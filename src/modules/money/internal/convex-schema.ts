@@ -16,6 +16,7 @@ export const moneyTables = {
     currency,
     exponent,
     balanceUnits: units,
+    recoveryDueUnits: v.optional(units),
     version: v.number(),
     state: v.union(v.literal('active'), v.literal('locked')),
     createdAt: v.number(),

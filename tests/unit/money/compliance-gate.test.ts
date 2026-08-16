@@ -19,9 +19,9 @@ import {
 const ownerId = 'owner-compliance-1'
 
 const accounts: readonly MoneyAccount[] = [
-  { accountRef: accountRefForOwner(ownerId, 'USD'), accountKind: 'operator_credit', accountId: ownerId, balance: amount('USD', '1000', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForOwner(ownerId, 'USD'), accountKind: 'operator_credit', accountId: ownerId, balance: amount('USD', '1000', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
 ]
 
 const approved: PaymentBinding = {

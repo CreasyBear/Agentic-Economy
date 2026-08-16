@@ -618,7 +618,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
             : { kind: 'settled' }
         case 'moneyLedger:markChargeOutcomeUnknown':
           state.unknownCharges.push(args)
-          return { kind: 'refused', code: 'charge_reconciliation_required', retryable: false }
+          return { kind: 'outcome_unknown', transactionRef: args.transactionRef }
         case 'moneyLedger:reserveExternalInvocationSpend':
           return { kind: 'accepted', status: 'reserved', replayed: false }
         case 'moneyLedger:finalizeExternalInvocationSpend':

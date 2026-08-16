@@ -159,6 +159,7 @@ async function seedPrincipal(
       currency: 'USD',
       exponent: 2,
       balanceUnits: '0',
+      recoveryDueUnits: '0',
       version: 1,
       state: 'active',
       createdAt: now,

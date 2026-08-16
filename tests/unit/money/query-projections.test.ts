@@ -4,6 +4,7 @@ import {
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
+  appendRefundReversal,
   authorizePaidCharge,
   createInMemoryMoneyQueryPort,
   createLedgerState,
@@ -14,9 +15,9 @@ import {
 const ownerId = 'owner-proj-1'
 
 const accounts: readonly MoneyAccount[] = [
-  { accountRef: accountRefForOwner(ownerId, 'USD'), accountKind: 'operator_credit', accountId: ownerId, balance: amount('USD', '1000', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
-  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForOwner(ownerId, 'USD'), accountKind: 'operator_credit', accountId: ownerId, balance: amount('USD', '1000', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), recoveryDue: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
 ]
 
 const resolveOwnerId = (principalId: string): string | undefined => {
@@ -71,6 +72,53 @@ describe('money query projections', () => {
       evidence: 'labelled_local_dev',
       grossAccrual: amount('USD', '0', 2),
       truncated: false,
+    })
+  })
+
+  it('nets held-funded provider and rake refunds in earnings', async () => {
+    const charged = authorizePaidCharge({
+      state: createLedgerState(accounts),
+      transaction: { transactionRef: 'held-charge', kind: 'charge', idempotencyKey: 'held-charge', inputDigest: 'held-charge-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 0, now: 1 },
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
+      providerAccountRef: accountRefForProvider('business-1', 'USD'),
+      rakeAccountRef: accountRefForRake('USD'),
+      grossAmount: amount('USD', '1000', 2),
+      rakeConfig: { rakeBps: 1_000 },
+      priceDigest: 'held-price',
+      principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
+      credentialId: 'key-1',
+      serviceRef: 'service-1',
+      offeringRef: 'offering-1',
+      businessId: 'business-1',
+      invocationRef: 'held-invocation',
+      attemptRef: 'held-attempt',
+      operationKey: 'held-operation',
+      sourceDigest: 'held-source',
+      evidenceRefs: ['held:evidence'],
+      observedAt: 1,
+    })
+    expect(charged.result).toMatchObject({ kind: 'accepted', providerNet: amount('USD', '900', 2), rake: amount('USD', '100', 2) })
+    const refunded = appendRefundReversal({
+      state: charged.state,
+      transaction: { transactionRef: 'held-refund', kind: 'refund', idempotencyKey: 'held-refund-key', inputDigest: 'held-refund-input', principalId: 'clerk_api_key:key-1', currency: 'USD', expectedAccountVersion: 1, now: 2 },
+      originalTransactionRef: 'held-charge',
+      principalId: 'clerk_api_key:key-1',
+      sourceDigest: 'held-refund-source',
+      evidenceRefs: ['held:refund'],
+      observedAt: 2,
+    })
+    expect(refunded.result).toMatchObject({ kind: 'accepted' })
+    const rakeRefund = refunded.state.entries.find((entry) => entry.entryType === 'refund' && entry.accountRef === accountRefForRake('USD'))
+    expect(rakeRefund?.businessId).toBe('business-1')
+    const port = createInMemoryMoneyQueryPort({ ledger: refunded.state, resolveOwnerId })
+    await expect(port.readProviderEarnings({ businessId: 'business-1', currency: 'USD' })).resolves.toMatchObject({
+      grossAccrual: amount('USD', '0', 2),
+      rake: amount('USD', '0', 2),
+      providerNet: amount('USD', '0', 2),
+      paidOut: amount('USD', '0', 2),
+      held: amount('USD', '0', 2),
+      recoveryDue: amount('USD', '0', 2),
     })
   })
 

@@ -5,6 +5,7 @@ import type {
   KeyUsageView,
   MoneyAccount,
   MoneyAcceptedCharge,
+  MoneyChargeOutcomeUnknown,
   MoneyLedgerEntry,
   MoneyRefusal,
   MoneyTransaction,
@@ -31,6 +32,11 @@ export type LedgerState = Readonly<{
 export type LedgerOperationResult<T> = Readonly<{
   state: LedgerState
   result: T
+}>
+export type ProviderAccountCreditApplication = Readonly<{
+  account: MoneyAccount
+  heldCredit: ExactAmount
+  recoveryPayment: ExactAmount
 }>
 type GenericChargeResult = MoneyAcceptedCharge | MoneyRefusal
 
@@ -169,6 +175,191 @@ export function validateChargeAccounts(input: Readonly<{
   if (operator.balance.currency !== input.currency || provider.balance.currency !== input.currency || rake.balance.currency !== input.currency) return refusalResult('currency_mismatch', false)
   if (provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) return refusalResult('currency_mismatch', false)
 }
+function sameEvidenceRefs(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((ref, index) => ref === right[index])
+}
+type SelectedRefundEntries = Readonly<{
+  operator: MoneyLedgerEntry
+  provider: MoneyLedgerEntry
+  rake: MoneyLedgerEntry
+}>
+
+function selectRefundEntries(entries: readonly MoneyLedgerEntry[], transactionRef: string): SelectedRefundEntries | undefined {
+  if (entries.length !== 3) return undefined
+  const byRef = new Map<string, MoneyLedgerEntry>()
+  for (const entry of entries) byRef.set(entry.entryRef, entry)
+  const operator = byRef.get(`${transactionRef}:operator`)
+  const provider = byRef.get(`${transactionRef}:provider`)
+  const rake = byRef.get(`${transactionRef}:rake`)
+  if (byRef.size !== entries.length || operator === undefined || provider === undefined || rake === undefined) return undefined
+  return { operator, provider, rake }
+}
+
+
+type SelectedChargeEntries = Readonly<{
+  charge: MoneyLedgerEntry
+  provider: MoneyLedgerEntry
+  rake: MoneyLedgerEntry
+  recovery?: MoneyLedgerEntry
+}>
+
+function selectChargeEntries(entries: readonly MoneyLedgerEntry[]): SelectedChargeEntries | undefined {
+  if (entries.length !== 3 && entries.length !== 4) return undefined
+  const charges = entries.filter((entry) => entry.entryType === 'charge' && entry.direction === 'debit')
+  const providers = entries.filter((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'credit')
+  const rakes = entries.filter((entry) => entry.entryType === 'rake' && entry.direction === 'credit')
+  const recoveries = entries.filter((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'debit')
+  if (charges.length !== 1 || providers.length !== 1 || rakes.length !== 1 || recoveries.length > 1 || entries.length !== 3 + recoveries.length) return undefined
+  const charge = charges[0]
+  const provider = providers[0]
+  const rake = rakes[0]
+  if (charge === undefined || provider === undefined || rake === undefined) return undefined
+  return { charge, provider, rake, ...(recoveries[0] === undefined ? {} : { recovery: recoveries[0] }) }
+}
+
+type ValidatedChargeContract = Readonly<{
+  original: MoneyTransaction
+  usage: MoneyUsageEvent
+  entries: SelectedChargeEntries
+  operator: MoneyAccount
+  provider: MoneyAccount
+  rake: MoneyAccount
+  chargeAmount: ExactAmount
+  providerAmount: ExactAmount
+  rakeAmount: ExactAmount
+}>
+
+function validateChargeContract(state: LedgerState, original: MoneyTransaction, usage: MoneyUsageEvent): ValidatedChargeContract | undefined {
+  if (
+    original.kind !== 'charge'
+    || original.idempotencyKey !== original.transactionRef
+    || usage.chargeState !== 'paid'
+    || original.currency !== usage.amount.currency
+    || original.accountId === undefined
+    || usage.accountId === undefined
+    || original.accountId !== usage.accountId
+    || original.principalId !== usage.principalId
+    || original.exponent !== usage.amount.exponent
+    || usage.observedAt !== original.createdAt
+    || !validAmount(usage.amount)
+  ) return undefined
+  const selected = selectChargeEntries(state.entries.filter((entry) => entry.transactionRef === original.transactionRef))
+  if (selected === undefined) return undefined
+  const chargeAmount = selected.charge.amount
+  const providerAmount = selected.provider.amount
+  const rakeAmount = selected.rake.amount
+  if (
+    selected.charge.entryRef !== `${original.transactionRef}:charge`
+    || selected.provider.entryRef !== `${original.transactionRef}:provider`
+    || selected.rake.entryRef !== `${original.transactionRef}:rake`
+    || selected.charge.accountRef !== accountRefForOwner(original.accountId, original.currency)
+    || selected.provider.accountRef !== accountRefForProvider(usage.businessId, original.currency)
+    || selected.rake.accountRef !== accountRefForRake(original.currency)
+    || selected.charge.transactionRef !== original.transactionRef
+    || selected.provider.transactionRef !== original.transactionRef
+    || selected.rake.transactionRef !== original.transactionRef
+    || selected.charge.idempotencyKey !== original.idempotencyKey
+    || selected.provider.idempotencyKey !== original.idempotencyKey
+    || selected.rake.idempotencyKey !== original.idempotencyKey
+    || selected.charge.sourceDigest !== selected.provider.sourceDigest
+    || selected.charge.sourceDigest !== selected.rake.sourceDigest
+    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.provider.evidenceRefs)
+    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.rake.evidenceRefs)
+    || selected.charge.createdAt !== original.createdAt
+    || selected.provider.createdAt !== original.createdAt
+    || selected.rake.createdAt !== original.createdAt
+    || selected.charge.principalId !== original.principalId
+    || selected.charge.businessId !== undefined
+    || selected.charge.reversalOf !== undefined
+    || selected.charge.invocationRef !== usage.invocationRef
+    || selected.charge.attemptRef !== usage.attemptRef
+    || selected.provider.businessId !== usage.businessId
+    || selected.provider.principalId !== undefined
+    || selected.provider.reversalOf !== undefined
+    || selected.provider.invocationRef !== usage.invocationRef
+    || selected.provider.attemptRef !== usage.attemptRef
+    || selected.rake.businessId !== usage.businessId
+    || selected.rake.principalId !== undefined
+    || selected.rake.invocationRef !== undefined
+    || selected.rake.attemptRef !== undefined
+    || selected.rake.reversalOf !== undefined
+    || compareExactAmounts(chargeAmount, usage.amount) !== 0
+    || chargeAmount.currency !== original.currency
+    || providerAmount.currency !== original.currency
+    || rakeAmount.currency !== original.currency
+    || chargeAmount.exponent !== original.exponent
+    || providerAmount.exponent !== original.exponent
+    || rakeAmount.exponent !== original.exponent
+    || compareExactAmounts(providerAmount, rakeAmount) === undefined
+    || compareExactAmounts(addExactAmounts(providerAmount, rakeAmount), chargeAmount) !== 0
+  ) return undefined
+  if (selected.recovery !== undefined) {
+    if (
+      selected.recovery.entryRef !== `${original.transactionRef}:provider-recovery`
+      || selected.recovery.accountRef !== selected.provider.accountRef
+      || selected.recovery.entryType !== 'payout_accrual'
+      || selected.recovery.direction !== 'debit'
+      || selected.recovery.businessId !== usage.businessId
+      || selected.recovery.principalId !== undefined
+      || selected.recovery.invocationRef !== usage.invocationRef
+      || selected.recovery.attemptRef !== usage.attemptRef
+      || selected.recovery.reversalOf !== undefined
+      || selected.recovery.transactionRef !== original.transactionRef
+      || selected.recovery.idempotencyKey !== original.idempotencyKey
+      || selected.recovery.sourceDigest !== selected.charge.sourceDigest
+      || !sameEvidenceRefs(selected.recovery.evidenceRefs, selected.charge.evidenceRefs)
+      || selected.recovery.createdAt !== original.createdAt
+      || selected.recovery.amount.currency !== providerAmount.currency
+      || selected.recovery.amount.exponent !== providerAmount.exponent
+      || compareExactAmounts(selected.recovery.amount, providerAmount) === 1
+    ) return undefined
+  }
+  const operator = state.accounts.get(selected.charge.accountRef)
+  const provider = state.accounts.get(selected.provider.accountRef)
+  const rake = state.accounts.get(selected.rake.accountRef)
+  if (
+    operator === undefined
+    || provider === undefined
+    || rake === undefined
+    || operator.balance.currency !== original.currency
+    || provider.balance.currency !== original.currency
+    || rake.balance.currency !== original.currency
+    || operator.balance.exponent !== original.exponent
+    || provider.balance.exponent !== original.exponent
+    || rake.balance.exponent !== original.exponent
+    || validateChargeAccounts({
+      operator,
+      provider,
+      rake,
+      operatorAccountRef: accountRefForOwner(original.accountId, original.currency),
+      providerAccountRef: accountRefForProvider(usage.businessId, original.currency),
+      rakeAccountRef: accountRefForRake(original.currency),
+      accountId: original.accountId,
+      businessId: usage.businessId,
+      currency: original.currency,
+    }) !== undefined
+  ) return undefined
+  return { original, usage, entries: selected, operator, provider, rake, chargeAmount, providerAmount, rakeAmount }
+}
+
+export function applyProviderAccountCredit(account: MoneyAccount, amount: ExactAmount, now: number): ProviderAccountCreditApplication | undefined {
+  if (account.accountKind !== 'provider_earnings' || !validAmount(amount) || !validAmount(account.recoveryDue)) return undefined
+  const recovered = compareExactAmounts(amount, account.recoveryDue) === 1 ? account.recoveryDue : amount
+  const recoveryDue = subtractExactAmounts(account.recoveryDue, recovered)
+  const available = subtractExactAmounts(amount, recovered)
+  const balance = available === undefined ? undefined : addExactAmounts(account.balance, available)
+  if (recoveryDue === undefined || balance === undefined || available === undefined) return undefined
+  return { account: { ...account, balance, recoveryDue, version: account.version + 1, updatedAt: now }, heldCredit: available, recoveryPayment: recovered }
+}
+
+export function applyProviderAccountDebit(account: MoneyAccount, amount: ExactAmount, now: number): MoneyAccount | undefined {
+  if (account.accountKind !== 'provider_earnings' || !validAmount(amount) || !validAmount(account.recoveryDue)) return undefined
+  const heldDebit = compareExactAmounts(amount, account.balance) === 1 ? account.balance : amount
+  const balance = subtractExactAmounts(account.balance, heldDebit)
+  const shortfall = subtractExactAmounts(amount, heldDebit)
+  const recoveryDue = shortfall === undefined ? undefined : addExactAmounts(account.recoveryDue, shortfall)
+  return balance === undefined || recoveryDue === undefined ? undefined : { ...account, balance, recoveryDue, version: account.version + 1, updatedAt: now }
+}
 
 export function beginIdempotentTransaction(input: Readonly<{ state: LedgerState; transaction: BeginTransactionInput }>): LedgerOperationResult<Readonly<{ kind: 'new' } | { kind: 'replay'; transaction: MoneyTransaction } | { kind: 'refused'; refusal: MoneyRefusal }>> {
   const prior = input.state.transactions.find((transaction) => transaction.idempotencyKey === input.transaction.idempotencyKey)
@@ -292,7 +483,17 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
   if ('kind' in split) return { state: input.state, result: refusalResult(split.code, false) }
   if (begun.result.kind === 'replay') {
     const priorUsage = input.state.usageEvents.find((usage) => usage.usageRef === usageRef)
-    if (priorUsage === undefined || priorUsage.chargeState !== 'paid' || compareExactAmounts(priorUsage.amount, grossAmount) !== 0 || priorUsage.priceDigest !== input.priceDigest || priorUsage.transactionRef !== begun.result.transaction.transactionRef) {
+    if (
+      priorUsage === undefined
+      || priorUsage.chargeState !== 'paid'
+      || priorUsage.accountId !== input.accountId
+      || compareExactAmounts(priorUsage.amount, grossAmount) !== 0
+      || priorUsage.priceDigest !== input.priceDigest
+      || priorUsage.transactionRef !== begun.result.transaction.transactionRef
+      || begun.result.transaction.accountId !== input.accountId
+      || begun.result.transaction.currency !== input.transaction.currency
+      || begun.result.transaction.exponent !== priorUsage.amount.exponent
+    ) {
       return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
     }
     return {
@@ -324,17 +525,21 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
   if (input.transaction.expectedAccountVersion !== operator.version) {
     return { state: input.state, result: refusalResult('ledger_cas_conflict', true) }
   }
-  const transaction = transactionFrom(input.transaction, 'charge', 'applied', grossAmount.exponent)
+  const transaction = transactionFrom({ ...input.transaction, accountId: input.accountId, now: input.observedAt }, 'charge', 'applied', grossAmount.exponent)
+  const nextOperator = updateBalance(operator, grossAmount, 'debit', input.observedAt)
+  const providerCredit = applyProviderAccountCredit(provider, split.providerNet, input.observedAt)
+  const nextRake = updateBalance(rake, split.rake, 'credit', input.observedAt)
+  if (providerCredit === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   const entries = [
-    createEntry({ accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amount: grossAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
-    createEntry({ accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amount: split.providerNet, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
-    createEntry({ accountRef: rake.accountRef, entryType: 'rake', direction: 'credit', amount: split.rake, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now }),
+    createEntry({ entryRef: `${transaction.transactionRef}:charge`, accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amount: grossAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
+    createEntry({ entryRef: `${transaction.transactionRef}:provider`, accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amount: split.providerNet, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
+    createEntry({ entryRef: `${transaction.transactionRef}:rake`, accountRef: rake.accountRef, entryType: 'rake', direction: 'credit', amount: split.rake, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
+    ...(providerCredit.recoveryPayment.units === '0' ? [] : [
+      createEntry({ entryRef: `${transaction.transactionRef}:provider-recovery`, accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'debit', amount: providerCredit.recoveryPayment, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
+    ]),
   ]
-  const nextOperator = updateBalance(operator, grossAmount, 'debit', input.transaction.now)
-  const nextProvider = updateBalance(provider, split.providerNet, 'credit', input.transaction.now)
-  const nextRake = updateBalance(rake, split.rake, 'credit', input.transaction.now)
   const usage = createUsage(input, 'paid', grossAmount, transaction.transactionRef)
-  const nextState = withChanges(input.state, nextOperator, entries, transaction, [nextProvider, nextRake], usage)
+  const nextState = withChanges(input.state, nextOperator, entries, transaction, [providerCredit.account, nextRake], usage)
   return {
     state: nextState,
     result: {
@@ -353,48 +558,119 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
 
 export function appendRefundReversal(input: RefundInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<GenericChargeResult> {
   const original = input.state.transactions.find((transaction) => transaction.transactionRef === input.originalTransactionRef)
-  if (original === undefined || original.principalId !== input.principalId || original.kind !== 'charge' || (original.state !== 'applied' && original.state !== 'outcome_unknown')) {
+  const usages = input.state.usageEvents.filter((usage) => usage.transactionRef === input.originalTransactionRef && usage.chargeState === 'paid')
+  if (original === undefined || original.principalId !== input.principalId || original.kind !== 'charge' || usages.length !== 1) {
     return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   }
-  const priorReversal = input.state.transactions.find((transaction) => transaction.reversalOf === input.originalTransactionRef)
-  if (priorReversal !== undefined) {
+  const usage = usages[0]
+  if (usage === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  const contract = validateChargeContract(input.state, original, usage)
+  if (contract === undefined || input.transaction.currency !== original.currency || input.transaction.principalId !== original.principalId) {
     return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   }
-  const originalEntries = input.state.entries.filter((entry) => entry.transactionRef === original.transactionRef)
-  if (originalEntries.length !== 3) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const operatorEntry = originalEntries.find((entry) => entry.entryType === 'charge')
-  const providerEntry = originalEntries.find((entry) => entry.entryType === 'payout_accrual')
-  const rakeEntry = originalEntries.find((entry) => entry.entryType === 'rake')
-  if (operatorEntry === undefined || providerEntry === undefined || rakeEntry === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const operator = input.state.accounts.get(operatorEntry.accountRef)
-  const provider = input.state.accounts.get(providerEntry.accountRef)
-  const rake = input.state.accounts.get(rakeEntry.accountRef)
-  if (operator === undefined || provider === undefined || rake === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  if (input.transaction.currency !== operatorEntry.amount.currency || provider.balance.currency !== operator.balance.currency || rake.balance.currency !== operator.balance.currency || provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const operatorAmount = rescaleExactAmount(operatorEntry.amount, operator.balance.exponent)
-  const providerAmount = rescaleExactAmount(providerEntry.amount, operator.balance.exponent)
-  const rakeAmount = rescaleExactAmount(rakeEntry.amount, operator.balance.exponent)
-  if (operatorAmount === undefined || providerAmount === undefined || rakeAmount === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const nextOperatorBalance = addExactAmounts(operator.balance, operatorAmount)
-  const nextProviderBalance = subtractExactAmounts(provider.balance, providerAmount)
-  const nextRakeBalance = subtractExactAmounts(rake.balance, rakeAmount)
-  if (nextOperatorBalance === undefined || nextProviderBalance === undefined || nextRakeBalance === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
+  if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
+  if (begun.result.kind === 'replay') {
+    const replayTransaction = begun.result.transaction
+    const currentReversals = input.state.transactions.filter((transaction) => transaction.reversalOf === original.transactionRef)
+    const replayEntries = input.state.entries.filter((entry) => entry.transactionRef === replayTransaction.transactionRef)
+    const selectedRefunds = selectRefundEntries(replayEntries, replayTransaction.transactionRef)
+    const operatorRefund = selectedRefunds?.operator
+    const providerRefund = selectedRefunds?.provider
+    const rakeRefund = selectedRefunds?.rake
+    if (
+      replayTransaction.transactionRef !== input.transaction.transactionRef
+      || replayTransaction.kind !== 'refund'
+      || replayTransaction.reversalOf !== original.transactionRef
+      || replayTransaction.idempotencyKey !== input.transaction.idempotencyKey
+      || replayTransaction.inputDigest !== input.transaction.inputDigest
+      || replayTransaction.principalId !== original.principalId
+      || replayTransaction.externalRef !== input.transaction.externalRef
+      || replayTransaction.state !== 'reversed'
+      || replayTransaction.currency !== original.currency
+      || replayTransaction.exponent !== original.exponent
+      || currentReversals.length !== 1
+      || currentReversals[0]?.transactionRef !== replayTransaction.transactionRef
+      || replayEntries.length !== 3
+      || operatorRefund === undefined
+      || providerRefund === undefined
+      || rakeRefund === undefined
+      || replayEntries.some((entry) => entry !== operatorRefund && entry !== providerRefund && entry !== rakeRefund)
+      || operatorRefund.accountRef !== contract.entries.charge.accountRef
+      || operatorRefund.entryType !== 'refund'
+      || operatorRefund.direction !== 'credit'
+      || operatorRefund.amount.units !== contract.chargeAmount.units
+      || operatorRefund.amount.currency !== contract.chargeAmount.currency
+      || operatorRefund.amount.exponent !== contract.chargeAmount.exponent
+      || operatorRefund.principalId !== original.principalId
+      || operatorRefund.businessId !== undefined
+      || operatorRefund.invocationRef !== undefined
+      || operatorRefund.attemptRef !== undefined
+      || providerRefund.accountRef !== contract.entries.provider.accountRef
+      || providerRefund.entryType !== 'refund'
+      || providerRefund.direction !== 'debit'
+      || providerRefund.amount.units !== contract.providerAmount.units
+      || providerRefund.amount.currency !== contract.providerAmount.currency
+      || providerRefund.amount.exponent !== contract.providerAmount.exponent
+      || providerRefund.principalId !== undefined
+      || providerRefund.businessId !== contract.entries.provider.businessId
+      || providerRefund.invocationRef !== undefined
+      || providerRefund.attemptRef !== undefined
+      || rakeRefund.accountRef !== contract.entries.rake.accountRef
+      || rakeRefund.entryType !== 'refund'
+      || rakeRefund.direction !== 'debit'
+      || rakeRefund.amount.units !== contract.rakeAmount.units
+      || rakeRefund.amount.currency !== contract.rakeAmount.currency
+      || rakeRefund.amount.exponent !== contract.rakeAmount.exponent
+      || rakeRefund.principalId !== undefined
+      || rakeRefund.businessId !== contract.entries.rake.businessId
+      || rakeRefund.invocationRef !== undefined
+      || rakeRefund.attemptRef !== undefined
+      || [operatorRefund, providerRefund, rakeRefund].some((entry) =>
+        entry.transactionRef !== replayTransaction.transactionRef
+        || entry.idempotencyKey !== replayTransaction.idempotencyKey
+        || entry.sourceDigest !== input.sourceDigest
+        || !sameEvidenceRefs(entry.evidenceRefs, input.evidenceRefs)
+        || entry.reversalOf !== original.transactionRef
+        || entry.createdAt !== replayTransaction.createdAt
+      )
+    ) return { state: input.state, result: refusalResult('ledger_idempotency_conflict', false) }
+    return { state: input.state, result: acceptedCharge(zeroAmountLike(contract.chargeAmount), original.inputDigest, replayTransaction.transactionRef) }
+  }
+  if (original.state !== 'applied' && original.state !== 'outcome_unknown') {
+    return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  }
+  if (input.state.transactions.some((transaction) => transaction.reversalOf === original.transactionRef)) {
+    return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  }
+  const operatorAmount = rescaleExactAmount(contract.chargeAmount, contract.operator.balance.exponent)
+  const providerAmount = rescaleExactAmount(contract.providerAmount, contract.provider.balance.exponent)
+  const rakeAmount = rescaleExactAmount(contract.rakeAmount, contract.rake.balance.exponent)
+  if (operatorAmount === undefined || providerAmount === undefined || rakeAmount === undefined || input.transaction.currency !== operatorAmount.currency) {
+    return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  }
+  const nextOperatorBalance = addExactAmounts(contract.operator.balance, operatorAmount)
+  const nextProvider = applyProviderAccountDebit(contract.provider, providerAmount, input.transaction.now)
+  const nextRakeBalance = subtractExactAmounts(contract.rake.balance, rakeAmount)
+  if (nextOperatorBalance === undefined || nextProvider === undefined || nextRakeBalance === undefined) {
+    return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  }
   const transaction = transactionFrom(input.transaction, 'refund', 'reversed', operatorAmount.exponent, original.transactionRef)
   const entries = [
-    createEntry({ accountRef: operator.accountRef, entryType: 'refund', direction: 'credit', amount: operatorAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
-    createEntry({ accountRef: provider.accountRef, entryType: 'refund', direction: 'debit', amount: providerAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, ...(provider.businessId === undefined ? {} : { businessId: provider.businessId }), sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
-    createEntry({ accountRef: rake.accountRef, entryType: 'refund', direction: 'debit', amount: rakeAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ entryRef: `${transaction.transactionRef}:operator`, accountRef: contract.operator.accountRef, entryType: 'refund', direction: 'credit', amount: operatorAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: original.principalId, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ entryRef: `${transaction.transactionRef}:provider`, accountRef: contract.provider.accountRef, entryType: 'refund', direction: 'debit', amount: providerAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, ...(contract.entries.provider.businessId === undefined ? {} : { businessId: contract.entries.provider.businessId }), sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
+    createEntry({ entryRef: `${transaction.transactionRef}:rake`, accountRef: contract.rake.accountRef, entryType: 'refund', direction: 'debit', amount: rakeAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, ...(contract.entries.rake.businessId === undefined ? {} : { businessId: contract.entries.rake.businessId }), sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: input.transaction.now, reversalOf: original.transactionRef }),
   ]
-  const nextState = withChanges(input.state, updateBalance(operator, operatorAmount, 'credit', input.transaction.now), entries, transaction, [updateBalance(provider, providerAmount, 'debit', input.transaction.now), updateBalance(rake, rakeAmount, 'debit', input.transaction.now)], createUsageFromOriginal(input.state, input, original, 'refunded', transaction.transactionRef))
+  const nextState = withChanges(input.state, updateBalance(contract.operator, operatorAmount, 'credit', input.transaction.now), entries, transaction, [nextProvider, updateBalance(contract.rake, rakeAmount, 'debit', input.transaction.now)], createUsageFromOriginal(input.state, input, original, 'refunded', transaction.transactionRef))
   return { state: nextState, result: acceptedCharge(zeroAmountLike(operatorAmount), original.inputDigest, transaction.transactionRef) }
 }
-
-export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
+export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<MoneyChargeOutcomeUnknown | MoneyRefusal> {
   const transaction = input.state.transactions.find((entry) => entry.transactionRef === input.transactionRef)
   if (transaction === undefined || transaction.principalId !== input.principalId || transaction.kind !== 'charge') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  if (transaction.state !== 'applied' && transaction.state !== 'pending') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  if (transaction.state === 'outcome_unknown') return { state: input.state, result: { kind: 'outcome_unknown', transactionRef: transaction.transactionRef } }
+  if (transaction.state !== 'applied') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   const updated = { ...transaction, state: 'outcome_unknown' as const, updatedAt: input.updatedAt }
-  return { state: replaceTransaction(input.state, updated), result: refusalResult('charge_reconciliation_required', false) }
+  return { state: replaceTransaction(input.state, updated), result: { kind: 'outcome_unknown', transactionRef: transaction.transactionRef } }
 }
 
 export function reconcileCharge(input: ReconcileChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<GenericChargeResult> {

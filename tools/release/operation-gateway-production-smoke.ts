@@ -1200,6 +1200,7 @@ export function parseGatewayOwnerProviderEarnings(
     account.earnings.providerNet,
     account.earnings.paidOut,
     account.earnings.held,
+    account.earnings.recoveryDue,
     account.payout.providerNet,
     account.payout.minimumPayout,
     account.payout.providerHeldBefore,
@@ -1642,7 +1643,11 @@ export async function runGatewayProductionSmoke(
         baseline.supplier.paidOut,
         zeroAmount(baseline.supplier.paidOut),
       ) ||
-      !sameAmount(baseline.supplier.held, zeroAmount(baseline.supplier.held))
+      !sameAmount(baseline.supplier.held, zeroAmount(baseline.supplier.held)) ||
+      !sameAmount(
+        baseline.supplier.recoveryDue,
+        zeroAmount(baseline.supplier.recoveryDue),
+      )
     )
       throw new GatewaySmokeError(
         "gateway_smoke_control_supplier_not_isolated",

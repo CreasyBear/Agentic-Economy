@@ -104,6 +104,7 @@ export type MoneyAccount = Readonly<{
   accountId?: string;
   businessId?: string;
   balance: ExactAmount;
+  recoveryDue: ExactAmount;
   version: number;
   state: AccountState;
   createdAt: number;
@@ -285,6 +286,11 @@ export type MoneyAcceptedInvocationCharge = MoneyAcceptedCharge &
 
 export type ChargeAuthorizationResult =
   MoneyAcceptedInvocationCharge | MoneyRefusal;
+export type MoneyChargeOutcomeUnknown = Readonly<{
+  kind: "outcome_unknown";
+  transactionRef: string;
+}>;
+
 
 export type CredentialBudgetGrant = Readonly<{
   grantRef: string;
@@ -319,7 +325,7 @@ export type MoneyInvocationPort = Readonly<{
       attemptRef: string;
       effectGeneration: number;
     }>,
-  ) => Promise<MoneyRefusal>;
+  ) => Promise<MoneyChargeOutcomeUnknown | MoneyRefusal>;
   refundCharge?: (
     input: Readonly<{
       transactionRef: string;
@@ -419,6 +425,7 @@ export type ProviderEarningsView = Readonly<{
   providerNet: ExactAmount;
   paidOut: ExactAmount;
   held: ExactAmount;
+  recoveryDue: ExactAmount;
   /** True when the source capped its ledger scan at the latest 100 entries. */
   truncated: boolean;
   evidence: "source" | "labelled_local_dev";
@@ -507,6 +514,7 @@ export const ProviderEarningsViewSchema = z.strictObject({
   providerNet: exactAmountSchema,
   paidOut: exactAmountSchema,
   held: exactAmountSchema,
+  recoveryDue: exactAmountSchema,
   truncated: z.literal(false),
   evidence: z.literal("source"),
 });
@@ -592,6 +600,8 @@ export {
   applyTopup,
   authorizePaidCharge,
   appendRefundReversal,
+  applyProviderAccountCredit,
+  applyProviderAccountDebit,
   markOutcomeUnknown,
   reconcileCharge,
   legacyPerKeyAccountRef,
@@ -608,6 +618,7 @@ export type {
   RefundInput,
   OutcomeUnknownInput,
   ReconcileChargeInput,
+  ProviderAccountCreditApplication,
 } from "./internal/ledger";
 export {
   transitionPayoutAccount,

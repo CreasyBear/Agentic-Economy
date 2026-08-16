@@ -14,7 +14,7 @@ import type {
   TopupState,
 } from '../public'
 import { addExactAmounts, compareExactAmounts, subtractExactAmounts } from './exact-amount'
-import { usageSummaryKey } from './ledger'
+import { accountRefForRake, usageSummaryKey } from './ledger'
 import type { LedgerState } from './ledger'
 
 export function createInMemoryMoneyQueryPort(input: Readonly<{
@@ -71,18 +71,26 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
     readProviderEarnings: async (query: ProviderEarningsQuery): Promise<ProviderEarningsView> => {
       const provider = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'provider_earnings' && item.businessId === query.businessId && item.balance.currency === query.currency)
       if (provider === undefined) throw new Error('payout_not_ready')
-      const grossEntries = input.ledger.entries.filter((entry) => entry.businessId === query.businessId && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.reversalOf === undefined && entry.amount.currency === query.currency)
-      const rakeEntries = input.ledger.entries.filter((entry) => entry.businessId === query.businessId && entry.entryType === 'rake' && entry.direction === 'credit' && entry.amount.currency === query.currency)
-      const providerNetAccrued = grossEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
-      const rake = rakeEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
-      if (providerNetAccrued === undefined || rake === undefined) throw new Error('currency_mismatch')
-      const grossAccrual = addExactAmounts(providerNetAccrued, rake)
-      if (grossAccrual === undefined) throw new Error('currency_mismatch')
-      const balanceComparison = compareExactAmounts(providerNetAccrued, provider.balance)
+      const providerCreditEntries = input.ledger.entries.filter((entry) => entry.accountRef === provider.accountRef && entry.businessId === query.businessId && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.reversalOf === undefined && entry.amount.currency === query.currency)
+      const providerRefundEntries = input.ledger.entries.filter((entry) => entry.accountRef === provider.accountRef && entry.businessId === query.businessId && entry.entryType === 'refund' && entry.direction === 'debit' && entry.reversalOf !== undefined && entry.amount.currency === query.currency)
+      const rakeCreditEntries = input.ledger.entries.filter((entry) => entry.accountRef === accountRefForRake(query.currency) && entry.businessId === query.businessId && entry.entryType === 'rake' && entry.direction === 'credit' && entry.amount.currency === query.currency)
+      const rakeRefundEntries = input.ledger.entries.filter((entry) => entry.accountRef === accountRefForRake(query.currency) && entry.businessId === query.businessId && entry.entryType === 'refund' && entry.direction === 'debit' && entry.reversalOf !== undefined && entry.amount.currency === query.currency)
+      const providerCredits = providerCreditEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
+      const providerRefunds = providerRefundEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
+      const rakeCredits = rakeCreditEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
+      const rakeRefunds = rakeRefundEntries.reduce<ExactAmount | undefined>((sum, entry) => sum === undefined ? undefined : addExactAmounts(sum, entry.amount), { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent })
+      if (providerCredits === undefined || providerRefunds === undefined || rakeCredits === undefined || rakeRefunds === undefined) throw new Error('currency_mismatch')
+      const providerNet = subtractExactAmounts(providerCredits, providerRefunds)
+      const rake = subtractExactAmounts(rakeCredits, rakeRefunds)
+      if (providerNet === undefined || rake === undefined) throw new Error('currency_mismatch')
+      const grossAccrual = addExactAmounts(providerNet, rake)
+      const providerNetPlusRecovery = addExactAmounts(providerNet, provider.recoveryDue)
+      if (grossAccrual === undefined || providerNetPlusRecovery === undefined) throw new Error('currency_mismatch')
+      const balanceComparison = compareExactAmounts(providerNetPlusRecovery, provider.balance)
       if (balanceComparison === undefined) throw new Error('currency_mismatch')
-      const paidOut = balanceComparison === -1 ? { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent } : subtractExactAmounts(providerNetAccrued, provider.balance)
+      const paidOut = balanceComparison === -1 ? { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent } : subtractExactAmounts(providerNetPlusRecovery, provider.balance)
       if (paidOut === undefined) throw new Error('currency_mismatch')
-      return { businessId: query.businessId, grossAccrual, rake, providerNet: provider.balance, paidOut, held: provider.balance, truncated: false, evidence: 'labelled_local_dev' }
+      return { businessId: query.businessId, grossAccrual, rake, providerNet, paidOut, held: provider.balance, recoveryDue: provider.recoveryDue, truncated: false, evidence: 'labelled_local_dev' }
     },
     readPayoutStatus: async (query: PayoutStatusQuery): Promise<PayoutStatusView> => {
       const status = payoutStatuses.find((item) => item.businessId === query.businessId && item.providerNet.currency === query.currency)

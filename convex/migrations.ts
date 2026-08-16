@@ -79,3 +79,30 @@ export const backfillCapabilityPublicationIdentity = internalMutation({
     }
   },
 })
+
+/**
+ * One-time widen/migrate/narrow bridge for money accounts created before
+ * recovery due units became mandatory. Safe to replay: present values are not rewritten.
+ */
+export const backfillMoneyAccountRecoveryDueUnits = internalMutation({
+  args: { cursor: v.optional(v.string()), batchSize: v.optional(v.number()) },
+  returns: batchResult,
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query('moneyAccounts').paginate({
+      cursor: args.cursor ?? null,
+      numItems: Math.min(Math.max(args.batchSize ?? 100, 1), 250),
+    })
+    let updated = 0
+    for (const account of page.page) {
+      if (account.recoveryDueUnits !== undefined) continue
+      await ctx.db.patch(account._id, { recoveryDueUnits: '0' })
+      updated += 1
+    }
+    return {
+      done: page.isDone,
+      cursor: page.continueCursor,
+      scanned: page.page.length,
+      updated,
+    }
+  },
+})

@@ -195,6 +195,7 @@ function seedPayout(
     currency: 'USD',
     exponent: 2,
     balanceUnits: '5000',
+    recoveryDueUnits: '0',
     version: 1,
     state: 'active',
     createdAt: 1,

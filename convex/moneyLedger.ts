@@ -36,6 +36,8 @@ import {
   accountRefForRake,
   legacyPerKeyAccountRef,
   addExactAmounts,
+  applyProviderAccountCredit,
+  applyProviderAccountDebit,
   calculateCreditTopupFinancials,
   compareExactAmounts,
   evaluateLiveMoneyGate,
@@ -47,6 +49,8 @@ import {
   rescaleExactAmount,
   settleCredentialBudget,
   subtractExactAmounts,
+  qualifiedUseMaterialDigest,
+  qualifiedUseRef,
   transitionPayout,
   STRIPE_CONNECT_RECOVERY_LEASE_MS,
   STRIPE_CONNECT_RECOVERY_WINDOW_MS,
@@ -590,7 +594,17 @@ async function writeBudgetUsage(
     })
   else await ctx.db.patch(rows.concurrency._id, concurrencyPatch)
 }
-async function reserveCredentialBudgetInTransaction(
+type PreparedCredentialBudgetReservation = Readonly<{
+  kind: 'accepted'
+  environment: 'sandbox' | 'production'
+  budgetPolicyRef: string
+  dayStart: string
+  monthStart: string
+  rows: BudgetRows
+  usage: CredentialBudgetUsage
+}>
+
+async function prepareCredentialBudgetReservation(
   ctx: MutationCtx,
   input: Readonly<{
     principalId: string
@@ -602,13 +616,7 @@ async function reserveCredentialBudgetInTransaction(
     observedAt: number
   }>,
 ): Promise<
-  | Readonly<{
-      kind: 'accepted'
-      environment: 'sandbox' | 'production'
-      budgetPolicyRef: string
-      dayStart: string
-      monthStart: string
-    }>
+  PreparedCredentialBudgetReservation
   | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
 > {
   const grantResult = await readBudgetGrant(ctx, {
@@ -641,22 +649,75 @@ async function reserveCredentialBudgetInTransaction(
     amount: input.amount,
   })
   if (admission.kind === 'refused') return budgetRefusal(admission.code)
-  await writeBudgetUsage(ctx, rows, admission.usage, input.observedAt)
   return {
     kind: 'accepted',
     environment: grantResult.environment,
     budgetPolicyRef: grantResult.budgetPolicyRef,
     dayStart,
     monthStart,
+    rows,
+    usage: admission.usage,
   }
 }
 
-async function releaseOrSettleCredentialBudget(
+async function applyPreparedCredentialBudgetReservation(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedCredentialBudgetReservation,
+  now: number,
+): Promise<void> {
+  await writeBudgetUsage(ctx, prepared.rows, prepared.usage, now)
+}
+
+async function reserveCredentialBudgetInTransaction(
+  ctx: MutationCtx,
+  input: Readonly<{
+    principalId: string
+    accountId: string
+    credentialId: string
+    grantRef: string
+    generation: number
+    amount: ExactAmount
+    observedAt: number
+  }>,
+): Promise<
+  | Readonly<{
+      kind: 'accepted'
+      environment: 'sandbox' | 'production'
+      budgetPolicyRef: string
+      dayStart: string
+      monthStart: string
+    }>
+  | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
+> {
+  const prepared = await prepareCredentialBudgetReservation(ctx, input)
+  if (prepared.kind === 'refused') return prepared
+  await applyPreparedCredentialBudgetReservation(ctx, prepared, input.observedAt)
+  return {
+    kind: 'accepted',
+    environment: prepared.environment,
+    budgetPolicyRef: prepared.budgetPolicyRef,
+    dayStart: prepared.dayStart,
+    monthStart: prepared.monthStart,
+  }
+}
+
+type PreparedCredentialBudgetTransition =
+  | Readonly<{ kind: 'no_op' }>
+  | Readonly<{
+      kind: 'apply'
+      rows: BudgetRows
+      usage: CredentialBudgetUsage
+      transaction: Doc<'moneyTransactions'>
+      budgetState: 'settled' | 'released'
+      now: number
+    }>
+
+async function prepareCredentialBudgetTransition(
   ctx: Pick<MutationCtx, 'db'>,
   transaction: Doc<'moneyTransactions'>,
   outcome: 'released' | 'not_released',
   now: number,
-): Promise<boolean> {
+): Promise<PreparedCredentialBudgetTransition | undefined> {
   const hasBudgetMetadata =
     transaction.credentialId !== undefined ||
     transaction.budgetPolicyRef !== undefined ||
@@ -665,7 +726,7 @@ async function releaseOrSettleCredentialBudget(
     transaction.budgetDayStart !== undefined ||
     transaction.budgetMonthStart !== undefined ||
     transaction.budgetState !== undefined
-  if (!hasBudgetMetadata) return true
+  if (!hasBudgetMetadata) return { kind: 'no_op' }
   if (
     transaction.credentialId === undefined ||
     transaction.budgetPolicyRef === undefined ||
@@ -676,18 +737,22 @@ async function releaseOrSettleCredentialBudget(
     transaction.budgetState === undefined ||
     transaction.amountUnits === undefined
   )
-    return false
+    return undefined
+  if (transaction.budgetState === 'released') return { kind: 'no_op' }
+  if (transaction.budgetState === 'settled' && outcome === 'released')
+    return { kind: 'no_op' }
   if (
     transaction.budgetState !== 'reserved' &&
-    transaction.budgetState !== 'unknown'
+    transaction.budgetState !== 'unknown' &&
+    transaction.budgetState !== 'settled'
   )
-    return true
+    return undefined
   const amount = amountFromParts(
     transaction.currency,
     transaction.amountUnits,
     transaction.exponent,
   )
-  if (amount === undefined) return false
+  if (amount === undefined) return undefined
   const rows = await readBudgetRows(ctx, {
     principalId: transaction.principalId,
     accountId: transaction.accountId ?? transaction.principalId,
@@ -700,20 +765,43 @@ async function releaseOrSettleCredentialBudget(
     amount,
     now,
   })
-  if (rows === undefined) return false
+  if (
+    rows === undefined ||
+    (transaction.budgetState === 'settled' &&
+      (rows.daily._creationTime === 0 ||
+        rows.monthly._creationTime === 0 ||
+        rows.concurrency._creationTime === 0))
+  )
+    return undefined
   const usage = budgetUsage(rows)
-  if (usage === undefined) return false
+  if (usage === undefined) return undefined
   const transition =
     outcome === 'released'
       ? settleCredentialBudget({ usage, amount })
-      : releaseCredentialBudget({ usage, amount })
-  if (transition.kind === 'refused') return false
-  await writeBudgetUsage(ctx, rows, transition.usage, now)
-  await ctx.db.patch(transaction._id, {
+      : transaction.budgetState === 'settled'
+        ? reverseCredentialBudget({ usage, amount })
+        : releaseCredentialBudget({ usage, amount })
+  if (transition.kind === 'refused') return undefined
+  return {
+    kind: 'apply',
+    rows,
+    usage: transition.usage,
+    transaction,
     budgetState: outcome === 'released' ? 'settled' : 'released',
-    updatedAt: now,
+    now,
+  }
+}
+
+async function applyPreparedCredentialBudgetTransition(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedCredentialBudgetTransition,
+): Promise<void> {
+  if (prepared.kind === 'no_op') return
+  await writeBudgetUsage(ctx, prepared.rows, prepared.usage, prepared.now)
+  await ctx.db.patch(prepared.transaction._id, {
+    budgetState: prepared.budgetState,
+    updatedAt: prepared.now,
   })
-  return true
 }
 
 function externalSpendIdentityFromRow(
@@ -886,13 +974,18 @@ function externalSpendAccepted(
 }
 function accountFromRow(row: Doc<'moneyAccounts'>): MoneyAccount | undefined {
   const balance = amountFromParts(row.currency, row.balanceUnits, row.exponent)
-  if (balance === undefined) return undefined
+  const recoveryDueUnits =
+    row.recoveryDueUnits === undefined ? '0' : row.recoveryDueUnits
+  const recoveryDue = amountFromParts(row.currency, recoveryDueUnits, row.exponent)
+  if (balance === undefined || recoveryDue === undefined) return undefined
+  if (row.accountKind !== 'provider_earnings' && recoveryDue.units !== '0') return undefined
   return {
     accountRef: row.accountRef,
     accountKind: row.accountKind,
     ...(row.accountId === undefined ? {} : { accountId: row.accountId }),
     ...(row.businessId === undefined ? {} : { businessId: row.businessId }),
     balance,
+    recoveryDue,
     version: row.version,
     state: row.state,
     createdAt: row.createdAt,
@@ -947,20 +1040,19 @@ function canonicalMoneyAccountMatches(
   )
 }
 
-async function ensureCanonicalMoneyAccount(
-  ctx: Pick<MutationCtx, 'db'>,
+type CanonicalMoneyAccountValue = Omit<
+  Doc<'moneyAccounts'>,
+  '_id' | '_creationTime'
+>
+type PreparedCanonicalMoneyAccount =
+  | Readonly<{ kind: 'existing'; row: Doc<'moneyAccounts'> }>
+  | Readonly<{ kind: 'insert'; value: CanonicalMoneyAccountValue }>
+
+function canonicalMoneyAccountValue(
   input: CanonicalMoneyAccountInput,
-): Promise<Doc<'moneyAccounts'> | undefined> {
+): CanonicalMoneyAccountValue {
   const accountRef = canonicalMoneyAccountRef(input)
-  const existing = await ctx.db
-    .query('moneyAccounts')
-    .withIndex('by_accountRef', (q) => q.eq('accountRef', accountRef))
-    .unique()
-  if (existing !== null)
-    return canonicalMoneyAccountMatches(existing, input, accountRef)
-      ? existing
-      : undefined
-  const accountId = await ctx.db.insert('moneyAccounts', {
+  return {
     accountRef,
     accountKind: input.accountKind,
     ...(input.accountKind === 'operator_credit'
@@ -972,13 +1064,61 @@ async function ensureCanonicalMoneyAccount(
     currency: input.currency,
     exponent: input.exponent,
     balanceUnits: '0',
+    recoveryDueUnits: '0',
     version: 0,
     state: 'active',
     createdAt: input.now,
     updatedAt: input.now,
-  })
+  }
+}
+
+function canonicalMoneyAccountPreview(
+  prepared: PreparedCanonicalMoneyAccount,
+): Doc<'moneyAccounts'> {
+  return prepared.kind === 'existing'
+    ? prepared.row
+    : {
+        _id: '' as Doc<'moneyAccounts'>['_id'],
+        _creationTime: 0,
+        ...prepared.value,
+      }
+}
+
+async function prepareCanonicalMoneyAccount(
+  ctx: Pick<MutationCtx, 'db'>,
+  input: CanonicalMoneyAccountInput,
+): Promise<PreparedCanonicalMoneyAccount | undefined> {
+  const accountRef = canonicalMoneyAccountRef(input)
+  const existing = await ctx.db
+    .query('moneyAccounts')
+    .withIndex('by_accountRef', (q) => q.eq('accountRef', accountRef))
+    .unique()
+  if (existing !== null)
+    return canonicalMoneyAccountMatches(existing, input, accountRef)
+      ? { kind: 'existing', row: existing }
+      : undefined
+  return { kind: 'insert', value: canonicalMoneyAccountValue(input) }
+}
+
+async function applyPreparedCanonicalMoneyAccount(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedCanonicalMoneyAccount,
+): Promise<Doc<'moneyAccounts'>> {
+  if (prepared.kind === 'existing') return prepared.row
+  const accountId = await ctx.db.insert('moneyAccounts', prepared.value)
   const created = await ctx.db.get(accountId)
-  return created === null ? undefined : created
+  if (created === null) throw new Error('canonical_money_account_insert_missing')
+  return created
+}
+
+async function ensureCanonicalMoneyAccount(
+  ctx: Pick<MutationCtx, 'db'>,
+  input: CanonicalMoneyAccountInput,
+): Promise<Doc<'moneyAccounts'> | undefined> {
+  const prepared = await prepareCanonicalMoneyAccount(ctx, input)
+  return prepared === undefined
+    ? undefined
+    : await applyPreparedCanonicalMoneyAccount(ctx, prepared)
 }
 
 function payoutFromRow(row: Doc<'moneyPayouts'>): MoneyPayout | undefined {
@@ -1102,6 +1242,217 @@ function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {
 function entryAmount(row: MoneyLedgerEntryRow): ExactAmount | undefined {
   return amountFromParts(row.currency, row.amountUnits, row.exponent)
 }
+type ChargeLedgerEntries = Readonly<{
+  charge: MoneyLedgerEntryRow
+  provider: MoneyLedgerEntryRow
+  rake: MoneyLedgerEntryRow
+  recovery?: MoneyLedgerEntryRow
+}>
+
+function selectChargeLedgerEntries(
+  entries: readonly MoneyLedgerEntryRow[],
+): ChargeLedgerEntries | undefined {
+  if (entries.length !== 3 && entries.length !== 4) return undefined
+  const charges = entries.filter(
+    (entry) => entry.entryType === 'charge' && entry.direction === 'debit',
+  )
+  const providers = entries.filter(
+    (entry) =>
+      entry.entryType === 'payout_accrual' && entry.direction === 'credit',
+  )
+  const rakes = entries.filter(
+    (entry) => entry.entryType === 'rake' && entry.direction === 'credit',
+  )
+  const recoveries = entries.filter(
+    (entry) =>
+      entry.entryType === 'payout_accrual' && entry.direction === 'debit',
+  )
+  if (
+    charges.length !== 1 ||
+    providers.length !== 1 ||
+    rakes.length !== 1 ||
+    entries.length !== 3 + recoveries.length ||
+    recoveries.length > 1
+  )
+    return undefined
+  const charge = charges[0]
+  const provider = providers[0]
+  const rake = rakes[0]
+  if (charge === undefined || provider === undefined || rake === undefined)
+    return undefined
+  return {
+    charge,
+    provider,
+    rake,
+    ...(recoveries[0] === undefined ? {} : { recovery: recoveries[0] }),
+  }
+}
+
+function providerRecoveryAmount(
+  entries: ChargeLedgerEntries,
+  transaction: Doc<'moneyTransactions'>,
+): ExactAmount | undefined {
+  const providerAmount = entryAmount(entries.provider)
+  if (
+    providerAmount === undefined ||
+    entries.provider.transactionRef !== transaction.transactionRef ||
+    entries.provider.idempotencyKey !== transaction.idempotencyKey ||
+    entries.provider.createdAt !== transaction.createdAt
+  )
+    return undefined
+  if (entries.recovery === undefined)
+    return zeroAmount(providerAmount.currency, providerAmount.exponent)
+  const recoveryAmount = entryAmount(entries.recovery)
+  if (
+    recoveryAmount === undefined ||
+    entries.recovery.entryRef !== `${transaction.transactionRef}:provider-recovery` ||
+    entries.recovery.accountRef !== entries.provider.accountRef ||
+    entries.recovery.businessId !== entries.provider.businessId ||
+    entries.recovery.currency !== entries.provider.currency ||
+    entries.recovery.exponent !== entries.provider.exponent ||
+    entries.recovery.transactionRef !== entries.provider.transactionRef ||
+    entries.recovery.idempotencyKey !== entries.provider.idempotencyKey ||
+    entries.recovery.sourceDigest !== entries.provider.sourceDigest ||
+    entries.recovery.evidenceRefs.length !== entries.provider.evidenceRefs.length ||
+    !entries.recovery.evidenceRefs.every(
+      (ref, index) => ref === entries.provider.evidenceRefs[index],
+    ) ||
+    entries.recovery.invocationRef !== entries.provider.invocationRef ||
+    entries.recovery.attemptRef !== entries.provider.attemptRef ||
+    entries.recovery.principalId !== undefined ||
+    entries.recovery.createdAt !== entries.provider.createdAt ||
+    entries.recovery.reversalOf !== undefined ||
+    compareExactAmounts(recoveryAmount, providerAmount) === 1
+  )
+    return undefined
+  return recoveryAmount
+}
+function sameEvidenceRefs(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((ref, index) => ref === right[index])
+}
+
+type ValidatedChargeJournal = Readonly<{
+  selected: ChargeLedgerEntries
+  usage: Doc<'moneyUsageEvents'>
+  accountId: string
+  businessId: string
+  chargeAmount: ExactAmount
+  providerAmount: ExactAmount
+  rakeAmount: ExactAmount
+}>
+
+function validateCanonicalChargeJournal(
+  original: Doc<'moneyTransactions'>,
+  usage: Doc<'moneyUsageEvents'> | undefined,
+  selected: ChargeLedgerEntries | undefined,
+): ValidatedChargeJournal | undefined {
+  const accountId = original.accountId
+  const businessId = usage?.businessId
+  const amount = original.amountUnits === undefined
+    ? undefined
+    : amountFromParts(original.currency, original.amountUnits, original.exponent)
+  const usageAmount = usage === undefined
+    ? undefined
+    : amountFromParts(usage.currency, usage.amountUnits, usage.exponent)
+  const chargeAmount = selected === undefined ? undefined : entryAmount(selected.charge)
+  const providerAmount = selected === undefined ? undefined : entryAmount(selected.provider)
+  const rakeAmount = selected === undefined ? undefined : entryAmount(selected.rake)
+  if (
+    accountId === undefined
+    || businessId === undefined
+    || usage === undefined
+    || selected === undefined
+    || amount === undefined
+    || usageAmount === undefined
+    || chargeAmount === undefined
+    || providerAmount === undefined
+    || rakeAmount === undefined
+    || original.kind !== 'charge'
+    || original.idempotencyKey !== original.transactionRef
+    || original.principalId !== usage.principalId
+    || original.credentialId === undefined
+    || original.credentialId !== usage.credentialId
+    || original.accountId !== usage.accountId
+    || usage.transactionRef !== original.transactionRef
+    || usage.chargeState !== 'paid'
+    || usage.observedAt !== original.createdAt
+    || usageAmount.currency !== original.currency
+    || usageAmount.exponent !== original.exponent
+    || compareExactAmounts(usageAmount, amount) !== 0
+    || selected.charge.entryRef !== `${original.transactionRef}:charge`
+    || selected.provider.entryRef !== `${original.transactionRef}:provider`
+    || selected.rake.entryRef !== `${original.transactionRef}:rake`
+    || selected.charge.accountRef !== accountRefForOwner(accountId, original.currency)
+    || selected.provider.accountRef !== accountRefForProvider(businessId, original.currency)
+    || selected.rake.accountRef !== accountRefForRake(original.currency)
+    || selected.charge.entryType !== 'charge'
+    || selected.charge.direction !== 'debit'
+    || selected.provider.entryType !== 'payout_accrual'
+    || selected.provider.direction !== 'credit'
+    || selected.rake.entryType !== 'rake'
+    || selected.rake.direction !== 'credit'
+    || selected.charge.transactionRef !== original.transactionRef
+    || selected.provider.transactionRef !== original.transactionRef
+    || selected.rake.transactionRef !== original.transactionRef
+    || selected.charge.idempotencyKey !== original.idempotencyKey
+    || selected.provider.idempotencyKey !== original.idempotencyKey
+    || selected.rake.idempotencyKey !== original.idempotencyKey
+    || selected.charge.createdAt !== original.createdAt
+    || selected.provider.createdAt !== original.createdAt
+    || selected.rake.createdAt !== original.createdAt
+    || selected.charge.principalId !== original.principalId
+    || selected.charge.businessId !== undefined
+    || selected.charge.invocationRef !== usage.invocationRef
+    || selected.charge.attemptRef !== usage.attemptRef
+    || selected.charge.reversalOf !== undefined
+    || selected.provider.principalId !== undefined
+    || selected.provider.businessId !== businessId
+    || selected.provider.invocationRef !== usage.invocationRef
+    || selected.provider.attemptRef !== usage.attemptRef
+    || selected.provider.reversalOf !== undefined
+    || selected.rake.principalId !== undefined
+    || selected.rake.businessId !== businessId
+    || selected.rake.invocationRef !== undefined
+    || selected.rake.attemptRef !== undefined
+    || selected.rake.reversalOf !== undefined
+    || selected.charge.sourceDigest !== selected.provider.sourceDigest
+    || selected.charge.sourceDigest !== selected.rake.sourceDigest
+    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.provider.evidenceRefs)
+    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.rake.evidenceRefs)
+    || compareExactAmounts(chargeAmount, amount) !== 0
+    || chargeAmount.currency !== original.currency
+    || providerAmount.currency !== original.currency
+    || rakeAmount.currency !== original.currency
+    || chargeAmount.exponent !== original.exponent
+    || providerAmount.exponent !== original.exponent
+    || rakeAmount.exponent !== original.exponent
+    || compareExactAmounts(addExactAmounts(providerAmount, rakeAmount), chargeAmount) !== 0
+  ) return undefined
+  if (
+    selected.recovery !== undefined
+    && (
+      selected.recovery.entryRef !== `${original.transactionRef}:provider-recovery`
+      || selected.recovery.accountRef !== selected.provider.accountRef
+      || selected.recovery.entryType !== 'payout_accrual'
+      || selected.recovery.direction !== 'debit'
+      || selected.recovery.businessId !== businessId
+      || selected.recovery.principalId !== undefined
+      || selected.recovery.invocationRef !== usage.invocationRef
+      || selected.recovery.attemptRef !== usage.attemptRef
+      || selected.recovery.reversalOf !== undefined
+      || selected.recovery.transactionRef !== original.transactionRef
+      || selected.recovery.idempotencyKey !== original.idempotencyKey
+      || selected.recovery.sourceDigest !== selected.charge.sourceDigest
+      || !sameEvidenceRefs(selected.recovery.evidenceRefs, selected.charge.evidenceRefs)
+      || selected.recovery.createdAt !== original.createdAt
+      || selected.recovery.currency !== selected.provider.currency
+      || selected.recovery.exponent !== selected.provider.exponent
+      || compareExactAmounts(entryAmount(selected.recovery), providerAmount) === 1
+    )
+  ) return undefined
+  return { selected, usage, accountId, businessId, chargeAmount, providerAmount, rakeAmount }
+}
+
 type PayoutAccrualAmounts = Readonly<{
   businessId: string
   currency: string
@@ -1144,38 +1495,26 @@ function payoutPeriodIdentity(
 
 async function readPayoutAccrualAmounts(
   ctx: Pick<MutationCtx, 'db'>,
-  transactionRef: string,
+  transaction: Doc<'moneyTransactions'>,
 ): Promise<PayoutAccrualAmounts | undefined> {
   const entries = await ctx.db
     .query('moneyLedgerEntries')
     .withIndex('by_transactionRef', (query) =>
-      query.eq('transactionRef', transactionRef),
+      query.eq('transactionRef', transaction.transactionRef),
     )
     .take(10)
-  const charge = entries.find(
-    (entry) => entry.entryType === 'charge' && entry.direction === 'debit',
-  )
-  const provider = entries.find(
-    (entry) =>
-      entry.entryType === 'payout_accrual' &&
-      entry.direction === 'credit' &&
-      entry.businessId !== undefined,
-  )
-  const rake = entries.find(
-    (entry) => entry.entryType === 'rake' && entry.direction === 'credit',
-  )
-  const chargeAmount = charge === undefined ? undefined : entryAmount(charge)
-  const providerAmount =
-    provider === undefined ? undefined : entryAmount(provider)
-  const rakeAmount = rake === undefined ? undefined : entryAmount(rake)
+  const selected = selectChargeLedgerEntries(entries)
+  if (selected === undefined) return undefined
+  const chargeAmount = entryAmount(selected.charge)
+  const providerAmount = entryAmount(selected.provider)
+  const rakeAmount = entryAmount(selected.rake)
+  const recoveryAmount = providerRecoveryAmount(selected, transaction)
   if (
-    charge === undefined ||
-    provider === undefined ||
-    rake === undefined ||
     chargeAmount === undefined ||
     providerAmount === undefined ||
     rakeAmount === undefined ||
-    provider.businessId === undefined ||
+    recoveryAmount === undefined ||
+    selected.provider.businessId === undefined ||
     chargeAmount.currency !== providerAmount.currency ||
     rakeAmount.currency !== providerAmount.currency
   )
@@ -1183,59 +1522,84 @@ async function readPayoutAccrualAmounts(
   const providerAccount = await ctx.db
     .query('moneyAccounts')
     .withIndex('by_accountRef', (query) =>
-      query.eq('accountRef', provider.accountRef),
+      query.eq('accountRef', selected.provider.accountRef),
     )
     .unique()
   if (
     providerAccount === null ||
     providerAccount.accountKind !== 'provider_earnings' ||
-    providerAccount.businessId !== provider.businessId ||
+    providerAccount.businessId !== selected.provider.businessId ||
     providerAccount.currency !== providerAmount.currency
   )
     return undefined
-  const grossAccrual = amountAtScale(
+  const fullGross = amountAtScale(
     chargeAmount,
     providerAccount.currency,
     providerAccount.exponent,
   )
-  const rakeAtScale = amountAtScale(
+  const fullRake = amountAtScale(
     rakeAmount,
     providerAccount.currency,
     providerAccount.exponent,
   )
-  const providerNet = amountAtScale(
+  const fullProvider = amountAtScale(
     providerAmount,
     providerAccount.currency,
     providerAccount.exponent,
   )
+  const recoveryAtScale = amountAtScale(
+    recoveryAmount,
+    providerAccount.currency,
+    providerAccount.exponent,
+  )
   if (
-    grossAccrual === undefined ||
-    rakeAtScale === undefined ||
-    providerNet === undefined
+    fullGross === undefined ||
+    fullRake === undefined ||
+    fullProvider === undefined ||
+    recoveryAtScale === undefined
   )
     return undefined
-  const expectedGross = addExactAmounts(providerNet, rakeAtScale)
+  const grossAccrual = subtractExactAmounts(fullGross, recoveryAtScale)
+  const providerNet = subtractExactAmounts(fullProvider, recoveryAtScale)
+  if (grossAccrual === undefined || providerNet === undefined) return undefined
+  const expectedGross = addExactAmounts(providerNet, fullRake)
   if (
     expectedGross === undefined ||
     compareExactAmounts(expectedGross, grossAccrual) !== 0
   )
     return undefined
   return {
-    businessId: provider.businessId,
+    businessId: selected.provider.businessId,
     currency: providerAccount.currency,
     exponent: providerAccount.exponent,
     grossAccrual,
-    rake: rakeAtScale,
+    rake: fullRake,
     providerNet,
   }
 }
 
-async function updatePayoutPeriod(
+type PreparedPayoutPeriodUpdate =
+  | Readonly<{
+      kind: 'insert'
+      value: Omit<Doc<'moneyPayouts'>, '_id' | '_creationTime'>
+    }>
+  | Readonly<{
+      kind: 'patch'
+      row: Doc<'moneyPayouts'>
+      patch: Readonly<{
+        grossAccrualUnits: string
+        rakeUnits: string
+        providerNetUnits: string
+        updatedAt: number
+      }>
+    }>
+
+async function preparePayoutPeriodUpdate(
   ctx: Pick<MutationCtx, 'db'>,
   accrual: PayoutAccrualAmounts,
   now: number,
   direction: 'credit' | 'debit',
-): Promise<boolean> {
+): Promise<PreparedPayoutPeriodUpdate | undefined> {
   const period = payoutPeriodIdentity(accrual.businessId, accrual.currency, now)
   const currentRow = await ctx.db
     .query('moneyPayouts')
@@ -1244,30 +1608,32 @@ async function updatePayoutPeriod(
     )
     .unique()
   if (currentRow === null) {
-    if (direction === 'debit') return false
+    if (direction === 'debit') return undefined
     const minimum = zeroAmount(accrual.currency, accrual.exponent)
-    if (minimum === undefined) return false
-    await ctx.db.insert('moneyPayouts', {
-      payoutRef: period.payoutRef,
-      businessId: accrual.businessId,
-      currency: accrual.currency,
-      exponent: accrual.exponent,
-      grossAccrualUnits: accrual.grossAccrual.units,
-      rakeUnits: accrual.rake.units,
-      providerNetUnits: accrual.providerNet.units,
-      minimumPayoutUnits: minimum.units,
-      state: 'held_threshold',
-      periodStart: period.periodStart,
-      periodEnd: period.periodEnd,
-      providerAccountRef: accountRefForProvider(
-        accrual.businessId,
-        accrual.currency,
-      ),
-      idempotencyKey: period.payoutRef,
-      createdAt: now,
-      updatedAt: now,
-    })
-    return true
+    if (minimum === undefined) return undefined
+    return {
+      kind: 'insert',
+      value: {
+        payoutRef: period.payoutRef,
+        businessId: accrual.businessId,
+        currency: accrual.currency,
+        exponent: accrual.exponent,
+        grossAccrualUnits: accrual.grossAccrual.units,
+        rakeUnits: accrual.rake.units,
+        providerNetUnits: accrual.providerNet.units,
+        minimumPayoutUnits: minimum.units,
+        state: 'held_threshold',
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        providerAccountRef: accountRefForProvider(
+          accrual.businessId,
+          accrual.currency,
+        ),
+        idempotencyKey: period.payoutRef,
+        createdAt: now,
+        updatedAt: now,
+      },
+    }
   }
   const current = payoutFromRow(currentRow)
   if (
@@ -1280,7 +1646,7 @@ async function updatePayoutPeriod(
     current.state === 'transfer_pending' ||
     current.state === 'outcome_unknown'
   )
-    return false
+    return undefined
   const nextGross =
     direction === 'credit'
       ? addExactAmounts(current.grossAccrual, accrual.grossAccrual)
@@ -1298,14 +1664,97 @@ async function updatePayoutPeriod(
     nextRake === undefined ||
     nextProviderNet === undefined
   )
-    return false
-  await ctx.db.patch(currentRow._id, {
-    grossAccrualUnits: nextGross.units,
-    rakeUnits: nextRake.units,
-    providerNetUnits: nextProviderNet.units,
-    updatedAt: now,
-  })
-  return true
+    return undefined
+  return {
+    kind: 'patch',
+    row: currentRow,
+    patch: {
+      grossAccrualUnits: nextGross.units,
+      rakeUnits: nextRake.units,
+      providerNetUnits: nextProviderNet.units,
+      updatedAt: now,
+    },
+  }
+}
+
+async function applyPreparedPayoutPeriodUpdate(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedPayoutPeriodUpdate,
+): Promise<void> {
+  if (prepared.kind === 'insert')
+    await ctx.db.insert('moneyPayouts', prepared.value)
+  else await ctx.db.patch(prepared.row._id, prepared.patch)
+}
+
+type PreparedPayoutAccrualReversalForRefund =
+  | Readonly<{ kind: 'no_op' }>
+  | Readonly<{
+      kind: 'patch'
+      row: Doc<'moneyPayouts'>
+      patch: Readonly<{
+        grossAccrualUnits: string
+        rakeUnits: string
+        providerNetUnits: string
+        updatedAt: number
+      }>
+    }>
+
+async function preparePayoutAccrualReversalForRefund(
+  ctx: Pick<MutationCtx, 'db'>,
+  accrual: PayoutAccrualAmounts,
+  settledAt: number,
+): Promise<PreparedPayoutAccrualReversalForRefund | undefined> {
+  const period = payoutPeriodIdentity(accrual.businessId, accrual.currency, settledAt)
+  const row = await ctx.db
+    .query('moneyPayouts')
+    .withIndex('by_payoutRef', (query) => query.eq('payoutRef', period.payoutRef))
+    .unique()
+  if (row === null) return undefined
+  const current = payoutFromRow(row)
+  if (
+    current === undefined ||
+    current.businessId !== accrual.businessId ||
+    current.periodStart !== period.periodStart ||
+    current.periodEnd !== period.periodEnd ||
+    current.state === 'transfer_pending' ||
+    current.state === 'outcome_unknown'
+  )
+    return undefined
+  if (current.state === 'paid' || current.state === 'reversed')
+    return { kind: 'no_op' }
+  const nextGross = subtractExactAmounts(
+    current.grossAccrual,
+    accrual.grossAccrual,
+  )
+  const nextRake = subtractExactAmounts(current.rake, accrual.rake)
+  const nextProviderNet = subtractExactAmounts(
+    current.providerNet,
+    accrual.providerNet,
+  )
+  if (
+    nextGross === undefined ||
+    nextRake === undefined ||
+    nextProviderNet === undefined
+  )
+    return undefined
+  return {
+    kind: 'patch',
+    row,
+    patch: {
+      grossAccrualUnits: nextGross.units,
+      rakeUnits: nextRake.units,
+      providerNetUnits: nextProviderNet.units,
+      updatedAt: settledAt,
+    },
+  }
+}
+
+async function applyPayoutAccrualReversalForRefund(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedPayoutAccrualReversalForRefund,
+): Promise<void> {
+  if (prepared.kind === 'no_op') return
+  await ctx.db.patch(prepared.row._id, prepared.patch)
 }
 
 type UsageChargeExpectation = Readonly<{
@@ -1360,21 +1809,54 @@ function usageIdentity(
   }
 }
 
-async function insertMoneyUsageEvent(
-  ctx: MutationCtx,
+type UsageSummaryWrite =
+  | Readonly<{
+      kind: 'insert'
+      value: Omit<
+        Doc<'moneyCredentialUsageSummaries'>,
+        '_id' | '_creationTime'
+      >
+    }>
+  | Readonly<{
+      kind: 'patch'
+      row: Doc<'moneyCredentialUsageSummaries'>
+      patch: Readonly<{
+        callCount: number
+        paidCallCount: number
+        freeCallCount: number
+        exponent: number
+        grossSpendUnits: string
+        states: Doc<'moneyCredentialUsageSummaries'>['states']
+        updatedAt: number
+      }>
+    }>
+type PreparedMoneyUsageEvent =
+  | Readonly<{ kind: 'existing'; row: Doc<'moneyUsageEvents'> }>
+  | Readonly<{
+      kind: 'insert'
+      event: MoneyUsageEventInput
+      summaryWrite: UsageSummaryWrite
+    }>
+
+async function prepareMoneyUsageEvent(
+  ctx: Pick<MutationCtx, 'db'>,
   event: MoneyUsageEventInput,
-): Promise<boolean> {
-  const existing = await ctx.db
-    .query('moneyUsageEvents')
-    .withIndex('by_usageRef', (q) => q.eq('usageRef', event.usageRef))
-    .unique()
-  if (existing !== null) return false
+  existingOverride?: Doc<'moneyUsageEvents'> | null,
+): Promise<PreparedMoneyUsageEvent | undefined> {
+  const existing =
+    existingOverride === undefined
+      ? await ctx.db
+          .query('moneyUsageEvents')
+          .withIndex('by_usageRef', (q) => q.eq('usageRef', event.usageRef))
+          .unique()
+      : existingOverride
+  if (existing !== null) return { kind: 'existing', row: existing }
   const eventAmount = amountFromParts(
     event.currency,
     event.amountUnits,
     event.exponent,
   )
-  if (eventAmount === undefined) return false
+  if (eventAmount === undefined) return undefined
   const summary = await ctx.db
     .query('moneyCredentialUsageSummaries')
     .withIndex('by_principalId_and_credentialId_and_currency', (q) =>
@@ -1384,6 +1866,18 @@ async function insertMoneyUsageEvent(
         .eq('currency', event.currency),
     )
     .unique()
+  if (
+    summary !== null &&
+    (
+      !Number.isSafeInteger(summary.callCount) ||
+      summary.callCount < 0 ||
+      !Number.isSafeInteger(summary.paidCallCount) ||
+      summary.paidCallCount < 0 ||
+      !Number.isSafeInteger(summary.freeCallCount) ||
+      summary.freeCallCount < 0
+    )
+  )
+    return undefined
   const states =
     summary === null || summary.states.includes(event.chargeState)
       ? (summary?.states ?? [event.chargeState])
@@ -1394,7 +1888,7 @@ async function insertMoneyUsageEvent(
     event.chargeState === 'paid'
       ? eventAmount
       : zeroAmount(event.currency, event.exponent)
-  if (spend === undefined) return false
+  if (spend === undefined) return undefined
   const nextGrossSpend =
     summary === null
       ? spend
@@ -1408,33 +1902,59 @@ async function insertMoneyUsageEvent(
             ? undefined
             : addExactAmounts(current, spend)
         })()
-  if (nextGrossSpend === undefined) return false
-  await ctx.db.insert('moneyUsageEvents', event)
-  if (summary === null) {
-    await ctx.db.insert('moneyCredentialUsageSummaries', {
-      principalId: event.principalId,
-      credentialId: event.credentialId,
-      currency: nextGrossSpend.currency,
-      exponent: nextGrossSpend.exponent,
-      callCount: 1,
-      paidCallCount: paidCall,
-      freeCallCount: freeCall,
-      grossSpendUnits: nextGrossSpend.units,
-      states,
-      updatedAt: event.observedAt,
-    })
-  } else {
-    await ctx.db.patch(summary._id, {
-      callCount: summary.callCount + 1,
-      paidCallCount: summary.paidCallCount + paidCall,
-      freeCallCount: summary.freeCallCount + freeCall,
-      exponent: nextGrossSpend.exponent,
-      grossSpendUnits: nextGrossSpend.units,
-      states,
-      updatedAt: event.observedAt,
-    })
+  if (nextGrossSpend === undefined) return undefined
+  return {
+    kind: 'insert',
+    event,
+    summaryWrite:
+      summary === null
+        ? {
+            kind: 'insert',
+            value: {
+              principalId: event.principalId,
+              credentialId: event.credentialId,
+              currency: nextGrossSpend.currency,
+              exponent: nextGrossSpend.exponent,
+              callCount: 1,
+              paidCallCount: paidCall,
+              freeCallCount: freeCall,
+              grossSpendUnits: nextGrossSpend.units,
+              states,
+              updatedAt: event.observedAt,
+            },
+          }
+        : {
+            kind: 'patch',
+            row: summary,
+            patch: {
+              callCount: summary.callCount + 1,
+              paidCallCount: summary.paidCallCount + paidCall,
+              freeCallCount: summary.freeCallCount + freeCall,
+              exponent: nextGrossSpend.exponent,
+              grossSpendUnits: nextGrossSpend.units,
+              states,
+              updatedAt: event.observedAt,
+            },
+          },
   }
-  return true
+}
+
+async function applyPreparedMoneyUsageEvent(
+  ctx: Pick<MutationCtx, 'db'>,
+  prepared: PreparedMoneyUsageEvent,
+): Promise<void> {
+  if (prepared.kind === 'existing') return
+  await ctx.db.insert('moneyUsageEvents', prepared.event)
+  if (prepared.summaryWrite.kind === 'insert')
+    await ctx.db.insert(
+      'moneyCredentialUsageSummaries',
+      prepared.summaryWrite.value,
+    )
+  else
+    await ctx.db.patch(
+      prepared.summaryWrite.row._id,
+      prepared.summaryWrite.patch,
+    )
 }
 
 function principalAllowed(
@@ -1499,6 +2019,9 @@ type ReconcileChargeResult =
   | Readonly<{ kind: 'accepted'; transactionRef: string; outcome: 'released' }>
   | Readonly<{ kind: 'accepted'; transactionRef: string; currency: string }>
   | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
+type RefundResult =
+  | Readonly<{ kind: 'accepted'; transactionRef: string; currency: string }>
+  | Readonly<{ kind: 'refused'; code: 'ledger_idempotency_conflict' | 'charge_reconciliation_required' | 'billing_identity_mismatch'; retryable: false }>
 
 export const readOperatorAccountVersion = internalQuery({
   args: {
@@ -1601,7 +2124,7 @@ export const reserveExternalInvocationSpend = internalMutation({
       )
     }
     const identityDigest = externalSpendIdentityDigest(identity)
-    await ctx.db.insert('moneyExternalSpendReservations', {
+    const reservationId = await ctx.db.insert('moneyExternalSpendReservations', {
       reservationRef: identity.reservationRef,
       principalId: identity.principalId,
       credentialId: identity.credentialId,
@@ -1628,15 +2151,12 @@ export const reserveExternalInvocationSpend = internalMutation({
       createdAt: observedAt,
       updatedAt: observedAt,
     })
-    const created = await ctx.db
-      .query('moneyExternalSpendReservations')
-      .withIndex('by_reservationRef', (query) =>
-        query.eq('reservationRef', identity.reservationRef),
-      )
-      .unique()
-    return created === null
-      ? externalSpendRefusal('external_spend_state_conflict')
-      : externalSpendAccepted(created, false)
+    const created = await ctx.db.get(reservationId)
+    if (created === null) throw new Error('external_spend_reservation_insert_missing')
+    const accepted = externalSpendAccepted(created, false)
+    if (accepted.kind === 'refused')
+      throw new Error('external_spend_reservation_state_conflict')
+    return accepted
   },
 })
 
@@ -2320,53 +2840,46 @@ export const authorizeInvocationCharge = internalMutation({
       currency,
     )
     if (legacyRefusal !== undefined) return legacyRefusal
-    const [operatorExisting, providerExisting, rakeExisting] =
-      await Promise.all([
-        ctx.db
-          .query('moneyAccounts')
-          .withIndex('by_accountRef', (q) =>
-            q.eq('accountRef', expectedOperatorRef),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyAccounts')
-          .withIndex('by_accountRef', (q) =>
-            q.eq('accountRef', expectedProviderRef),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyAccounts')
-          .withIndex('by_accountRef', (q) =>
-            q.eq('accountRef', expectedRakeRef),
-          )
-          .unique(),
-      ])
+    const [operatorPrepared, providerPrepared, rakePrepared] =
+      await (async () => {
+        const operator = await prepareCanonicalMoneyAccount(ctx, {
+          accountKind: 'operator_credit',
+          accountId: ownerAccountId,
+          currency,
+          exponent: amount.exponent,
+          now: args.observedAt,
+        })
+        const operatorPreview =
+          operator === undefined
+            ? undefined
+            : canonicalMoneyAccountPreview(operator)
+        const provider = await prepareCanonicalMoneyAccount(ctx, {
+          accountKind: 'provider_earnings',
+          businessId: durableBusinessId,
+          currency,
+          exponent: operatorPreview?.exponent ?? amount.exponent,
+          now: args.observedAt,
+        })
+        const rake = await prepareCanonicalMoneyAccount(ctx, {
+          accountKind: 'ae_rake',
+          currency,
+          exponent: operatorPreview?.exponent ?? amount.exponent,
+          now: args.observedAt,
+        })
+        return [operator, provider, rake] as const
+      })()
     const operator =
-      operatorExisting ??
-      (await ensureCanonicalMoneyAccount(ctx, {
-        accountKind: 'operator_credit',
-        accountId: ownerAccountId,
-        currency,
-        exponent: amount.exponent,
-        now: args.observedAt,
-      }))
+      operatorPrepared === undefined
+        ? undefined
+        : canonicalMoneyAccountPreview(operatorPrepared)
     const provider =
-      providerExisting ??
-      (await ensureCanonicalMoneyAccount(ctx, {
-        accountKind: 'provider_earnings',
-        businessId: durableBusinessId,
-        currency,
-        exponent: operator?.exponent ?? amount.exponent,
-        now: args.observedAt,
-      }))
+      providerPrepared === undefined
+        ? undefined
+        : canonicalMoneyAccountPreview(providerPrepared)
     const rakeAccount =
-      rakeExisting ??
-      (await ensureCanonicalMoneyAccount(ctx, {
-        accountKind: 'ae_rake',
-        currency,
-        exponent: operator?.exponent ?? amount.exponent,
-        now: args.observedAt,
-      }))
+      rakePrepared === undefined
+        ? undefined
+        : canonicalMoneyAccountPreview(rakePrepared)
     const operatorDomain =
       operator === undefined ? undefined : accountFromRow(operator)
     const providerDomain =
@@ -2392,13 +2905,12 @@ export const authorizeInvocationCharge = internalMutation({
       operatorDomain === undefined ||
       providerDomain === undefined ||
       rakeDomain === undefined
-    ) {
+    )
       return {
         kind: 'refused' as const,
         code: 'billing_identity_missing' as const,
         retryable: false,
       }
-    }
     if (
       provider.exponent !== operator.exponent ||
       rakeAccount.exponent !== operator.exponent
@@ -2437,12 +2949,13 @@ export const authorizeInvocationCharge = internalMutation({
         code: 'currency_mismatch' as const,
         retryable: false,
       }
-    const providerBalance = addExactAmounts(
-      providerDomain.balance,
+    const providerCredit = applyProviderAccountCredit(
+      providerDomain,
       providerAmount,
+      args.observedAt,
     )
     const rakeBalance = addExactAmounts(rakeDomain.balance, rakeAmount)
-    if (providerBalance === undefined || rakeBalance === undefined)
+    if (providerCredit === undefined || rakeBalance === undefined)
       return {
         kind: 'refused' as const,
         code: 'rake_not_configured' as const,
@@ -2462,6 +2975,10 @@ export const authorizeInvocationCharge = internalMutation({
         retryable: false,
       }
     const usageRef = `${invocation.invocationRef}:${durableAttemptRef}:${invocation.operationRef}`
+    const existingUsage = await ctx.db
+      .query('moneyUsageEvents')
+      .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
+      .unique()
     const prior = await ctx.db
       .query('moneyTransactions')
       .withIndex('by_idempotencyKey', (q) =>
@@ -2495,10 +3012,7 @@ export const authorizeInvocationCharge = internalMutation({
           retryable: false,
         }
       if (prior.amountUnits === '0') {
-        const priorUsage = await ctx.db
-          .query('moneyUsageEvents')
-          .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-          .unique()
+        const priorUsage = existingUsage
         const priorAmount =
           priorUsage === null
             ? undefined
@@ -2539,10 +3053,7 @@ export const authorizeInvocationCharge = internalMutation({
           ...usageIdentity(priorUsage),
         }
       }
-      const priorUsage = await ctx.db
-        .query('moneyUsageEvents')
-        .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-        .unique()
+      const priorUsage = existingUsage
       const priorAmount =
         priorUsage === null
           ? undefined
@@ -2580,30 +3091,28 @@ export const authorizeInvocationCharge = internalMutation({
         .withIndex('by_transactionRef', (q) =>
           q.eq('transactionRef', prior.transactionRef),
         )
-        .take(3)
-      const charge = entries.find(
-        (entry) => entry.entryType === 'charge' && entry.direction === 'debit',
-      )
-      const providerEntry = entries.find(
-        (entry) =>
-          entry.entryType === 'payout_accrual' && entry.direction === 'credit',
-      )
-      const rakeEntry = entries.find(
-        (entry) => entry.entryType === 'rake' && entry.direction === 'credit',
-      )
+        .take(5)
+      const selected = selectChargeLedgerEntries(entries)
+      const charge = selected?.charge
+      const providerEntry = selected?.provider
+      const rakeEntry = selected?.rake
       const chargeAmount =
         charge === undefined ? undefined : entryAmount(charge)
       const providerEntryAmount =
         providerEntry === undefined ? undefined : entryAmount(providerEntry)
       const rakeEntryAmount =
         rakeEntry === undefined ? undefined : entryAmount(rakeEntry)
+      const recoveryAmount =
+        selected === undefined ? undefined : providerRecoveryAmount(selected, prior)
       if (
+        selected === undefined ||
         charge === undefined ||
         providerEntry === undefined ||
         rakeEntry === undefined ||
         chargeAmount === undefined ||
         providerEntryAmount === undefined ||
         rakeEntryAmount === undefined ||
+        recoveryAmount === undefined ||
         charge.accountRef !== operator.accountRef ||
         providerEntry.accountRef !== provider.accountRef ||
         rakeEntry.accountRef !== rakeAccount.accountRef
@@ -2652,10 +3161,6 @@ export const authorizeInvocationCharge = internalMutation({
       }
     }
     if (grossAmount.units === '0') {
-      const existingUsage = await ctx.db
-        .query('moneyUsageEvents')
-        .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-        .unique()
       if (existingUsage !== null) {
         const existingAmount = amountFromParts(
           existingUsage.currency,
@@ -2709,7 +3214,7 @@ export const authorizeInvocationCharge = internalMutation({
           retryable: false,
           nextAction: 'credit_topup_required' as const,
         }
-      const budgetReservation = await reserveCredentialBudgetInTransaction(ctx, {
+      const budgetReservation = await prepareCredentialBudgetReservation(ctx, {
         principalId: durablePrincipalId,
         accountId: ownerAccountId,
         credentialId: invocation.credentialId,
@@ -2719,6 +3224,56 @@ export const authorizeInvocationCharge = internalMutation({
         observedAt: args.observedAt,
       })
       if (budgetReservation.kind === 'refused') return budgetReservation
+      const usageEvent = {
+        usageRef,
+        principalId: durablePrincipalId,
+        accountId: ownerAccountId,
+        credentialId: invocation.credentialId,
+        currency,
+        exponent: grossAmount.exponent,
+        serviceRef: durableServiceRef,
+        offeringRef: durableOfferingRef,
+        businessId: durableBusinessId,
+        invocationRef: invocation.invocationRef,
+        attemptRef: canonicalAttempt.attemptRef,
+        operationKey: invocation.operationRef,
+        priceDigest: expectedPriceDigest,
+        chargeState: 'free_tier' as const,
+        amountUnits: '0',
+        transactionRef: expectedTransactionRef,
+        observedAt: args.observedAt,
+      }
+      const usagePlan = await prepareMoneyUsageEvent(
+        ctx,
+        usageEvent,
+        existingUsage,
+      )
+      if (usagePlan === undefined || usagePlan.kind !== 'insert')
+        return {
+          kind: 'refused' as const,
+          code: 'charge_reconciliation_required' as const,
+          retryable: false,
+        }
+      const budgetFields = {
+        credentialId: invocation.credentialId,
+        budgetPolicyRef: budgetReservation.budgetPolicyRef,
+        budgetGeneration: budgetGrant.generation,
+        budgetEnvironment: budgetReservation.environment,
+        budgetDayStart: budgetReservation.dayStart,
+        budgetMonthStart: budgetReservation.monthStart,
+        budgetState: 'reserved' as const,
+      }
+      const appliedOperator = await applyPreparedCanonicalMoneyAccount(
+        ctx,
+        operatorPrepared!,
+      )
+      await applyPreparedCanonicalMoneyAccount(ctx, providerPrepared!)
+      await applyPreparedCanonicalMoneyAccount(ctx, rakePrepared!)
+      await applyPreparedCredentialBudgetReservation(
+        ctx,
+        budgetReservation,
+        args.observedAt,
+      )
       if (counter === null)
         await ctx.db.insert('moneyFreeTierCounters', {
           counterRef: `${durablePrincipalId}:${durableOfferingRef}:day:${windowStart}`,
@@ -2736,15 +3291,6 @@ export const authorizeInvocationCharge = internalMutation({
           version: counter.version + 1,
           updatedAt: args.observedAt,
         })
-      const budgetFields = {
-        credentialId: invocation.credentialId,
-        budgetPolicyRef: budgetReservation.budgetPolicyRef,
-        budgetGeneration: budgetGrant.generation,
-        budgetEnvironment: budgetReservation.environment,
-        budgetDayStart: budgetReservation.dayStart,
-        budgetMonthStart: budgetReservation.monthStart,
-        budgetState: 'reserved' as const,
-      }
       await ctx.db.insert('moneyTransactions', {
         transactionRef: expectedTransactionRef,
         kind: 'charge' as const,
@@ -2756,71 +3302,20 @@ export const authorizeInvocationCharge = internalMutation({
         amountUnits: '0',
         exponent: grossAmount.exponent,
         state: 'applied' as const,
-        expectedAccountVersion: operator.version,
+        expectedAccountVersion: appliedOperator.version,
         createdAt: args.observedAt,
         updatedAt: args.observedAt,
         ...budgetFields,
       })
-      await insertMoneyUsageEvent(ctx, {
-        usageRef,
-        principalId: durablePrincipalId,
-        accountId: ownerAccountId,
-        credentialId: invocation.credentialId,
-        currency,
-        exponent: grossAmount.exponent,
-        serviceRef: durableServiceRef,
-        offeringRef: durableOfferingRef,
-        businessId: durableBusinessId,
-        invocationRef: invocation.invocationRef,
-        attemptRef: canonicalAttempt.attemptRef,
-        operationKey: invocation.operationRef,
-        priceDigest: expectedPriceDigest,
-        chargeState: 'free_tier',
-        amountUnits: '0',
-        transactionRef: expectedTransactionRef,
-        observedAt: args.observedAt,
-      })
-      const persistedUsage = await ctx.db
-        .query('moneyUsageEvents')
-        .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-        .unique()
-      const persistedAmount =
-        persistedUsage === null
-          ? undefined
-          : amountFromParts(
-              persistedUsage.currency,
-              persistedUsage.amountUnits,
-              persistedUsage.exponent,
-            )
-      if (
-        persistedUsage === null ||
-        persistedAmount === undefined ||
-        !usageMatchesCharge(persistedUsage, {
-          usageRef,
-          principalId: durablePrincipalId,
-          credentialId: invocation.credentialId,
-          serviceRef: durableServiceRef,
-          offeringRef: durableOfferingRef,
-          businessId: durableBusinessId,
-          invocationRef: invocation.invocationRef,
-          attemptRef: canonicalAttempt.attemptRef,
-          operationKey: invocation.operationRef,
-          priceDigest: expectedPriceDigest,
-          chargeState: 'free_tier',
-          amount: operatorAmount,
-        })
-      )
-        return {
-          kind: 'refused' as const,
-          code: 'charge_reconciliation_required' as const,
-          retryable: false,
-        }
+      await applyPreparedMoneyUsageEvent(ctx, usagePlan)
       return {
         kind: 'accepted' as const,
         chargeState: 'free_tier' as const,
-        amount: persistedAmount,
-        priceDigest: persistedUsage.priceDigest,
-        ...usageIdentity(persistedUsage),
+        amount: operatorAmount,
+        priceDigest: usagePlan.event.priceDigest,
+        usageRef: usagePlan.event.usageRef,
+        observedAt: usagePlan.event.observedAt,
+        transactionRef: usagePlan.event.transactionRef,
       }
     }
     const balanceComparison = compareExactAmounts(
@@ -2832,29 +3327,6 @@ export const authorizeInvocationCharge = internalMutation({
       balanceComparison === undefined ||
       balanceComparison === -1
     ) {
-      const existingUsage = await ctx.db
-        .query('moneyUsageEvents')
-        .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-        .unique()
-      if (existingUsage === null)
-        await insertMoneyUsageEvent(ctx, {
-          usageRef,
-          principalId: durablePrincipalId,
-          accountId: ownerAccountId,
-          credentialId: invocation.credentialId,
-          currency,
-          exponent: grossAmount.exponent,
-          serviceRef: durableServiceRef,
-          offeringRef: durableOfferingRef,
-          businessId: durableBusinessId,
-          invocationRef: invocation.invocationRef,
-          attemptRef: canonicalAttempt.attemptRef,
-          operationKey: invocation.operationRef,
-          priceDigest: expectedPriceDigest,
-          chargeState: 'insufficient_credit',
-          amountUnits: grossAmount.units,
-          observedAt: args.observedAt,
-        })
       return {
         kind: 'refused' as const,
         code: 'insufficient_credit' as const,
@@ -2864,6 +3336,12 @@ export const authorizeInvocationCharge = internalMutation({
         availableAmount: operatorDomain.balance,
       }
     }
+    if (existingUsage !== null)
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false,
+      }
     const operatorBalance = subtractExactAmounts(
       operatorDomain.balance,
       operatorAmount,
@@ -2880,7 +3358,7 @@ export const authorizeInvocationCharge = internalMutation({
         code: 'ledger_cas_conflict' as const,
         retryable: true,
       }
-    const budgetReservation = await reserveCredentialBudgetInTransaction(ctx, {
+    const budgetReservation = await prepareCredentialBudgetReservation(ctx, {
       principalId: durablePrincipalId,
       accountId: ownerAccountId,
       credentialId: invocation.credentialId,
@@ -2890,6 +3368,35 @@ export const authorizeInvocationCharge = internalMutation({
       observedAt: args.observedAt,
     })
     if (budgetReservation.kind === 'refused') return budgetReservation
+    const usagePlan = await prepareMoneyUsageEvent(
+      ctx,
+      {
+        usageRef,
+        principalId: durablePrincipalId,
+        accountId: ownerAccountId,
+        credentialId: invocation.credentialId,
+        currency,
+        exponent: grossAmount.exponent,
+        serviceRef: durableServiceRef,
+        offeringRef: durableOfferingRef,
+        businessId: durableBusinessId,
+        invocationRef: invocation.invocationRef,
+        attemptRef: canonicalAttempt.attemptRef,
+        operationKey: invocation.operationRef,
+        priceDigest: expectedPriceDigest,
+        chargeState: 'paid',
+        amountUnits: grossAmount.units,
+        transactionRef: expectedTransactionRef,
+        observedAt: args.observedAt,
+      },
+      existingUsage,
+    )
+    if (usagePlan === undefined || usagePlan.kind !== 'insert')
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false,
+      }
     const budgetFields = {
       credentialId: invocation.credentialId,
       budgetPolicyRef: budgetReservation.budgetPolicyRef,
@@ -2959,83 +3466,63 @@ export const authorizeInvocationCharge = internalMutation({
       exponent: rakeAmount.exponent,
       businessId: durableBusinessId,
     })
-    await ctx.db.patch('moneyAccounts', operator._id, {
+    const appliedOperator = await applyPreparedCanonicalMoneyAccount(
+      ctx,
+      operatorPrepared!,
+    )
+    const appliedProvider = await applyPreparedCanonicalMoneyAccount(
+      ctx,
+      providerPrepared!,
+    )
+    const appliedRake = await applyPreparedCanonicalMoneyAccount(
+      ctx,
+      rakePrepared!,
+    )
+    await applyPreparedCredentialBudgetReservation(
+      ctx,
+      budgetReservation,
+      args.observedAt,
+    )
+    if (providerCredit.recoveryPayment.units !== '0')
+      await ctx.db.insert('moneyLedgerEntries', {
+        ...common,
+        entryRef: `${expectedTransactionRef}:provider-recovery`,
+        accountRef: appliedProvider.accountRef,
+        entryType: 'payout_accrual',
+        direction: 'debit',
+        amountUnits: providerCredit.recoveryPayment.units,
+        currency: providerCredit.recoveryPayment.currency,
+        exponent: providerCredit.recoveryPayment.exponent,
+        businessId: durableBusinessId,
+        invocationRef: invocation.invocationRef,
+        attemptRef: canonicalAttempt.attemptRef,
+      })
+    await ctx.db.patch('moneyAccounts', appliedOperator._id, {
       balanceUnits: operatorBalance.units,
       version: operator.version + 1,
       updatedAt: args.observedAt,
     })
-    await ctx.db.patch('moneyAccounts', provider._id, {
-      balanceUnits: providerBalance.units,
-      version: provider.version + 1,
-      updatedAt: args.observedAt,
+    await ctx.db.patch('moneyAccounts', appliedProvider._id, {
+      balanceUnits: providerCredit.account.balance.units,
+      recoveryDueUnits: providerCredit.account.recoveryDue.units,
+      version: providerCredit.account.version,
+      updatedAt: providerCredit.account.updatedAt,
     })
-    await ctx.db.patch('moneyAccounts', rakeAccount._id, {
+    await ctx.db.patch('moneyAccounts', appliedRake._id, {
       balanceUnits: rakeBalance.units,
       version: rakeAccount.version + 1,
       updatedAt: args.observedAt,
     })
     await ctx.db.insert('moneyTransactions', transaction)
-    await insertMoneyUsageEvent(ctx, {
-      usageRef,
-      principalId: durablePrincipalId,
-      accountId: ownerAccountId,
-      credentialId: invocation.credentialId,
-      currency,
-      exponent: grossAmount.exponent,
-      serviceRef: durableServiceRef,
-      offeringRef: durableOfferingRef,
-      businessId: durableBusinessId,
-      invocationRef: invocation.invocationRef,
-      attemptRef: canonicalAttempt.attemptRef,
-      operationKey: invocation.operationRef,
-      priceDigest: expectedPriceDigest,
-      chargeState: 'paid',
-      amountUnits: grossAmount.units,
-      transactionRef: expectedTransactionRef,
-      observedAt: args.observedAt,
-    })
-    const persistedUsage = await ctx.db
-      .query('moneyUsageEvents')
-      .withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef))
-      .unique()
-    const persistedAmount =
-      persistedUsage === null
-        ? undefined
-        : amountFromParts(
-            persistedUsage.currency,
-            persistedUsage.amountUnits,
-            persistedUsage.exponent,
-          )
-    if (
-      persistedUsage === null ||
-      persistedAmount === undefined ||
-      !usageMatchesCharge(persistedUsage, {
-        usageRef,
-        principalId: durablePrincipalId,
-        credentialId: invocation.credentialId,
-        serviceRef: durableServiceRef,
-        offeringRef: durableOfferingRef,
-        businessId: durableBusinessId,
-        invocationRef: invocation.invocationRef,
-        attemptRef: canonicalAttempt.attemptRef,
-        operationKey: invocation.operationRef,
-        priceDigest: expectedPriceDigest,
-        chargeState: 'paid',
-        amount: operatorAmount,
-        transactionRef: expectedTransactionRef,
-      })
-    )
-      return {
-        kind: 'refused' as const,
-        code: 'charge_reconciliation_required' as const,
-        retryable: false,
-      }
+    await applyPreparedMoneyUsageEvent(ctx, usagePlan)
     return {
       kind: 'accepted' as const,
       chargeState: 'paid' as const,
-      amount: persistedAmount,
-      priceDigest: persistedUsage.priceDigest,
-      ...usageIdentity(persistedUsage),
+      amount: operatorAmount,
+      priceDigest: usagePlan.event.priceDigest,
+      usageRef: usagePlan.event.usageRef,
+      observedAt: usagePlan.event.observedAt,
+      transactionRef: usagePlan.event.transactionRef,
       providerNet,
       rake,
     }
@@ -3463,17 +3950,19 @@ export const reserveCreditTopup = mutation({
     const gate = evaluateLiveMoneyGate()
     if (gate.kind === 'refused') return refusedTopup(gate.code, false)
     const now = Date.now()
-    const account =
-      existing ??
-      (await ensureCanonicalMoneyAccount(ctx, {
-        accountKind: 'operator_credit',
-        accountId: principal.ownerId,
-        currency: financials.amount.currency,
-        exponent: financials.amount.exponent,
-        now,
-      }))
-    if (account === undefined)
+    const preparedAccount =
+      existing === null
+        ? await prepareCanonicalMoneyAccount(ctx, {
+            accountKind: 'operator_credit',
+            accountId: principal.ownerId,
+            currency: financials.amount.currency,
+            exponent: financials.amount.exponent,
+            now,
+          })
+        : { kind: 'existing' as const, row: existing }
+    if (preparedAccount === undefined)
       return refusedTopup('billing_identity_mismatch', false)
+    await applyPreparedCanonicalMoneyAccount(ctx, preparedAccount)
     const metadataDigest = canonicalDigest({ ae_command_ref: args.commandRef })
     const row = {
       commandRef: args.commandRef,
@@ -5334,6 +5823,8 @@ export const beginPayoutTransfer = mutation({
     }
     if (payout.state === 'outcome_unknown')
       return refusedTopup('payout_reconciliation_required', false)
+    if (provider.recoveryDue.units !== '0')
+      return refusedTopup('payout_reconciliation_required', false)
     if (compareExactAmounts(provider.balance, amount) === -1)
       return refusedTopup('payout_below_threshold', false)
     if (
@@ -5883,12 +6374,11 @@ async function completePayoutBody(
       return refusedTopup('payout_reconciliation_required', false)
     if (compareExactAmounts(provider.balance, providerHeldAfter) !== 0)
       return refusedTopup('payout_reconciliation_required', false)
-    const restoredBalance = addExactAmounts(provider.balance, expectedAmount)
+    const restoredProvider = applyProviderAccountCredit(provider, expectedAmount, args.observedAt)
     const restoredPaid = subtractExactAmounts(providerPaidAfter, expectedAmount)
     if (
-      restoredBalance === undefined ||
+      restoredProvider === undefined ||
       restoredPaid === undefined ||
-      compareExactAmounts(restoredBalance, providerHeldBefore) !== 0 ||
       compareExactAmounts(restoredPaid, providerPaidBefore) !== 0
     )
       return refusedTopup('payout_reconciliation_required', false)
@@ -5909,9 +6399,10 @@ async function completePayoutBody(
       createdAt: args.evidence.observedAt,
     })
     await ctx.db.patch('moneyAccounts', providerAccount._id, {
-      balanceUnits: restoredBalance.units,
-      version: providerAccount.version + 1,
-      updatedAt: args.observedAt,
+      balanceUnits: restoredProvider.account.balance.units,
+      recoveryDueUnits: restoredProvider.account.recoveryDue.units,
+      version: restoredProvider.account.version,
+      updatedAt: restoredProvider.account.updatedAt,
     })
     await ctx.db.insert('moneyTransactions', {
       transactionRef: reversalTransactionRef,
@@ -5952,7 +6443,7 @@ async function completePayoutBody(
         reversalEvidenceDigest: args.evidence.evidenceDigest,
         observedAt: args.evidence.observedAt,
         providerHeldBefore: provider.balance,
-        providerHeldAfter: restoredBalance,
+        providerHeldAfter: restoredProvider.account.balance,
         providerPaidBefore: providerPaidAfter,
         providerPaidAfter: restoredPaid,
       }),
@@ -6343,13 +6834,14 @@ type AppendRefundInput = Readonly<{
   sourceDigest: string
   evidenceRefs: readonly string[]
   observedAt: number
+  externalRef?: string
 }>
 
 async function appendRefundBody(
   ctx: MutationCtx,
   args: AppendRefundInput,
   suppliedOriginal?: Doc<'moneyTransactions'>,
-): Promise<ReconcileChargeResult> {
+): Promise<RefundResult> {
   const original =
     suppliedOriginal ??
     (await ctx.db
@@ -6361,36 +6853,236 @@ async function appendRefundBody(
   if (
     original === null ||
     original.kind !== 'charge' ||
-    original.principalId !== args.principalId
+    original.principalId !== args.principalId ||
+    args.evidenceRefs.length === 0
   )
     return {
       kind: 'refused' as const,
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  if (args.evidenceRefs.length === 0)
+  const [prior, originalEntries, usageRows] = await Promise.all([
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_idempotencyKey', (q) =>
+        q.eq('idempotencyKey', args.idempotencyKey),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyLedgerEntries')
+      .withIndex('by_transactionRef', (q) =>
+        q.eq('transactionRef', original.transactionRef),
+      )
+      .take(5),
+    original.credentialId === undefined
+      ? Promise.resolve([] as Doc<'moneyUsageEvents'>[])
+      : ctx.db
+          .query('moneyUsageEvents')
+          .withIndex(
+            'by_principalId_and_credentialId_and_currency_and_observedAt',
+            (q) =>
+              q
+                .eq('principalId', original.principalId)
+                .eq('credentialId', original.credentialId!)
+                .eq('currency', original.currency)
+                .eq('observedAt', original.createdAt),
+          )
+          .take(2),
+  ])
+  const usage = usageRows.length === 1 ? usageRows[0] : undefined
+  const selected = selectChargeLedgerEntries(originalEntries)
+  const journal = validateCanonicalChargeJournal(original, usage, selected)
+  const recoveryAmount =
+    selected === undefined
+      ? undefined
+      : providerRecoveryAmount(selected, original)
+  if (journal === undefined || recoveryAmount === undefined)
     return {
       kind: 'refused' as const,
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  const prior = await ctx.db
-    .query('moneyTransactions')
-    .withIndex('by_idempotencyKey', (q) =>
-      q.eq('idempotencyKey', args.idempotencyKey),
-    )
-    .unique()
+  const charge = journal.selected.charge
+  const provider = journal.selected.provider
+  const rake = journal.selected.rake
+  const [operatorAccount, providerAccount, rakeAccount] = await Promise.all([
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (q) =>
+        q.eq('accountRef', charge.accountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (q) =>
+        q.eq('accountRef', provider.accountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (q) =>
+        q.eq('accountRef', rake.accountRef),
+      )
+      .unique(),
+  ])
+  const operatorDomain =
+    operatorAccount === null ? undefined : accountFromRow(operatorAccount)
+  const providerDomain =
+    providerAccount === null ? undefined : accountFromRow(providerAccount)
+  const rakeDomain =
+    rakeAccount === null ? undefined : accountFromRow(rakeAccount)
+  if (
+    operatorAccount === null ||
+    providerAccount === null ||
+    rakeAccount === null ||
+    operatorDomain === undefined ||
+    providerDomain === undefined ||
+    rakeDomain === undefined
+  )
+    return {
+      kind: 'refused' as const,
+      code: 'charge_reconciliation_required' as const,
+      retryable: false,
+    }
+  const accountRefusal =
+    operatorAccount.accountRef !== accountRefForOwner(journal.accountId, original.currency) ||
+    operatorAccount.accountKind !== 'operator_credit' ||
+    operatorAccount.accountId !== journal.accountId ||
+    operatorAccount.businessId !== undefined ||
+    operatorAccount.currency !== original.currency ||
+    operatorAccount.exponent !== original.exponent ||
+    providerAccount.accountRef !== accountRefForProvider(journal.businessId, original.currency) ||
+    providerAccount.accountKind !== 'provider_earnings' ||
+    providerAccount.businessId !== journal.businessId ||
+    providerAccount.accountId !== undefined ||
+    providerAccount.currency !== original.currency ||
+    providerAccount.exponent !== original.exponent ||
+    rakeAccount.accountRef !== accountRefForRake(original.currency) ||
+    rakeAccount.accountKind !== 'ae_rake' ||
+    rakeAccount.accountId !== undefined ||
+    rakeAccount.businessId !== undefined ||
+    rakeAccount.currency !== original.currency ||
+    rakeAccount.exponent !== original.exponent ||
+    new Set([charge.accountRef, provider.accountRef, rake.accountRef]).size !== 3 ||
+    validateChargeAccounts({
+      operator: operatorDomain,
+      provider: providerDomain,
+      rake: rakeDomain,
+      operatorAccountRef: accountRefForOwner(journal.accountId, original.currency),
+      providerAccountRef: accountRefForProvider(journal.businessId, original.currency),
+      rakeAccountRef: accountRefForRake(original.currency),
+      accountId: journal.accountId,
+      businessId: journal.businessId,
+      currency: original.currency,
+    }) !== undefined
+  if (accountRefusal)
+    return {
+      kind: 'refused' as const,
+      code: 'billing_identity_mismatch' as const,
+      retryable: false,
+    }
   if (prior !== null) {
     if (
       prior.inputDigest !== args.inputDigest ||
       prior.kind !== 'refund' ||
-      prior.reversalOf !== args.originalTransactionRef ||
-      prior.principalId !== args.principalId
+      prior.reversalOf !== original.transactionRef ||
+      prior.principalId !== original.principalId ||
+      prior.transactionRef !== args.transactionRef ||
+      prior.externalRef !== args.externalRef ||
+      prior.state !== 'reversed' ||
+      prior.currency !== original.currency ||
+      prior.exponent !== original.exponent
     )
       return {
         kind: 'refused' as const,
         code: 'ledger_idempotency_conflict' as const,
         retryable: false,
+      }
+    const [replayEntries, currentReversals] = await Promise.all([
+      ctx.db
+        .query('moneyLedgerEntries')
+        .withIndex('by_transactionRef', (q) =>
+          q.eq('transactionRef', prior.transactionRef),
+        )
+        .take(4),
+      ctx.db
+        .query('moneyTransactions')
+        .withIndex('by_reversalOf', (q) =>
+          q.eq('reversalOf', original.transactionRef),
+        )
+        .take(2),
+    ])
+    const operatorRefund = replayEntries.find(
+      (entry) => entry.entryRef === `${prior.transactionRef}:operator`,
+    )
+    const providerRefund = replayEntries.find(
+      (entry) => entry.entryRef === `${prior.transactionRef}:provider`,
+    )
+    const rakeRefund = replayEntries.find(
+      (entry) => entry.entryRef === `${prior.transactionRef}:rake`,
+    )
+    if (
+      original.state !== 'reversed' ||
+      currentReversals.length !== 1 ||
+      currentReversals[0]?._id !== prior._id ||
+      currentReversals[0]?.transactionRef !== prior.transactionRef ||
+      replayEntries.length !== 3 ||
+      operatorRefund === undefined ||
+      providerRefund === undefined ||
+      rakeRefund === undefined ||
+      replayEntries.some(
+        (entry) =>
+          entry !== operatorRefund &&
+          entry !== providerRefund &&
+          entry !== rakeRefund,
+      ) ||
+      operatorRefund.accountRef !== charge.accountRef ||
+      operatorRefund.entryType !== 'refund' ||
+      operatorRefund.direction !== 'credit' ||
+      operatorRefund.entryRef !== `${prior.transactionRef}:operator` ||
+      operatorRefund.amountUnits !== journal.chargeAmount.units ||
+      operatorRefund.currency !== journal.chargeAmount.currency ||
+      operatorRefund.exponent !== journal.chargeAmount.exponent ||
+      operatorRefund.principalId !== original.principalId ||
+      operatorRefund.businessId !== undefined ||
+      operatorRefund.invocationRef !== undefined ||
+      operatorRefund.attemptRef !== undefined ||
+      providerRefund.accountRef !== provider.accountRef ||
+      providerRefund.entryType !== 'refund' ||
+      providerRefund.direction !== 'debit' ||
+      providerRefund.entryRef !== `${prior.transactionRef}:provider` ||
+      providerRefund.amountUnits !== journal.providerAmount.units ||
+      providerRefund.currency !== journal.providerAmount.currency ||
+      providerRefund.exponent !== journal.providerAmount.exponent ||
+      providerRefund.principalId !== undefined ||
+      providerRefund.businessId !== journal.businessId ||
+      providerRefund.invocationRef !== undefined ||
+      providerRefund.attemptRef !== undefined ||
+      rakeRefund.accountRef !== rake.accountRef ||
+      rakeRefund.entryType !== 'refund' ||
+      rakeRefund.direction !== 'debit' ||
+      rakeRefund.entryRef !== `${prior.transactionRef}:rake` ||
+      rakeRefund.amountUnits !== journal.rakeAmount.units ||
+      rakeRefund.currency !== journal.rakeAmount.currency ||
+      rakeRefund.exponent !== journal.rakeAmount.exponent ||
+      rakeRefund.principalId !== undefined ||
+      rakeRefund.businessId !== journal.businessId ||
+      rakeRefund.invocationRef !== undefined ||
+      rakeRefund.attemptRef !== undefined ||
+      [operatorRefund, providerRefund, rakeRefund].some(
+        (entry) =>
+          entry.transactionRef !== prior.transactionRef ||
+          entry.idempotencyKey !== prior.idempotencyKey ||
+          entry.sourceDigest !== args.sourceDigest ||
+          !sameEvidenceRefs(entry.evidenceRefs, args.evidenceRefs) ||
+          entry.reversalOf !== original.transactionRef ||
+          entry.createdAt !== prior.createdAt,
+      )
+    )
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false as const,
       }
     return {
       kind: 'accepted' as const,
@@ -6416,102 +7108,36 @@ async function appendRefundBody(
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  const entries = await ctx.db
-    .query('moneyLedgerEntries')
-    .withIndex('by_transactionRef', (q) =>
-      q.eq('transactionRef', args.originalTransactionRef),
-    )
-    .take(4)
-  const charge = entries.find(
-    (entry) => entry.entryType === 'charge' && entry.direction === 'debit',
-  )
-  const provider = entries.find(
-    (entry) =>
-      entry.entryType === 'payout_accrual' && entry.direction === 'credit',
-  )
-  const rake = entries.find(
-    (entry) => entry.entryType === 'rake' && entry.direction === 'credit',
-  )
-  const chargeAmount = charge === undefined ? undefined : entryAmount(charge)
-  const providerAmount =
-    provider === undefined ? undefined : entryAmount(provider)
-  const rakeAmount = rake === undefined ? undefined : entryAmount(rake)
-  if (
-    charge === undefined ||
-    provider === undefined ||
-    rake === undefined ||
-    chargeAmount === undefined ||
-    providerAmount === undefined ||
-    rakeAmount === undefined ||
-    chargeAmount.currency !== original.currency ||
-    providerAmount.currency !== original.currency ||
-    rakeAmount.currency !== original.currency ||
-    chargeAmount.exponent !== original.exponent ||
-    providerAmount.exponent !== original.exponent ||
-    rakeAmount.exponent !== original.exponent
-  )
-    return {
-      kind: 'refused' as const,
-      code: 'charge_reconciliation_required' as const,
-      retryable: false,
-    }
   const payoutAccrual =
     original.settledAt === undefined
       ? undefined
-      : await readPayoutAccrualAmounts(ctx, args.originalTransactionRef)
-  if (original.settledAt !== undefined && payoutAccrual === undefined)
-    return {
-      kind: 'refused' as const,
-      code: 'charge_reconciliation_required' as const,
-      retryable: false,
-    }
-  const [operatorAccount, providerAccount, rakeAccount] = await Promise.all([
-    ctx.db
-      .query('moneyAccounts')
-      .withIndex('by_accountRef', (q) => q.eq('accountRef', charge.accountRef))
-      .unique(),
-    ctx.db
-      .query('moneyAccounts')
-      .withIndex('by_accountRef', (q) =>
-        q.eq('accountRef', provider.accountRef),
-      )
-      .unique(),
-    ctx.db
-      .query('moneyAccounts')
-      .withIndex('by_accountRef', (q) => q.eq('accountRef', rake.accountRef))
-      .unique(),
-  ])
-  const operatorDomain =
-    operatorAccount === null ? undefined : accountFromRow(operatorAccount)
-  const providerDomain =
-    providerAccount === null ? undefined : accountFromRow(providerAccount)
-  const rakeDomain =
-    rakeAccount === null ? undefined : accountFromRow(rakeAccount)
-  if (
-    operatorAccount === null ||
-    providerAccount === null ||
-    rakeAccount === null ||
-    operatorDomain === undefined ||
-    providerDomain === undefined ||
-    rakeDomain === undefined
-  )
+      : await readPayoutAccrualAmounts(ctx, original)
+  const preparedPayoutReversal =
+    payoutAccrual === undefined || original.settledAt === undefined
+      ? undefined
+      : await preparePayoutAccrualReversalForRefund(
+          ctx,
+          payoutAccrual,
+          original.settledAt,
+        )
+  if (original.settledAt !== undefined && preparedPayoutReversal === undefined)
     return {
       kind: 'refused' as const,
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
   const operatorRefund = amountAtScale(
-    chargeAmount,
+    journal.chargeAmount,
     operatorAccount.currency,
     operatorAccount.exponent,
   )
   const providerRefund = amountAtScale(
-    providerAmount,
+    journal.providerAmount,
     providerAccount.currency,
     providerAccount.exponent,
   )
   const rakeRefund = amountAtScale(
-    rakeAmount,
+    journal.rakeAmount,
     rakeAccount.currency,
     rakeAccount.exponent,
   )
@@ -6519,7 +7145,6 @@ async function appendRefundBody(
     operatorRefund === undefined ||
     providerRefund === undefined ||
     rakeRefund === undefined ||
-    compareExactAmounts(providerDomain.balance, providerRefund) === -1 ||
     compareExactAmounts(rakeDomain.balance, rakeRefund) === -1
   )
     return {
@@ -6531,14 +7156,18 @@ async function appendRefundBody(
     operatorDomain.balance,
     operatorRefund,
   )
-  const nextProviderBalance = subtractExactAmounts(
-    providerDomain.balance,
+  const nextProvider = applyProviderAccountDebit(
+    providerDomain,
     providerRefund,
+    args.observedAt,
   )
-  const nextRakeBalance = subtractExactAmounts(rakeDomain.balance, rakeRefund)
+  const nextRakeBalance = subtractExactAmounts(
+    rakeDomain.balance,
+    rakeRefund,
+  )
   if (
     nextOperatorBalance === undefined ||
-    nextProviderBalance === undefined ||
+    nextProvider === undefined ||
     nextRakeBalance === undefined
   )
     return {
@@ -6546,29 +7175,21 @@ async function appendRefundBody(
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  if (
-    !(await releaseOrSettleCredentialBudget(
-      ctx,
-      original,
-      'not_released',
-      args.observedAt,
-    ))
+  const preparedBudget = await prepareCredentialBudgetTransition(
+    ctx,
+    original,
+    'not_released',
+    args.observedAt,
   )
+  if (preparedBudget === undefined)
     return {
       kind: 'refused' as const,
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
-  if (
-    payoutAccrual !== undefined &&
-    original.settledAt !== undefined &&
-    !(await updatePayoutPeriod(ctx, payoutAccrual, original.settledAt, 'debit'))
-  )
-    return {
-      kind: 'refused' as const,
-      code: 'charge_reconciliation_required' as const,
-      retryable: false,
-    }
+  await applyPreparedCredentialBudgetTransition(ctx, preparedBudget)
+  if (preparedPayoutReversal !== undefined)
+    await applyPayoutAccrualReversalForRefund(ctx, preparedPayoutReversal)
   const common = {
     transactionRef: args.transactionRef,
     idempotencyKey: args.idempotencyKey,
@@ -6597,9 +7218,7 @@ async function appendRefundBody(
     amountUnits: providerRefund.units,
     currency: providerRefund.currency,
     exponent: providerRefund.exponent,
-    ...(provider.businessId === undefined
-      ? {}
-      : { businessId: provider.businessId }),
+    businessId: journal.businessId,
     reversalOf: args.originalTransactionRef,
   })
   await ctx.db.insert('moneyLedgerEntries', {
@@ -6611,7 +7230,7 @@ async function appendRefundBody(
     amountUnits: rakeRefund.units,
     currency: rakeRefund.currency,
     exponent: rakeRefund.exponent,
-    ...(rake.businessId === undefined ? {} : { businessId: rake.businessId }),
+    businessId: journal.businessId,
     reversalOf: args.originalTransactionRef,
   })
   await ctx.db.patch('moneyAccounts', operatorAccount._id, {
@@ -6620,9 +7239,10 @@ async function appendRefundBody(
     updatedAt: args.observedAt,
   })
   await ctx.db.patch('moneyAccounts', providerAccount._id, {
-    balanceUnits: nextProviderBalance.units,
-    version: providerAccount.version + 1,
-    updatedAt: args.observedAt,
+    balanceUnits: nextProvider.balance.units,
+    recoveryDueUnits: nextProvider.recoveryDue.units,
+    version: nextProvider.version,
+    updatedAt: nextProvider.updatedAt,
   })
   await ctx.db.patch('moneyAccounts', rakeAccount._id, {
     balanceUnits: nextRakeBalance.units,
@@ -6640,6 +7260,7 @@ async function appendRefundBody(
     state: 'reversed' as const,
     expectedAccountVersion: operatorAccount.version,
     reversalOf: args.originalTransactionRef,
+    ...(args.externalRef === undefined ? {} : { externalRef: args.externalRef }),
     createdAt: args.observedAt,
     updatedAt: args.observedAt,
   })
@@ -6653,6 +7274,174 @@ async function appendRefundBody(
     currency: original.currency,
   }
 }
+
+const disputeReversalResultValue = v.union(
+  v.object({
+    kind: v.literal('accepted'),
+    transactionRef: identifier,
+    currency: identifier,
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    code: v.union(
+      v.literal('billing_identity_mismatch'),
+      v.literal('ledger_idempotency_conflict'),
+      v.literal('charge_reconciliation_required'),
+    ),
+    retryable: v.literal(false),
+  }),
+)
+
+export const reverseDisputedQualifiedUse = internalMutation({
+  args: {
+    qualifiedUseRef: identifier,
+    disputeRef: identifier,
+    sourceDigest: identifier,
+    evidenceRefs: v.array(identifier),
+    observedAt: v.number(),
+  },
+  returns: disputeReversalResultValue,
+  handler: async (ctx, args) => {
+    if (
+      args.disputeRef.trim().length === 0 ||
+      args.sourceDigest.trim().length === 0 ||
+      args.evidenceRefs.length === 0 ||
+      args.evidenceRefs.some((ref) => ref.trim().length === 0)
+    )
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false as const,
+      }
+    const receipt = await ctx.db
+      .query('qualifiedUseReceipts')
+      .withIndex('by_qualifiedUseRef', (q) => q.eq('qualifiedUseRef', args.qualifiedUseRef))
+      .unique()
+    if (receipt === null || receipt.environment !== 'production' || receipt.usageRef === undefined || receipt.transactionRef === undefined)
+      return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false as const }
+    const receiptIdentity = {
+      invocationRef: receipt.invocationRef,
+      attemptRef: receipt.attemptRef,
+      effectGeneration: receipt.effectGeneration,
+    }
+    const receiptMaterial = {
+      ...receiptIdentity,
+      businessId: receipt.businessId,
+      operationRef: receipt.operationRef,
+      publicationRef: receipt.publicationRef,
+      publicationRevision: receipt.publicationRevision,
+      contractDigest: receipt.contractDigest,
+      bindingDigest: receipt.bindingDigest,
+      principalClass: receipt.principalClass,
+      requestDigest: receipt.requestDigest,
+      responseDigest: receipt.responseDigest,
+      evidenceRefs: receipt.evidenceRefs,
+    }
+    if (qualifiedUseRef(receiptIdentity) !== receipt.qualifiedUseRef || qualifiedUseMaterialDigest(receiptMaterial) !== receipt.materialDigest)
+      return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false as const }
+    const [usage, original] = await Promise.all([
+      ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', receipt.usageRef!)).unique(),
+      ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', receipt.transactionRef!)).unique(),
+    ])
+    if (
+      usage === null ||
+      original === null ||
+      usage.usageRef !== receipt.usageRef ||
+      usage.transactionRef !== receipt.transactionRef ||
+      original.credentialId === undefined ||
+      original.credentialId !== usage.credentialId ||
+      usage.invocationRef !== receipt.invocationRef ||
+      usage.attemptRef !== receipt.attemptRef ||
+      usage.operationKey !== receipt.operationRef ||
+      usage.chargeState !== 'paid' ||
+      original.kind !== 'charge' ||
+      (original.state !== 'applied' && original.state !== 'reversed') ||
+      (original.budgetState !== 'settled' &&
+        !(original.state === 'reversed' && original.budgetState === 'released')) ||
+      original.settledAt === undefined ||
+      original.accountId === undefined ||
+      usage.accountId === undefined ||
+      original.accountId !== usage.accountId ||
+      usage.observedAt !== original.createdAt ||
+      original.principalId !== usage.principalId ||
+      usage.businessId !== receipt.businessId ||
+      original.currency !== usage.currency ||
+      original.exponent !== usage.exponent ||
+      original.amountUnits !== usage.amountUnits
+    )
+      return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false as const }
+    const entries = await ctx.db
+      .query('moneyLedgerEntries')
+      .withIndex('by_transactionRef', (q) =>
+        q.eq('transactionRef', original.transactionRef),
+      )
+      .take(5)
+    const selected = selectChargeLedgerEntries(entries)
+    const charge = selected?.charge
+    const provider = selected?.provider
+    const rake = selected?.rake
+    const chargeAmount = charge === undefined ? undefined : entryAmount(charge)
+    const originalAmount =
+      original.amountUnits === undefined
+        ? undefined
+        : amountFromParts(original.currency, original.amountUnits, original.exponent)
+    const providerAmount =
+      provider === undefined ? undefined : entryAmount(provider)
+    const rakeAmount = rake === undefined ? undefined : entryAmount(rake)
+    const recoveryAmount =
+      selected === undefined ? undefined : providerRecoveryAmount(selected, original)
+    const split =
+      providerAmount === undefined || rakeAmount === undefined
+        ? undefined
+        : addExactAmounts(providerAmount, rakeAmount)
+    if (
+      selected === undefined ||
+      charge === undefined ||
+      provider === undefined ||
+      rake === undefined ||
+      chargeAmount === undefined ||
+      originalAmount === undefined ||
+      split === undefined ||
+      recoveryAmount === undefined ||
+      compareExactAmounts(chargeAmount, split) !== 0 ||
+      compareExactAmounts(chargeAmount, originalAmount) !== 0 ||
+      charge.principalId !== usage.principalId ||
+      charge.invocationRef !== receipt.invocationRef ||
+      charge.attemptRef !== receipt.attemptRef ||
+      provider.businessId !== receipt.businessId ||
+      provider.invocationRef !== receipt.invocationRef ||
+      provider.attemptRef !== receipt.attemptRef ||
+      rake.businessId !== receipt.businessId
+    )
+      return {
+        kind: 'refused' as const,
+        code: 'billing_identity_mismatch' as const,
+        retryable: false as const,
+      }
+    const sortedEvidenceRefs = [...args.evidenceRefs].sort()
+    const refundTransactionRef = `qualified-use-dispute-refund:${receipt.qualifiedUseRef}`
+    return await appendRefundBody(ctx, {
+      principalId: original.principalId,
+      originalTransactionRef: original.transactionRef,
+      transactionRef: refundTransactionRef,
+      idempotencyKey: refundTransactionRef,
+      inputDigest: canonicalDigest({
+        format: 'qualified-use-dispute-reversal:v1',
+        qualifiedUseRef: receipt.qualifiedUseRef,
+        materialDigest: receipt.materialDigest,
+        disputeRef: args.disputeRef,
+        originalTransactionRef: original.transactionRef,
+        sourceDigest: args.sourceDigest,
+        evidenceRefs: sortedEvidenceRefs,
+      } as StableHashValue),
+      sourceDigest: args.sourceDigest,
+      evidenceRefs: sortedEvidenceRefs,
+      observedAt: args.observedAt,
+      externalRef: args.disputeRef,
+    }, original)
+  },
+})
+
 
 export const appendRefund = internalMutation({
   args: {
@@ -6695,77 +7484,71 @@ async function reconcileChargeBody(
   transaction: Doc<'moneyTransactions'>,
 ): Promise<ReconcileChargeResult> {
   if (args.outcome === 'released') {
-    if (transaction.state === 'reversed')
+    if (
+      transaction.state === 'reversed' ||
+      transaction.budgetState === 'released'
+    )
       return {
         kind: 'refused' as const,
         code: 'charge_reconciliation_required' as const,
         retryable: false,
       }
+    const preparedBudget = await prepareCredentialBudgetTransition(
+      ctx,
+      transaction,
+      'released',
+      args.observedAt,
+    )
+    if (preparedBudget === undefined)
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false,
+      }
+    let preparedPayout: PreparedPayoutPeriodUpdate | undefined
     if (
       transaction.amountUnits !== '0' &&
-      transaction.settledAt === undefined
+      transaction.settledAt === undefined &&
+      transaction.budgetState !== 'settled'
     ) {
-      const payoutAccrual = await readPayoutAccrualAmounts(
-        ctx,
-        transaction.transactionRef,
-      )
+      const payoutAccrual = await readPayoutAccrualAmounts(ctx, transaction)
       if (payoutAccrual === undefined)
         return {
           kind: 'refused' as const,
           code: 'charge_reconciliation_required' as const,
           retryable: false,
         }
-      if (
-        !(await updatePayoutPeriod(
-          ctx,
-          payoutAccrual,
-          args.observedAt,
-          'credit',
-        ))
+      preparedPayout = await preparePayoutPeriodUpdate(
+        ctx,
+        payoutAccrual,
+        args.observedAt,
+        'credit',
       )
+      if (preparedPayout === undefined)
         return {
           kind: 'refused' as const,
           code: 'charge_reconciliation_required' as const,
           retryable: false,
         }
-      if (
-        !(await releaseOrSettleCredentialBudget(
-          ctx,
-          transaction,
-          'released',
-          args.observedAt,
-        ))
-      )
-        return {
-          kind: 'refused' as const,
-          code: 'charge_reconciliation_required' as const,
-          retryable: false,
-        }
-      await ctx.db.patch(transaction._id, {
-        state: 'applied',
-        settledAt: args.observedAt,
-        updatedAt: args.observedAt,
-      })
-    } else if (
+    }
+    const shouldApplyState =
       transaction.state === 'outcome_unknown' ||
       transaction.budgetState === 'reserved' ||
-      transaction.budgetState === 'unknown'
-    ) {
-      if (
-        !(await releaseOrSettleCredentialBudget(
-          ctx,
-          transaction,
-          'released',
-          args.observedAt,
-        ))
+      transaction.budgetState === 'unknown' ||
+      (
+        transaction.amountUnits !== '0' &&
+        transaction.settledAt === undefined
       )
-        return {
-          kind: 'refused' as const,
-          code: 'charge_reconciliation_required' as const,
-          retryable: false,
-        }
+    if (shouldApplyState) {
+      await applyPreparedCredentialBudgetTransition(ctx, preparedBudget)
+      if (preparedPayout !== undefined)
+        await applyPreparedPayoutPeriodUpdate(ctx, preparedPayout)
       await ctx.db.patch(transaction._id, {
         state: 'applied',
+        ...(transaction.amountUnits !== '0' &&
+        transaction.settledAt === undefined
+          ? { settledAt: args.observedAt }
+          : {}),
         updatedAt: args.observedAt,
       })
     }
@@ -6782,19 +7565,19 @@ async function reconcileChargeBody(
         transactionRef: args.transactionRef,
         currency: transaction.currency,
       }
-    if (
-      !(await releaseOrSettleCredentialBudget(
-        ctx,
-        transaction,
-        'not_released',
-        args.observedAt,
-      ))
+    const preparedBudget = await prepareCredentialBudgetTransition(
+      ctx,
+      transaction,
+      'not_released',
+      args.observedAt,
     )
+    if (preparedBudget === undefined)
       return {
         kind: 'refused' as const,
         code: 'charge_reconciliation_required' as const,
         retryable: false,
       }
+    await applyPreparedCredentialBudgetTransition(ctx, preparedBudget)
     await ctx.db.patch(transaction._id, {
       state: 'reversed',
       updatedAt: args.observedAt,
@@ -6981,12 +7764,24 @@ export const reconcileInvocationCharge = internalMutation({
   },
 })
 
+const chargeOutcomeUnknownResultValue = v.union(
+  v.object({
+    kind: v.literal('outcome_unknown'),
+    transactionRef: identifier,
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    code: identifier,
+    retryable: v.boolean(),
+  }),
+)
 export const markChargeOutcomeUnknown = internalMutation({
   args: {
     transactionRef: identifier,
     principalId: identifier,
     now: v.number(),
   },
+  returns: chargeOutcomeUnknownResultValue,
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
     if (!principalAllowed(identity, args.principalId))
@@ -7011,17 +7806,43 @@ export const markChargeOutcomeUnknown = internalMutation({
         code: 'charge_reconciliation_required' as const,
         retryable: false,
       }
+    if (transaction.state === 'outcome_unknown') {
+      if (
+        transaction.budgetState === 'released' ||
+        transaction.budgetState === 'settled' ||
+        transaction.settledAt !== undefined
+      )
+        return {
+          kind: 'refused' as const,
+          code: 'charge_reconciliation_required' as const,
+          retryable: false,
+        }
+      return {
+        kind: 'outcome_unknown' as const,
+        transactionRef: transaction.transactionRef,
+      }
+    }
+    if (
+      transaction.state === 'reversed' ||
+      transaction.budgetState === 'released' ||
+      transaction.budgetState === 'settled' ||
+      transaction.settledAt !== undefined ||
+      transaction.state !== 'applied' ||
+      transaction.budgetState !== 'reserved'
+    )
+      return {
+        kind: 'refused' as const,
+        code: 'charge_reconciliation_required' as const,
+        retryable: false,
+      }
     await ctx.db.patch('moneyTransactions', transaction._id, {
       state: 'outcome_unknown',
-      ...(transaction.budgetState === 'reserved'
-        ? { budgetState: 'unknown' as const }
-        : {}),
+      budgetState: 'unknown',
       updatedAt: args.now,
     })
     return {
-      kind: 'refused' as const,
-      code: 'charge_reconciliation_required' as const,
-      retryable: false,
+      kind: 'outcome_unknown' as const,
+      transactionRef: transaction.transactionRef,
     }
   },
 })
@@ -7315,6 +8136,7 @@ type ProviderEarningsReadResult =
       providerNet: ExactAmount
       paidOut: ExactAmount
       held: ExactAmount
+      recoveryDue: ExactAmount
       truncated: boolean
       evidence: 'source'
     }>
@@ -7429,7 +8251,8 @@ async function readProviderEarningsForAccount(
       entry.currency === currency &&
       entry.accountRef === account.accountRef &&
       entry.entryType === 'payout_accrual' &&
-      entry.direction === 'debit',
+      entry.direction === 'debit' &&
+      transactions.get(entry.transactionRef)?.kind === 'payout_accrual',
   )
   const payoutReversals = sumEntries(
     rows,
@@ -7439,7 +8262,8 @@ async function readProviderEarningsForAccount(
       entry.accountRef === account.accountRef &&
       entry.entryType === 'payout_accrual' &&
       entry.direction === 'credit' &&
-      entry.reversalOf !== undefined,
+      entry.reversalOf !== undefined &&
+      transactions.get(entry.transactionRef)?.kind === 'payout_accrual',
   )
   const paidOut =
     payoutDebits === undefined || payoutReversals === undefined
@@ -7497,6 +8321,7 @@ async function readProviderEarningsForAccount(
     providerNet,
     paidOut,
     held: accountDomain.balance,
+    recoveryDue: accountDomain.recoveryDue,
     truncated: false,
     evidence: 'source' as const,
   }
@@ -7745,6 +8570,7 @@ const providerEarningsViewValue = v.object({
   providerNet: exactAmount,
   paidOut: exactAmount,
   held: exactAmount,
+  recoveryDue: exactAmount,
   truncated: v.boolean(),
   evidence: v.literal('source'),
 })

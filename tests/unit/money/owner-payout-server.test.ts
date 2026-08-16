@@ -71,6 +71,7 @@ const ownerProjection = {
         providerNet: amount,
         paidOut: { currency: 'USD', units: '0', exponent: 2 },
         held: amount,
+        recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
         truncated: false,
         evidence: 'source' as const,
       },

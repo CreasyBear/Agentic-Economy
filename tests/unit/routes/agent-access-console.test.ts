@@ -28,6 +28,7 @@ const account: MoneyAccount = {
   accountKind: 'operator_credit',
   accountId: ownerId,
   balance: { currency: 'USD', units: '2500', exponent: 2 },
+  recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
   version: 1,
   state: 'active',
   createdAt: 1,
