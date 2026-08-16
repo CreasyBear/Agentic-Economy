@@ -4,8 +4,8 @@ import { OPERATION_INVOKE_ACTION_ID } from '@/modules/capability-execution/opera
 import type { CliOptions } from '../lib/args'
 import { CliFailure, heading, line, printJson, table } from '../lib/output'
 /**
- * Generic dispatch by name over the real registry. No HTTP, no per-action
- * codegen: whatever is registered is what the CLI can see and run.
+ * Generic dispatch by name over the real registry. Registration is visible in
+ * the inventory; execution still requires the action to declare the CLI surface.
  */
 export async function runActionsCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const rows = listActions().map((action) => {
@@ -67,14 +67,26 @@ export async function runActionCommand(args: readonly string[], options: CliOpti
     throw new CliFailure(usage, { kind: 'INVALID_ARGUMENT', code: 'action-usage' })
   }
 
-  const rawInput = args.slice(1).join(' ').trim()
-  let parsedInput: unknown = {}
   if (id === OPERATION_INVOKE_ACTION_ID) {
     throw new CliFailure('Use `npm run -s ae -- invoke` so operation.invoke runs through the authenticated HTTP gateway.', {
       kind: 'PERMISSION_DENIED',
       code: 'operation_invoke_requires_gateway',
     })
   }
+
+  const action = findAction(id)
+  if (action === undefined) {
+    throw new CliFailure(`Unknown action: ${id}\nRun: npm run -s ae -- advanced actions`, { kind: 'NOT_FOUND', code: 'unknown_action' })
+  }
+  if (!action.surfaces.includes('cli')) {
+    throw new CliFailure(`Action ${id} is not declared for the CLI surface.`, {
+      kind: 'PERMISSION_DENIED',
+      code: 'surface_not_allowed',
+    })
+  }
+
+  const rawInput = args.slice(1).join(' ').trim()
+  let parsedInput: unknown = {}
   if (rawInput.length > 0) {
     try {
       parsedInput = JSON.parse(rawInput)
@@ -83,10 +95,6 @@ export async function runActionCommand(args: readonly string[], options: CliOpti
     }
   }
 
-  const action = findAction(id)
-  if (action === undefined) {
-    throw new CliFailure(`Unknown action: ${id}\nRun: npm run -s ae -- advanced actions`, { kind: 'NOT_FOUND', code: 'unknown_action' })
-  }
   if (!action.readOnly && !options.allowWrite) {
     throw new CliFailure('Pass --allow-write to run a write-classified action.', { kind: 'PERMISSION_DENIED', code: 'write_requires_allow' })
   }

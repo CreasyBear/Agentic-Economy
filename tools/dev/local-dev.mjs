@@ -216,7 +216,7 @@ function createManagedChild(command, args, env, {
   return { child, done, ready: readyPromise, terminate }
 }
 
-function createSupervisor() {
+export function createSupervisor() {
   const children = new Set()
   let parentSignal = null
 
@@ -235,6 +235,9 @@ function createSupervisor() {
   const terminateAll = (signal, reason, statusSignal = signal) => {
     for (const managed of children) managed.terminate(signal, reason, statusSignal)
   }
+  const waitForChildren = async () => {
+    await Promise.all([...children].map(({ done }) => done))
+  }
   const signal = (receivedSignal) => {
     if (parentSignal === null) parentSignal = receivedSignal
     terminateAll(
@@ -248,6 +251,7 @@ function createSupervisor() {
     add,
     signal,
     terminateAll,
+    waitForChildren,
     get parentSignal() {
       return parentSignal
     },
@@ -322,6 +326,24 @@ async function runLocalStack(viteArgs) {
       return signalExitStatus(supervisor.parentSignal)
     }
 
+    // Seed the dev catalog (idempotent) so the stack is usable immediately and
+    // persists across restarts. A seed failure should not tear down an already
+    // healthy Convex+Vite stack, so it is best-effort and logged.
+    try {
+      const seed = supervisor.add(createManagedChild(
+        'npx',
+        ['convex', 'run', 'devSeed:seedDevCatalog'],
+        env,
+        { label: 'Seed dev catalog', timeoutMs: 90_000 },
+      ))
+      const seedResult = await seed.done
+      if (childExitStatus(seedResult) !== 0) {
+        process.stderr.write('local-dev: dev-catalog seed reported a non-zero exit; continuing.\n')
+      }
+    } catch (seedError) {
+      process.stderr.write(`local-dev: dev-catalog seed skipped (${seedError instanceof Error ? seedError.message : String(seedError)})\n`)
+    }
+
     let vite
     try {
       vite = await runVite(viteArgs, supervisor)
@@ -354,6 +376,7 @@ async function runLocalStack(viteArgs) {
   } finally {
     process.off('SIGINT', onSigint)
     process.off('SIGTERM', onSigterm)
+    await supervisor.waitForChildren()
   }
 }
 

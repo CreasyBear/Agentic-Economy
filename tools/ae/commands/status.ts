@@ -47,16 +47,22 @@ function configuredApiKeyOrigin(options: CliOptions): string {
       code: 'agent_access_key_origin_invalid',
     })
   }
-  const isExactOrigin = originUrl.protocol === 'http:' || originUrl.protocol === 'https:'
-  if (
-    !isExactOrigin
-    || originUrl.username !== ''
-    || originUrl.password !== ''
-    || (originUrl.pathname !== '' && originUrl.pathname !== '/')
-    || originUrl.search !== ''
-    || originUrl.hash !== ''
-  ) {
-    throw new CliFailure('AE_API_KEY_ORIGIN must be an exact HTTP(S) origin without a path, query, or credentials.', {
+  const isExactOrigin = (
+    (baseUrl.protocol === 'http:' || baseUrl.protocol === 'https:')
+    && baseUrl.username === ''
+    && baseUrl.password === ''
+    && (baseUrl.pathname === '' || baseUrl.pathname === '/')
+    && baseUrl.search === ''
+    && baseUrl.hash === ''
+    && (originUrl.protocol === 'http:' || originUrl.protocol === 'https:')
+    && originUrl.username === ''
+    && originUrl.password === ''
+    && (originUrl.pathname === '' || originUrl.pathname === '/')
+    && originUrl.search === ''
+    && originUrl.hash === ''
+  )
+  if (!isExactOrigin) {
+    throw new CliFailure('AE_API_KEY_ORIGIN and --base-url must be valid exact HTTP(S) origins without paths, queries, or credentials.', {
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_invalid',
     })
@@ -138,32 +144,37 @@ export function statusCommandFor(invocationRef: string): string {
   return `npm run -s ae -- status ${invocationRef}`
 }
 
-export function statusTransportFailure(invocationRef: string): CliFailure {
-  const statusPath = operationStatusPath(invocationRef)
-  const retryHint = statusCommandFor(invocationRef)
+export function statusTransportFailure(_invocationRef: string): CliFailure {
+  const detail = {
+    recovery: 'Read operation status again with the same invocation identity.',
+    identityPreserved: true,
+  }
   return new CliFailure(
-    `Operation status transport is unknown; retry ${retryHint} with the same invocation reference. statusPath=${statusPath} retryHint=${retryHint}`,
+    'Operation status transport is unknown; retry status with the same invocation identity.',
     {
       kind: 'UNAVAILABLE',
       code: 'operation-status-transport-unknown',
-      detail: { invocationRef, statusPath, retryHint },
+      detail,
     },
   )
 }
 
 export function recoveryTransportFailure(
   action: 'cancel' | 'reconcile',
-  invocationRef: string,
-  idempotencyKey: string,
+  _invocationRef: string,
+  _idempotencyKey: string,
 ): CliFailure {
-  const statusPath = operationStatusPath(invocationRef)
-  const retryHint = statusCommandFor(invocationRef)
+  const detail = {
+    action,
+    recovery: 'Retry with the same invocation and idempotency identity; do not create a new identity.',
+    identityPreserved: true,
+  }
   return new CliFailure(
-    `Operation ${action} transport is unknown; do not retry with a new identity. invocationRef=${invocationRef} idempotencyKey=${idempotencyKey} statusPath=${statusPath} retryHint=${retryHint}`,
+    `Operation ${action} transport is unknown; do not retry with a new identity.`,
     {
       kind: 'UNAVAILABLE',
       code: `operation-${action}-transport-unknown`,
-      detail: { invocationRef, idempotencyKey, statusPath, retryHint },
+      detail,
     },
   )
 }
@@ -197,7 +208,7 @@ export async function readOperationStatus(
     method: OPERATION_INVOKE_ROUTE_CONTRACT.status.method,
     headers: { Authorization: `Bearer ${apiKey}` },
   })
-  return parseStatusResult(requireOk(outcome, path))
+  return parseStatusResult(requireOk(outcome, 'operation status'))
 }
 
 export async function runStatusCommand(args: readonly string[], options: CliOptions): Promise<void> {

@@ -28,65 +28,42 @@ function parseInvokeResult(value: unknown): OperationInvokeResult {
   })
 }
 
-function recoveryMessage(
-  message: string,
-  recovery: Readonly<{
-    operationRef: string
-    idempotencyKey: string
-    invocationRef?: string
-    statusPath?: string
-    retryHint: string
-  }>,
-): string {
-  const fields = [
-    `operationRef=${recovery.operationRef}`,
-    ...(recovery.invocationRef === undefined ? [] : [`invocationRef=${recovery.invocationRef}`]),
-    `idempotencyKey=${recovery.idempotencyKey}`,
-    ...(recovery.statusPath === undefined ? [] : [`statusPath=${recovery.statusPath}`]),
-    `retryHint=${recovery.retryHint}`,
-  ]
-  return `${message} ${fields.join(' ')}`
-}
-
 function unknownInvokeTransport(
   operationRef: string,
-  idempotencyKey: string,
+  _idempotencyKey: string,
   invocationRef?: string,
 ): CliFailure {
-  const statusPath = invocationRef === undefined ? undefined : operationStatusPath(invocationRef)
-  const retryHint = invocationRef === undefined
-    ? `Retry npm run -s ae -- invoke with --idempotency-key ${idempotencyKey}.`
-    : statusCommandFor(invocationRef)
-  const recovery = {
+  const detail = {
     operationRef,
-    idempotencyKey,
-    ...(invocationRef === undefined ? {} : { invocationRef }),
-    ...(statusPath === undefined ? {} : { statusPath }),
-    retryHint,
+    recovery: invocationRef === undefined
+      ? 'Repeat invoke with the same idempotency identity.'
+      : 'Read operation status with the same invocation identity.',
+    identityPreserved: true,
   }
-  return new CliFailure(recoveryMessage('Operation transport is unknown; do not retry with a new identity.', recovery), {
-    kind: 'UNAVAILABLE',
-    code: 'operation-transport-unknown',
-    detail: recovery,
-  })
+  return new CliFailure(
+    `Operation transport is unknown for ${operationRef}; do not retry with a new identity.`,
+    {
+      kind: 'UNAVAILABLE',
+      code: 'operation-transport-unknown',
+      detail,
+    },
+  )
 }
 
 function waitTimeoutFailure(
   operationRef: string,
-  idempotencyKey: string,
-  invocationRef: string,
+  _idempotencyKey: string,
+  _invocationRef: string,
 ): CliFailure {
-  const recovery = {
+  const detail = {
     operationRef,
-    invocationRef,
-    idempotencyKey,
-    statusPath: operationStatusPath(invocationRef),
-    retryHint: statusCommandFor(invocationRef),
+    recovery: 'Read operation status with the same invocation identity before retrying.',
+    identityPreserved: true,
   }
-  return new CliFailure(recoveryMessage('Operation wait timed out; the outcome remains unknown.', recovery), {
+  return new CliFailure('Operation wait timed out; the outcome remains unknown.', {
     kind: 'UNAVAILABLE',
     code: 'operation-wait-timeout',
-    detail: recovery,
+    detail,
   })
 }
 
@@ -136,7 +113,7 @@ async function waitForOperationResult(
     await new Promise<void>((resolve) => {
       setTimeout(resolve, Math.min(delayMs, remainingMs))
     })
-    if (!options.json) process.stderr.write(`Waiting for operation ${invocationRef}.\n`)
+    if (!options.json) process.stderr.write('Waiting for the operation outcome.\n')
     let status: unknown
     try {
       status = await readOperationStatus(options, invocationRef)
@@ -187,7 +164,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
       code: 'invoke-input',
     })
   }
-  process.stderr.write(`Invocation identity: operationRef=${operationRef} idempotencyKey=${idempotencyKey}\n`)
+  if (!options.json) process.stderr.write(`Invocation identity: operationRef=${operationRef} idempotencyKey=<redacted>\n`)
 
   const apiKey = requireAgentAccessKey('invoke', options)
 

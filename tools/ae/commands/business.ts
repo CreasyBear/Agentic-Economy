@@ -10,6 +10,12 @@ export async function runBusinessCommand(args: readonly string[], options: CliOp
   const outcome = await callJson(options.baseUrl, path)
   const body = requireOk(outcome, path)
 
+  if (isRecord(body) && body.kind === 'not_found') {
+    throw new CliFailure('The requested business was not found.', {
+      kind: 'NOT_FOUND',
+      code: 'business_not_found',
+    })
+  }
   if (options.json) {
     printJson(body)
     return
@@ -18,11 +24,6 @@ export async function runBusinessCommand(args: readonly string[], options: CliOp
   heading(`Business "${slug}" (${outcome.durationMs}ms)`)
   if (!isRecord(body)) {
     line('Unreadable response body.')
-    return
-  }
-
-  if (body.kind === 'not_found') {
-    line(`Not found: ${String(body.reason ?? '')}`)
     return
   }
 

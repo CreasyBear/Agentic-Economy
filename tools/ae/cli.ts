@@ -13,7 +13,8 @@
 
 import { loadEnv } from 'vite'
 
-import { parseArgs, printUsage, type CliOptions, type ParsedArgs } from './lib/args'
+import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
+import { parseArgs, printUsage, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
@@ -23,14 +24,18 @@ type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<v
 const CLI_ENTRYPOINT = 'npm run -s ae --'
 const JSON_HELP_FLAGS = {
   '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, or the hosted default.' },
+  '--limit': { type: 'string', description: 'Search page size from 1 through 20; search only.' },
+  '--cursor': { type: 'string', description: 'Opaque search continuation cursor; search only.' },
+  '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
+  '--technical': { type: 'boolean', description: 'Include operation identity and evidence metadata in human compare output.' },
   '--allow-write': { type: 'boolean', description: 'Permit a non-read-only action or explicit Braintrust export.' },
   '--idempotency-key': { type: 'string', description: 'Stable replay identity for invoke/cancel/reconcile; never generated.' },
   '--wait': { type: 'boolean', description: 'Bounded invoke wait; timeout returns durable recovery detail.' },
-  '--thread-id': { type: 'string', description: 'Ask follow-up thread identifier.' },
-  '--operation-ref': { type: 'string', description: 'Exact operation reference to select.' },
-  '--candidate-digest': { type: 'string', description: 'Frozen candidate-set digest for a follow-up.' },
+  '--thread-id': { type: 'string', description: 'Ask follow-up thread identifier; plain queries load continuation state server-side.' },
+  '--operation-ref': { type: 'string', description: 'Exact operation reference to select in automation mode.' },
+  '--candidate-digest': { type: 'string', description: 'Frozen candidate-set digest for automation mode.' },
   '--turn-id': { type: 'string', repeatable: true, description: 'Explicit finalized answer turn identifier; repeatable up to 25.' },
   '--manifest': { type: 'string', description: 'Explicit JSON manifest with bounded turn IDs.' },
   '--project': { type: 'string', description: 'Braintrust project (or AE_BRAINTRUST_PROJECT).' },
@@ -39,18 +44,52 @@ const JSON_HELP_FLAGS = {
   '--update-snapshot': { type: 'boolean', description: 'Allow replacing an existing snapshot name.' },
 } as const
 
-const COMMAND_USAGE: Record<string, string> = {
-  manifest: `${CLI_ENTRYPOINT} manifest`,
-  search: `${CLI_ENTRYPOINT} search "<job>"`,
-  inspect: `${CLI_ENTRYPOINT} inspect <operation-ref>`,
-  compare: `${CLI_ENTRYPOINT} compare <ref> <ref> [...]`,
-  connect: `${CLI_ENTRYPOINT} connect`,
-  invoke: `${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]`,
-  status: `${CLI_ENTRYPOINT} status <invocation-ref>`,
-  recover: `${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>`,
-  'advanced cancel': `${CLI_ENTRYPOINT} advanced cancel <invocation-ref> --idempotency-key <key>`,
-  demand: `${CLI_ENTRYPOINT} demand <subcommand> ...`,
-  advanced: `${CLI_ENTRYPOINT} advanced <subcommand> ...`,
+const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
+const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
+  manifest: [],
+  search: ['limit', 'cursor', 'filters'],
+  inspect: [],
+  compare: ['technical'],
+  'inspect-plan': [],
+  connect: [],
+  invoke: ['idempotency-key', 'wait'],
+  status: [],
+  recover: ['idempotency-key'],
+  'demand ask': ['thread-id', 'operation-ref', 'candidate-digest'],
+  'demand business': [],
+  'demand discover': [],
+  'demand enrich': ['suburb'],
+  'demand import': [],
+  'demand journey': [],
+  'demand request': [],
+  'advanced action': ['allow-write'],
+  'advanced actions': [],
+  'advanced cancel': ['idempotency-key'],
+  'advanced doctor': [],
+  'advanced eval': [
+    'allow-write',
+    'turn-id',
+    'manifest',
+    'project',
+    'dataset',
+    'snapshot-name',
+    'update-snapshot',
+  ],
+  'advanced policy': ['apply'],
+}
+
+function commandMetadata(path: string): CommandManifestEntry | undefined {
+  const [command, subcommand] = path.split(' ')
+  if (command === undefined) return undefined
+  const root = COMMANDS[command]
+  if (subcommand === undefined) return root
+  return root?.commands?.[subcommand]
+}
+
+function commandUsage(path: string): string {
+  const metadata = commandMetadata(path)
+  if (metadata === undefined) return `${CLI_ENTRYPOINT} ${path} [args] [flags]`
+  return `${CLI_ENTRYPOINT} ${path}${metadata.args.length === 0 ? '' : ` ${metadata.args}`}`
 }
 
 const AUTH_HELP = {
@@ -62,22 +101,47 @@ const AUTH_HELP = {
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
   next: 'After approval, export AE_API_KEY=<token> and AE_API_KEY_ORIGIN=<origin printed by connect>; invoke, status, cancel, and reconcile use the key as a Bearer credential.',
   authenticatedOperations: {
-    invoke: COMMAND_USAGE.invoke,
-    status: COMMAND_USAGE.status,
-    cancel: COMMAND_USAGE['advanced cancel'],
-    reconcile: COMMAND_USAGE.recover,
+    invoke: commandUsage('invoke'),
+    status: commandUsage('status'),
+    cancel: commandUsage('advanced cancel'),
+    reconcile: commandUsage('recover'),
   },
   cancelRequirements: 'Cancel requires the AE access key AE_API_KEY plus --idempotency-key, sent as body.idempotencyKey.',
 } as const
 
-
 function commandHelpName(command: string | undefined, positionals: readonly string[]): string | undefined {
-  if (command === undefined) return positionals[0]
-  if (command === 'help') return positionals[0]
-  if ((command === 'demand' || command === 'advanced') && positionals[0] !== undefined) {
-    return `${command} ${positionals[0]}`
+  const tokens = command === undefined
+    ? []
+    : command === 'help'
+      ? positionals
+      : [command, ...positionals]
+  if (tokens.length === 0) return undefined
+  if ((tokens[0] === 'demand' || tokens[0] === 'advanced') && tokens[1] !== undefined) {
+    return `${tokens[0]} ${tokens[1]}`
   }
-  return command
+  return tokens[0]
+}
+
+function commandHelpProjection(path: string): Record<string, unknown> {
+  const metadata = commandMetadata(path)
+  if (metadata === undefined) {
+    return { usage: commandUsage(path) }
+  }
+  return {
+    usage: commandUsage(path),
+    summary: metadata.summary,
+    ...(metadata.guidance === undefined ? {} : { guidance: metadata.guidance }),
+    ...(metadata.commands === undefined ? {} : {
+      commands: Object.fromEntries(Object.entries(metadata.commands).map(([name, child]) => [
+        name,
+        {
+          usage: commandUsage(`${path} ${name}`),
+          summary: child.summary,
+          ...(child.guidance === undefined ? {} : { guidance: child.guidance }),
+        },
+      ])),
+    }),
+  }
 }
 
 function jsonHelp(
@@ -87,16 +151,17 @@ function jsonHelp(
 ): Record<string, unknown> {
   const requested = commandHelpName(command, positionals)
   const commandName = requested ?? 'root'
-  const usage = requested === undefined
-    ? `${CLI_ENTRYPOINT} <command> [args] [flags]`
-    : COMMAND_USAGE[requested] ?? `${CLI_ENTRYPOINT} ${requested} [args] [flags]`
-  const commands = Object.fromEntries(knownCommands.map((name) => [name, { usage: COMMAND_USAGE[name] ?? `${CLI_ENTRYPOINT} ${name} ...` }]))
+  const commands = Object.fromEntries(knownCommands.map((name) => [name, commandHelpProjection(name)]))
   return {
     kind: 'HELP',
     command: commandName,
-    usage,
+    ...(requested === undefined
+      ? {
+        usage: `${CLI_ENTRYPOINT} <command> [args] [flags]`,
+        commands,
+      }
+      : commandHelpProjection(requested)),
     flags: JSON_HELP_FLAGS,
-    ...(requested === undefined ? { commands } : {}),
     auth: AUTH_HELP,
     ...(requested === 'connect' ? {
       auth: {
@@ -126,24 +191,110 @@ function printUsageWithAuthenticatedOperationHelp(): void {
 }
 
 function printCommandHelp(command: string | undefined, positionals: readonly string[]): void {
-  if (commandHelpName(command, positionals) !== 'connect') {
+  const requested = commandHelpName(command, positionals)
+  if (requested === undefined) {
     printUsageWithAuthenticatedOperationHelp()
     return
   }
-  process.stdout.write([
-    `Usage: ${COMMAND_USAGE.connect}`,
+  const metadata = commandMetadata(requested)
+  if (metadata === undefined) {
+    printUsageWithAuthenticatedOperationHelp()
+    return
+  }
+  const lines = [
+    `Usage: ${commandUsage(requested)}`,
     '',
-    'Authentication:',
-    `  Credential: ${AUTH_HELP.credential}`,
-    `  Credential origin: ${AUTH_HELP.credentialOrigin}`,
-    `  Scope: ${AUTH_HELP.scope}`,
-    `  Device flow: ${AUTH_HELP.deviceFlow}`,
-    `  Existing key: ${AUTH_HELP.existingKey}`,
-    `  Origin policy: ${AUTH_HELP.origin}`,
-    `  Next: ${AUTH_HELP.next}`,
-  ].join('\n') + '\n')
-  printAuthenticatedOperationHelp()
+    metadata.summary,
+    ...(metadata.guidance?.map((guidance) => `  ${guidance}`) ?? []),
+    ...(metadata.commands === undefined
+      ? []
+      : [
+        '',
+        'Subcommands:',
+        ...Object.entries(metadata.commands).map(([name, child]) => `  ${name}: ${commandUsage(`${requested} ${name}`)} — ${child.summary}`),
+      ]),
+  ]
+  if (requested === 'connect') {
+    lines.push(
+      '',
+      'Authentication:',
+      `  Credential: ${AUTH_HELP.credential}`,
+      `  Credential origin: ${AUTH_HELP.credentialOrigin}`,
+      `  Scope: ${AUTH_HELP.scope}`,
+      `  Device flow: ${AUTH_HELP.deviceFlow}`,
+      `  Existing key: ${AUTH_HELP.existingKey}`,
+      `  Origin policy: ${AUTH_HELP.origin}`,
+      `  Next: ${AUTH_HELP.next}`,
+    )
+  }
+  process.stdout.write(lines.join('\n') + '\n')
+  if (requested === 'connect') printAuthenticatedOperationHelp()
 }
+type HelpPathResult = Readonly<{
+  path?: string
+  error?: Readonly<{ code: string; message: string }>
+}>
+
+function resolveHelpPath(
+  command: string | undefined,
+  positionals: readonly string[],
+  commands: Readonly<Record<string, CommandRunner>>,
+  groups: Readonly<Record<'demand' | 'advanced', Readonly<Record<string, CommandRunner>>>>,
+): HelpPathResult {
+  const tokens = command === undefined
+    ? []
+    : command === 'help'
+      ? positionals
+      : [command, ...positionals]
+  const root = tokens[0]
+  if (root === undefined) return {}
+  if (commands[root] === undefined) {
+    // Never echo the raw token: hostile/paste argv can embed secrets.
+    return { error: { code: 'unknown-command', message: 'Unknown command' } }
+  }
+  if (root !== 'demand' && root !== 'advanced') return { path: root }
+  const subcommand = tokens[1]
+  if (subcommand === undefined) return { path: root }
+  if (groups[root][subcommand] === undefined) {
+    return {
+      error: {
+        code: `${root}-subcommand`,
+        message: `Usage: ${commandUsage(root)} (available: ${Object.keys(groups[root]).join(', ')})`,
+      },
+    }
+  }
+  return { path: `${root} ${subcommand}` }
+}
+
+function validateCommandOptions(parsed: ParsedArgs): void {
+  const command = parsed.command
+  if (command === undefined) return
+  const commandPath =
+    command === 'demand' || command === 'advanced'
+      ? `${command} ${parsed.positionals[0] ?? ''}`.trim()
+      : command
+  const allowed = new Set([
+    ...COMMON_COMMAND_OPTIONS,
+    ...(COMMAND_OPTIONS[commandPath] ?? []),
+  ])
+  const unsupported = parsed.providedOptions.filter(
+    (option) => option !== 'help' && !allowed.has(option),
+  )
+  if (unsupported.length === 0) return
+  throw new CliFailure(
+    `Option --${unsupported[0]} is not valid for ${commandPath}.`,
+    {
+      kind: 'INVALID_ARGUMENT',
+      code: 'option-not-supported',
+      detail: {
+        command: commandPath,
+        unsupportedOptions: unsupported.map((option) => `--${option}`),
+        allowedOptions: [...allowed].map((option) => `--${option}`),
+      },
+    },
+  )
+}
+
 
 
 async function main(): Promise<number> {
@@ -161,6 +312,7 @@ async function main(): Promise<number> {
     evalCommands,
     importCommands,
     inspectCommands,
+    inspectPlanCommands,
     invokeCommands,
     journeyCommands,
     manifestCommands,
@@ -182,6 +334,7 @@ async function main(): Promise<number> {
     import('./commands/eval'),
     import('./commands/import'),
     import('./commands/inspect'),
+    import('./commands/inspect-plan'),
     import('./commands/invoke'),
     import('./commands/journey'),
     import('./commands/manifest'),
@@ -226,6 +379,7 @@ async function main(): Promise<number> {
     search: searchCommands.runSearchCommand,
     inspect: inspectCommands.runInspectCommand,
     compare: compareCommands.runCompareCommand,
+    'inspect-plan': inspectPlanCommands.runInspectPlanCommand,
     connect: connectCommands.runConnectCommand,
     invoke: invokeCommands.runInvokeCommand,
     status: statusCommands.runStatusCommand,
@@ -250,6 +404,23 @@ async function main(): Promise<number> {
   }
   const isHelp = parsed.command === 'help' || parsed.options.help
   if (isHelp) {
+    const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands, {
+      demand: demandCommands,
+      advanced: advancedCommands,
+    })
+    if (helpPath.error !== undefined) {
+      if (parsed.options.json) {
+        printJson({
+          kind: 'INVALID_ARGUMENT',
+          code: helpPath.error.code,
+          message: helpPath.error.message,
+          exitCode: 1,
+        })
+      } else {
+        process.stderr.write(`${helpPath.error.message}\n`)
+      }
+      return 1
+    }
     if (parsed.options.json) {
       printJson(jsonHelp(parsed.command, parsed.positionals, Object.keys(commands)))
     } else {
@@ -269,16 +440,17 @@ async function main(): Promise<number> {
   const run = commands[parsed.command]
   if (run === undefined) {
     if (parsed.options.json) {
-      printJson({ kind: 'INVALID_ARGUMENT', code: 'unknown-command', message: `Unknown command: ${parsed.command}`, exitCode: 1 })
+      printJson({ kind: 'INVALID_ARGUMENT', code: 'unknown-command', message: 'Unknown command', exitCode: 1 })
       return 1
     }
-    process.stderr.write(`Unknown command: ${parsed.command}\n\n`)
+    process.stderr.write('Unknown command\n\n')
     process.stderr.write(`Known commands: ${Object.keys(commands).join(', ')}\n\n`)
     printUsageWithAuthenticatedOperationHelp()
     return 1
   }
 
   try {
+    validateCommandOptions(parsed)
     await run(parsed.positionals, parsed.options)
     return 0
   } catch (error) {
@@ -289,8 +461,6 @@ async function main(): Promise<number> {
     let detail: unknown
     let retryable: boolean | undefined
     let retryAfter: string | undefined
-    let recovery: unknown
-    let nextAction: unknown
     const mappedFailure = error instanceof CliFailure ? error : sourceErrorToCliFailure(error)
     if (mappedFailure !== undefined) {
       exitCode = mappedFailure.exitCode
@@ -300,13 +470,11 @@ async function main(): Promise<number> {
       detail = mappedFailure.detail
       retryable = mappedFailure.retryable
       retryAfter = mappedFailure.retryAfter
-      recovery = mappedFailure.recovery
-      nextAction = mappedFailure.nextAction
     } else if (isConnectionRefused(error)) {
       exitCode = 1
       kind = 'UNAVAILABLE'
       code = 'connection_refused'
-      message = `Could not reach ${parsed.options.baseUrl}. Is the dev server running? Start it with: npm run dev`
+      message = `Could not reach ${safeOriginForDiagnostics(parsed.options.baseUrl)}. Is the dev server running? Start it with: npm run dev`
     } else {
       exitCode = 1
       kind = 'INTERNAL'
@@ -323,8 +491,6 @@ async function main(): Promise<number> {
         exitCode,
         ...(retryable === undefined ? {} : { retryable }),
         ...(retryAfter === undefined ? {} : { retryAfter }),
-        ...(recovery === undefined ? {} : { recovery }),
-        ...(nextAction === undefined ? {} : { nextAction }),
       })
     } else {
       process.stderr.write(`${message}\n`)

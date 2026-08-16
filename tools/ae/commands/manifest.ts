@@ -38,19 +38,64 @@ const RECOVERY_EVIDENCE_EXAMPLE = {
   digest: canonicalDigest(RECOVERY_EVIDENCE_MATERIAL),
 }
 
-const COMMANDS = {
+export type CommandManifestEntry = Readonly<{
+  summary: string
+  args: string
+  json: boolean
+  guidance?: readonly string[]
+  commands?: Readonly<Record<string, CommandManifestEntry>>
+}>
+
+export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   manifest: { summary: 'Read this machine-readable Operation terminal contract.', args: '', json: true },
-  search: { summary: 'Search current public Market Operations for a job.', args: '<job>', json: true },
+  search: { summary: 'Search current public Market Operations for a job.', args: '<job> [--limit <1-20>] [--cursor <cursor>] [--filters \'<json>\'>', json: true },
   inspect: { summary: 'Read one exact current Market Operation before connecting or invoking.', args: '<operationRef>', json: true },
-  compare: { summary: 'Compare two to four exact current Operation references.', args: '<operationRef> <operationRef> [operationRef ...]', json: true },
+  compare: { summary: 'Compare one to four exact current Operation references.', args: '<operationRef> [<operationRef> ...]', json: true },
+  'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operationRef> [operationRef ...]', json: true },
   connect: { summary: 'Register a public device client or validate the configured AE key.', args: '', json: true },
   invoke: { summary: 'Invoke an admitted Market Operation through the authenticated AE gateway.', args: "<operationRef> '<json>' --idempotency-key <key> [--wait]", json: true },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
-  recover: { summary: 'Recover one uncertain invocation with evidence and a stable key.', args: "<invocationRef> '<evidence-json>' --idempotency-key <key>", json: true },
-  advanced: {
-    summary: 'Operator-only actions; not part of the root cold path.',
+  recover: {
+    summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
+    args: "<invocationRef> '<evidence-json>' --idempotency-key <key>",
+    json: true,
+    guidance: [
+      'Inspect status first and use this only when the invocation outcome remains genuinely uncertain.',
+      'Provide canonical evidence for the same invocation and stable idempotency key; recover reconciles the outcome and does not replay a known result.',
+    ],
+  },
+  demand: {
+    summary: 'Run demand-side workflows; demand ask supports natural-language same-thread continuation.',
+    args: '<subcommand> ...',
+    json: true,
     commands: {
+      ask: {
+        summary: 'Ask a natural-language question; --thread-id continues the same thread with server-side continuation state.',
+        args: '"<question>" [--thread-id <thread-id>] | --thread-id <thread-id> --operation-ref <operation-ref> --candidate-digest <digest> \'<input-json>\'',
+        json: true,
+        guidance: [
+          'Pass --thread-id with a follow-up question to continue the existing thread; omit it to start a new ask.',
+        ],
+      },
+      business: { summary: 'Inspect one local business by slug.', args: '<slug>', json: true },
+      discover: { summary: 'Discover local businesses from the registry.', args: '', json: true },
+      enrich: { summary: 'Enrich a local business from its name and optional suburb.', args: '"<business name>" [--suburb X]', json: true },
+      import: { summary: 'Import one business website URL.', args: '<websiteUrl>', json: true },
+      journey: { summary: 'Run a demand journey for a natural-language query.', args: '"<query>"', json: true },
+      request: { summary: 'Create or inspect a demand request.', args: 'create "<text>" | get <requestRef> | options <requestRef> | confirm <requestRef> <optionRef>', json: true },
+    },
+  },
+  advanced: {
+    summary: 'Run operator-only actions; these are not part of the root cold path.',
+    args: '<subcommand> ...',
+    json: true,
+    commands: {
+      action: { summary: 'Run one registered action by ID.', args: "<id> ['<json>'] [--allow-write]", json: true },
+      actions: { summary: 'List registered actions.', args: '', json: true },
       cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
+      doctor: { summary: 'Inspect local CLI and environment diagnostics.', args: '', json: true },
+      eval: { summary: 'Run an advanced evaluation command.', args: '...', json: true },
+      policy: { summary: 'Inspect or refine policy evaluation.', args: '[test|refine|fidelity]', json: true },
     },
   },
 } as const
@@ -74,12 +119,14 @@ function directKeylessManifest() {
   }
   const described = describeActionForAgent(action)
   return {
-    action: action.id,
+    action: described.id,
+    contractVersion: action.invocationContract.version,
+    invocationContract: action.invocationContract,
     mcpTool: mcpToolName(action),
     authentication: 'none' as const,
     requiresOperationRef: true as const,
     ...(described.inputJsonSchema === undefined ? {} : { inputJsonSchema: described.inputJsonSchema }),
-    invocationContract: action.invocationContract,
+    ...(described.outputJsonSchema === undefined ? {} : { outputJsonSchema: described.outputJsonSchema }),
   }
 }
 
@@ -102,15 +149,18 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
   printJson({
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
     protocol: 'agentic-economy.operation-terminal.v1',
-    about: 'AE-native Operation loop: discover exact current work, inspect terms, compare or inspect a plan, connect one AE key, invoke idempotently, observe durable status, and recover uncertain outcomes.',
+    about: 'AE-native Operation loop: discover exact current work, inspect terms, compare or inspect a plan, connect one AE key, invoke idempotently, observe durable status, and reconcile genuinely uncertain outcomes with evidence.',
     commands: COMMANDS,
-    coldLoop: ['manifest', 'search', 'inspect', 'compare', 'connect', 'invoke', 'status', 'recover'],
+    coldLoop: ['manifest', 'search', 'inspect', 'compare', 'inspect-plan', 'connect', 'invoke', 'status', 'recover'],
     anonymous: {
       authentication: 'none',
-      routes: operationReads.map(({ route }) => ({
+      routes: operationReads.map(({ route, action }) => ({
         method: route.method,
         path: route.pathTemplate,
-        actionId: route.actionId,
+        actionId: action.id,
+        contractVersion: action.invocationContract.version,
+        ...(action.inputJsonSchema === undefined ? {} : { inputJsonSchema: action.inputJsonSchema }),
+        ...(action.outputJsonSchema === undefined ? {} : { outputJsonSchema: action.outputJsonSchema }),
       })),
       operationReads,
     },
@@ -126,9 +176,9 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
         commandFieldRequired: true,
         location: 'body.idempotencyKey',
         requiredFor: ['operation.invoke', 'operation.cancel', 'operation.reconcile'],
-        replay: 'same_material_returns_original_state',
-        conflict: 'changed_material_refused',
-        uncertain: 'recover_before_retry',
+        replay: 'same_material_returns_exact_original_result',
+        conflict: 'changed_material_refused_as_idempotency_conflict',
+        uncertain: 'recover_only_after_a_real_uncertain_outcome',
       },
       outcomes: {
         action: describedAction(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId).outputJsonSchema,
@@ -195,7 +245,7 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
         digestMaterialRule: 'Compute canonicalDigest over all evidence fields except digest; include every other present field, including optional fields, exactly once and do not include the outer command wrapper.',
         invocationRefIdentityRule: 'The recover command invocationRef argument, evidence.invocationRef, and canonical invocationRef returned by invoke/status must be byte-for-byte identical; operationRef, attemptRef, and idempotencyKey are not substitutes.',
       },
-      unknown: 'A transport timeout is not a terminal outcome; inspect status and recover with the same invocation and idempotency references.',
+      unknown: 'A transport timeout is not a terminal outcome; inspect status and use recover only when the outcome remains genuinely uncertain, supplying canonical evidence and the same invocation and idempotency references. Recover reconciles evidence; it does not replay a known result.',
     },
   })
 }

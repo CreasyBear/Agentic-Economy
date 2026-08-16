@@ -27,7 +27,6 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
     })
   }
 
-  const apiKey = requireAgentAccessKey('recover', options)
   const idempotencyKey = options.idempotencyKey?.trim()
   if (idempotencyKey === undefined || idempotencyKey.length === 0) {
     throw new CliFailure('Recover requires an explicit --idempotency-key.', {
@@ -47,13 +46,15 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
   }
   const parsedEvidence = operationReconciliationEvidenceSchema.safeParse(evidence)
   const parsedInput = operationReconcileInputSchema.safeParse({ invocationRef, evidence, idempotencyKey })
-  if (!parsedEvidence.success || !parsedInput.success) {
+  const identityMatchesEvidence = parsedEvidence.success && parsedEvidence.data.invocationRef === invocationRef
+  if (!parsedEvidence.success || !parsedInput.success || !identityMatchesEvidence) {
     throw new CliFailure('Recovery evidence or identity does not match operation.reconcile:v1.', {
       kind: 'INVALID_ARGUMENT',
       code: parsedEvidence.success ? 'recover-input' : 'recover-evidence',
     })
   }
 
+  const apiKey = requireAgentAccessKey('recover', options)
   const path = recoverPath(parsedInput.data.invocationRef)
   let outcome
   try {
@@ -71,7 +72,7 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
     if (error instanceof CliFailure) throw error
     throw recoveryTransportFailure('reconcile', parsedInput.data.invocationRef, parsedInput.data.idempotencyKey)
   }
-  const parsedResult = operationInvokeRecoveryResultSchema.safeParse(requireOk(outcome, path))
+  const parsedResult = operationInvokeRecoveryResultSchema.safeParse(requireOk(outcome, 'operation reconciliation'))
   if (!parsedResult.success) {
     throw new CliFailure('The gateway returned an invalid recovery result.', {
       kind: 'UNAVAILABLE',

@@ -1,11 +1,11 @@
 import { parseArgs as parseNodeArgs } from 'node:util'
-import { trimTrailingSlashes } from '../../../src/modules/common/trim-trailing-slashes'
 
 export type CliOptions = {
   baseUrl: string
   json: boolean
   help: boolean
   allowWrite: boolean
+  technical?: boolean
   suburb?: string
   threadId?: string
   operationRef?: string
@@ -19,17 +19,56 @@ export type CliOptions = {
   dataset?: string
   snapshotName?: string
   updateSnapshot?: boolean
+  limit?: string | number
+  cursor?: string
+  filters?: string | Record<string, unknown>
 }
 
 export type ParsedArgs = {
   command?: string
   positionals: readonly string[]
   options: CliOptions
+  providedOptions: readonly string[]
 }
 
 const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
 const CLI_ENTRYPOINT = 'npm run -s ae --'
 
+export function safeOriginForDiagnostics(value: unknown): string {
+  if (typeof value !== 'string') return INVALID_BASE_URL_PLACEHOLDER
+  try {
+    const url = new URL(value.trim())
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:')
+      || url.username !== ''
+      || url.password !== ''
+    ) return INVALID_BASE_URL_PLACEHOLDER
+    return url.origin
+  } catch {
+    return INVALID_BASE_URL_PLACEHOLDER
+  }
+}
+
+function parseBaseUrl(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new TypeError('Invalid --base-url. Use an origin-only HTTP(S) URL.')
+  }
+  try {
+    const url = new URL(value.trim())
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:')
+      || url.username !== ''
+      || url.password !== ''
+      || (url.pathname !== '' && url.pathname !== '/')
+      || url.search !== ''
+      || url.hash !== ''
+    ) throw new TypeError()
+    return url.origin
+  } catch {
+    throw new TypeError('Invalid --base-url. Use an origin-only HTTP(S) URL.')
+  }
+}
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const parsed = parseNodeArgs({
     args: argv,
@@ -37,6 +76,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       'base-url': { type: 'string' },
       json: { type: 'boolean' },
       help: { type: 'boolean' },
+      technical: { type: 'boolean' },
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
       suburb: { type: 'string' },
@@ -51,35 +91,33 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       dataset: { type: 'string' },
       'snapshot-name': { type: 'string' },
       'update-snapshot': { type: 'boolean' },
+      limit: { type: 'string' },
+      cursor: { type: 'string' },
+      filters: { type: 'string' },
     },
     allowPositionals: true,
     tokens: true,
   })
   const seenLongOptions = new Set<string>()
   for (const token of parsed.tokens) {
-    if (token.kind !== 'option' || !token.rawName.startsWith('--') || token.name === 'turn-id') continue
-    if (seenLongOptions.has(token.name)) {
+    if (token.kind !== 'option' || !token.rawName.startsWith('--')) continue
+    if (seenLongOptions.has(token.name) && token.name !== 'turn-id') {
       throw new TypeError(`Option --${token.name} cannot be repeated`)
     }
     seenLongOptions.add(token.name)
   }
   const configuredBaseUrl = process.env.AE_CLI_BASE_URL?.trim() || process.env.AE_CANONICAL_BASE_URL?.trim()
-  const baseUrl = parsed.values['base-url'] === undefined
-    ? trimTrailingSlashes(configuredBaseUrl || DEFAULT_BASE_URL)
-    : trimTrailingSlashes(parsed.values['base-url'])
-  try {
-    const url = new URL(baseUrl)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new TypeError()
-    }
-  } catch {
-    throw new TypeError('Invalid --base-url: ' + baseUrl)
-  }
+  const baseUrl = parseBaseUrl(
+    parsed.values['base-url'] === undefined
+      ? configuredBaseUrl || DEFAULT_BASE_URL
+      : parsed.values['base-url'],
+  )
   const options: CliOptions = {
     baseUrl,
     json: parsed.values.json ?? false,
     help: parsed.values.help ?? false,
     allowWrite: parsed.values['allow-write'] ?? false,
+    technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
     ...(parsed.values.suburb === undefined ? {} : { suburb: parsed.values.suburb }),
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
@@ -93,9 +131,17 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.dataset === undefined ? {} : { dataset: parsed.values.dataset }),
     ...(parsed.values['snapshot-name'] === undefined ? {} : { snapshotName: parsed.values['snapshot-name'] }),
     ...(parsed.values['update-snapshot'] === undefined ? {} : { updateSnapshot: parsed.values['update-snapshot'] }),
+    ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
+    ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
+    ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
   }
   const [command, ...positionals] = parsed.positionals
-  return { ...(command === undefined ? {} : { command }), positionals, options }
+  return {
+    ...(command === undefined ? {} : { command }),
+    positionals,
+    options,
+    providedOptions: [...seenLongOptions],
+  }
 }
 
 export function printUsage(): void {
@@ -105,16 +151,18 @@ Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
 Canonical Operation commands (need a running server; default ${DEFAULT_BASE_URL}):
   ${CLI_ENTRYPOINT} manifest
-  ${CLI_ENTRYPOINT} search "<job>"
+  ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
   ${CLI_ENTRYPOINT} inspect <operation-ref>
-  ${CLI_ENTRYPOINT} compare <ref> <ref> [...]
+  ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
+  ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} connect
   ${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]
   ${CLI_ENTRYPOINT} status <invocation-ref>
   ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
 
 Demand commands:
-  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>']
+  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id>]
+  ${CLI_ENTRYPOINT} demand ask --thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>'
   ${CLI_ENTRYPOINT} demand business <slug>
   ${CLI_ENTRYPOINT} demand discover
   ${CLI_ENTRYPOINT} demand enrich "<business name>" [--suburb X]
@@ -136,12 +184,16 @@ Flags:
   AE_API_KEY <token>          reusable caller credential for credentialed commands
   AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
   --json             machine-readable output
+  --limit <1-20>     search page size (search only)
+  --cursor <cursor>  opaque search continuation cursor (search only)
+  --filters '<json>' canonical search filters (search only)
+  --technical        human compare output with operation identity and evidence metadata
   --allow-write      permit a non read-only action or explicit Braintrust export
   --idempotency-key <key>  stable replay identity for invoke/recovery (required; never generated)
   --wait                   bounded invoke wait; timeout returns durable recovery detail
-  --thread-id <id>     ask follow-up thread (requires --operation-ref and --candidate-digest)
-  --operation-ref <ref> exact operation to select (requires --thread-id and --candidate-digest)
-  --candidate-digest <digest> frozen candidate set digest (requires --thread-id and --operation-ref)
+  --thread-id <id>     conversational ask thread; plain queries load continuation state server-side
+  --operation-ref <ref> exact operation to select in automation mode (requires --thread-id and --candidate-digest)
+  --candidate-digest <digest> frozen candidate set digest in automation mode (requires --thread-id and --operation-ref)
   --turn-id <id>     explicit finalized answer turn id (repeatable; max 25)
   --manifest <path>  explicit JSON manifest with bounded turnIds
   --project <name>   Braintrust project (env: AE_BRAINTRUST_PROJECT)

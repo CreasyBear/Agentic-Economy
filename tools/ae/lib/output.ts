@@ -1,6 +1,27 @@
 import { isRecord } from '@/modules/common/is-record'
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { kindForStatus, PROBLEM_KINDS, type ProblemKind } from '@/lib/errors'
+import { remoteProblemToProblem, type ProblemKind } from '@/lib/errors'
+import { safeOriginForDiagnostics } from './args'
+
+const REDACTED_FAILURE_VALUE = '<redacted>'
+const SENSITIVE_FAILURE_FIELD = /^(?:authorization|access[_-]?token|api[_-]?key|bearer|base[_-]?url|body|credential|cookie|headers?|idempotency[_-]?key|invocation[_-]?ref|password|path|query|raw[_-]?url|request[_-]?url|retry[_-]?hint|secret|status[_-]?path|token|transport[_-]?url|url|userinfo)$/iu
+const URL_IN_FAILURE_TEXT = /https?:\/\/[^\s"'<>]+/giu
+const SENSITIVE_FAILURE_TEXT = /\b(?:authorization|access[_-]?token|api[_-]?key|bearer|idempotency[_-]?key|invocation[_-]?ref|password|secret|token)\s*[:=]\s*[^\s,;]+/giu
+
+function sanitizeFailureText(value: string): string {
+  return value
+    .replace(URL_IN_FAILURE_TEXT, (url) => safeOriginForDiagnostics(url))
+    .replace(/\bBearer\s+\S+/giu, 'Bearer <redacted>')
+    .replace(SENSITIVE_FAILURE_TEXT, (field) => `${field.slice(0, field.search(/[:=]/u) + 1)}${REDACTED_FAILURE_VALUE}`)
+}
+
+function sanitizeFailureValue(value: unknown, field?: string): unknown {
+  if (field !== undefined && SENSITIVE_FAILURE_FIELD.test(field)) return REDACTED_FAILURE_VALUE
+  if (typeof value === 'string') return sanitizeFailureText(value)
+  if (Array.isArray(value)) return value.map((item) => sanitizeFailureValue(item))
+  if (!isRecord(value)) return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeFailureValue(item, key)]))
+}
 
 export type CliFailureOptions = {
   exitCode?: number
@@ -9,8 +30,6 @@ export type CliFailureOptions = {
   detail?: unknown
   retryable?: boolean
   retryAfter?: string
-  recovery?: unknown
-  nextAction?: unknown
 }
 
 export class CliFailure extends Error {
@@ -20,20 +39,16 @@ export class CliFailure extends Error {
   readonly detail: unknown | undefined
   readonly retryable: boolean | undefined
   readonly retryAfter: string | undefined
-  readonly recovery: unknown | undefined
-  readonly nextAction: unknown | undefined
 
   constructor(message: string, options: CliFailureOptions = {}) {
-    super(message)
+    super(sanitizeFailureText(message))
     this.name = 'CliFailure'
     this.exitCode = options.exitCode ?? 1
     this.kind = options.kind ?? 'INTERNAL'
     this.code = options.code
-    this.detail = options.detail
+    this.detail = options.detail === undefined ? undefined : sanitizeFailureValue(options.detail)
     this.retryable = options.retryable
     this.retryAfter = options.retryAfter
-    this.recovery = options.recovery
-    this.nextAction = options.nextAction
   }
 }
 
@@ -88,14 +103,6 @@ export async function readHttpOutcome(response: Response, startedAt: number): Pr
 
   return { status: response.status, ok: response.ok, durationMs, headers: response.headers, body, bodyText }
 }
-const SAFE_FAILURE_CODE = /^[a-z][a-z0-9_:-]{0,95}$/u
-const MAX_FAILURE_TEXT_LENGTH = 2_000
-
-function boundedFailureText(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  return value.slice(0, MAX_FAILURE_TEXT_LENGTH)
-}
-
 function isStructuredFailureBody(body: unknown, contentType: string): body is Record<string, unknown> {
   if (!isRecord(body)) return false
   if (!contentType.includes('application/problem+json') && !contentType.includes('application/json')) return false
@@ -108,24 +115,17 @@ export function requireOk(outcome: HttpOutcome, path: string): unknown {
   const status = outcome.status
   const contentType = (outcome.headers.get('content-type') ?? '').toLowerCase()
   if (isStructuredFailureBody(outcome.body, contentType)) {
-    const body = outcome.body
-    const kind = PROBLEM_KINDS.find((candidate) => candidate !== 'no_data' && candidate === body.kind) ?? kindForStatus(status)
-    const code = typeof body.code === 'string' && SAFE_FAILURE_CODE.test(body.code) ? body.code : String(status)
-    const detail = boundedFailureText(body.detail)
-    const title = boundedFailureText(body.title)
+    const problem = remoteProblemToProblem({ status, body: outcome.body })
     const retryAfter = outcome.headers.get('retry-after')?.trim()
-    // One clean actionable line for humans; the parsed detail/code/kind and
-    // explicit retry/recovery fields ride the CliFailure for --json.
-    const suffix = (detail ?? title ?? '').replace(/\s+/gu, ' ').trim()
-    throw new CliFailure(`${path} returned ${status}${suffix ? `: ${suffix}` : ''}`, {
+    // One clean actionable line for humans; the canonical kind/code and
+    // retry fields ride the CliFailure for --json.
+    throw new CliFailure(`${path} returned ${status}: ${problem.title}`, {
       exitCode: 1,
-      kind,
-      code,
-      detail,
-      ...(typeof body.retryable === 'boolean' ? { retryable: body.retryable } : {}),
+      kind: problem.kind,
+      code: problem.code,
+      ...(problem.detail === undefined ? {} : { detail: problem.detail }),
+      ...(problem.retryable === undefined ? {} : { retryable: problem.retryable }),
       ...(retryAfter === undefined || retryAfter.length === 0 ? {} : { retryAfter }),
-      ...(body.recovery === undefined ? {} : { recovery: body.recovery }),
-      ...(body.nextAction === undefined ? {} : { nextAction: body.nextAction }),
     })
   }
   throw new CliFailure(`${path} returned ${status}`)

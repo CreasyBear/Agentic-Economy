@@ -1,4 +1,12 @@
 import { randomUUID } from 'node:crypto'
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { dirname, join } from 'node:path'
 
 import { buildAnswerTurnProblem, parseAnswerTurnProblemStrict, redactAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
 import {
@@ -13,6 +21,92 @@ import { isRecord } from '@/modules/common/is-record'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, heading, line, printJson, readHttpOutcome } from '../lib/output'
+
+const ANSWER_SESSION_COOKIE = 'ae_session'
+const ANSWER_SESSION_VALUE = /^[A-Za-z0-9_-]{1,128}$/u
+const MAX_SAVED_ANSWER_SESSIONS = 64
+
+function answerSessionFile(): string {
+  return join(process.env.AE_CLI_STATE_DIR ?? join(process.cwd(), '.ae-cli'), 'answer-sessions.json')
+}
+
+function readAnswerSessions(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(answerSessionFile(), 'utf8'))
+    if (!isRecord(parsed)) {
+      throw new CliFailure('Saved Answer sessions are malformed.', {
+        kind: 'INTERNAL',
+        code: 'answer-session-state-invalid',
+      })
+    }
+    const sessions: Record<string, string> = {}
+    for (const [origin, session] of Object.entries(parsed)) {
+      if (
+        !URL.canParse(origin)
+        || new URL(origin).origin !== origin
+        || typeof session !== 'string'
+        || !ANSWER_SESSION_VALUE.test(session)
+      ) {
+        throw new CliFailure('Saved Answer sessions are malformed.', {
+          kind: 'INTERNAL',
+          code: 'answer-session-state-invalid',
+        })
+      }
+      sessions[origin] = session
+    }
+    return sessions
+  } catch (error) {
+    if (isMissingFileError(error)) return {}
+    if (error instanceof CliFailure) throw error
+    throw new CliFailure('Saved Answer sessions could not be read.', {
+      kind: 'INTERNAL',
+      code: 'answer-session-state-unreadable',
+    })
+  }
+}
+
+function saveAnswerSession(origin: string, session: string): void {
+  const sessions = Object.entries({ ...readAnswerSessions(), [origin]: session })
+    .slice(-MAX_SAVED_ANSWER_SESSIONS)
+  const file = answerSessionFile()
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
+  const temporaryFile = `${file}.next-${process.pid}-${randomUUID()}`
+  try {
+    writeFileSync(temporaryFile, JSON.stringify(Object.fromEntries(sessions)), {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
+    renameSync(temporaryFile, file)
+  } catch {
+    rmSync(temporaryFile, { force: true })
+    throw new CliFailure('Saved Answer sessions could not be updated.', {
+      kind: 'INTERNAL',
+      code: 'answer-session-state-unwritable',
+    })
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === 'ENOENT'
+  )
+}
+
+function answerSessionFrom(response: Response): string | undefined {
+  const match = response.headers.get('set-cookie')
+    ?.match(/(?:^|,\s*)ae_session=([^;,]+)/u)
+  if (match?.[1] === undefined) return undefined
+  let value: string
+  try {
+    value = decodeURIComponent(match[1])
+  } catch {
+    return undefined
+  }
+  return ANSWER_SESSION_VALUE.test(value) ? value : undefined
+}
 
 type AskStatus = 'complete' | 'pending' | 'stopped' | 'error'
 
@@ -56,11 +150,10 @@ type AskRequest = Readonly<{
 }>
 
 function buildAskRequest(args: readonly string[], options: CliOptions): AskRequest {
-  const hasSelectionInput =
-    options.threadId !== undefined
-    || options.operationRef !== undefined
+  const hasAutomationSelection =
+    options.operationRef !== undefined
     || options.candidateDigest !== undefined
-  if (!hasSelectionInput) {
+  if (!hasAutomationSelection) {
     const query = args.join(' ').trim()
     if (query.length === 0) {
       throw new CliFailure('Usage: npm run -s ae -- demand ask "<question>"', {
@@ -68,7 +161,17 @@ function buildAskRequest(args: readonly string[], options: CliOptions): AskReque
         code: 'ask-usage',
       })
     }
-    return { query }
+    const threadId = options.threadId?.trim()
+    if (options.threadId !== undefined && (threadId === undefined || threadId.length === 0)) {
+      throw new CliFailure('Conversational continuation requires a non-empty --thread-id.', {
+        kind: 'INVALID_ARGUMENT',
+        code: 'ask-thread-id',
+      })
+    }
+    return {
+      query,
+      ...(threadId === undefined ? {} : { threadId }),
+    }
   }
 
   const threadId = options.threadId?.trim()
@@ -78,13 +181,13 @@ function buildAskRequest(args: readonly string[], options: CliOptions): AskReque
     || operationRef === undefined || operationRef.length === 0
     || candidateSetDigest === undefined || candidateSetDigest.length === 0) {
     throw new CliFailure(
-      'Follow-up selection requires --thread-id, --operation-ref, and --candidate-digest together.',
+      'Machine-selected follow-up requires --thread-id, --operation-ref, and --candidate-digest together.',
       { kind: 'INVALID_ARGUMENT', code: 'ask-selection-args' },
     )
   }
   if (args.length !== 1 || args[0]!.trim().length === 0) {
     throw new CliFailure(
-      'Follow-up selection requires one JSON input object after the selection flags.',
+      'Machine-selected follow-up requires one JSON input object after the selection flags.',
       { kind: 'INVALID_ARGUMENT', code: 'ask-selection-input' },
     )
   }
@@ -115,6 +218,8 @@ function buildAskRequest(args: readonly string[], options: CliOptions): AskReque
 export async function runAskCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const request = buildAskRequest(args, options)
   const { query } = request
+  const origin = new URL(options.baseUrl).origin
+  const answerSession = readAnswerSessions()[origin]
 
   const startedAt = Date.now()
   let response: Response
@@ -125,6 +230,9 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
         'X-AE-Turn-Key': randomUUID(),
+        ...(answerSession === undefined
+          ? {}
+          : { Cookie: `${ANSWER_SESSION_COOKIE}=${encodeURIComponent(answerSession)}` }),
       },
       body: JSON.stringify({
         ...(request.threadId === undefined ? {} : { threadId: request.threadId }),
@@ -139,6 +247,11 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
       code: problem.code,
       detail: problem,
     })
+  }
+
+  const nextAnswerSession = answerSessionFrom(response)
+  if (nextAnswerSession !== undefined && nextAnswerSession !== answerSession) {
+    saveAnswerSession(origin, nextAnswerSession)
   }
 
   if (!response.ok) {

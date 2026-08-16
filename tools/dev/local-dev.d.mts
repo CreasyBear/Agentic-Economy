@@ -28,3 +28,25 @@ export function terminateProcessTrees(
   signal: NodeJS.Signals,
   kill?: ProcessKill,
 ): boolean[]
+
+type ManagedChild = {
+  done: Promise<unknown>
+  terminate: (
+    signal?: NodeJS.Signals,
+    reason?: string,
+    requestedSignal?: NodeJS.Signals | null,
+  ) => void
+}
+
+type LocalDevSupervisor = {
+  add: <T extends ManagedChild>(managed: T) => T
+  signal: (signal: NodeJS.Signals) => void
+  terminateAll: (
+    signal?: NodeJS.Signals,
+    reason?: string,
+    requestedSignal?: NodeJS.Signals | null,
+  ) => void
+  waitForChildren: () => Promise<unknown[]>
+}
+
+export function createSupervisor(): LocalDevSupervisor

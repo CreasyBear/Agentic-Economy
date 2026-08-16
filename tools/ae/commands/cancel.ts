@@ -50,7 +50,7 @@ export async function runCancelCommand(args: readonly string[], options: CliOpti
   }
   let resultBody: unknown
   try {
-    resultBody = requireOk(outcome, path)
+    resultBody = requireOk(outcome, 'operation cancellation')
   } catch (error) {
     if (error instanceof CliFailure && error.kind !== 'UNAVAILABLE') throw error
     throw recoveryTransportFailure('cancel', parsedInput.data.invocationRef, parsedInput.data.idempotencyKey)
