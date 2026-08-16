@@ -396,11 +396,31 @@ export function createPaymentAttemptRuntime(
         || !custodyReferenceMatches(current.custodyRef, event.custodyRef)) {
         throw new Error('x402_payment_attempt_attribution_invalid')
       }
+      const settlementEvidence = event.settlementEvidence
       const updated = {
         ...current,
         state: event.state,
         observedAt: now(),
         evidenceRefs: event.evidenceRefs,
+        ...(settlementEvidence === undefined
+          ? {}
+          : {
+              settlementStatus:
+                settlementEvidence.kind === 'not_submitted'
+                  ? 'not_settled'
+                  : settlementEvidence.kind,
+            }),
+        ...(settlementEvidence === undefined
+          || settlementEvidence.kind === 'not_submitted'
+          || settlementEvidence.response === undefined
+          ? {}
+          : { settlementResponse: settlementEvidence.response }),
+        ...(settlementEvidence === undefined
+          || settlementEvidence.kind === 'not_submitted'
+          || settlementEvidence.digest === undefined
+          ? {}
+          : { settlementDigest: settlementEvidence.digest }),
+        ...(event.state === 'settled' ? { settledAmount: current.amount } : {}),
       } as const
       const authorizationEvent = attemptPort.loadAuthorizationEvent(key)
       if (authorizationEvent === undefined) throw new Error('x402_payment_authorization_event_missing')

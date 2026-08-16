@@ -71,6 +71,14 @@ import type {
   CapabilityPublicationSourceSelector,
 } from "./internal/publication-importers";
 import { boundedTrimmed, validEvidenceRefs } from "./internal/shared";
+export type OwnerProviderConnectionCommandResult =
+  | Readonly<{
+      kind: "applied" | "duplicate";
+      connection: ProviderConnectionOwnerProjection;
+      commandDigest: string;
+    }>
+  | Readonly<{ kind: "refused"; code: string }>;
+export type OwnerProviderConnection = ProviderConnectionOwnerProjection;
 export type SupplyLandingTool = Readonly<{
   id: string;
   name: string;
@@ -565,6 +573,42 @@ const readOwnerProviderConnectionsQuery = sourceQuery<
   Record<string, never>,
   readonly ProviderConnectionOwnerProjection[]
 >("capabilityProviderConnections:listOwner");
+const connectOwnerX402Mutation = sourceMutation<
+  {
+    businessId: string;
+    resourceUrl: string;
+    commandId: string;
+    evidenceRefs: readonly string[];
+  },
+  OwnerProviderConnectionCommandResult
+>("capabilityProviderConnections:connectX402Owner");
+const reconnectOwnerProviderConnectionMutation = sourceMutation<
+  {
+    connectionRef: string;
+    commandId: string;
+    expectedAuthorityGeneration: number;
+    expectedAuthorityDigest: string;
+    evidenceRefs: readonly string[];
+  },
+  OwnerProviderConnectionCommandResult
+>("capabilityProviderConnections:reconnectOwner");
+const revokeOwnerProviderConnectionMutation = sourceMutation<
+  {
+    connectionRef: string;
+    commandId: string;
+    expectedAuthorityGeneration: number;
+    expectedAuthorityDigest: string;
+    evidenceRefs: readonly string[];
+  },
+  OwnerProviderConnectionCommandResult
+>("capabilityProviderConnections:revokeOwner");
+const retryOwnerProviderConnectionCleanupMutation = sourceMutation<
+  {
+    connectionRef: string;
+    commandId: string;
+  },
+  OwnerProviderConnectionCommandResult
+>("capabilityProviderConnections:retryOwnerCleanup");
 const readOwnerProviderEarningsQuery = sourceQuery<
   Record<string, never>,
   OwnerProviderEarningsReadback
@@ -1059,6 +1103,76 @@ export const readOwnerProviderConnectionsServer = createServerFn().handler(
     }
   },
 );
+const ownerConnectionCommandSchema = z.strictObject({
+  connectionRef: z.string().min(1).max(300),
+  commandId: z.string().min(1).max(256),
+  expectedAuthorityGeneration: z.number().int().positive(),
+  expectedAuthorityDigest: z.string().min(1).max(200),
+});
+export const connectOwnerX402Server = createServerFn({ method: "POST" })
+  .validator((data) =>
+    z.strictObject({
+      businessId: z.string().min(1),
+      resourceUrl: z.url().max(2_048),
+      commandId: z.string().min(1).max(256),
+    }).parse(data),
+  )
+  .handler(async ({ data }): Promise<OwnerProviderConnectionCommandResult> => {
+    try {
+      return await callSourceMutation(connectOwnerX402Mutation, {
+        ...data,
+        evidenceRefs: [],
+      });
+    } catch {
+      return { kind: "refused", code: "source_unavailable" };
+    }
+  });
+export const reconnectOwnerProviderConnectionServer = createServerFn({
+  method: "POST",
+})
+  .validator((data) => ownerConnectionCommandSchema.parse(data))
+  .handler(async ({ data }): Promise<OwnerProviderConnectionCommandResult> => {
+    try {
+      return await callSourceMutation(
+        reconnectOwnerProviderConnectionMutation,
+        { ...data, evidenceRefs: [] },
+      );
+    } catch {
+      return { kind: "refused", code: "source_unavailable" };
+    }
+  });
+export const revokeOwnerProviderConnectionServer = createServerFn({
+  method: "POST",
+})
+  .validator((data) => ownerConnectionCommandSchema.parse(data))
+  .handler(async ({ data }): Promise<OwnerProviderConnectionCommandResult> => {
+    try {
+      return await callSourceMutation(revokeOwnerProviderConnectionMutation, {
+        ...data,
+        evidenceRefs: [],
+      });
+    } catch {
+      return { kind: "refused", code: "source_unavailable" };
+    }
+  });
+export const retryOwnerProviderConnectionCleanupServer = createServerFn({
+  method: "POST",
+})
+  .validator((data) =>
+    ownerConnectionCommandSchema
+      .pick({ connectionRef: true, commandId: true })
+      .parse(data),
+  )
+  .handler(async ({ data }): Promise<OwnerProviderConnectionCommandResult> => {
+    try {
+      return await callSourceMutation(
+        retryOwnerProviderConnectionCleanupMutation,
+        data,
+      );
+    } catch {
+      return { kind: "refused", code: "source_unavailable" };
+    }
+  });
 export const readOwnerProviderEarningsServer = createServerFn().handler(
   async (): Promise<OwnerProviderEarningsReadback> => {
     try {

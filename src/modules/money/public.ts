@@ -680,4 +680,22 @@ export type {
   CredentialBudgetRefusalCode,
   CredentialBudgetAdmission,
 } from "./internal/credential-budget";
+export { reverseCredentialBudget } from "./internal/credential-budget";
+export {
+  externalSpendIdentityDigest,
+  externalSpendFinalizationDigest,
+  externalSpendReconciliationDigest,
+  externalSpendReversalDigest,
+  sameExternalSpendIdentity,
+  externalSpendStateForSettlement,
+} from "./internal/external-spend";
+export type {
+  ExternalSpendIdentity,
+  ExternalSpendReservation,
+  ExternalSpendReservationState,
+  ExternalSpendSettlementStatus,
+  ExternalSpendSubmissionStatus,
+  ExternalSpendRefusalCode,
+  ExternalSpendMutationResult,
+} from "./internal/external-spend";
 export { createInMemoryMoneyQueryPort } from "./internal/query-projections";

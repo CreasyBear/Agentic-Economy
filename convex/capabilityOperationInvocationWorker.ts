@@ -44,6 +44,19 @@ import {
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import {
+  verifyExactEvmX402Settlement,
+} from '@/modules/capability-supply/internal/x402-settlement-verifier'
+import { readGuardedX402EvmReceipt } from '@/modules/capability-supply/internal/x402-evm-receipt-reader'
+import {
+  chargeSettlementOutcome,
+  paymentObservationDigest,
+  transportObservationDigest,
+  x402ActionEffectStatus,
+  x402SettlementStatusForObservation,
+  type EconomicRail,
+} from '@/modules/capability-supply/internal/x402-invocation-policy'
+import { readX402PaymentPayer } from '@/modules/capability-supply/internal/x402-payment-signer'
+import {
   accountRefForOperator,
   accountRefForProvider,
   accountRefForRake,
@@ -52,6 +65,10 @@ import {
   type ExactAmount,
   type MoneyAcceptedInvocationCharge,
 } from '@/modules/money/public'
+import type {
+  ExternalSpendIdentity,
+  ExternalSpendSettlementStatus,
+} from '@/modules/money/internal/external-spend'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
@@ -70,6 +87,9 @@ import {
   isPrincipalEnvironmentCompatibleWithOperation,
   operationEnvironmentMismatchNextAction,
 } from '@/modules/capability-execution/operation-invoke'
+import {
+  x402PaymentReconciliationEvidenceValue,
+} from '@/modules/customer-request/internal/route-mandate-convex-schema'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import {
@@ -113,6 +133,34 @@ type OpenDispatch = Readonly<{
   dispatchState?: 'enqueued' | 'running' | 'completed' | 'failed' | 'reconciliation_required'
   authority?: OperationInvokePersistedAuthority
 }>
+function configuredX402RpcUrl(network: string): URL | undefined {
+  const raw = (env as unknown as Record<string, string | undefined>).AE_X402_RPC_URLS_JSON?.trim()
+  if (raw === undefined || raw.length === 0 || raw.length > 16_384) return undefined
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed) || typeof parsed[network] !== 'string') return undefined
+    const url = new URL(parsed[network])
+    return url.protocol === 'https:' ? url : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readX402EvmReceipt(
+  network: string,
+  transactionHash: string,
+  dispatcher: Agent,
+): ReturnType<typeof readGuardedX402EvmReceipt> {
+  const target = configuredX402RpcUrl(network)
+  return target === undefined
+    ? Promise.resolve(undefined)
+    : readGuardedX402EvmReceipt({
+        target,
+        network,
+        transactionHash,
+        dispatcher,
+      })
+}
 type OperationInvocationAttemptIdentityInput = Readonly<{
   invocationRef: string
   principalId: string
@@ -149,25 +197,74 @@ export function operationInvocationAttemptIdentityDigest(
 ): string {
   return canonicalDigest(operationInvocationAttemptIdentityMaterial(input))
 }
-type EconomicRail = 'provider_direct_x402' | 'ae_internal'
 type ContractOutputValidation =
   | Readonly<{ valid: false }>
   | Readonly<{ valid: true; output: StableHashValue }>
 type ChargeSettlementResult =
   | Readonly<{ kind: 'settled'; outcome: 'not_released' | 'released' }>
   | Readonly<{ kind: 'reconciliation_required' }>
+type ExternalSpendSettlement =
+  | Readonly<{ kind: 'settled'; settlementStatus: 'settled' | 'not_settled' }>
+  | Readonly<{ kind: 'reconciliation_required' }>
 type WorkerAcceptedCharge = Omit<MoneyAcceptedInvocationCharge, 'transactionRef' | 'providerNet' | 'rake'> & Readonly<{
   transactionRef?: string | undefined
   providerNet?: ExactAmount | undefined
   rake?: ExactAmount | undefined
 }>
+
+export function x402ExternalSpendIdentity(input: Readonly<{
+  dispatch: Pick<OpenDispatch, 'invocationRef' | 'principalId' | 'credentialId' | 'grantRef' | 'grantGeneration' | 'environment' | 'operationRef'>
+  attemptRef: string
+  effectGeneration: number
+  providerRef: string
+  paymentIdentifier: string
+  challengeDigest: string
+  selectedRequirementJson: string
+  amount: ExactAmount
+}>): ExternalSpendIdentity {
+  const idempotencyDigest = canonicalDigest({
+    format: 'ae.x402.external-spend-identity:v1',
+    invocationRef: input.dispatch.invocationRef,
+    principalId: input.dispatch.principalId,
+    credentialId: input.dispatch.credentialId,
+    grantRef: input.dispatch.grantRef,
+    grantGeneration: input.dispatch.grantGeneration,
+    environment: input.dispatch.environment,
+    attemptRef: input.attemptRef,
+    effectGeneration: input.effectGeneration,
+    operationRef: input.dispatch.operationRef,
+    providerRef: input.providerRef,
+    paymentIdentifier: input.paymentIdentifier,
+    challengeDigest: input.challengeDigest,
+    selectedRequirementJson: input.selectedRequirementJson,
+    amount: input.amount,
+  } as StableHashValue)
+  return {
+    reservationRef: `external-spend:${idempotencyDigest}`,
+    principalId: input.dispatch.principalId,
+    credentialId: input.dispatch.credentialId,
+    grantRef: input.dispatch.grantRef,
+    grantGeneration: input.dispatch.grantGeneration,
+    environment: input.dispatch.environment,
+    invocationRef: input.dispatch.invocationRef,
+    attemptRef: input.attemptRef,
+    effectGeneration: input.effectGeneration,
+    operationRef: input.dispatch.operationRef,
+    providerRef: input.providerRef,
+    paymentIdentifier: input.paymentIdentifier,
+    challengeDigest: input.challengeDigest,
+    idempotencyDigest,
+    amount: input.amount,
+  }
+}
+
 const recoveryArgs = {
   invocationRef: v.string(),
   principalId: v.string(),
   credentialId: v.string(),
   mode: v.union(v.literal('status'), v.literal('cancel'), v.literal('reconcile')),
   idempotencyKey: v.optional(v.string()),
-  evidence: v.optional(reconciliationEvidenceValue),
+  evidence: v.optional(v.union(reconciliationEvidenceValue, x402PaymentReconciliationEvidenceValue)),
 } as const
 
 
@@ -672,14 +769,101 @@ export const run = internalAction({
       byDigest: boolean,
     ): Promise<string | undefined> => {
       const credentialRef = x402PaymentCredentialRefFromEnvironment()
-      if (credentialRef === undefined) return undefined
-      return await readX402Authorization(ctx, prepared, byDigest, {
+      const material = byDigest
+        ? await ctx.runQuery(
+            internal.customerRequestRouteExecution.readX402PaymentAuthorizationByDigest,
+            prepared,
+          )
+        : await ctx.runQuery(
+            internal.customerRequestRouteExecution.readX402PaymentAuthorization,
+            prepared,
+          )
+      const expected = material === null
+        ? undefined
+        : x402ExternalSpendIdentityFromAttempt(
+            dispatch,
+            operation,
+            material,
+            durableAttemptRef,
+            claimed.attempt.effectGeneration,
+          )
+      if (
+        credentialRef === undefined
+        || material === null
+        || material.state !== 'prepared'
+        || material.credentialRef !== credentialRef
+        || material.dispatchRef !== dispatch.invocationRef
+        || material.attemptRef !== durableAttemptRef
+        || material.effectGeneration !== claimed.attempt.effectGeneration
+        || material.paymentIdentifier !== operationKeyDigest
+        || expected === undefined
+      ) {
+        if (expected !== undefined) {
+          const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
+            ctx,
+            expected,
+            [operationKeyDigest],
+          )
+          if (cleanupOutcome === 'failed') return undefined
+        }
+        return undefined
+      }
+      const validation = validateProviderAuthority === undefined || leaseRef === undefined || leaseAuthority === undefined
+        ? { kind: 'valid' as const }
+        : await validateProviderAuthority({
+            leaseRef,
+            invocationRef: dispatch.invocationRef,
+            operationRef: dispatch.operationRef,
+            connectionRef: connectionAuthority!.connectionRef,
+            providerRef: connectionAuthority!.providerRef,
+            adapterId: connectionAuthority!.adapterId,
+            authorityGeneration: connectionAuthority!.authorityGeneration,
+            authorityDigest: connectionAuthority!.authorityDigest,
+            grantedScopes: leaseAuthority.grantedScopes,
+            grantedResources: leaseAuthority.grantedResources,
+            readinessValidUntil: operation.readiness.validUntil,
+            readinessDigest: operation.readiness.qualificationDigest,
+          })
+      if (validation.kind !== 'valid') {
+        const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
+          ctx,
+          expected,
+          [operationKeyDigest],
+        )
+        if (cleanupOutcome === 'failed') return undefined
+        return undefined
+      }
+      const signature = await readX402Authorization(ctx, prepared, byDigest, {
         credentialRef,
         dispatchRef: dispatch.invocationRef,
         attemptRef: durableAttemptRef,
         effectGeneration: claimed.attempt.effectGeneration,
         paymentIdentifier: operationKeyDigest,
       })
+      if (signature === undefined || signature.length === 0) {
+        const cleanupOutcome = await bestEffortReleaseX402ExternalSpend(
+          ctx,
+          expected,
+          [operationKeyDigest],
+        )
+        if (cleanupOutcome === 'failed') return undefined
+        return undefined
+      }
+      try {
+        await ctx.runMutation(internal.customerRequestRouteExecution.recordX402PaymentSignature, {
+          custodyRef: prepared.custodyRef,
+          authorizationDigest: prepared.authorizationDigest,
+          paymentSignatureDigest: canonicalDigest(signature),
+        })
+      } catch (error) {
+        await bestEffortReleaseX402ExternalSpend(
+          ctx,
+          expected,
+          [operationKeyDigest],
+        )
+        throw error
+      }
+      return signature
     }
     const paymentCallbacks: Pick<
       X402RouteTransportRuntime,
@@ -688,11 +872,26 @@ export const run = internalAction({
       | 'readX402PaymentAuthorizationByDigest'
       | 'markX402PaymentPossiblySubmitted'
       | 'observeX402PaymentAttempt'
+      | 'verifyX402Settlement'
     > | undefined = connectionAuthority === undefined
       || leaseRef === undefined
       || leaseAuthority === undefined
       ? undefined
       : {
+          verifyX402Settlement: async ({
+            response,
+            requirement,
+            paymentSignature,
+          }) => verifyExactEvmX402Settlement({
+            response,
+            requirement,
+            payer: readX402PaymentPayer(paymentSignature),
+            receipt: await readX402EvmReceipt(
+              requirement.network,
+              response.transaction,
+              dispatcher,
+            ),
+          }),
           prepareX402PaymentAuthorization: async (request) => {
             if (
               request.attemptRef !== durableAttemptRef
@@ -701,37 +900,78 @@ export const run = internalAction({
             ) return undefined
             const paymentCredentialRef = x402PaymentCredentialRefFromEnvironment()
             if (paymentCredentialRef === undefined || request.credential !== paymentCredentialRef) return undefined
-            return await ctx.runMutation(
-              internal.customerRequestRouteExecution.prepareX402PaymentAuthorization,
-              {
-                dispatchRef: dispatch.invocationRef,
-                operationRef: dispatch.operationRef,
-                inputDigest: dispatch.inputDigest,
-                challengeDigest: request.challengeDigest,
-                attemptRef: request.attemptRef,
-                effectGeneration: request.effectGeneration,
-                paymentIdentifier: request.paymentIdentifier,
-                operationKeyDigest,
-                challengeJson: JSON.stringify(request.challenge),
-                selectedRequirementJson: JSON.stringify(request.selectedRequirement),
-                providerEndpoint: request.challenge.resource.url,
-                credentialRef: paymentCredentialRef,
-                scheme: request.selectedRequirement.scheme,
-                network: request.selectedRequirement.network,
-                asset: request.selectedRequirement.asset,
-                payTo: request.selectedRequirement.payTo,
-                amountUnits: request.paymentAmount.units,
-                currency: request.paymentAmount.currency,
-                exponent: request.paymentAmount.exponent,
-              },
-            )
+            const selectedRequirementJson = JSON.stringify(request.selectedRequirement)
+            const externalIdentity = x402ExternalSpendIdentity({
+              dispatch,
+              attemptRef: request.attemptRef,
+              effectGeneration: request.effectGeneration,
+              providerRef: connectionAuthority.providerRef,
+              paymentIdentifier: request.paymentIdentifier,
+              challengeDigest: request.challengeDigest,
+              selectedRequirementJson,
+              amount: request.paymentAmount,
+            })
+            const reserved = await ctx.runMutation(internal.moneyLedger.reserveExternalInvocationSpend, {
+              ...externalIdentity,
+              observedAt: Date.now(),
+            })
+            if (reserved.kind !== 'accepted') return undefined
+            try {
+              const prepared = await ctx.runMutation(
+                internal.customerRequestRouteExecution.prepareX402PaymentAuthorization,
+                {
+                  dispatchRef: dispatch.invocationRef,
+                  operationRef: dispatch.operationRef,
+                  inputDigest: dispatch.inputDigest,
+                  challengeDigest: request.challengeDigest,
+                  attemptRef: request.attemptRef,
+                  effectGeneration: request.effectGeneration,
+                  paymentIdentifier: request.paymentIdentifier,
+                  operationKeyDigest,
+                  challengeJson: JSON.stringify(request.challenge),
+                  selectedRequirementJson,
+                  providerEndpoint: request.challenge.resource.url,
+                  credentialRef: paymentCredentialRef,
+                  scheme: request.selectedRequirement.scheme,
+                  network: request.selectedRequirement.network,
+                  asset: request.selectedRequirement.asset,
+                  payTo: request.selectedRequirement.payTo,
+                  amountUnits: request.paymentAmount.units,
+                  currency: request.paymentAmount.currency,
+                  exponent: request.paymentAmount.exponent,
+                  reservationRef: externalIdentity.reservationRef,
+                },
+              )
+              return prepared
+            } catch (error) {
+              const attempt = await ctx.runQuery(
+                internal.customerRequestRouteExecution.readX402PaymentAttempt,
+                {
+                  dispatchRef: dispatch.invocationRef,
+                  attemptRef: request.attemptRef,
+                  effectGeneration: request.effectGeneration,
+                },
+              ).catch(() => undefined)
+              if (attempt === null || attempt?.state === 'prepared') {
+                await bestEffortReleaseX402ExternalSpend(
+                  ctx,
+                  externalIdentity,
+                  [operationKeyDigest],
+                )
+              }
+              throw error
+            }
           },
           readX402PaymentAuthorization: async (prepared) =>
             await readPaymentAuthorization(prepared, false),
           readX402PaymentAuthorizationByDigest: async (prepared) =>
             await readPaymentAuthorization(prepared, true),
           markX402PaymentPossiblySubmitted: async (event) => {
-            const { amount, ...paymentEvent } = event
+            const {
+              amount,
+              settlementEvidence: _settlementEvidence,
+              ...paymentEvent
+            } = event
             await ctx.runMutation(internal.customerRequestRouteExecution.markX402PaymentPossiblySubmitted, {
               dispatchRef: dispatch.invocationRef,
               effectGeneration: claimed.attempt.effectGeneration,
@@ -742,11 +982,29 @@ export const run = internalAction({
             })
           },
           observeX402PaymentAttempt: async (event) => {
-            const { amount, ...paymentEvent } = event
+            const { amount, settlementEvidence, ...paymentEvent } = event
             await ctx.runMutation(internal.customerRequestRouteExecution.observeX402PaymentAttempt, {
               dispatchRef: dispatch.invocationRef,
               effectGeneration: claimed.attempt.effectGeneration,
               ...paymentEvent,
+              settlementStatus:
+                settlementEvidence?.kind === 'not_submitted'
+                  ? 'not_settled'
+                  : settlementEvidence?.kind ?? 'unknown',
+              ...(settlementEvidence !== undefined
+                && settlementEvidence.kind !== 'not_submitted'
+                && settlementEvidence.response !== undefined
+                ? { settlementResponse: settlementEvidence.response }
+                : {}),
+              ...(settlementEvidence !== undefined
+                && settlementEvidence.kind !== 'not_submitted'
+                && settlementEvidence.digest !== undefined
+                ? { settlementDigest: settlementEvidence.digest }
+                : {}),
+              state: event.state === 'reconciliation_required'
+                || settlementEvidence?.kind === 'unknown'
+                ? 'reconciliation_required'
+                : 'observed',
               evidenceRefs: [...event.evidenceRefs],
               amountUnits: amount.units,
               currency: amount.currency,
@@ -838,33 +1096,92 @@ export const run = internalAction({
       }
       const outputValidation = parseContractOutput(observation, descriptor)
       const deliveryOutcome = chargeSettlementOutcome(observation, economicRail, outputValidation.valid)
-      if (isX402) {
-        await ctx.runMutation(internal.customerRequestRouteExecution.recordX402PaymentObservation, {
-          dispatchRef: dispatch.invocationRef,
-          attemptRef: durableAttemptRef,
-          effectGeneration: durableEffectGeneration,
-          paymentIdentifier: operationKeyDigest,
-          operationRef: dispatch.operationRef,
-          inputDigest: dispatch.inputDigest,
-          transportObservationDigest: transportObservationDigest(observation),
-          transportRequestDigest: observation.requestDigest,
-          paymentObservationDigest: paymentObservationDigest(observation, operationKeyDigest),
-          paymentResolution: deliveryOutcome,
-          observedAt: Date.now(),
-        })
-      }
-      const settlement = moneyResult === undefined
-        ? deliveryOutcome === 'unknown'
-          ? { kind: 'reconciliation_required' as const }
-          : { kind: 'settled' as const, outcome: deliveryOutcome }
-        : await reconcileAcceptedCharge(
-            ctx,
-            dispatch,
-            operation,
-            moneyResult,
-            durableAttemptRef,
-            deliveryOutcome,
-          )
+      const externalSpendSettlement = isX402
+        ? await (async (): Promise<ChargeSettlementResult> => {
+            const x402SettlementStatus = x402SettlementStatusForObservation(observation)
+            const settlementDigest =
+              observation.settlementEvidence?.kind === 'settled'
+              || observation.settlementEvidence?.kind === 'not_settled'
+                ? observation.settlementEvidence.digest
+                : undefined
+            const attempt = await ctx.runQuery(
+              internal.customerRequestRouteExecution.readX402PaymentAttempt,
+              {
+                dispatchRef: dispatch.invocationRef,
+                attemptRef: durableAttemptRef,
+                effectGeneration: durableEffectGeneration,
+              },
+            )
+            const identity = attempt === null
+              ? undefined
+              : x402ExternalSpendIdentityFromAttempt(
+                  dispatch,
+                  operation,
+                  attempt,
+                  durableAttemptRef,
+                  durableEffectGeneration,
+                )
+            const evidenceRefs = [
+              ...operation.readiness.evidenceRefs,
+              transportObservationDigest(observation),
+            ]
+            const submissionStatus = observation.paymentSubmissionStatus
+              ?? (x402SettlementStatus === 'unknown'
+                ? 'unknown'
+                : 'observed')
+            await ctx.runMutation(internal.customerRequestRouteExecution.recordX402PaymentObservation, {
+              dispatchRef: dispatch.invocationRef,
+              attemptRef: durableAttemptRef,
+              effectGeneration: durableEffectGeneration,
+              paymentIdentifier: operationKeyDigest,
+              operationRef: dispatch.operationRef,
+              inputDigest: dispatch.inputDigest,
+              transportObservationDigest: transportObservationDigest(observation),
+              transportRequestDigest: observation.requestDigest,
+              paymentObservationDigest: paymentObservationDigest(observation, operationKeyDigest),
+              settlementStatus: x402SettlementStatus,
+              ...(settlementDigest === undefined
+                ? {}
+                : { paymentResponseDigest: settlementDigest }),
+              observedAt: Date.now(),
+            })
+            const external = identity === undefined
+              ? { kind: 'reconciliation_required' as const }
+              : await finalizeX402ExternalSpend(
+                  ctx,
+                  identity,
+                  submissionStatus,
+                  x402SettlementStatus,
+                  settlementDigest,
+                  evidenceRefs,
+                  observation.providerReceipt === undefined
+                    ? undefined
+                    : canonicalDigest(observation.providerReceipt),
+                )
+            return external.kind === 'settled'
+              ? {
+                  kind: 'settled',
+                  outcome: external.settlementStatus === 'settled'
+                    ? 'released'
+                    : 'not_released',
+                }
+              : external
+          })()
+        : undefined
+      const settlement = isX402
+        ? externalSpendSettlement
+        : moneyResult === undefined
+          ? deliveryOutcome === 'unknown'
+            ? { kind: 'reconciliation_required' as const }
+            : { kind: 'settled' as const, outcome: deliveryOutcome }
+          : await reconcileAcceptedCharge(
+              ctx,
+              dispatch,
+              operation,
+              moneyResult,
+              durableAttemptRef,
+              deliveryOutcome,
+            )
       acceptedChargeReconciled = true
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)
       const recordedAt = new Date().toISOString()
@@ -1171,6 +1488,7 @@ export const recover = internalAction({
         ...(control.authorityBinding === undefined ? {} : { authorityBinding: control.authorityBinding }),
       }],
     }
+    let trustedReconciliationEvidenceDigest: string | undefined
     const tracer = createDurableActionInvocationTracer({
       action,
       port,
@@ -1197,20 +1515,12 @@ export const recover = internalAction({
               : undefined
           )
         ) return false
-        if (operation.identity.adapterId === 'x402-fetch:v2') {
-          return x402Attempt !== null
-            && evidence.paymentIdentifier === x402Attempt.paymentIdentifier
-            && evidence.requestDigest === x402Attempt.transportRequestDigest
-            && evidence.transportObservationDigest === x402Attempt.transportObservationDigest
-            && evidence.paymentObservationDigest === x402Attempt.paymentObservationDigest
-            && evidence.resolution === x402Attempt.paymentResolution
-            && x402Attempt.state !== 'prepared'
-            && x402Attempt.state !== 'possibly_submitted'
-        }
-        return historyRows.some((history) =>
-          history.sourceEvidenceRef === evidence.evidenceRef
-          && history.observation?.release === evidence.resolution
-          && history.observation?.evidenceDigest === evidence.digest)
+        return canonicalDigest(evidence as StableHashValue)
+          === trustedReconciliationEvidenceDigest
+          || historyRows.some((history) =>
+            history.sourceEvidenceRef === evidence.evidenceRef
+            && history.observation?.release === evidence.resolution
+            && history.observation?.evidenceDigest === evidence.digest)
       },
     }, initialSnapshot)
     const actor = { callerRef: row.credentialId, principalRef: row.principalId }
@@ -1298,8 +1608,191 @@ export const recover = internalAction({
       await projectRecoveryOuter(ctx, row, reconciliation, 'reconciliation_required')
       return reconciliation
     }
-    const evidence = args.evidence
-    if (evidence === undefined) return recoveryNotFound(args.invocationRef)
+    const submittedEvidence = args.evidence
+    if (submittedEvidence === undefined) return recoveryNotFound(args.invocationRef)
+    let evidence: ReconciliationEvidence
+    let x402MoneyReconciled = false
+    if (submittedEvidence.kind === 'x402_payment_reconciliation') {
+      const paymentStatus = await readPublicInvocationStatus({
+        port,
+        invocationRef: row.invocationRef,
+        actor,
+      })
+      if (paymentStatus.kind === 'refused') return recoveryNotFound(args.invocationRef)
+      const providerRef = operation.binding.authority.kind === 'provider_connection'
+        ? operation.binding.authority.providerRef
+        : undefined
+      const externalIdentity = x402Attempt === null || providerRef === undefined
+        ? undefined
+        : x402ExternalSpendIdentity({
+            dispatch: {
+              invocationRef: row.invocationRef,
+              principalId: row.principalId,
+              credentialId: row.credentialId,
+              grantRef: row.grantRef,
+              grantGeneration: row.grantGeneration,
+              environment: row.environment,
+              operationRef: row.operationRef,
+            },
+            attemptRef: submittedEvidence.attemptRef,
+            effectGeneration: submittedEvidence.effectGeneration,
+            providerRef,
+            paymentIdentifier: submittedEvidence.paymentIdentifier,
+            challengeDigest: submittedEvidence.challengeDigest,
+            selectedRequirementJson: x402Attempt?.selectedRequirementJson ?? '',
+            amount: submittedEvidence.amount,
+          })
+      const observedAt = Date.parse(submittedEvidence.observedAt)
+      const { digest: submittedDigest, ...submittedMaterial } = submittedEvidence
+      if (
+        operation.identity.adapterId !== 'x402-fetch:v2'
+        || x402Attempt === null
+        || externalIdentity === undefined
+        || submittedEvidence.settlementStatus !== 'settled'
+        || submittedEvidence.invocationRef !== row.invocationRef
+        || submittedEvidence.operationRef !== row.operationRef
+        || submittedEvidence.inputDigest !== row.inputDigest
+        || submittedEvidence.amount.units !== x402Attempt.amountUnits
+        || submittedEvidence.amount.currency !== x402Attempt.currency
+        || submittedEvidence.amount.exponent !== x402Attempt.exponent
+        || externalIdentity.reservationRef !== submittedEvidence.reservationRef
+        || providerRef !== submittedEvidence.providerRef
+        || !/^0x[0-9a-fA-F]{64}$/.test(submittedEvidence.transactionHash)
+        || (
+          x402Attempt.paymentResponseDigest !== undefined
+          && x402Attempt.paymentResponseDigest !== submittedEvidence.paymentResponseDigest
+        )
+        || !Number.isFinite(observedAt)
+        || canonicalDigest(submittedMaterial as StableHashValue) !== submittedDigest
+      ) {
+        const required = reconciliationResult(row, paymentStatus, attemptRows, operation.operationId)
+        await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
+        return required
+      }
+      const paymentSignature = await readX402Authorization(
+        ctx,
+        {
+          custodyRef: x402Attempt.custodyRef,
+          authorizationDigest: x402Attempt.authorizationDigest,
+        },
+        true,
+        {
+          credentialRef: x402Attempt.credentialRef,
+          dispatchRef: row.invocationRef,
+          attemptRef: submittedEvidence.attemptRef,
+          effectGeneration: submittedEvidence.effectGeneration,
+          paymentIdentifier: submittedEvidence.paymentIdentifier,
+        },
+      )
+      let settlementVerified = false
+      if (paymentSignature !== undefined) {
+        const dispatcher = new Agent({
+          connect: { lookup: createGuardedLookup(defaultDnsResolver) },
+        })
+        try {
+          settlementVerified = verifyExactEvmX402Settlement({
+            response: {
+              success: true,
+              transaction: submittedEvidence.transactionHash,
+              network: x402Attempt.network,
+              amount: x402Attempt.amountUnits,
+            },
+            requirement: {
+              scheme: x402Attempt.scheme,
+              network: x402Attempt.network,
+              amount: x402Attempt.amountUnits,
+              asset: x402Attempt.asset,
+              payTo: x402Attempt.payTo,
+            },
+            payer: readX402PaymentPayer(paymentSignature),
+            receipt: await readX402EvmReceipt(
+              x402Attempt.network,
+              submittedEvidence.transactionHash,
+              dispatcher,
+            ),
+          })
+        } finally {
+          await dispatcher.close().catch(() => undefined)
+        }
+      }
+      if (!settlementVerified) {
+        const required = reconciliationResult(
+          row,
+          paymentStatus,
+          attemptRows,
+          operation.operationId,
+        )
+        await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
+        return required
+      }
+      const payment = await ctx.runMutation(
+        internal.customerRequestRouteExecution.reconcileX402PaymentAttempt,
+        {
+          dispatchRef: row.invocationRef,
+          attemptRef: submittedEvidence.attemptRef,
+          effectGeneration: submittedEvidence.effectGeneration,
+          operationRef: submittedEvidence.operationRef,
+          inputDigest: submittedEvidence.inputDigest,
+          evidenceRef: submittedEvidence.evidenceRef,
+          evidenceDigest: submittedEvidence.digest,
+          reservationRef: submittedEvidence.reservationRef,
+          paymentIdentifier: submittedEvidence.paymentIdentifier,
+          challengeDigest: submittedEvidence.challengeDigest,
+          settlementStatus: submittedEvidence.settlementStatus,
+          amountUnits: submittedEvidence.amount.units,
+          currency: submittedEvidence.amount.currency,
+          exponent: submittedEvidence.amount.exponent,
+          paymentResponseDigest: submittedEvidence.paymentResponseDigest,
+          transportObservationDigest: submittedEvidence.transportObservationDigest,
+          transportRequestDigest: submittedEvidence.requestDigest,
+          paymentObservationDigest: submittedEvidence.paymentObservationDigest,
+          observedAt,
+        },
+      )
+      const external = payment.kind === 'settled'
+        ? await ctx.runMutation(internal.moneyLedger.reconcileExternalInvocationSpend, {
+            ...externalIdentity,
+            settlementStatus: submittedEvidence.settlementStatus,
+            paymentResponseDigest: submittedEvidence.paymentResponseDigest,
+            evidenceRef: submittedEvidence.evidenceRef,
+            evidenceDigest: submittedEvidence.digest,
+            observedAt,
+          })
+        : { kind: 'refused' as const }
+      if (payment.kind !== 'settled' || external.kind !== 'accepted') {
+        const required = reconciliationResult(row, paymentStatus, attemptRows, operation.operationId)
+        await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
+        return required
+      }
+      const evidenceMaterial = {
+        kind: 'action_invocation_reconciliation' as const,
+        version: 1 as const,
+        evidenceRef: submittedEvidence.evidenceRef,
+        source: submittedEvidence.source,
+        invocationRef: submittedEvidence.invocationRef,
+        attemptRef: submittedEvidence.attemptRef,
+        effectGeneration: submittedEvidence.effectGeneration,
+        operationRef: submittedEvidence.operationRef,
+        inputDigest: submittedEvidence.inputDigest,
+        requestDigest: submittedEvidence.requestDigest,
+        providerIdentity: submittedEvidence.providerRef,
+        paymentIdentifier: submittedEvidence.paymentIdentifier,
+        transportObservationDigest: submittedEvidence.transportObservationDigest,
+        paymentObservationDigest: submittedEvidence.paymentObservationDigest,
+        resolution: submittedEvidence.settlementStatus === 'settled'
+          ? 'released' as const
+          : 'not_released' as const,
+        observedAt: submittedEvidence.observedAt,
+      }
+      evidence = {
+        ...evidenceMaterial,
+        digest: canonicalDigest(evidenceMaterial as StableHashValue),
+      }
+      trustedReconciliationEvidenceDigest = canonicalDigest(evidence as StableHashValue)
+      x402MoneyReconciled = true
+    } else {
+      evidence = submittedEvidence
+    }
     const reconciliation = await reconcilePublicInvocation({
       tracer,
       invocationRef: row.invocationRef,
@@ -1314,40 +1807,14 @@ export const recover = internalAction({
       await projectRecoveryOuter(ctx, row, result, undefined)
       return result
     }
-    if (operation.identity.adapterId === 'x402-fetch:v2') {
-      if (
-        x402Attempt === null
-        || evidence.operationRef === undefined
-        || evidence.inputDigest === undefined
-        || evidence.requestDigest === undefined
-        || evidence.transportObservationDigest === undefined
-        || evidence.paymentObservationDigest === undefined
-      ) {
-        const required = reconciliationResult(row, reconciliation.status, attemptRows, operation.operationId)
-        await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
-        return required
-      }
-      const payment = await ctx.runMutation(internal.customerRequestRouteExecution.reconcileX402PaymentAttempt, {
-        dispatchRef: row.invocationRef,
-        attemptRef: evidence.attemptRef,
-        effectGeneration: evidence.effectGeneration,
-        operationRef: evidence.operationRef,
-        inputDigest: evidence.inputDigest,
-        evidenceRef: evidence.evidenceRef,
-        evidenceDigest: evidence.digest,
-        resolution: evidence.resolution,
-        transportObservationDigest: evidence.transportObservationDigest,
-        transportRequestDigest: evidence.requestDigest,
-        paymentObservationDigest: evidence.paymentObservationDigest,
-        observedAt: Date.parse(evidence.observedAt),
-      })
-      if (payment.kind === 'reconciliation_required' || payment.kind === 'not_found') {
-        const required = reconciliationResult(row, reconciliation.status, attemptRows, operation.operationId)
-        await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
-        return required
-      }
+    if (operation.identity.adapterId === 'x402-fetch:v2' && !x402MoneyReconciled) {
+      const required = reconciliationResult(row, reconciliation.status, attemptRows, operation.operationId)
+      await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
+      return required
     }
-    const money = await reconcileMoney(evidence.resolution)
+    const money = operation.identity.adapterId === 'x402-fetch:v2'
+      ? { kind: 'settled' as const, outcome: evidence.resolution }
+      : await reconcileMoney(evidence.resolution)
     if (money.kind === 'reconciliation_required') {
       const required = reconciliationResult(row, reconciliation.status, attemptRows, operation.operationId)
       await projectRecoveryOuter(ctx, row, required, 'reconciliation_required')
@@ -1892,6 +2359,94 @@ async function reconcileAcceptedCharge(
     return { kind: 'reconciliation_required' }
   }
 }
+async function finalizeX402ExternalSpend(
+  ctx: ActionCtx,
+  identity: ExternalSpendIdentity,
+  submissionStatus: 'not_submitted' | 'possibly_submitted' | 'observed' | 'unknown',
+  settlementStatus: ExternalSpendSettlementStatus,
+  paymentResponseDigest: string | undefined,
+  evidenceRefs: readonly string[],
+  providerReceiptDigest?: string,
+): Promise<ExternalSpendSettlement> {
+  const result = await ctx.runMutation(internal.moneyLedger.finalizeExternalInvocationSpend, {
+    ...identity,
+    submissionStatus,
+    settlementStatus,
+    ...(paymentResponseDigest === undefined ? {} : { paymentResponseDigest }),
+    ...(providerReceiptDigest === undefined ? {} : { providerReceiptDigest }),
+    evidenceRefs: [...evidenceRefs],
+    observedAt: Date.now(),
+  })
+  if (result.kind !== 'accepted' || settlementStatus === 'unknown') {
+    return { kind: 'reconciliation_required' }
+  }
+  return { kind: 'settled', settlementStatus }
+}
+
+async function bestEffortReleaseX402ExternalSpend(
+  ctx: ActionCtx,
+  identity: ExternalSpendIdentity,
+  evidenceRefs: readonly string[],
+): Promise<'released' | 'failed'> {
+  try {
+    const result = await finalizeX402ExternalSpend(
+      ctx,
+      identity,
+      'not_submitted',
+      'not_settled',
+      undefined,
+      evidenceRefs,
+    )
+    return result.kind === 'settled'
+      && result.settlementStatus === 'not_settled'
+      ? 'released'
+      : 'failed'
+  } catch {
+    return 'failed'
+  }
+}
+
+type X402AttemptSnapshotForMoney = Readonly<{
+  reservationRef?: string
+  selectedRequirementJson: string
+  paymentIdentifier: string
+  challengeDigest: string
+  amountUnits: string
+  currency: string
+  exponent: number
+}>
+
+function x402ExternalSpendIdentityFromAttempt(
+  dispatch: OpenDispatch,
+  operation: PublishedOperation,
+  attempt: X402AttemptSnapshotForMoney,
+  attemptRef: string,
+  effectGeneration: number,
+): ExternalSpendIdentity | undefined {
+  if (
+    operation.binding.authority.kind !== 'provider_connection'
+    || attempt.reservationRef === undefined
+  ) return undefined
+  const amount = exactAmountSchema.safeParse({
+    currency: attempt.currency,
+    units: attempt.amountUnits,
+    exponent: attempt.exponent,
+  })
+  if (!amount.success) return undefined
+  const identity = x402ExternalSpendIdentity({
+    dispatch,
+    attemptRef,
+    effectGeneration,
+    providerRef: operation.binding.authority.providerRef,
+    paymentIdentifier: attempt.paymentIdentifier,
+    challengeDigest: attempt.challengeDigest,
+    selectedRequirementJson: attempt.selectedRequirementJson,
+    amount: amount.data,
+  })
+  return identity.reservationRef === attempt.reservationRef ? identity : undefined
+}
+
+
 async function projectReconciliationRequired(
   ctx: ActionCtx,
   dispatch: OpenDispatch,
@@ -1920,65 +2475,6 @@ async function projectReconciliationRequired(
     now: Date.now(),
   })
 }
-function chargeSettlementOutcome(
-  observation: RouteTransportObservation,
-  economicRail: EconomicRail,
-  contractValidOutput = true,
-): 'not_released' | 'released' | 'unknown' {
-  if (
-    observation.disposition === 'unknown'
-    || observation.disposition === 'partial'
-    || observation.queryReleaseStatus === 'unknown'
-    || observation.paymentAuthorizationStatus === 'unknown'
-    || observation.paymentSubmissionStatus === 'possibly_submitted'
-    || observation.paymentSubmissionStatus === 'unknown'
-    || observation.settlementStatus === 'unknown'
-    || observation.quoteDeliveryStatus === 'unknown'
-  ) return 'unknown'
-  if (!contractValidOutput) return economicRail === 'ae_internal' ? 'not_released' : 'unknown'
-  return observation.releaseStarted ? 'released' : 'not_released'
-}
-function transportObservationDigest(observation: RouteTransportObservation): string {
-  return canonicalDigest({
-    format: 'operation-transport-observation:v1',
-    transport: observation.transport,
-    disposition: observation.disposition,
-    releaseStarted: observation.releaseStarted,
-    queryReleaseStatus: observation.queryReleaseStatus ?? null,
-    paymentAuthorizationStatus: observation.paymentAuthorizationStatus ?? null,
-    paymentSubmissionStatus: observation.paymentSubmissionStatus ?? null,
-    settlementStatus: observation.settlementStatus ?? null,
-    quoteDeliveryStatus: observation.quoteDeliveryStatus ?? null,
-    requestDigest: observation.requestDigest,
-    responseDigest: observation.responseDigest ?? null,
-    outputDigest: observation.outputJson === undefined ? null : canonicalDigest(observation.outputJson),
-    providerReceiptDigest: observation.providerReceipt === undefined ? null : canonicalDigest(observation.providerReceipt),
-    paymentProofDigest: observation.paymentProof === undefined ? null : canonicalDigest(observation.paymentProof),
-    paymentChallengeDigest: observation.paymentChallengeDigest ?? null,
-    continuationTokenDigest: observation.continuationToken === undefined ? null : canonicalDigest(observation.continuationToken),
-    failureCode: observation.failureCode ?? null,
-  } as StableHashValue)
-}
-
-function paymentObservationDigest(
-  observation: RouteTransportObservation,
-  paymentIdentifier: string,
-): string {
-  return canonicalDigest({
-    format: 'operation-payment-observation:v1',
-    paymentIdentifier,
-    transport: observation.transport,
-    requestDigest: observation.requestDigest,
-    releaseStarted: observation.releaseStarted,
-    paymentAuthorizationStatus: observation.paymentAuthorizationStatus ?? null,
-    paymentSubmissionStatus: observation.paymentSubmissionStatus ?? null,
-    settlementStatus: observation.settlementStatus ?? null,
-    paymentChallengeDigest: observation.paymentChallengeDigest ?? null,
-    providerReceiptDigest: observation.providerReceipt === undefined ? null : canonicalDigest(observation.providerReceipt),
-    paymentProofDigest: observation.paymentProof === undefined ? null : canonicalDigest(observation.paymentProof),
-  } as StableHashValue)
-}
-
 function routeCallSigningKey(): Readonly<{ keyId: string; secret: string }> | undefined {
   const keyId = env.AE_ROUTE_CALL_SIGNING_KEY_ID
   const secret = env.AE_ROUTE_CALL_SIGNING_SECRET

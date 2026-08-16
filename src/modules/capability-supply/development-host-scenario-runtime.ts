@@ -1,3 +1,4 @@
+import { encodePaymentResponseHeader } from '@x402/core/http'
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
@@ -71,7 +72,13 @@ export function developmentSuccessRuntime(
     }), {
       status: 200,
       headers: {
-        'payment-response': 'mock:payment-proof',
+        'payment-response': encodePaymentResponseHeader({
+          success: true,
+          transaction: 'development:mock-payment',
+          network: developmentChallenge(endpoint, url).accepts[0]!.network,
+          amount: developmentChallenge(endpoint, url).accepts[0]!.amount,
+          payer: 'development:mock-payer',
+        }),
         'provider-receipt': 'mock:provider-receipt',
       },
     })
@@ -110,6 +117,7 @@ export function developmentSuccessRuntime(
         ? { kind: 'valid' as const }
         : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
+    verifyX402Settlement: async () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,

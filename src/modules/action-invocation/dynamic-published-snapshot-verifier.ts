@@ -30,6 +30,14 @@ function optionalFieldsAreAbsent(value: object, fields: readonly string[]): bool
   const record = value as Record<string, unknown>
   return fields.every((field) => !Object.hasOwn(value, field) || record[field] !== undefined)
 }
+const digestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/)
+const x402SettlementResponseSchema = z.strictObject({
+  success: z.boolean(),
+  transaction: nonEmptyStringSchema,
+  network: nonEmptyStringSchema,
+  amount: nonEmptyStringSchema.optional(),
+  payer: nonEmptyStringSchema.optional(),
+}).refine((value) => optionalFieldsAreAbsent(value, ['amount', 'payer']))
 const sourceRowSchema = z.looseObject({
   operationKey: z.string(),
   operation: recordSchema,
@@ -88,6 +96,13 @@ const paymentAttemptSchema = z.strictObject({
   operationRevision: nonEmptyStringSchema,
   authorizationDigest: nonEmptyStringSchema,
   custodyRef: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  operationRef: nonEmptyStringSchema.optional(),
+  inputDigest: digestSchema.optional(),
+  paymentObservationDigest: digestSchema.optional(),
+  settlementStatus: z.enum(['settled', 'not_settled', 'unknown']).optional(),
+  settlementResponse: x402SettlementResponseSchema.optional(),
+  settlementDigest: digestSchema.optional(),
+  paymentResolution: z.enum(['not_released', 'released', 'unknown']).optional(),
   state: z.custom((value) => [
     'prepared',
     'possibly_submitted',
@@ -104,6 +119,13 @@ const paymentAttemptSchema = z.strictObject({
   reconciliationEvidenceDigest: z.unknown().optional(),
   evidenceRefs: z.array(z.string()),
 }).refine((value) => optionalFieldsAreAbsent(value, [
+  'operationRef',
+  'inputDigest',
+  'paymentObservationDigest',
+  'settlementStatus',
+  'settlementResponse',
+  'settlementDigest',
+  'paymentResolution',
   'settledAmount',
   'submissionStartedAt',
   'observedAt',
@@ -112,15 +134,26 @@ const paymentAttemptSchema = z.strictObject({
 ]))
   .refine((value) => !Object.values(value).some((entry) =>
     typeof entry === 'string' && sensitiveStringPattern.test(entry)))
-  .refine((value) => (
-    value.state === 'not_settled' || value.state === 'settled'
-      ? typeof value.reconciliationEvidenceRef === 'string'
-        && value.reconciliationEvidenceRef.length > 0
-        && typeof value.reconciliationEvidenceDigest === 'string'
-        && /^sha256:[0-9a-f]{64}$/.test(value.reconciliationEvidenceDigest)
-      : value.reconciliationEvidenceRef === undefined
+  .refine((value) => {
+    const reconciled =
+      typeof value.reconciliationEvidenceRef === 'string'
+      && value.reconciliationEvidenceRef.length > 0
+      && typeof value.reconciliationEvidenceDigest === 'string'
+      && /^sha256:[0-9a-f]{64}$/.test(value.reconciliationEvidenceDigest)
+    if (value.state !== 'not_settled' && value.state !== 'settled') {
+      return value.reconciliationEvidenceRef === undefined
         && value.reconciliationEvidenceDigest === undefined
-  ))
+    }
+    if (reconciled) return true
+    return value.settlementStatus === value.state
+      && value.settlementDigest !== undefined
+      && value.settlementResponse?.success === (value.state === 'settled')
+      && (value.state === 'settled'
+        ? value.settledAmount !== undefined
+          && compareExactAmounts(value.settledAmount, value.amount) === 0
+          && value.evidenceRefs.length > 0
+        : value.settledAmount === undefined)
+  })
 
 const paymentAuthorizationEventSchema = z.strictObject({
   invocationRef: z.string(),
@@ -174,7 +207,11 @@ const dynamicPublishedSnapshotShapeSchema = z.strictObject({
 export function assertDynamicPublishedSnapshotShape(value: unknown): asserts value is DynamicPublishedAdapterSnapshot {
   const parsed = dynamicPublishedSnapshotShapeSchema.safeParse(value)
   if (!parsed.success) {
-    throw new Error('dynamic_published_snapshot_schema_invalid')
+    const issues = parsed.error.issues
+      .slice(0, 3)
+      .map((issue) => `${issue.path.join('.')}:${issue.code}`)
+      .join(',')
+    throw new Error(`dynamic_published_snapshot_schema_invalid:${issues}`)
   }
 }
 

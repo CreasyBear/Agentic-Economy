@@ -133,7 +133,6 @@ export {
 } from './strict-schema'
 
 export {
-  AnswerModelToolIds,
   actionToHarnessToolContract,
   buildHarnessToolContracts,
   buildHarnessToolEvalFixture,

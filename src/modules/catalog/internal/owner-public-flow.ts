@@ -11,7 +11,7 @@ import { normalizeSlug } from '@/modules/common/normalize-slug'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { matchingCsrf } from '@/modules/common/matching-csrf'
 import { sanitizeText } from '@/modules/common/sanitize-text'
-import { buildOfferingSupplyProjection, createEmptyCatalogSourceState } from './catalog-model'
+import { createEmptyCatalogSourceState } from './catalog-model'
 import { publishBusinessCatalog } from './publish'
 import type {
   FirstRequestMode,
@@ -19,7 +19,6 @@ import type {
   PublishBusinessCatalogState,
   ServiceCatalogInput,
 } from './catalog-model'
-import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 const PublicOwnerClaimFieldValues = [
@@ -263,10 +262,6 @@ export function resetPublicOwnerRouteReadbacksForTest(): void {
   publicOwnerRouteState = createPublicOwnerFlowState()
 }
 
-export function getPublicOwnerStatusReadbackBySlug(slug: string): PublicOwnerStatusReadback | undefined {
-  const catalog = readPublicOwnerRouteCatalogBySlug(slug)
-  return catalog === undefined ? undefined : buildPublicOwnerStatusReadback(catalog)
-}
 
 function submitPublicOwnerClaimFlowWithState(
   state: PublicOwnerRouteState,
@@ -361,32 +356,6 @@ function submitPublicOwnerClaimFlowWithState(
   }
 }
 
-export function getDefaultPublicOwnerStatusReadback(): PublicOwnerStatusReadback {
-  const result = submitPublicOwnerClaimFlow(publicOwnerDefaultClaimInput)
-  if (result.kind === 'ok') {
-    return result.readback
-  }
-
-  throw new Error(
-    result.kind === 'error'
-      ? `Default public owner readback failed: ${result.reason}`
-      : 'Default public owner readback cannot represent a provider claim.',
-  )
-}
-
-export function getPublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
-  const readback = getDefaultPublicOwnerStatusReadback()
-  if (readback.catalog.slug !== slug) {
-    const routeCatalog = readPublicOwnerRouteCatalogBySlug(slug)
-    if (routeCatalog !== undefined) {
-      return { kind: 'available', catalog: routeCatalog }
-    }
-
-    return { kind: 'not_found', reason: 'no_such_business' }
-  }
-
-  return { kind: 'available', catalog: readback.catalog }
-}
 
 export function buildPublicOwnerStatusReadback(catalog: PublicBusinessCatalogApiV2Dto): PublicOwnerStatusReadback {
   return {
@@ -423,31 +392,6 @@ function createPublicOwnerFlowState(): PublishBusinessCatalogState {
   }
 }
 
-function readPublicOwnerRouteCatalogBySlug(slug: string): PublicBusinessCatalogApiV2Dto | undefined {
-  const normalizedSlug = normalizeSlug(slug)
-  const business = publicOwnerRouteState.businesses.find(
-    (candidate) => candidate.slug === normalizedSlug && candidate.publicStatus === 'published'
-  )
-  if (business === undefined) {
-    return undefined
-  }
-
-  const context = publicOwnerRouteState.businessContexts.find((candidate) => candidate.businessId === business.businessId)
-  if (context === undefined) {
-    return undefined
-  }
-
-  const projection = buildOfferingSupplyProjection({
-    business,
-    context,
-    offerings: publicOwnerRouteState.offerings.filter((offering) => offering.businessId === business.businessId),
-    revisions: publicOwnerRouteState.revisions.filter((revision) => revision.businessId === business.businessId),
-    accessPaths: publicOwnerRouteState.accessPaths.filter((path) => path.businessId === business.businessId),
-    indexStatus: 'queued',
-    discoveryStatus: 'degraded',
-  })
-  return projection === undefined ? undefined : projectBusinessSupplyToPublicApi(projection)
-}
 
 export function toServiceCatalogInput(
   input: PublicOwnerClaimFlowInput,

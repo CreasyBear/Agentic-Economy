@@ -11,10 +11,18 @@ import {
   type OperationExecuteResult,
 } from './operation-execute.functions'
 
+const EXECUTION_RETRY_BACKOFF_MS = 250
+
+function isRetryableExecutionFailure(result: OperationExecuteResult): boolean {
+  return result.kind === 'error'
+    && result.retryable
+    && (result.code === 'fetch_failed' || result.code === 'source_unavailable')
+}
+
 export async function executeKeylessOperation(
   input: OperationExecuteInput,
   source: KeylessExecutableSourcePort = convexKeylessExecutableSource,
-  operationExecuteDeps?: Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl'>,
+  operationExecuteDeps?: Partial<Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl' | 'signal'>>,
   expectedExecutionBindingDigest?: string,
 ): Promise<OperationExecuteResult> {
   const dispatcher = operationExecuteDeps?.fetchImpl === undefined
@@ -28,10 +36,25 @@ export async function executeKeylessOperation(
   const isPublicTarget = operationExecuteDeps?.isPublicTarget
     ?? ((url: URL) => isPublicHttpTarget(url, defaultDnsResolver))
   try {
+    const result = await executeOperation(input, {
+      readDescriptor: (operationRef) => source.read(operationRef),
+      isPublicTarget,
+      fetchImpl,
+      ...(operationExecuteDeps?.signal === undefined
+        ? {}
+        : { signal: operationExecuteDeps.signal }),
+    }, expectedExecutionBindingDigest)
+    if (!isRetryableExecutionFailure(result)) return result
+    operationExecuteDeps?.signal?.throwIfAborted()
+    await new Promise<void>((resolve) => setTimeout(resolve, EXECUTION_RETRY_BACKOFF_MS))
+    operationExecuteDeps?.signal?.throwIfAborted()
     return await executeOperation(input, {
       readDescriptor: (operationRef) => source.read(operationRef),
       isPublicTarget,
       fetchImpl,
+      ...(operationExecuteDeps?.signal === undefined
+        ? {}
+        : { signal: operationExecuteDeps.signal }),
     }, expectedExecutionBindingDigest)
   } finally {
     if (dispatcher !== undefined) await dispatcher.close().catch(() => undefined)

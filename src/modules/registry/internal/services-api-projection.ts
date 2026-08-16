@@ -1,4 +1,5 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
   formatExactAmount,
   parseDecimalExactAmount,
@@ -52,11 +53,9 @@ export type PublicServicesSearchPage = Readonly<{
 }>
 
 /**
- * The services surface is the canonical, agent-native Service: ONE Service per
- * business, with a flat `endpoints[]` across every offering. It derives from
- * the public business catalog DTO — the same underlying supply projection the
- * `/api/businesses` view reads (`projectBusinessSupplyToPublicApi` on a
- * `BusinessSupplyProjection`) — so it is a thin view, never a separate hand map.
+ * Projects one published-business portfolio per business, with flat external
+ * endpoint links across its offerings. This is a thin view over the public
+ * business catalog, not an Agent Service or an execution authority.
  */
 export function projectPublicServicesPage(
   page: PublicBusinessCatalogApiV2Page,
@@ -134,7 +133,11 @@ function projectServiceFromBusinessDto(
     : undefined
   const domain = domainFromPublicUrl(providerUrl ?? business.publicUrl)
   const description = descriptionFromOfferings(business.offerings)
-  const tags = uniqueSorted(business.offerings.map((offering) => offering.category))
+  const tags = uniqueSorted(
+    business.offerings
+      .map((offering) => offering.category.trim())
+      .filter((category) => category.length > 0),
+  )
   const integrationType: ServiceDto['integrationType'] = endpoints.length > 0
     && endpoints.every((endpoint) => endpoint.ae.authorityMode === 'provider_owned')
     ? '1P'
@@ -517,12 +520,12 @@ function isValidEndpointUrl(value: string): boolean {
 function descriptionFromOfferings(
   offerings: readonly { summary: string }[],
 ): string | undefined {
-  const summaries = uniqueSorted(offerings.map((offering) => offering.summary))
+  const summaries = uniqueSorted(
+    offerings
+      .map((offering) => offering.summary.trim())
+      .filter((summary) => summary.length > 0),
+  )
   return summaries.length === 0 ? undefined : summaries.join(' ')
-}
-
-function uniqueSorted(values: readonly string[]): readonly string[] {
-  return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))].sort()
 }
 
 function domainFromPublicUrl(publicUrl: string): string | undefined {

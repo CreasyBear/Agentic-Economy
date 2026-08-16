@@ -122,7 +122,7 @@ type SourceWriteNonceQuery = {
 }
 type SourceWriteNonceIndexBuilder = { eq: (field: string, value: unknown) => SourceWriteNonceIndexBuilder }
 
-function isSourceWriteRequest(value: unknown): value is SourceWriteAdmissionRequest {
+export function isSourceWriteRequest(value: unknown): value is SourceWriteAdmissionRequest {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return typeof record.method === 'string'
@@ -189,7 +189,7 @@ function sourceWriteErrorReason(error: unknown): SourceWriteAdmissionFailureReas
   }
 }
 
-function isSourceWriteAdmission(value: unknown): value is SourceWriteAdmission {
+export function isSourceWriteAdmission(value: unknown): value is SourceWriteAdmission {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return record.version === 'source-write:v2'

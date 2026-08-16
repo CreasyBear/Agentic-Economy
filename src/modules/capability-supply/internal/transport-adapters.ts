@@ -579,6 +579,7 @@ function staticallyPrivateHostname(rawHostname: string): boolean {
   return hostname === '::' || hostname === '::1'
     || hostname.startsWith('fc') || hostname.startsWith('fd')
     || /^fe[89ab]/.test(hostname)
+    || /^fe[c-f]/.test(hostname)
     || hostname.startsWith('ff')
     || hostname.startsWith('::ffff:')
 }

@@ -33,6 +33,36 @@ const admittedOperation = v.object({
 
 const exactAmountValue = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })
 const money = exactAmountValue
+export const x402PaymentSettlementStatusValue = v.union(
+  v.literal('settled'),
+  v.literal('not_settled'),
+  v.literal('unknown'),
+)
+
+export const x402PaymentReconciliationEvidenceValue = v.object({
+  kind: v.literal('x402_payment_reconciliation'),
+  version: v.literal(1),
+  evidenceRef: v.string(),
+  source: v.string(),
+  invocationRef: v.string(),
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  operationRef: v.string(),
+  inputDigest: v.string(),
+  requestDigest: v.string(),
+  transportObservationDigest: v.string(),
+  paymentObservationDigest: v.string(),
+  providerRef: v.string(),
+  paymentIdentifier: v.string(),
+  reservationRef: v.string(),
+  challengeDigest: v.string(),
+  amount: exactAmountValue,
+  settlementStatus: v.union(v.literal('settled'), v.literal('not_settled')),
+  paymentResponseDigest: v.string(),
+  transactionHash: v.string(),
+  observedAt: v.string(),
+  digest: v.string(),
+})
 
 const registeredPrice = v.union(
   v.object({ kind: v.literal('fixed'), amount: exactAmountValue }),
@@ -763,6 +793,9 @@ export const customerRequestRouteMandateTables = {
     exponent: v.number(),
     custodyRef: v.string(),
     authorizationDigest: v.string(),
+    reservationRef: v.optional(v.string()),
+    paymentIdentityDigest: v.optional(v.string()),
+    paymentSignatureDigest: v.optional(v.string()),
     state: v.union(
       v.literal('prepared'),
       v.literal('possibly_submitted'),
@@ -775,11 +808,12 @@ export const customerRequestRouteMandateTables = {
     transportObservationDigest: v.optional(v.string()),
     transportRequestDigest: v.optional(v.string()),
     paymentObservationDigest: v.optional(v.string()),
-    paymentResolution: v.optional(v.union(
-      v.literal('not_released'),
-      v.literal('released'),
+    settlementStatus: v.optional(v.union(
+      v.literal('settled'),
+      v.literal('not_settled'),
       v.literal('unknown'),
     )),
+    paymentResponseDigest: v.optional(v.string()),
     reconciliationEvidenceRef: v.optional(v.string()),
     reconciliationEvidenceDigest: v.optional(v.string()),
     evidenceRefs: v.array(v.string()),

@@ -5,7 +5,7 @@ import type { BoundedRequestBody } from '@/lib/server/bounded-request-body'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { validateJsonSchema } from '@/modules/capability-contract/public'
+import { isBoundedJsonValue, validateJsonSchema } from '@/modules/capability-contract/public'
 import { exactAmountSchema } from '@/modules/money/public'
 import { prepareHttpJsonRequest, responseContentTypeMatches } from '@/modules/capability-supply/route-transport-runtime'
 import {
@@ -156,6 +156,8 @@ export type OperationExecuteDeps = {
     input: URL | string | Request,
     init?: RequestInit,
   ) => Promise<BoundedRequestBody & Readonly<{ status: number; ok: boolean }>>
+  /** The Answer turn/lease signal, shared with the provider transport. */
+  signal?: AbortSignal
   now?: () => number
 }
 
@@ -257,11 +259,16 @@ export async function executeOperation(
   }
   const startedAt = (deps.now ?? Date.now)()
   let response: BoundedRequestBody & Readonly<{ status: number; ok: boolean }>
+  const requestTimeoutSignal = AbortSignal.timeout(descriptor.requestTimeoutMs)
+  const requestSignal = deps.signal === undefined
+    ? requestTimeoutSignal
+    : AbortSignal.any([deps.signal, requestTimeoutSignal])
+  deps.signal?.throwIfAborted()
   try {
     response = await deps.fetchImpl(prepared.target, {
       method: descriptor.method,
       redirect: 'manual',
-      signal: AbortSignal.timeout(descriptor.requestTimeoutMs),
+      signal: requestSignal,
       ...(descriptor.method === 'POST' && descriptor.requestContentType !== undefined
         ? { body: defaultBodySerializer(input.input) }
         : {}),
@@ -344,6 +351,15 @@ export async function executeOperation(
       code: 'response_invalid',
       retryable: false,
       reason: 'The operation returned malformed JSON.',
+    }
+  }
+  if (!isBoundedJsonValue(parsed)) {
+    return {
+      kind: 'error',
+      operationRef: input.operationRef,
+      code: 'response_invalid',
+      retryable: false,
+      reason: 'The operation response exceeded the bounded JSON limit.',
     }
   }
 

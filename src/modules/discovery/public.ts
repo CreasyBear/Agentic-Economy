@@ -184,7 +184,7 @@ export type RegenerateDiscoveryManifestOptions = {
   canonicalBaseUrl: string
   now: number
   staleAfterMs?: number
-  adapter?: DiscoveryManifestAdapter
+  adapter: DiscoveryManifestAdapter
 }
 
 export type RegenerateDiscoveryManifestResult =
@@ -245,7 +245,9 @@ export type ReadCatalogDiscoveryManifestInput = {
   now: number
 }
 
-export type ReadCatalogDiscoveryManifestResult = BuildCatalogDiscoveryManifestResult
+export type ReadCatalogDiscoveryManifestResult =
+  | { kind: 'available'; manifest: DiscoveryManifestContract }
+  | { kind: 'hidden'; reason: 'not_public' | 'no_public_catalog' | 'unconfigured' }
 
 
 export { buildCatalogDiscoveryManifest } from './internal/ucp-manifest'

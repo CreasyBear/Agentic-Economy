@@ -1,3 +1,4 @@
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import type { BusinessContext } from '@/modules/business/public'
 import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { formatOfferingPrice } from '@/modules/catalog/public'
@@ -16,6 +17,7 @@ import { operationRouteExamples } from './operation-contract'
 import {
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
+  OPERATION_MARKET_INSPECT_PLAN_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-entry'
 
@@ -50,14 +52,15 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '2. Search a job anonymously with the repo-local CLI or the public POST route.',
     `   \`${cli} search "<job>" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
     `3. Inspect one exact result with \`${cli} inspect "$AE_OPERATION_REF" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`; read its inputs, terms, price, effects, availability, and evidence.`,
-    `4. Optionally compare exact candidates with \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`.`,
-    `5. Run \`${cli} connect --json\` and complete the OAuth device flow.`,
-    `6. Invoke with \`${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.route.method} ${base}${invoke.route.path}\`).`,
-    `7. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.route.method} ${base}${status.route.path}\`).`,
-    `8. Recover uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.route.method} ${base}${reconcile.route.path}\`).`,
+    `4. Optionally compare exact candidates with \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a bounded composition with \`${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
+    '5. After exact detail, choose the qualified direct-keyless MCP lane only when that current Operation advertises the anonymous execute continuation; no caller key is needed for that lane.',
+    `6. Otherwise run \`${cli} connect --json\` and complete the OAuth device flow.`,
+    `7. Invoke with \`${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.route.method} ${base}${invoke.route.path}\`).`,
+    `8. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.route.method} ${base}${status.route.path}\`).`,
+    `9. Recover uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.route.method} ${base}${reconcile.route.path}\`).`,
     '',
     OperationMarketAnonymousBoundaryLine,
-    'Invoke, status, and recovery require one owner-approved AE caller key.',
+    'The controlled invoke, status, and recovery path requires one owner-approved AE caller key; qualified direct-keyless MCP execution does not.',
     `Connect uses \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and \`${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`.`,
     'The key identifies the caller; it never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
@@ -67,6 +70,7 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '',
     DiscoveryListingBoundaryLine,
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
+    'Business reads are business-only: `/api/businesses`, `registry.search`, and `registry.detail` describe published businesses and offering portfolios. They do not select an admitted Market Operation. An Agent Service means one admitted Market Operation.',
     '',
     '## Problem responses and retry rules',
     '',
@@ -100,6 +104,10 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     OperationMarketAnonymousBoundaryLine,
     OperationMarketInvokeScopeLine,
     '',
+    '## MCP lifecycle',
+    '',
+    `Use the installed Streamable HTTP MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`: connect to \`${base}/mcp\`, complete \`initialize\` then \`notifications/initialized\`, call \`tools/list\` before \`tools/call\`, and close the transport when finished.`,
+    '',
     '## Step 2 — use the repo-local CLI',
     '',
     `The executable entrypoint in this repository is \`${cli}\`; no bare \`ae\` command is assumed.`,
@@ -107,6 +115,8 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     '```sh',
     `${cli} search "extract line items from a supplier invoice" --json`,
     `${cli} inspect "$AE_OPERATION_REF" --json`,
+    `${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
+    `${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
     `${cli} connect --json`,
     `export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"`,
     `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
@@ -137,8 +147,8 @@ export function buildCatalogMarkdown(
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
   const shown = businesses.slice(0, AgentCatalogMarkdownLimit)
   const heading = options.query === undefined || options.query.length === 0
-    ? '# Listed businesses'
-    : `# Listed businesses matching "${oneLine(options.query)}"`
+    ? '# Published businesses'
+    : `# Published businesses matching "${oneLine(options.query)}"`
 
   return [
     heading,

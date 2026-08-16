@@ -73,7 +73,7 @@ export function regenerateDiscoveryManifest(
     repairResult: 'not_run',
   })
 
-  const readbackResult = safeReadManifest(options.adapter ?? defaultAdapter, manifest)
+  const readbackResult = safeReadManifest(options.adapter, manifest)
   if (readbackResult.kind === 'error') {
     const failedAttempt = updateAttempt(state.discoveryManifestAttempts, {
       ...baseAttempt,
@@ -333,7 +333,7 @@ function latestManifestForBusiness(
 }
 
 function safeReadManifest(
-  adapter: NonNullable<RegenerateDiscoveryManifestOptions['adapter']>,
+  adapter: RegenerateDiscoveryManifestOptions['adapter'],
   manifest: DiscoveryManifestContract
 ) {
   try {
@@ -345,10 +345,6 @@ function safeReadManifest(
       redactedMessage: 'Discovery readback failed before completion.',
     }
   }
-}
-
-const defaultAdapter = {
-  readManifest: () => ({ kind: 'ok' as const }),
 }
 
 function buildReadback(

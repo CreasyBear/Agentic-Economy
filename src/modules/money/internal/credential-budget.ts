@@ -166,6 +166,24 @@ export function releaseCredentialBudget(input: Readonly<{
     usage: { daily, monthly, reservedConcurrency: input.usage.reservedConcurrency - 1 },
   }
 }
+export function reverseCredentialBudget(input: Readonly<{
+  usage: CredentialBudgetUsage
+  amount: ExactAmount
+}>): CredentialBudgetAdmission {
+  const dailySettled = subtractExactAmounts(input.usage.daily.settledSpend, input.amount)
+  const monthlySettled = subtractExactAmounts(input.usage.monthly.settledSpend, input.amount)
+  if (dailySettled === undefined || monthlySettled === undefined) {
+    return { kind: 'refused', code: 'budget_reservation_conflict' }
+  }
+  return {
+    kind: 'accepted',
+    usage: {
+      daily: { settledSpend: dailySettled, reservedSpend: input.usage.daily.reservedSpend },
+      monthly: { settledSpend: monthlySettled, reservedSpend: input.usage.monthly.reservedSpend },
+      reservedConcurrency: input.usage.reservedConcurrency,
+    },
+  }
+}
 
 export function credentialBudgetReservationDigest(reservation: Omit<CredentialBudgetReservation, 'state' | 'updatedAt'>): string {
   return canonicalDigest({ contract: 'ae.money-credential-budget-reservation:v1', ...reservation })

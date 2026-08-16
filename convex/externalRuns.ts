@@ -116,6 +116,10 @@ export const updateManifest = mutation({
 export const inspectManifest = query({
   args: { runId: v.string() },
   handler: async (ctx, args) => {
+    const authority = await resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'read_admin_readbacks')
+    if (authority.kind === 'denied') {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
     const row = await ctx.db.query('externalRunManifests')
       .withIndex('by_runId', (query) => query.eq('runId', args.runId))
       .unique()
@@ -319,6 +323,10 @@ export const finalizeRun = mutation({
 export const readReport = query({
   args: { runId: v.string() },
   handler: async (ctx, args) => {
+    const authority = await resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'read_admin_readbacks')
+    if (authority.kind === 'denied') {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
     const manifestRow = await ctx.db.query('externalRunManifests')
       .withIndex('by_runId', (query) => query.eq('runId', args.runId))
       .unique()

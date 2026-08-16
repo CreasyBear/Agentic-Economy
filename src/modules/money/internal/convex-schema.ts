@@ -119,6 +119,72 @@ export const moneyTables = {
       'principalId', 'credentialId', 'environment', 'generation', 'windowKind', 'windowStart',
     ])
     .index('by_credentialId_and_environment_and_generation_and_windowKind', ['credentialId', 'environment', 'generation', 'windowKind']),
+  moneyExternalSpendReservations: defineTable({
+    reservationRef: identifier,
+    principalId: identifier,
+    credentialId: identifier,
+    grantRef: identifier,
+    grantGeneration: v.number(),
+    environment: v.union(v.literal('sandbox'), v.literal('production')),
+    budgetPolicyRef: identifier,
+    budgetDayStart: identifier,
+    budgetMonthStart: identifier,
+    invocationRef: identifier,
+    attemptRef: identifier,
+    effectGeneration: v.number(),
+    operationRef: identifier,
+    providerRef: identifier,
+    paymentIdentifier: identifier,
+    challengeDigest: identifier,
+    idempotencyDigest: identifier,
+    identityDigest: identifier,
+    currency,
+    amountUnits: units,
+    exponent,
+    state: v.union(
+      v.literal('reserved'),
+      v.literal('settled'),
+      v.literal('released'),
+      v.literal('outcome_unknown'),
+      v.literal('reversed'),
+    ),
+    submissionStatus: v.optional(v.union(
+      v.literal('not_submitted'),
+      v.literal('possibly_submitted'),
+      v.literal('observed'),
+      v.literal('unknown'),
+    )),
+    finalizationDigest: v.optional(identifier),
+    paymentResponseDigest: v.optional(identifier),
+    providerReceiptDigest: v.optional(identifier),
+    evidenceRefs,
+    reconciliationDigest: v.optional(identifier),
+    reconciliationEvidenceRef: v.optional(identifier),
+    reconciliationEvidenceDigest: v.optional(identifier),
+    reversalEvidenceRef: v.optional(identifier),
+    reversalEvidenceDigest: v.optional(identifier),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    finalizedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+    reversedAt: v.optional(v.number()),
+  })
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_idempotencyDigest', ['idempotencyDigest'])
+    .index('by_identityDigest', ['identityDigest'])
+    .index('by_invocationRef_and_attemptRef_and_effectGeneration', [
+      'invocationRef', 'attemptRef', 'effectGeneration',
+    ])
+    .index('by_paymentIdentifier_and_challengeDigest', [
+      'paymentIdentifier', 'challengeDigest',
+    ])
+    .index('by_principalId_and_state_and_updatedAt', [
+      'principalId', 'state', 'updatedAt',
+    ])
+    .index('by_state_and_updatedAt', ['state', 'updatedAt'])
+    .index('by_grantRef_and_generation_and_environment', [
+      'grantRef', 'grantGeneration', 'environment',
+    ]),
   moneyCredentialUsageSummaries: defineTable({
     principalId: identifier,
     credentialId: identifier,

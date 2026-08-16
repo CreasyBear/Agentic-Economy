@@ -13,7 +13,7 @@ import {
   type WorkTreeApprovalAuthority,
   type WorkTreeApprovalIssueInput,
   type WorkTreeApprovalRefusalCode,
-} from '../src/modules/work-tree/public'
+} from '../src/modules/work-tree/internal/approval'
 import { workTreeSchema, type WorkTree } from '../src/modules/work-tree/convex'
 
 const exactAmountArg = v.object({ currency: v.string(), units: v.string(), exponent: v.number() })

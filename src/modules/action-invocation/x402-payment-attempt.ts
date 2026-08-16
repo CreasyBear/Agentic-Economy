@@ -1,3 +1,7 @@
+import type {
+  X402SettlementResponse,
+  X402SettlementStatus,
+} from '@/modules/capability-supply/route-transport-runtime'
 import type { ExactAmount } from '@/modules/money/public'
 
 export type X402PaymentAttemptState =
@@ -26,9 +30,10 @@ export type X402PaymentAttempt = Readonly<{
   custodyRef: string
   operationRef?: string
   inputDigest?: string
-  transportObservationDigest?: string
-  transportRequestDigest?: string
   paymentObservationDigest?: string
+  settlementStatus?: X402SettlementStatus
+  settlementResponse?: X402SettlementResponse
+  settlementDigest?: string
   paymentResolution?: 'not_released' | 'released' | 'unknown'
   settledAmount?: ExactAmount
   reconciliationEvidenceRef?: string

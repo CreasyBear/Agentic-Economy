@@ -781,7 +781,7 @@ const EXECUTE_NAVIGATION: PublicOperationNavigationRelation = {
   method: "POST",
   actionId: "operation.execute",
   authentication: "none",
-  surfaces: ["mcp"],
+  surfaces: ["answerThread", "mcp"],
   precondition: "free_keyless_read_only",
 };
 const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
@@ -790,18 +790,23 @@ const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
   actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   authentication: "required",
+  surfaces: ["answerThread"],
 };
+type OperationAccessMode = "anonymous_execute" | "authenticated_invoke" | "inspect_only";
+
 function operationNavigation(
-  executable = false,
-  answerExecutable = false,
+  accessMode: OperationAccessMode,
 ): readonly PublicOperationNavigationRelation[] {
   return Object.freeze([
     operationMarketNavigation("search"),
     operationMarketNavigation("detail"),
     operationMarketNavigation("compare"),
     operationMarketNavigation("inspect_plan"),
-    ...(answerExecutable ? [EXECUTE_NAVIGATION] : []),
-    ...(executable ? [INVOKE_NAVIGATION] : []),
+    ...(accessMode === "anonymous_execute"
+      ? [EXECUTE_NAVIGATION]
+      : accessMode === "authenticated_invoke"
+        ? [INVOKE_NAVIGATION]
+        : []),
   ]);
 }
 function noOperationNavigation(): readonly PublicOperationNavigationRelation[] {
@@ -901,7 +906,7 @@ export async function searchCapabilityOperations(
           }
         : {}),
     },
-    navigation: operationNavigation(),
+    navigation: operationNavigation("inspect_only"),
   };
 }
 
@@ -984,7 +989,7 @@ export async function compareCapabilityOperations(
     schemaVersion: PublicOperationRegistrySchemaVersion,
     operations,
     facts: comparisonFacts(operations),
-    navigation: operationNavigation(),
+    navigation: operationNavigation("inspect_only"),
   };
 }
 
@@ -1096,7 +1101,7 @@ export async function inspectCapabilityOperationPlan(
       effects: mergeEffects(operations),
       expiry,
     },
-    navigation: operationNavigation(),
+    navigation: operationNavigation("inspect_only"),
   };
 }
 
@@ -1175,8 +1180,14 @@ export function projectCapabilityOperation(
       availability.posture === "unavailable"
         ? noOperationNavigation()
         : operationNavigation(
-            availability.posture === "routeable",
-            availability.posture === "routeable" && record.answerExecutable,
+            availability.posture !== "routeable" ||
+              record.authentication.kind === "unknown"
+              ? "inspect_only"
+              : record.answerExecutable &&
+                  record.authentication.kind === "keyless" &&
+                  record.provenance.sourceKind !== "x402"
+                ? "anonymous_execute"
+                : "authenticated_invoke",
           ),
     ...(parameters === undefined ? {} : { parameters }),
     ...(catalogPrice === undefined ? {} : { catalogPrice }),
@@ -1974,18 +1985,15 @@ function isPublicDataUsePolicy(value: unknown): value is PublicDataUsePolicy {
           item.classification !== "sensitive" &&
           item.classification !== "credential") ||
         (item.phase !== "preparation" && item.phase !== "execution") ||
-        !isRecord(item.recipient) ||
+        (item.recipient !== "candidate_binding" &&
+          item.recipient !== "selected_binding" &&
+          item.recipient !== "named_recipient") ||
         !Array.isArray(item.purposes) ||
         !item.purposes.every((purpose: unknown) => typeof purpose === "string")
       ) {
         return false;
       }
-      return (
-        item.recipient.kind === "candidate_binding" ||
-        item.recipient.kind === "selected_binding" ||
-        (item.recipient.kind === "named_recipient" &&
-          typeof item.recipient.recipientId === "string")
-      );
+      return true;
     })
   );
 }

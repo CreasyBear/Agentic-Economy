@@ -399,8 +399,13 @@ export type OperationInvokeAdapterFactory = (input: Readonly<{
   correlationId: string
 }>) => Promise<DynamicPublishedActionInvocationAdapter>
 
+/**
+ * Reject only while enqueue is definitely uncommitted. Once enqueue may have
+ * started, resolve `outcome_unknown` so the reservation remains reconcilable.
+ */
 export type OperationInvokeDispatchResult =
   | Readonly<{ kind: 'enqueued'; retryAfterMs?: number }>
+  | Readonly<{ kind: 'outcome_unknown' }>
   | Readonly<{
       kind: 'refused'
       code: OperationInvokeRefusalCode
@@ -737,6 +742,7 @@ export function createOperationInvokeApplication(
           ownerId: request.principal.ownerId,
         })
         if (abandoned.kind === 'abandoned') return refusal
+        if (abandoned.kind === 'dispatch_started') return reconciliationRequiredAfterDispatch()
       } catch {
         // A failed cleanup must remain visible as runtime unavailability.
       }
@@ -748,6 +754,36 @@ export function createOperationInvokeApplication(
         nextAction: 'Retry after the invocation store is available.',
       }
     }
+    const reconciliationRequiredAfterDispatch = (
+      view?: ActionInvocationView<DynamicPublishedInvocationResult>,
+    ): OperationInvokeResult => {
+      const fallbackAttemptRef = `operation-attempt:${reservation.invocationRef}:1`
+      const viewAttemptRef = view !== undefined
+        && (view.control.state === 'leased' || view.control.state === 'reconciliation_required')
+        ? view.control.attemptRef
+        : undefined
+      const attemptRef = viewAttemptRef ?? view?.attempts.at(-1)?.attemptRef ?? fallbackAttemptRef
+      const attempt = view?.attempts.find(({ attemptRef: candidate }) => candidate === attemptRef)
+      const effectGeneration = attempt?.effectGeneration
+        ?? (view !== undefined && view.control.state === 'leased' ? view.control.effectGeneration : 1)
+      const requiredAt = attempt !== undefined
+        && (attempt.outcome.state === 'uncertain' || attempt.outcome.state === 'timed_out')
+        ? attempt.outcome.reconciliationRequiredAt
+        : new Date(now()).toISOString()
+      return {
+        kind: 'reconciliation_required',
+        invocationRef: reservation.invocationRef,
+        operationRef: command.operationRef,
+        evidence: {
+          attemptRef,
+          effectGeneration,
+          requiredAt,
+          retry: 'reconcile_before_retry',
+          evidenceSource: `operation:${command.operationRef}`,
+        },
+      }
+    }
+
     if (preflightRefusal !== undefined) {
       return await refuseBeforeDispatch(preflightRefusal)
     }
@@ -905,6 +941,7 @@ export function createOperationInvokeApplication(
           retryable: true,
         })
       }
+      if (dispatched.kind === 'outcome_unknown') return reconciliationRequiredAfterDispatch()
       if (dispatched.kind === 'refused') {
         return await refuseBeforeDispatch({
           kind: 'refused',
@@ -1030,12 +1067,13 @@ export function createOperationInvokeApplication(
       }
     } catch {
       if (continuationStarted) {
-        return {
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: 'invocation_runtime_unavailable',
-          retryable: true,
+        let view: ActionInvocationView<DynamicPublishedInvocationResult> | undefined
+        try {
+          view = host.inspect(prepared.invocationRef)
+        } catch {
+          view = undefined
         }
+        return reconciliationRequiredAfterDispatch(view)
       }
       return await refuseBeforeDispatch({
         kind: 'refused',

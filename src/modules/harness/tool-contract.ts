@@ -7,7 +7,8 @@ import type {
   ActionSurface,
   AnyAction,
 } from '@/modules/common/action'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
+import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/answer-thread.schema'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 
@@ -22,13 +23,6 @@ import {
   findStrictToolSchemaViolation,
   type StrictSchemaViolation,
 } from './strict-schema'
-
-export const AnswerModelToolIds = [
-  'registry.search',
-  'registry.detail',
-  'web.discover',
-  'registry.operations.search',
-] as const
 
 export type HarnessApprovalMode =
   | 'public-read'
@@ -243,7 +237,7 @@ export function buildHarnessToolSchemaBundle<Input, Output>(input: {
     ...strictViolationDiagnostics('input', inputJsonSchema),
     ...strictViolationDiagnostics('output', outputJsonSchema),
   ]
-  const descriptorHash = canonicalDigest({
+  const descriptorHash = schemaDescriptorDigest({
     toolId: input.id,
     inputJsonSchema: stableJsonValue(inputJsonSchema),
     outputJsonSchema: stableJsonValue(outputJsonSchema),
@@ -307,6 +301,11 @@ export function describeHarnessToolExecutionValidation(
 export function describeHarnessToolForAnswerModel(
   contract: HarnessToolContract,
 ): HarnessDescriptorProjection<HarnessAnswerModelToolDescriptor> {
+  const inputJsonSchema = contract.schemas.inputJsonSchema
+  if (inputJsonSchema === undefined) {
+    throw new Error(`Action ${contract.id} has no representable strict input schema`)
+  }
+
   return {
     descriptor: {
       type: 'function',
@@ -317,11 +316,7 @@ export function describeHarnessToolForAnswerModel(
           'Boundaries:',
           ...contract.boundaries.map((boundary) => `- ${boundary}`),
         ].join('\n'),
-        parameters: contract.schemas.inputJsonSchema ?? {
-          type: 'object',
-          properties: {},
-          required: [],
-        },
+        parameters: inputJsonSchema,
       },
     },
     descriptorHash: contract.schemas.descriptorHash,
@@ -360,7 +355,7 @@ export function filterAnswerModelToolContracts(
 ): readonly HarnessToolContract[] {
   return sortContractsById(
     contracts.filter((contract) => contract.exposure.answerModel && contract.policy.tier === 'read'),
-    AnswerModelToolIds,
+    ANSWER_READ_TOOL_IDS,
   )
 }
 
@@ -411,7 +406,7 @@ function policyForAction(action: AnyAction, exposure: HarnessToolExposure): Harn
 }
 
 function isAnswerModelToolId(id: string): boolean {
-  return (AnswerModelToolIds as readonly string[]).includes(id)
+  return (ANSWER_READ_TOOL_IDS as readonly string[]).includes(id)
 }
 
 function sortContractsById(

@@ -134,7 +134,7 @@ export type ActionRunArgs<Input> = {
   context: ActionContext
 }
 
-export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'object'
+export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum' | 'object' | 'array'
 
 export type ActionParameter = {
   name: string
@@ -283,8 +283,22 @@ export type AgentToolDescriptor = {
   outputJsonSchema?: JSONSchema
   hasOutputSchema: true
 }
+type ActionDescriptorSource = Readonly<{
+  id: string
+  name: string
+  summary: string
+  boundaries: readonly string[]
+  readOnly: boolean
+  effect: ActionEffectMetadata
+  parameters: readonly ActionParameter[]
+  surfaces: readonly ActionSurface[]
+  credentialAdmission?: ActionCredentialAdmission
+  schema: z.ZodType
+  outputSchema: z.ZodType
+}>
 
-export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
+
+export function describeActionForAgent(action: ActionDescriptorSource): AgentToolDescriptor {
   const inputJsonSchema = convertSchemaToJsonSchema(action.schema)
   const outputJsonSchema = convertSchemaToJsonSchema(action.outputSchema)
 

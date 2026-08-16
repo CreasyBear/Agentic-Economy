@@ -184,8 +184,8 @@ const openMeteoForecastContract: CapabilityContractMetadata = {
   evidence: [{ evidenceId: 'forecast', outputPointer: '/generationtime_ms', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
   inputExamples: [
-    { label: 'Paris weather', input: { latitude: 48.857, longitude: 2.352 } },
-    { label: 'London weather', input: { latitude: 51.5074, longitude: -0.1278 } },
+    { label: 'Paris weather', input: { latitude: 48.857, longitude: 2.352, current_weather: true } },
+    { label: 'London weather', input: { latitude: 51.5074, longitude: -0.1278, current_weather: true } },
   ],
 }
 
@@ -507,6 +507,10 @@ const wikipediaSummaryContract: CapabilityContractMetadata = {
   }],
   evidence: [{ evidenceId: 'summary', outputPointer: '/extract', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+  inputExamples: [
+    { label: 'Paris summary', input: { title: 'Paris' } },
+    { label: 'OpenAI summary', input: { title: 'OpenAI' } },
+  ],
 }
 
 const wikipediaSummaryPublication: CapabilityPublicationImport = {
@@ -574,157 +578,133 @@ const wikipediaSummaryPublication: CapabilityPublicationImport = {
   evidenceRefs: [...WIKIPEDIA_SUMMARY_SOURCE_EVIDENCE],
 }
 
-// ---- TheCatAPI image search ---------------------------------------------------------
+// ---- Mockster random cat images ----------------------------------------------------
 
-const THECATAPI_IMAGE_SEARCH_SOURCE_EVIDENCE = [
-  'https://docs.thecatapi.com/api-reference/images/images-search',
-  'https://api.thecatapi.com/v1/images/search',
+const MOCKSTER_CAT_IMAGES_SOURCE_EVIDENCE = [
+  'https://mockster.dev/docs/api/images',
+  'https://api.mockster.dev/api/v1/images',
+  'https://loremflickr.com/',
 ] as const
 
-const theCatApiImageSearchInputSchema = {
+const mocksterCatImagesInputSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
   properties: {
-    limit: {
+    count: {
       type: 'integer',
       minimum: 1,
-      maximum: 100,
-      default: 1,
-      description: 'Number of image results to return.',
-    },
-    has_breeds: {
-      type: 'boolean',
-      description: 'Whether to require images that include breed information.',
-    },
-    breed_ids: {
-      type: 'string',
-      maxLength: 200,
-      description: 'Comma-separated breed ids to filter images by.',
-    },
-    mime_types: {
-      type: 'string',
-      maxLength: 200,
-      description: 'Comma-separated image formats, e.g. jpg,png,gif.',
+      maximum: 10,
+      default: 10,
+      description: 'Exact number of random cat image results to return.',
     },
   },
   required: [],
   additionalProperties: false,
 } as const
 
-const theCatApiImageSearchOutputSchema = {
+const mocksterCatImagesOutputSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'array',
   minItems: 1,
+  maxItems: 10,
   items: {
     type: 'object',
     properties: {
-      id: { type: 'string' },
+      name: { type: 'string' },
       url: { type: 'string', format: 'uri' },
-      width: { type: 'integer' },
-      height: { type: 'integer' },
     },
-    required: ['id', 'url'],
+    required: ['name', 'url'],
     additionalProperties: false,
   },
 } as const
 
-const theCatApiImageSearchContract: CapabilityContractMetadata = {
-  capabilityId: 'thecatapi.image-search',
+const mocksterCatImagesContract: CapabilityContractMetadata = {
+  capabilityId: 'mockster.cat-images',
   version: 1,
-  name: 'Random cat image search',
-  description: 'Returns random cat image URLs and dimensions through the keyless TheCatAPI image search endpoint.',
+  name: 'Random cat image batch',
+  description: 'Returns the requested number of random cat image links through Mockster’s keyless image endpoint.',
   customerAnnotations: [
-    { annotationId: 'image', document: 'output', pointer: '/0', label: 'Cat image', role: 'completion_evidence' },
+    { annotationId: 'image_link', semanticIdentity: 'https-link', document: 'output', pointer: '/0/url', label: 'Cat image link', role: 'completion_evidence' },
   ],
   dataUse: [
     {
-      effectId: 'query_release', inputPointer: '/limit', classification: 'public',
+      effectId: 'query_release', inputPointer: '/count', classification: 'public',
       phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['bound_image_result_count'],
-    },
-    {
-      effectId: 'query_release', inputPointer: '/has_breeds', classification: 'public',
-      phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['filter_images_with_breeds'],
-    },
-    {
-      effectId: 'query_release', inputPointer: '/breed_ids', classification: 'public',
-      phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['filter_images_by_breed'],
-    },
-    {
-      effectId: 'query_release', inputPointer: '/mime_types', classification: 'public',
-      phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['filter_images_by_format'],
     },
   ],
   effects: [{
     effectId: 'query_release', class: 'data_release', authority: 'mandate_or_explicit', reversibility: 'not_applicable',
   }],
-  evidence: [{ evidenceId: 'image', outputPointer: '/0', purpose: 'completion' }],
+  evidence: [{ evidenceId: 'image_link', outputPointer: '/0/url', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+  inputExamples: [
+    { label: 'One cat', input: { count: 1 } },
+  ],
 }
 
-const theCatApiImageSearchPublication: CapabilityPublicationImport = {
+const mocksterCatImagesPublication: CapabilityPublicationImport = {
   kind: 'openapi_http',
   document: {
     openapi: '3.1.0',
     info: {
-      title: 'TheCatAPI',
+      title: 'Mockster',
       version: '1',
-      description: 'Public keyless cat image search API.',
+      description: 'Public keyless random image data API.',
     },
-    servers: [{ url: 'https://api.thecatapi.com/v1' }],
+    servers: [{ url: 'https://api.mockster.dev/api/v1' }],
     paths: {
-      '/images/search': {
+      '/images': {
         get: {
-          operationId: 'thecatapi.image-search',
-          description: 'Returns random cat image results matching the filters.',
+          operationId: 'mockster.cat-images',
+          description: 'Returns the caller-requested number of random cat image URLs.',
           parameters: [
-            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 100 } },
-            { name: 'has_breeds', in: 'query', required: false, schema: { type: 'boolean' } },
-            { name: 'breed_ids', in: 'query', required: false, schema: { type: 'string', maxLength: 200 } },
-            { name: 'mime_types', in: 'query', required: false, schema: { type: 'string', maxLength: 200 } },
+            { name: 'category', in: 'query', required: false, schema: { type: 'string', enum: ['cats'] } },
+            { name: 'count', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 10 } },
           ],
           responses: {
             '200': {
-              description: 'An array of cat image records.',
-              content: { 'application/json': { schema: theCatApiImageSearchOutputSchema } },
+              description: 'An array containing the requested number of cat image records.',
+              content: { 'application/json': { schema: mocksterCatImagesOutputSchema } },
             },
           },
         },
       },
     },
   },
-  operation: { path: '/images/search', method: 'get' },
-  contract: theCatApiImageSearchContract,
+  operation: { path: '/images', method: 'get' },
+  fixedQuery: [{ parameter: 'category', value: 'cats' }],
+  contract: mocksterCatImagesContract,
   commercial: {
     offering: {
-      offeringId: 'offering:thecatapi-image-search:image-search:v1',
+      offeringId: 'offering:mockster-cat-images:cat-images:v1',
       networkId: AE_PUBLIC_NETWORK,
       presentation: {
-        label: 'Random cat image search',
-        summary: 'AE-curated keyless access to random cat image results via TheCatAPI.',
+        label: 'Random cat image batch',
+        summary: 'AE-curated keyless access to exact-size batches of random cat image links via Mockster.',
         price: { ...KEYLESS_PRICE },
         materialTerms: [
-          { termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS under a fair-use rate limit; platform-funded provider cost is USD 0.' },
-          { termId: 'usage-boundary', label: 'Use', value: 'Keyless fair-use rate limited; higher limits require an optional API key that AE does not require or supply.' },
-          { termId: 'source-attribution', label: 'Source', value: 'Official TheCatAPI image-search reference.' },
+          { termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS; platform-funded provider cost is USD 0.' },
+          { termId: 'usage-boundary', label: 'Use', value: 'AE bounds each request to 1–10 images; Mockster documents Count as the number of returned objects.' },
+          { termId: 'source-attribution', label: 'Source', value: 'Official Mockster image API; image links are supplied by LoremFlickr and retain upstream licensing and attribution requirements.' },
         ],
         commercialRelationship: {
           kind: 'none',
-          summary: 'AE-curated external publication with no commercial relationship to TheCatAPI.',
+          summary: 'AE-curated external publication with no commercial relationship to Mockster or LoremFlickr.',
           influencesEligibility: false,
           influencesInclusion: false,
           influencesOrder: false,
-          evidenceRefs: [...THECATAPI_IMAGE_SEARCH_SOURCE_EVIDENCE],
+          evidenceRefs: [...MOCKSTER_CAT_IMAGES_SOURCE_EVIDENCE],
         },
       },
       searchTerms: ['cat', 'cat images', 'random cat', 'cat photo', 'cute cat pictures'],
-      registrationEvidenceRefs: [...THECATAPI_IMAGE_SEARCH_SOURCE_EVIDENCE],
+      registrationEvidenceRefs: [...MOCKSTER_CAT_IMAGES_SOURCE_EVIDENCE],
     },
-    bindingId: 'binding:thecatapi-image-search:image-search:v1',
+    bindingId: 'binding:mockster-cat-images:cat-images:v1',
     authority: KEYLESS_AUTHORITY,
-    registrationEvidenceRefs: [...THECATAPI_IMAGE_SEARCH_SOURCE_EVIDENCE],
+    registrationEvidenceRefs: [...MOCKSTER_CAT_IMAGES_SOURCE_EVIDENCE],
     requestTimeoutMs: 10_000,
   },
-  evidenceRefs: [...THECATAPI_IMAGE_SEARCH_SOURCE_EVIDENCE],
+  evidenceRefs: [...MOCKSTER_CAT_IMAGES_SOURCE_EVIDENCE],
 }
 
 // ---- CoinGecko simple price (keyless) ----------------------------------------------
@@ -914,15 +894,18 @@ const ipifyOutputSchema = {
 const ipifyContract: CapabilityContractMetadata = {
   capabilityId: 'ipify.public-ip',
   version: 1,
-  name: 'Get public IP',
-  description: 'Returns the caller public IPv4 address through the keyless ipify endpoint.',
+  name: 'Get AE runtime public IP',
+  description: 'Returns the AE runtime server egress IPv4 address observed by the keyless ipify endpoint.',
   customerAnnotations: [
-    { annotationId: 'ip', document: 'output', pointer: '/ip', label: 'Public IP', role: 'completion_evidence' },
+    { annotationId: 'ip', document: 'output', pointer: '/ip', label: 'AE runtime public IP', role: 'completion_evidence' },
   ],
   dataUse: [],
   effects: [],
   evidence: [{ evidenceId: 'ip', outputPointer: '/ip', purpose: 'completion' }],
   lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+  inputExamples: [
+    { label: 'Current IP', input: {} },
+  ],
 }
 
 const ipifyPublication: CapabilityPublicationImport = {
@@ -939,7 +922,7 @@ const ipifyPublication: CapabilityPublicationImport = {
       '/.': {
         get: {
           operationId: 'ipify.public-ip',
-          description: 'Returns the caller public IP address at the ipify root endpoint.',
+          description: 'Returns the AE runtime server egress public IP address at the ipify root endpoint.',
           parameters: [
             { name: 'format', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'jsonp', 'text'] } },
           ],
@@ -961,12 +944,12 @@ const ipifyPublication: CapabilityPublicationImport = {
       offeringId: 'offering:ipify:public-ip:v1',
       networkId: AE_PUBLIC_NETWORK,
       presentation: {
-        label: 'Get public IP',
-        summary: 'AE-curated keyless access to the caller public IPv4 address via ipify.',
+        label: 'Get AE runtime public IP',
+        summary: 'AE-curated keyless observation of the AE runtime server egress IPv4 address via ipify.',
         price: { ...KEYLESS_PRICE },
         materialTerms: [
           { termId: 'provider-cost', label: 'Provider cost', value: 'Public keyless HTTPS; platform-funded provider cost is USD 0.' },
-          { termId: 'usage-boundary', label: 'Use', value: 'Returns the caller public IP only; free and unrestricted per ipify.' },
+          { termId: 'usage-boundary', label: 'Use', value: 'Returns the AE runtime server egress public IP only; it does not identify the human user or their device.' },
           { termId: 'source-attribution', label: 'Source', value: 'Official ipify documentation.' },
         ],
         commercialRelationship: {
@@ -998,7 +981,7 @@ export const CLUSTER_A_PUBLICATIONS = [
   { businessSlug: 'open-meteo-forecast', publication: openMeteoForecastPublication },
   { businessSlug: 'open-meteo-geocoding', publication: openMeteoGeocodingPublication },
   { businessSlug: 'wikipedia-rest-summary', publication: wikipediaSummaryPublication },
-  { businessSlug: 'thecatapi-image-search', publication: theCatApiImageSearchPublication },
+  { businessSlug: 'mockster-cat-images', publication: mocksterCatImagesPublication },
   { businessSlug: 'coingecko-simple-price-keyless', publication: coingeckoSimplePricePublication },
   { businessSlug: 'ipify', publication: ipifyPublication },
 ] as const satisfies readonly ClusterAPublication[]

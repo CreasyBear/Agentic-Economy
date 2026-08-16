@@ -1,3 +1,4 @@
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke'
 import {
@@ -10,7 +11,7 @@ import {
   OperationMarketIdempotencyLine,
   OperationMarketInvokeScopeLine,
 } from './offering-discovery-file'
-import { listMcpActions, mcpToolName } from '@/modules/actions'
+import { findAction, listMcpActions, mcpToolName } from '@/modules/actions'
 import {
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
@@ -77,7 +78,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     '```',
     '',
     `HTTP detail: \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read the current input schema, terms, price, effects, availability, and evidence before connecting or invoking.`,
-    `Optional anonymous reads: \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a proposed plan with \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
+    `Optional anonymous reads: \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a proposed plan with \`${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
 
     'After exact detail, choose one execution mode: the global `executionModes.directKeyless` entry describes an optional capability, not a guarantee for every Operation. Use the anonymous MCP tool `ae_operation_execute` (action `operation.execute`) only when that exact current detail includes a navigation relation with `relation: "execute"`, `actionId: "operation.execute"`, `authentication: "none"`, and routeable availability; then pass the exact `operationRef` and only the published `input` fields. Otherwise continue to connect and use the authenticated `operation.invoke` path below for the controlled market flow. Never substitute one path for the other.',
     OperationMarketAnonymousBoundaryLine,
@@ -136,6 +137,11 @@ export function buildPublicAgentSkillMarkdown(options: {
     '',
     `Endpoint: \`${base}/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}. Authenticated tools: ${operationMcpToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}.`,
     'MCP follows the same order and boundaries. Static tool names do not enumerate live Operations.',
+    `Installed MCP SDK lifecycle (protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`): connect to \`${base}/mcp\`; complete \`initialize\` then \`notifications/initialized\`; call \`tools/list\` before \`tools/call\`; close the transport.`,
+    '',
+    '## Business catalog is business-only',
+    '',
+    `\`${registeredActionId('registry.search')}\` and \`${registeredActionId('registry.detail')}\` read published businesses and offering portfolios; they neither authorize execution nor create an Agent Service. One admitted Market Operation is one Agent Service; inspect those through \`registry.operations.*\`.`,
     '',
     '## Stop rules',
     '',
@@ -147,3 +153,9 @@ export function buildPublicAgentSkillMarkdown(options: {
   ].join('\n')
 }
 
+
+function registeredActionId(actionId: string): string {
+  const action = findAction(actionId)
+  if (action === undefined) throw new Error(`Action is not registered: ${actionId}`)
+  return action.id
+}

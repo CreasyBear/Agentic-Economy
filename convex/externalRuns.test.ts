@@ -88,6 +88,8 @@ async function manifestArgs(
   })
 }
 
+
+
 afterEach(() => {
   delete process.env.AE_SOURCE_WRITE_SECRET
 })
@@ -113,8 +115,87 @@ describe('external run Convex seam', () => {
     expect(created).toMatchObject({ kind: 'accepted', state: 'frozen' })
     const changed = await admin.mutation(externalRunsApi.updateManifest, await manifestArgs('run:update', ['provider:a', 'provider:b', 'provider:c', 'provider:d']))
     expect(changed).toMatchObject({ kind: 'refused', reason: 'manifest_frozen' })
-    const read = await backend.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })
+    const read = await admin.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })
+
     expect(read).toMatchObject({ kind: 'accepted', state: 'frozen' })
+  })
+
+  it('authorizes manifest and report readbacks before revealing run existence', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    await seedAdmin(backend)
+    const admin = backend.withIdentity(adminIdentity)
+    const nonAdminIdentity = {
+      subject: 'external-run-non-admin',
+      tokenIdentifier: 'clerk|external-run-non-admin',
+      issuer: 'https://clerk.example.test',
+    }
+    const revokedIdentity = {
+      subject: 'external-run-revoked',
+      tokenIdentifier: 'clerk|external-run-revoked',
+      issuer: 'https://clerk.example.test',
+    }
+    const suspendedIdentity = {
+      subject: 'external-run-suspended',
+      tokenIdentifier: 'clerk|external-run-suspended',
+      issuer: 'https://clerk.example.test',
+    }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: revokedIdentity.subject,
+        tokenIdentifier: revokedIdentity.tokenIdentifier,
+        role: 'owner_admin',
+        state: 'revoked',
+        grantedBy: 'test',
+        grantedAt: 1,
+        evidenceRef: 'test:evidence',
+      })
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: suspendedIdentity.subject,
+        tokenIdentifier: suspendedIdentity.tokenIdentifier,
+        role: 'owner_admin',
+        state: 'suspended',
+        grantedBy: 'test',
+        grantedAt: 1,
+        evidenceRef: 'test:evidence',
+      })
+    })
+    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:readback:create'))
+    const assertDenied = async (client: Pick<typeof backend, 'query'>) => {
+      const denied = { kind: 'refused', reason: 'authorization_denied' }
+      expect(await client.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })).toEqual(denied)
+      expect(await client.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })).toEqual(denied)
+    }
+    await assertDenied(backend)
+    await assertDenied(backend.withIdentity(nonAdminIdentity))
+    await assertDenied(backend.withIdentity(revokedIdentity))
+    await assertDenied(backend.withIdentity(suspendedIdentity))
+
+    const manifest = await admin.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })
+    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
+    expect(manifest).toMatchObject({ kind: 'accepted', state: 'frozen' })
+    expect(report).toMatchObject({ kind: 'accepted' })
+    if (manifest.kind !== 'accepted' || report.kind !== 'accepted') throw new Error('authorized readback unavailable')
+    expect(report.manifestJson).toBe(manifest.manifestJson)
+    expect(report.manifestDigest).toBe(manifest.manifestDigest)
+
+    const unknownRunId = 'run:convex:unknown'
+    expect(await backend.query(externalRunsApi.inspectManifest, { runId: unknownRunId })).toEqual({
+      kind: 'refused',
+      reason: 'authorization_denied',
+    })
+    expect(await admin.query(externalRunsApi.inspectManifest, { runId: unknownRunId })).toEqual({
+      kind: 'refused',
+      reason: 'manifest_not_found',
+    })
+    expect(await backend.query(externalRunsApi.readReport, { runId: unknownRunId })).toEqual({
+      kind: 'refused',
+      reason: 'authorization_denied',
+    })
+    expect(await admin.query(externalRunsApi.readReport, { runId: unknownRunId })).toEqual({
+      kind: 'refused',
+      reason: 'manifest_not_found',
+    })
   })
 
   it('replays an identical admitted start after a retry', async () => {
@@ -213,7 +294,7 @@ describe('external run Convex seam', () => {
     }
     const evidence = await admin.mutation(externalRunsApi.recordEvidence, await signedExternalRunArgs(evidenceCommand))
     expect(evidence).toMatchObject({ kind: 'refused', reason: 'provider_evidence_mismatch' })
-    const report = await backend.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
+    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
     expect(report).toMatchObject({ kind: 'accepted' })
   })
   it('reports the frozen denominator when recruitment has only one admitted start', async () => {
@@ -239,7 +320,7 @@ describe('external run Convex seam', () => {
       evidenceRefs: ['test:evidence'],
     }))
     expect(start).toMatchObject({ kind: 'accepted' })
-    const report = await backend.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
+    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
     expect(report).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL' })
     if (report.kind !== 'accepted') throw new Error('report unavailable')
     const parsed = JSON.parse(report.reportJson) as { reconciliation: { denominator: number; recordedStarts: number; missingStarts: number } }
@@ -278,7 +359,7 @@ describe('external run Convex seam', () => {
     }))
     expect(start).toMatchObject({ kind: 'refused', reason: 'run_finalized' })
 
-    const report = await backend.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
+    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
     expect(report).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL', finalDecision: 'FAIL/KILL' })
   })
 })

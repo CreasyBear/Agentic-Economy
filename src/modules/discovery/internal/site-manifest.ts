@@ -1,4 +1,6 @@
-import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   OPERATION_INVOKE_ROUTE_CONTRACT,
@@ -44,6 +46,7 @@ import {
 } from '../developer-discovery'
 import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-discovery'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
+import { describeActionForAgent, findAction, type ActionInvocationContract } from '@/modules/actions'
 
 export const SiteDiscoveryManifestSchemaVersion = 'ae-site-discovery:v2' as const
 
@@ -81,7 +84,10 @@ export type SiteDiscoveryEndpointContract = Readonly<{
   authentication: 'none' | typeof CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication
   requiredScope?: string
   requiredHeaders?: Readonly<Record<string, string>>
+  actionId?: string
+  contractVersion?: string
   inputJsonSchema?: unknown
+  outputJsonSchema?: unknown
 }>
 
 type SiteDiscoveryOAuthContract = Readonly<{
@@ -158,6 +164,8 @@ export type SiteDiscoveryManifestContract = Readonly<{
       }>
     }>
     mcp: Readonly<{
+      protocolVersion: typeof MCP_LATEST_PROTOCOL_VERSION
+      lifecycle: readonly ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close']
       endpoint: string
       operationInvokeTool: string
       inputFields: readonly string[]
@@ -165,11 +173,15 @@ export type SiteDiscoveryManifestContract = Readonly<{
     executionModes: Readonly<{
       directKeyless: Readonly<{
         action: 'operation.execute'
+        contractVersion: string
+        invocationContract: ActionInvocationContract
         mcpTool: string
         authentication: 'none'
         requiresOperationRef: true
         eligibility: 'free_keyless_read_only'
         requiresExactDetailExecuteRelation: true
+        inputJsonSchema?: unknown
+        outputJsonSchema?: unknown
         description: string
       }>
       gateway: Readonly<{
@@ -253,8 +265,16 @@ export function buildSiteDiscoveryManifest(
   const mcpTools = publicMcpToolDocs()
   const operationInvokeTool = mcpTools.find((tool) => tool.actionId === OPERATION_INVOKE_ACTION_ID)
   if (operationInvokeTool === undefined) throw new Error('Operation invoke MCP tool is not registered')
+  const operationInvokeAction = findAction(OPERATION_INVOKE_ACTION_ID)
+  if (operationInvokeAction === undefined) throw new Error('Operation invoke action is not registered')
+  const operationInvokeDescriptor = describeActionForAgent(operationInvokeAction)
   const directKeylessTool = mcpTools.find((tool) => tool.actionId === 'operation.execute')
   if (directKeylessTool === undefined) throw new Error('Keyless operation execute MCP tool is not registered')
+  const directKeylessAction = findAction('operation.execute')
+  if (directKeylessAction === undefined) throw new Error('Keyless operation execute action is not registered')
+  const directKeylessActionId = directKeylessAction.id
+  if (directKeylessActionId !== 'operation.execute') throw new Error('Registered keyless operation execute action has an unexpected id')
+  const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
   const body = {
     schemaVersion: SiteDiscoveryManifestSchemaVersion,
     ucpVersion: 'v1',
@@ -313,16 +333,22 @@ export function buildSiteDiscoveryManifest(
       mcp: {
         endpoint: `${origin}/mcp`,
         operationInvokeTool: operationInvokeTool.name,
-        inputFields: ['operationRef', 'input', 'idempotencyKey'],
+        protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
+        lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
+        inputFields: Object.keys(operationInvokeDescriptor.inputJsonSchema?.properties ?? {}),
       },
       executionModes: {
         directKeyless: {
-          action: 'operation.execute',
+          action: directKeylessActionId,
+          contractVersion: directKeylessAction.invocationContract.version,
+          invocationContract: directKeylessAction.invocationContract,
           mcpTool: directKeylessTool.name,
           authentication: 'none',
           requiresOperationRef: true,
           eligibility: 'free_keyless_read_only',
           requiresExactDetailExecuteRelation: true,
+          ...(directKeylessDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: directKeylessDescriptor.inputJsonSchema }),
+          ...(directKeylessDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: directKeylessDescriptor.outputJsonSchema }),
           description: 'Optional anonymous observation for current free, keyless, read-only Operations; use it only when exact current detail includes the execute relation.',
         },
         gateway: {
@@ -370,11 +396,11 @@ export function buildSiteDiscoveryManifest(
       keyRequestUrl: `${origin}${agentKeyPath}`,
       toolListSource: `${origin}${businessManifestPath}`,
     },
-    boundary: DiscoveryListingBoundaryLine,
+    boundary: `${DiscoveryListingBoundaryLine} The published business catalog is business-only; an Agent Service is one admitted Market Operation.`,
     unsupportedCapabilities: DeveloperDiscoveryUnsupportedCapabilities,
   } as const
 
-  return { ...body, generatedAt: input.now, generatedHash: canonicalDigest(body) }
+  return { ...body, generatedAt: input.now, generatedHash: schemaDescriptorDigest(body as StableHashValue) }
 }
 
 function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[] {
@@ -388,6 +414,9 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
     [CUSTOMER_REQUEST_AGENT_ENTRYPOINT.schemaPath]: 'Customer Request contract schema',
     ...Object.fromEntries(DeveloperDiscoveryPublicRoutes.map((route) => [route.path, route.label])),
     ...Object.fromEntries(DeveloperDiscoveryArtifacts.map((artifact) => [artifact.route, artifact.label])),
+    '/api/businesses': 'Published business catalog list',
+    '/api/businesses/search?q=': 'Published business catalog search',
+    '/api/businesses/{slug}': 'Published business catalog detail',
   }
   const paths: readonly string[] = [
     CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path,
@@ -407,6 +436,19 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
     seen.add(path)
     const access = accessFor(path, operationRoutes)
     const operationRead = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
+    const operationAction = operationRead === undefined ? undefined : findAction(operationRead.actionId)
+    if (operationRead !== undefined && operationAction === undefined) {
+      throw new Error(`Operation market action is not registered: ${operationRead.actionId}`)
+    }
+    const operationDescriptor = operationAction === undefined ? undefined : describeActionForAgent(operationAction)
+    const operationMetadata = operationAction === undefined || operationDescriptor === undefined
+      ? undefined
+      : {
+        actionId: operationDescriptor.id,
+        contractVersion: operationAction.invocationContract.version,
+        ...(operationDescriptor.inputJsonSchema === undefined ? {} : { inputJsonSchema: operationDescriptor.inputJsonSchema }),
+        ...(operationDescriptor.outputJsonSchema === undefined ? {} : { outputJsonSchema: operationDescriptor.outputJsonSchema }),
+      }
     endpoints.push({
       kind: kindFor(path, operationRoutes),
       label: labels[path] ?? path,
@@ -418,9 +460,7 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
       authentication: access.authentication,
       ...(access.requiredScope === undefined ? {} : { requiredScope: access.requiredScope }),
       ...(access.requiredHeaders === undefined ? {} : { requiredHeaders: access.requiredHeaders }),
-      ...(operationRead === undefined ? {} : {
-        inputJsonSchema: operationRead.inputSchema,
-      }),
+      ...(operationMetadata === undefined ? {} : operationMetadata),
     })
   }
 

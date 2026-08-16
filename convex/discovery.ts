@@ -261,6 +261,7 @@ const discoveryManifestErrorCodeMembers = [
   v.literal('discovery_manifest_csrf_rejected'),
   v.literal('discovery_manifest_wrong_owner'),
   v.literal('discovery_manifest_not_public'),
+  v.literal('discovery_manifest_canonical_unconfigured'),
 ] as const
 const discoveryManifestErrorCode = v.union(...discoveryManifestErrorCodeMembers)
 const regenerateResult = v.union(
@@ -314,7 +315,7 @@ const manifestReadResult = v.union(
   }),
   v.object({
     kind: v.literal('hidden'),
-    reason: v.union(v.literal('not_public'), v.literal('no_public_catalog')),
+    reason: v.union(v.literal('not_public'), v.literal('no_public_catalog'), v.literal('unconfigured')),
   })
 )
 
@@ -353,8 +354,15 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     if (catalog === undefined) {
       return discoveryError('discovery_manifest_not_public', 'Catalog is not public or has no published Offerings.')
     }
+    const baseUrl = canonicalBaseUrl(args.canonicalBaseUrl)
+    if (baseUrl === undefined) {
+      return discoveryError(
+        'discovery_manifest_canonical_unconfigured',
+        'Canonical base URL configuration is required.',
+      )
+    }
     const now = Date.now()
-    const manifest = buildManifest(catalog, canonicalBaseUrl(args.canonicalBaseUrl), now)
+    const manifest = buildManifest(catalog, baseUrl, now)
     const existingAttempt = await latestAttemptForBusiness(ctx.db, auth.business._id, manifest.slug, manifest.sourceHash)
     const replayed = existingAttempt?.status === 'succeeded'
       && existingAttempt.sourceHash === manifest.sourceHash
@@ -383,7 +391,9 @@ export async function seedDiscoveryManifestForBusinessCommand(
 ): Promise<'generated' | 'skipped'> {
   const catalog = await publicCatalogForBusiness(db, business)
   if (catalog === undefined) return 'skipped'
-  const manifest = buildManifest(catalog, canonicalBaseUrl(undefined), now)
+  const baseUrl = canonicalBaseUrl(undefined)
+  if (baseUrl === undefined) return 'skipped'
+  const manifest = buildManifest(catalog, baseUrl, now)
   const existingAttempt = await latestAttemptForBusiness(db, business._id, manifest.slug, manifest.sourceHash)
   await upsertManifest(db, manifest, business._id)
   await upsertSucceededAttempt(db, manifest, business._id, existingAttempt, now)
@@ -521,9 +531,11 @@ export const readCatalogDiscoveryManifest = queryGeneric({
     if (business === null) return { kind: 'hidden' as const, reason: 'no_public_catalog' as const }
     const catalog = await publicCatalogForBusiness(ctx.db, business)
     if (catalog === undefined) return { kind: 'hidden' as const, reason: 'not_public' as const }
+    const baseUrl = canonicalBaseUrl(args.canonicalBaseUrl)
+    if (baseUrl === undefined) return { kind: 'hidden' as const, reason: 'unconfigured' as const }
     return {
       kind: 'available' as const,
-      manifest: manifestForReturn(buildManifest(catalog, canonicalBaseUrl(args.canonicalBaseUrl), args.now)),
+      manifest: manifestForReturn(buildManifest(catalog, baseUrl, args.now)),
     }
   },
 })
@@ -537,9 +549,12 @@ export const readLlmsTxt = queryGeneric({
   },
   returns: discoveryFileResult,
   handler: async (ctx, args) => {
+    const baseUrl = canonicalBaseUrl(args.canonicalBaseUrl)
+    if (baseUrl === undefined) throw new Error('canonical_base_url_configuration_required')
+    const routingBaseUrl = canonicalBaseUrl(args.routingBaseUrl)
     const result = buildOfferingLlmsTxt(await publicOfferingSupplyForDiscovery(ctx.db), {
-      canonicalBaseUrl: canonicalBaseUrl(args.canonicalBaseUrl),
-      routingBaseUrl: canonicalBaseUrl(args.routingBaseUrl),
+      canonicalBaseUrl: baseUrl,
+      ...(routingBaseUrl === undefined ? {} : { routingBaseUrl }),
       ...(args.totalBusinesses === undefined ? {} : { totalBusinesses: args.totalBusinesses }),
     })
     return { body: result.body, urls: [...result.urls] }
@@ -579,6 +594,7 @@ type DiscoveryMutationError = {
     | 'discovery_manifest_csrf_rejected'
     | 'discovery_manifest_wrong_owner'
     | 'discovery_manifest_not_public'
+    | 'discovery_manifest_canonical_unconfigured'
   retryable: boolean
   reason: string
 }
@@ -1947,9 +1963,11 @@ function readEnv(name: string): string | undefined {
   return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
-function canonicalBaseUrl(value: string | undefined): string {
-  const raw = value ?? readEnv('AE_CANONICAL_BASE_URL') ?? readEnv('SITE_URL') ?? 'https://ae.example'
-  return trimTrailingSlashes(raw)
+function canonicalBaseUrl(value: string | undefined): string | undefined {
+  const raw = value?.trim() || readEnv('AE_CANONICAL_BASE_URL')?.trim() || readEnv('SITE_URL')?.trim()
+  if (raw === undefined) return undefined
+  const trimmed = trimTrailingSlashes(raw)
+  return trimmed.length === 0 ? undefined : trimmed
 }
 
 export type {

@@ -56,7 +56,7 @@ export function buildLlmsTxt(
     `- Human guide: ${canonicalBaseUrl}/for-agents`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
-    'Published businesses (secondary directory):',
+    'Published businesses (business catalog; never Agent Services):',
     ...(businessLines.length === 0 ? ['- none'] : businessLines),
     '',
     'Boundary:',

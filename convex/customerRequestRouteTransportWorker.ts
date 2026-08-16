@@ -240,7 +240,11 @@ export const run = internalAction({
       readX402PaymentAuthorizationByDigest: async (prepared) =>
         await readX402Authorization(ctx, prepared, true),
       markX402PaymentPossiblySubmitted: async (event) => {
-        const { amount, ...paymentEvent } = event
+        const {
+          amount,
+          settlementEvidence: _settlementEvidence,
+          ...paymentEvent
+        } = event
         await ctx.runMutation(internal.customerRequestRouteExecution.markX402PaymentPossiblySubmitted, {
           dispatchRef: opened.invocation.dispatchRef,
           ...paymentEvent,
@@ -251,10 +255,28 @@ export const run = internalAction({
         })
       },
       observeX402PaymentAttempt: async (event) => {
-        const { amount, ...paymentEvent } = event
+        const { amount, settlementEvidence, ...paymentEvent } = event
         await ctx.runMutation(internal.customerRequestRouteExecution.observeX402PaymentAttempt, {
           dispatchRef: opened.invocation.dispatchRef,
           ...paymentEvent,
+          settlementStatus:
+            settlementEvidence?.kind === 'not_submitted'
+              ? 'not_settled'
+              : settlementEvidence?.kind ?? 'unknown',
+          ...(settlementEvidence !== undefined
+            && settlementEvidence.kind !== 'not_submitted'
+            && settlementEvidence.response !== undefined
+            ? { settlementResponse: settlementEvidence.response }
+            : {}),
+          ...(settlementEvidence !== undefined
+            && settlementEvidence.kind !== 'not_submitted'
+            && settlementEvidence.digest !== undefined
+            ? { settlementDigest: settlementEvidence.digest }
+            : {}),
+          state: event.state === 'reconciliation_required'
+            || settlementEvidence?.kind === 'unknown'
+            ? 'reconciliation_required'
+            : 'observed',
           effectGeneration: canonical.attempt.effectGeneration,
           amountUnits: amount.units,
           currency: amount.currency,
@@ -434,7 +456,7 @@ function canonicalTerminalOutcome(
     queryReleaseStatus: observation.queryReleaseStatus ?? null,
     paymentAuthorizationStatus: observation.paymentAuthorizationStatus ?? null,
     paymentSubmissionStatus: observation.paymentSubmissionStatus ?? null,
-    settlementStatus: observation.settlementStatus ?? null,
+    settlementEvidence: observation.settlementEvidence ?? null,
     quoteDeliveryStatus: observation.quoteDeliveryStatus ?? null,
   }
   const evidenceDigest = canonicalDigest(digestMaterial)

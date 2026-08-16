@@ -1,5 +1,10 @@
 import { createOpenRouter, type OpenRouterProvider } from '@openrouter/ai-sdk-provider'
-import type { LanguageModel, ProviderMetadata } from 'ai'
+import {
+  addToolInputExamplesMiddleware,
+  wrapLanguageModel,
+  type LanguageModel,
+  type ProviderMetadata,
+} from 'ai'
 
 /**
  * The single AE seam onto the OpenRouter language-model provider.
@@ -85,6 +90,13 @@ export type OpenRouterModelOptions = Readonly<{
   jsonSchemaResponse?: Readonly<Record<string, unknown>>
   /** Budget reasoning tokens instead of suppressing them outright. */
   reasoningEffort?: 'low' | 'medium' | 'high'
+  /**
+   * Request reasoning AND return its content in the response so callers can
+   * surface it. Mirrors `reasoningEffort` but keeps `exclude` off so the SDK
+   * populates `reasoningText`; use for user-facing deliberation, never for
+   * latency-sensitive or deterministic roles.
+   */
+  surfaceReasoning?: 'low' | 'medium' | 'high'
   /** Enable OpenRouter's web plugin, capped at this many results. */
   webSearchMaxResults?: number
   /** Test seam: route the provider's HTTP through a supplied fetch. */
@@ -109,11 +121,14 @@ export function openRouterModel(
     ...(options.reasoningEffort === undefined
       ? {}
       : { reasoning: { effort: options.reasoningEffort, exclude: true } }),
+    ...(options.surfaceReasoning === undefined
+      ? {}
+      : { reasoning: { effort: options.surfaceReasoning } }),
     ...(options.webSearchMaxResults === undefined
       ? {}
       : { plugins: [{ id: 'web', max_results: options.webSearchMaxResults }] }),
   }
-  return openRouterProvider(config, options.fetch)(modelId, {
+  const model = openRouterProvider(config, options.fetch)(modelId, {
     provider: {
       allow_fallbacks: true,
       require_parameters: options.structuredOutputs ?? false,
@@ -121,6 +136,10 @@ export function openRouterModel(
     ...(options.structuredOutputs === true ? { structuredOutputs: { strict: true } } : {}),
     ...(Object.keys(extraBody).length === 0 ? {} : { extraBody }),
     usage: { include: true },
+  })
+  return wrapLanguageModel({
+    model,
+    middleware: addToolInputExamplesMiddleware(),
   })
 }
 

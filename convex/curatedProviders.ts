@@ -13,7 +13,6 @@ import {
   createRegisteredOperationMappingRef,
   CURATED_PROVIDER_PUBLICATIONS,
   EXA_BUSINESS_SLUG,
-  FRANKFURTER_BUSINESS_SLUG,
   parseAdmittedTransportCatalogMetadata,
   decodeConvexPublicationSource,
   preparePublicationDraft,
@@ -60,6 +59,20 @@ const CURATED_PROVIDER_CREDENTIAL_REFS: Readonly<Record<string, string>> = {
   'provider:tavily': 'env:TAVILY_API_KEY',
   'provider:serpapi': 'env:SERPAPI_API_KEY',
   'provider:coingecko': 'env:COINGECKO_DEMO_API_KEY',
+}
+const DEMO_OR_DEVELOPMENT_KEY_MARKER = /(?:^|[-_:])(?:demo|dev)(?:[-_:]|$)/iu
+
+function isDemoOrDevelopmentKeyedPublication(
+  entry: (typeof CURATED_PROVIDER_PUBLICATIONS)[number],
+): boolean {
+  const publication = entry.publication
+  if (!('commercial' in publication) || publication.commercial.authority.kind !== 'provider_connection') {
+    return false
+  }
+  const authority = publication.commercial.authority
+  const credentialRef = CURATED_PROVIDER_CREDENTIAL_REFS[authority.providerRef]
+  return [authority.connectionRef, authority.providerRef, credentialRef]
+    .some((value) => value !== undefined && DEMO_OR_DEVELOPMENT_KEY_MARKER.test(value))
 }
 
 type ConnectionSeed = Readonly<{
@@ -225,10 +238,11 @@ function parseProviderSlug(value: string): Slug {
 async function ensureCuratedProviderConnections(
   ctx: MutationCtx,
   businesses: ReadonlyMap<string, string>,
+  entries: readonly (typeof CURATED_PROVIDER_PUBLICATIONS)[number][],
   now: number,
 ): Promise<void> {
   const seeds = new Map<string, ConnectionSeed>()
-  for (const entry of CURATED_PROVIDER_PUBLICATIONS) {
+  for (const entry of entries) {
     const businessId = businesses.get(entry.businessSlug)
     if (businessId === undefined) throw new Error(`curated_provider_business_missing:${entry.businessSlug}`)
     const seed = curatedConnectionSeed(entry, businessId as Id<'businesses'>)
@@ -281,30 +295,6 @@ async function ensureCuratedProviderConnections(
   }
 }
 
-const PROVIDER_SLUGS: readonly Slug[] = [
-  EXA_BUSINESS_SLUG,
-  FRANKFURTER_BUSINESS_SLUG,
-  // Cluster A (keyless) — 6
-  'open-meteo-forecast',
-  'open-meteo-geocoding',
-  'wikipedia-rest-summary',
-  'thecatapi-image-search',
-  'coingecko-simple-price-keyless',
-  'ipify',
-  // Cluster B (keyed) — 4
-  'openweathermap-current-weather',
-  'tavily-search',
-  'serpapi-google-search',
-  'coingecko-simple-price-demo',
-  // Cluster C (observed x402) — 7
-  'agentic-market-exa-x402',
-  'agentic-market-timezone-x402',
-  'agentic-market-wolframalpha-x402',
-  'agentic-market-coinmarketcap-x402',
-  'agentic-market-flightaware-x402',
-  'agentic-market-bizintel-x402',
-  'agentic-market-tavily-x402',
-].map(parseProviderSlug)
 const LEGACY_EXA_PUBLICATION_REFS = [
   'offering:agentic-market-exa:search:v1',
   'offering:agentic-market-exa:contents:v1',
@@ -336,6 +326,11 @@ export const seed = internalMutation({
     mappingRef: v.string(),
   }),
   handler: async (ctx, args) => {
+    const seedEntries = args.runtimeEnvironment === 'production'
+      ? CURATED_PROVIDER_PUBLICATIONS.filter((entry) => !isDemoOrDevelopmentKeyedPublication(entry))
+      : CURATED_PROVIDER_PUBLICATIONS
+    const providerSlugs = [...new Set(seedEntries.map(({ businessSlug }) => parseProviderSlug(businessSlug)))]
+
     const now = Date.now()
     await ensureCatalogProjectionControlsCommand(ctx.db, {
       actorRef: 'system:dev-seed',
@@ -345,7 +340,7 @@ export const seed = internalMutation({
       evidenceRefs: ['seed:operator-control'],
     }, now)
     const currentPublicationRefs = new Set(
-      CURATED_PROVIDER_PUBLICATIONS.map(({ publication }) => publication.commercial.offering.offeringId),
+      seedEntries.map(({ publication }) => publication.commercial.offering.offeringId),
     )
     const removedPublications = (await ctx.db.query('capabilityPublications')
       .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', 'ae:public').eq('disposition', 'current'))
@@ -364,19 +359,18 @@ export const seed = internalMutation({
       })
     }
     const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter(({ requestedSlug }) => (
-      PROVIDER_SLUGS.some((slug) => slug === parseProviderSlug(requestedSlug))
+      providerSlugs.some((slug) => slug === parseProviderSlug(requestedSlug))
     ))
-    if (fixtures.length !== PROVIDER_SLUGS.length) {
+    if (fixtures.length !== providerSlugs.length) {
       throw new Error('curated_provider_business_fixture_missing')
     }
-
     const seedCatalog = buildDevSeedCatalogState(fixtures)
     const sourceOfferingRefBySlug = new Map(seedCatalog.state.businesses.map((business) => {
       const offering = seedCatalog.state.offerings.find((candidate) => candidate.businessId === business.businessId)
       if (offering === undefined) throw new Error(`curated_provider_catalog_offering_fixture_missing:${business.slug}`)
       return [business.slug, offering.offeringRef] as const
     }))
-    const existing = await Promise.all(PROVIDER_SLUGS.map(async (slug) => (
+    const existing = await Promise.all(providerSlugs.map(async (slug) => (
       await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()
     )))
     const missing = fixtures.filter(({ requestedSlug }) => (
@@ -387,7 +381,7 @@ export const seed = internalMutation({
     }
 
     const businesses = new Map<string, string>()
-    for (const slug of PROVIDER_SLUGS) {
+    for (const slug of providerSlugs) {
       const business = await ctx.db.query('businesses')
         .withIndex('by_slug', (query) => query.eq('slug', slug))
         .unique()
@@ -396,8 +390,7 @@ export const seed = internalMutation({
       }
       businesses.set(slug, business._id)
     }
-    await ensureCuratedProviderConnections(ctx, businesses, now)
-
+    await ensureCuratedProviderConnections(ctx, businesses, seedEntries, now)
 
     // Resolve each curated business's published catalog offering so every seeded
     // capability can carry a `catalog_offering` origin pointing at it (the W1
@@ -408,7 +401,7 @@ export const seed = internalMutation({
       revision: number
       sourceHash: string
     }>()
-    for (const slug of PROVIDER_SLUGS) {
+    for (const slug of providerSlugs) {
       const businessId = businesses.get(slug)
       if (businessId === undefined) throw new Error(`curated_provider_business_missing:${slug}`)
       const sourceOfferingRef = sourceOfferingRefBySlug.get(parseProviderSlug(slug))
@@ -461,7 +454,7 @@ export const seed = internalMutation({
     // for the operation-specific path linked to its publication below.
     const stagedPublications: StagedCuratedPublication[] = []
     const contracts = new Map<string, CapabilityContract>()
-    for (const [index, entry] of CURATED_PROVIDER_PUBLICATIONS.entries()) {
+    for (const [index, entry] of seedEntries.entries()) {
       const businessId = businesses.get(entry.businessSlug)
       if (businessId === undefined) throw new Error(`curated_provider_business_missing:${entry.businessSlug}`)
       const sourceOffering = entry.publication.commercial.offering
@@ -617,7 +610,7 @@ export const seed = internalMutation({
           return {
             kind: 'source_drift_requires_migration' as const,
             sourceDrift: [`${staged.entry.businessSlug}:${staged.prepared.offering.offeringId}:${published.reason}`],
-            businessSlugs: [...PROVIDER_SLUGS],
+            businessSlugs: [...providerSlugs],
             publications: [],
             mappingRef: '',
           }
@@ -679,7 +672,7 @@ export const seed = internalMutation({
     // Rebuild each business after every exact origin has been admitted. The
     // projection can therefore expose one independent endpoint per declared
     // access path without falling back to an offering-level link.
-    for (const slug of PROVIDER_SLUGS) {
+    for (const slug of providerSlugs) {
       const businessId = businesses.get(slug)
       if (businessId === undefined) throw new Error(`curated_provider_endpoint_wiring_missing:${slug}`)
       const support = await deriveBusinessOfferingSupportFromCapabilitySupply(
@@ -710,7 +703,7 @@ export const seed = internalMutation({
       createRegisteredOperationMappingRef,
     )
     const mappingEvidenceRefs = [...new Set(
-      CURATED_PROVIDER_PUBLICATIONS
+      seedEntries
         .flatMap(({ businessSlug, publication }) => businessSlug === EXA_BUSINESS_SLUG ? publication.evidenceRefs : []),
     )]
     const mappingResult = await registerCuratedMapping(ctx, {
@@ -725,7 +718,7 @@ export const seed = internalMutation({
     return {
       kind: 'seeded' as const,
       sourceDrift: [],
-      businessSlugs: [...PROVIDER_SLUGS],
+      businessSlugs: [...providerSlugs],
       publications,
       mappingRef: mappingResult.mappingRef,
     }

@@ -38,7 +38,20 @@ import {
 import type { ExactAmount } from '@/modules/money/public'
 import type { CapabilityTransportAuthority } from './public'
 
-import { decodeX402PaymentRequiredHeader } from './internal/x402-payment-signer'
+import {
+  decodeX402PaymentRequiredHeader,
+  readX402PaymentPayer,
+  readX402PaymentResponseHeader,
+  validateX402PaymentRequired,
+  type X402SettlementEvidence,
+  type X402SettlementResponse,
+  type X402SettlementStatus,
+} from './internal/x402-payment-signer'
+export type {
+  X402SettlementEvidence,
+  X402SettlementResponse,
+  X402SettlementStatus,
+} from './internal/x402-payment-signer'
 import {
   injectHttpJsonCredential,
   parseHttpJsonTransportConfiguration,
@@ -235,6 +248,7 @@ export type X402PaymentAttemptEvent = Readonly<{
   providerEndpoint: string
   custodyRef: string
   authorizationDigest: string
+  settlementEvidence?: X402SettlementEvidence
 }>
 
 export type ProviderConnectionAuthorityLookup = Readonly<{
@@ -290,6 +304,15 @@ export type RouteTransportRuntime = Readonly<{
       maximumSpend: ExactAmount
     }>,
   ) => boolean
+  verifyX402Settlement?: (
+    input: Readonly<{
+      response: X402SettlementResponse
+      requirement: X402Challenge['accepts'][number]
+      paymentSignature: string
+      paymentIdentifier: string
+      challengeDigest: string
+    }>,
+  ) => boolean | Promise<boolean>
   prepareX402PaymentAuthorization?: (
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
   ) => Promise<X402PreparedAuthorization | undefined>
@@ -306,7 +329,7 @@ export type RouteTransportRuntime = Readonly<{
   observeX402PaymentAttempt?: (
     event: X402PaymentAttemptEvent &
       Readonly<{
-        state: 'observed' | 'reconciliation_required'
+        state: 'settled' | 'not_settled' | 'reconciliation_required'
         evidenceRefs: readonly string[]
       }>,
   ) => Promise<void> | void
@@ -325,6 +348,48 @@ export type X402RouteTransportRuntime = RouteTransportRuntime &
       prepared: X402PreparedAuthorization,
     ) => Promise<string | undefined>
   }>
+async function validateX402ProviderAuthority(
+  invocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<string | undefined> {
+  if (invocation.binding.authority.kind !== 'provider_connection')
+    return undefined
+  const validateProviderConnectionAuthority =
+    runtime.validateProviderConnectionAuthority
+  if (validateProviderConnectionAuthority === undefined)
+    return 'connection_authority_validator_unavailable'
+  const authority = invocation.authority
+  if (!isProviderRouteTransportAuthority(authority))
+    return 'connection_authority_snapshot_invalid'
+  let validation: ProviderConnectionAuthorityValidationResult
+  try {
+    validation = await validateProviderConnectionAuthority({
+      connectionRef: invocation.binding.authority.connectionRef,
+      providerRef: invocation.binding.authority.providerRef,
+      adapterId: invocation.binding.adapterId,
+      authorityGeneration: authority.authorityGeneration,
+      authorityDigest: authority.authorityDigest,
+      ...(authority.leaseRef === undefined
+        ? {}
+        : {
+            leaseRef: authority.leaseRef,
+            invocationRef: authority.invocationRef,
+            operationRef: authority.operationRef,
+            grantedScopes: authority.grantedScopes,
+            grantedResources: authority.grantedResources,
+            readinessValidUntil: authority.readinessValidUntil,
+            ...(authority.readinessDigest === undefined
+              ? {}
+              : { readinessDigest: authority.readinessDigest }),
+          }),
+    })
+  } catch {
+    return 'connection_authority_validation_failed'
+  }
+  return validation.kind === 'valid'
+    ? undefined
+    : providerAuthorityFailure(validation.reason)
+}
 
 export type RouteTransportObservation = Readonly<{
   transport: 'http' | 'mcp' | 'x402' | 'unknown'
@@ -334,7 +399,7 @@ export type RouteTransportObservation = Readonly<{
   paymentAuthorizationStatus?: 'not_created' | 'created' | 'unknown'
   paymentSubmissionStatus?:
     'not_submitted' | 'possibly_submitted' | 'observed' | 'unknown'
-  settlementStatus?: 'not_evidenced' | 'provider_asserted' | 'unknown'
+  settlementEvidence?: X402SettlementEvidence
   quoteDeliveryStatus?: 'not_delivered' | 'delivered' | 'unknown'
   requestDigest: string
   responseDigest?: string
@@ -373,6 +438,29 @@ export function parseRouteTransportObservationJson(
     return undefined
   const bounded = (max: number) =>
     z.string().refine((text) => boundedString(text, max))
+  const settlementResponse = z.strictObject({
+    success: z.boolean(),
+    transaction: bounded(4_096),
+    network: bounded(256),
+    amount: bounded(4_096).exactOptional(),
+    payer: bounded(4_096).exactOptional(),
+    errorReason: bounded(4_096).exactOptional(),
+    errorMessage: bounded(4_096).exactOptional(),
+  })
+  const settlementEvidence = z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('not_submitted') }),
+    z.strictObject({
+      kind: z.enum(['settled', 'not_settled']),
+      response: settlementResponse,
+      digest: bounded(200),
+    }),
+    z.strictObject({
+      kind: z.literal('unknown'),
+      reason: bounded(200),
+      response: settlementResponse.exactOptional(),
+      digest: bounded(200).exactOptional(),
+    }),
+  ])
   const observationSchema: z.ZodType<RouteTransportObservation> =
     z.strictObject({
       transport: z.enum(['http', 'mcp', 'x402', 'unknown']),
@@ -387,9 +475,7 @@ export function parseRouteTransportObservationJson(
       paymentSubmissionStatus: z
         .enum(['not_submitted', 'possibly_submitted', 'observed', 'unknown'])
         .exactOptional(),
-      settlementStatus: z
-        .enum(['not_evidenced', 'provider_asserted', 'unknown'])
-        .exactOptional(),
+      settlementEvidence: settlementEvidence.exactOptional(),
       quoteDeliveryStatus: z
         .enum(['not_delivered', 'delivered', 'unknown'])
         .exactOptional(),
@@ -1427,65 +1513,9 @@ async function invokeX402(
   const target = preparedTarget
   if (target === undefined)
     return refused('x402', requestDigest, false, 'input_invalid')
-  if (invocation.binding.authority.kind === 'provider_connection') {
-    const validateProviderConnectionAuthority =
-      runtime.validateProviderConnectionAuthority
-    if (validateProviderConnectionAuthority === undefined) {
-      return refused(
-        'x402',
-        requestDigest,
-        false,
-        'connection_authority_validator_unavailable',
-      )
-    }
-    const authority = invocation.authority
-    if (!isProviderRouteTransportAuthority(authority)) {
-      return refused(
-        'x402',
-        requestDigest,
-        false,
-        'connection_authority_snapshot_invalid',
-      )
-    }
-    let validation: ProviderConnectionAuthorityValidationResult
-    try {
-      validation = await validateProviderConnectionAuthority({
-        connectionRef: invocation.binding.authority.connectionRef,
-        providerRef: invocation.binding.authority.providerRef,
-        adapterId: invocation.binding.adapterId,
-        authorityGeneration: authority.authorityGeneration,
-        authorityDigest: authority.authorityDigest,
-        ...(authority.leaseRef === undefined
-          ? {}
-          : {
-              leaseRef: authority.leaseRef,
-              invocationRef: authority.invocationRef,
-              operationRef: authority.operationRef,
-              grantedScopes: authority.grantedScopes,
-              grantedResources: authority.grantedResources,
-              readinessValidUntil: authority.readinessValidUntil,
-              ...(authority.readinessDigest === undefined
-                ? {}
-                : { readinessDigest: authority.readinessDigest }),
-            }),
-      })
-    } catch {
-      return refused(
-        'x402',
-        requestDigest,
-        false,
-        'connection_authority_validation_failed',
-      )
-    }
-    if (validation.kind !== 'valid') {
-      return refused(
-        'x402',
-        requestDigest,
-        false,
-        providerAuthorityFailure(validation.reason),
-      )
-    }
-  }
+  const authorityFailure = await validateX402ProviderAuthority(invocation, runtime)
+  if (authorityFailure !== undefined)
+    return refused('x402', requestDigest, false, authorityFailure)
   let first: RouteTransportResponse
   try {
     first = await runtime.send(target, {
@@ -1626,6 +1656,9 @@ async function invokeX402(
     return {
       ...refused('x402', requestDigest, false, 'payment_signature_unavailable'),
       paymentChallengeDigest,
+      paymentAuthorizationStatus: 'not_created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     }
   }
   const paymentSignature = await runtime.readX402PaymentAuthorization(
@@ -1635,6 +1668,9 @@ async function invokeX402(
     return {
       ...refused('x402', requestDigest, false, 'payment_signature_unavailable'),
       paymentChallengeDigest,
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
     }
   }
   const sensitiveValues = outboundSensitiveValues(
@@ -1654,6 +1690,16 @@ async function invokeX402(
     providerEndpoint: target.href,
     custodyRef: preparedAuthorization.custodyRef,
     authorizationDigest: preparedAuthorization.authorizationDigest,
+  }
+  const preSendAuthorityFailure = await validateX402ProviderAuthority(invocation, runtime)
+  if (preSendAuthorityFailure !== undefined) {
+    return {
+      ...refused('x402', requestDigest, false, preSendAuthorityFailure),
+      paymentChallengeDigest,
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'not_submitted',
+      settlementEvidence: { kind: 'not_submitted' },
+    }
   }
   const markX402PaymentPossiblySubmitted =
     runtime.markX402PaymentPossiblySubmitted
@@ -1694,20 +1740,51 @@ async function invokeX402(
     const paymentOutputContainsSensitive =
       containsSensitiveValue(paymentProof, sensitiveValues) ||
       containsSensitiveValue(providerReceipt, sensitiveValues)
+    const settlement = paymentOutputContainsSensitive
+      ? { status: 'unknown' as const, failureCode: 'response_output_invalid' }
+      : await x402SettlementCheck(
+          paymentProof.paymentProof,
+          requirement,
+          paymentSignature,
+          authorizationIdentity,
+          runtime.verifyX402Settlement,
+        )
+    const evidenceRefs = paymentOutputContainsSensitive
+      ? []
+      : [
+          ...(paymentProof.paymentProof === undefined
+            ? []
+            : [canonicalDigest(paymentProof.paymentProof)]),
+          ...(providerReceipt.providerReceipt === undefined
+            ? []
+            : [canonicalDigest(providerReceipt.providerReceipt)]),
+        ]
     if (observeX402PaymentAttempt !== undefined) {
       await observeX402PaymentAttempt({
         ...paymentEvent,
-        state: 'observed',
-        evidenceRefs: paymentOutputContainsSensitive
-          ? []
-          : [
-              ...(paymentProof.paymentProof === undefined
-                ? []
-                : [canonicalDigest(paymentProof.paymentProof)]),
-              ...(providerReceipt.providerReceipt === undefined
-                ? []
-                : [canonicalDigest(providerReceipt.providerReceipt)]),
-            ],
+        settlementEvidence:
+          settlement.status === 'unknown'
+            ? {
+                kind: 'unknown',
+                reason:
+                  settlement.failureCode ?? 'payment_settlement_unknown',
+                ...(settlement.response === undefined
+                  ? {}
+                  : { response: settlement.response }),
+                ...(settlement.digest === undefined
+                  ? {}
+                  : { digest: settlement.digest }),
+              }
+            : {
+                kind: settlement.status,
+                response: settlement.response,
+                digest: settlement.digest,
+              },
+        state:
+          settlement.status === 'unknown'
+            ? 'reconciliation_required'
+            : settlement.status,
+        evidenceRefs,
       })
     }
     if (paymentOutputContainsSensitive) {
@@ -1716,7 +1793,58 @@ async function invokeX402(
         paymentChallengeDigest,
         queryReleaseStatus: 'released',
         paymentAuthorizationStatus: 'created',
+        paymentSubmissionStatus: 'observed',
+        settlementEvidence: {
+          kind: 'unknown',
+          reason: 'response_output_invalid',
+        },
         quoteDeliveryStatus: 'unknown',
+      }
+    }
+    if (settlement.status === 'unknown') {
+      return {
+        ...unknown(
+          'x402',
+          requestDigest,
+          true,
+          settlement.failureCode ?? 'payment_settlement_unknown',
+        ),
+        paymentChallengeDigest,
+        queryReleaseStatus: 'released',
+        paymentAuthorizationStatus: 'created',
+        paymentSubmissionStatus: 'observed',
+        settlementEvidence: {
+          kind: 'unknown',
+          reason: settlement.failureCode ?? 'payment_settlement_unknown',
+          ...(settlement.response === undefined
+            ? {}
+            : { response: settlement.response }),
+          ...(settlement.digest === undefined
+            ? {}
+            : { digest: settlement.digest }),
+        },
+        quoteDeliveryStatus: 'unknown',
+        ...paymentProof,
+        ...providerReceipt,
+      }
+    }
+    if (settlement.status === 'not_settled') {
+      return {
+        ...normalized,
+        disposition: 'refused',
+        failureCode: 'payment_not_settled',
+        paymentChallengeDigest,
+        queryReleaseStatus: 'released',
+        paymentAuthorizationStatus: 'created',
+        paymentSubmissionStatus: 'observed',
+        settlementEvidence: {
+          kind: 'not_settled',
+          response: settlement.response,
+          digest: settlement.digest,
+        },
+        quoteDeliveryStatus: 'not_delivered',
+        ...paymentProof,
+        ...providerReceipt,
       }
     }
     return {
@@ -1725,10 +1853,11 @@ async function invokeX402(
       queryReleaseStatus: 'released',
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'observed',
-      settlementStatus:
-        paymentProof.paymentProof === undefined
-          ? 'not_evidenced'
-          : 'provider_asserted',
+      settlementEvidence: {
+        kind: 'settled',
+        response: settlement.response,
+        digest: settlement.digest,
+      },
       quoteDeliveryStatus:
         normalized.outputJson === undefined ? 'unknown' : 'delivered',
       ...paymentProof,
@@ -1738,6 +1867,10 @@ async function invokeX402(
     if (observeX402PaymentAttempt !== undefined) {
       await observeX402PaymentAttempt({
         ...paymentEvent,
+        settlementEvidence: {
+          kind: 'unknown',
+          reason: `network_${errorName(error)}`,
+        },
         state: 'reconciliation_required',
         evidenceRefs: [],
       })
@@ -1748,7 +1881,10 @@ async function invokeX402(
       queryReleaseStatus: 'released',
       paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'possibly_submitted',
-      settlementStatus: 'unknown',
+      settlementEvidence: {
+        kind: 'unknown',
+        reason: `network_${errorName(error)}`,
+      },
       quoteDeliveryStatus: 'unknown',
     }
   }
@@ -2145,29 +2281,31 @@ function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   if (header === null || header.length > MAX_RESPONSE_BYTES * 2)
     return undefined
   try {
-    const parsed: unknown = decodeX402PaymentRequiredHeader(header)
+    const decoded = decodeX402PaymentRequiredHeader(header)
+    const parsed = validateX402PaymentRequired(decoded)
     if (
-      !isRecord(parsed) ||
-      parsed.x402Version !== 2 ||
-      !isRecord(parsed.resource) ||
-      !boundedString(parsed.resource.url, 2_000) ||
-      !Array.isArray(parsed.accepts) ||
-      parsed.accepts.length < 1 ||
-      parsed.accepts.length > 16
+      parsed.x402Version !== 2
+      || !boundedString(parsed.resource.url, 2_000)
+      || !Array.isArray(parsed.accepts)
+      || parsed.accepts.length < 1
+      || parsed.accepts.length > 16
     )
       return undefined
     for (const candidate of parsed.accepts) {
       if (
-        !isRecord(candidate) ||
-        !boundedString(candidate.scheme, 100) ||
-        !boundedString(candidate.network, 100) ||
-        !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(candidate.network) ||
-        typeof candidate.amount !== 'string' ||
-        !/^(?:0|[1-9]\d{0,77})$/.test(candidate.amount) ||
-        !boundedString(candidate.asset, 200) ||
-        !boundedString(candidate.payTo, 200) ||
-        !Number.isSafeInteger(candidate.maxTimeoutSeconds) ||
-        !isRecord(candidate.extra)
+        !isRecord(candidate)
+        || !boundedString(candidate.scheme, 100)
+        || !boundedString(candidate.network, 100)
+        || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(candidate.network)
+        || typeof candidate.amount !== 'string'
+        || !/^(?:0|[1-9]\d{0,77})$/.test(candidate.amount)
+        || !boundedString(candidate.asset, 200)
+        || !boundedString(candidate.payTo, 200)
+        || !Number.isSafeInteger(candidate.maxTimeoutSeconds)
+        || candidate.maxTimeoutSeconds <= 0
+        || candidate.maxTimeoutSeconds > 86_400
+        || !isRecord(candidate.extra)
+        || !isSupportedX402TransferMethod(candidate.extra)
       )
         return undefined
     }
@@ -2175,6 +2313,13 @@ function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   } catch {
     return undefined
   }
+}
+
+function isSupportedX402TransferMethod(
+  extra: Readonly<Record<string, unknown>>,
+): boolean {
+  const method = extra.assetTransferMethod
+  return method === undefined || method === 'eip3009' || method === 'permit2'
 }
 
 function expectedX402Amount(
@@ -2199,6 +2344,72 @@ function expectedX402Amount(
     configuration.assetAmountExponent,
   )
   return tokenAmount?.units === rescaled.units ? rescaled : undefined
+}
+type X402SettlementCheck =
+  | Readonly<{
+      status: 'settled' | 'not_settled'
+      response: X402SettlementResponse
+      digest: string
+    }>
+  | Readonly<{
+      status: 'unknown'
+      response?: X402SettlementResponse
+      digest?: string
+      failureCode: string
+    }>
+
+async function x402SettlementCheck(
+  paymentProof: string | undefined,
+  requirement: X402Challenge['accepts'][number],
+  paymentSignature: string,
+  authorizationIdentity: Readonly<{
+    paymentIdentifier: string
+    challengeDigest: string
+  }>,
+  verifySettlement: RouteTransportRuntime['verifyX402Settlement'],
+): Promise<X402SettlementCheck> {
+  if (paymentProof === undefined)
+    return { status: 'unknown', failureCode: 'payment_settlement_missing' }
+  const response = readX402PaymentResponseHeader(paymentProof)
+  if (response === undefined)
+    return { status: 'unknown', failureCode: 'payment_settlement_malformed' }
+  const digest = canonicalDigest(response as StableHashValue)
+  if (
+    response.network !== requirement.network
+    || (response.amount !== undefined && response.amount !== requirement.amount)
+  )
+    return {
+      status: 'unknown',
+      response,
+      digest,
+      failureCode: 'payment_settlement_mismatch',
+    }
+  let verified = false
+  try {
+    verified = verifySettlement === undefined
+      ? false
+      : await verifySettlement({
+          response,
+          requirement,
+          paymentSignature,
+          ...authorizationIdentity,
+        })
+  } catch {
+    verified = false
+  }
+  if (!verified) {
+    return {
+      status: 'unknown',
+      response,
+      digest,
+      failureCode: 'payment_settlement_unverified',
+    }
+  }
+  return {
+    status: response.success ? 'settled' : 'not_settled',
+    response,
+    digest,
+  }
 }
 
 async function readBoundedText(

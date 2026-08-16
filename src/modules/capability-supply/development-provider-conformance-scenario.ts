@@ -1,3 +1,4 @@
+import { encodePaymentResponseHeader } from '@x402/core/http'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -324,6 +325,7 @@ function paymentRuntime(
         : { kind: 'unavailable' as const, reason: 'stale_generation' as const }
     },
     x402PaymentSigningAvailable: () => true,
+    verifyX402Settlement: async () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         provider: operation.identity.businessId,
@@ -370,7 +372,13 @@ function paymentRuntime(
       return new Response(JSON.stringify(payload), {
         status: 200,
         headers: {
-          'payment-response': `mock:payment-proof:${operation.identity.businessId}`,
+          'payment-response': encodePaymentResponseHeader({
+            success: true,
+            transaction: `development:${operation.identity.businessId}`,
+            network: challenge.accepts[0]!.network,
+            amount: challenge.accepts[0]!.amount,
+            payer: `development:${operation.identity.businessId}`,
+          }),
           'provider-receipt': `mock:receipt:${operation.identity.businessId}`,
         },
       })

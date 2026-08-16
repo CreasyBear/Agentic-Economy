@@ -22,13 +22,13 @@ export const DiscoveryPublicSurfacePaths = [
   OPERATION_MARKET_INSPECT_PLAN_PATH,
 ] as const
 
-/** Public listings remain facts only; Operation invocation has a separate authenticated authority boundary. */
+/** Published business portfolios remain facts only; Operation execution has a separate exact-detail boundary. */
 export const DiscoveryListingBoundaryLine =
-  'Published business facts do not select or invoke an Operation. Search and inspect current Operations anonymously, then use the authenticated Operation gateway for invoke, status, cancel, and reconcile.'
+  'Business facts never select or invoke an Operation. Search and inspect current Operations; use anonymous MCP execution only when exact detail advertises it, otherwise use the authenticated gateway.'
 
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
-  'Anonymous: search, detail, compare, inspect-plan. Authenticated: invoke, status, cancel, reconcile.'
+  'Anonymous reads: search, detail, compare, inspect-plan. Qualified no-key execution: operation.execute through MCP for an exact current free, keyless, read-only Operation. Authenticated: invoke, status, cancel, reconcile.'
 export const OperationMarketIdempotencyLine =
   'The request JSON body field `idempotencyKey` is required for invoke, cancel, and reconcile; choose it once for the intended invocation and retain it.'
 export const OperationMarketInvokeScopeLine = `Required invoke scope: \`${OPERATION_INVOKE_ROUTE_CONTRACT.scope}\`.`
@@ -40,22 +40,23 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
   return [
     '## Operation market loop',
     '',
-    `1. No-install Step 1: \`GET ${canonicalBaseUrl}/.well-known/ucp\` (for example, \`curl -fsSL ${canonicalBaseUrl}/.well-known/ucp\`).`,
-    `2. Search a job anonymously with \`${cli} search "<job>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`.`,
-    `3. Inspect one exact result with \`${cli} inspect "<operationRef>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`; read inputs, terms, price, effects, availability, and evidence.`,
-    `4. Optional anonymous reads: \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_COMPARE_PATH}\`; \`POST ${canonicalBaseUrl}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
-    `5. Run \`${cli} connect --json\` to complete the OAuth device flow or validate the configured key against the gateway.`,
-    `6. Invoke with \`${cli} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`). ${OperationMarketIdempotencyLine}`,
-    `7. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`).`,
-    `8. Cancel with \`${cli} advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${cancel.method} ${canonicalBaseUrl}${cancel.path}\`). Cancellation requires the AE access key \`AE_API_KEY\` plus the request JSON body field \`idempotencyKey\`.`,
-    `9. Reconcile uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.method} ${canonicalBaseUrl}${reconcile.path}\`) using bounded evidence, the same invocation, and the same stable key.`,
+    `1. No-install Step 1: \`GET ${canonicalBaseUrl}/.well-known/ucp\`.`,
+    `2. Search a job anonymously: \`${cli} search "<job>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`.`,
+    `3. Inspect one exact result: \`${cli} inspect "<operationRef>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`.`,
+    `4. Optional anonymous reads: compare (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_COMPARE_PATH}\`) and inspect-plan (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`).`,
+    '5. After exact detail, use MCP `operation.execute` only when current navigation advertises no-auth execute; otherwise connect.',
+    `6. Run \`${cli} connect --json\` for the controlled market path.`,
+    `7. Invoke with \`${cli} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`).`,
+    `8. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`).`,
+    `9. Cancel with \`${cli} advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${cancel.method} ${canonicalBaseUrl}${cancel.path}\`). Cancellation requires the AE access key \`AE_API_KEY\` plus the request JSON body field \`idempotencyKey\`.`,
+    `10. Reconcile uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.method} ${canonicalBaseUrl}${reconcile.path}\`).`,
     '',
     OperationMarketAnonymousBoundaryLine,
     'The AE key identifies the caller. It never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
     '',
-    'Errors use application/problem+json. Retry only when retryable=true, respect Retry-After, and preserve the same operation, input, and idempotency key. Unknown outcomes require status then reconcile, never a new invocation.',
+    'Errors use application/problem+json. Retry only when retryable=true; preserve the operation, input, and key. Unknown outcomes require status then reconcile.',
   ]
 }
 
@@ -95,7 +96,7 @@ export function buildOfferingLlmsTxt(
     `- Human guide: ${canonicalBaseUrl}/for-agents`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
-    'Published businesses (secondary directory):',
+    'Published businesses (business catalog; never Agent Services):',
   ]
   const afterSample = [
     `- full list=${canonicalBaseUrl}/api/businesses`,

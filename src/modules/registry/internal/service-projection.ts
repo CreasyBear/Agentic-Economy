@@ -5,22 +5,18 @@ import type {
   PublicOperationParameter,
 } from '@/modules/capability-supply/public'
 /**
- * Canonical agent-native Service model — ONE Service per business.
+ * Published-business portfolio wire model retained by `/api/v1/services`.
  *
- * Mirrors agentic.market's `Service.endpoints[]` shape: a business is
- * represented as a single Service carrying identity + merchandising fields
- * (`ae.offerings[]`) and a FLAT, agent-native `endpoints[]` across every offering.
+ * One record represents one published business and rolls up its offerings and
+ * external endpoint links. It is not an Agent Service: that term is reserved
+ * for one admitted Market Operation. `provider` links the business Provider;
+ * endpoint provenance describes Publication authority and source mode unless
+ * a separately verified Publisher identity exists.
  *
- * The canonical Service is produced by `projectServiceFromBusinessDto`
- * (src/modules/registry/internal/services-api-projection.ts), which derives it
- * from the public business catalog DTO — the same `BusinessSupplyProjection`
- * the `/api/businesses` view reads. This file owns the canonical TYPES so there
- * is exactly one wire shape and one producer, never a fork.
- *
- * The endpoint `operationRef`, flat `parameters[]`, and decimal `pricing{scheme}`
- * are injected only when the capability-supply projection proves a single
- * operation linkage for the offering. Without that proof, the endpoint remains
- * un-enriched and the fields stay absent rather than being fabricated.
+ * The projection is produced by `projectServiceFromBusinessDto`
+ * (`services-api-projection.ts`) from the same public business catalog DTO used
+ * by `/api/businesses`. Exact Operation links are additive and appear only when
+ * capability supply proves a single current linkage.
  */
 
 export type ServiceEndpointAuthenticationDto = PublicOperationAuthentication

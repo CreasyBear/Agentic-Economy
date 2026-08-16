@@ -274,7 +274,7 @@ const serviceEndpointAuthenticationOutputSchema = z.union([
 ])
 
 const serviceEndpointOutputSchema = z.strictObject({
-  url: z.string().describe('Callable external endpoint URL'),
+  url: z.string().describe('Published external endpoint link'),
   description: z.string().describe('Published endpoint description'),
   method: z.string().optional().describe('HTTP method when published'),
   pricing: z
@@ -289,7 +289,7 @@ const serviceEndpointOutputSchema = z.strictObject({
     .optional()
     .describe('Decimal endpoint price when published'),
   providerName: z.string().optional().describe('Provider name only when linked supply is provider-owned'),
-  serviceName: z.string().describe('Published service name'),
+  serviceName: z.string().describe('Published business name in the legacy wire field'),
   tags: z.array(z.string()).describe('Published endpoint tags'),
   parameters: z
     .array(
@@ -310,18 +310,18 @@ const serviceEndpointOutputSchema = z.strictObject({
     .strictObject({
       operationRef: z.string().regex(/^operation:v1:[0-9a-f]{64}$/).optional().describe('Canonical execution read link when linked to a capability operation'),
       offeringRef: z.string().describe('Published offering the endpoint belongs to'),
-      provenance: z.enum(['business_declared', 'publicly_observed']).describe('How the endpoint was published'),
-      access: z.literal('external').describe('Published external provider endpoint access'),
+      provenance: z.enum(['business_declared', 'publicly_observed']).describe('Publication authority: declared by the business or observed publicly'),
+      access: z.literal('external').describe('Published external Provider endpoint access'),
       authentication: serviceEndpointAuthenticationOutputSchema.describe('Public authentication classification without secret values'),
       execution: z.enum(['answer_tool', 'request_route', 'catalog_only']).describe('Public execution channel'),
-      authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Authoritative source classification when linked'),
-      sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']).optional().describe('Transport source classification when linked'),
+      authorityMode: z.enum(['provider_owned', 'ae_curated_external', 'third_party_gateway', 'observed_external']).optional().describe('Publication authority mode when linked'),
+      sourceKind: z.enum(['ae_envelope', 'openapi_http', 'mcp', 'agent_plugin_mcp', 'x402']).optional().describe('Publication source mode when linked'),
       authenticationSummary: z.string().optional().describe('Published authentication requirement'),
       settlementSupport: z
         .enum(['executable', 'catalog_only', 'unpriced'])
         .describe('Whether the published price can be settled by the execution path'),
     })
-    .describe('AE execution and provenance metadata'),
+    .describe('AE execution and Publication provenance metadata'),
 })
 
 const servicePriceSummaryOutputSchema = z.strictObject({
@@ -333,22 +333,22 @@ const servicePriceSummaryOutputSchema = z.strictObject({
 })
 
 const serviceOutputSchema = z.strictObject({
-  id: z.string().describe('Published service identifier'),
-  name: z.string().describe('Published service name'),
-  description: z.string().optional().describe('Published service description'),
-  domain: z.string().optional().describe('Published service domain'),
-  provider: z.string().optional().describe('Published service provider'),
-  providerUrl: z.string().optional().describe('Published service provider URL'),
-  category: z.string().describe('Published service category'),
-  networks: z.array(z.string()).describe('Payment networks supported by the service'),
-  enriched: z.boolean().describe('Whether at least one endpoint is linked to a capability operation'),
-  integrationType: z.enum(['1P', '3P']).describe('First-party or third-party integration grouping'),
-  isNew: z.boolean().optional().describe('Whether the service is newly published'),
-  endpoints: z.array(serviceEndpointOutputSchema).describe('Flat endpoints published by the service'),
+  id: z.string().describe('Published business identifier'),
+  name: z.string().describe('Published business name'),
+  description: z.string().optional().describe('Published business portfolio description'),
+  domain: z.string().optional().describe('Published Provider domain'),
+  provider: z.string().optional().describe('Published business Provider'),
+  providerUrl: z.string().optional().describe('Published business Provider URL'),
+  category: z.string().describe('Published business category'),
+  networks: z.array(z.string()).describe('Payment networks represented across linked Operations'),
+  enriched: z.boolean().describe('Whether at least one endpoint is linked to an admitted Market Operation'),
+  integrationType: z.enum(['1P', '3P']).describe('Provider-owned or third-party publication grouping'),
+  isNew: z.boolean().optional().describe('Whether the business portfolio is newly published'),
+  endpoints: z.array(serviceEndpointOutputSchema).describe('Flat external endpoint links published by the business portfolio'),
   priceSummary: servicePriceSummaryOutputSchema.optional().describe('Aggregate published decimal price summary'),
-  serviceName: z.string().describe('Published service name'),
-  tags: z.array(z.string()).describe('Published service tags'),
-  iconUrl: z.string().optional().describe('Published service icon URL'),
+  serviceName: z.string().describe('Published business name in the legacy wire field'),
+  tags: z.array(z.string()).describe('Published business portfolio tags'),
+  iconUrl: z.string().optional().describe('Published business icon URL'),
   ae: z
     .strictObject({
       trustTier: z.enum(TrustTierValues).describe('Published business trust tier'),
@@ -364,26 +364,26 @@ const serviceOutputSchema = z.strictObject({
       offerings: z.array(serviceOfferingOutputSchema).describe('Local merchandising and inquiry listing view'),
       links: z
         .strictObject({
-          business: z.string().describe('Business detail API link'),
-          manifest: z.string().describe('Business manifest link'),
+          business: z.string().describe('Provider business detail link'),
+          manifest: z.string().describe('Publication manifest link'),
         })
         .describe('Related public discovery links'),
     })
-    .describe('AE-local merchandising and provenance metadata'),
+    .describe('AE-local business portfolio and Publication provenance metadata'),
 }) as z.ZodType<ServiceDto>
 
 const servicesPageOutputSchema = z.strictObject({
-  kind: z.literal('ok').describe('Successful services response'),
-  schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
-  services: z.array(serviceOutputSchema).describe('One Service per published business with flat endpoints'),
+  kind: z.literal('ok').describe('Successful published business portfolio response'),
+  schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Published business portfolio response schema version'),
+  services: z.array(serviceOutputSchema).describe('One published business portfolio per business'),
   isDone: z.boolean(),
   continueCursor: z.string(),
 }) as z.ZodType<PublicServicesApiPage>
 const servicesSearchPageOutputSchema = z.strictObject({
-  kind: z.literal('ok').describe('Successful services response'),
-  schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
+  kind: z.literal('ok').describe('Successful published business portfolio response'),
+  schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Published business portfolio response schema version'),
   query: z.string().optional().describe('Echo of the supplied search query'),
-  services: z.array(serviceOutputSchema).describe('Matching Services grouped one per published business'),
+  services: z.array(serviceOutputSchema).describe('Matching published business portfolios'),
   pagination: z
     .strictObject({
       cursor: z.string().optional().describe('Cursor used for this page'),
@@ -397,12 +397,12 @@ const servicesSearchPageOutputSchema = z.strictObject({
 
 const servicesDetailOutputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
-    kind: z.literal('found').describe('Service found'),
-    schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Services response schema version'),
-    service: serviceOutputSchema.describe('Canonical Service projection'),
+    kind: z.literal('found').describe('Published business portfolio found'),
+    schemaVersion: z.literal(PublicServicesApiSchemaVersion).describe('Published business portfolio response schema version'),
+    service: serviceOutputSchema.describe('Published business portfolio projection'),
   }),
   z.strictObject({
-    kind: z.literal('not_found').describe('Service was not found'),
+    kind: z.literal('not_found').describe('Published business was not found'),
     code: z.literal('service_not_found'),
     reason: z.string(),
   }),
@@ -604,13 +604,13 @@ export const registrySearchAction = defineAction({
 
 export const registryServicesListAction = defineAction({
   id: 'registry.services_list',
-  name: 'List published services',
+  name: 'List published business portfolios',
   summary:
-    'List each published business as one agent-native Service with flat endpoints across its offerings. ' +
-    'This is a read-only projection of the same public business supply used by /api/businesses.',
+    'List one public portfolio for each published business, including its offerings and external endpoint links. ' +
+    'This is a read-only projection of the same public business catalog used by /api/businesses; it does not return Agent Services.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
+    'Returns one published business portfolio per business; offering facts remain under ae.offerings[].',
   ],
   schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
   outputSchema: servicesPageOutputSchema,
@@ -645,13 +645,13 @@ export const registryServicesListAction = defineAction({
 
 export const registryServicesSearchAction = defineAction({
   id: 'registry.services_search',
-  name: 'Search published services',
+  name: 'Search published business portfolios',
   summary:
-    'Search published businesses as agent-native Services with flat endpoints across their offerings. ' +
-    'This is a read-only projection of the same public business supply used by /api/businesses/search.',
+    'Search the public business catalog and return each matching business with its offering portfolio and external endpoint links. ' +
+    'This is the same public business supply used by /api/businesses/search; it does not search Agent Services or select a Market Operation.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns one Service per business; AE-local offering facts remain under ae.offerings[].',
+    'Returns one published business portfolio per business; offering facts remain under ae.offerings[].',
   ],
   schema: registrySearchInputSchema,
   outputSchema: servicesSearchPageOutputSchema,
@@ -700,14 +700,14 @@ export const registryServicesSearchAction = defineAction({
 })
 export const registryServicesDetailAction = defineAction({
   id: 'registry.services_detail',
-  name: 'Read a published service',
+  name: 'Read a published business portfolio',
   summary:
-    'Read one canonical agent-native Service by service id. ' +
-    'The detail response is the same Service projection returned by the list and search routes.',
+    'Read one published business portfolio by business slug. ' +
+    'The detail response is the same portfolio projection returned by the list and search routes, not an Agent Service.',
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
-    'Returns only the public Service projection for the requested business slug.',
-    'A not_found result means no public listing exists for that service id; do not invent provider details.',
+    'Returns only the public business portfolio for the requested business slug.',
+    'A not_found result means no public business exists for that slug; do not invent Provider details.',
   ],
   schema: registryDetailInputSchema,
   outputSchema: servicesDetailOutputSchema,

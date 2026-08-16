@@ -1,30 +1,27 @@
-import { z, type ZodType } from 'zod'
-import type { ActionSurface } from '@/modules/common/action'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PublicOperationNavigationRelation } from '@/modules/capability-supply/public'
+import { describeActionForAgent, type ActionSurface } from '@/modules/common/action'
+import {
+  registryOperationsCompareContract,
+  registryOperationsDetailContract,
+  registryOperationsInspectPlanContract,
+  registryOperationsSearchContract,
+} from './operation-action-contracts'
 import {
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
   OPERATION_MARKET_INSPECT_PLAN_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from './operation-paths'
-import {
-  operationCompareInputSchema,
-  operationDetailInputSchema,
-  operationInspectPlanInputSchema,
-  operationSearchInputSchema,
-} from '@/modules/capability-supply/operation-schemas'
 
 export {
   OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
   OPERATION_MARKET_INSPECT_PLAN_PATH,
   OPERATION_MARKET_SEARCH_PATH,
-}
-
+} from './operation-paths'
 
 type OperationMarketRelation = 'search' | 'detail' | 'compare' | 'inspect_plan'
-
 type OperationMarketActionEntry = Readonly<{
   relation: OperationMarketRelation
   pathTemplate: string
@@ -38,25 +35,27 @@ type OperationMarketActionEntry = Readonly<{
 function operationMarketActionEntry(
   relation: OperationMarketRelation,
   pathTemplate: string,
-  actionId: string,
-  schema: ZodType,
+  action: Parameters<typeof describeActionForAgent>[0],
 ): OperationMarketActionEntry {
+  const inputSchema = describeActionForAgent(action).inputJsonSchema
   return {
     relation,
     pathTemplate,
     method: 'POST',
-    actionId,
+    actionId: action.id,
     authentication: 'none',
-    inputSchema: z.toJSONSchema(schema) as Readonly<Record<string, JsonValue>>,
-    surfaces: ['http', 'agentJson', 'answerThread', 'mcp'],
+    ...(inputSchema === undefined
+      ? {}
+      : { inputSchema: inputSchema as Readonly<Record<string, JsonValue>> }),
+    surfaces: action.surfaces,
   }
 }
 
 export const OPERATION_MARKET_ACTION_ENTRIES: readonly OperationMarketActionEntry[] = Object.freeze([
-  operationMarketActionEntry('search', OPERATION_MARKET_SEARCH_PATH, 'registry.operations.search', operationSearchInputSchema),
-  operationMarketActionEntry('detail', OPERATION_MARKET_DETAIL_PATH, 'registry.operations.detail', operationDetailInputSchema),
-  operationMarketActionEntry('compare', OPERATION_MARKET_COMPARE_PATH, 'registry.operations.compare', operationCompareInputSchema),
-  operationMarketActionEntry('inspect_plan', OPERATION_MARKET_INSPECT_PLAN_PATH, 'registry.operations.inspectPlan', operationInspectPlanInputSchema),
+  operationMarketActionEntry('search', OPERATION_MARKET_SEARCH_PATH, registryOperationsSearchContract),
+  operationMarketActionEntry('detail', OPERATION_MARKET_DETAIL_PATH, registryOperationsDetailContract),
+  operationMarketActionEntry('compare', OPERATION_MARKET_COMPARE_PATH, registryOperationsCompareContract),
+  operationMarketActionEntry('inspect_plan', OPERATION_MARKET_INSPECT_PLAN_PATH, registryOperationsInspectPlanContract),
 ])
 
 export function operationMarketNavigation(relation: OperationMarketRelation): PublicOperationNavigationRelation {
