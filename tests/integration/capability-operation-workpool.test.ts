@@ -16,7 +16,7 @@ import {
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
-import { accountRefForOperator } from '@/modules/money/public'
+import { accountRefForOwner } from '@/modules/money/public'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
@@ -153,9 +153,9 @@ async function seedPrincipal(
   if (recordedGrant.kind !== 'recorded') throw new Error(`grant fixture failed: ${recordedGrant.kind}`)
   await backend.run(async (ctx) => {
     await ctx.db.insert('moneyAccounts', {
-      accountRef: accountRefForOperator(principal.principalId, 'USD'),
+      accountRef: accountRefForOwner(principal.ownerId, 'USD'),
       accountKind: 'operator_credit',
-      principalId: principal.principalId,
+      accountId: principal.ownerId,
       currency: 'USD',
       exponent: 2,
       balanceUnits: '0',

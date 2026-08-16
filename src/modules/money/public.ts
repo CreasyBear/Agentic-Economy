@@ -101,7 +101,7 @@ export type PayoutState =
 export type MoneyAccount = Readonly<{
   accountRef: string;
   accountKind: AccountKind;
-  principalId?: string;
+  accountId?: string;
   businessId?: string;
   balance: ExactAmount;
   version: number;
@@ -134,6 +134,7 @@ export type MoneyTransaction = Readonly<{
   idempotencyKey: string;
   inputDigest: string;
   principalId: string;
+  accountId?: string;
   currency: string;
   exponent: number;
   state: TransactionState;
@@ -147,6 +148,7 @@ export type MoneyTransaction = Readonly<{
 export type MoneyUsageEvent = Readonly<{
   usageRef: string;
   principalId: string;
+  accountId?: string;
   credentialId: string;
   serviceRef: string;
   offeringRef: string;
@@ -371,6 +373,7 @@ export type PayoutStatusQuery = Readonly<{
 
 export type CreditAccountView = Readonly<{
   principalId: string;
+  accountId: string;
   balance: ExactAmount;
   pendingTopup?: Readonly<{
     amount: ExactAmount;
@@ -592,6 +595,7 @@ export {
   markOutcomeUnknown,
   reconcileCharge,
   accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
 } from "./internal/ledger";

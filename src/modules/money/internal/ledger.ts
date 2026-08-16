@@ -40,6 +40,7 @@ export type BeginTransactionInput = Readonly<{
   idempotencyKey: string
   inputDigest: string
   principalId: string
+  accountId?: string
   currency: string
   expectedAccountVersion: number
   now: number
@@ -50,6 +51,7 @@ export type BeginTransactionInput = Readonly<{
 export type TopupInput = Readonly<{
   transaction: BeginTransactionInput
   accountRef: string
+  accountId: string
   amount: ExactAmount
   sourceDigest: string
   evidenceRefs: readonly string[]
@@ -64,6 +66,7 @@ export type PaidChargeInput = Readonly<{
   rakeConfig: RakeConfig
   priceDigest: string
   principalId: string
+  accountId: string
   credentialId: string
   serviceRef: string
   offeringRef: string
@@ -116,6 +119,10 @@ export function usageSummaryKey(principalId: string, credentialId: string, curre
   return `${principalId}\u0000${credentialId}\u0000${currency}`
 }
 
+export function accountRefForOwner(ownerId: string, currency: string): string {
+  return `owner:${ownerId}:${currency}`
+}
+
 export function accountRefForOperator(principalId: string, currency: string): string {
   return `clerk_api_key:${principalId.replace(/^clerk_api_key:/, '')}:${currency}`
 }
@@ -135,7 +142,7 @@ export function validateChargeAccounts(input: Readonly<{
   operatorAccountRef: string
   providerAccountRef: string
   rakeAccountRef: string
-  principalId: string
+  accountId: string
   businessId: string
   currency: string
 }>): MoneyRefusal | undefined {
@@ -145,11 +152,11 @@ export function validateChargeAccounts(input: Readonly<{
     operator.accountKind !== 'operator_credit'
     || provider.accountKind !== 'provider_earnings'
     || rake.accountKind !== 'ae_rake'
-    || operator.principalId !== input.principalId
+    || operator.accountId !== input.accountId
     || operator.businessId !== undefined
     || provider.businessId !== input.businessId
-    || provider.principalId !== undefined
-    || rake.principalId !== undefined
+    || provider.accountId !== undefined
+    || rake.accountId !== undefined
     || rake.businessId !== undefined
     || operator.accountRef !== input.operatorAccountRef
     || provider.accountRef !== input.providerAccountRef
@@ -180,7 +187,7 @@ export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>)
   if (account === undefined || account.accountKind !== 'operator_credit' || account.balance.currency !== input.amount.currency) {
     return { state: input.state, result: refusalResult('currency_mismatch', false) }
   }
-  if (account.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
+  if (account.accountId !== input.accountId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
   const amount = rescaleExactAmount(input.amount, account.balance.exponent)
   if (amount === undefined) return { state: input.state, result: refusalResult('currency_mismatch', false) }
   const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
@@ -228,7 +235,7 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
     operatorAccountRef: input.operatorAccountRef,
     providerAccountRef: input.providerAccountRef,
     rakeAccountRef: input.rakeAccountRef,
-    principalId: input.transaction.principalId,
+    accountId: input.accountId,
     businessId: input.businessId,
     currency: input.transaction.currency,
   })
@@ -439,6 +446,7 @@ function transactionFrom(input: BeginTransactionInput, kind: EntryType, state: '
     idempotencyKey: input.idempotencyKey,
     inputDigest: input.inputDigest,
     principalId: input.principalId,
+    ...(input.accountId === undefined ? {} : { accountId: input.accountId }),
     currency: input.currency,
     exponent,
     state,
@@ -467,6 +475,7 @@ function createUsage(input: PaidChargeInput, chargeState: MoneyUsageEvent['charg
   return {
     usageRef: `${input.invocationRef}:${input.attemptRef}:${input.operationKey}`,
     principalId: input.principalId,
+    accountId: input.accountId,
     credentialId: input.credentialId,
     serviceRef: input.serviceRef,
     offeringRef: input.offeringRef,

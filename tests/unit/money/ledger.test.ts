@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
-  accountRefForOperator,
   applyTopup,
   appendRefundReversal,
   authorizePaidCharge,
@@ -15,8 +15,9 @@ import {
 } from '../../../src/modules/money/internal/ledger'
 import type { ExactAmount } from '../../../src/modules/money/public'
 
+const ownerId = 'owner-ledger-1'
 const accounts: readonly MoneyAccount[] = [
-  { accountRef: accountRefForOperator('key-1', 'USD'), accountKind: 'operator_credit', principalId: 'clerk_api_key:key-1', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
+  { accountRef: accountRefForOwner(ownerId, 'USD'), accountKind: 'operator_credit', accountId: ownerId, balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
   { accountRef: accountRefForProvider('business-1', 'USD'), accountKind: 'provider_earnings', businessId: 'business-1', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
   { accountRef: accountRefForRake('USD'), accountKind: 'ae_rake', balance: amount('USD', '0', 2), version: 0, state: 'active', createdAt: 1, updatedAt: 1 },
 ]
@@ -41,7 +42,8 @@ describe('money append-only ledger', () => {
     const topup = applyTopup({
       state: initial,
       transaction: { ...transaction(), transactionRef: 'topup-1', kind: 'topup', idempotencyKey: 'topup-key', inputDigest: 'topup-input', expectedAccountVersion: 0 },
-      accountRef: accountRefForOperator('key-1', 'USD'),
+      accountRef: accountRefForOwner(ownerId, 'USD'),
+      accountId: ownerId,
       amount: amount('USD', '1000', 2),
       sourceDigest: 'source-topup',
       evidenceRefs: ['stripe:event:1'],
@@ -50,13 +52,14 @@ describe('money append-only ledger', () => {
     const charged = authorizePaidCharge({
       state: topup.state,
       transaction: transaction(),
-      operatorAccountRef: accountRefForOperator('key-1', 'USD'),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
       providerAccountRef: accountRefForProvider('business-1', 'USD'),
       rakeAccountRef: accountRefForRake('USD'),
       grossAmount: amount('USD', '500', 2),
       rakeConfig: { rakeBps: 1_000 },
       priceDigest: 'price-1',
       principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
       credentialId: 'key-1',
       serviceRef: 'service-1',
       offeringRef: 'offering-1',
@@ -78,7 +81,7 @@ describe('money append-only ledger', () => {
       rake: amount('USD', '50', 2),
     })
     expect(charged.state.entries.filter((entry) => entry.transactionRef === 'charge-1')).toHaveLength(3)
-    expect(charged.state.accounts.get(accountRefForOperator('key-1', 'USD'))?.balance).toEqual(amount('USD', '500', 2))
+    expect(charged.state.accounts.get(accountRefForOwner(ownerId, 'USD'))?.balance).toEqual(amount('USD', '500', 2))
     expect(charged.state.accounts.get(accountRefForProvider('business-1', 'USD'))?.balance).toEqual(amount('USD', '450', 2))
     expect(charged.state.accounts.get(accountRefForRake('USD'))?.balance).toEqual(amount('USD', '50', 2))
   })
@@ -87,13 +90,14 @@ describe('money append-only ledger', () => {
     const result = authorizePaidCharge({
       state: createLedgerState(accounts),
       transaction: transaction(),
-      operatorAccountRef: accountRefForOperator('key-1', 'USD'),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
       providerAccountRef: accountRefForProvider('business-1', 'USD'),
       rakeAccountRef: accountRefForRake('USD'),
       grossAmount: amount('USD', '500', 2),
       rakeConfig: { rakeBps: 1_000 },
       priceDigest: 'price-1',
       principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
       credentialId: 'key-1',
       serviceRef: 'service-1',
       offeringRef: 'offering-1',
@@ -122,7 +126,8 @@ describe('money append-only ledger', () => {
     const topup = applyTopup({
       state: initial,
       transaction: { ...transaction(), transactionRef: 'topup-1', kind: 'topup', idempotencyKey: 'topup-key', inputDigest: 'topup-input', expectedAccountVersion: 0 },
-      accountRef: accountRefForOperator('key-1', 'USD'),
+      accountRef: accountRefForOwner(ownerId, 'USD'),
+      accountId: ownerId,
       amount: amount('USD', '1000', 2),
       sourceDigest: 'source-topup',
       evidenceRefs: ['stripe:event:1'],
@@ -130,13 +135,14 @@ describe('money append-only ledger', () => {
     const chargeInput = {
       state: topup.state,
       transaction: transaction(),
-      operatorAccountRef: accountRefForOperator('key-1', 'USD'),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
       providerAccountRef: accountRefForProvider('business-1', 'USD'),
       rakeAccountRef: accountRefForRake('USD'),
       grossAmount: amount('USD', '500', 2),
       rakeConfig: { rakeBps: 1_000 },
       priceDigest: 'price-1',
       principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
       credentialId: 'key-1',
       serviceRef: 'service-1',
       offeringRef: 'offering-1',
@@ -155,7 +161,7 @@ describe('money append-only ledger', () => {
     expect(replay.state.entries).toHaveLength(charge.state.entries.length)
     expect(replay.state.transactions).toHaveLength(charge.state.transactions.length)
     expect(replay.state.usageEvents).toHaveLength(charge.state.usageEvents.length)
-    expect(replay.state.accounts.get(accountRefForOperator('key-1', 'USD'))?.balance).toEqual(amount('USD', '500', 2))
+    expect(replay.state.accounts.get(accountRefForOwner(ownerId, 'USD'))?.balance).toEqual(amount('USD', '500', 2))
     expect(authorizePaidCharge({
       ...chargeInput,
       state: charge.state,
@@ -195,13 +201,14 @@ describe('money append-only ledger', () => {
     const result = authorizePaidCharge({
       state: createLedgerState(accounts),
       transaction: transaction(),
-      operatorAccountRef: accountRefForOperator('key-1', 'USD'),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
       providerAccountRef: accountRefForProvider('business-1', 'USD'),
       rakeAccountRef: accountRefForRake('USD'),
       grossAmount: amount('USD', '500', 2),
       rakeConfig: { rakeBps: 1_000 },
       priceDigest: 'price-1',
       principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
       credentialId: 'key-1',
       serviceRef: 'service-1',
       offeringRef: 'offering-1',

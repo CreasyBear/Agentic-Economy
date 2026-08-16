@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { readAgentAccessMoneyReadback } from '@/modules/customer-request/agent-access-console'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   createInMemoryMoneyQueryPort,
   createLedgerState,
   type MoneyAccount,
   type MoneyUsageEvent,
 } from '@/modules/money/public'
+
+const ownerId = 'owner-console-1'
 
 const key: AgentAccessKeyInventoryItem = {
   keyId: 'key_console_1',
@@ -22,9 +24,9 @@ const key: AgentAccessKeyInventoryItem = {
 }
 
 const account: MoneyAccount = {
-  accountRef: accountRefForOperator(key.keyId, 'USD'),
+  accountRef: accountRefForOwner(ownerId, 'USD'),
   accountKind: 'operator_credit',
-  principalId: `clerk_api_key:${key.keyId}`,
+  accountId: ownerId,
   balance: { currency: 'USD', units: '2500', exponent: 2 },
   version: 1,
   state: 'active',
@@ -35,6 +37,7 @@ const account: MoneyAccount = {
 const usage: MoneyUsageEvent = {
   usageRef: 'usage-console-1',
   principalId: `clerk_api_key:${key.keyId}`,
+  accountId: ownerId,
   credentialId: key.keyId,
   serviceRef: 'service:quote',
   offeringRef: 'offering:quote',
@@ -52,7 +55,10 @@ const usage: MoneyUsageEvent = {
 describe('agent access money seam', () => {
   it('reads exact key balance, bounded activity, and per-key spend from the public query port', async () => {
     const ledger = { ...createLedgerState([account]), usageEvents: [usage], usageSummaries: new Map([[`${usage.principalId}\u0000${usage.credentialId}\u0000${usage.amount.currency}`, { principalId: usage.principalId, credentialId: usage.credentialId, callCount: 1, paidCallCount: 1, freeCallCount: 0, grossSpend: { currency: 'USD', units: '500', exponent: 2 }, states: ['paid'] as const }]]) }
-    const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({ ledger }))
+    const [result] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
+      ledger,
+      resolveOwnerId: (principalId) => principalId === `clerk_api_key:${key.keyId}` ? ownerId : undefined,
+    }))
 
     expect(result).toMatchObject({
       principalId: 'clerk_api_key:key_console_1',

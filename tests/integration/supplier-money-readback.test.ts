@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
 } from '@/modules/money/public'
@@ -32,6 +32,7 @@ describe('supplier money readback', () => {
       'supplier-earnings',
     )
     const businessRef = String(businessId)
+    const ownerAccountId = 'user_supplier-earnings'
     const principalId = `principal:${businessRef}`
     const credentialId = `credential:${businessRef}`
     const transactionRef = `transaction:${businessRef}:charge`
@@ -48,7 +49,7 @@ describe('supplier money readback', () => {
           Doc<'moneyAccounts'>,
           | 'accountRef'
           | 'accountKind'
-          | 'principalId'
+          | 'accountId'
           | 'businessId'
           | 'balanceUnits'
         >,
@@ -63,9 +64,9 @@ describe('supplier money readback', () => {
           ...row,
         })
       await account({
-        accountRef: accountRefForOperator(principalId, 'USD'),
+        accountRef: accountRefForOwner(ownerAccountId, 'USD'),
         accountKind: 'operator_credit',
-        principalId,
+        accountId: ownerAccountId,
         balanceUnits: '0',
       })
       await account({
@@ -163,7 +164,7 @@ describe('supplier money readback', () => {
         })
       await entry({
         entryRef: `${transactionRef}:charge`,
-        accountRef: accountRefForOperator(principalId, 'USD'),
+        accountRef: accountRefForOwner(ownerAccountId, 'USD'),
         entryType: 'charge',
         direction: 'debit',
         amountUnits: '1000',

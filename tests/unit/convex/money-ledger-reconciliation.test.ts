@@ -8,7 +8,7 @@ import {
   reconcileInvocationCharge,
 } from '../../../convex/moneyLedger'
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
 } from '@/modules/money/public'
@@ -132,6 +132,7 @@ const reconcileHandler = reconcileExport._handler
 const completionHandler = completionExport._handler
 const invocationRef = 'operation-invocation:test-money'
 const principalId = 'principal:test-money'
+const ownerId = 'owner:test-money'
 const credentialId = 'credential:test-money'
 const attemptRef = `operation-attempt:${invocationRef}:1`
 const transactionRef = `operation-money:${invocationRef}:${attemptRef}:1`
@@ -483,9 +484,9 @@ function seedAuthorizationFixture(db: MemoryDb): void {
     })
   account({
     _id: 'authorization:operator',
-    accountRef: accountRefForOperator(principalId, 'USD'),
+    accountRef: accountRefForOwner(ownerId, 'USD'),
     accountKind: 'operator_credit',
-    principalId,
+    accountId: ownerId,
     balanceUnits: '1000',
   })
   account({
@@ -539,7 +540,7 @@ function authorizationArgs(): Record<string, unknown> {
   return {
     principalId,
     amount: authorizationAmount,
-    operatorAccountRef: accountRefForOperator(principalId, 'USD'),
+    operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
     providerAccountRef: accountRefForProvider('business:money', 'USD'),
     rakeAccountRef: accountRefForRake('USD'),
     transactionRef,
@@ -624,9 +625,9 @@ function seedPaidCharge(
     })
   account({
     _id: 'account:operator',
-    accountRef: accountRefForOperator(principalId, 'USD'),
+    accountRef: accountRefForOwner(ownerId, 'USD'),
     accountKind: 'operator_credit',
-    principalId,
+    accountId: ownerId,
     balanceUnits: '0',
   })
   account({
@@ -654,7 +655,7 @@ function seedPaidCharge(
   entry({
     _id: 'entry:charge',
     entryRef: `${transactionRef}:charge`,
-    accountRef: accountRefForOperator(principalId, 'USD'),
+    accountRef: accountRefForOwner(ownerId, 'USD'),
     entryType: 'charge',
     direction: 'debit',
     amountUnits: '100',
@@ -731,9 +732,9 @@ describe('money authorization account version', () => {
     const db = new MemoryDb()
     db.seed('moneyAccounts', {
       _id: 'account:operator-version',
-      accountRef: accountRefForOperator('principal:version', 'USD'),
+      accountRef: accountRefForOwner('owner:version', 'USD'),
       accountKind: 'operator_credit',
-      principalId: 'principal:version',
+      accountId: 'owner:version',
       currency: 'USD',
       exponent: 2,
       balanceUnits: '1000',
@@ -746,13 +747,13 @@ describe('money authorization account version', () => {
     await expect(
       accountVersionHandler(
         { db },
-        { principalId: 'principal:version', currency: 'USD' },
+        { ownerId: 'owner:version', currency: 'USD' },
       ),
     ).resolves.toBe(1)
     await expect(
       accountVersionHandler(
         { db },
-        { principalId: 'principal:other', currency: 'USD' },
+        { ownerId: 'owner:other', currency: 'USD' },
       ),
     ).resolves.toBeNull()
   })

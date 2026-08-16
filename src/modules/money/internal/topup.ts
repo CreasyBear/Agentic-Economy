@@ -107,7 +107,7 @@ export async function beginCreditTopup(input: Readonly<{
   if (
     account === undefined
     || account.accountKind !== 'operator_credit'
-    || account.principalId !== input.principalId
+    || account.accountId === undefined
     || account.balance.currency !== input.amount.currency
   ) {
     return { state: input.state, ledgerState: input.ledgerState, result: refusal('billing_identity_missing', false) }
@@ -208,7 +208,10 @@ export function applyCreditTopup(input: Readonly<{
     return { state: input.state, ledgerState: input.ledgerState, result: { kind: 'accepted', chargeState: 'paid', amount: command.amount, priceDigest: command.inputDigest, transactionRef: command.appliedTransactionRef } }
   }
   const beforeAccount = input.ledgerState.accounts.get(command.accountRef)
-  const applied = applyTopup({ state: input.ledgerState, transaction: input.transaction, accountRef: command.accountRef, amount: command.amount, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs })
+  if (beforeAccount === undefined || beforeAccount.accountId === undefined) {
+    return { state: input.state, ledgerState: input.ledgerState, result: refusal('credit_topup_outcome_unknown', false) }
+  }
+  const applied = applyTopup({ state: input.ledgerState, transaction: input.transaction, accountRef: command.accountRef, accountId: beforeAccount.accountId, amount: command.amount, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs })
   if (applied.result.kind === 'refused') return { state: input.state, ledgerState: input.ledgerState, result: applied.result }
   const afterAccount = applied.state.accounts.get(command.accountRef)
   if (beforeAccount === undefined || afterAccount === undefined) return { state: input.state, ledgerState: input.ledgerState, result: refusal('credit_topup_outcome_unknown', false) }

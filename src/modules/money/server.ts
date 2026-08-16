@@ -27,7 +27,6 @@ import {
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 import {
-  accountRefForOperator,
   accountRefForProvider,
   compareExactAmounts,
   exactAmountSchema,
@@ -286,24 +285,20 @@ export async function beginCreditTopupThroughSource(
     runtime.gatePolicy ?? LIVE_MONEY_GATE_POLICY,
   )
   if (gate.kind === 'refused') return refusal(gate.code, false)
-  const accountRef = accountRefForOperator(
-    input.principalId,
-    input.amount.currency,
-  )
-  if (input.accountRef !== accountRef)
+  if (!input.accountRef.startsWith('owner:'))
     return refusal('billing_identity_mismatch', false)
   const provider = createCreditTopupProvider(runtime)
   if (isMoneyRefusal(provider)) return provider
   const commandRef = canonicalDigest({
     format: 'money-topup-command:v1',
     principalId: input.principalId,
-    accountRef,
+    accountRef: input.accountRef,
     idempotencyKey: input.idempotencyKey,
   })
   const inputDigest = canonicalDigest({
     format: 'money-topup-input:v1',
     principalId: input.principalId,
-    accountRef,
+    accountRef: input.accountRef,
     amount: input.amount,
     idempotencyKey: input.idempotencyKey,
   })
@@ -312,7 +307,6 @@ export async function beginCreditTopupThroughSource(
   const correlationId = commandRef
   const commandArgs = {
     ...input,
-    accountRef,
     commandRef,
     inputDigest,
     successReturnRef,

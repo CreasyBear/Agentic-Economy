@@ -66,7 +66,7 @@ import {
   KeyUsageViewSchema,
   ProviderEarningsViewSchema,
   StrictLivePayoutReceiptSchema,
-  accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   addExactAmounts,
   calculateCreditTopupFinancials,
@@ -3330,7 +3330,7 @@ function createHostedRuntimeFromEnvironment(
     options.env.AE_GATEWAY_SMOKE_CURRENCY ?? "USD",
     "AE_GATEWAY_SMOKE_CURRENCY",
   );
-  const accountRef = accountRefForOperator(principalId, currency);
+  const accountRef = accountRefForOwner(ownerUserId, currency);
   const topupIdempotencyKey = `${options.runId}:topup`;
   const payoutRef = required(
     options.env.AE_GATEWAY_SMOKE_PAYOUT_REF,

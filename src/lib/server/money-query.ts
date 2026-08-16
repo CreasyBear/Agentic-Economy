@@ -43,6 +43,7 @@ export function createConvexMoneyQueryPort(): MoneyQueryPort {
       if (result.kind !== 'ok') throw new MoneyQueryError(result.code)
       return {
         principalId: result.principalId,
+        accountId: result.accountId,
         balance: result.balance,
         ...(result.pendingTopup === undefined ? {} : { pendingTopup: result.pendingTopup }),
         autoRecharge: {

@@ -21,7 +21,7 @@ import {
   readCreditTopupCommand,
   reserveCreditTopup,
 } from '../../../convex/moneyLedger'
-import { accountRefForOperator } from '@/modules/money/public'
+import { accountRefForOwner } from '@/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
 type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
@@ -117,7 +117,8 @@ const read = (readCreditTopupCommand as unknown as HandlerExport)._handler
 const apply = (applyCreditTopup as unknown as HandlerExport)._handler
 
 const principalId = 'principal:topup'
-const accountRef = accountRefForOperator(principalId, 'USD')
+const ownerId = 'owner:topup'
+const accountRef = accountRefForOwner(ownerId, 'USD')
 const commandRef = 'command:topup'
 const idempotencyKey = 'topup:idempotency'
 const sourceArgs = {
@@ -125,14 +126,32 @@ const sourceArgs = {
   correlationId: commandRef,
 }
 const identity = {
-  getUserIdentity: async () => ({ tokenIdentifier: principalId }),
+  getUserIdentity: async () => ({ subject: ownerId, tokenIdentifier: principalId }),
+}
+
+function seedPrincipal(db: MemoryDb): void {
+  db.insert('agentAccessPrincipals', {
+    principalId,
+    ownerId,
+    credentialId: 'credential:topup',
+    applicationRef: 'agentic-economy',
+    environment: 'sandbox',
+    scopes: [],
+    authorityMode: 'inspect_only',
+    grantGeneration: 1,
+    policyDigest: 'policy:topup',
+    lifecycle: 'active',
+    recordedAt: 1,
+    lastSeenAt: 1,
+  })
 }
 
 function seedAccount(db: MemoryDb): void {
+  seedPrincipal(db)
   db.insert('moneyAccounts', {
     accountRef,
     accountKind: 'operator_credit',
-    principalId,
+    accountId: ownerId,
     currency: 'USD',
     exponent: 2,
     balanceUnits: '0',
@@ -280,6 +299,7 @@ describe('Convex credit topup recovery', () => {
   })
   it('materializes the canonical operator account once before the first top-up', async () => {
     const db = new MemoryDb()
+    seedPrincipal(db)
     const context = { db, auth: identity }
 
     await expect(reserve(context, reserveArgs())).resolves.toMatchObject({
@@ -295,7 +315,7 @@ describe('Convex credit topup recovery', () => {
       expect.objectContaining({
         accountRef,
         accountKind: 'operator_credit',
-        principalId,
+        accountId: ownerId,
         currency: 'USD',
         exponent: 2,
         balanceUnits: '0',

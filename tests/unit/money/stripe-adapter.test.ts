@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   applyCreditTopup,
   beginCreditTopup,
   createLedgerState,
@@ -17,10 +17,12 @@ import {
   readCreditPaymentThroughSource,
 } from '../../../src/modules/money/server'
 
+const ownerId = 'owner-stripe-1'
+
 const account: MoneyAccount = {
-  accountRef: accountRefForOperator('key-1', 'USD'),
+  accountRef: accountRefForOwner(ownerId, 'USD'),
   accountKind: 'operator_credit',
-  principalId: 'clerk_api_key:key-1',
+  accountId: ownerId,
   balance: amount('USD', '0', 2),
   version: 0,
   state: 'active',

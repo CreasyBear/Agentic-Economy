@@ -11,7 +11,7 @@ export const moneyTables = {
   moneyAccounts: defineTable({
     accountRef: identifier,
     accountKind: v.union(v.literal('operator_credit'), v.literal('provider_earnings'), v.literal('ae_rake')),
-    principalId: v.optional(identifier),
+    accountId: v.optional(identifier),
     businessId: v.optional(identifier),
     currency,
     exponent,
@@ -22,7 +22,7 @@ export const moneyTables = {
     updatedAt: v.number(),
   })
     .index('by_accountRef', ['accountRef'])
-    .index('by_principalId_and_currency', ['principalId', 'currency'])
+    .index('by_accountId_and_currency', ['accountId', 'currency'])
     .index('by_businessId_and_currency', ['businessId', 'currency']),
   moneyLedgerEntries: defineTable({
     entryRef: identifier,
@@ -53,6 +53,7 @@ export const moneyTables = {
     idempotencyKey: identifier,
     inputDigest: identifier,
     principalId: identifier,
+    accountId: v.optional(identifier),
     currency,
     credentialId: v.optional(identifier),
     budgetPolicyRef: v.optional(identifier),
@@ -80,6 +81,7 @@ export const moneyTables = {
   moneyUsageEvents: defineTable({
     usageRef: identifier,
     principalId: identifier,
+    accountId: v.optional(identifier),
     credentialId: identifier,
     currency,
     exponent,
@@ -101,6 +103,7 @@ export const moneyTables = {
     .index('by_usageRef', ['usageRef']),
   moneyCredentialBudgetStates: defineTable({
     principalId: identifier,
+    accountId: v.optional(identifier),
     credentialId: identifier,
     budgetPolicyRef: identifier,
     environment: v.union(v.literal('sandbox'), v.literal('production')),

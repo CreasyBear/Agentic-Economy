@@ -22,7 +22,7 @@ import {
   reserveCreditTopup,
 } from '../../../convex/moneyLedger'
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   type CreditPaymentRequest,
 } from '../../../src/modules/money/public'
 import {
@@ -125,10 +125,11 @@ const config: StripeMoneyProviderConfig = {
   publishableKey: 'pk_test_topup',
   mode: 'test',
 }
+const ownerId = 'owner-topup-1'
 const request: CreditPaymentRequest = {
   commandRef: 'command-topup-1',
   principalId: 'principal-topup-1',
-  accountRef: accountRefForOperator('principal-topup-1', 'USD'),
+  accountRef: accountRefForOwner(ownerId, 'USD'),
   amount: { currency: 'USD', units: '1050', exponent: 2 },
   idempotencyKey: 'topup-idempotency-1',
   inputDigest: 'sha256:input-topup-1',
@@ -140,17 +141,32 @@ const sourceArgs = {
   correlationId: 'money:test:1',
 }
 const identity = {
-  getUserIdentity: async () => ({ tokenIdentifier: request.principalId }),
+  getUserIdentity: async () => ({ subject: ownerId, tokenIdentifier: request.principalId }),
 }
 
 describe('Stripe Checkout top-up lifecycle', () => {
   it('credits once across open/unpaid creation, signed paid webhook, expanded readback, replay, and drift refusal', async () => {
     const db = new MemoryDb()
+    db.seed('agentAccessPrincipals', {
+      _id: 'agentAccessPrincipals:1',
+      principalId: request.principalId,
+      ownerId,
+      credentialId: 'credential-topup-1',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox',
+      scopes: [],
+      authorityMode: 'inspect_only',
+      grantGeneration: 1,
+      policyDigest: 'policy:topup',
+      lifecycle: 'active',
+      recordedAt: 1,
+      lastSeenAt: 1,
+    })
     db.seed('moneyAccounts', {
       _id: 'moneyAccounts:1',
       accountRef: request.accountRef,
       accountKind: 'operator_credit',
-      principalId: request.principalId,
+      accountId: ownerId,
       currency: 'USD',
       exponent: 2,
       balanceUnits: '0',

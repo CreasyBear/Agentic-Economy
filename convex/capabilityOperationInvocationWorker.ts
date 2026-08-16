@@ -56,7 +56,7 @@ import {
   type EconomicRail,
 } from '@/modules/capability-supply/server'
 import {
-  accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
   exactAmountSchema,
@@ -661,7 +661,7 @@ export const run = internalAction({
     let moneyResult: WorkerAcceptedCharge | undefined
     if (economicRail === 'ae_internal') {
       const operatorAccountVersion = await ctx.runQuery(internal.moneyLedger.readOperatorAccountVersion, {
-        principalId: principal.principalId,
+        ownerId: principal.ownerId,
         currency: authorityMaximumSpend.currency,
       })
       if (operatorAccountVersion === null) {
@@ -672,7 +672,7 @@ export const run = internalAction({
       const authorizedCharge = await ctx.runMutation(internal.moneyLedger.authorizeInvocationCharge, {
         principalId: principal.principalId,
         amount: authorityMaximumSpend,
-        operatorAccountRef: accountRefForOperator(principal.principalId, authorityMaximumSpend.currency),
+        operatorAccountRef: accountRefForOwner(principal.ownerId, authorityMaximumSpend.currency),
         providerAccountRef: accountRefForProvider(operation.identity.businessId, authorityMaximumSpend.currency),
         rakeAccountRef: accountRefForRake(authorityMaximumSpend.currency),
         transactionRef: `operation-money:${dispatch.invocationRef}:${durableAttemptRef}:1`,

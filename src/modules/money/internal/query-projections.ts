@@ -21,12 +21,15 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
   ledger: LedgerState
   topups?: TopupState
   payoutStatuses?: readonly PayoutStatusView[]
+  resolveOwnerId?: (principalId: string) => string | undefined
 }>): MoneyQueryPort {
   const topups = input.topups
   const payoutStatuses = input.payoutStatuses ?? []
   return {
     readCreditAccount: async (query: CreditAccountQuery): Promise<CreditAccountView> => {
-      const account = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'operator_credit' && item.principalId === query.principalId && item.balance.currency === query.currency)
+      const ownerId = input.resolveOwnerId?.(query.principalId)
+      if (input.resolveOwnerId !== undefined && ownerId === undefined) throw new Error('billing_identity_missing')
+      const account = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'operator_credit' && item.balance.currency === query.currency && (ownerId === undefined || item.accountId === ownerId))
       if (account === undefined) throw new Error('billing_identity_missing')
       const pending = topups?.commands.find((command) => command.principalId === query.principalId && command.amount.currency === query.currency && (command.state === 'pending' || command.state === 'outcome_unknown'))
       const accountAutoRecharge = topups?.autoRecharge.get(account.accountRef)
@@ -34,6 +37,7 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
       const zero = { currency: account.balance.currency, units: '0', exponent: account.balance.exponent }
       return {
         principalId: query.principalId,
+        accountId: account.accountId ?? ownerId ?? query.principalId,
         balance: account.balance,
         ...(pending === undefined ? {} : { pendingTopup: { amount: pending.amount, state: pending.state === 'pending' ? 'pending' as const : 'outcome_unknown' as const, ...(pending.externalRef === undefined ? {} : { externalRef: pending.externalRef }) } }),
         autoRecharge: {

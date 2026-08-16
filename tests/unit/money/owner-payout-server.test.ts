@@ -7,7 +7,7 @@ import type * as TanstackReactStartModule from '@tanstack/react-start'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   LIVE_MONEY_GATE_POLICY,
-  accountRefForOperator,
+  accountRefForOwner,
 } from '@/modules/money/public'
 
 const sourceMocks = vi.hoisted(() => ({
@@ -191,7 +191,7 @@ describe('credit top-up reservation', () => {
     const result = await beginCreditTopupThroughSource(
       {
         principalId: 'clerk_api_key:key-1',
-        accountRef: accountRefForOperator('clerk_api_key:key-1', 'USD'),
+        accountRef: accountRefForOwner('owner-1', 'USD'),
         amount: { currency: 'USD', units: '1000', exponent: 2 },
         idempotencyKey: 'topup:test-1',
       },
@@ -214,7 +214,7 @@ describe('credit top-up reservation', () => {
 describe('credit top-up outcome recovery', () => {
   const input = {
     principalId: 'clerk_api_key:key-1',
-    accountRef: accountRefForOperator('clerk_api_key:key-1', 'USD'),
+    accountRef: accountRefForOwner('owner-1', 'USD'),
     amount: { currency: 'USD', units: '1000', exponent: 2 },
     idempotencyKey: 'topup:unknown-1',
   } as const

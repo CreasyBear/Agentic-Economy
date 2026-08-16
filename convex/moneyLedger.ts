@@ -31,7 +31,7 @@ import {
 import type { StableHashValue } from '../src/modules/common/stable-hash'
 import {
   admitCredentialBudget,
-  accountRefForOperator,
+  accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
   addExactAmounts,
@@ -403,6 +403,7 @@ async function readBudgetRows(
   ctx: Pick<MutationCtx, 'db'>,
   input: Readonly<{
     principalId: string
+    accountId: string
     credentialId: string
     environment: 'sandbox' | 'production'
     generation: number
@@ -474,6 +475,7 @@ async function readBudgetRows(
       _id: '' as Doc<'moneyCredentialBudgetStates'>['_id'],
       _creationTime: 0,
       principalId: input.principalId,
+      accountId: input.accountId,
       credentialId: input.credentialId,
       budgetPolicyRef: input.budgetPolicyRef,
       environment: input.environment,
@@ -550,6 +552,7 @@ async function writeBudgetUsage(
     if (row._creationTime === 0)
       await ctx.db.insert('moneyCredentialBudgetStates', {
         principalId: row.principalId,
+        ...(row.accountId === undefined ? {} : { accountId: row.accountId }),
         credentialId: row.credentialId,
         budgetPolicyRef: row.budgetPolicyRef,
         environment: row.environment,
@@ -573,6 +576,7 @@ async function writeBudgetUsage(
   if (rows.concurrency._creationTime === 0)
     await ctx.db.insert('moneyCredentialBudgetStates', {
       principalId: rows.concurrency.principalId,
+      ...(rows.concurrency.accountId === undefined ? {} : { accountId: rows.concurrency.accountId }),
       credentialId: rows.concurrency.credentialId,
       budgetPolicyRef: rows.concurrency.budgetPolicyRef,
       environment: rows.concurrency.environment,
@@ -589,6 +593,7 @@ async function reserveCredentialBudgetInTransaction(
   ctx: MutationCtx,
   input: Readonly<{
     principalId: string
+    accountId: string
     credentialId: string
     grantRef: string
     generation: number
@@ -684,6 +689,7 @@ async function releaseOrSettleCredentialBudget(
   if (amount === undefined) return false
   const rows = await readBudgetRows(ctx, {
     principalId: transaction.principalId,
+    accountId: transaction.accountId ?? transaction.principalId,
     credentialId: transaction.credentialId,
     generation: transaction.budgetGeneration,
     environment: transaction.budgetEnvironment,
@@ -826,8 +832,16 @@ async function transitionExternalSpendBudget(
 ): Promise<boolean> {
   const amount = amountFromParts(row.currency, row.amountUnits, row.exponent)
   if (amount === undefined) return false
+  const spendPrincipal = await ctx.db
+    .query('agentAccessPrincipals')
+    .withIndex('by_principalId', (query) =>
+      query.eq('principalId', row.principalId),
+    )
+    .unique()
+  if (spendPrincipal === null) return false
   const rows = await readBudgetRows(ctx, {
     principalId: row.principalId,
+    accountId: spendPrincipal.ownerId,
     credentialId: row.credentialId,
     generation: row.grantGeneration,
     environment: row.environment,
@@ -875,7 +889,7 @@ function accountFromRow(row: Doc<'moneyAccounts'>): MoneyAccount | undefined {
   return {
     accountRef: row.accountRef,
     accountKind: row.accountKind,
-    ...(row.principalId === undefined ? {} : { principalId: row.principalId }),
+    ...(row.accountId === undefined ? {} : { accountId: row.accountId }),
     ...(row.businessId === undefined ? {} : { businessId: row.businessId }),
     balance,
     version: row.version,
@@ -887,7 +901,7 @@ function accountFromRow(row: Doc<'moneyAccounts'>): MoneyAccount | undefined {
 type CanonicalMoneyAccountInput =
   | Readonly<{
       accountKind: 'operator_credit'
-      principalId: string
+      accountId: string
       currency: string
       exponent: number
       now: number
@@ -908,7 +922,7 @@ type CanonicalMoneyAccountInput =
 
 function canonicalMoneyAccountRef(input: CanonicalMoneyAccountInput): string {
   if (input.accountKind === 'operator_credit')
-    return accountRefForOperator(input.principalId, input.currency)
+    return accountRefForOwner(input.accountId, input.currency)
   if (input.accountKind === 'provider_earnings')
     return accountRefForProvider(input.businessId, input.currency)
   return accountRefForRake(input.currency)
@@ -925,10 +939,10 @@ function canonicalMoneyAccountMatches(
     row.currency === input.currency &&
     row.exponent === input.exponent &&
     (input.accountKind === 'operator_credit'
-      ? row.principalId === input.principalId && row.businessId === undefined
+      ? row.accountId === input.accountId && row.businessId === undefined
       : input.accountKind === 'provider_earnings'
-        ? row.businessId === input.businessId && row.principalId === undefined
-        : row.principalId === undefined && row.businessId === undefined)
+        ? row.businessId === input.businessId && row.accountId === undefined
+        : row.accountId === undefined && row.businessId === undefined)
   )
 }
 
@@ -949,7 +963,7 @@ async function ensureCanonicalMoneyAccount(
     accountRef,
     accountKind: input.accountKind,
     ...(input.accountKind === 'operator_credit'
-      ? { principalId: input.principalId }
+      ? { accountId: input.accountId }
       : {}),
     ...(input.accountKind === 'provider_earnings'
       ? { businessId: input.businessId }
@@ -1487,7 +1501,7 @@ type ReconcileChargeResult =
 
 export const readOperatorAccountVersion = internalQuery({
   args: {
-    principalId: identifier,
+    ownerId: identifier,
     currency: identifier,
   },
   handler: async (ctx, args) => {
@@ -1496,18 +1510,18 @@ export const readOperatorAccountVersion = internalQuery({
       .withIndex('by_accountRef', (q) =>
         q.eq(
           'accountRef',
-          accountRefForOperator(args.principalId, args.currency),
+          accountRefForOwner(args.ownerId, args.currency),
         ),
       )
       .unique()
     if (
       account === null ||
       account.accountKind !== 'operator_credit' ||
-      account.principalId !== args.principalId ||
+      account.accountId !== args.ownerId ||
       account.businessId !== undefined ||
       account.currency !== args.currency ||
       account.accountRef !==
-        accountRefForOperator(args.principalId, args.currency)
+        accountRefForOwner(args.ownerId, args.currency)
     )
       return null
     return account.version
@@ -1561,8 +1575,18 @@ export const reserveExternalInvocationSpend = internalMutation({
     if (!await activeExternalSpendGrant(ctx, identity, observedAt)) {
       return externalSpendRefusal('external_spend_grant_invalid')
     }
+    const spendPrincipal = await ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (query) =>
+        query.eq('principalId', identity.principalId),
+      )
+      .unique()
+    if (spendPrincipal === null) {
+      return externalSpendRefusal('external_spend_grant_invalid')
+    }
     const budgetReservation = await reserveCredentialBudgetInTransaction(ctx, {
       principalId: identity.principalId,
+      accountId: spendPrincipal.ownerId,
       credentialId: identity.credentialId,
       grantRef: identity.grantRef,
       generation: identity.grantGeneration,
@@ -2272,8 +2296,9 @@ export const authorizeInvocationCharge = internalMutation({
     const durableSourceDigest = operation.materialDigest
     const durableEvidenceRefs = [...operation.readiness.evidenceRefs]
     const currency = amount.currency
-    const expectedOperatorRef = accountRefForOperator(
-      durablePrincipalId,
+    const ownerAccountId = principal.ownerId
+    const expectedOperatorRef = accountRefForOwner(
+      ownerAccountId,
       currency,
     )
     const expectedProviderRef = accountRefForProvider(durableBusinessId, currency)
@@ -2313,7 +2338,7 @@ export const authorizeInvocationCharge = internalMutation({
       operatorExisting ??
       (await ensureCanonicalMoneyAccount(ctx, {
         accountKind: 'operator_credit',
-        principalId: durablePrincipalId,
+        accountId: ownerAccountId,
         currency,
         exponent: amount.exponent,
         now: args.observedAt,
@@ -2348,7 +2373,7 @@ export const authorizeInvocationCharge = internalMutation({
       operatorAccountRef: expectedOperatorRef,
       providerAccountRef: expectedProviderRef,
       rakeAccountRef: expectedRakeRef,
-      principalId: durablePrincipalId,
+      accountId: ownerAccountId,
       businessId: durableBusinessId,
       currency,
     })
@@ -2679,6 +2704,7 @@ export const authorizeInvocationCharge = internalMutation({
         }
       const budgetReservation = await reserveCredentialBudgetInTransaction(ctx, {
         principalId: durablePrincipalId,
+        accountId: ownerAccountId,
         credentialId: invocation.credentialId,
         grantRef: args.credentialBudgetGrantRef,
         generation: args.credentialBudgetGeneration,
@@ -2718,6 +2744,7 @@ export const authorizeInvocationCharge = internalMutation({
         idempotencyKey: expectedTransactionRef,
         inputDigest: invocation.inputDigest,
         principalId: durablePrincipalId,
+        accountId: ownerAccountId,
         currency,
         amountUnits: '0',
         exponent: grossAmount.exponent,
@@ -2730,6 +2757,7 @@ export const authorizeInvocationCharge = internalMutation({
       await insertMoneyUsageEvent(ctx, {
         usageRef,
         principalId: durablePrincipalId,
+        accountId: ownerAccountId,
         credentialId: invocation.credentialId,
         currency,
         exponent: grossAmount.exponent,
@@ -2805,6 +2833,7 @@ export const authorizeInvocationCharge = internalMutation({
         await insertMoneyUsageEvent(ctx, {
           usageRef,
           principalId: durablePrincipalId,
+          accountId: ownerAccountId,
           credentialId: invocation.credentialId,
           currency,
           exponent: grossAmount.exponent,
@@ -2846,6 +2875,7 @@ export const authorizeInvocationCharge = internalMutation({
       }
     const budgetReservation = await reserveCredentialBudgetInTransaction(ctx, {
       principalId: durablePrincipalId,
+      accountId: ownerAccountId,
       credentialId: invocation.credentialId,
       grantRef: args.credentialBudgetGrantRef,
       generation: args.credentialBudgetGeneration,
@@ -2868,6 +2898,7 @@ export const authorizeInvocationCharge = internalMutation({
       idempotencyKey: expectedTransactionRef,
       inputDigest: invocation.inputDigest,
       principalId: durablePrincipalId,
+      accountId: ownerAccountId,
       currency,
       amountUnits: operatorAmount.units,
       exponent: grossAmount.exponent,
@@ -2940,6 +2971,7 @@ export const authorizeInvocationCharge = internalMutation({
     await insertMoneyUsageEvent(ctx, {
       usageRef,
       principalId: durablePrincipalId,
+      accountId: ownerAccountId,
       credentialId: invocation.credentialId,
       currency,
       exponent: grossAmount.exponent,
@@ -3337,11 +3369,18 @@ export const reserveCreditTopup = mutation({
           .unique(),
     )
     if (!ownerAllowed) return refusedTopup('billing_identity_missing', false)
+    const principal = await ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (q) =>
+        q.eq('principalId', args.principalId),
+      )
+      .unique()
+    if (principal === null) return refusedTopup('billing_identity_missing', false)
     const requestedAmount = readAmount(args.amount)
     if (requestedAmount === undefined)
       return refusedTopup('credit_topup_amount_invalid', false)
-    const expectedAccountRef = accountRefForOperator(
-      args.principalId,
+    const expectedAccountRef = accountRefForOwner(
+      principal.ownerId,
       requestedAmount.currency,
     )
     if (args.accountRef !== expectedAccountRef)
@@ -3356,7 +3395,7 @@ export const reserveCreditTopup = mutation({
         existing,
         {
           accountKind: 'operator_credit',
-          principalId: args.principalId,
+          accountId: principal.ownerId,
           currency: existing.currency,
           exponent: existing.exponent,
           now: 0,
@@ -3380,7 +3419,7 @@ export const reserveCreditTopup = mutation({
       existing ??
       (await ensureCanonicalMoneyAccount(ctx, {
         accountKind: 'operator_credit',
-        principalId: args.principalId,
+        accountId: principal.ownerId,
         currency: financials.amount.currency,
         exponent: financials.amount.exponent,
         now,
@@ -3930,10 +3969,18 @@ export const applyCreditTopup = internalMutation({
       accountDomain === undefined ||
       accountAmount === undefined ||
       account.accountKind !== 'operator_credit' ||
-      account.principalId !== command.principalId ||
+      account.accountId === undefined ||
       account.currency !== command.currency
     )
       return refusedTopup('currency_mismatch', false)
+    const principal = await ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (q) =>
+        q.eq('principalId', command.principalId),
+      )
+      .unique()
+    if (principal === null || principal.ownerId !== account.accountId)
+      return refusedTopup('billing_identity_mismatch', false)
     const nextBalance = addExactAmounts(accountDomain.balance, accountAmount)
     if (nextBalance === undefined)
       return refusedTopup('credit_topup_amount_invalid', false)
@@ -3947,6 +3994,7 @@ export const applyCreditTopup = internalMutation({
       idempotencyKey: command.idempotencyKey,
       inputDigest: command.inputDigest,
       principalId: command.principalId,
+      accountId: account.accountId,
       currency: accountAmount.currency,
       amountUnits: accountAmount.units,
       exponent: accountAmount.exponent,
@@ -6951,10 +6999,21 @@ export const readCreditAccount = query({
         kind: 'refused' as const,
         code: 'billing_identity_missing' as const,
       }
+    const principal = await ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (q) =>
+        q.eq('principalId', args.principalId),
+      )
+      .unique()
+    if (principal === null)
+      return {
+        kind: 'refused' as const,
+        code: 'billing_identity_missing' as const,
+      }
     const account = await ctx.db
       .query('moneyAccounts')
-      .withIndex('by_principalId_and_currency', (q) =>
-        q.eq('principalId', args.principalId).eq('currency', args.currency),
+      .withIndex('by_accountId_and_currency', (q) =>
+        q.eq('accountId', principal.ownerId).eq('currency', args.currency),
       )
       .unique()
     const accountDomain = account === null ? undefined : accountFromRow(account)
@@ -6972,6 +7031,7 @@ export const readCreditAccount = query({
     return {
       kind: 'ok' as const,
       principalId: args.principalId,
+      accountId: principal.ownerId,
       balance: accountDomain.balance,
       autoRecharge: { enabled: false, threshold, rechargeAmount: threshold },
       evidence: 'source' as const,
@@ -7084,6 +7144,18 @@ export const readKeyUsage = query({
         code: 'billing_identity_missing',
         items: [] as const,
       }
+    const principal = await ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (q) =>
+        q.eq('principalId', args.principalId),
+      )
+      .unique()
+    if (principal === null)
+      return {
+        kind: 'refused' as const,
+        code: 'billing_identity_missing' as const,
+        items: [] as const,
+      }
     const summary = await ctx.db
       .query('moneyCredentialUsageSummaries')
       .withIndex('by_principalId_and_credentialId_and_currency', (q) =>
@@ -7095,8 +7167,8 @@ export const readKeyUsage = query({
       .unique()
     const account = await ctx.db
       .query('moneyAccounts')
-      .withIndex('by_principalId_and_currency', (q) =>
-        q.eq('principalId', args.principalId).eq('currency', args.currency),
+      .withIndex('by_accountId_and_currency', (q) =>
+        q.eq('accountId', principal.ownerId).eq('currency', args.currency),
       )
       .unique()
     const exponent = summary?.exponent ?? account?.exponent
