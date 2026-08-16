@@ -9,12 +9,21 @@ import { fetch as guardedFetch, type Agent } from 'undici'
 
 import type { X402EvmReceipt } from './x402-settlement-verifier'
 
+/**
+ * A JSON-RPC result is opaque by protocol, so the envelope — not the payload —
+ * carries the contract: `unavailable` covers transport, bound, and parse
+ * failures alike and never masquerades as a legitimate null result.
+ */
+type GuardedRpcResult =
+  | Readonly<{ kind: 'result'; value: unknown }>
+  | Readonly<{ kind: 'unavailable' }>
+
 async function readGuardedRpcResult(
   target: URL,
   dispatcher: Agent,
   method: string,
   params: readonly unknown[],
-): Promise<unknown> {
+): Promise<GuardedRpcResult> {
   const response = await guardedFetch(target, {
     method: 'POST',
     dispatcher,
@@ -22,11 +31,12 @@ async function readGuardedRpcResult(
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
     signal: AbortSignal.timeout(5_000),
   })
-  if (!response.ok) return undefined
+  if (!response.ok) return { kind: 'unavailable' }
   const bounded = await readBoundedRequestText(response, 256 * 1024)
-  if (!bounded.ok) return undefined
+  if (!bounded.ok) return { kind: 'unavailable' }
   const payload: unknown = JSON.parse(bounded.text)
-  return isRecord(payload) ? payload.result : undefined
+  if (!isRecord(payload) || !('result' in payload)) return { kind: 'unavailable' }
+  return { kind: 'result', value: payload.result }
 }
 
 export async function readGuardedX402EvmReceipt(input: Readonly<{
@@ -52,8 +62,10 @@ export async function readGuardedX402EvmReceipt(input: Readonly<{
             method,
             params,
           )
-          if (result === undefined) throw new Error('x402_rpc_result_missing')
-          return result
+          if (result.kind === 'unavailable') {
+            throw new Error('x402_rpc_result_missing')
+          }
+          return result.value
         },
       }),
     })

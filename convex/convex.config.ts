@@ -15,6 +15,7 @@ const app = defineApp({
     AE_CONVEX_SERVER_FUNCTION_TOKEN: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_SECRET: v.optional(v.string()),
     AE_ROUTE_CALL_SIGNING_KEY_ID: v.optional(v.string()),
+    AE_X402_RPC_URLS_JSON: v.optional(v.string()),
   },
 })
 

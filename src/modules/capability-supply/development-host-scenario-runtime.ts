@@ -226,7 +226,10 @@ export function developmentReleasedRefusalRuntime(
         return await base.send(url, init)
       }
       effects.provider += 1
-      const requirement = developmentChallenge(endpoint, url).accepts[0]!
+      const [requirement] = developmentChallenge(endpoint, url).accepts
+      if (requirement === undefined) {
+        throw new Error('development_challenge_missing_requirement')
+      }
       // Settlement must verify so the refusal is attributable to the invalid
       // body rather than to an undecodable payment proof.
       return new Response(JSON.stringify({ unexpected: true }), {

@@ -132,7 +132,7 @@ type OpenDispatch = Readonly<{
   authority?: OperationInvokePersistedAuthority
 }>
 function configuredX402RpcUrl(network: string): URL | undefined {
-  const raw = (env as unknown as Record<string, string | undefined>).AE_X402_RPC_URLS_JSON?.trim()
+  const raw = env.AE_X402_RPC_URLS_JSON?.trim()
   if (raw === undefined || raw.length === 0 || raw.length > 16_384) return undefined
   try {
     const parsed: unknown = JSON.parse(raw)
