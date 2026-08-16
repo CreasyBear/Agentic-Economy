@@ -197,6 +197,36 @@ export const moneyTables = {
     states: v.array(v.union(v.literal('free_tier'), v.literal('paid'), v.literal('insufficient_credit'), v.literal('outcome_unknown'), v.literal('refunded'))),
     updatedAt: v.number(),
   }).index('by_principalId_and_credentialId_and_currency', ['principalId', 'credentialId', 'currency']),
+  /**
+   * ADR-034 delivery evidence. Insert-once and never updated: the money ledger
+   * remains the economic authority and Action Invocation the lifecycle
+   * authority, so corrections append facts elsewhere.
+   */
+  qualifiedUseReceipts: defineTable({
+    qualifiedUseRef: identifier,
+    materialDigest: identifier,
+    invocationRef: identifier,
+    attemptRef: identifier,
+    effectGeneration: v.number(),
+    businessId: identifier,
+    operationRef: identifier,
+    publicationRef: identifier,
+    publicationRevision: v.number(),
+    contractDigest: identifier,
+    bindingDigest: identifier,
+    principalClass: v.union(v.literal('agent_key'), v.literal('human_owner'), v.literal('service')),
+    requestDigest: identifier,
+    responseDigest: identifier,
+    evidenceRefs,
+    environment: v.literal('production'),
+    qualifiedAt: v.number(),
+    usageRef: v.optional(identifier),
+    transactionRef: v.optional(identifier),
+  })
+    .index('by_qualifiedUseRef', ['qualifiedUseRef'])
+    .index('by_businessId_and_qualifiedAt', ['businessId', 'qualifiedAt'])
+    .index('by_invocationRef', ['invocationRef'])
+    .index('by_operationRef_and_qualifiedAt', ['operationRef', 'qualifiedAt']),
   moneyFreeTierCounters: defineTable({
     counterRef: identifier,
     principalId: identifier,

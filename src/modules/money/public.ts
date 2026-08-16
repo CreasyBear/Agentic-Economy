@@ -707,3 +707,22 @@ export type {
   ExternalSpendMutationResult,
 } from "./internal/external-spend";
 export { createInMemoryMoneyQueryPort } from "./internal/query-projections";
+export {
+  buildQualifiedUseReceipt,
+  decideQualifiedUseWrite,
+  qualifiedUseEligibility,
+  qualifiedUseMaterialDigest,
+  qualifiedUseRef,
+  sameQualifiedUseIdentity,
+  QUALIFIED_USE_EXCLUSIONS,
+  QUALIFIED_USE_PRINCIPAL_CLASSES,
+} from "./internal/delivery";
+export type {
+  QualifiedUseEligibility,
+  QualifiedUseExclusion,
+  QualifiedUseIdentity,
+  QualifiedUseMaterial,
+  QualifiedUsePrincipalClass,
+  QualifiedUseReceipt,
+  QualifiedUseWriteDecision,
+} from "./internal/delivery";

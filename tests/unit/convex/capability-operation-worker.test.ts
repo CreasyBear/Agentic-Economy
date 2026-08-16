@@ -127,6 +127,7 @@ type WorkerState = {
   records: Record<string, unknown>[]
   reconciliations: Record<string, unknown>[]
   unknownCharges: Record<string, unknown>[]
+  qualifiedUse: Record<string, unknown>[]
 }
 
 type Handler = (ctx: unknown, args: { invocationRef: string }) => Promise<unknown>
@@ -325,6 +326,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     records: [],
     reconciliations: [],
     unknownCharges: [],
+    qualifiedUse: [],
   }
   const persistedPaymentMaterial = () => {
     const request = state.payment.prepare
@@ -631,6 +633,11 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
           return null
         case 'customerRequestRouteExecution:recordX402PaymentSignature':
           return null
+        case 'qualifiedUse:recordQualifiedUse':
+          state.qualifiedUse.push(args)
+          return args.environment === 'production'
+            ? { kind: 'recorded' }
+            : { kind: 'excluded', reason: 'non_production_environment' }
         default: throw new Error(`unexpected_mutation:${path}:${JSON.stringify(args)}`)
       }
     }),
@@ -688,6 +695,14 @@ describe('capability operation invocation worker', () => {
     expect(worker.state.payment.observe).toMatchObject({ dispatchRef: invocationRef, effectGeneration: 1 })
     expect(mocks.createEvmX402PaymentSignature).toHaveBeenCalledWith(expect.objectContaining({ credential: '0xpayer-secret' }))
     expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
+    expect(worker.state.qualifiedUse).toEqual([
+      expect.objectContaining({
+        invocationRef,
+        attemptRef,
+        effectGeneration: 1,
+        usageRef: `operation-x402-payment:${invocationRef}:${attemptRef}`,
+      }),
+    ])
   })
   it('refuses missing x402 payer custody before money reservation or transport', async () => {
     vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
@@ -700,6 +715,7 @@ describe('capability operation invocation worker', () => {
       state: 'refused',
       result: { kind: 'refused' },
     })
+    expect(worker.state.qualifiedUse).toHaveLength(0)
   })
   it('keeps a possibly submitted x402 reservation for reconciliation after retry', async () => {
     const worker = createWorker('x402', {

@@ -2837,6 +2837,26 @@ export async function projectOuterResult(
       )
       return
     }
+    await ctx.runMutation(internal.qualifiedUse.recordQualifiedUse, {
+      invocationRef: dispatch.invocationRef,
+      attemptRef,
+      effectGeneration,
+      businessId: operation.identity.businessId,
+      operationRef: dispatch.operationRef,
+      publicationRef: operation.identity.publicationRef,
+      publicationRevision: operation.identity.publicationRevision,
+      contractDigest: operation.identity.contractDigest,
+      bindingDigest: operation.identity.bindingDigest,
+      principalClass: 'agent_key',
+      requestDigest: observation.requestDigest,
+      responseDigest: evidenceHash,
+      evidenceRefs: [`operation:${dispatch.operationRef}`, `attempt:${attemptRef}`],
+      principalId: dispatch.principalId,
+      environment: dispatch.environment,
+      qualifiedAt: Date.parse(recordedAt),
+      usageRef: usage.usageRef,
+      ...(usage.transactionRef === undefined ? {} : { transactionRef: usage.transactionRef }),
+    })
     await finalizeOperationDispatch(
       ctx,
       dispatch,

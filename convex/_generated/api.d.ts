@@ -99,6 +99,7 @@ import type * as notificationOutboxReconstruction from "../notificationOutboxRec
 import type * as notificationOutboxSourceState from "../notificationOutboxSourceState.js";
 import type * as observability from "../observability.js";
 import type * as projectSpine from "../projectSpine.js";
+import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as registry from "../registry.js";
 import type * as routingKernelV1History from "../routingKernelV1History.js";
@@ -209,6 +210,7 @@ declare const fullApi: ApiFromModules<{
   notificationOutboxSourceState: typeof notificationOutboxSourceState;
   observability: typeof observability;
   projectSpine: typeof projectSpine;
+  qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
   registry: typeof registry;
   routingKernelV1History: typeof routingKernelV1History;
