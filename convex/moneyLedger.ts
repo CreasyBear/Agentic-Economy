@@ -7150,12 +7150,6 @@ export const readKeyUsage = query({
         q.eq('principalId', args.principalId),
       )
       .unique()
-    if (principal === null)
-      return {
-        kind: 'refused' as const,
-        code: 'billing_identity_missing' as const,
-        items: [] as const,
-      }
     const summary = await ctx.db
       .query('moneyCredentialUsageSummaries')
       .withIndex('by_principalId_and_credentialId_and_currency', (q) =>
@@ -7165,12 +7159,15 @@ export const readKeyUsage = query({
           .eq('currency', args.currency),
       )
       .unique()
-    const account = await ctx.db
-      .query('moneyAccounts')
-      .withIndex('by_accountId_and_currency', (q) =>
-        q.eq('accountId', principal.ownerId).eq('currency', args.currency),
-      )
-      .unique()
+    const account =
+      principal === null
+        ? null
+        : await ctx.db
+            .query('moneyAccounts')
+            .withIndex('by_accountId_and_currency', (q) =>
+              q.eq('accountId', principal.ownerId).eq('currency', args.currency),
+            )
+            .unique()
     const exponent = summary?.exponent ?? account?.exponent
     if (exponent === undefined)
       return {

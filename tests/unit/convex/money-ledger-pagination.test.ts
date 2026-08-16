@@ -171,7 +171,7 @@ describe('Convex native money queries', () => {
       _id: 'moneyAccounts:operator',
       accountRef: 'account:test',
       accountKind: 'operator_credit',
-      principalId: 'principal:test',
+      accountId: 'owner:test',
       currency: 'USD',
       exponent: 2,
       balanceUnits: '0',
@@ -180,6 +180,11 @@ describe('Convex native money queries', () => {
       createdAt: 1,
       updatedAt: 1,
     }
-    await expect(keyUsageHandler(context([account]), { principalId: 'principal:test', credentialId: 'credential:new', currency: 'USD' })).resolves.toEqual({ kind: 'ok', credentialId: 'credential:new', callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpend: { currency: 'USD', units: '0', exponent: 2 }, states: [] })
+    const principal: Row = {
+      _id: 'agentAccessPrincipals:test',
+      principalId: 'principal:test',
+      ownerId: 'owner:test',
+    }
+    await expect(keyUsageHandler(context([principal, account]), { principalId: 'principal:test', credentialId: 'credential:new', currency: 'USD' })).resolves.toEqual({ kind: 'ok', credentialId: 'credential:new', callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpend: { currency: 'USD', units: '0', exponent: 2 }, states: [] })
   })
 })

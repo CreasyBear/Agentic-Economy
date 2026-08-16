@@ -52,6 +52,7 @@ const keyReadback: AgentOperatorKeyReadback = {
   principalId: 'clerk_api_key:key_ui_1',
   account: {
     principalId: 'clerk_api_key:key_ui_1',
+    accountId: 'owner:key_ui_1',
     balance: { currency: 'USD', units: '1250', exponent: 2 },
     autoRecharge: {
       enabled: false,
