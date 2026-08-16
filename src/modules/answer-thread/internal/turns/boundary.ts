@@ -4,6 +4,9 @@ import {
   buildBoundaryNextStep,
   buildBoundaryOneLine,
   buildBoundarySummary,
+  buildSafetyCheckUnavailableNextStep,
+  buildSafetyCheckUnavailableOneLine,
+  buildSafetyCheckUnavailableSummary,
   buildSafetyRefusalNextStep,
   buildSafetyRefusalOneLine,
   buildSafetyRefusalSummary,
@@ -24,42 +27,56 @@ import {
 } from './types'
 
 type BoundaryKind = 'boundary_explain' | 'unsupported' | 'web_search_unavailable' | 'safety_refusal'
+type BoundaryRequest =
+  | BoundaryKind
+  | Readonly<{ kind: 'safety_refusal'; safetyReason: 'unsafe_request' | 'classifier_unavailable' }>
 
-export const boundaryTurnPath: TurnPath<[BoundaryKind]> = {
+export const boundaryTurnPath: TurnPath<[BoundaryRequest]> = {
   id: 'boundary_explain',
-  async run(ctx, kind) {
-    return streamBoundaryTurn(ctx, kind)
+  async run(ctx, request) {
+    const kind = typeof request === 'string' ? request : request.kind
+    const safetyReason = typeof request === 'string' ? undefined : request.safetyReason
+    return streamBoundaryTurn(ctx, kind, safetyReason)
   },
 }
 
 async function streamBoundaryTurn(
   ctx: TurnPathContext,
   kind: BoundaryKind,
+  safetyReason?: 'unsafe_request' | 'classifier_unavailable',
 ): Promise<TurnPathResult> {
   const isWebSearchUnavailable = kind === 'web_search_unavailable'
   const isSafetyRefusal = kind === 'safety_refusal'
+  const isSafetyCheckUnavailable =
+    isSafetyRefusal && safetyReason === 'classifier_unavailable'
   const providers = isWebSearchUnavailable || isSafetyRefusal ? [] : reindexProviders(ctx.priorProviders)
   const oneLine = isWebSearchUnavailable
     ? 'I cannot search the web here because no executable web-search operation is available.'
-    : isSafetyRefusal
-      ? buildSafetyRefusalOneLine()
-      : kind === 'boundary_explain'
-        ? buildBoundaryOneLine()
-        : buildUnsupportedOneLine()
+    : isSafetyCheckUnavailable
+      ? buildSafetyCheckUnavailableOneLine()
+      : isSafetyRefusal
+        ? buildSafetyRefusalOneLine()
+        : kind === 'boundary_explain'
+          ? buildBoundaryOneLine()
+          : buildUnsupportedOneLine()
   const summary = isWebSearchUnavailable
     ? 'No web search was run for this request.'
-    : isSafetyRefusal
-      ? buildSafetyRefusalSummary()
-      : kind === 'boundary_explain'
-        ? buildBoundarySummary(providers)
-        : buildUnsupportedSummary(providers)
+    : isSafetyCheckUnavailable
+      ? buildSafetyCheckUnavailableSummary()
+      : isSafetyRefusal
+        ? buildSafetyRefusalSummary()
+        : kind === 'boundary_explain'
+          ? buildBoundarySummary(providers)
+          : buildUnsupportedSummary(providers)
   const nextStep = isWebSearchUnavailable
     ? 'Try again when a web-search operation is available, or ask for a supported live data lookup.'
-    : isSafetyRefusal
-      ? buildSafetyRefusalNextStep()
-      : kind === 'boundary_explain'
-        ? buildBoundaryNextStep(providers)
-        : buildUnsupportedNextStep(providers)
+    : isSafetyCheckUnavailable
+      ? buildSafetyCheckUnavailableNextStep()
+      : isSafetyRefusal
+        ? buildSafetyRefusalNextStep()
+        : kind === 'boundary_explain'
+          ? buildBoundaryNextStep(providers)
+          : buildUnsupportedNextStep(providers)
 
   if (!isWebSearchUnavailable && !isSafetyRefusal) {
 

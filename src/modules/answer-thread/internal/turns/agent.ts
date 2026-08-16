@@ -1,7 +1,6 @@
 import {
   buildAnswerTurnProblem,
   collectAllowedSlugsFromToolResults,
-  filterKeylessDataAskCandidates,
   type AnswerSnapshot,
   type AnswerToolUseAgentCheckpoint,
   type AnswerWorkStep,
@@ -11,6 +10,7 @@ import {
   type OperationInvokeResult,
 } from '@/modules/capability-execution/operation-invoke'
 import {
+  ANSWER_AGENT_MAX_TOOL_CALLS,
   isAnswerToolUseAgentError,
   runAnswerToolUseAgent,
 } from '@/modules/answer/server'
@@ -74,10 +74,7 @@ async function streamAgentTurn(
   seedToolCalls: readonly AnswerToolCallRecord[] = [],
   planMode?: StreamPlanMode,
 ): Promise<TurnPathResult | undefined> {
-  const keylessDataAsk = filterKeylessDataAskCandidates(
-    agentInput.query,
-    agentInput.keylessDataAsk,
-  )
+  const keylessDataAsk = agentInput.keylessDataAsk
   const capabilityCandidates =
     keylessDataAsk?.kind === 'resolved' ? keylessDataAsk.candidates : []
   const selectedCapability =
@@ -151,10 +148,18 @@ async function streamAgentTurn(
     agentTimingStopped = true
     stopAgentTiming(metadata)
   }
+  const maxToolCalls =
+    agentInput.maxToolCalls ??
+    (agentInput.effectiveRoute?.lane === 'operation' ||
+      agentInput.keylessDataAsk === undefined
+      ? ANSWER_AGENT_MAX_TOOL_CALLS
+      : 1)
   try {
     const result = await runAnswerToolUseAgent({
       ...agentInput,
+      maxToolCalls: Math.max(0, maxToolCalls - seedToolCalls.length),
       turnId: ctx.turnId,
+      harnessLoop: ctx.harness.loop,
       ...(ctx.operationInvokeContext === undefined
         ? {}
         : {
@@ -189,7 +194,12 @@ async function streamAgentTurn(
         call.toolId === 'operation.execute' ||
         call.toolId === 'operation.invoke',
     )
-    if (hasCapabilityCandidates) {
+    const operationArtifacts = readOperationArtifacts(result.snapshot)
+    const hasCapabilityActivity =
+      hasCapabilityCandidates ||
+      capabilityCalls.length > 0 ||
+      operationArtifacts !== undefined
+    if (hasCapabilityActivity) {
       if (capabilityCalls.length === 0) {
         ctx.workLog.emit({
           id: 'capability.execute',
@@ -218,6 +228,7 @@ async function streamAgentTurn(
             buildCapabilityExecutionWorkStep(
               executedCapabilityName ||
                 selectedCapabilityName ||
+                executedOperationRef ||
                 capabilityName,
               call,
               recoveryStartedAt,
@@ -228,7 +239,11 @@ async function streamAgentTurn(
           )
         })
       }
-    } else if (agentInput.disableTools !== true) {
+    }
+    if (
+      agentInput.disableTools !== true &&
+      !hasCapabilityCandidates
+    ) {
       ctx.workLog.emit({
         id: 'search.registry.recovery',
         phase: 'search',
@@ -236,11 +251,15 @@ async function streamAgentTurn(
         title:
           result.toolCalls.length === 0
             ? 'Using the first search result'
-            : 'Trying another search',
+            : hasCapabilityActivity
+              ? 'Checked registered capabilities'
+              : 'Trying another search',
         summary:
           result.toolCalls.length === 0
             ? 'No extra search was needed.'
-            : describeProviderCount(result.providers.length, 'match'),
+            : hasCapabilityActivity
+              ? 'Current operation evidence was checked.'
+              : describeProviderCount(result.providers.length, 'match'),
         detailRows: buildRecoveryWorkStepDetailRows(
           result.toolCalls,
           result.providers.length,
@@ -274,7 +293,7 @@ async function streamAgentTurn(
     emitReadAndCompareSteps(ctx.workLog, result.providers)
     const snapshot = {
       ...withFollowUpLayout(result.snapshot, ctx.priorTurnsCount, ctx.intent),
-      ...(hasCapabilityCandidates
+      ...(hasCapabilityActivity
         ? { layoutProfile: 'data_answer' as const }
         : {}),
     }
@@ -293,7 +312,7 @@ async function streamAgentTurn(
     const assembly = await ctx.emitOrDeferSnapshot(
       finalized.snapshot,
       'agent',
-      hasCapabilityCandidates
+      hasCapabilityActivity
         ? { planMode: 'answer' }
         : planMode === undefined
           ? {}
@@ -321,7 +340,12 @@ async function streamAgentTurn(
         call.toolId === 'operation.execute' ||
         call.toolId === 'operation.invoke',
     )
-    if (hasCapabilityCandidates) {
+    const operationArtifacts = readOperationArtifacts(recoveryCheckpoint)
+    const hasCapabilityActivity =
+      hasCapabilityCandidates ||
+      capabilityCalls.length > 0 ||
+      operationArtifacts !== undefined
+    if (hasCapabilityActivity) {
       if (capabilityCalls.length === 0) {
         ctx.workLog.emit(
           buildCapabilityExecutionWorkStep(
@@ -332,9 +356,18 @@ async function streamAgentTurn(
         )
       } else {
         capabilityCalls.forEach((call, index) => {
+          const executedOperationRef = readExecutedOperationRef(call)
+          const executedCapabilityName =
+            keylessDataAsk?.kind === 'resolved'
+              ? keylessDataAsk.descriptors
+                  .find(
+                    ({ operationRef }) => operationRef === executedOperationRef,
+                  )
+                  ?.name.trim()
+              : undefined
           ctx.workLog.emit(
             buildCapabilityExecutionWorkStep(
-              capabilityName,
+              executedCapabilityName || executedOperationRef || capabilityName,
               call,
               recoveryStartedAt,
               index === 0
@@ -344,13 +377,21 @@ async function streamAgentTurn(
           )
         })
       }
-    } else {
+    }
+    if (
+      agentInput.disableTools !== true &&
+      !hasCapabilityCandidates
+    ) {
       ctx.workLog.emit({
         id: 'search.registry.recovery',
         phase: 'search',
         status: 'error',
-        title: 'Trying another search',
-        summary: 'The extra search did not complete.',
+        title: hasCapabilityActivity
+          ? 'Checked registered capabilities'
+          : 'Trying another search',
+        summary: hasCapabilityActivity
+          ? 'The capability call did not complete.'
+          : 'The extra search did not complete.',
         startedAtMs: recoveryStartedAt,
         completedAtMs: Date.now(),
       })
@@ -365,7 +406,6 @@ async function streamAgentTurn(
         toolCallRecordsToGateInput(toolCalls),
       ),
     ])
-    const operationArtifacts = readOperationArtifacts(recoveryCheckpoint)
     return {
       snapshot: undefined,
       toolCalls,
@@ -401,7 +441,9 @@ export function readOperationArtifacts(
   if (
     source.operationCandidates === undefined &&
     source.operationCandidatesDigest === undefined &&
+    source.operationComparison === undefined &&
     source.operationOutcome === undefined &&
+    source.operationPlan === undefined &&
     source.operationSelection === undefined
   ) {
     return undefined
@@ -413,9 +455,15 @@ export function readOperationArtifacts(
     ...(source.operationCandidatesDigest === undefined
       ? {}
       : { operationCandidatesDigest: source.operationCandidatesDigest }),
+    ...(source.operationComparison === undefined
+      ? {}
+      : { operationComparison: source.operationComparison }),
     ...(source.operationOutcome === undefined
       ? {}
       : { operationOutcome: source.operationOutcome }),
+    ...(source.operationPlan === undefined
+      ? {}
+      : { operationPlan: source.operationPlan }),
     ...(source.operationSelection === undefined
       ? {}
       : { operationSelection: source.operationSelection }),

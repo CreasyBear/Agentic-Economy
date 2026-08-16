@@ -2,11 +2,21 @@ import { mutationGeneric, paginationOptsValidator, queryGeneric } from 'convex/s
 import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
-import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
+import { env, internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
 
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { resolveAdminAuthority } from './authz'
-import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
+import {
+  isSourceWriteAdmission,
+  isSourceWriteRequest,
+  requireSourceWrite,
+  sourceWriteArgs,
+  type SourceWriteArgs,
+} from './sourceWriteAdmission'
+import {
+  sourceWriteCommandDigest,
+  verifySourceWriteAdmission,
+} from '../src/modules/security/source-write-admission'
 import {
   ANSWER_TURN_EXECUTION_LEASE_MS,
   AnswerTurnReservationStateValues,
@@ -612,11 +622,13 @@ export const readAnswerTurnCheckpoint = queryGeneric({
     turnId: v.string(),
     turnSeq: v.number(),
     generation: v.number(),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
     ...sourceWriteArgs,
   },
   returns: readAnswerTurnCheckpointResult,
   handler: async (ctx, args) => {
-    await requireAnswerThreadSourceWrite(ctx, args)
+    await requireAnswerThreadSourceRead(args)
     const reservation = await ctx.db
       .query('answerTurnReservations')
       .withIndex('by_reservationKey', (query) => query.eq('reservationKey', args.reservationKey))
@@ -635,6 +647,7 @@ export const readAnswerTurnCheckpoint = queryGeneric({
     }
     const generation = reservationGeneration(reservation)
     if (reservation.state === 'stopped') return { kind: 'conflict' as const, reason: 'stopped' as const }
+    if (reservation.state === 'finalized') return { kind: 'conflict' as const, reason: 'settled' as const }
     if (generation !== args.generation) {
       return { kind: 'conflict' as const, reason: 'generation_mismatch' as const }
     }
@@ -1287,6 +1300,35 @@ export const deleteAnswerThread = mutationGeneric({
     return { threadId: args.threadId }
   },
 })
+
+async function requireAnswerThreadSourceRead(args: SourceWriteArgs): Promise<void> {
+  const admission = isSourceWriteAdmission(args.sourceWrite) ? args.sourceWrite : undefined
+  const request = isSourceWriteRequest(args.sourceWriteRequest)
+    ? args.sourceWriteRequest
+    : undefined
+  if (
+    admission === undefined
+    || request === undefined
+    || args.operationKey === undefined
+    || args.correlationId === undefined
+  ) {
+    throw new Error('answer_thread_source_write_rejected:missing_source_write_admission')
+  }
+  const sourceWrite = await verifySourceWriteAdmission({
+    admission,
+    env: env as Record<string, string | undefined>,
+    expected: {
+      scope: 'answer_thread',
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest: sourceWriteCommandDigest(args),
+      request,
+    },
+  })
+  if (sourceWrite.kind === 'rejected') {
+    throw new Error(`answer_thread_source_write_rejected:${sourceWrite.reason}`)
+  }
+}
 
 async function requireAnswerThreadSourceWrite(
   ctx: { db: unknown },

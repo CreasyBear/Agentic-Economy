@@ -35,6 +35,9 @@ export const AnswerToolIdValues = [
   'registry.detail',
   'web.discover',
   'registry.operations.search',
+  'registry.operations.detail',
+  'registry.operations.compare',
+  'registry.operations.inspectPlan',
   'operation.execute',
   'operation.invoke',
 ] as const

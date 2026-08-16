@@ -36,7 +36,11 @@ export type AnswerToolPolicy =
   | { kind: 'registry.detail'; maxCalls: 1; slug?: string }
   | { kind: 'frozen'; allowedSlugs: readonly string[] }
 
-export type AnswerClarificationReason = 'missing_service' | 'missing_place'
+export type AnswerClarificationReason =
+  | 'missing_service'
+  | 'missing_place'
+  | 'missing_pending_operation'
+  | 'pending_operation_action'
 
 type AnswerResponsePlanBase<Mode extends AnswerResponseMode, Tool extends AnswerToolPolicy> = {
   mode: Mode
@@ -159,6 +163,33 @@ export function planAnswerTurn(input: {
   }
 
   return buildAnswerResponsePlan()
+}
+
+export function planPendingOperationClarification(input: {
+  query: string
+  hasPendingDecision: boolean
+}): Extract<AnswerResponsePlan, { mode: 'clarify' }> {
+  const hasPendingDecision = input.hasPendingDecision
+  return buildClarifyResponsePlan({
+    reason: hasPendingDecision
+      ? 'pending_operation_action'
+      : 'missing_pending_operation',
+    snapshot: {
+      query: input.query,
+      oneLine: hasPendingDecision
+        ? 'What should I do with the pending operation?'
+        : 'What should I execute?',
+      providers: [],
+      summary: hasPendingDecision
+        ? 'Choose the recorded approval or recovery action, or start a new operation.'
+        : 'Name the operation and result you want before I run anything.',
+      nextStep: hasPendingDecision
+        ? 'Choose the approval or reconciliation action, or ask for a new operation.'
+        : 'Name the operation and result you want.',
+      agentJsonUrl: buildAgentJsonUrl(input.query, ANSWER_SEARCH_PROVIDER_LIMIT),
+      layoutProfile: 'clarification',
+    },
+  })
 }
 
 function buildClarifyResponsePlan(input: {

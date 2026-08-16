@@ -59,3 +59,15 @@ export function buildSafetyRefusalSummary(): string {
 export function buildSafetyRefusalNextStep(): string {
   return 'Try a safe question or start a new ask.'
 }
+
+export function buildSafetyCheckUnavailableOneLine(): string {
+  return 'I could not run the safety check needed before answering this request.'
+}
+
+export function buildSafetyCheckUnavailableSummary(): string {
+  return 'No search, provider lookup, capability selection, or external action was run for this request.'
+}
+
+export function buildSafetyCheckUnavailableNextStep(): string {
+  return 'Please try again.'
+}

@@ -1,8 +1,12 @@
 import {
   ANSWER_OPERATION_CANDIDATE_LIMIT,
   AnswerOperationCandidateSchema,
+  AnswerOperationComparisonSchema,
   AnswerOperationOutcomeSchema,
+  AnswerOperationPlanSchema,
   AnswerOperationSelectionSchema,
+  AnswerRequestedIntentsSchema,
+  AnswerRequestInterpretationSchema,
   answerOperationCandidateSetDigest,
 } from '@/modules/answer/answer-schema'
 import { isValidFrozenAnswerOperationArtifacts } from '@/modules/answer/answer-event-schema'
@@ -15,6 +19,8 @@ import {
   AnswerTurnCheckpointRouteValues,
 } from '../answer-thread.values'
 import {
+  AnswerContinuationSourceSchema,
+  AnswerPendingDecisionSchema,
   type AnswerTurnCheckpoint,
   type AnswerTurnCheckpointRoute,
 } from '../answer-thread.schema'
@@ -120,6 +126,8 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
       && (!isAnswerToolId(value.selectedToolId) || value.selectedToolId.length === 0))
     || (value.descriptorDigest !== undefined
       && (typeof value.descriptorDigest !== 'string' || value.descriptorDigest.length === 0))
+    || (value.selectedInputDigest !== undefined
+      && (typeof value.selectedInputDigest !== 'string' || value.selectedInputDigest.length === 0))
     || (value.operationCandidatesDigest !== undefined
       && (typeof value.operationCandidatesDigest !== 'string' || value.operationCandidatesDigest.length === 0))
     || (value.resultDigest !== undefined
@@ -127,7 +135,14 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
     || (value.operationCandidates !== undefined && value.operationCandidatesDigest === undefined)
     || (value.operationCandidatesDigest !== undefined && value.operationCandidates === undefined)
     || (value.selectedOperationRef !== undefined && value.descriptorDigest === undefined)
-    || (value.descriptorDigest !== undefined && value.selectedOperationRef === undefined)) {
+    || (value.interpretation !== undefined
+      && !AnswerRequestInterpretationSchema.safeParse(value.interpretation).success)
+    || (value.requestedIntents !== undefined
+      && !isRequestedIntentArray(value.requestedIntents))
+    || (value.continuationSource !== undefined
+      && !AnswerContinuationSourceSchema.safeParse(value.continuationSource).success)
+    || (value.pendingDecision !== undefined
+      && !AnswerPendingDecisionSchema.safeParse(value.pendingDecision).success)) {
     return false
   }
 
@@ -139,6 +154,34 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
     return false
   }
   const operationCandidates = parsedCandidates?.success ? parsedCandidates.data : undefined
+  const operationCandidatesDigest =
+    typeof value.operationCandidatesDigest === 'string'
+      ? value.operationCandidatesDigest
+      : undefined
+  const parsedComparison = value.operationComparison === undefined
+    ? undefined
+    : AnswerOperationComparisonSchema.safeParse(value.operationComparison)
+  if (value.operationComparison !== undefined
+    && (parsedComparison === undefined || !parsedComparison.success)) {
+    return false
+  }
+  const operationComparison = parsedComparison?.success ? parsedComparison.data : undefined
+  const parsedPlan = value.operationPlan === undefined
+    ? undefined
+    : AnswerOperationPlanSchema.safeParse(value.operationPlan)
+  if (value.operationPlan !== undefined
+    && (parsedPlan === undefined || !parsedPlan.success)) {
+    return false
+  }
+  const operationPlan = parsedPlan?.success ? parsedPlan.data : undefined
+  if (
+    operationComparison !== undefined
+    && encoder.encode(JSON.stringify(operationComparison)).byteLength > MAX_ANSWER_TURN_CHECKPOINT_BYTES
+    || operationPlan !== undefined
+    && encoder.encode(JSON.stringify(operationPlan)).byteLength > MAX_ANSWER_TURN_CHECKPOINT_BYTES
+  ) {
+    return false
+  }
   const parsedOutcome = value.operationOutcome === undefined
     ? undefined
     : AnswerOperationOutcomeSchema.safeParse(value.operationOutcome)
@@ -155,12 +198,7 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
     return false
   }
   const operationSelection = parsedSelection?.success ? parsedSelection.data : undefined
-  const operationCandidatesDigest = value.operationCandidatesDigest
   if (operationCandidates !== undefined) {
-    if (typeof operationCandidatesDigest !== 'string'
-      || answerOperationCandidateSetDigest(operationCandidates) !== operationCandidatesDigest) {
-      return false
-    }
     for (const candidate of operationCandidates) {
       if (candidate.inputJsonSchema !== undefined
         && new TextEncoder().encode(JSON.stringify(candidate.inputJsonSchema)).byteLength
@@ -172,8 +210,10 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
   if (!isValidFrozenAnswerOperationArtifacts({
     candidates: operationCandidates,
     candidateSetDigest: operationCandidatesDigest,
-    selection: operationSelection,
+    comparison: operationComparison,
     outcome: operationOutcome,
+    plan: operationPlan,
+    selection: operationSelection,
     toolCalls: value.toolCalls,
     requireToolEvidence: operationOutcome !== undefined,
   })) {
@@ -283,4 +323,7 @@ function hasForbiddenReplayKey(value: unknown, seen = new Set<object>()): boolea
   return Object.entries(value).some(([key, item]) =>
     FORBIDDEN_REPLAY_KEYS.test(key) || hasForbiddenReplayKey(item, seen),
   )
+}
+function isRequestedIntentArray(value: unknown): boolean {
+  return AnswerRequestedIntentsSchema.safeParse(value).success
 }

@@ -16,25 +16,29 @@ export {
 } from './internal/answer-gate'
 export {
   classifyAnswerQuerySafety,
+  classifyAnswerRequestPreflight,
+  buildRedactedPriorTurnContext,
   type AnswerQuerySafetyResult,
+  type AnswerRequestPreflightResult,
+  type AnswerPriorTurnContext,
 } from './internal/answer-query-safety'
 export {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,
 } from './internal/copy-guard-patterns'
-export { neutralizeBidiFormattingControls } from './projection'
 export {
-  ANSWER_OPERATION_INPUT_MAX_BYTES,
-  filterKeylessDataAskCandidates,
   keylessDataAskFromCandidates,
-  resolveKeylessDataAsk,
+  resolveKeylessDataAskFromInterpretation,
   resolveKeylessDataAskSelection,
-  parseAnswerOperationSelectionInput,
   type KeylessDataAskDecision,
   type KeylessDataAskDecisionCandidate,
   type KeylessDataAskResolution,
-  type AnswerOperationSelectionInput,
 } from './internal/keyless-data-ask'
+export {
+  ANSWER_OPERATION_INPUT_MAX_BYTES,
+  parseAnswerOperationSelectionInput,
+  type AnswerOperationSelectionInput,
+} from './operation-selection'
 export { answerOperationCandidateFromPublicDescriptor } from './internal/operation-artifacts'
 export {
   AnswerProseSchema,
@@ -61,12 +65,20 @@ export {
   inferLayoutProfileFromArtifacts,
   resolveLayoutProfile,
 } from './internal/answer-layout-profile'
+export { neutralizeBidiFormattingControls } from './projection'
 export {
   buildMessagePartsFromSnapshot,
   artifactsToMessageParts,
   type AnswerMessagePart,
   type AnswerMessagePartsResult,
 } from './internal/build-message-parts'
+export {
+  projectAnswerOperationResult,
+  sanitizeAnswerOperationOutcome,
+  sanitizeAnswerOperationToolCallRecord,
+  type AnswerOperationResultAnnotation,
+  type AnswerOperationResultView,
+} from './internal/operation-result-presentation'
 export {
   buildCompactFollowUpProse,
   buildRationaleFollowUpProse,
@@ -81,6 +93,9 @@ export {
   buildBoundaryNextStep,
   buildBoundaryOneLine,
   buildBoundarySummary,
+  buildSafetyCheckUnavailableNextStep,
+  buildSafetyCheckUnavailableOneLine,
+  buildSafetyCheckUnavailableSummary,
   buildSafetyRefusalNextStep,
   buildSafetyRefusalOneLine,
   buildSafetyRefusalSummary,
@@ -138,6 +153,7 @@ export {
   AnswerArtifactSchema,
   AnswerOperationCandidateSchema,
   AnswerOperationOutcomeSchema,
+  AnswerOperationPresentationSchema,
   AnswerOperationSelectionSchema,
   answerOperationCandidateSetDigest,
   AnswerSourceSchema,
@@ -147,8 +163,10 @@ export {
   type AnswerCompareField,
   type AnswerOperationCandidate,
   type AnswerOperationOutcome,
+  type AnswerOperationPresentation,
   type AnswerOperationSelection,
   type AeAnswerArtifacts,
+  type EffectiveAnswerAgentRoute,
 } from './answer-schema'
 
 export {

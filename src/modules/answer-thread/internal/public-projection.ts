@@ -2,8 +2,12 @@ import { z } from 'zod'
 import {
   ANSWER_OPERATION_CANDIDATE_LIMIT,
   AnswerOperationCandidateSchema,
+  AnswerOperationComparisonSchema,
   AnswerOperationOutcomeSchema,
+  AnswerOperationPlanSchema,
   AnswerOperationSelectionSchema,
+  AnswerRequestedIntentsSchema,
+  AnswerRequestInterpretationSchema,
   answerOperationCandidateSetDigest,
   AnswerSourceSchema,
   WebDiscoveryClaimSchema,
@@ -17,18 +21,22 @@ import {
   buildArtifactsFromSnapshot,
   type AnswerSnapshot,
 } from '@/modules/answer/projection'
+import { sanitizeAnswerOperationOutcome } from '@/modules/answer/convex'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { MAX_ANSWER_TURN_CHECKPOINT_BYTES } from './answer-turn-checkpoint'
 import { parseAnswerTurnProblemStrict, redactAnswerTurnProblem } from '@/lib/errors'
 import { isRecord } from '@/modules/common/is-record'
 
-import type {
-  AnswerTurnRecord,
-  AnswerTurnReservationRecord,
-  AnswerThreadRecord,
-  FrozenTurnEvidence,
-  PublicThreadProjection,
-  PublicThreadTurn,
+import {
+  AnswerToolIdValues,
+  AnswerContinuationSourceSchema,
+  AnswerPendingDecisionSchema,
+  type AnswerTurnRecord,
+  type AnswerTurnReservationRecord,
+  type AnswerThreadRecord,
+  type FrozenTurnEvidence,
+  type PublicThreadTurn,
+  type PublicThreadProjection,
 } from '../answer-thread.schema'
 import { buildPublicAnswerCheckSummary } from './answer-run-summary'
 import { publicWorkLog } from './public-worklog'
@@ -37,12 +45,13 @@ const frozenToolCallSchema = z.strictObject({
   toolCallId: z.string().min(1),
   turnId: z.string().min(1),
   seq: z.number().finite().int().nonnegative(),
-  toolId: z.string().min(1),
+  toolId: z.enum(AnswerToolIdValues),
   inputJson: z.string(),
   resultSummaryJson: z.string(),
   resultJson: z.string(),
   resultHash: z.string().min(1),
   status: z.enum(['complete', 'error', 'refused']),
+  executed: z.boolean().exactOptional(),
   createdAt: z.number().finite(),
 })
 
@@ -106,6 +115,35 @@ function isCurrentFrozenEvidence(value: unknown): value is FrozenTurnEvidence {
     && !z.array(WebDiscoveryClaimSchema).max(5).safeParse(value.importedClaims).success) {
     return false
   }
+  const interpretation = value.interpretation === undefined
+    ? undefined
+    : AnswerRequestInterpretationSchema.safeParse(value.interpretation)
+  const requestedIntents = value.requestedIntents === undefined
+    ? undefined
+    : AnswerRequestedIntentsSchema.safeParse(value.requestedIntents)
+  const continuationSource = value.continuationSource === undefined
+    ? undefined
+    : AnswerContinuationSourceSchema.safeParse(value.continuationSource)
+  const pendingDecision = value.pendingDecision === undefined
+    ? undefined
+    : AnswerPendingDecisionSchema.safeParse(value.pendingDecision)
+  if (
+    interpretation !== undefined && !interpretation.success
+    || requestedIntents !== undefined && !requestedIntents.success
+    || continuationSource !== undefined && !continuationSource.success
+    || pendingDecision !== undefined && !pendingDecision.success
+    || value.selectedInputDigest !== undefined
+      && (typeof value.selectedInputDigest !== 'string' || value.selectedInputDigest.length === 0)
+    || value.terminalCheckpointDigest !== undefined
+      && (typeof value.terminalCheckpointDigest !== 'string'
+        || value.terminalCheckpointDigest.length === 0)
+    || interpretation?.success === true
+      && requestedIntents?.success === true
+      && canonicalDigest(interpretation.data.requestedIntents).toString()
+        !== canonicalDigest(requestedIntents.data).toString()
+  ) {
+    return false
+  }
 
   const parsedCandidates = value.operationCandidates === undefined
     ? undefined
@@ -130,6 +168,30 @@ function isCurrentFrozenEvidence(value: unknown): value is FrozenTurnEvidence {
     return false
   }
   const operationCandidates = parsedCandidates?.success ? parsedCandidates.data : undefined
+  const parsedComparison = value.operationComparison === undefined
+    ? undefined
+    : AnswerOperationComparisonSchema.safeParse(value.operationComparison)
+  if (value.operationComparison !== undefined
+    && (parsedComparison === undefined || !parsedComparison.success)) {
+    return false
+  }
+  const operationComparison = parsedComparison?.success ? parsedComparison.data : undefined
+  const parsedPlan = value.operationPlan === undefined
+    ? undefined
+    : AnswerOperationPlanSchema.safeParse(value.operationPlan)
+  if (value.operationPlan !== undefined
+    && (parsedPlan === undefined || !parsedPlan.success)) {
+    return false
+  }
+  const operationPlan = parsedPlan?.success ? parsedPlan.data : undefined
+  if (
+    operationComparison !== undefined
+    && new TextEncoder().encode(JSON.stringify(operationComparison)).byteLength > MAX_ANSWER_TURN_CHECKPOINT_BYTES
+    || operationPlan !== undefined
+    && new TextEncoder().encode(JSON.stringify(operationPlan)).byteLength > MAX_ANSWER_TURN_CHECKPOINT_BYTES
+  ) {
+    return false
+  }
   const parsedOutcome = value.operationOutcome === undefined
     ? undefined
     : AnswerOperationOutcomeSchema.safeParse(value.operationOutcome)
@@ -147,8 +209,10 @@ function isCurrentFrozenEvidence(value: unknown): value is FrozenTurnEvidence {
   if (!isValidFrozenAnswerOperationArtifacts({
     candidates: operationCandidates,
     candidateSetDigest: value.operationCandidatesDigest,
-    selection: operationSelection,
+    comparison: operationComparison,
     outcome: operationOutcome,
+    plan: operationPlan,
+    selection: operationSelection,
     toolCalls: toolCalls.data,
     requireToolEvidence: operationOutcome !== undefined,
   })) {
@@ -178,6 +242,42 @@ function isCurrentFrozenEvidence(value: unknown): value is FrozenTurnEvidence {
     && operationCandidates !== undefined
     && answerOperationCandidateSetDigest(operationCandidates) !== operationSelection.candidateSetDigest) {
     return false
+  }
+  if (pendingDecision?.success) {
+    const pending = pendingDecision.data
+    const candidate = operationCandidates?.filter(
+      (item) => item.operationRef === pending.operationRef,
+    )
+    const selectedCandidate =
+      candidate?.length === 1 ? candidate[0] : undefined
+    const inputCall = toolCalls.data
+      .toReversed()
+      .find(
+        (call) =>
+          call.toolId === pending.toolId
+          && call.status === 'complete',
+      )
+    if (
+      pending.origin === undefined
+      || value.terminalCheckpointDigest === undefined
+      || pending.origin.terminalCheckpointDigest !== value.terminalCheckpointDigest
+      || pending.operationRef !== operationSelection?.operationRef
+      || pending.toolId !== operationSelection.toolId
+      || pending.candidateSetDigest !== value.operationCandidatesDigest
+      || pending.candidateSetDigest !== operationSelection.candidateSetDigest
+      || pending.descriptorDigest !== selectedCandidate?.descriptorDigest
+      || pending.descriptorDigest !== operationSelection.descriptorDigest
+      || selectedCandidate?.executionBindingDigest
+        !== operationSelection.executionBindingDigest
+      || inputCall === undefined
+      || pending.inputDigest !== value.selectedInputDigest
+      || pending.inputDigest !== canonicalDigest(inputCall.inputJson).toString()
+      || operationOutcome === undefined
+      || pending.decisionDigest
+        !== canonicalDigest(operationOutcome.result).toString()
+    ) {
+      return false
+    }
   }
 
   const summary = value.answerRun.summary
@@ -395,6 +495,9 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
       throw new Error('answer_prose_invalid')
     }
     const prose = parsedProse.data
+    const operationOutcome = evidence.operationOutcome === undefined
+      ? undefined
+      : sanitizeAnswerOperationOutcome(evidence.operationOutcome)
     const snapshot: AnswerSnapshot = {
       query: turn.query,
       oneLine: prose.oneLine,
@@ -404,7 +507,9 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
       ...(evidence.operationCandidatesDigest === undefined
         ? {}
         : { operationCandidatesDigest: evidence.operationCandidatesDigest }),
-      ...(evidence.operationOutcome === undefined ? {} : { operationOutcome: evidence.operationOutcome }),
+      ...(evidence.operationComparison === undefined ? {} : { operationComparison: evidence.operationComparison }),
+      ...(operationOutcome === undefined ? {} : { operationOutcome }),
+      ...(evidence.operationPlan === undefined ? {} : { operationPlan: evidence.operationPlan }),
       ...(evidence.operationSelection === undefined ? {} : { operationSelection: evidence.operationSelection }),
       ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
         ? { selectedProvider: evidence.providers[0] }
@@ -419,6 +524,9 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     const problem = turn.status === 'error' ? parsePublicTurnProblem(turn.errorProblemJson) : undefined
     return {
       ...lifecycle,
+      ...(evidence.requestedIntents === undefined
+        ? {}
+        : { requestedIntents: evidence.requestedIntents }),
       workLog: publicWorkLog(evidence.workLog),
       artifacts: buildArtifactsFromSnapshot(snapshot),
       oneLine: prose.oneLine,

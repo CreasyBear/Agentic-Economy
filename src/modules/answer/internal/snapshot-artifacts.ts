@@ -19,11 +19,21 @@ const COMPARE_PROVIDER_LIMIT = 2
 const OPERATION_CANDIDATE_LIMIT = ANSWER_OPERATION_CANDIDATE_LIMIT
 
 const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
-const DATA_ANSWER_ARTIFACTS = [...TEXT_ONLY_ARTIFACTS, 'operation-candidates', 'operation-outcome'] as const
+const DATA_ANSWER_ARTIFACTS = [
+  ...TEXT_ONLY_ARTIFACTS,
+  'operation-candidates',
+  'operation-comparison',
+  'operation-plan',
+  'operation-outcome',
+] as const
+const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
+const EMPTY_ARTIFACTS = ['one-line', 'prose', 'imported-claims', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
 const ANSWER_ARTIFACTS = [
   'one-line',
   'provider-cards',
   'operation-candidates',
+  'operation-comparison',
+  'operation-plan',
   'operation-outcome',
   'location-map',
   'prose',
@@ -31,8 +41,6 @@ const ANSWER_ARTIFACTS = [
   'what-to-do-now',
   'agent-json',
 ] as const
-const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
-const EMPTY_ARTIFACTS = ['one-line', 'prose', 'imported-claims', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
 const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
 const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now'] as const
 
@@ -61,6 +69,18 @@ export function buildArtifactsFromSnapshot(
       candidates: [...snapshot.operationCandidates].slice(0, OPERATION_CANDIDATE_LIMIT),
       ...(snapshot.operationCandidatesDigest === undefined ? {} : { operationCandidatesDigest: snapshot.operationCandidatesDigest }),
       ...(snapshot.operationSelection === undefined ? {} : { selection: snapshot.operationSelection }),
+    })
+  }
+  if (snapshot.operationComparison !== undefined) {
+    artifacts.push({
+      kind: 'operation-comparison',
+      ...snapshot.operationComparison,
+    })
+  }
+  if (snapshot.operationPlan !== undefined) {
+    artifacts.push({
+      kind: 'operation-plan',
+      ...snapshot.operationPlan,
     })
   }
   if (snapshot.operationOutcome !== undefined) {
@@ -292,6 +312,9 @@ function capArtifactForBudget(
             ...(artifact.selection === undefined ? {} : { selection: artifact.selection }),
           }
     }
+    case 'operation-comparison':
+    case 'operation-plan':
+      return artifact
     case 'operation-outcome':
       return artifact
     case 'one-line':

@@ -1,12 +1,5 @@
-import type {
-  AnswerArtifact,
-  AnswerCompareField,
-  AnswerOperationCandidate,
-  AnswerOperationOutcome,
-  AnswerOperationSelection,
-} from '../answer-schema'
-import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
-import type { WebDiscoveryClaim } from '@/modules/storefront/public'
+import type { AnswerArtifact } from '../answer-schema'
+import type { AnswerSnapshot } from '../answer-synthesizer'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import {
   buildArtifactsFromSnapshot,
@@ -15,26 +8,18 @@ import {
   getArtifactBudgetForSnapshot,
   type AnswerArtifactBudget,
 } from './snapshot-artifacts'
+import {
+  projectAnswerOperationResult,
+  type AnswerOperationResultView,
+} from './operation-result-presentation'
 
-export type AnswerMessagePart =
-  | { kind: 'one-line'; text: string }
-  | { kind: 'selected-provider'; provider: AnswerSource }
-  | { kind: 'imported-claims'; claims: readonly WebDiscoveryClaim[] }
-  | { kind: 'operation-candidates'; candidates: readonly AnswerOperationCandidate[]; operationCandidatesDigest?: string; selection?: AnswerOperationSelection }
-  | { kind: 'operation-outcome'; outcome: AnswerOperationOutcome }
-  | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
-  | {
-      kind: 'provider-compare-table'
-      providers: readonly AnswerSource[]
-      fields?: readonly AnswerCompareField[]
-    }
-  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' }[] }
-  | { kind: 'location-map'; label: string; placeQuery: string }
-  | { kind: 'prose'; block: 'summary'; text: string }
-  | { kind: 'what-to-do-now'; text: string; compact?: boolean }
-  | { kind: 'agent-json'; url: string }
-  | { kind: 'protected-by-ae' }
-  | { kind: 'empty-state'; text: string }
+type AnswerMessagePartFromArtifact =
+  | Exclude<AnswerArtifact, { kind: 'provider-cards' | 'operation-outcome' | 'what-to-do-now' }>
+  | (Extract<AnswerArtifact, { kind: 'provider-cards' }> & { scroll?: boolean })
+  | (Extract<AnswerArtifact, { kind: 'operation-outcome' }> & { resultView: AnswerOperationResultView })
+  | (Extract<AnswerArtifact, { kind: 'what-to-do-now' }> & { compact?: boolean })
+
+export type AnswerMessagePart = AnswerMessagePartFromArtifact | { kind: 'empty-state'; text: string }
 
 export type AnswerMessagePartsResult = {
   profile: AnswerLayoutProfile
@@ -110,8 +95,16 @@ export function artifactsToMessageParts(
           ...(artifact.selection === undefined ? {} : { selection: artifact.selection }),
         })
         break
+      case 'operation-comparison':
+      case 'operation-plan':
+        parts.push(artifact)
+        break
       case 'operation-outcome':
-        parts.push({ kind: 'operation-outcome', outcome: artifact.outcome })
+        parts.push({
+          kind: 'operation-outcome',
+          outcome: artifact.outcome,
+          resultView: projectAnswerOperationResult(artifact.outcome),
+        })
         break
       case 'recovery-prompts':
         parts.push({

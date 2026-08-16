@@ -22,10 +22,15 @@ import {
 } from '@/modules/answer/answer-event-schema'
 import {
   AnswerArtifactSchema,
+  AnswerRequestedIntentsSchema,
   type AnswerArtifact,
   type AnswerOperationCandidate,
+  type AnswerOperationComparison,
   type AnswerOperationOutcome,
+  type AnswerOperationPlan,
   type AnswerOperationSelection,
+  type AnswerRequestedIntent,
+  type AnswerRequestInterpretation,
 } from '@/modules/answer/answer-schema'
 import { parseAnswerOperationSelectionRecognition } from './internal/turn-digests'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
@@ -50,6 +55,7 @@ export {
   FollowUpIntentValues,
 }
 export type {
+  AnswerRequestInterpretation,
   AnswerToolCallStatus,
   AnswerTurnCheckpointRoute,
 }
@@ -74,6 +80,9 @@ export const ANSWER_READ_TOOL_IDS = [
   'registry.detail',
   'web.discover',
   'registry.operations.search',
+  'registry.operations.detail',
+  'registry.operations.compare',
+  'registry.operations.inspectPlan',
 ] as const satisfies readonly AnswerToolId[]
 
 const ThinkingStepValues = ['search', 'read', 'write'] as const
@@ -129,10 +138,43 @@ export type AnswerOperationInvokeContext = Readonly<{
   generation?: number
 }>
 
+const answerPendingOriginSchema = z.strictObject({
+  originTurnId: z.string().min(1),
+  originGeneration: z.number().int().nonnegative(),
+  terminalCheckpointDigest: z.string().min(1),
+})
+
+export const AnswerPendingDecisionSchema = z.strictObject({
+  kind: z.enum([
+    'confirmation_required',
+    'authority_required',
+    'operation_pending',
+    'reconciliation_required',
+  ]),
+  operationRef: z.string().min(1),
+  toolId: z.enum(['operation.execute', 'operation.invoke']),
+  candidateSetDigest: z.string().min(1).exactOptional(),
+  descriptorDigest: z.string().min(1).exactOptional(),
+  inputDigest: z.string().min(1).exactOptional(),
+  decisionDigest: z.string().min(1).exactOptional(),
+  origin: answerPendingOriginSchema.exactOptional(),
+})
+export type AnswerPendingDecision = z.infer<typeof AnswerPendingDecisionSchema>
+
+export const AnswerContinuationSourceSchema = z.strictObject({
+  priorTurnId: z.string().min(1),
+  priorTurnSeq: z.number().int().nonnegative(),
+  priorSnapshotHash: z.string().min(1),
+  priorTerminalCheckpointDigest: z.string().min(1),
+})
+export type AnswerContinuationSource = z.infer<typeof AnswerContinuationSourceSchema>
+
 export type AnswerTurnOperationArtifacts = Readonly<{
   operationCandidates?: readonly AnswerOperationCandidate[]
   operationCandidatesDigest?: string
+  operationComparison?: AnswerOperationComparison
   operationOutcome?: AnswerOperationOutcome
+  operationPlan?: AnswerOperationPlan
   operationSelection?: AnswerOperationSelection
 }>
 
@@ -154,6 +196,10 @@ export type AnswerTurnCheckpoint = {
   parentCheckpointDigest?: string
   route: AnswerTurnCheckpointRoute
   intent: FollowUpIntent
+  interpretation?: AnswerRequestInterpretation
+  requestedIntents?: AnswerRequestInterpretation['requestedIntents']
+  continuationSource?: AnswerContinuationSource
+  pendingDecision?: AnswerPendingDecision
   query: string
   priorTurnCount: number
   searchContext?: AeSearchContext
@@ -163,10 +209,13 @@ export type AnswerTurnCheckpoint = {
   toolCallDigests: readonly AnswerTurnCheckpointToolDigest[]
   operationCandidates?: readonly AnswerOperationCandidate[]
   operationCandidatesDigest?: string
+  operationComparison?: AnswerOperationComparison
   operationOutcome?: AnswerOperationOutcome
+  operationPlan?: AnswerOperationPlan
   operationSelection?: AnswerOperationSelection
   resultDigest?: string
   modelRequests: readonly HarnessModelRequestRecord[]
+  selectedInputDigest?: string
   replayMessagesJson: string
   selectedOperationRef?: string
   selectedToolId?: AnswerToolId
@@ -189,6 +238,8 @@ export type AnswerToolCallRecord = {
   resultJson: string
   resultHash: string
   status: AnswerToolCallStatus
+  /** False only when the requested call was rejected before any dispatch. */
+  executed?: boolean
   createdAt: number
 }
 
@@ -286,6 +337,7 @@ export type PublicThreadTurn = {
   seq: number
   query: string
   intent: FollowUpIntent
+  requestedIntents?: readonly AnswerRequestedIntent[]
   status: AnswerTurnStatus
   problem?: AnswerTurnProblem
   workLog: readonly AnswerWorkStep[]
@@ -331,6 +383,7 @@ export const PublicThreadTurnSchema = z.strictObject({
   seq: publicNonnegativeInteger,
   query: z.string(),
   intent: z.enum(FollowUpIntentValues),
+  requestedIntents: AnswerRequestedIntentsSchema.optional(),
   status: z.enum(AnswerTurnStatusValues),
   problem: publicAnswerTurnProblemSchema.optional(),
   workLog: z.array(AnswerWorkStepSchema),
@@ -387,6 +440,9 @@ export function parsePublicThreadProjection(
       query: turn.query,
       intent: turn.intent,
       status: turn.status,
+      ...(turn.requestedIntents === undefined
+        ? {}
+        : { requestedIntents: turn.requestedIntents }),
       ...(turn.problem === undefined ? {} : { problem: turn.problem }),
       workLog: turn.workLog,
       artifacts: turn.artifacts,
@@ -422,8 +478,16 @@ export type FrozenTurnEvidence = {
   importedClaims?: readonly WebDiscoveryClaim[]
   operationCandidates?: readonly AnswerOperationCandidate[]
   operationCandidatesDigest?: string
+  operationComparison?: AnswerOperationComparison
   operationOutcome?: AnswerOperationOutcome
+  operationPlan?: AnswerOperationPlan
   operationSelection?: AnswerOperationSelection
+  interpretation?: AnswerRequestInterpretation
+  requestedIntents?: AnswerRequestInterpretation['requestedIntents']
+  continuationSource?: AnswerContinuationSource
+  pendingDecision?: AnswerPendingDecision
+  selectedInputDigest?: string
+  terminalCheckpointDigest?: string
   allowedSlugs: readonly string[]
   agentJsonUrl: string
   searchContext?: AeSearchContext

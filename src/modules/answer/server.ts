@@ -1,5 +1,6 @@
 export {
   AnswerToolUseAgentError,
+  ANSWER_AGENT_MAX_TOOL_CALLS,
   isAnswerToolUseAgentError,
   runAnswerToolUseAgent,
   type AnswerToolUseAgentInput,

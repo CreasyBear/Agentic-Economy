@@ -1,7 +1,8 @@
 import {
   buildRationaleFollowUpProse,
-  classifyAnswerQuerySafety,
+  classifyAnswerRequestPreflight,
   keylessDataAskFromCandidates,
+  resolveKeylessDataAskFromInterpretation,
   resolveKeylessDataAskSelection,
   type AnswerEvent,
   type AnswerSnapshot,
@@ -10,18 +11,15 @@ import {
   type AnswerWorkStep,
   collectAllowedSlugsFromToolResults,
   emitSnapshotEvents,
-  extractRequestedLocation,
-  resolveKeylessDataAsk,
   type KeylessDataAskResolution,
-  answerOperationCandidateSetDigest,
-  type AnswerQuerySafetyResult,
+  type AnswerPriorTurnContext,
+  type AnswerRequestPreflightResult,
 } from '@/modules/answer/public'
 import {
   convexKeylessExecutableSource,
   type KeylessExecutableSourcePort,
   type OperationExecuteDeps,
 } from '@/modules/capability-execution'
-import { readCapabilityOperationSearch } from '@/modules/capability-supply/operation-source'
 import type {
   HarnessModelRequestRecord,
   HarnessRunStatus,
@@ -40,8 +38,8 @@ import {
   type AnswerTurnProblem,
 } from '@/lib/errors'
 import {
-  hasAnswerServiceSignal,
   planAnswerTurn,
+  planPendingOperationClarification,
   type AnswerResponsePlan,
 } from './answer-response-planner'
 import {
@@ -49,20 +47,22 @@ import {
   publicWorkLog,
   safeWorkLogUserText,
 } from './public-worklog'
-
 import {
-  ANSWER_TURN_EXECUTION_LEASE_MS,
   type AnswerOperationInvokeContext,
+  type AnswerPendingDecision,
+  type AnswerRequestInterpretation,
   type AnswerRunGateSummary,
   type AnswerToolCallRecord,
   type AnswerTurnCheckpoint,
   type AnswerTurnOperationArtifacts,
   type AnswerTurnRecord,
   type AnswerTurnTimingEntry,
+  type AnswerContinuationSource,
   type FollowUpIntent,
-  type FrozenTurnEvidence,
   type FrozenTurnProse,
 } from '../answer-thread.schema'
+import { ANSWER_TURN_EXECUTION_LEASE_MS } from '../answer-thread.schema'
+
 import {
   finalizeReservedAnswerTurnFromSource,
   getAnswerThreadWithTurns,
@@ -79,18 +79,16 @@ import {
   normalizeAnswerTurnQuery,
   parseAnswerOperationSelectionRecognition,
 } from './turn-digests'
-import { resolveIntentRoute, type IntentRoute } from './intent-router'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
 import {
-  findThreadNeedQuery,
   filterProvidersBySuburb,
   parseNarrowToSuburb,
-  resolveFollowUpRegistryQuery,
 } from './follow-up-query'
 import {
   answerHarnessFinalizationSucceeded,
   collectLatestFrozenAllowedSlugs,
   collectLatestFrozenOperationCandidates,
+  collectLatestFrozenSelectedOperationRef,
   collectLatestFrozenProviders,
   finalizePersistedAnswerTurnHarnessRun,
   persistAnswerTurnWithResult,
@@ -105,17 +103,34 @@ import {
   createLiveAnswerHarnessOperation,
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
+import {
+  buildCorrectiveRegistryQuery,
+  buildRationaleEvidence,
+  latestPriorOperationPresentation,
+  pendingDecisionFor,
+  priorTurnOperation,
+  priorTurnStatus,
+  readOperationInputFromToolCalls,
+  readPriorContinuationState,
+  readPriorOperationInput,
+  readPriorSearchContext,
+  readDurableFailureEvidence,
+  selectedInputDigestFor,
+} from './answer-continuation-state'
+import {
+  resolveEffectiveAnswerRoute,
+  type EffectiveAnswerRoute,
+} from './effective-answer-route'
 import { agentTurnPath, readOperationArtifacts } from './turns/agent'
 import { boundaryTurnPath } from './turns/boundary'
 import { clarificationTurnPath } from './turns/clarification'
 import { inquiryHandoffTurnPath } from './turns/inquiry-handoff'
-import { retrievalFirstTurnPath } from './turns/retrieval-first'
 import { insufficientFrozenTurnPath } from './turns/insufficient-frozen'
 import {
   frozenKnownTurnPath,
   selectFrozenProviders,
 } from './turns/frozen-known'
-import { answerOperationCandidateFromPublicDescriptor } from '@/modules/answer/public'
+import { retrievalFirstTurnPath } from './turns/retrieval-first'
 import { parseFrozenEvidence } from './public-projection'
 import {
   describeProviderCount,
@@ -152,316 +167,9 @@ type AnswerTurnLeaseLoss =
   | { kind: 'transport' }
 
 
-type StreamAnswerRoute =
-  IntentRoute | { kind: 'rationale' } | { kind: 'safety_refusal' }
-
-const EXPLICIT_REFERENCE_DOMAIN_TOKENS: Record<string, true> = {
-  encyclopedia: true,
-  reference: true,
-  references: true,
-  wiki: true,
-  wikipedia: true,
-}
-
-function isExplicitReferenceAsk(normalizedQuery: string): boolean {
-  const tokens = normalizedQuery.match(/[a-z0-9]+/g) ?? []
-  if (
-    tokens.some((token) => EXPLICIT_REFERENCE_DOMAIN_TOKENS[token] === true)
-  ) {
-    return true
-  }
-  return (
-    /\b(?:article|page)[-\s]+(?:extract|overview|summary)\b/.test(
-      normalizedQuery,
-    ) ||
-    /\b(?:extract|overview|summary)[-\s]+(?:article|page)\b/.test(
-      normalizedQuery,
-    )
-  )
-}
-
-function isExplicitGeneralWebSearch(query: string): boolean {
-  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
-  return (
-    /\bsearch\s+(?:the\s+)?web\b/.test(normalized) ||
-    /\bweb\s+search\b/.test(normalized) ||
-    /\blook\s+up\b.{0,120}\bon\s+(?:the\s+)?web\b/.test(normalized) ||
-    /\blatest\s+on\s+(?:the\s+)?[a-z0-9]/.test(normalized) ||
-    isExplicitReferenceAsk(normalized)
-  )
-}
-function isRationaleFollowUpQuery(query: string): boolean {
-  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
-  return /\b(?:why|how come|what failed|which constraints?|what constraints?|no matches?|no businesses?|couldn['’]?t find|didn['’]?t find|explain)\b/.test(
-    normalized,
-  )
-}
-
-function isCorrectiveSearchFollowUp(query: string): boolean {
-  const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
-  return (
-    extractRequestedLocation(query) !== undefined ||
-    /\b(?:only|just|licensed|registered|budget|under|within|available|tonight|today|tomorrow|this week|radius|km|exclude|must|prefer)\b/.test(
-      normalized,
-    )
-  )
-}
-
-function buildCorrectiveRegistryQuery(
-  query: string,
-  priorTurns: readonly AnswerTurnRecordLite[],
-): string | undefined {
-  if (!isCorrectiveSearchFollowUp(query)) {
-    return undefined
-  }
-
-  const resolved = resolveFollowUpRegistryQuery(query, priorTurns)
-  if (hasAnswerServiceSignal(resolved)) {
-    return normalizeAnswerTurnQuery(resolved)
-  }
-
-  const priorNeed = findThreadNeedQuery(priorTurns)
-  if (
-    priorNeed === undefined ||
-    resolved.toLowerCase().includes(priorNeed.toLowerCase())
-  ) {
-    return normalizeAnswerTurnQuery(resolved)
-  }
-  return normalizeAnswerTurnQuery(`${priorNeed} ${resolved}`)
-}
-
-function readPriorSearchContext(
-  priorTurns: readonly AnswerTurnRecordLite[],
-): AeSearchContext | undefined {
-  for (const turn of priorTurns.toSorted(
-    (left, right) => right.seq - left.seq,
-  )) {
-    try {
-      const context = parseFrozenEvidence(turn.evidenceJson).searchContext
-      if (context !== undefined) {
-        return context
-      }
-    } catch {
-      // Ignore malformed historical evidence and keep looking for a valid context.
-    }
-  }
-  return undefined
-}
-
-async function readCurrentPublicOperationCandidates(
-  query: string,
-): Promise<readonly AnswerOperationCandidate[]> {
-  let result
-  try {
-    result = await readCapabilityOperationSearch({
-      query,
-      limit: 4,
-    })
-  } catch {
-    return []
-  }
-  if (result.kind !== 'ok') {
-    return []
-  }
-  return result.items.slice(0, 4).flatMap((operation, index) => {
-    const candidate = answerOperationCandidateFromPublicDescriptor(
-      operation,
-      index + 1,
-    )
-    return candidate === undefined ? [] : [candidate]
-  })
-}
-
-function mergePublicOperationCandidates(
-  resolution: KeylessDataAskResolution,
-  publicCandidates: readonly AnswerOperationCandidate[],
-): KeylessDataAskResolution {
-  if (publicCandidates.length === 0) {
-    return resolution
-  }
-
-  const executableByRef = new Map<string, AnswerOperationCandidate>()
-  if (resolution.kind !== 'unavailable') {
-    for (const candidate of resolution.operationCandidates ?? []) {
-      executableByRef.set(candidate.operationRef, candidate)
-    }
-  }
-  const mergedCandidates = publicCandidates.slice(0, 4).map((candidate) => {
-    const executable = executableByRef.get(candidate.operationRef)
-    if (executable?.inputJsonSchema === undefined) {
-      return candidate
-    }
-    return {
-      ...candidate,
-      inputJsonSchema: executable.inputJsonSchema,
-      exactRebindRequired: false,
-      ...(executable.executionBindingDigest === undefined
-        ? {}
-        : { executionBindingDigest: executable.executionBindingDigest }),
-    }
-  })
-  const candidateSetDigest = answerOperationCandidateSetDigest(mergedCandidates)
-
-  if (resolution.kind === 'unavailable') {
-    return {
-      kind: 'resolved',
-      descriptors: [],
-      candidates: [],
-      operationCandidates: mergedCandidates,
-      candidateSetDigest,
-    }
-  }
-
-  if (resolution.kind === 'needs_clarification') {
-    return {
-      ...resolution,
-      operationCandidates: mergedCandidates,
-      decision: {
-        ...resolution.decision,
-        candidates: mergedCandidates,
-        candidateSetDigest,
-      },
-    }
-  }
-
-  const selectedRef = resolution.selected?.operationRef
-  const selectedCandidate =
-    selectedRef === undefined
-      ? undefined
-      : mergedCandidates.find(
-          (candidate) => candidate.operationRef === selectedRef,
-        )
-
-  if (selectedCandidate === undefined) {
-    const {
-      selected: _selected,
-      selectedCandidate: _selectedCandidate,
-      ...withoutSelection
-    } = resolution
-    return {
-      ...withoutSelection,
-      operationCandidates: mergedCandidates,
-      candidateSetDigest,
-    }
-  }
-  return {
-    ...resolution,
-    operationCandidates: mergedCandidates,
-    candidateSetDigest,
-    selectedCandidate,
-  }
-}
-
-function readDurableFailureEvidence(
-  priorTurns: readonly AnswerTurnRecordLite[],
-): string | undefined {
-  for (const turn of priorTurns.toSorted(
-    (left, right) => right.seq - left.seq,
-  )) {
-    let evidence: FrozenTurnEvidence
-    try {
-      evidence = parseFrozenEvidence(turn.evidenceJson)
-    } catch {
-      continue
-    }
-
-    const failedStep = evidence.workLog
-      .toReversed()
-      .find((step) => step.status === 'error' && isPublicWorkStep(step))
-    const summary = failedStep?.summary?.replace(/\s+/g, ' ').trim()
-    if (
-      summary !== undefined &&
-      summary.length > 0 &&
-      !/\b(?:thought|reasoning|prompt|model|tool|capability|internal|raw)\b/i.test(
-        summary,
-      )
-    ) {
-      return summary.slice(0, 240)
-    }
-  }
-  return undefined
-}
-
-function buildRationaleEvidence(input: {
-  query: string
-  priorTurns: readonly AnswerTurnRecordLite[]
-  searchContext: AeSearchContext | undefined
-}): {
-  constraints: string[]
-  budget?: string
-  failure?: string
-} {
-  const queries = [...input.priorTurns.map((turn) => turn.query), input.query]
-  const constraints = new Set<string>()
-  const explicitLocations = queries
-    .map((query) => extractRequestedLocation(query))
-    .filter(
-      (location): location is string =>
-        location !== undefined && location.trim().length > 0,
-    )
-  const location =
-    explicitLocations.at(-1) ?? input.searchContext?.location?.label
-  if (location !== undefined) {
-    constraints.add(`Location: ${location}`)
-  }
-
-  const timing =
-    input.searchContext?.timing === 'date' &&
-    input.searchContext.timingDate !== undefined
-      ? `Timing: ${input.searchContext.timingDate}`
-      : input.searchContext?.timing === undefined
-        ? queries
-            .toReversed()
-            .find((query) =>
-              /\b(?:tonight|tomorrow(?: morning)?|today|this week|urgent)\b/i.test(
-                query,
-              ),
-            )
-        : `Timing: ${input.searchContext.timing.replace('_', ' ')}`
-  if (timing !== undefined) {
-    constraints.add(
-      timing.startsWith('Timing:')
-        ? timing
-        : `Timing: ${timing.match(/\b(?:tonight|tomorrow(?: morning)?|today|this week|urgent)\b/i)?.[0] ?? timing}`,
-    )
-  }
-
-  if (queries.some((query) => /\blicen[cs]ed\b/i.test(query))) {
-    constraints.add('Licensed providers requested')
-  }
-  const radius = queries
-    .map((query) =>
-      query.match(
-        /\b(?:within|under|less than|no more than)\s+(\d+)\s*(km|kilomet(?:re|er)s?|mi(?:le)?s?)\b/i,
-      ),
-    )
-    .find((match): match is RegExpMatchArray => match !== null)
-  if (radius?.[1] !== undefined && radius[2] !== undefined) {
-    constraints.add(`Distance: ${radius[1]} ${radius[2]}`)
-  }
-
-  const budgets = queries.flatMap((query) =>
-    [...query.matchAll(/\b(?:A\$|AUD\s*|\$)\s?\d[\d,]*(?:\.\d{1,2})?\b/gi)].map(
-      (match) => match[0].replace(/\s+/g, ''),
-    ),
-  )
-  const uniqueBudgets = [...new Set(budgets)]
-  const budget =
-    uniqueBudgets.length === 0
-      ? 'Budget: no explicit budget was retained'
-      : uniqueBudgets.length === 1
-        ? `Budget retained: ${uniqueBudgets[0]}`
-        : `Budget precedence: ${uniqueBudgets.at(-1)} is the latest stated budget; earlier ${uniqueBudgets.slice(0, -1).join(' and ')} was superseded`
-  const failure = readDurableFailureEvidence(input.priorTurns)
-
-  return {
-    constraints: [...constraints],
-    budget,
-    ...(failure === undefined ? {} : { failure }),
-  }
-}
-
 type StreamAnswerTurnRuntimeState = {
+  checkpointDigestRef: { value?: string }
+  resumeCheckpoint?: AnswerTurnCheckpoint
   query: string
   threadId: string
   turnId: string
@@ -470,7 +178,6 @@ type StreamAnswerTurnRuntimeState = {
   reservationKey: string
   requestDigest: string
   generation: number
-  resumeCheckpoint?: AnswerTurnCheckpoint
   createdAt: number
   searchContext: AeSearchContext | undefined
   registryQuery?: string
@@ -478,14 +185,17 @@ type StreamAnswerTurnRuntimeState = {
   priorTurnCount: number
   priorProviders: AnswerSource[]
   priorAllowedSlugs: readonly string[]
+  priorOperationInput?: Readonly<Record<string, unknown>>
+  priorOperationRef?: string
   intent: FollowUpIntent
-  querySafety?: AnswerQuerySafetyResult | undefined
-  route?: StreamAnswerRoute | undefined
+  interpretation?: AnswerRequestInterpretation
+  continuationSource?: AnswerContinuationSource
+  pendingDecision?: AnswerPendingDecision
+  querySafety?: AnswerRequestPreflightResult
+  route?: EffectiveAnswerRoute | undefined
   responsePlan?: AnswerResponsePlan | undefined
   keylessDataAsk?: KeylessDataAskResolution | undefined
   publicOperationCandidates: readonly AnswerOperationCandidate[]
-  webSearchUnavailable?: boolean | undefined
-  retrievalFirst?: TurnPathResult | undefined
   narrowSuburb?: string | undefined
   captured?: AnswerSnapshot | undefined
   errorCopyId?: string | undefined
@@ -522,13 +232,14 @@ export type StreamAnswerTurnInput = {
     OperationExecuteDeps,
     'isPublicTarget' | 'fetchImpl'
   >
-  /** Narrow evaluator seam; production always uses the OpenRouter safety classifier. */
+  /** Narrow evaluator seam; production uses the structured Answer preflight. */
   querySafetyClassifier?: (
     input: Readonly<{
       query: string
+      priorTurns?: readonly AnswerPriorTurnContext[]
       signal?: AbortSignal
     }>,
-  ) => Promise<AnswerQuerySafetyResult>
+  ) => Promise<AnswerRequestPreflightResult>
   signal?: AbortSignal
   sourceWriteRequest?: Request
   sourceWriteBody?: string | Uint8Array
@@ -818,8 +529,22 @@ export async function streamAnswerTurn(
 
   const createdAt = Date.now()
   const operationArtifacts = readOperationArtifacts(resumeCheckpoint)
+  const resumePriorOperationRef =
+    resumeCheckpoint?.operationSelection?.operationRef
+    ?? resumeCheckpoint?.selectedOperationRef
+  const resumePriorOperationInput =
+    resumeCheckpoint === undefined
+      ? undefined
+      : readOperationInputFromToolCalls(
+          resumeCheckpoint.toolCalls,
+          resumePriorOperationRef,
+        )
   const runResult = await harness.loop.run<StreamAnswerTurnRuntimeState>({
     initialState: {
+      checkpointDigestRef:
+        resumeCheckpoint === undefined
+          ? {}
+          : { value: canonicalDigest(resumeCheckpoint).toString() },
       query: resumeCheckpoint?.query ?? query,
       threadId,
       turnId,
@@ -828,14 +553,29 @@ export async function streamAnswerTurn(
       reservationKey: admission.reservationKey,
       requestDigest: input.requestDigest,
       generation: admission.generation,
-      ...(resumeCheckpoint === undefined ? {} : { resumeCheckpoint }),
       createdAt,
-      searchContext: resumeCheckpoint?.searchContext ?? input.searchContext,
+      searchContext: input.searchContext,
+      ...(resumeCheckpoint === undefined ? {} : { resumeCheckpoint }),
       priorTurns: [],
       priorTurnCount: resumeCheckpoint?.priorTurnCount ?? 0,
       priorProviders: [...(resumeCheckpoint?.priorProviders ?? [])],
       priorAllowedSlugs: [...(resumeCheckpoint?.priorAllowedSlugs ?? [])],
+      ...(resumePriorOperationRef === undefined
+        ? {}
+        : { priorOperationRef: resumePriorOperationRef }),
+      ...(resumePriorOperationInput === undefined
+        ? {}
+        : { priorOperationInput: resumePriorOperationInput }),
       intent: resumeCheckpoint?.intent ?? 'refine_search',
+      ...(resumeCheckpoint?.interpretation === undefined
+        ? {}
+        : { interpretation: resumeCheckpoint.interpretation }),
+      ...(resumeCheckpoint?.continuationSource === undefined
+        ? {}
+        : { continuationSource: resumeCheckpoint.continuationSource }),
+      ...(resumeCheckpoint?.pendingDecision === undefined
+        ? {}
+        : { pendingDecision: resumeCheckpoint.pendingDecision }),
       ...(resumeCheckpoint?.operationCandidates === undefined
         ? {}
         : {
@@ -858,6 +598,7 @@ export async function streamAnswerTurn(
       timings,
       workLog,
       harness,
+      stopLeaseHeartbeat,
     }),
   })
   const finalState = runResult.state
@@ -912,30 +653,55 @@ function buildStreamAnswerTurnPhases(input: {
   timings: TurnTimingCollector
   workLog: WorkStepEmitter
   harness: LiveAnswerHarnessOperation
+  stopLeaseHeartbeat: () => void
 }): HarnessRunLoopPhaseHandlers<StreamAnswerTurnRuntimeState> {
   return {
     context: async ({ state }) => {
       if (state.resumeCheckpoint !== undefined) {
         return state
       }
-      const selectionRecognition = parseAnswerOperationSelectionRecognition(
-        state.query,
+      const priorTurns =
+        input.input.preloadedPriorTurns === undefined
+          ? await readPriorCompleteTurns(
+              input.input.admission.threadId,
+              input.input.sessionId,
+            )
+          : input.input.preloadedPriorTurns.filter(
+              (turn) => turn.status === 'complete',
+            )
+      const priorContinuation = readPriorContinuationState(priorTurns)
+      const priorContext: readonly AnswerPriorTurnContext[] = priorTurns.map(
+        (turn) => {
+          const operation = priorTurnOperation(turn)
+          return {
+            seq: turn.seq,
+            query: turn.query,
+            status: priorTurnStatus(turn),
+            ...(operation === undefined ? {} : { operation }),
+            ...(priorContinuation.source?.priorTurnId === turn.turnId
+              && priorContinuation.pendingDecision !== undefined
+              ? {
+                  pendingDecision: {
+                    kind: priorContinuation.pendingDecision.kind,
+                    operationRef: priorContinuation.pendingDecision.operationRef,
+                  },
+                }
+              : {}),
+          }
+        },
       )
-      const publicOperationCandidates =
-        selectionRecognition.kind === 'absent'
-          ? await readCurrentPublicOperationCandidates(state.query)
-          : []
       const querySafety = await (
-        input.input.querySafetyClassifier ?? classifyAnswerQuerySafety
+        input.input.querySafetyClassifier ?? classifyAnswerRequestPreflight
       )({
         query: state.query,
+        priorTurns: priorContext,
         ...(input.input.signal === undefined
           ? {}
           : { signal: input.input.signal }),
       })
       input.harness.recordModelRequest(querySafety.modelRequest)
       input.timings.record(
-        'model.answer_query_safety',
+        'model.answer_request_preflight',
         querySafety.modelRequest.durationMs,
         {
           decision: querySafety.kind,
@@ -944,20 +710,20 @@ function buildStreamAnswerTurnPhases(input: {
             : {}),
         },
       )
-      const priorTurns =
-        querySafety.kind === 'refused'
-          ? []
-          : input.input.preloadedPriorTurns === undefined
-            ? await readPriorCompleteTurns(
-                input.input.admission.threadId,
-                input.input.sessionId,
-              )
-            : input.input.preloadedPriorTurns.filter(
-                (turn) => turn.status === 'complete',
-              )
+      const interpretation = querySafety.interpretation
+      const priorOperationInput = readPriorOperationInput(priorTurns)
+      const canReusePriorOperationInput =
+        interpretation?.continuation === 'resolve_pending'
+        || (
+          interpretation?.route === 'operation'
+          && interpretation.continuation === 'refine_prior_operation'
+        )
+      const priorOperationRef =
+        collectLatestFrozenSelectedOperationRef(priorTurns)
       return {
         ...state,
         querySafety,
+        ...(interpretation === undefined ? {} : { interpretation }),
         modelRequests: [querySafety.modelRequest],
         searchContext:
           querySafety.kind === 'refused'
@@ -965,14 +731,34 @@ function buildStreamAnswerTurnPhases(input: {
             : (input.input.searchContext ?? readPriorSearchContext(priorTurns)),
         priorTurns,
         priorTurnCount: priorTurns.length,
-        publicOperationCandidates,
+        ...(canReusePriorOperationInput && priorOperationInput !== undefined
+          ? {
+              priorOperationInput,
+              ...(priorOperationRef === undefined ? {} : { priorOperationRef }),
+            }
+          : {}),
+        ...(interpretation === undefined
+          || interpretation.continuation === 'new'
+          || priorContinuation.source === undefined
+          ? {}
+          : { continuationSource: priorContinuation.source }),
+        ...(interpretation?.continuation !== 'resolve_pending'
+          || priorContinuation.pendingDecision === undefined
+          ? {}
+          : { pendingDecision: priorContinuation.pendingDecision }),
       }
     },
     intent: ({ state }) => {
       if (state.resumeCheckpoint !== undefined) {
         return state
       }
-      const intent = classifyFollowUpIntent(state.query, state.priorTurnCount)
+      const interpretedRoute = state.interpretation?.route
+      const intent =
+        interpretedRoute === 'boundary'
+          ? ('explain_boundary' as const)
+          : interpretedRoute === 'business'
+            ? classifyFollowUpIntent(state.query, state.priorTurnCount)
+            : ('refine_search' as const)
       input.stopContextTiming({
         priorTurns: state.priorTurns.length,
         accessTurnCount: state.priorTurnCount,
@@ -989,6 +775,20 @@ function buildStreamAnswerTurnPhases(input: {
             ? 'Checking the latest answer to see whether this is a follow-up.'
             : 'Starting with this request.',
         detailRows: [
+          ...(state.interpretation === undefined
+            ? []
+            : [
+                {
+                  label: 'Interpretation',
+                  value: `${state.interpretation.route}/${state.interpretation.continuation}`,
+                },
+                {
+                  label: 'Requested intents',
+                  value: state.interpretation.requestedIntents
+                    .map((intent) => intent.phrase)
+                    .join(', '),
+                },
+              ]),
           { label: 'Request', value: safeWorkLogUserText(state.query) },
           { label: 'Earlier answers', value: String(state.priorTurnCount) },
           {
@@ -1002,47 +802,54 @@ function buildStreamAnswerTurnPhases(input: {
       return {
         ...state,
         intent,
+        narrowSuburb: parseNarrowToSuburb(state.query),
         priorProviders: collectLatestFrozenProviders(state.priorTurns),
         priorAllowedSlugs: collectLatestFrozenAllowedSlugs(state.priorTurns),
       }
     },
     route: ({ state }) => {
-      if (state.querySafety?.kind === 'refused') {
-        return { ...state, route: { kind: 'safety_refusal' } }
-      }
-      const baseRoute = resolveIntentRoute(state.intent)
-      const rationaleRoute =
-        state.priorTurnCount > 0 &&
-        state.priorProviders.length === 0 &&
-        isRationaleFollowUpQuery(state.query) &&
-        baseRoute.kind !== 'boundary_explain' &&
-        baseRoute.kind !== 'unsupported'
-      const restartRoute =
-        state.priorProviders.length === 0 &&
-        isCorrectiveSearchFollowUp(state.query) &&
-        (baseRoute.kind === 'frozen_filter' ||
-          baseRoute.kind === 'frozen_compare')
-      const route =
-        rationaleRoute || restartRoute
-          ? ({
-              kind: rationaleRoute ? 'rationale' : 'tool_search',
-            } as StreamAnswerRoute)
-          : baseRoute
-      const registryQuery =
-        route.kind === 'tool_search' && state.priorProviders.length === 0
+      const correctiveRegistryQuery =
+        state.priorProviders.length === 0
           ? buildCorrectiveRegistryQuery(state.query, state.priorTurns)
+          : undefined
+      const decision = resolveEffectiveAnswerRoute({
+        query: state.query,
+        ...(correctiveRegistryQuery === undefined
+          ? {}
+          : { registryQuery: correctiveRegistryQuery }),
+        querySafetyRefused: state.querySafety?.kind === 'refused',
+        intent: state.intent,
+        interpretation: state.interpretation,
+        priorTurnCount: state.priorTurnCount,
+        priorProviderCount: state.priorProviders.length,
+        priorOperationRef: state.priorOperationRef,
+        resuming: state.resumeCheckpoint !== undefined,
+      })
+      const registryQuery =
+        decision.shouldBuildCorrectiveRegistryQuery
+          ? correctiveRegistryQuery
           : undefined
       return {
         ...state,
-        route,
+        route: decision.route,
         ...(registryQuery === undefined ? {} : { registryQuery }),
       }
     },
     retrieval: async ({ state }) => {
       if (state.resumeCheckpoint !== undefined) {
-        return state
+        return {
+          ...state,
+          responsePlan: planAnswerTurn({
+            query: state.query,
+            priorTurnsCount: state.priorTurnCount,
+            searchContext: state.searchContext,
+          }),
+        }
       }
-      if (state.route?.kind !== 'tool_search') {
+      if (
+        state.route?.kind !== 'tool_search' &&
+        state.route?.kind !== 'initial_retrieval'
+      ) {
         return state
       }
       if (state.registryQuery !== undefined) {
@@ -1059,14 +866,29 @@ function buildStreamAnswerTurnPhases(input: {
           })
         }
       }
-      const keylessExecutableSource =
-        input.input.keylessExecutableSource ?? convexKeylessExecutableSource
-      const priorOperationCandidates = collectLatestFrozenOperationCandidates(
-        state.priorTurns,
-      )
+      const priorOperationCandidates =
+        collectLatestFrozenOperationCandidates(state.priorTurns)
+      const priorSelectedOperationRef =
+        collectLatestFrozenSelectedOperationRef(state.priorTurns)
       const structuredSelection = parseAnswerOperationSelectionRecognition(
         state.query,
       )
+      if (
+        structuredSelection.kind === 'absent'
+        && (
+          state.interpretation?.route === 'confirmation'
+          || state.interpretation?.continuation === 'resolve_pending'
+        )
+        && state.pendingDecision === undefined
+      ) {
+        return {
+          ...state,
+          responsePlan: planPendingOperationClarification({
+            query: state.query,
+            hasPendingDecision: state.pendingDecision !== undefined,
+          }),
+        }
+      }
       if (
         structuredSelection.kind === 'invalid' ||
         (structuredSelection.kind === 'valid' &&
@@ -1080,7 +902,9 @@ function buildStreamAnswerTurnPhases(input: {
           ),
         }
       }
-      if (priorOperationCandidates.length > 0) {
+      if (structuredSelection.kind === 'valid') {
+        const keylessExecutableSource =
+          input.input.keylessExecutableSource ?? convexKeylessExecutableSource
         const selection = await resolveKeylessDataAskSelection(
           state.query,
           priorOperationCandidates,
@@ -1093,63 +917,38 @@ function buildStreamAnswerTurnPhases(input: {
           }
         }
       }
-      const keylessDataAsk = await resolveKeylessDataAsk(
-        state.query,
-        keylessExecutableSource,
-      )
-      const mergedKeylessDataAsk = mergePublicOperationCandidates(
-        keylessDataAsk,
-        state.publicOperationCandidates,
-      )
-      const resolvedState = {
-        ...state,
-        keylessDataAsk: mergedKeylessDataAsk,
+      const continuation = state.interpretation?.continuation
+      const canReusePriorOperation =
+        continuation === 'resolve_pending'
+        || (
+          state.interpretation?.route === 'operation'
+          && continuation === 'refine_prior_operation'
+        )
+      if (structuredSelection.kind === 'absent' && canReusePriorOperation) {
+        const keylessExecutableSource =
+          input.input.keylessExecutableSource ?? convexKeylessExecutableSource
+        const continuationResolution = await resolveKeylessDataAskFromInterpretation(
+          continuation ?? 'new',
+          priorOperationCandidates,
+          priorSelectedOperationRef,
+          keylessExecutableSource,
+        )
+        if (continuationResolution !== undefined) {
+          return {
+            ...state,
+            keylessDataAsk: continuationResolution,
+          }
+        }
       }
-      if (
-        mergedKeylessDataAsk.kind === 'needs_clarification' ||
-        mergedKeylessDataAsk.kind === 'unavailable'
-      ) {
-        return resolvedState
-      }
-      if ((mergedKeylessDataAsk.operationCandidates?.length ?? 0) > 0) {
-        return resolvedState
-      }
-      if (isExplicitGeneralWebSearch(state.query)) {
-        return { ...resolvedState, webSearchUnavailable: true }
-      }
-
-      const narrowSuburb = parseNarrowToSuburb(state.query)
-      if (narrowSuburb !== undefined && state.priorProviders.length > 0) {
-        return { ...resolvedState, narrowSuburb }
-      }
-
       const responsePlan = planAnswerTurn({
-        query: state.registryQuery ?? state.query,
+        query: state.query,
         priorTurnsCount: state.priorTurnCount,
         searchContext: state.searchContext,
       })
       if (responsePlan.mode === 'clarify') {
-        return { ...resolvedState, responsePlan }
+        return { ...state, responsePlan }
       }
-
-      const retrievalFirst = await retrievalFirstTurnPath.run(
-        runtimeTurnPathContext(input, resolvedState),
-        responsePlan,
-      )
-      const nextState = {
-        ...resolvedState,
-        responsePlan,
-        retrievalFirst,
-      }
-      if (retrievalFirst === undefined) {
-        return nextState
-      }
-      if ((retrievalFirst.snapshot?.providers.length ?? 0) > 0) {
-        return hasAnswerServiceSignal(state.registryQuery ?? state.query)
-          ? applyToolLedResult(nextState, retrievalFirst)
-          : nextState
-      }
-      return applyToolLedResult(nextState, retrievalFirst)
+      return { ...state, responsePlan }
     },
     model: async ({ state }) => {
       if (
@@ -1167,12 +966,77 @@ function buildStreamAnswerTurnPhases(input: {
 
       const responsePlan = state.responsePlan
       switch (route.kind) {
+        case 'initial_retrieval': {
+          if (responsePlan?.mode === 'clarify') {
+            return applyToolLedResult(
+              state,
+              await clarificationTurnPath.run(
+                runtimeTurnPathContext(input, state),
+                responsePlan,
+              ),
+            )
+          }
+          if (responsePlan?.mode !== 'answer') return state
+          let seedToolCalls =
+            state.resumeCheckpoint === undefined ? state.toolCalls : []
+          if (
+            state.resumeCheckpoint === undefined
+            && route.shouldRunBusinessRetrievalFirst
+          ) {
+            const retrieval = await retrievalFirstTurnPath.run(
+              runtimeTurnPathContext(input, state),
+              responsePlan,
+            )
+            if (
+              retrieval === undefined
+              || retrieval.snapshot !== undefined
+              || retrieval.toolCalls.some((call) => call.status !== 'complete')
+              || input.input.signal?.aborted === true
+            ) {
+              return applyToolLedResult(state, retrieval)
+            }
+            seedToolCalls = retrieval.toolCalls
+          }
+          const result = await agentTurnPath.run(
+            runtimeTurnPathContext(input, state),
+            {
+              query: state.query,
+              followUpIntent: state.intent,
+              searchContext: state.searchContext,
+              effectiveRoute: route.agent,
+              ...(state.interpretation === undefined
+                ? {}
+                : { requestedIntents: state.interpretation.requestedIntents }),
+              ...(state.priorOperationInput === undefined
+                ? {}
+                : {
+                    priorOperationInput: state.priorOperationInput,
+                    ...(state.priorOperationRef === undefined
+                      ? {}
+                      : { priorOperationRef: state.priorOperationRef }),
+                  }),
+              keylessExecutableSource:
+                input.input.keylessExecutableSource ??
+                convexKeylessExecutableSource,
+            },
+            seedToolCalls,
+            undefined,
+            undefined,
+          )
+          return applyToolLedResult(state, result)
+        }
         case 'safety_refusal':
           return applyToolLedResult(
             state,
             await boundaryTurnPath.run(
               runtimeTurnPathContext(input, state),
-              'safety_refusal',
+              {
+                kind: 'safety_refusal',
+                safetyReason:
+                  state.querySafety?.kind === 'refused'
+                    ? state.querySafety.reason
+                    : 'unsafe_request',
+              },
             ),
           )
         case 'rationale': {
@@ -1267,16 +1131,10 @@ function buildStreamAnswerTurnPhases(input: {
           return applyToolLedResult(state, result)
         }
         case 'tool_search': {
-          if (state.webSearchUnavailable === true) {
-            return applyToolLedResult(
-              state,
-              await boundaryTurnPath.run(
-                runtimeTurnPathContext(input, state),
-                'web_search_unavailable',
-              ),
-            )
-          }
-          if (state.narrowSuburb !== undefined) {
+          if (
+            state.narrowSuburb !== undefined
+            && state.priorProviders.length > 0
+          ) {
             const narrowed = reindexProviders(
               filterProvidersBySuburb(state.priorProviders, state.narrowSuburb),
             )
@@ -1287,87 +1145,85 @@ function buildStreamAnswerTurnPhases(input: {
             )
             return applyToolLedResult(state, result)
           }
-          if (state.responsePlan?.mode === 'clarify') {
-            return applyToolLedResult(
-              state,
-              await clarificationTurnPath.run(
+          let seedToolCalls =
+            state.resumeCheckpoint === undefined ? state.toolCalls : []
+          if (
+            state.keylessDataAsk === undefined
+            && state.responsePlan !== undefined
+          ) {
+            if (state.responsePlan.mode === 'clarify') {
+              return applyToolLedResult(
+                state,
+                await clarificationTurnPath.run(
+                  runtimeTurnPathContext(input, state),
+                  state.responsePlan,
+                ),
+              )
+            }
+            if (
+              state.responsePlan.mode === 'answer'
+              && route.shouldRunBusinessRetrievalFirst
+            ) {
+              const retrieval = await retrievalFirstTurnPath.run(
                 runtimeTurnPathContext(input, state),
                 state.responsePlan,
-              ),
-            )
+              )
+              if (
+                retrieval === undefined
+                || retrieval.snapshot !== undefined
+                || retrieval.toolCalls.some((call) => call.status !== 'complete')
+                || input.input.signal?.aborted === true
+              ) {
+                return applyToolLedResult(state, retrieval)
+              }
+              seedToolCalls = retrieval.toolCalls
+            }
           }
-          const retrieved = state.retrievalFirst
-          const retrievedHasProviders =
-            retrieved?.snapshot !== undefined &&
-            retrieved.snapshot.providers.length > 0
           const keylessExecutableSource =
             input.input.keylessExecutableSource ?? convexKeylessExecutableSource
-          const keylessDataAsk: KeylessDataAskResolution =
-            state.keylessDataAsk ?? {
-              kind: 'resolved',
-              descriptors: [],
-              candidates: [],
-            }
-          const selected =
-            keylessDataAsk.kind === 'resolved'
-              ? keylessDataAsk.selected
-              : undefined
-          const result =
-            retrievedHasProviders &&
-            keylessDataAsk.kind === 'resolved' &&
-            selected === undefined
-              ? await agentTurnPath.run(
-                  runtimeTurnPathContext(input, state),
-                  {
-                    query: state.query,
-                    followUpIntent: state.intent,
-                    searchContext: state.searchContext,
-                    priorProviders: retrieved!.snapshot!.providers,
-                    priorAllowedSlugs: [...retrieved!.allowedSlugs],
-                    keylessDataAsk,
-                    keylessExecutableSource,
-                    ...(input.input.operationExecuteDeps === undefined
+          const keylessDataAsk = state.keylessDataAsk
+          const priorOperationPresentation =
+            latestPriorOperationPresentation(state.priorTurns)
+          const result = await agentTurnPath.run(
+            runtimeTurnPathContext(input, state),
+            {
+              query: state.query,
+              followUpIntent: state.intent,
+              searchContext: state.searchContext,
+              effectiveRoute: route.agent,
+              ...(state.interpretation === undefined
+                ? {}
+                : { requestedIntents: state.interpretation.requestedIntents }),
+              ...(state.priorOperationInput === undefined
+                ? {}
+                : {
+                    priorOperationInput: state.priorOperationInput,
+                    ...(state.priorOperationRef === undefined
                       ? {}
-                      : {
-                          operationExecuteDeps:
-                            input.input.operationExecuteDeps,
-                        }),
-                    disableTools: true,
-                  },
-                  retrieved!.toolCalls,
-                  state.responsePlan?.mode,
-                  undefined,
-                )
-              : await agentTurnPath.run(
-                  runtimeTurnPathContext(input, state),
-                  {
-                    query: state.query,
-                    followUpIntent: state.intent,
-                    searchContext: state.searchContext,
-                    keylessDataAsk,
-                    keylessExecutableSource,
-                    ...(input.input.operationExecuteDeps === undefined
-                      ? {}
-                      : {
-                          operationExecuteDeps:
-                            input.input.operationExecuteDeps,
-                        }),
-                    ...(keylessDataAsk.kind === 'needs_clarification'
-                      ? { disableTools: true }
-                      : {}),
-                    // Keep surfaced operation providers as grounding when the
-                    // selected capability tool is enabled.
-                    ...(retrievedHasProviders && selected !== undefined
-                      ? {
-                          priorProviders: retrieved!.snapshot!.providers,
-                          priorAllowedSlugs: [...retrieved!.allowedSlugs],
-                        }
-                      : {}),
-                  },
-                  state.resumeCheckpoint === undefined ? state.toolCalls : [],
-                  undefined,
-                  state.responsePlan?.toolPolicy,
-                )
+                      : { priorOperationRef: state.priorOperationRef }),
+                  }),
+              ...(state.priorOperationRef === undefined ||
+              priorOperationPresentation === undefined
+                ? {}
+                : { priorOperationPresentation }),
+              keylessExecutableSource,
+              ...(input.input.operationExecuteDeps === undefined
+                ? {}
+                : {
+                    operationExecuteDeps:
+                      input.input.operationExecuteDeps,
+                  }),
+              ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
+              ...(keylessDataAsk?.kind === 'needs_clarification'
+                ? { disableTools: true }
+                : {}),
+            },
+            seedToolCalls,
+            undefined,
+            keylessDataAsk === undefined
+              ? undefined
+              : responsePlan?.toolPolicy,
+          )
           return applyToolLedResult(state, result)
         }
         default: {
@@ -1454,6 +1310,7 @@ function buildStreamAnswerTurnPhases(input: {
       return { ...state, assembled: true }
     },
     persist: async ({ state }) => {
+      input.timings.record('turn.persistence_prepare', 0)
       const persistInput = buildPersistAnswerTurnInput({
         input: input.input,
         state,
@@ -1461,6 +1318,7 @@ function buildStreamAnswerTurnPhases(input: {
         workLog: input.workLog,
         harness: input.harness,
       })
+
       const persistResult = await input.harness.persist(() =>
         persistAnswerTurnWithResult(persistInput),
       )
@@ -1471,6 +1329,10 @@ function buildStreamAnswerTurnPhases(input: {
       }
     },
     report: async ({ state }) => {
+      // The turn lease ends at the persistence handoff. A finalizer may take
+      // longer than one heartbeat; renewals after it settles would report a
+      // false lease conflict and suppress the terminal complete frame.
+      input.stopLeaseHeartbeat()
       let reportState: StreamAnswerTurnRuntimeState = state
       let persistInput = state.persistInput
       let persistResult = state.persistResult
@@ -1755,24 +1617,45 @@ function buildPersistAnswerTurnInput(input: {
     collectAllowedSlugsFromToolResults(
       toolCallRecordsToGateInput(input.state.toolCalls),
     )
+  const pendingDecision = pendingDecisionFor(
+    input.state.operationArtifacts?.operationOutcome,
+    input.state.operationArtifacts?.operationSelection,
+    input.state.toolCalls,
+  )
+  const selectedInputDigest = selectedInputDigestFor(
+    input.state.toolCalls,
+    input.state.operationArtifacts?.operationSelection,
+  )
+  const interpretation = input.state.interpretation
+  const continuationSource = input.state.continuationSource
+  const terminalCheckpointDigest = input.state.checkpointDigestRef.value
 
-  input.timings.record('turn.persistence_prepare', 0, {
-    status: finalTurnStatus,
-    toolCalls: input.state.toolCalls.length,
-  })
   return {
     reservationKey: input.state.reservationKey,
     requestDigest: input.state.requestDigest,
     expectedGeneration: input.state.generation,
     sessionId: input.input.sessionId,
-    createdAt: input.state.createdAt,
     threadId: input.state.threadId,
     isNewThread: input.state.isNewThread,
+    createdAt: input.state.createdAt,
+    query: input.state.query,
+    intent: input.state.intent,
+    ...(interpretation === undefined
+      ? {}
+      : {
+          interpretation,
+          requestedIntents: interpretation.requestedIntents,
+        }),
+    ...(continuationSource === undefined ? {} : { continuationSource }),
+    ...(pendingDecision === undefined ? {} : { pendingDecision }),
+    ...(selectedInputDigest === undefined ? {} : { selectedInputDigest }),
+    ...(terminalCheckpointDigest === undefined
+      ? {}
+      : { terminalCheckpointDigest }),
+
     title: buildThreadTitle(input.state.query),
     turnId: input.state.turnId,
     turnSeq: input.state.turnSeq,
-    query: input.state.query,
-    intent: input.state.intent,
     ...(input.state.captured === undefined
       ? {}
       : { captured: input.state.captured }),
@@ -1913,7 +1796,7 @@ function startAnswerTurnLeaseHeartbeat(input: {
 
 
 function checkpointRouteFor(
-  route: StreamAnswerRoute | undefined,
+  route: EffectiveAnswerRoute | undefined,
 ): AnswerTurnCheckpoint['route'] {
   switch (route?.kind) {
     case 'frozen_filter':
@@ -1980,6 +1863,17 @@ function runtimeTurnPathContext(
         inputDigest: canonicalDigest(call.inputJson).toString(),
         resultDigest: call.resultHash,
       }))
+      const continuationSource = state.continuationSource
+      const pendingDecision = pendingDecisionFor(
+        partial.operationOutcome,
+        partial.operationSelection,
+        partial.toolCalls,
+      )
+      const selectedInputDigest = selectedInputDigestFor(
+        partial.toolCalls,
+        partial.operationSelection,
+      )
+
       const checkpoint: AnswerTurnCheckpoint = {
         schemaVersion: 1,
         reservationKey: state.reservationKey,
@@ -1994,6 +1888,17 @@ function runtimeTurnPathContext(
           : { parentCheckpointDigest }),
         route: checkpointRouteFor(state.route),
         intent: state.intent,
+        ...(state.interpretation === undefined
+          ? {}
+          : {
+              interpretation: state.interpretation,
+              requestedIntents: state.interpretation.requestedIntents,
+            }),
+        ...(continuationSource === undefined
+          ? {}
+          : { continuationSource }),
+        ...(pendingDecision === undefined ? {} : { pendingDecision }),
+
         query: state.query,
         priorTurnCount: state.priorTurnCount,
         ...(state.searchContext === undefined
@@ -2009,9 +1914,15 @@ function runtimeTurnPathContext(
         ...(partial.operationCandidatesDigest === undefined
           ? {}
           : { operationCandidatesDigest: partial.operationCandidatesDigest }),
+        ...(partial.operationComparison === undefined
+          ? {}
+          : { operationComparison: partial.operationComparison }),
         ...(partial.operationOutcome === undefined
           ? {}
           : { operationOutcome: partial.operationOutcome }),
+        ...(partial.operationPlan === undefined
+          ? {}
+          : { operationPlan: partial.operationPlan }),
         ...(partial.operationSelection === undefined
           ? {}
           : {
@@ -2028,6 +1939,9 @@ function runtimeTurnPathContext(
                 ? {}
                 : { resultDigest: partial.operationSelection.resultDigest }),
             }),
+              ...(selectedInputDigest === undefined
+                ? {}
+                : { selectedInputDigest }),
         modelRequests: partial.modelRequests,
         replayMessagesJson: partial.replayMessagesJson,
       }
@@ -2051,6 +1965,7 @@ function runtimeTurnPathContext(
         throw new Error(`answer_turn_checkpoint_${result.reason}`)
       }
       parentCheckpointDigest = result.checkpointDigest
+      state.checkpointDigestRef.value = result.checkpointDigest
     },
     send: input.send,
     timings: input.timings,

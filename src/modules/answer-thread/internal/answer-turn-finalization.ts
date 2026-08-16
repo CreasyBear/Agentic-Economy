@@ -31,6 +31,9 @@ import type {
   AnswerTurnRecord,
   AnswerTurnStatus,
   AnswerTurnTimingEntry,
+  AnswerContinuationSource,
+  AnswerPendingDecision,
+  AnswerRequestInterpretation,
   FollowUpIntent,
   PublicThreadProjection,
   FrozenTurnEvidence,
@@ -52,12 +55,15 @@ import {
   buildAnswerRunReport,
   buildHarnessRunReportForAnswer,
 } from './answer-run-summary'
+import {
+  sanitizeAnswerOperationOutcome,
+  sanitizeAnswerOperationToolCallRecord,
+} from '@/modules/answer/convex'
 import { answerTurnFinalizationDigest } from './turn-digests'
 import { parseFrozenEvidence } from './public-projection'
-
 export type AnswerTurnRecordLite = Pick<
   AnswerTurnRecord,
-  'evidenceJson' | 'query' | 'seq' | 'status'
+  'evidenceJson' | 'query' | 'seq' | 'status' | 'turnId' | 'snapshotHash'
 >
 
 export async function readPriorCompleteTurns(
@@ -95,6 +101,12 @@ export type PersistAnswerTurnInput = {
   turnSeq: number
   query: string
   intent: FollowUpIntent
+  interpretation?: AnswerRequestInterpretation
+  requestedIntents?: AnswerRequestInterpretation['requestedIntents']
+  continuationSource?: AnswerContinuationSource
+  pendingDecision?: AnswerPendingDecision
+  selectedInputDigest?: string
+  terminalCheckpointDigest?: string
   captured?: AnswerSnapshot
   errorCopyId?: string
   errorProblemJson?: string
@@ -150,23 +162,26 @@ export async function persistAnswerTurnWithResult(
 ): Promise<PersistAnswerTurnResult> {
   const status =
     input.captured !== undefined ? ('complete' as const) : ('error' as const)
+  const safeToolCalls = input.toolCalls.map(sanitizeAnswerOperationToolCallRecord)
   const baseEvidence =
     input.captured !== undefined
       ? buildFrozenEvidence(
           input.captured,
           input.allowedSlugs,
-          input.toolCalls,
+          safeToolCalls,
           input.searchContext,
           input.timings,
           input.workLog,
+          input,
         )
       : emptyEvidence(
           input.searchContext,
           input.timings,
           input.workLog,
           input.allowedSlugs,
-          input.toolCalls,
+          safeToolCalls,
           input.operationArtifacts,
+          input,
         )
   const prose =
     input.captured !== undefined
@@ -178,20 +193,25 @@ export async function persistAnswerTurnWithResult(
     ...(input.searchContext === undefined
       ? {}
       : { searchContext: stableAeSearchContextKey(input.searchContext) }),
-    providers: baseEvidence.providers.map((provider) => provider.slug),
     ...(baseEvidence.operationCandidates === undefined
       ? {}
       : { operationCandidates: baseEvidence.operationCandidates }),
+    ...(baseEvidence.operationComparison === undefined
+      ? {}
+      : { operationComparison: baseEvidence.operationComparison }),
     ...(baseEvidence.operationOutcome === undefined
       ? {}
       : { operationOutcome: baseEvidence.operationOutcome }),
+    ...(baseEvidence.operationPlan === undefined
+      ? {}
+      : { operationPlan: baseEvidence.operationPlan }),
     ...(baseEvidence.operationSelection === undefined
       ? {}
       : { operationSelection: baseEvidence.operationSelection }),
     prose,
-    ...(input.toolCalls.length === 0
+    ...(safeToolCalls.length === 0
       ? {}
-      : { toolCalls: input.toolCalls.map((call) => call.resultHash) }),
+      : { toolCalls: safeToolCalls.map((call) => call.resultHash) }),
   }).toString()
   const evidenceForSummary: FrozenTurnEvidenceDraft = baseEvidence
   const answerRun = buildAnswerRunReport({
@@ -215,7 +235,7 @@ export async function persistAnswerTurnWithResult(
       runId: input.turnId,
       sessionId: input.sessionId,
       status,
-      toolCalls: input.toolCalls,
+      toolCalls: safeToolCalls,
       ...(input.modelRequests === undefined
         ? {}
         : { modelRequests: input.modelRequests }),
@@ -250,7 +270,7 @@ export async function persistAnswerTurnWithResult(
     ...(input.errorProblemJson === undefined
       ? {}
       : { errorProblemJson: input.errorProblemJson }),
-    toolCalls: input.toolCalls.map((call) => ({
+    toolCalls: safeToolCalls.map((call) => ({
       toolCallId: call.toolCallId,
       seq: call.seq,
       toolId: call.toolId,
@@ -283,7 +303,7 @@ export async function persistAnswerTurnWithResult(
         ? {}
         : { errorProblemJson: input.errorProblemJson }),
     },
-    toolCalls: input.toolCalls,
+    toolCalls: safeToolCalls,
   })
 
   return {
@@ -302,8 +322,12 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
   runtimeEvents?: readonly HarnessRuntimeEvent[]
   finalizer?: AnswerHarnessFinalizer
 }): Promise<AnswerHarnessFinalizationResult> {
-  const request = args.input.sourceWriteRequest
-  const body = args.input.sourceWriteBody
+  const safeToolCalls = args.input.toolCalls.map(
+    sanitizeAnswerOperationToolCallRecord,
+  )
+  const safeInput = { ...args.input, toolCalls: safeToolCalls }
+  const request = safeInput.sourceWriteRequest
+  const body = safeInput.sourceWriteBody
   if (request === undefined || body === undefined) {
     return {
       status: 'denied',
@@ -313,7 +337,7 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
   }
 
   const entries = buildAnswerHarnessSessionJournalEntries({
-    input: args.input,
+    input: safeInput,
     harnessRun: args.harnessRun,
     snapshotHash: args.persistResult.snapshotHash,
     status: args.persistResult.status,
@@ -322,7 +346,7 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
       : { runtimeEvents: args.runtimeEvents }),
   })
   const finalizationHash = buildAnswerHarnessFinalizationHash({
-    input: args.input,
+    input: safeInput,
     persistResult: args.persistResult,
     harnessRun: args.harnessRun,
     entries,
@@ -336,36 +360,36 @@ export async function finalizePersistedAnswerTurnHarnessRun(args: {
   return (args.finalizer ?? answerHarnessFinalizer)({
     request,
     sourceWriteBody: body,
-    reservationKey: args.input.reservationKey,
-    requestDigest: args.input.requestDigest,
-    sessionId: args.input.sessionId,
-    threadId: args.input.threadId,
-    turnId: args.input.turnId,
-    turnSeq: args.input.turnSeq,
-    expectedGeneration: args.input.expectedGeneration,
-    createdAt: args.input.createdAt,
+    reservationKey: safeInput.reservationKey,
+    requestDigest: safeInput.requestDigest,
+    sessionId: safeInput.sessionId,
+    threadId: safeInput.threadId,
+    turnId: safeInput.turnId,
+    turnSeq: safeInput.turnSeq,
+    expectedGeneration: safeInput.expectedGeneration,
+    createdAt: safeInput.createdAt,
     answerDigest: args.persistResult.finalizationDigest,
-    query: args.input.query,
-    intent: args.input.intent,
+    query: safeInput.query,
+    intent: safeInput.intent,
     finalStatus: args.persistResult.status,
     snapshotHash: args.persistResult.snapshotHash,
     evidenceJson: finalizedEvidence,
     proseJson: JSON.stringify(
-      args.input.captured === undefined
+      safeInput.captured === undefined
         ? emptyProse()
-        : buildFrozenProse(args.input.captured),
+        : buildFrozenProse(safeInput.captured),
     ),
     artifactKindsJson: JSON.stringify(
-      buildArtifactKinds(args.input.captured, args.input.operationArtifacts),
+      buildArtifactKinds(safeInput.captured, safeInput.operationArtifacts),
     ),
-    ...(args.input.errorCopyId === undefined
+    ...(safeInput.errorCopyId === undefined
       ? {}
-      : { errorCopyId: args.input.errorCopyId }),
-    ...(args.input.errorProblemJson === undefined
+      : { errorCopyId: safeInput.errorCopyId }),
+    ...(safeInput.errorProblemJson === undefined
       ? {}
-      : { errorProblemJson: args.input.errorProblemJson }),
+      : { errorProblemJson: safeInput.errorProblemJson }),
     finalizationHash,
-    toolCalls: args.input.toolCalls.map((call) => ({
+    toolCalls: safeToolCalls.map((call) => ({
       toolCallId: call.toolCallId,
       seq: call.seq,
       toolId: call.toolId,
@@ -474,9 +498,15 @@ export async function finalizeReservedAnswerTurnError(input: {
         ...(checkpoint.operationCandidatesDigest === undefined
           ? {}
           : { operationCandidatesDigest: checkpoint.operationCandidatesDigest }),
+        ...(checkpoint.operationComparison === undefined
+          ? {}
+          : { operationComparison: checkpoint.operationComparison }),
         ...(checkpoint.operationOutcome === undefined
           ? {}
           : { operationOutcome: checkpoint.operationOutcome }),
+        ...(checkpoint.operationPlan === undefined
+          ? {}
+          : { operationPlan: checkpoint.operationPlan }),
         ...(checkpoint.operationSelection === undefined
           ? {}
           : { operationSelection: checkpoint.operationSelection }),
@@ -526,7 +556,6 @@ export async function finalizeReservedAnswerTurnError(input: {
     return { kind: 'unavailable' }
   }
 }
-
 function finalizeEvidenceJson(input: {
   evidenceJson: string
   harnessRun: HarnessRunReport
@@ -547,6 +576,8 @@ function finalizeEvidenceJson(input: {
   }
   return JSON.stringify(finalized)
 }
+
+
 
 function buildAnswerHarnessFinalizationHash(input: {
   input: PersistAnswerTurnInput
@@ -597,6 +628,20 @@ export function collectLatestFrozenOperationCandidates(
   )
 }
 
+export function collectLatestFrozenSelectedOperationRef(
+  priorTurns: readonly AnswerTurnRecordLite[],
+): AnswerOperationCandidate['operationRef'] | undefined {
+  const evidence = readLatestFrozenEvidence(priorTurns)
+  const operationRef =
+    evidence?.operationOutcome?.operationRef ??
+    evidence?.operationSelection?.operationRef
+  return evidence?.operationCandidates?.some(
+    (candidate) => candidate.operationRef === operationRef,
+  )
+    ? operationRef
+    : undefined
+}
+
 function readLatestFrozenEvidence(
   priorTurns: readonly AnswerTurnRecordLite[],
 ): FrozenTurnEvidence | undefined {
@@ -618,7 +663,12 @@ function buildFrozenEvidence(
   searchContext: AeSearchContext | undefined,
   timings: readonly AnswerTurnTimingEntry[],
   workLog: readonly AnswerWorkStep[],
+  coreInput: PersistAnswerTurnInput,
 ): FrozenTurnEvidenceDraft {
+  const safeToolCalls = toolCalls.map(sanitizeAnswerOperationToolCallRecord)
+  const safeOutcome = snapshot.operationOutcome === undefined
+    ? undefined
+    : sanitizeAnswerOperationOutcome(snapshot.operationOutcome)
   return {
     providers: snapshot.providers,
     ...(snapshot.operationCandidates === undefined
@@ -627,9 +677,15 @@ function buildFrozenEvidence(
     ...(snapshot.operationCandidatesDigest === undefined
       ? {}
       : { operationCandidatesDigest: snapshot.operationCandidatesDigest }),
-    ...(snapshot.operationOutcome === undefined
+    ...(snapshot.operationComparison === undefined
       ? {}
-      : { operationOutcome: snapshot.operationOutcome }),
+      : { operationComparison: snapshot.operationComparison }),
+    ...(safeOutcome === undefined
+      ? {}
+      : { operationOutcome: safeOutcome }),
+    ...(snapshot.operationPlan === undefined
+      ? {}
+      : { operationPlan: snapshot.operationPlan }),
     ...(snapshot.operationSelection === undefined
       ? {}
       : { operationSelection: snapshot.operationSelection }),
@@ -637,10 +693,11 @@ function buildFrozenEvidence(
     snapshot.importedClaims.length === 0
       ? {}
       : { importedClaims: snapshot.importedClaims }),
+    ...coreEvidenceFields(coreInput),
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: snapshot.agentJsonUrl,
     ...(searchContext === undefined ? {} : { searchContext }),
-    toolCalls,
+    toolCalls: safeToolCalls,
     timings,
     workLog,
   }
@@ -664,8 +721,13 @@ function emptyEvidence(
   workLog: readonly AnswerWorkStep[],
   allowedSlugs: ReadonlySet<string>,
   toolCalls: readonly AnswerToolCallRecord[],
-  operationArtifacts?: AnswerTurnOperationArtifacts,
+  operationArtifacts: AnswerTurnOperationArtifacts | undefined,
+  coreInput: PersistAnswerTurnInput,
 ): FrozenTurnEvidenceDraft {
+  const safeToolCalls = toolCalls.map(sanitizeAnswerOperationToolCallRecord)
+  const safeOutcome = operationArtifacts?.operationOutcome === undefined
+    ? undefined
+    : sanitizeAnswerOperationOutcome(operationArtifacts.operationOutcome)
   return {
     providers: [],
     ...(operationArtifacts?.operationCandidates === undefined
@@ -677,18 +739,65 @@ function emptyEvidence(
           operationCandidatesDigest:
             operationArtifacts.operationCandidatesDigest,
         }),
-    ...(operationArtifacts?.operationOutcome === undefined
+    ...(operationArtifacts?.operationComparison === undefined
       ? {}
-      : { operationOutcome: operationArtifacts.operationOutcome }),
+      : { operationComparison: operationArtifacts.operationComparison }),
+    ...(safeOutcome === undefined
+      ? {}
+      : { operationOutcome: safeOutcome }),
+    ...(operationArtifacts?.operationPlan === undefined
+      ? {}
+      : { operationPlan: operationArtifacts.operationPlan }),
     ...(operationArtifacts?.operationSelection === undefined
       ? {}
       : { operationSelection: operationArtifacts.operationSelection }),
+    ...coreEvidenceFields(coreInput),
     allowedSlugs: [...allowedSlugs],
     agentJsonUrl: '',
     ...(searchContext === undefined ? {} : { searchContext }),
-    toolCalls,
+    toolCalls: safeToolCalls,
     timings,
     workLog,
+  }
+}
+
+function coreEvidenceFields(
+  input: PersistAnswerTurnInput,
+): Partial<Pick<
+  FrozenTurnEvidenceDraft,
+  | 'interpretation'
+  | 'requestedIntents'
+  | 'continuationSource'
+  | 'pendingDecision'
+  | 'selectedInputDigest'
+  | 'terminalCheckpointDigest'
+>> {
+  const pendingDecision =
+    input.pendingDecision === undefined || input.terminalCheckpointDigest === undefined
+      ? input.pendingDecision
+      : {
+          ...input.pendingDecision,
+          origin: {
+            originTurnId: input.turnId,
+            originGeneration: input.expectedGeneration,
+            terminalCheckpointDigest: input.terminalCheckpointDigest,
+          },
+        }
+  const interpretation = input.interpretation
+  const requestedIntents =
+    interpretation?.requestedIntents ?? input.requestedIntents
+  const continuationSource = input.continuationSource
+  const selectedInputDigest = input.selectedInputDigest
+  const terminalCheckpointDigest = input.terminalCheckpointDigest
+  return {
+    ...(interpretation === undefined ? {} : { interpretation }),
+    ...(requestedIntents === undefined ? {} : { requestedIntents }),
+    ...(continuationSource === undefined ? {} : { continuationSource }),
+    ...(pendingDecision === undefined ? {} : { pendingDecision }),
+    ...(selectedInputDigest === undefined ? {} : { selectedInputDigest }),
+    ...(terminalCheckpointDigest === undefined
+      ? {}
+      : { terminalCheckpointDigest }),
   }
 }
 
@@ -704,6 +813,12 @@ function buildArtifactKinds(
     operationArtifacts.operationCandidates.length === 0
       ? []
       : ['operation-candidates']),
+    ...(operationArtifacts?.operationComparison === undefined
+      ? []
+      : ['operation-comparison']),
+    ...(operationArtifacts?.operationPlan === undefined
+      ? []
+      : ['operation-plan']),
     ...(operationArtifacts?.operationOutcome === undefined
       ? []
       : ['operation-outcome']),

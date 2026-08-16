@@ -7,7 +7,9 @@ import {
   AnswerArtifactKindValues,
   AnswerArtifactSchema,
   AnswerOperationCandidateSchema,
+  AnswerOperationComparisonSchema,
   AnswerOperationOutcomeSchema,
+  AnswerOperationPlanSchema,
   AnswerOperationSelectionSchema,
   AnswerSourceSchema,
   answerOperationCandidateSetDigest,
@@ -37,16 +39,27 @@ export type FrozenOperationToolEvidenceRecord = Readonly<{
   resultJson: string
   resultHash: string
   status: 'complete' | 'error' | 'refused'
+  createdAt: number
 }>
 
 export function isValidFrozenAnswerOperationArtifacts(input: {
   candidates?: unknown
   candidateSetDigest?: unknown
-  selection?: unknown
+  comparison?: unknown
   outcome?: unknown
+  plan?: unknown
+  selection?: unknown
   toolCalls: readonly unknown[]
   requireToolEvidence?: boolean
 }): boolean {
+  const parsedComparison = input.comparison === undefined
+    ? undefined
+    : AnswerOperationComparisonSchema.safeParse(input.comparison)
+  if (parsedComparison !== undefined && !parsedComparison.success) return false
+  const parsedPlan = input.plan === undefined
+    ? undefined
+    : AnswerOperationPlanSchema.safeParse(input.plan)
+  if (parsedPlan !== undefined && !parsedPlan.success) return false
   const parsedCandidates = input.candidates === undefined
     ? undefined
     : z.array(AnswerOperationCandidateSchema).safeParse(input.candidates)
@@ -97,6 +110,10 @@ export function isValidFrozenAnswerOperationArtifacts(input: {
     || outcome.resultDigest !== selection.resultDigest) {
     return false
   }
+  if (outcome.presentation !== undefined
+    && outcome.presentation.descriptorDigest !== candidate.descriptorDigest) {
+    return false
+  }
   if (input.requireToolEvidence !== true && input.toolCalls.length === 0) return true
 
   for (const value of input.toolCalls) {
@@ -137,10 +154,15 @@ export function isValidFrozenAnswerOperationArtifacts(input: {
       && parsedResult.operationRef !== outcome.operationRef) {
       continue
     }
-    const expectedStatus = outcome.toolId === 'operation.execute'
-      ? outcome.result.kind === 'ok' ? 'complete' : outcome.result.kind === 'refused' ? 'refused' : 'error'
-      : outcome.result.kind === 'refused' ? 'refused' : 'complete'
+    const expectedStatus =
+      outcome.result.kind === 'unsafe_output'
+        ? 'refused'
+        : outcome.toolId === 'operation.execute'
+          ? outcome.result.kind === 'ok' ? 'complete' : outcome.result.kind === 'refused' ? 'refused' : 'error'
+          : outcome.result.kind === 'refused' ? 'refused' : 'complete'
     if (value.status !== expectedStatus) continue
+    if (outcome.presentation !== undefined
+      && value.createdAt !== outcome.presentation.observedAt) continue
     return true
   }
   return false
@@ -168,7 +190,9 @@ export const AnswerSnapshotSchema = z.strictObject({
   selectedProvider: AnswerSourceSchema.exactOptional(),
   operationCandidates: z.array(AnswerOperationCandidateSchema).max(ANSWER_OPERATION_CANDIDATE_LIMIT).exactOptional(),
   operationCandidatesDigest: z.string().exactOptional(),
+  operationComparison: AnswerOperationComparisonSchema.exactOptional(),
   operationOutcome: AnswerOperationOutcomeSchema.exactOptional(),
+  operationPlan: AnswerOperationPlanSchema.exactOptional(),
   operationSelection: AnswerOperationSelectionSchema.exactOptional(),
   summary: z.string(),
   nextStep: z.string(),
@@ -179,8 +203,10 @@ export const AnswerSnapshotSchema = z.strictObject({
   if (!isValidFrozenAnswerOperationArtifacts({
     candidates: snapshot.operationCandidates,
     candidateSetDigest: snapshot.operationCandidatesDigest,
-    selection: snapshot.operationSelection,
+    comparison: snapshot.operationComparison,
     outcome: snapshot.operationOutcome,
+    plan: snapshot.operationPlan,
+    selection: snapshot.operationSelection,
     toolCalls: [],
   })) {
     context.addIssue({

@@ -27,6 +27,9 @@ export type EvalOpenRouterToolUse = {
     toolId: string
     input: Record<string, unknown>
   }[]
+  navigationOperationRef?: string
+  stageOperationReads?: boolean
+  stageBusinessRecovery?: boolean
   prose: {
     oneLine: string
     summary: string
@@ -280,6 +283,7 @@ export const ANSWER_TURN_EVAL_CASES = [
     query: 'paramata',
     openRouterAgent: {
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      stageBusinessRecovery: true,
       prose: {
         oneLine: 'Two listed businesses match this need.',
         summary:
@@ -613,7 +617,17 @@ export const ANSWER_TURN_EVAL_CASES = [
     ],
     query: 'what is the current price of bitcoin in USD',
     openRouterAgent: {
+      navigationOperationRef: SEED_ONLY_CAPABILITY_OPERATION_REF,
+      stageOperationReads: true,
       toolCalls: [
+        {
+          toolId: 'registry.operations.search',
+          input: { query: 'current bitcoin price' },
+        },
+        {
+          toolId: 'registry.operations.detail',
+          input: { operationRef: SEED_ONLY_CAPABILITY_OPERATION_REF },
+        },
         {
           toolId: SEED_ONLY_CAPABILITY_TOOL_ID,
           input: { ids: 'bitcoin', vs_currencies: 'usd' },
@@ -630,14 +644,18 @@ export const ANSWER_TURN_EVAL_CASES = [
     capabilityOutput: SEED_ONLY_CAPABILITY_OUTPUT,
     expected: {
       status: 'complete',
-      expectedModelRequests: 3,
-      expectedModelToolRuns: 1,
-      maxModelRequests: 3,
-      maxModelToolRuns: 1,
-      maxToolRuns: 1,
+      expectedModelRequests: 6,
+      expectedModelToolRuns: 3,
+      maxModelRequests: 6,
+      maxModelToolRuns: 3,
+      maxToolRuns: 3,
       slugs: [],
-      toolIds: ['operation.execute'],
-      toolStatuses: ['complete'],
+      toolIds: [
+        'registry.operations.search',
+        'registry.operations.detail',
+        'operation.execute',
+      ],
+      toolStatuses: ['complete', 'complete', 'complete'],
       oneLineIncludes: ['USD'],
       summaryIncludes: ['94213.00'],
       capabilityEvidence: {

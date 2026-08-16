@@ -7,6 +7,7 @@ import {
   isStepCount,
   tool,
   type LanguageModelUsage,
+  type JSONSchema7,
   type ModelMessage,
   type Tool,
   type StepResult,
@@ -19,11 +20,7 @@ import {
   type JsonValue,
 } from '@/modules/capability-contract/public'
 import {
-  composeKeylessOperationInput,
   convexKeylessExecutableSource,
-  hasExplicitNumericCoordinates,
-  planKeylessOperationComposition,
-  readGeocodedCoordinates,
   type KeylessExecutableSourcePort,
   type KeylessExecutableToolDescriptor,
   type OperationExecuteDeps,
@@ -34,11 +31,15 @@ import {
   operationInvokeResultSchema,
   type OperationInvokeResult,
 } from '@/modules/capability-execution/operation-invoke'
+import {
+  operationDetailOutputSchema,
+  type PublicOperationDescriptor,
+} from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { findStrictToolSchemaViolation } from '@/modules/harness/strict-schema'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 import { isRecord } from '@/modules/common/is-record'
 import type { AnyAction } from '@/modules/common/action'
-import { findStrictToolSchemaViolation } from '@/modules/harness/strict-schema'
 import {
   openRouterCostUsd,
   openRouterGatewayConfig,
@@ -46,13 +47,12 @@ import {
   type OpenRouterGatewayConfig,
 } from '@/modules/model-gateway/public'
 import {
-  filterKeylessDataAskCandidates,
   parseAnswerOperationSelectionInput,
-  rebindKeylessDataAskFromRegistrySearch,
-  resolveKeylessDataAsk,
+  rebindKeylessDataAskFromRegistryDetail,
   resolveKeylessDataAskSelection,
   type KeylessDataAskResolution,
 } from './keyless-data-ask'
+import { labelForContractInput } from './contract-input-binding'
 import { runAnswerGate, type AnswerGateResult } from './answer-gate'
 import { collectAllowedSlugsFromToolResults } from './catalog-grounding'
 import {
@@ -70,12 +70,39 @@ import {
   filterProvidersForRequestedLocation,
   isConfirmedSearchContext,
 } from './provider-location-filter'
-import { buildOperationArtifactsFromToolCalls } from './operation-artifacts'
+import {
+  answerOperationCandidateFromPublicDescriptor,
+  buildOperationArtifactsFromToolCalls,
+} from './operation-artifacts'
+import {
+  answerNavigationBudgetExceeded,
+  answerNavigationBudgetExhausted,
+  answerNavigationStepPolicy,
+  answerRouteForbidsTool,
+  completedOperationDetailResult,
+  initialAnswerOperationNavigationState,
+  oneNativeBatchCoversRequestedIntents,
+  reduceAnswerOperationNavigation,
+  selectedCandidateAdvertisesAnswerThreadEffect,
+  shouldRunStagedAnswerNavigation,
+  type AnswerOperationEffectToolId,
+} from './answer-navigation-policy'
+import {
+  decideAnswerOperationResultPrivacy,
+  sanitizeAnswerOperationOutcome,
+  sanitizeAnswerOperationToolCallRecord,
+} from './operation-result-presentation'
 import {
   answerOperationCandidateSetDigest,
+  AnswerNavigationDecisionSchema,
   type AnswerOperationCandidate,
+  type AnswerOperationComparison,
   type AnswerOperationOutcome,
+  type AnswerOperationPlan,
+  type AnswerOperationPresentation,
   type AnswerOperationSelection,
+  type AnswerRequestInterpretation,
+  type EffectiveAnswerAgentRoute,
 } from '../answer-schema'
 import {
   AnswerProseSchema,
@@ -94,6 +121,7 @@ import {
 import {
   ANSWER_READ_TOOL_IDS,
   findAnswerReadToolAction,
+  isAnswerOperationReadToolId,
   refuseAnswerToolCall,
   runAnswerToolCall,
   toolCallRecordsToGateInput,
@@ -133,13 +161,11 @@ import type {
  * tool evidence. No hidden query-rewrite preprocessor runs.
  */
 
-const MAX_ROUNDS = 4
+export const ANSWER_AGENT_MAX_TOOL_CALLS = 4
+const MAX_EFFECT_CALLS = 1
 const DEFAULT_LIMIT = 3
 const ANSWER_MODEL_MAX_OUTPUT_TOKENS = 1024
 export const MAX_MODEL_TOOL_RESULT_BYTES = 64 * 1024
-
-const REGISTRY_OPERATIONS_SEARCH_TOOL_ID = 'registry.operations.search'
-const recoveryToolName = openRouterToolName(REGISTRY_OPERATIONS_SEARCH_TOOL_ID)
 
 const RepairDecisionSchema = z.discriminatedUnion('kind', [
   z.strictObject({
@@ -182,7 +208,9 @@ export type AnswerToolUseAgentCheckpoint = Readonly<{
   resultDigest?: string
   operationCandidates?: readonly AnswerOperationCandidate[]
   operationCandidatesDigest?: string
+  operationComparison?: AnswerOperationComparison
   operationOutcome?: AnswerOperationOutcome
+  operationPlan?: AnswerOperationPlan
   operationSelection?: AnswerOperationSelection
 }>
 
@@ -200,15 +228,22 @@ export type AnswerToolUseAgentInput = {
   /** Frozen prior-turn slugs, used as the gate allow-list for non-search intents. */
   priorAllowedSlugs?: readonly string[]
   followUpIntent?: FollowUpIntent
+  /**
+   * Orchestrator-resolved route policy. Direct harness callers may omit it to
+   * exercise the legacy unrestricted tool surface.
+   */
+  effectiveRoute?: EffectiveAnswerAgentRoute
   searchContext?: AeSearchContext | undefined
   /** One deterministic descriptor snapshot shared by selection and execution. */
   keylessDataAsk?: KeylessDataAskResolution
-  /** Explicit descriptor source for fixture/local-e2e callers. */
+  /** Ordered request items from the durable structured preflight. */
+  requestedIntents?: AnswerRequestInterpretation['requestedIntents']
+  priorOperationInput?: Readonly<Record<string, unknown>>
+  priorOperationRef?: string
+  priorOperationPresentation?: AnswerOperationPresentation
   keylessExecutableSource?: KeylessExecutableSourcePort
-  /** Narrow fixture/evaluator execution dependencies; production omits this. */
-  operationExecuteDeps?: Pick<
-    OperationExecuteDeps,
-    'isPublicTarget' | 'fetchImpl'
+  operationExecuteDeps?: Partial<
+    Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl' | 'signal'>
   >
   onModelRequest?: (record: HarnessModelRequestRecord) => void
   onToolCheckpoint?: (checkpoint: AnswerToolUseAgentCheckpoint) => Promise<void>
@@ -257,9 +292,25 @@ function buildAgentResult(
   timings: readonly AnswerTurnTimingEntry[] = [],
   modelRequests: readonly HarnessModelRequestRecord[] = [],
 ): AnswerToolUseAgentResult {
+  const selectedOperationRef =
+    input.keylessDataAsk?.kind === 'resolved'
+      ? input.keylessDataAsk.selectedCandidate?.operationRef ??
+        input.keylessDataAsk.selected?.operationRef
+      : undefined
+  const frozenPresentation =
+    input.priorOperationPresentation !== undefined &&
+    input.priorOperationRef !== undefined &&
+    selectedOperationRef === input.priorOperationRef
+      ? {
+          operationRef: input.priorOperationRef,
+          presentation: input.priorOperationPresentation,
+        }
+      : undefined
+  const safeToolCalls = toolCalls.map(sanitizeAnswerOperationToolCallRecord)
   const operationArtifactsFromCalls = buildOperationArtifactsFromToolCalls(
-    toolCalls,
+    safeToolCalls,
     input.keylessDataAsk,
+    frozenPresentation,
   )
   const operationArtifacts =
     input.resumeCheckpoint === undefined
@@ -279,11 +330,21 @@ function buildAgentResult(
                 candidateSetDigest:
                   input.resumeCheckpoint.operationCandidatesDigest,
               }),
+          ...(input.resumeCheckpoint.operationComparison === undefined
+            ? operationArtifactsFromCalls.comparison === undefined
+              ? {}
+              : { comparison: operationArtifactsFromCalls.comparison }
+            : { comparison: input.resumeCheckpoint.operationComparison }),
           ...(input.resumeCheckpoint.operationOutcome === undefined
             ? operationArtifactsFromCalls.outcome === undefined
               ? {}
-              : { outcome: operationArtifactsFromCalls.outcome }
-            : { outcome: input.resumeCheckpoint.operationOutcome }),
+              : { outcome: sanitizeAnswerOperationOutcome(operationArtifactsFromCalls.outcome) }
+            : { outcome: sanitizeAnswerOperationOutcome(input.resumeCheckpoint.operationOutcome) }),
+          ...(input.resumeCheckpoint.operationPlan === undefined
+            ? operationArtifactsFromCalls.plan === undefined
+              ? {}
+              : { plan: operationArtifactsFromCalls.plan }
+            : { plan: input.resumeCheckpoint.operationPlan }),
           ...(input.resumeCheckpoint.operationSelection === undefined
             ? operationArtifactsFromCalls.selection === undefined
               ? {}
@@ -291,12 +352,12 @@ function buildAgentResult(
             : { selection: input.resumeCheckpoint.operationSelection }),
         }
   const toolAllowedSlugs = collectAllowedSlugsFromToolResults(
-    toolCallRecordsToGateInput(toolCalls),
+    toolCallRecordsToGateInput(safeToolCalls),
   )
   const priorAllowed = new Set(input.priorAllowedSlugs ?? [])
   const allowedSlugs = new Set<string>([...toolAllowedSlugs, ...priorAllowed])
 
-  const agentQueryFromTools = resolveAgentQuery(toolCalls, input.query)
+  const agentQueryFromTools = resolveAgentQuery(safeToolCalls, input.query)
   const locationFiltered = filterProvidersForRequestedLocation({
     providers,
     userQuery: input.query,
@@ -305,29 +366,41 @@ function buildAgentResult(
   })
 
   // For non-search intents the providers come from frozen prior evidence.
-  const finalProviders: readonly AnswerSource[] =
-    providers.length > 0
+  const operationNavigationAttempted = safeToolCalls.some((call) =>
+    isAnswerOperationReadToolId(call.toolId),
+  )
+  const finalProviders: readonly AnswerSource[] = operationNavigationAttempted
+    ? []
+    : providers.length > 0
       ? (locationFiltered?.providers ?? providers)
       : (input.priorProviders ?? [])
-  const capabilityAttempted = toolCalls.some(
+  const capabilityAttempted = safeToolCalls.some(
     (toolCall) =>
       toolCall.toolId === OPERATION_EXECUTE_TOOL_ID ||
       toolCall.toolId === OPERATION_INVOKE_TOOL_ID,
   )
-  const capabilityOptionsAvailable =
-    (input.keylessDataAsk?.kind === 'resolved' ||
+  const hasOperationEvidence =
+    operationArtifacts.candidates.length > 0 ||
+    operationArtifacts.comparison !== undefined ||
+    operationArtifacts.outcome !== undefined ||
+    operationArtifacts.plan !== undefined ||
+    operationArtifacts.selection !== undefined ||
+    ((input.keylessDataAsk?.kind === 'resolved' ||
       input.keylessDataAsk?.kind === 'needs_clarification') &&
-    (input.keylessDataAsk.operationCandidates?.length ??
-      input.keylessDataAsk.candidates.length) > 0
+      (input.keylessDataAsk.operationCandidates?.length ??
+        input.keylessDataAsk.candidates.length) > 0)
 
   const deterministicOperationProse =
-    buildDeterministicOperationProse(toolCalls)
+    buildDeterministicOperationProse(
+      safeToolCalls,
+      input.effectiveRoute?.effectAllowed,
+    )
   const effectiveProse =
     deterministicOperationProse ??
     (finalProviders.length === 0 &&
+    !operationNavigationAttempted &&
     !capabilityAttempted &&
-    !capabilityOptionsAvailable &&
-    !isSpecificLiveDataRequest(input.query)
+    !hasOperationEvidence
       ? buildNoMatchesProse(input.query)
       : prose)
   const mapped = snapshotProseFromAnswer(effectiveProse)
@@ -345,7 +418,7 @@ function buildAgentResult(
   const agentJsonUrl = buildAgentJsonUrl(
     agentQuery,
     DEFAULT_LIMIT,
-    resolveAgentJsonScope(toolCalls, input.searchContext),
+    resolveAgentJsonScope(safeToolCalls, input.searchContext),
   )
   const rawSnapshot: AnswerSnapshot = {
     query: input.query,
@@ -357,9 +430,15 @@ function buildAgentResult(
     ...(operationArtifacts.candidateSetDigest === undefined
       ? {}
       : { operationCandidatesDigest: operationArtifacts.candidateSetDigest }),
+    ...(operationArtifacts.comparison === undefined
+      ? {}
+      : { operationComparison: operationArtifacts.comparison }),
     ...(operationArtifacts.outcome === undefined
       ? {}
       : { operationOutcome: operationArtifacts.outcome }),
+    ...(operationArtifacts.plan === undefined
+      ? {}
+      : { operationPlan: operationArtifacts.plan }),
     ...(operationArtifacts.selection === undefined
       ? {}
       : { operationSelection: operationArtifacts.selection }),
@@ -376,7 +455,7 @@ function buildAgentResult(
       prose: effectiveProse,
       providers: finalProviders,
       allowedSlugs,
-      toolCalls: [...toolCalls],
+      toolCalls: [...safeToolCalls],
       modelRequests: [...modelRequests],
       timings: [...timings],
       snapshot: rawSnapshot,
@@ -388,7 +467,7 @@ function buildAgentResult(
     prose: effectiveProse,
     providers: finalProviders,
     allowedSlugs,
-    toolCalls: [...toolCalls],
+    toolCalls: [...safeToolCalls],
     modelRequests: [...modelRequests],
     timings: [...timings],
     snapshot: rawSnapshot,
@@ -544,7 +623,91 @@ async function rebindIntermediateKeylessDataAsk(
   }
   return rebound
 }
+async function readPublicOperationForInputBinding(
+  source: KeylessExecutableSourcePort,
+  operationRef: string,
+): Promise<PublicOperationDescriptor | undefined> {
+  if (source.readPublic === undefined) return undefined
+  try {
+    return (await source.readPublic(operationRef)) ?? undefined
+  } catch {
+    return undefined
+  }
+}
 
+type OperationInputField = Readonly<{
+  name: string
+  description?: string
+  label?: string
+}>
+
+function operationInputFields(
+  descriptor: KeylessExecutableToolDescriptor,
+): readonly OperationInputField[] {
+  const properties = isRecord(descriptor.inputSchema.properties)
+    ? descriptor.inputSchema.properties
+    : {}
+  const annotations = descriptor.publicOperation?.contract.customerAnnotations ?? []
+  return Object.entries(properties).flatMap(([name, property]) => {
+    if (!isRecord(property)) return []
+    const annotation = annotations.find(
+      (candidate) =>
+        candidate.document === 'input'
+        && candidate.pointer === `/${name.replaceAll('~', '~0').replaceAll('/', '~1')}`,
+    )
+    return [{
+      name,
+      ...(typeof property.description === 'string'
+        ? { description: property.description }
+        : {}),
+      ...(annotation === undefined ? {} : { label: annotation.label }),
+    }]
+  })
+}
+
+
+function buildSelectedCapabilityInputContext(
+  input: AnswerToolUseAgentInput,
+  descriptor: KeylessExecutableToolDescriptor | undefined,
+): string | undefined {
+  if (descriptor === undefined) return undefined
+  const annotations = descriptor.publicOperation?.contract.customerAnnotations
+    .filter((annotation) => annotation.document === 'input')
+    .map((annotation) => ({
+      pointer: annotation.pointer,
+      label: annotation.label,
+      role: annotation.role,
+    })) ?? []
+  const priorOperationInput =
+    input.priorOperationInput !== undefined
+    && (
+      input.priorOperationRef === undefined
+      || input.priorOperationRef === descriptor.operationRef
+    )
+      ? input.priorOperationInput
+      : undefined
+  return [
+    `Original user query: ${safeToolResultJsonForPrompt(input.query)}`,
+    `Ordered requested intents: ${safeToolResultJsonForPrompt(safeJsonStringify(input.requestedIntents ?? []))}`,
+    ...(priorOperationInput === undefined
+      ? []
+      : [
+          `Previously validated input for this same operation (repeat unchanged required fields and change only fields explicitly requested now): ${safeToolResultJsonForPrompt(safeJsonStringify(priorOperationInput))}`,
+        ]),
+    `Selected operation strict input schema: ${safeToolResultJsonForPrompt(safeJsonStringify(descriptor.inputSchema))}`,
+    `Published customer input annotations: ${safeToolResultJsonForPrompt(safeJsonStringify(annotations))}`,
+    'Fill only values explicitly present in the current query or the prior validated input for this same operation. Published input examples are illustrative teaching data, never defaults; do not copy an example value unless the current request supplies that value.',
+  ].join('\n')
+}
+
+function appendSelectedCapabilityInputContext(
+  prompt: string,
+  input: AnswerToolUseAgentInput,
+  descriptor: KeylessExecutableToolDescriptor | undefined,
+): string {
+  const context = buildSelectedCapabilityInputContext(input, descriptor)
+  return context === undefined ? prompt : `${prompt}\n\n${context}`
+}
 async function runRealToolUseAgent(
   input: AnswerToolUseAgentInput,
   config: OpenRouterGatewayConfig,
@@ -567,11 +730,20 @@ async function runRealToolUseAgent(
   ) {
     throw new AnswerToolUseAgentError('unavailable')
   }
+  const effectToolId: AnswerOperationEffectToolId =
+    invokeContext === undefined
+      ? OPERATION_EXECUTE_TOOL_ID
+      : OPERATION_INVOKE_TOOL_ID
   const modelId = input.model ?? config.model
   const resumed = input.resumeCheckpoint
   const resumedIntermediate =
-    resumed !== undefined && resumed.operationOutcome === undefined
-  // Checkpoint ordinals are turn-global.  A recovery turn can span several
+    resumed !== undefined &&
+    resumed.operationOutcome === undefined &&
+    (resumed.operationSelection !== undefined ||
+      resumed.selectedOperationRef !== undefined ||
+      resumed.selectedToolId === OPERATION_EXECUTE_TOOL_ID ||
+      resumed.selectedToolId === OPERATION_INVOKE_TOOL_ID ||
+      resumed.toolCalls.length > 0)
   // generateText calls, each of which resets the SDK's stepNumber to zero.
   let checkpointStepOrdinal = resumed?.stepOrdinal ?? 0
   let resumedReplayMessages: ModelMessage[] | undefined
@@ -637,58 +809,54 @@ async function runRealToolUseAgent(
     ? [...(resumed?.priorProviders ?? [])]
     : []
   const slugSeen = new Set(providers.map((provider) => provider.slug))
-  const maxToolCalls = normalizeMaxToolCalls(input.maxToolCalls)
-  let toolCallAttempts = toolCalls.length
+  const maxToolCalls = normalizeMaxToolCalls(
+    input.maxToolCalls ??
+      (input.effectiveRoute?.lane === 'operation'
+        ? ANSWER_AGENT_MAX_TOOL_CALLS
+        : input.keylessDataAsk === undefined
+          ? ANSWER_AGENT_MAX_TOOL_CALLS
+          : 1),
+  )
   let toolSeq = toolCalls.reduce(
     (nextSeq, call) => Math.max(nextSeq, call.seq + 1),
     0,
   )
-  let toolBudgetExhausted = false
   const keylessExecutableSource =
     input.keylessExecutableSource ?? convexKeylessExecutableSource
   const disableTools = input.disableTools === true && !resumedIntermediate
 
-  const resumedCandidates = resumed?.operationCandidates
-  const reboundCheckpointKeylessDataAsk =
+  const resumedHasEffectSelection =
     resumedIntermediate &&
     resumed !== undefined &&
-    resumedCandidates !== undefined &&
-    resumedCandidates.length > 0
-      ? await rebindIntermediateKeylessDataAsk(
-          resumed,
-          keylessExecutableSource,
-        )
-      : undefined
+    (resumed.operationSelection !== undefined ||
+      resumed.selectedOperationRef !== undefined ||
+      resumed.selectedToolId === OPERATION_EXECUTE_TOOL_ID ||
+      resumed.selectedToolId === OPERATION_INVOKE_TOOL_ID)
+  const reboundCheckpointKeylessDataAsk = resumedHasEffectSelection
+    ? await rebindIntermediateKeylessDataAsk(
+        resumed,
+        keylessExecutableSource,
+      )
+    : undefined
   if (
-    resumedIntermediate &&
-    resumedCandidates !== undefined &&
-    resumedCandidates.length > 0 &&
+    resumedHasEffectSelection &&
     reboundCheckpointKeylessDataAsk === undefined
   ) {
     throw new AnswerToolUseAgentError('tool_unavailable')
   }
+  const resumeNavigation =
+    resumedIntermediate &&
+    !resumedHasEffectSelection &&
+    input.keylessDataAsk === undefined
   const keylessDataAskInput =
-    reboundCheckpointKeylessDataAsk ?? input.keylessDataAsk
-
-  let initialKeylessDataAsk: KeylessDataAskResolution
-  if (reboundCheckpointKeylessDataAsk !== undefined) {
-    initialKeylessDataAsk = reboundCheckpointKeylessDataAsk
-  } else if (keylessDataAskInput !== undefined) {
-    initialKeylessDataAsk =
-      filterKeylessDataAskCandidates(input.query, keylessDataAskInput) ??
-      keylessDataAskInput
-  } else if (disableTools) {
-    initialKeylessDataAsk = {
+    reboundCheckpointKeylessDataAsk ??
+    (resumeNavigation ? undefined : input.keylessDataAsk)
+  const initialKeylessDataAsk: KeylessDataAskResolution =
+    keylessDataAskInput ?? {
       kind: 'resolved',
       descriptors: [],
       candidates: [],
     }
-  } else {
-    initialKeylessDataAsk = await resolveKeylessDataAsk(
-      input.query,
-      keylessExecutableSource,
-    )
-  }
   if (initialKeylessDataAsk.kind === 'unavailable') {
     throw new AnswerToolUseAgentError(initialKeylessDataAsk.reason)
   }
@@ -707,21 +875,23 @@ async function runRealToolUseAgent(
     { kind: 'resolved' }
   > = initialKeylessDataAsk
   const explicitSelectionInput = parseAnswerOperationSelectionInput(input.query)
-  const explicitOperationSelection =
-    explicitSelectionInput !== undefined ||
-    isExplicitOperationSelectionQuery(
-      input.query,
-      activeKeylessDataAsk.selected,
+  let navigationState = initialAnswerOperationNavigationState({
+    toolCalls,
+    effectUnlocked:
+      invokeContext !== undefined
+      || explicitSelectionInput !== undefined
+      || activeKeylessDataAsk.selected !== undefined,
+  })
+  let unsafeOperationOutput = false
+  const selectedEffectContinuationAdvertised = (): boolean =>
+    selectedCandidateAdvertisesAnswerThreadEffect(
+      activeKeylessDataAsk.selectedCandidate,
+      activeKeylessDataAsk.selected?.operationRef,
+      effectToolId,
     )
-  const capabilityExecutionAllowed =
-    invokeContext !== undefined ||
-    isSpecificLiveDataRequest(input.query) ||
-    explicitOperationSelection
-  let recoveryAttempted = false
   let repairAttempted = false
   let repairMissingFields: readonly string[] | undefined
   let toolQueue: Promise<void> = Promise.resolve()
-  let suppressOperationSearchProviders = false
   const runToolCall = (
     toolId: string,
     rawInput: unknown,
@@ -735,7 +905,7 @@ async function runRealToolUseAgent(
           : toolId
       const callInput = {
         toolId: routedToolId,
-        input: applySearchContextToRegistrySearchInput(
+        input: applyToolSearchDefaults(
           input,
           routedToolId,
           rawInput,
@@ -749,31 +919,90 @@ async function runRealToolUseAgent(
       const isOperationTool =
         callInput.toolId === OPERATION_EXECUTE_TOOL_ID ||
         callInput.toolId === OPERATION_INVOKE_TOOL_ID
+      const routeToolForbidden = answerRouteForbidsTool(
+        input.effectiveRoute,
+        callInput.toolId,
+      )
       const requiresCapabilityIntent =
         callInput.toolId === OPERATION_EXECUTE_TOOL_ID &&
         invokeContext === undefined
+      const operationRef =
+        isRecord(callInput.input) &&
+        typeof callInput.input.operationRef === 'string'
+          ? callInput.input.operationRef
+          : undefined
+      const operationEffectToolId =
+        callInput.toolId === OPERATION_EXECUTE_TOOL_ID
+          ? OPERATION_EXECUTE_TOOL_ID
+          : callInput.toolId === OPERATION_INVOKE_TOOL_ID
+            ? OPERATION_INVOKE_TOOL_ID
+            : undefined
+      const operationEffectContinuationAdvertised =
+        !isOperationTool ||
+        (operationEffectToolId !== undefined &&
+          selectedCandidateAdvertisesAnswerThreadEffect(
+            activeKeylessDataAsk.selectedCandidate,
+            operationRef,
+            operationEffectToolId,
+          ))
+      const budgetExceeded = answerNavigationBudgetExceeded({
+        state: navigationState,
+        effect: isOperationTool,
+        maxNavigationCalls: maxToolCalls,
+        maxEffectCalls: MAX_EFFECT_CALLS,
+      })
+      const coversEveryRequestedIntent =
+        !isOperationTool
+        || oneNativeBatchCoversRequestedIntents(
+          callInput.input,
+          activeKeylessDataAsk.selected,
+          input.requestedIntents,
+        )
       const result: OperationToolCallResult =
-        toolCallAttempts >= maxToolCalls
-          ? refuseAnswerToolCall(callInput, 'budget_exceeded', toolCallId)
-          : requiresCapabilityIntent && !capabilityExecutionAllowed
+        isOperationTool && input.signal?.aborted === true
+          ? refuseAnswerToolCall(
+              callInput,
+              'aborted_before_dispatch',
+              toolCallId,
+            )
+          : routeToolForbidden
             ? refuseAnswerToolCall(
                 callInput,
-                'capability_intent_required',
+                'route_tool_forbidden',
                 toolCallId,
               )
-            : isOperationTool
-              ? await runOperationToolCall(
-                  callInput,
-                  toolCallId,
-                  keylessExecutableSource,
-                  input.operationExecuteDeps,
-                  activeKeylessDataAsk.descriptors,
-                  hasExplicitNumericCoordinates(input.query)
-                    ? undefined
-                    : extractRequestedLocation(input.query),
-                  invokeContext,
-                )
-              : await runAnswerToolCall(callInput)
+            : budgetExceeded
+              ? refuseAnswerToolCall(callInput, 'budget_exceeded', toolCallId)
+              : !coversEveryRequestedIntent
+                ? refuseAnswerToolCall(
+                    callInput,
+                    'multiple_operation_intents_require_narrowing',
+                    toolCallId,
+                  )
+                : requiresCapabilityIntent && !navigationState.effectUnlocked
+                  ? refuseAnswerToolCall(
+                      callInput,
+                      'capability_intent_required',
+                      toolCallId,
+                    )
+                : isOperationTool && !operationEffectContinuationAdvertised
+                  ? refuseAnswerToolCall(
+                      callInput,
+                      'capability_intent_required',
+                      toolCallId,
+                    )
+                  : isOperationTool
+                ? await runOperationToolCall(
+                    callInput,
+                    toolCallId,
+                    keylessExecutableSource,
+                    input.operationExecuteDeps,
+                    activeKeylessDataAsk.selected?.executionBindingDigest,
+                    callInput.seq,
+                    invokeContext,
+                    input.signal,
+                  )
+                : await runAnswerToolCall(callInput)
       const observedResult =
         (result.record.toolId === OPERATION_EXECUTE_TOOL_ID ||
           result.record.toolId === OPERATION_INVOKE_TOOL_ID) &&
@@ -789,25 +1018,31 @@ async function runRealToolUseAgent(
               ],
             }
           : result
-      toolCallAttempts += 1
-      toolBudgetExhausted = toolCallAttempts >= maxToolCalls
+      navigationState = reduceAnswerOperationNavigation(
+        navigationState,
+        { kind: 'tool_attempted', effect: isOperationTool },
+      )
       const records = observedResult.records ?? [observedResult.record]
       toolCalls.push(...records)
+      if (isOperationTool) {
+        try {
+          const parsed: unknown = JSON.parse(observedResult.record.resultJson)
+          unsafeOperationOutput =
+            isRecord(parsed) && parsed.kind === 'unsafe_output'
+        } catch {
+          unsafeOperationOutput = false
+        }
+      }
       appendTimings(timings, observedResult.timings, {
         phase: 'agent_tool',
         toolId: observedResult.record.toolId,
         toolSeq: observedResult.record.seq,
       })
-      if (
-        !suppressOperationSearchProviders ||
-        observedResult.record.toolId !== REGISTRY_OPERATIONS_SEARCH_TOOL_ID
-      ) {
-        appendProvidersFromToolResult(
-          providers,
-          slugSeen,
-          observedResult.providers,
-        )
-      }
+      appendProvidersFromToolResult(
+        providers,
+        slugSeen,
+        observedResult.providers,
+      )
       toolSeq += records.length
       return safeToolResultJsonForPrompt(observedResult.resultJson)
     })
@@ -817,9 +1052,37 @@ async function runRealToolUseAgent(
     )
     return run
   }
+  if (
+    explicitSelectionInput !== undefined &&
+    (
+      activeKeylessDataAsk.selected?.operationRef !==
+        explicitSelectionInput.operationRef ||
+      activeKeylessDataAsk.candidateSetDigest === undefined ||
+      activeKeylessDataAsk.candidateSetDigest !==
+        explicitSelectionInput.candidateSetDigest ||
+      !selectedEffectContinuationAdvertised()
+    )
+  ) {
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
+  if (
+    explicitSelectionInput === undefined &&
+    activeKeylessDataAsk.selected !== undefined &&
+    !selectedEffectContinuationAdvertised()
+  ) {
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
+  const selectedCapabilityCandidates = (): readonly KeylessExecutableToolDescriptor[] =>
+    activeKeylessDataAsk.selected !== undefined &&
+    selectedEffectContinuationAdvertised()
+      ? activeKeylessDataAsk.candidates.filter(
+          (candidate) =>
+            candidate.operationRef === activeKeylessDataAsk.selected?.operationRef,
+        )
+      : []
   let tools = buildAnswerAgentTools(
     runToolCall,
-    activeKeylessDataAsk.candidates,
+    selectedCapabilityCandidates(),
   )
   let capabilityToolNames = Object.keys(tools).filter((name) =>
     name.startsWith('capability_'),
@@ -829,30 +1092,30 @@ async function runRealToolUseAgent(
       ? undefined
       : capabilityToolName(activeKeylessDataAsk.selected.operationRef)
   let selectedToolAvailable =
-    capabilityExecutionAllowed &&
+    navigationState.effectUnlocked &&
+    selectedEffectContinuationAdvertised() &&
     selectedCapabilityToolName !== undefined &&
     tools[selectedCapabilityToolName] !== undefined
-  let requireCapabilityChoice =
-    capabilityExecutionAllowed &&
-    capabilityToolNames.length > 0 &&
-    !isCapabilityOptionsRequest(input.query)
   const persistToolCheckpoint = async (
     replayMessagesJson: string,
   ): Promise<void> => {
     if (input.onToolCheckpoint === undefined) return
     const checkpointStep = checkpointStepOrdinal + 1
     checkpointStepOrdinal = checkpointStep
+    const safeCheckpointToolCalls = toolCalls.map(
+      sanitizeAnswerOperationToolCallRecord,
+    )
     const checkpointArtifacts = buildOperationArtifactsFromToolCalls(
-      toolCalls,
+      safeCheckpointToolCalls,
       activeKeylessDataAsk,
     )
     await input.onToolCheckpoint({
       stepOrdinal: checkpointStep,
-      toolCalls: [...toolCalls],
+      toolCalls: [...safeCheckpointToolCalls],
       priorProviders: [...providers],
       priorAllowedSlugs: [
         ...collectAllowedSlugsFromToolResults(
-          toolCallRecordsToGateInput(toolCalls),
+          toolCallRecordsToGateInput(safeCheckpointToolCalls),
         ),
       ],
       modelRequests: [...modelRequests],
@@ -880,9 +1143,15 @@ async function runRealToolUseAgent(
         : {
             operationCandidatesDigest: checkpointArtifacts.candidateSetDigest,
           }),
+      ...(checkpointArtifacts.comparison === undefined
+        ? {}
+        : { operationComparison: checkpointArtifacts.comparison }),
       ...(checkpointArtifacts.outcome === undefined
         ? {}
         : { operationOutcome: checkpointArtifacts.outcome }),
+      ...(checkpointArtifacts.plan === undefined
+        ? {}
+        : { operationPlan: checkpointArtifacts.plan }),
       ...(checkpointArtifacts.selection === undefined
         ? {}
         : { operationSelection: checkpointArtifacts.selection }),
@@ -937,24 +1206,38 @@ async function runRealToolUseAgent(
       await persistToolCheckpoint(safeJsonStringify(replayMessages))
     }
 
-  let userPrompt = buildToolUseAgentUserPrompt({
-    query: input.query,
-    ...(input.priorProviders === undefined
-      ? {}
-      : { priorProviders: input.priorProviders }),
-    ...(input.followUpIntent === undefined
-      ? {}
-      : { followUpIntent: input.followUpIntent }),
-    ...(input.searchContext === undefined
-      ? {}
-      : { searchContext: input.searchContext }),
-    capabilityCandidates:
-      activeKeylessDataAsk.operationCandidates?.map((candidate) => ({
-        name: candidate.offering.label,
-        summary: candidate.summary,
-      })) ?? activeKeylessDataAsk.candidates,
+  let userPrompt = appendSelectedCapabilityInputContext(
+    buildToolUseAgentUserPrompt({
+      query: input.query,
+      ...(input.priorProviders === undefined
+        ? {}
+        : { priorProviders: input.priorProviders }),
+      ...(input.followUpIntent === undefined
+        ? {}
+        : { followUpIntent: input.followUpIntent }),
+      ...(input.searchContext === undefined
+        ? {}
+        : { searchContext: input.searchContext }),
+      capabilityCandidates:
+        activeKeylessDataAsk.operationCandidates?.map((candidate) => ({
+          name: candidate.offering.label,
+          summary: candidate.summary,
+        })) ?? activeKeylessDataAsk.candidates,
+    }),
+    input,
+    activeKeylessDataAsk.selected,
+  )
+  const hasSelectedOperation =
+    input.keylessDataAsk?.kind === 'resolved'
+    && input.keylessDataAsk.selected !== undefined
+  const shouldRunStagedNavigation = shouldRunStagedAnswerNavigation({
+    route: input.effectiveRoute,
+    hasSelectedOperation,
+    hasKeylessDataAsk: input.keylessDataAsk !== undefined,
+    resumeNavigation,
+    hasExplicitSelection: explicitSelectionInput !== undefined,
+    resumedHasEffectSelection,
   })
-
   const proseOutput = Output.object({
     schema: AnswerProseSchema,
     name: 'answer_prose',
@@ -1056,140 +1339,7 @@ async function runRealToolUseAgent(
     }
   }
 
-  if (
-    activeKeylessDataAsk.kind === 'resolved' &&
-    activeKeylessDataAsk.candidates.length === 0 &&
-    isSpecificLiveDataRequest(input.query)
-  ) {
-    recoveryAttempted = true
-    suppressOperationSearchProviders = true
-    await runGuardedModelCall(input, modelId, modelRequests, (accounting) =>
-      generateText({
-        model: openRouterModel(config, modelId, { structuredOutputs: true }),
-        instructions: buildToolUseAgentSystemPrompt(),
-        ...(resumedReplayMessages === undefined
-          ? {
-              prompt: [
-                userPrompt,
-                'This is a specific live-data request with no initial executable match.',
-                `Call ${recoveryToolName} once to search current admitted operations. Do not call local registry search.`,
-              ].join('\n\n'),
-            }
-          : { messages: resumedReplayMessages }),
-        maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
-        tools,
-        activeTools: [recoveryToolName],
-        stopWhen: isStepCount(1),
-        temperature: 0.2,
-        maxRetries: 0,
-        repairToolCall,
-        onStepEnd: recordStep(accounting, 'model.openrouter_round', {
-          tools: 1,
-        }),
-        ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-      }),
-    )
-    await toolQueue
-    const operationSearchCall = [...toolCalls]
-      .reverse()
-      .find(
-        (call) =>
-          call.toolId === REGISTRY_OPERATIONS_SEARCH_TOOL_ID &&
-          call.status === 'complete',
-      )
-    let operationSearchResult: unknown
-    if (operationSearchCall !== undefined) {
-      try {
-        operationSearchResult = JSON.parse(operationSearchCall.resultJson)
-      } catch {
-        operationSearchResult = undefined
-      }
-    }
-    if (operationSearchResult !== undefined) {
-      const rebound = await rebindKeylessDataAskFromRegistrySearch(
-        input.query,
-        operationSearchResult,
-        keylessExecutableSource,
-        activeKeylessDataAsk.descriptors,
-      )
-      if (rebound.kind === 'needs_clarification') {
-        return finalizeAgentResult(
-          { ...input, keylessDataAsk: rebound },
-          buildKeylessClarificationProse(rebound),
-          toolCalls,
-          providers,
-          timings,
-          modelRequests,
-        )
-      }
-      if (rebound.kind === 'resolved' && rebound.candidates.length > 0) {
-        activeKeylessDataAsk = rebound
-        tools = buildAnswerAgentTools(
-          runToolCall,
-          activeKeylessDataAsk.candidates,
-        )
-        capabilityToolNames = Object.keys(tools).filter((name) =>
-          name.startsWith('capability_'),
-        )
-        selectedCapabilityToolName =
-          activeKeylessDataAsk.selected === undefined
-            ? undefined
-            : capabilityToolName(activeKeylessDataAsk.selected.operationRef)
-        selectedToolAvailable =
-          capabilityExecutionAllowed &&
-          selectedCapabilityToolName !== undefined &&
-          tools[selectedCapabilityToolName] !== undefined
-        requireCapabilityChoice =
-          capabilityExecutionAllowed &&
-          capabilityToolNames.length > 0 &&
-          !isCapabilityOptionsRequest(input.query)
-        userPrompt = buildToolUseAgentUserPrompt({
-          query: input.query,
-          ...(input.priorProviders === undefined
-            ? {}
-            : { priorProviders: input.priorProviders }),
-          ...(input.followUpIntent === undefined
-            ? {}
-            : { followUpIntent: input.followUpIntent }),
-          ...(input.searchContext === undefined
-            ? {}
-            : { searchContext: input.searchContext }),
-          capabilityCandidates:
-            activeKeylessDataAsk.operationCandidates?.map((candidate) => ({
-              name: candidate.offering.label,
-              summary: candidate.summary,
-            })) ?? activeKeylessDataAsk.candidates,
-        })
-      }
-    }
-  }
 
-  if (
-    recoveryAttempted &&
-    activeKeylessDataAsk.kind === 'resolved' &&
-    activeKeylessDataAsk.candidates.length === 0
-  ) {
-    const unavailableProse: AnswerProse = {
-      oneLine: 'I could not find an admitted live capability for this request.',
-      summary:
-        'No current keyless operation matched the specific live-data request.',
-      whatToDoNow:
-        'Ask what live sources are available or provide a more specific data request.',
-    }
-    return finalizeAgentResult(
-      {
-        ...input,
-        keylessDataAsk: activeKeylessDataAsk,
-        priorProviders: [],
-        priorAllowedSlugs: [],
-      },
-      unavailableProse,
-      toolCalls,
-      [],
-      timings,
-      modelRequests,
-    )
-  }
 
   // filter_known / compare_known reuse frozen prior evidence, so the turn is a
   // single prose request that never exposes the catalogue toolset at all.
@@ -1228,40 +1378,281 @@ async function runRealToolUseAgent(
     )
   }
 
-
-  if (
-    invokeContext === undefined &&
-    selectedToolAvailable &&
-    explicitSelectionInput === undefined &&
-    activeKeylessDataAsk.selected !== undefined
-  ) {
-    const missingInputNames = missingRequiredOperationInputs(
+  if (shouldRunStagedNavigation) {
+    activeKeylessDataAsk = {
+      kind: 'resolved',
+      descriptors: [],
+      candidates: [],
+    }
+    userPrompt = appendSelectedCapabilityInputContext(
+      buildToolUseAgentUserPrompt({
+        query: input.query,
+        ...(input.priorProviders === undefined
+          ? {}
+          : { priorProviders: input.priorProviders }),
+        ...(input.followUpIntent === undefined
+          ? {}
+          : { followUpIntent: input.followUpIntent }),
+        ...(input.searchContext === undefined
+          ? {}
+          : { searchContext: input.searchContext }),
+        capabilityCandidates: [],
+      }),
+      input,
       activeKeylessDataAsk.selected,
-      input.query,
     )
-    if (missingInputNames.length > 0) {
+    const navigationTools = buildAnswerAgentTools(runToolCall, [])
+    const navigationToolNames = ANSWER_READ_TOOL_IDS.map(openRouterToolName)
+    const navigationPrompt = [
+      userPrompt,
+      ...(input.effectiveRoute?.lane === 'operation'
+        ? [
+            'The structured request route is Market Operation. Before any navigation decision, call registry.operations.search. Do not substitute local-business reads.',
+          ]
+        : input.effectiveRoute?.lane === 'business'
+          ? [
+              'The structured request route is local business. Keep discovery on registry.search/detail and do not call Market Operation reads.',
+            ]
+          : []),
+      'Use the registered read tools to navigate current evidence.',
+      '`registry.search` and `registry.detail` are local-business reads only. `registry.operations.search`, `registry.operations.detail`, `registry.operations.compare`, and `registry.operations.inspectPlan` are callable Market Operation reads only.',
+      'Never use a business-registry read as a fallback for Market Operations, or an operation read as a fallback for local businesses. Compare or inspect a plan only when the request needs a choice, composition, or material disclosure; exact operation detail is mandatory before any call.',
+      'Return call only for a reference present in a completed exact-detail result. Otherwise answer from the read evidence or ask one plain-language clarification question.',
+      'For a specific current or live-data request, do not stop at catalog prose or ask permission for a free keyless read: search, inspect exact detail, then return call for a routeable reference.',
+    ].join('\n\n')
+    const navigation = await runGuardedModelCall(
+      input,
+      modelId,
+      modelRequests,
+      (accounting) =>
+        generateText({
+          model: openRouterModel(config, modelId, {
+            structuredOutputs: true,
+          }),
+          instructions: buildToolUseAgentSystemPrompt(),
+          ...(resumedReplayMessages === undefined
+            ? { prompt: navigationPrompt }
+            : { messages: resumedReplayMessages }),
+          maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
+          tools: navigationTools,
+          output: Output.object({
+            schema: AnswerNavigationDecisionSchema,
+            name: 'answer_navigation',
+          }),
+          temperature: 0.2,
+          maxRetries: 0,
+          prepareStep: () => {
+            accounting.stepRecorded = false
+            const candidates = buildOperationArtifactsFromToolCalls(toolCalls).candidates
+            const policy = answerNavigationStepPolicy({
+              route: input.effectiveRoute,
+              toolCalls,
+              candidates,
+              navigationReadCallAttempts:
+                navigationState.navigationReadCallAttempts,
+              maxToolCalls,
+            })
+            const forcedToolName =
+              policy.forcedToolId === undefined
+                ? undefined
+                : openRouterToolName(policy.forcedToolId)
+            return {
+              activeTools: policy.readBudgetAvailable
+                ? navigationToolNames
+                : [],
+              ...(forcedToolName !== undefined
+                ? {
+                    toolChoice: {
+                      type: 'tool' as const,
+                      toolName: forcedToolName,
+                    },
+                  }
+                : !policy.readBudgetAvailable
+                  ? { toolChoice: 'none' as const }
+                  : policy.requireAnyRead
+                    ? { toolChoice: 'required' as const }
+                    : {}),
+              ...(policy.detailedCandidate === undefined
+                ? {}
+                : {
+                    instructions: [
+                      buildToolUseAgentSystemPrompt(),
+                      `You selected and inspected ${policy.detailedCandidate.operationRef}. If the user asked for its current or live result, return call for this exact reference now; never stop at catalog prose or ask permission. Answer without calling only when the user asked to browse, compare, or inspect available operations.`,
+                    ].join('\n\n'),
+                  }),
+            }
+          },
+          stopWhen: isStepCount(ANSWER_AGENT_MAX_TOOL_CALLS + 1),
+          onStepEnd: recordStep(accounting, 'model.openrouter_navigation', {
+            tools: navigationToolNames.length,
+          }),
+          ...(input.signal === undefined
+            ? {}
+            : { abortSignal: input.signal }),
+        }),
+    )
+    await toolQueue
+    let decision = navigation.output
+    if (decision === undefined) {
+      throw new AnswerToolUseAgentError('prose_failed')
+    }
+    if (decision.kind !== 'call') {
+      const operationArtifacts = buildOperationArtifactsFromToolCalls(toolCalls)
+      const soleCandidate =
+        operationArtifacts.candidates.length === 1
+          ? operationArtifacts.candidates[0]
+          : undefined
+      const hasOperationSearch = toolCalls.some(
+        (call) =>
+          call.toolId === 'registry.operations.search' &&
+          call.status === 'complete',
+      )
+      const hasDetailedCandidate = operationArtifacts.candidates.some(
+        ({ operationRef }) =>
+          completedOperationDetailResult(toolCalls, operationRef) !==
+          undefined,
+      )
+      if (
+        input.effectiveRoute?.lane === 'operation' &&
+        (
+          !hasOperationSearch ||
+          (
+            operationArtifacts.candidates.length === 1 &&
+            !hasDetailedCandidate
+          )
+        )
+      ) {
+        throw new AnswerToolUseAgentError('tool_unavailable')
+      }
+      const hasOptionalOperationRead = toolCalls.some(
+        (call) =>
+          call.status === 'complete' &&
+          (call.toolId === 'registry.operations.compare' ||
+            call.toolId === 'registry.operations.inspectPlan'),
+      )
+      const exactDetail =
+        soleCandidate === undefined
+          ? undefined
+          : completedOperationDetailResult(
+              toolCalls,
+              soleCandidate.operationRef,
+            )
+      if (
+        input.effectiveRoute?.exactOperationDetailRequired === true &&
+        input.effectiveRoute.effectAllowed &&
+        input.requestedIntents?.length === 1 &&
+        hasOperationSearch &&
+        !hasOptionalOperationRead &&
+        soleCandidate !== undefined &&
+        exactDetail !== undefined &&
+        selectedCandidateAdvertisesAnswerThreadEffect(
+          soleCandidate,
+          soleCandidate.operationRef,
+          effectToolId,
+        )
+      ) {
+        decision = {
+          kind: 'call',
+          operationRef: soleCandidate.operationRef,
+        }
+      }
+    }
+    if (decision.kind === 'answer') {
       return finalizeAgentResult(
         { ...input, keylessDataAsk: activeKeylessDataAsk },
-        buildOperationInputClarification(
-          activeKeylessDataAsk.selected,
-          missingInputNames,
-        ),
+        decision.prose,
         toolCalls,
         providers,
         timings,
         modelRequests,
       )
     }
-  }
-  if (
-    selectedToolAvailable &&
-    explicitSelectionInput !== undefined &&
-    activeKeylessDataAsk.selected?.operationRef ===
-      explicitSelectionInput.operationRef
-  ) {
+    if (decision.kind === 'clarify') {
+      return finalizeAgentResult(
+        { ...input, keylessDataAsk: activeKeylessDataAsk },
+        {
+          oneLine: decision.question,
+          summary:
+            'I need this information before I can choose or call a Market Operation.',
+          whatToDoNow: decision.question,
+        },
+        toolCalls,
+        providers,
+        timings,
+        modelRequests,
+      )
+    }
+    if (input.effectiveRoute?.effectAllowed === false) {
+      // The request authorized reads only, so the candidate stops here rather
+      // than unlocking the effect tool and refusing at the route gate.
+      return finalizeAgentResult(
+        { ...input, keylessDataAsk: activeKeylessDataAsk },
+        buildCandidateOnlyProse(),
+        toolCalls,
+        providers,
+        timings,
+        modelRequests,
+      )
+    }
+    const detailResult = completedOperationDetailResult(
+      toolCalls,
+      decision.operationRef,
+    )
+    if (detailResult === undefined) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    const rebound =
+      invokeContext === undefined
+        ? await rebindKeylessDataAskFromRegistryDetail(
+            decision.operationRef,
+            detailResult,
+            keylessExecutableSource,
+          )
+        : invocationResolutionFromRegistryDetail(
+            decision.operationRef,
+            detailResult,
+          )
     if (
+      rebound.kind !== 'resolved' ||
+      rebound.selected?.operationRef !== decision.operationRef ||
+      rebound.candidateSetDigest === undefined ||
+      !selectedCandidateAdvertisesAnswerThreadEffect(
+        rebound.selectedCandidate,
+        decision.operationRef,
+        effectToolId,
+      )
+    ) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    activeKeylessDataAsk = rebound
+    userPrompt = appendSelectedCapabilityInputContext(
+      userPrompt,
+      input,
+      activeKeylessDataAsk.selected,
+    )
+    navigationState = reduceAnswerOperationNavigation(
+      navigationState,
+      { kind: 'effect_unlocked' },
+    )
+    tools = buildAnswerAgentTools(
+      runToolCall,
+      selectedCapabilityCandidates(),
+    )
+    capabilityToolNames = Object.keys(tools).filter((name) =>
+      name.startsWith('capability_'),
+    )
+    selectedCapabilityToolName = capabilityToolName(decision.operationRef)
+    selectedToolAvailable =
+      selectedEffectContinuationAdvertised() &&
+      tools[selectedCapabilityToolName] !== undefined
+  }
+
+  const explicitlySelectedDescriptor = activeKeylessDataAsk.selected
+  if (selectedToolAvailable && explicitSelectionInput !== undefined) {
+    if (
+      explicitlySelectedDescriptor === undefined ||
       !validateJsonSchema(
-        activeKeylessDataAsk.selected.inputSchema,
+        explicitlySelectedDescriptor.inputSchema,
         explicitSelectionInput.input,
       )
     ) {
@@ -1297,6 +1688,16 @@ async function runRealToolUseAgent(
         },
       ]),
     )
+    if (unsafeOperationOutput) {
+      return finalizeAgentResult(
+        { ...input, keylessDataAsk: activeKeylessDataAsk },
+        buildUnsafeOperationOutputProse(),
+        toolCalls,
+        providers,
+        timings,
+        modelRequests,
+      )
+    }
     const grounded = await requestProse(
       [
         userPrompt,
@@ -1316,7 +1717,11 @@ async function runRealToolUseAgent(
       modelRequests,
     )
   }
-  if (selectedToolAvailable && selectedCapabilityToolName !== undefined) {
+  if (
+    selectedToolAvailable &&
+    selectedCapabilityToolName !== undefined &&
+    selectedEffectContinuationAdvertised()
+  ) {
     const forced = await runGuardedModelCall(
       input,
       modelId,
@@ -1344,6 +1749,16 @@ async function runRealToolUseAgent(
         }),
     )
     await toolQueue
+    if (unsafeOperationOutput) {
+      return finalizeAgentResult(
+        { ...input, keylessDataAsk: activeKeylessDataAsk },
+        buildUnsafeOperationOutputProse(),
+        toolCalls,
+        providers,
+        timings,
+        modelRequests,
+      )
+    }
     if (
       !toolCalls.some(
         (call) =>
@@ -1354,11 +1769,22 @@ async function runRealToolUseAgent(
       if (repairMissingFields === undefined) {
         throw new AnswerToolUseAgentError('tool_unavailable')
       }
+      const repairDescriptor = activeKeylessDataAsk.selected
+      const repairPublicOperation = repairDescriptor === undefined
+        ? undefined
+        : await readPublicOperationForInputBinding(
+            keylessExecutableSource,
+            repairDescriptor.operationRef,
+          )
+      const repairLabels = repairDescriptor === undefined
+        ? []
+        : repairMissingFields.map((name) =>
+            labelForContractInput(repairDescriptor, name, repairPublicOperation))
       const clarification = await requestProse(
         [
           userPrompt,
-          `The selected capability needs these user-provided fields before it can run: ${repairMissingFields.join(', ')}.`,
-          'Ask for those fields plainly. Do not claim a live result and do not switch to local businesses.',
+          `The selected capability needs these user-facing inputs before it can run: ${repairLabels.join(', ')}.`,
+          'Ask for those inputs plainly. Do not claim a live result and do not switch to local businesses.',
         ].join('\n\n'),
         'model.openrouter_round',
       )
@@ -1409,14 +1835,20 @@ async function runRealToolUseAgent(
   }
 
   let finalStepRequested = false
-  const stopAtMaxRounds = isStepCount(MAX_ROUNDS)
+  const stopAtMaxRounds = isStepCount(ANSWER_AGENT_MAX_TOOL_CALLS)
   const toolStopCondition = async ({
     steps,
   }: {
     steps: Array<StepResult<ToolSet>>
   }): Promise<boolean> => {
+    if (unsafeOperationOutput) return true
     const reachedStop =
-      (await stopAtMaxRounds({ steps })) || toolBudgetExhausted
+      (await stopAtMaxRounds({ steps }))
+      || answerNavigationBudgetExhausted({
+        state: navigationState,
+        maxNavigationCalls: maxToolCalls,
+        maxEffectCalls: MAX_EFFECT_CALLS,
+      })
     if (!reachedStop) {
       return false
     }
@@ -1459,9 +1891,6 @@ async function runRealToolUseAgent(
                 }
               : { activeTools: [] }
           }
-          if (stepNumber === 0 && requireCapabilityChoice) {
-            return { activeTools: capabilityToolNames, toolChoice: 'required' }
-          }
           return finalStepRequested ? { activeTools: [] } : undefined
         },
         // Defer the existing round/budget stop once so the same SDK call can make
@@ -1473,7 +1902,21 @@ async function runRealToolUseAgent(
         ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
       }),
   )
-  if (toolBudgetExhausted) {
+  if (unsafeOperationOutput) {
+    return finalizeAgentResult(
+      { ...input, keylessDataAsk: activeKeylessDataAsk },
+      buildUnsafeOperationOutputProse(),
+      toolCalls,
+      providers,
+      timings,
+      modelRequests,
+    )
+  }
+  if (answerNavigationBudgetExhausted({
+    state: navigationState,
+    maxNavigationCalls: maxToolCalls,
+    maxEffectCalls: MAX_EFFECT_CALLS,
+  })) {
     updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
   }
 
@@ -1493,44 +1936,44 @@ async function runRealToolUseAgent(
 }
 function buildAnswerOperationEffectKey(
   operationInvokeContext: AnswerOperationInvokeContext,
-  input: Pick<RunAnswerToolCallInput, 'turnId' | 'seq'>,
+  turnId: string,
+  effectOrdinal: number,
 ): string {
-  const { reservationKey, generation } = operationInvokeContext
+  const { reservationKey } = operationInvokeContext
   if (
     typeof reservationKey !== 'string' ||
     reservationKey.trim().length === 0 ||
-    typeof generation !== 'number' ||
-    !Number.isInteger(generation) ||
-    generation < 0
+    typeof turnId !== 'string' ||
+    turnId.trim().length === 0 ||
+    !Number.isSafeInteger(effectOrdinal) ||
+    effectOrdinal < 0
   ) {
     throw new AnswerToolUseAgentError('unavailable')
   }
   return `${ANSWER_OPERATION_EFFECT_KEY_PREFIX}:${canonicalDigest({
     reservationKey,
-    turnId: input.turnId,
-    generation,
-    ordinal: input.seq,
+    turnId,
+    ordinal: effectOrdinal,
   }).toString()}`
 }
 
 
 /**
- * Executes a DB-described keyless operation (routed from a per-op tool that
- * bound `operationRef` + the model's strict-schema inputs). A registered
- * place-to-weather mapping may execute geocoding first, then the destination;
- * each attempt is returned as ordered durable evidence while the final result
- * is what the model receives. All calls use the same fail-closed executor.
- * This direct network work has no harness model-request accounting.
+ * Executes one descriptor-bound operation through the existing fail-closed
+ * executor or controlled invocation service. Multi-operation composition
+ * remains a registered inspect-plan concern; one model tool call cannot hide
+ * a second provider effect.
  */
 async function runOperationToolCall(
   input: RunAnswerToolCallInput,
   toolCallId: string,
   source: KeylessExecutableSourcePort,
   operationExecuteDeps:
-    Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl'> | undefined,
-  descriptors: readonly KeylessExecutableToolDescriptor[],
-  place: string | undefined,
+    Partial<Pick<OperationExecuteDeps, 'isPublicTarget' | 'fetchImpl' | 'signal'>> | undefined,
+  expectedExecutionBindingDigest: string | undefined,
+  effectOrdinal: number,
   operationInvokeContext?: AnswerOperationInvokeContext,
+  signal?: AbortSignal,
 ): Promise<OperationToolCallResult> {
   const raw = input.input
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -1556,8 +1999,10 @@ async function runOperationToolCall(
   if (operationInvokeContext !== undefined) {
     const idempotencyKey = buildAnswerOperationEffectKey(
       operationInvokeContext,
-      input,
+      input.turnId,
+      effectOrdinal,
     )
+    signal?.throwIfAborted()
     const result = await operationInvokeContext.service.invokeOperation({
       input: {
         operationRef,
@@ -1578,158 +2023,40 @@ async function runOperationToolCall(
       result,
     )
   }
-  const targetDescriptor = descriptors.find(
-    (descriptor) => descriptor.operationRef === operationRef,
-  )
-  const plan = planKeylessOperationComposition({
-    place,
-    targetDescriptor,
-    descriptors,
-    targetInput,
-  })
-  const execute = async (operationInput: {
-    operationRef: string
-    input: Record<string, unknown>
-  }): Promise<OperationExecuteResult> => {
-    const expectedExecutionBindingDigest = descriptors.find(
-      (descriptor) => descriptor.operationRef === operationInput.operationRef,
-    )?.executionBindingDigest
-    if (operationExecuteDeps === undefined) {
-      return expectedExecutionBindingDigest === undefined
-        ? executeKeylessOperation(operationInput, source)
-        : executeKeylessOperation(
+  const operationInput = { operationRef, input: targetInput }
+  const executeDeps =
+    operationExecuteDeps === undefined
+      ? signal === undefined
+        ? undefined
+        : { signal }
+      : signal === undefined
+        ? operationExecuteDeps
+        : { ...operationExecuteDeps, signal }
+  const result =
+    expectedExecutionBindingDigest === undefined
+      ? executeDeps === undefined
+        ? await executeKeylessOperation(operationInput, source)
+        : await executeKeylessOperation(operationInput, source, executeDeps)
+      : executeDeps === undefined
+        ? await executeKeylessOperation(
             operationInput,
             source,
             undefined,
             expectedExecutionBindingDigest,
           )
-    }
-    return expectedExecutionBindingDigest === undefined
-      ? executeKeylessOperation(operationInput, source, operationExecuteDeps)
-      : executeKeylessOperation(
-          operationInput,
-          source,
-          operationExecuteDeps,
-          expectedExecutionBindingDigest,
-        )
-  }
-
-  if (plan === undefined) {
-    const result = await execute({ operationRef, input: targetInput })
-    return buildOperationToolCallResult(
-      input,
-      toolCallId,
-      { operationRef, input: targetInput },
-      result,
-    )
-  }
-
-  const geocodeInput = {
-    operationRef: plan.sourceDescriptor.operationRef,
-    input: { ...plan.sourceInput },
-  }
-  const geocodeResult = await execute(geocodeInput)
-  if (geocodeResult.kind !== 'ok') {
-    const targetFailure: OperationExecuteResult = {
-      ...geocodeResult,
-      operationRef,
-    }
-    return buildOperationToolCallResult(
-      input,
-      toolCallId,
-      { operationRef, input: targetInput },
-      targetFailure,
-      input.seq,
-      {
-        ...targetFailure,
-        composition: {
-          stage: 'geocoding',
-          place: plan.place,
-          providerResult: geocodeResult,
-        },
-      },
-    )
-  }
-
-  const coordinates = readGeocodedCoordinates(geocodeResult.output)
-  if (coordinates === undefined) {
-    const invalidGeocode: OperationExecuteResult = {
-      kind: 'error',
-      operationRef,
-      code: 'response_invalid',
-      retryable: false,
-      reason:
-        'The geocoding operation returned no valid latitude/longitude for the supplied place.',
-    }
-    const invalidGeocodeForPrompt = {
-      ...invalidGeocode,
-      composition: {
-        stage: 'geocoding',
-        place: plan.place,
-        providerResult: geocodeResult,
-      },
-    }
-    return buildOperationToolCallResult(
-      input,
-      toolCallId,
-      { operationRef, input: targetInput },
-      invalidGeocode,
-      input.seq,
-      invalidGeocodeForPrompt,
-    )
-  }
-
-  const composedInput = composeKeylessOperationInput({ plan, coordinates })
-  const forecastInput = {
-    operationRef,
-    input:
-      composedInput === undefined
-        ? { ...plan.targetInputDefaults }
-        : { ...composedInput },
-  }
-  const forecastResult =
-    composedInput === undefined
-      ? {
-          kind: 'refused' as const,
-          operationRef,
-          reason: 'input_invalid' as const,
-        }
-      : await execute(forecastInput)
-  const forecastPromptResult = {
-    ...forecastResult,
-    composition: {
-      stage: 'forecast',
-      place: plan.place,
-      geocoding: {
-        operationRef: plan.sourceDescriptor.operationRef,
-        output: geocodeResult.output,
-        evidenceHash: geocodeResult.evidenceHash,
-      },
-    },
-  }
-  const geocodeRecord = buildOperationToolCallResult(
-    input,
-    `${toolCallId}:geocode`,
-    geocodeInput,
-    geocodeResult,
-    input.seq,
-    {
-      ...geocodeResult,
-      composition: { stage: 'geocoding', place: plan.place },
-    },
-  )
-  const forecastRecord = buildOperationToolCallResult(
+        : await executeKeylessOperation(
+            operationInput,
+            source,
+            executeDeps,
+            expectedExecutionBindingDigest,
+          )
+  return buildOperationToolCallResult(
     input,
     toolCallId,
-    forecastInput,
-    forecastResult,
-    input.seq + 1,
-    forecastPromptResult,
+    operationInput,
+    result,
+    input.seq,
   )
-  return {
-    ...forecastRecord,
-    records: [geocodeRecord.record, forecastRecord.record],
-  }
 }
 
 function buildOperationToolCallResult(
@@ -1740,34 +2067,40 @@ function buildOperationToolCallResult(
   seq = input.seq,
   resultForPrompt: unknown = result,
 ): OperationToolCallResult {
+  const privacy = decideAnswerOperationResultPrivacy(
+    operationInput.operationRef,
+    resultForPrompt,
+  )
   const fullResultJson = safeToolResultJsonForPrompt(
-    safeJsonStringify(resultForPrompt),
+    safeJsonStringify(privacy.result),
   )
   let resultJson = fullResultJson
   let status: AnswerToolCallStatus =
-    result.kind === 'ok'
-      ? 'complete'
-      : result.kind === 'refused'
-        ? 'refused'
-        : 'error'
+    privacy.kind === 'unsafe'
+      ? 'refused'
+      : result.kind === 'ok'
+        ? 'complete'
+        : result.kind === 'refused'
+          ? 'refused'
+          : 'error'
   let errorCode: string | undefined =
-    result.kind === 'ok'
-      ? undefined
-      : result.kind === 'error'
-        ? result.code
-        : result.kind
+    privacy.kind === 'unsafe'
+      ? 'unsafe_output'
+      : result.kind === 'ok'
+        ? undefined
+        : result.kind === 'error'
+          ? result.code
+          : result.kind
   if (
-    new TextEncoder().encode(fullResultJson).byteLength >
-    MAX_MODEL_TOOL_RESULT_BYTES
+    privacy.kind === 'safe'
+    && new TextEncoder().encode(fullResultJson).byteLength >
+      MAX_MODEL_TOOL_RESULT_BYTES
   ) {
-    const fullResultHash = canonicalDigest(
-      JSON.parse(fullResultJson),
-    ).toString()
     resultJson = safeJsonStringify({
       kind: 'refused',
       operationRef: operationInput.operationRef,
       reason: 'result_too_large',
-      resultHash: fullResultHash,
+      resultHash: privacy.resultDigest,
     })
     status = 'refused'
     errorCode = 'result_too_large'
@@ -1816,20 +2149,32 @@ function buildOperationInvokeToolCallResult(
   },
   result: OperationInvokeResult,
 ): OperationToolCallResult {
-  const exactResultJson = safeJsonStringify(result)
+  const privacy = decideAnswerOperationResultPrivacy(
+    operationInput.operationRef,
+    result,
+  )
+  const exactResultJson = safeJsonStringify(privacy.result)
   const promptResult = safeToolResultJsonForPrompt(exactResultJson)
   const promptResultJson =
-    new TextEncoder().encode(promptResult).byteLength >
-    MAX_MODEL_TOOL_RESULT_BYTES
+    privacy.kind === 'safe'
+    && new TextEncoder().encode(promptResult).byteLength >
+      MAX_MODEL_TOOL_RESULT_BYTES
       ? safeJsonStringify({
           kind: 'result_bounded',
           operationRef: operationInput.operationRef,
-          resultHash: canonicalDigest(result).toString(),
+          resultHash: privacy.resultDigest,
         })
       : promptResult
   const status: AnswerToolCallStatus =
-    result.kind === 'refused' ? 'refused' : 'complete'
-  const errorCode = result.kind === 'refused' ? result.code : undefined
+    privacy.kind === 'unsafe' || result.kind === 'refused'
+      ? 'refused'
+      : 'complete'
+  const errorCode =
+    privacy.kind === 'unsafe'
+      ? 'unsafe_output'
+      : result.kind === 'refused'
+        ? result.code
+        : undefined
   const inputJson = safeJsonStringify(operationInput)
   const summary: AnswerToolCallResultSummary = {
     slugs: [],
@@ -1876,6 +2221,16 @@ function buildOperationInvokeToolCallResult(
  * tools. Each capability closure binds its canonical operation reference; the
  * model supplies only that operation's published input object.
  */
+function sanitizeCapabilityToolInput(
+  input: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  return JSON.parse(
+    JSON.stringify(input, (_key, value) =>
+      typeof value === 'string' ? sanitizePromptDataString(value) : value),
+  ) as Record<string, unknown>
+}
+
+
 export function buildAnswerAgentTools(
   runToolCall: (
     toolId: string,
@@ -1895,25 +2250,9 @@ export function buildAnswerAgentTools(
     toolNames.add(toolName)
     tools[toolName] = tool({
       description: spec.function.description,
+      strict: true,
       inputSchema: jsonSchema<unknown>(
-        {
-          type: 'object',
-          properties: Object.fromEntries(
-            Object.entries(spec.function.parameters.properties).map(
-              ([name, property]) => [
-                name,
-                {
-                  type: property.type,
-                  description: property.description,
-                  ...(property.enum === undefined
-                    ? {}
-                    : { enum: [...property.enum] }),
-                },
-              ],
-            ),
-          ),
-          required: [...spec.function.parameters.required],
-        },
+        spec.function.parameters as JSONSchema7,
         { validate: (value: unknown) => ({ success: true, value }) },
       ),
       execute: (rawInput: unknown, options: { toolCallId: string }) =>
@@ -1935,11 +2274,20 @@ export function buildAnswerAgentTools(
       string,
       Record<string, unknown>
     >({
-      description: capabilityToolDescription(
-        descriptor.name,
-        descriptor.summary,
-        descriptor.inputExamples,
-      ),
+      description: [
+        capabilityToolDescription(
+          descriptor.name,
+          descriptor.summary,
+        ),
+        `Published input fields: ${operationInputFields(descriptor)
+          .map((field) => [
+            field.name,
+            field.description,
+            field.label,
+          ].filter((value): value is string => value !== undefined).join(' — '))
+          .join('; ')}`,
+        'Input examples are illustrative only; do not copy them unless the current request supplies that value.',
+      ].join(' '),
       strict: true,
       inputSchema: jsonSchema<Record<string, unknown>>(descriptor.inputSchema, {
         validate: (value: unknown) =>
@@ -1947,9 +2295,9 @@ export function buildAnswerAgentTools(
             ? { success: true, value }
             : { success: false, error: new Error('capability_input_invalid') },
       }),
-      inputExamples: (descriptor.inputExamples ?? []).map(({ input }) => ({
-        input: { ...input },
-      })),
+      inputExamples: descriptor.inputExamples?.map((example) => ({
+        input: sanitizeCapabilityToolInput(example.input),
+      })) ?? [],
       execute: (rawInput, options) =>
         runToolCall(
           OPERATION_EXECUTE_TOOL_ID,
@@ -2132,29 +2480,6 @@ function appendTimings(
   }
 }
 
-function isSpecificLiveDataRequest(query: string): boolean {
-  const normalized = query.trim().toLowerCase()
-  if (normalized.length === 0 || isCapabilityOptionsRequest(normalized)) {
-    return false
-  }
-  return /\b(?:api|article|count|convert|coordinates?|crypto|currency|current|data|definition|exchange|fetch|forecast|geocode|image|json|latest|live|lookup|number|photo|price|rate|retrieve|search|status|summar(?:y|i[sz]e)|temperature|today|translate|value|weather)\b/.test(
-    normalized,
-  )
-}
-function isCapabilityOptionsRequest(query: string): boolean {
-  const normalized = query.trim().toLowerCase()
-  return (
-    /\b(?:without|do not|don't)\s+(?:running|run|fetching|fetch|executing|execute)\b/.test(
-      normalized,
-    ) ||
-    /\b(?:which|what|list|show)\b.*\b(?:capabilities|feeds?|options?|sources?)\b/.test(
-      normalized,
-    ) ||
-    /\b(?:compare|comparison)\b.*\b(?:feeds?|options?|sources?)\b/.test(
-      normalized,
-    )
-  )
-}
 function requestsFabricatedLiveAnswerWithoutExecution(query: string): boolean {
   const normalized = query.trim().toLowerCase()
   const requestsFabrication =
@@ -2172,97 +2497,23 @@ function requestsFabricatedLiveAnswerWithoutExecution(query: string): boolean {
 }
 
 
-function isExplicitOperationSelectionQuery(
-  query: string,
-  selected: KeylessExecutableToolDescriptor | undefined,
-): boolean {
-  if (selected === undefined) return false
-  const normalized = query.trim().toLowerCase()
-  if (normalized === selected.operationRef.toLowerCase()) return true
-  if (/^(?:choose|pick|select|use)\b/i.test(normalized)) return true
-  return [selected.name, selected.capabilityId].some(
-    (alias) =>
-      normalized === alias.toLowerCase() && normalized.split(/\s+/).length > 1,
-  )
-}
 
-function missingRequiredOperationInputs(
-  descriptor: KeylessExecutableToolDescriptor,
-  query: string,
-): readonly string[] {
-  const schema = descriptor.inputSchema
-  const required = Array.isArray(schema.required)
-    ? schema.required.filter((name): name is string => typeof name === 'string')
-    : []
-  const properties = isRecord(schema.properties) ? schema.properties : {}
-  const normalizedQuery = query.toLowerCase()
-  const place = extractRequestedLocation(query)
-  return required.filter((name) => {
-    const property = isRecord(properties[name]) ? properties[name] : {}
-    if (property.default !== undefined || property.const !== undefined)
-      return false
-    if (
-      place !== undefined &&
-      /^(?:lat(?:itude)?|lon(?:gitude)?|lng)$/i.test(name)
-    )
-      return false
-    const enumValues = Array.isArray(property.enum)
-      ? property.enum
-          .filter(
-            (value): value is string | number =>
-              typeof value === 'string' || typeof value === 'number',
-          )
-          .map(String)
-      : []
-    if (enumValues.length === 1) return false
-    const exampleValues = (descriptor.inputExamples ?? []).flatMap(
-      (example) => {
-        const value = example.input[name]
-        if (typeof value === 'string' || typeof value === 'number')
-          return [String(value)]
-        if (Array.isArray(value)) {
-          return value
-            .filter(
-              (item): item is string | number =>
-                typeof item === 'string' || typeof item === 'number',
-            )
-            .map(String)
-        }
-        return []
-      },
-    )
-    const propertyExample =
-      typeof property.example === 'string' ||
-      typeof property.example === 'number'
-        ? [String(property.example)]
-        : []
-    const possibleValues = [
-      ...new Set([...enumValues, ...exampleValues, ...propertyExample]),
-    ]
-    const mentionedValues = possibleValues.filter((value) =>
-      normalizedQuery.includes(value.toLowerCase()),
-    )
-    return possibleValues.length > 0 && mentionedValues.length === 0
-  })
-}
 
-function buildOperationInputClarification(
-  descriptor: KeylessExecutableToolDescriptor,
-  missing: readonly string[],
-): AnswerProse {
-  const examples = (descriptor.inputExamples ?? [])
-    .slice(0, 2)
-    .map((example) => safeJsonStringify(example.input))
-    .join('; ')
+
+/** The turn stopped at a reviewable candidate because the request authorized reads only. */
+function buildCandidateOnlyProse(): AnswerProse {
   return {
-    oneLine: `I need ${missing.join(' and ')} before I can run ${descriptor.name}.`,
-    summary: `The request does not identify a unique value for ${missing.join(', ')}. I will not choose one from conflicting published examples${examples.length === 0 ? '.' : ` such as ${examples}.`}`,
-    whatToDoNow: `Reply with the intended ${missing.join(' and ')} value${missing.length === 1 ? '' : 's'} so I can run the exact operation.`,
+    oneLine: 'I found a matching operation and left it unrun.',
+    summary:
+      'The current candidate is ready for review. This turn made no provider call because you asked to search only.',
+    whatToDoNow:
+      'Review the candidate, then explicitly select it if you want to run it.',
   }
 }
 
 function buildDeterministicOperationProse(
   toolCalls: readonly AnswerToolCallRecord[],
+  effectAllowed: boolean | undefined,
 ): AnswerProse | undefined {
   const latestExecuteIndex = toolCalls.findLastIndex(
     (call) => call?.toolId === OPERATION_EXECUTE_TOOL_ID,
@@ -2277,7 +2528,11 @@ function buildDeterministicOperationProse(
       continue
     let result: OperationInvokeResult
     try {
-      result = operationInvokeResultSchema.parse(JSON.parse(call.resultJson))
+      const raw: unknown = JSON.parse(call.resultJson)
+      if (isRecord(raw) && raw.kind === 'unsafe_output') {
+        return buildUnsafeOperationOutputProse()
+      }
+      result = operationInvokeResultSchema.parse(raw)
     } catch {
       continue
     }
@@ -2328,14 +2583,35 @@ function buildDeterministicOperationProse(
       output?: unknown
       code?: unknown
       reason?: unknown
-      composition?: { place?: unknown }
+      composition?: Record<string, unknown>
     }
     try {
       parsed = JSON.parse(call.resultJson) as typeof parsed
     } catch {
       continue
     }
+    if (parsed.kind === 'unsafe_output') {
+      return buildUnsafeOperationOutputProse()
+    }
     if (parsed.kind === 'ok') return undefined
+    if (
+      parsed.kind === 'refused'
+      && parsed.code === 'multiple_operation_intents_require_narrowing'
+    ) {
+      return {
+        oneLine: 'I need you to choose one result before I run anything.',
+        summary:
+          'The selected operation accepts one requested item per invocation, so this turn made no provider call.',
+        whatToDoNow: 'Choose one requested item, or select an operation whose published input batches all of them.',
+      }
+    }
+    if (
+      parsed.kind === 'refused'
+      && parsed.code === 'route_tool_forbidden'
+      && effectAllowed === false
+    ) {
+      return buildCandidateOnlyProse()
+    }
     const place =
       typeof parsed.composition?.place === 'string'
         ? parsed.composition.place.replace(/[<>]/g, '').trim().slice(0, 200)
@@ -2360,6 +2636,15 @@ function buildDeterministicOperationProse(
     }
   }
   return undefined
+}
+function buildUnsafeOperationOutputProse(): AnswerProse {
+  return {
+    oneLine: 'I could not safely display the live result.',
+    summary:
+      'The provider call was recorded, but its returned payload cannot be shown in this answer.',
+    whatToDoNow:
+      'Try a narrower request or continue with the recorded operation for authorized recovery.',
+  }
 }
 function operationFailureReason(reason: string): string {
   switch (reason) {
@@ -2511,19 +2796,18 @@ function resolveAgentJsonScope(
   return location === undefined ? undefined : { mode: 'near_me', location }
 }
 
-function applySearchContextToRegistrySearchInput(
+function applyToolSearchDefaults(
   input: AnswerToolUseAgentInput,
   toolId: string,
   raw: unknown,
 ): unknown {
-  if (
-    toolId !== 'registry.search' ||
-    typeof raw !== 'object' ||
-    raw === null ||
-    Array.isArray(raw)
-  ) {
-    return raw
+  if (toolId === 'registry.operations.search' && isRecord(raw)) {
+    const filters = isRecord(raw.filters) ? { ...raw.filters } : {}
+    filters.availability ??= ['routeable']
+    return { ...raw, filters }
   }
+
+  if (toolId !== 'registry.search' || !isRecord(raw)) return raw
 
   const record = { ...(raw as Record<string, unknown>) }
   record.limit = normalizeRegistrySearchLimit(
@@ -2558,6 +2842,65 @@ function applySearchContextToRegistrySearchInput(
   }
 
   return record
+}
+
+/**
+ * Authenticated invocation gets its execution authority and current-material
+ * preflight from OperationInvokeService. Answer uses exact detail evidence only
+ * to bind the model-facing strict input schema and candidate membership.
+ */
+function invocationResolutionFromRegistryDetail(
+  operationRef: string,
+  result: unknown,
+): KeylessDataAskResolution {
+  const detail = operationDetailOutputSchema.safeParse(result)
+  if (
+    !detail.success ||
+    detail.data.kind !== 'found' ||
+    detail.data.operation.operationRef !== operationRef
+  ) {
+    return { kind: 'unavailable', reason: 'source_unavailable' }
+  }
+  const operation: PublicOperationDescriptor = detail.data.operation
+  const descriptor: KeylessExecutableToolDescriptor = {
+    operationRef,
+    capabilityId: operation.contract.capabilityId,
+    name: operation.offering.label,
+    summary: operation.summary,
+    searchTerms: [
+      operation.operationId,
+      operation.contract.capabilityId,
+      operation.business.name,
+      operation.offering.label,
+    ],
+    inputSchema: operation.contract.inputJsonSchema,
+    publicOperation: operation,
+    ...(operation.contract.inputExamples === undefined
+      ? {}
+      : { inputExamples: operation.contract.inputExamples }),
+  }
+  if (findStrictToolSchemaViolation(descriptor.inputSchema) !== null) {
+    return { kind: 'unavailable', reason: 'source_unavailable' }
+  }
+  const candidate = answerOperationCandidateFromPublicDescriptor(
+    operation,
+    1,
+    { includeInputSchema: true },
+  )
+  if (candidate === undefined) {
+    return { kind: 'unavailable', reason: 'source_unavailable' }
+  }
+  const operationCandidates = [candidate]
+  return {
+    kind: 'resolved',
+    descriptors: [descriptor],
+    candidates: [descriptor],
+    operationCandidates,
+    selectedCandidate: candidate,
+    selected: descriptor,
+    candidateSetDigest:
+      answerOperationCandidateSetDigest(operationCandidates),
+  }
 }
 
 function normalizeMaxToolCalls(value: number | undefined): number {

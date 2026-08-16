@@ -14,6 +14,15 @@ import type {
   KeylessExecutableSourcePort,
   OperationExecuteDeps,
 } from '../../../src/modules/capability-execution/public'
+import {
+  isPublicOperationRef,
+  serializeOperationDescriptor,
+  type PublicOperationDescriptor,
+} from '../../../src/modules/capability-supply/public'
+import {
+  createPublicSourceTransport,
+  setPublicSourceTransportForTests,
+} from '../../../src/lib/server/convex-source'
 import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
 import { streamAnswerTurn } from '../../../src/modules/answer-thread/server'
 import {
@@ -22,7 +31,7 @@ import {
   setAnswerThreadPortForTests,
 } from '../../../src/modules/answer-thread/testing'
 import type { FrozenTurnEvidence } from '../../../src/modules/answer-thread/harness'
-import type { AnswerQuerySafetyResult, AnswerSnapshot, AnswerWorkStep } from '@/modules/answer/public'
+import type { AnswerRequestPreflightResult, AnswerSnapshot, AnswerWorkStep } from '@/modules/answer/public'
 
 import { BROAD_ANSWER_EVAL_BUSINESS_FIXTURES } from './registry-seed'
 import { handleAnswerTurnRequest } from '../../../src/routes/api.answer.turn'
@@ -47,6 +56,7 @@ import {
 import { createLocalE2eRegistrySourcePort } from '../../../tests/helpers/registry-local-e2e'
 import { readAnswerTurnStream, type AnswerTurnFrame } from '../../../tests/helpers/answer-turn-stream'
 import {
+  SEED_ONLY_CAPABILITY_OPERATION_REF,
   SEED_ONLY_CAPABILITY_OUTPUT,
   SEED_ONLY_CAPABILITY_TOOL_ID,
   findAnswerThreadEvalCase,
@@ -88,28 +98,201 @@ const EMPTY_KEYLESS_EXECUTABLE_SOURCE: KeylessExecutableSourcePort = {
   search: async () => [],
 }
 
-function allowEvalQuerySafety(): Promise<AnswerQuerySafetyResult> {
+async function seedOnlyPublicOperation(): Promise<PublicOperationDescriptor> {
+  if (!isPublicOperationRef(SEED_ONLY_CAPABILITY_OPERATION_REF)) {
+    throw new Error('answer_eval_seed_operation_ref_invalid')
+  }
+  const executable = await seedKeylessExecutableSource.read(
+    SEED_ONLY_CAPABILITY_OPERATION_REF,
+  )
+  if (executable === null || executable.outputSchema === undefined) {
+    throw new Error('answer_eval_seed_operation_missing')
+  }
   const now = Date.now()
-  return Promise.resolve({
-    kind: 'allowed',
-    modelRequest: {
-      seq: 0,
-      provider: 'openrouter',
-      model: 'test-model',
-      status: 'ok',
-      startedAt: now,
-      endedAt: now,
-      durationMs: 0,
-      responseId: 'chatcmpl-safety-allow',
-      stopReason: 'stop',
-      usage: {
-        inputTokens: 40,
-        outputTokens: 2,
-        totalTokens: 42,
-      },
-      costUnavailableReason: 'provider_metadata_missing',
+  return {
+    operationRef: SEED_ONLY_CAPABILITY_OPERATION_REF,
+    operationId: `capability:${executable.capabilityId}`,
+    contract: {
+      capabilityId: executable.capabilityId,
+      version: 1,
+      inputJsonSchema:
+        executable.inputSchema as PublicOperationDescriptor['contract']['inputJsonSchema'],
+      outputJsonSchema:
+        executable.outputSchema as PublicOperationDescriptor['contract']['outputJsonSchema'],
+      customerAnnotations: [
+        {
+          annotationId: 'ids',
+          document: 'input',
+          pointer: '/ids',
+          label: 'Coin IDs',
+          role: 'request',
+        },
+        {
+          annotationId: 'vs_currencies',
+          document: 'input',
+          pointer: '/vs_currencies',
+          label: 'Quote currencies',
+          role: 'request',
+        },
+      ],
     },
-  })
+    business: {
+      businessId: 'business:answer-eval-seed',
+      slug: 'answer-eval-seed',
+      name: 'Answer eval seed',
+    },
+    offering: {
+      offeringRef: 'offering:answer-eval-seed',
+      revision: 1,
+      label: executable.name,
+      summary: 'Seed-only deterministic capability fixture.',
+    },
+    summary: 'Seed-only deterministic capability fixture.',
+    commercial: {
+      price: executable.price,
+      materialTerms: [],
+      relationship: {
+        kind: 'none',
+        summary: 'Seed-only test fixture; no commercial relationship.',
+      },
+    },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    cancellation: { kind: 'unsupported' },
+    recovery: {
+      idempotency: 'required',
+      recovery: 'reconcile_required',
+    },
+    authentication: { kind: 'keyless' },
+    transport: {
+      method: executable.method,
+      requestTimeoutMs: executable.requestTimeoutMs,
+    },
+    provenance: {
+      publisher: executable.provenance.publisher as PublicOperationDescriptor['provenance']['publisher'],
+      sourceKind: executable.provenance.sourceKind as PublicOperationDescriptor['provenance']['sourceKind'],
+    },
+    availability: {
+      posture: 'routeable',
+      observedAt: now,
+      validUntil: now + 60_000,
+    },
+    navigation: [{
+      relation: 'execute',
+      method: 'POST',
+      actionId: 'operation.execute',
+      authentication: 'none',
+      surfaces: ['answerThread'],
+      precondition: 'free_keyless_read_only',
+    }],
+  }
+}
+
+function installSeedOnlyOperationSource(
+  operation: PublicOperationDescriptor,
+): () => void {
+  const wireOperation = serializeOperationDescriptor(operation)
+  return setPublicSourceTransportForTests(
+    createPublicSourceTransport({
+      env: { CONVEX_URL: 'https://answer-eval.test' },
+      fetch: async (_input, init) => {
+        const payload: unknown = JSON.parse(String(init?.body ?? '{}'))
+        if (!isRecord(payload) || typeof payload.path !== 'string') {
+          throw new Error('answer_eval_operation_source_request_invalid')
+        }
+        const args = Array.isArray(payload.args) && isRecord(payload.args[0])
+          ? payload.args[0]
+          : {}
+        if (payload.path === 'capabilitySupplyOperations:search') {
+          const query = typeof args.query === 'string' ? args.query : ''
+          const matches =
+            query.trim().length > 0 &&
+            (!Array.isArray(args.operationRefs) ||
+              args.operationRefs.includes(operation.operationRef))
+          return Response.json({
+            status: 'success',
+            value: {
+              kind: 'ok',
+              schemaVersion: 'registry-operations:v1',
+              query,
+              items: matches ? [wireOperation] : [],
+              matchedCount: matches ? 1 : 0,
+              ranking: matches
+                ? [{
+                    operationRef: operation.operationRef,
+                    rank: 1,
+                    score: 1,
+                  }]
+                : [],
+              pagination: {
+                limit: typeof args.limit === 'number' ? args.limit : 20,
+                hasMore: false,
+              },
+              navigation: [],
+            },
+          })
+        }
+        if (payload.path === 'capabilitySupplyOperations:detail') {
+          const found = args.operationRef === operation.operationRef
+          return Response.json({
+            status: 'success',
+            value: found
+              ? {
+                  kind: 'found',
+                  schemaVersion: 'registry-operations:v1',
+                  operation: wireOperation,
+                }
+              : {
+                  kind: 'unavailable',
+                  schemaVersion: 'registry-operations:v1',
+                  reason: 'operation_not_found',
+                  navigation: [],
+                },
+          })
+        }
+        throw new Error(`answer_eval_operation_source_unconfigured:${payload.path}`)
+      },
+    }),
+  )
+}
+
+function allowEvalQuerySafety(
+  route: 'business' | 'operation',
+): (input: Readonly<{ query: string }>) => Promise<AnswerRequestPreflightResult> {
+  return (input) => {
+    const now = Date.now()
+    return Promise.resolve({
+      kind: 'allowed',
+      interpretation: {
+        route,
+        requestedIntents: [{
+          intentId: 'answer-eval-request',
+          phrase: input.query,
+          requestedResult: input.query,
+        }],
+        continuation: 'new',
+        effectPolicy: 'run_when_ready',
+      },
+      modelRequest: {
+        seq: 0,
+        provider: 'openrouter',
+        model: 'test-model',
+        status: 'ok',
+        startedAt: now,
+        endedAt: now,
+        durationMs: 0,
+        responseId: 'chatcmpl-safety-allow',
+        stopReason: 'stop',
+        usage: {
+          inputTokens: 40,
+          outputTokens: 2,
+          totalTokens: 42,
+        },
+        costUnavailableReason: 'price_table_missing',
+      },
+    })
+  }
 }
 
 type GateVars = {
@@ -634,13 +817,26 @@ function usesSeedOnlyCapabilitySource(agent: AnswerTurnEvalCase['openRouterAgent
 function streamWithSeedOnlyKeylessSource(
   agent: AnswerTurnEvalCase['openRouterAgent'],
   store: AnswerThreadTestStore,
+  publicOperation?: PublicOperationDescriptor,
   capabilityOutput?: unknown,
 ): typeof streamAnswerTurn {
   const capability = usesSeedOnlyCapabilitySource(agent)
+  const keylessExecutableSource: KeylessExecutableSourcePort =
+    capability && publicOperation !== undefined
+      ? {
+          ...seedKeylessExecutableSource,
+          readPublic: async (operationRef) =>
+            operationRef === publicOperation.operationRef
+              ? publicOperation
+              : null,
+        }
+      : EMPTY_KEYLESS_EXECUTABLE_SOURCE
   return (streamInput, send) => streamAnswerTurn({
     ...streamInput,
-    keylessExecutableSource: capability ? seedKeylessExecutableSource : EMPTY_KEYLESS_EXECUTABLE_SOURCE,
-    querySafetyClassifier: allowEvalQuerySafety,
+    keylessExecutableSource,
+    querySafetyClassifier: allowEvalQuerySafety(
+      capability ? 'operation' : 'business',
+    ),
     // The eval finalizer captures harness evidence without mutating the test
     // port's pending row; the consumed SSE terminal frame is authoritative.
     preloadedPriorTurns: [...store.turns.values()].map((turn) => ({
@@ -679,9 +875,20 @@ async function runAnswerTurnInStore(input: {
   turnKey: string
   threadId?: string
 }): Promise<AnswerTurnEvalResult> {
+  const capability = usesSeedOnlyCapabilitySource(
+    input.testCase.openRouterAgent,
+  )
+  const publicOperation = capability
+    ? await seedOnlyPublicOperation()
+    : undefined
+  const restoreOperationSource =
+    publicOperation === undefined
+      ? undefined
+      : installSeedOnlyOperationSource(publicOperation)
   const stream = streamWithSeedOnlyKeylessSource(
     input.testCase.openRouterAgent,
     input.store,
+    publicOperation,
     input.testCase.capabilityOutput,
   )
   const server = input.testCase.openRouterAgent === undefined
@@ -833,6 +1040,7 @@ async function runAnswerTurnInStore(input: {
     }
   } finally {
     restoreHarnessFinalizer()
+    restoreOperationSource?.()
     restoreOpenRouter?.()
     if (server !== undefined) {
       await server.close()

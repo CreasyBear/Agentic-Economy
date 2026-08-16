@@ -31,6 +31,7 @@ import {
   parseAnswerTurnCheckpoint,
   serializeAnswerTurnCheckpoint,
 } from './internal/answer-turn-checkpoint'
+import { normalizeAnswerTurnQuery } from './internal/turn-digests'
 import { mintAnswerThreadShareToken } from './internal/share-token'
 import { isValidFrozenAnswerOperationArtifacts } from '@/modules/answer/answer-event-schema'
 import { buildPublicThreadProjection } from './internal/public-projection'
@@ -472,28 +473,32 @@ export function setAnswerThreadPortForTests(port: AnswerThreadPort | undefined):
 }
 
 export async function reserveAnswerTurn(args: ReserveAnswerTurnArgs): Promise<AnswerTurnReservationResult> {
+  const normalizedArgs = {
+    ...args,
+    query: normalizeAnswerTurnQuery(args.query),
+  }
   const port = activeAnswerThreadPort()
   if (port !== undefined) {
-    return port.reserveAnswerTurn(args)
+    return port.reserveAnswerTurn(normalizedArgs)
   }
-  const operationKey = `answer_thread:reserve:${args.reservationKey}`
+  const operationKey = `answer_thread:reserve:${normalizedArgs.reservationKey}`
   const correlationId = operationKey
   const command: Omit<ReserveAnswerTurnMutationArgs, 'sourceWrite' | 'sourceWriteRequest'> = {
-    sessionId: args.sessionId,
-    requestedThreadScope: args.threadId ?? 'new',
-    query: args.query,
-    ...(args.searchContextJson === undefined ? {} : { searchContextJson: args.searchContextJson }),
-    requestDigest: args.requestDigest,
-    reservationKey: args.reservationKey,
-    title: args.title,
+    sessionId: normalizedArgs.sessionId,
+    requestedThreadScope: normalizedArgs.threadId ?? 'new',
+    query: normalizedArgs.query,
+    ...(normalizedArgs.searchContextJson === undefined ? {} : { searchContextJson: normalizedArgs.searchContextJson }),
+    requestDigest: normalizedArgs.requestDigest,
+    reservationKey: normalizedArgs.reservationKey,
+    title: normalizedArgs.title,
     operationKey,
     correlationId,
   }
   return callPublicSourceMutation(
     reserveAnswerTurnMutation,
     await withAnswerThreadSourceWrite({
-      request: args.sourceWriteRequest,
-      body: args.sourceWriteBody,
+      request: normalizedArgs.sourceWriteRequest,
+      body: normalizedArgs.sourceWriteBody,
       command,
       scope: 'answer_thread',
       operationKey,
@@ -673,8 +678,10 @@ export async function finalizeReservedAnswerTurnFromSource(
   if (!isRecord(evidence) || !isValidFrozenAnswerOperationArtifacts({
     candidates: evidence.operationCandidates,
     candidateSetDigest: evidence.operationCandidatesDigest,
-    selection: evidence.operationSelection,
+    comparison: evidence.operationComparison,
     outcome: evidence.operationOutcome,
+    plan: evidence.operationPlan,
+    selection: evidence.operationSelection,
     toolCalls: args.toolCalls,
     requireToolEvidence: true,
   })) {
@@ -926,6 +933,10 @@ function activeAnswerThreadPort(): AnswerThreadPort | undefined {
     return testPort
   }
   if (!isLocalE2EAuthBypassEnabled()) {
+    return undefined
+  }
+  const hasConvexSource = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()
+  if (process.env.NODE_ENV !== 'test' && hasConvexSource) {
     return undefined
   }
   localE2ePort ??= createLocalE2eAnswerThreadPort()

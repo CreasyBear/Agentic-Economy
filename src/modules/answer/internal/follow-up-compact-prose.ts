@@ -7,7 +7,23 @@ export function buildRationaleFollowUpProse(input: {
   constraints: readonly string[]
   budget?: string
   failure?: string
+  operationRecall?: Readonly<{
+    operationLabel: string
+    sourceLabel: string
+    rationale: string
+    result: unknown
+  }>
 }): { oneLine: string; summary: string; nextStep: string } {
+  if (input.operationRecall !== undefined) {
+    const recall = input.operationRecall
+    return {
+      oneLine: `${recall.operationLabel} from ${recall.sourceLabel} was selected.`,
+      summary:
+        `Selection rationale: ${recall.rationale} `
+        + `Exact frozen result: ${JSON.stringify(recall.result)}.`,
+      nextStep: 'No operation was run for this explanation.',
+    }
+  }
   const facts = [
     input.constraints.length > 0
       ? `Retained constraints: ${input.constraints.join('; ')}.`

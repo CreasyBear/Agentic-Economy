@@ -13,6 +13,10 @@ import {
   type RunHarnessToolOutcome,
 } from '@/modules/harness/public'
 import type {
+  InspectPlanResult,
+  OperationCompareResult,
+  OperationDetailResult,
+  OperationSearchResult,
   PublicBusinessCatalogApiV2SearchPage,
   PublicBusinessCatalogV2DetailResult,
 } from '@/modules/registry/public'
@@ -177,6 +181,7 @@ function refuse(
     inputJson: safeJsonStringify(input.input),
     providers: [],
     resultJson: safeJsonStringify({ kind: 'refused', code: errorCode }),
+    executed: false,
     timings: [],
   })
 }
@@ -191,6 +196,7 @@ function recordResult(
     providers: AnswerSource[]
     resultJson: string
     timings: readonly AnswerTurnTimingEntry[]
+    executed?: boolean
   },
 ): RunAnswerToolCallResult {
   const resultSummaryJson = safeJsonStringify(outcome.summary)
@@ -200,6 +206,7 @@ function recordResult(
     summary: resultSummaryJson,
     resultJson: outcome.resultJson,
     status: outcome.status,
+    ...(outcome.executed === undefined ? {} : { executed: outcome.executed }),
   }).toString()
 
   const record: AnswerToolCallRecord = {
@@ -212,6 +219,7 @@ function recordResult(
     resultJson: outcome.resultJson,
     resultHash,
     status: outcome.status,
+    ...(outcome.executed === undefined ? {} : { executed: outcome.executed }),
     createdAt: Date.now(),
   }
 
@@ -241,6 +249,38 @@ function extractProviders(
     return {
       providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
       count: page.pagination.total,
+    }
+  }
+
+  if (toolId === 'registry.operations.search') {
+    const operationSearch = result as OperationSearchResult
+    return {
+      providers: [],
+      count: operationSearch.kind === 'ok' ? operationSearch.items.length : 0,
+    }
+  }
+
+  if (toolId === 'registry.operations.detail') {
+    const operationDetail = result as OperationDetailResult
+    return {
+      providers: [],
+      count: operationDetail.kind === 'found' ? 1 : 0,
+    }
+  }
+
+  if (toolId === 'registry.operations.compare') {
+    const operationCompare = result as OperationCompareResult
+    return {
+      providers: [],
+      count: operationCompare.kind === 'ok' ? 1 : 0,
+    }
+  }
+
+  if (toolId === 'registry.operations.inspectPlan') {
+    const inspectPlan = result as InspectPlanResult
+    return {
+      providers: [],
+      count: inspectPlan.kind === 'ok' ? 1 : 0,
     }
   }
 

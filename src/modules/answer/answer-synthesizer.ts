@@ -1,7 +1,9 @@
 import type { AnswerTurnProblem } from '@/lib/errors'
 import type {
   AnswerOperationCandidate,
+  AnswerOperationComparison,
   AnswerOperationOutcome,
+  AnswerOperationPlan,
   AnswerOperationSelection,
   AnswerArtifact,
 } from './answer-schema'
@@ -136,6 +138,8 @@ export type AnswerSnapshot = {
   operationCandidatesDigest?: string
   operationOutcome?: AnswerOperationOutcome
   operationSelection?: AnswerOperationSelection
+  operationComparison?: AnswerOperationComparison
+  operationPlan?: AnswerOperationPlan
   summary: string
   nextStep: string
   agentJsonUrl: string
