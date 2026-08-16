@@ -31,6 +31,7 @@ type Env = {
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SITE_URL: string | undefined;
+  readonly AE_X402_RPC_URLS_JSON: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
 };
