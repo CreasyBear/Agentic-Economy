@@ -315,3 +315,25 @@ of three isolated runs on the branch. Load flake, not regression.
 
 The guardrail red was self-inflicted card authoring — the validator was told to run all of
 `tests/imports` on a branch that did not fix the one test known to be red there.
+
+## Merged Phase 1 gate — green
+
+`npm run test:release:source:after-codegen` exits 0 on `main` with both cards merged: lint,
+typecheck, kernel retirement, product frontier, 498 unit files, 85 integration files, import
+boundaries, ts-standards, SEO, UI contract, eval report, and build. The market-terminal CLI test
+passed here too, independently confirming the earlier single timeout was load flake.
+
+The outer `test:release:source` still fails closed at `verify:deployment-manifest` for missing
+operator-owned production configuration. That is the intended posture and is unchanged by the reset.
+
+## Founder decisions — P1-f supply authority
+
+Agent keys may publish supply under a new narrow scope, bound server-side to a business their owner
+already owns. The V1 acceptance packet requires an independent supplier to publish from its own
+descriptor with no AE operator intervention, so keeping publishing human-only would leave supply
+non-agent-native while the demand side is fully agent-callable. The binding is resolved from the
+key's registered owner, never from caller input, so a key cannot reach another owner's business.
+
+Withdraw drains rather than cancels: in-flight invocations finish and settle, and withdrawal only
+stops new ones. The buyer of an already-authorized call is owed delivery or a refund, and cancelling
+mid-flight would create exactly the unresolved-outcome state the money model works to avoid.
