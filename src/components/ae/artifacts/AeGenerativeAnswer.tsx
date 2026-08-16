@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon, SearchIcon } from 'lucide-react'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -37,6 +38,8 @@ import type {
   AnswerCompareField,
   AnswerOperationCandidate,
   AnswerOperationOutcome,
+  AnswerOperationResultAnnotation,
+  AnswerOperationResultView,
   AnswerSource,
   AnswerWorkStep,
 } from '@/modules/answer/public'
@@ -140,15 +143,11 @@ export function AeGenerativeAnswer({
   const headlineSize = isFirstTurnProfile
     ? 'font-heading text-2xl leading-snug text-balance'
     : 'text-base font-medium leading-snug'
-  const hasProviderEvidence = parts.some(isProviderEvidencePart)
   const summaryPart = parts.find(
     (part): part is Extract<AnswerMessagePart, { kind: 'prose' }> =>
       part.kind === 'prose' && part.text.trim().length > 0,
   )
   const hasSummary = summaryPart !== undefined
-  const hasNextStep = parts.some(
-    (part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0,
-  )
   return (
     <section
       className="grid gap-4"
@@ -157,46 +156,49 @@ export function AeGenerativeAnswer({
       data-empty={empty ? 'true' : 'false'}
       aria-busy={busy}
     >
-      <div className="flex items-start justify-between gap-3">
-        {headline.length > 0 ? (
-          <p
-            dir="auto"
-            style={{ unicodeBidi: 'isolate' }}
-            className={cn(
-              'min-w-0 flex-1 text-foreground',
-              headlineSize,
-              isFirstTurnProfile && REVEAL_ENTER,
-            )}
-          >
-            {headline}
-          </p>
-        ) : (
-          <p
-            dir="auto"
-            style={{ unicodeBidi: 'isolate' }}
-            className={cn('min-w-0 flex-1 text-muted-foreground', headlineSize)}
-            aria-label="Checking what's available"
-          >
-            {busy ? <AeStreamingLabel as="span">Checking what's available</AeStreamingLabel> : 'Checking what\'s available'}
-          </p>
-        )}
+      {phase === 'error' ? (
+        <Alert variant="destructive">
+          <AlertTitle>Unable to finish this response.</AlertTitle>
+          {errorMessage === null ? null : (
+            <AlertDescription>{errorMessage}</AlertDescription>
+          )}
+        </Alert>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          {headline.length > 0 ? (
+            <p
+              dir="auto"
+              style={{ unicodeBidi: 'isolate' }}
+              className={cn(
+                'min-w-0 flex-1 text-foreground',
+                headlineSize,
+                isFirstTurnProfile && REVEAL_ENTER,
+              )}
+            >
+              {headline}
+            </p>
+          ) : (
+            <p
+              dir="auto"
+              style={{ unicodeBidi: 'isolate' }}
+              className={cn('min-w-0 flex-1 text-muted-foreground', headlineSize)}
+              aria-label="Checking what's available"
+            >
+              {busy ? <AeStreamingLabel as="span">Checking what's available</AeStreamingLabel> : 'Checking what\'s available'}
+            </p>
+          )}
 
-        {phase === 'reconnecting' ? (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            <AeStreamingLabel as="span">Reconnecting…</AeStreamingLabel>
-          </span>
-        ) : null}
+          {phase === 'reconnecting' ? (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              <AeStreamingLabel as="span">Reconnecting…</AeStreamingLabel>
+            </span>
+          ) : null}
 
-        {busy && onStop !== undefined ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onStop}>Stop</Button>
-        ) : null}
-      </div>
-
-      {phase === 'error' && errorMessage !== null ? (
-        <div className="rounded-md border border-red-ring bg-red-subtle p-4 text-sm text-red-vivid" role="alert">
-          <div>{errorMessage}</div>
+          {busy && onStop !== undefined ? (
+            <Button type="button" variant="secondary" size="sm" onClick={onStop}>Stop</Button>
+          ) : null}
         </div>
-      ) : null}
+      )}
       {phase === 'stopped' && errorMessage !== null ? (
         <p className="text-sm text-muted-foreground">{errorMessage}</p>
       ) : null}
@@ -208,6 +210,7 @@ export function AeGenerativeAnswer({
         thinkingLabel={thinkingLabel ?? ''}
         {...(thinkingStep === undefined ? {} : { thinkingStep })}
         {...(checkSummary === undefined ? {} : { checkSummary })}
+        {...(phase === 'error' ? { defaultOpen: false } : {})}
         query={query}
       />
 
@@ -238,47 +241,8 @@ export function AeGenerativeAnswer({
         />
       ]))}
 
-      {/* The construction record supports inspection without competing with the answer.
-          It stays complete and reachable, but ordinary users do not need to read it first. */}
-      {hasProviderEvidence ? (
-        <details className="group rounded-md border border-border bg-card">
-          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-            How this was checked
-            <span className="shrink-0 text-xs font-normal text-muted-foreground">Sources reviewed</span>
-          </summary>
-          <div className="border-t border-border p-4">
-            <AeAnswerJourney
-              phase={phase}
-              profile={profile}
-              progress={{
-                headline: headline.length > 0,
-                providerEvidence: hasProviderEvidence,
-                summary: hasSummary,
-                nextStep: hasNextStep,
-              }}
-            />
-          </div>
-        </details>
-      ) : null}
-
-      {phase === 'complete' && !empty ? (
-        <p className="sr-only">
-          Answer ready.
-        </p>
-      ) : null}
     </section>
   )
-}
-
-function isProviderEvidencePart(part: AnswerMessagePart): boolean {
-  switch (part.kind) {
-    case 'selected-provider':
-    case 'provider-cards':
-    case 'provider-compare-table':
-      return true
-    default:
-      return false
-  }
 }
 
 function retryableExecutionOperationRef(parts: readonly AnswerMessagePart[]): string | undefined {
@@ -318,205 +282,6 @@ function ProseBody({ text }: { text: string }) {
   )
 }
 
-type AnswerJourneyState = 'complete' | 'active' | 'pending' | 'error' | 'stopped'
-
-type AnswerJourneyProgress = {
-  headline: boolean
-  providerEvidence: boolean
-  summary: boolean
-  nextStep: boolean
-}
-
-function AeAnswerJourney({
-  phase,
-  profile,
-  progress,
-}: {
-  phase: AeGenerativeAnswerPhase
-  profile: AnswerLayoutProfile
-  progress: AnswerJourneyProgress
-}) {
-  const empty = profile === 'empty_state'
-  const steps = [
-    {
-      label: 'Understand your request',
-      detail: 'Reading the request and what you want done.',
-      record: 'request read',
-    },
-    {
-      label: "Find what's available",
-      detail: 'Checking the businesses that can help.',
-      record: 'available details',
-    },
-    {
-      label: 'Compare options',
-      detail: 'Comparing area, response, and next-step details.',
-      record: 'options compared',
-    },
-    {
-      label: 'Choose what happens next',
-      detail: empty
-        ? 'Ask a business or sharpen the request.'
-        : 'Choose a business or send a request for the business to review.',
-      record: 'next step ready',
-    },
-  ] as const
-
-  const completedIndex = getJourneyCompletedIndex({ phase, empty, progress })
-  const activeIndex =
-    phase === 'streaming'
-      ? Math.min(completedIndex + 1, steps.length - 1)
-      : Math.max(0, Math.min(completedIndex, steps.length - 1))
-  const guidance =
-    phase === 'streaming'
-      ? 'Putting the answer together as information arrives.'
-      : empty
-        ? 'No clear match yet. Try a more specific request.'
-        : 'Options are compared using published details. The business still confirms timing, price, and availability before anything is sent.'
-
-  // The handoff record is settled evidence, not live chrome. During streaming
-  // the research trace + streaming answer already show progress, so this stays
-  // out until the turn settles and then fades in as one card.
-  // no strip-to-card swap, no mid-stream layout jump.
-  if (phase === 'idle' || phase === 'streaming' || phase === 'reconnecting') {
-    return null
-  }
-
-  return (
-    <Card
-      className={cn(REVEAL_ENTER, 'grid gap-5 border border-border bg-card p-4')}
-      aria-label="How this answer was put together"
-      data-phase={phase}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <img
-            src="/brand/logo/ae-seal.svg"
-            alt=""
-            aria-hidden="true"
-            className="mt-0.5 size-8 shrink-0"
-            loading="lazy"
-          />
-          <div className="grid min-w-0 gap-1">
-            <Badge variant="outline" className="w-fit">How this was put together</Badge>
-            <p className="text-lg font-semibold text-foreground">
-              What was checked, and what happens next.
-            </p>
-            <p className="max-w-[58ch] text-pretty text-muted-foreground">
-              {guidance}
-            </p>
-          </div>
-        </div>
-        <p className="font-mono tabular-nums text-sm text-muted-foreground">
-          {phase === 'complete' ? 'ready' : 'next step'}
-        </p>
-      </div>
-
-      <ol
-        className="grid gap-4 border-l border-border pl-5 sm:grid-cols-4 sm:gap-5 sm:border-l-0 sm:border-t sm:pl-0 sm:pt-5"
-        aria-live="off"
-        aria-label="How this answer was put together"
-      >
-        {steps.map((step, index) => {
-          const state = getJourneyState({ index, activeIndex, completedIndex, phase })
-          const nodeClassName = cn(
-            'absolute -left-[1.85rem] top-0 inline-flex size-5 items-center justify-center rounded-full border font-mono text-2xs font-semibold tabular-nums sm:-top-[1.9rem] sm:left-0',
-            state === 'complete' && 'border-brand bg-brand text-on-brand',
-            state === 'active' && 'border-brand bg-card text-brand',
-            state === 'pending' && 'border-border bg-card text-muted-foreground',
-            (state === 'error' || state === 'stopped') && 'border-red-ring bg-red-subtle text-red-vivid',
-          )
-
-          return (
-            <li
-              key={step.label}
-              data-state={state}
-              aria-current={state === 'active' ? 'step' : undefined}
-              className="relative grid min-w-0 gap-1 data-[state=pending]:opacity-70"
-            >
-              <span className={nodeClassName} aria-hidden="true">
-                {state === 'complete' ? <CheckIcon className="size-3" /> : index + 1}
-              </span>
-              <span className="sr-only">{journeyStateLabel(state)}: </span>
-              <span className="block text-sm font-semibold text-foreground">{step.label}</span>
-              <span className="block text-pretty text-sm text-muted-foreground">{step.detail}</span>
-              <span className="block font-mono text-2xs tabular-nums text-muted-foreground">{step.record}</span>
-            </li>
-          )
-        })}
-      </ol>
-    </Card>
-  )
-}
-
-function getJourneyCompletedIndex({
-  phase,
-  empty,
-  progress,
-}: {
-  phase: AeGenerativeAnswerPhase
-  empty: boolean
-  progress: AnswerJourneyProgress
-}): number {
-  if (phase === 'complete') {
-    return 3
-  }
-
-  const { headline, providerEvidence, summary, nextStep } = progress
-  let completed = -1
-  if (headline || providerEvidence || summary || nextStep || empty) {
-    completed = 0
-  }
-  if (providerEvidence || summary || nextStep || empty) {
-    completed = 1
-  }
-  if (summary || nextStep || empty) {
-    completed = 2
-  }
-  if (nextStep) {
-    completed = 3
-  }
-  return completed
-}
-
-function getJourneyState({
-  index,
-  activeIndex,
-  completedIndex,
-  phase,
-}: {
-  index: number
-  activeIndex: number
-  completedIndex: number
-  phase: AeGenerativeAnswerPhase
-}): AnswerJourneyState {
-  if (index <= completedIndex) {
-    return 'complete'
-  }
-  if ((phase === 'error' || phase === 'stopped') && index === activeIndex) {
-    return phase
-  }
-  if ((phase === 'streaming' || phase === 'reconnecting' || phase === 'idle') && index === activeIndex) {
-    return 'active'
-  }
-  return 'pending'
-}
-
-function journeyStateLabel(state: AnswerJourneyState): string {
-  switch (state) {
-    case 'complete':
-      return 'Complete'
-    case 'active':
-      return 'Current'
-    case 'pending':
-      return 'Pending'
-    case 'error':
-      return 'Needs attention'
-    case 'stopped':
-      return 'Stopped'
-  }
-}
-
 function AnswerPartView({
   part,
   query,
@@ -553,8 +318,11 @@ function AnswerPartView({
           retryableOperationRef={retryableOperationRef}
         />
       )
+    case 'operation-comparison':
+    case 'operation-plan':
+      return null
     case 'operation-outcome':
-      return <OperationOutcome outcome={part.outcome} />
+      return <OperationOutcome outcome={part.outcome} view={part.resultView} />
     case 'imported-claims':
       return <AeImportedClaims claims={part.claims} query={query} />
     case 'provider-compare-table':
@@ -562,7 +330,7 @@ function AnswerPartView({
         <details className={cn(REVEAL_ENTER, 'group rounded-lg border border-border bg-card')}>
           <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             <span>See full comparison</span>
-            <span className="font-mono text-2xs text-muted-foreground">{listingCountLabel(part.providers.length)}</span>
+            <span className="font-mono text-xs text-muted-foreground">{listingCountLabel(part.providers.length)}</span>
           </summary>
           <div className="border-t border-border">
             <ProviderCompareTable
@@ -600,7 +368,7 @@ function AnswerPartView({
           <p dir="auto" style={{ unicodeBidi: 'isolate' }} className={cn(REVEAL_ENTER, 'text-sm text-muted-foreground')}>{actionText}</p>
         ) : (
           <p className={cn(REVEAL_ENTER, 'grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-foreground')}>
-            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">What to do now</span>
+            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">What to do now</span>
             <span dir="auto" style={{ unicodeBidi: 'isolate' }}>{actionText}</span>
           </p>
         )
@@ -861,7 +629,7 @@ function OperationCandidateCard({
                 }}
               />
               {inputError === undefined ? null : (
-                <p id={errorId} role="alert" className="text-sm text-red-vivid">{inputError}</p>
+                <p id={errorId} role="alert" className="text-sm text-destructive">{inputError}</p>
               )}
             </div>
             <Button type="submit" className="min-h-11 w-full sm:w-fit">Validate and run</Button>
@@ -940,115 +708,274 @@ function CandidateList({
   )
 }
 
-function OperationOutcome({ outcome }: { outcome: AnswerOperationOutcome }) {
+function OperationOutcome({
+  outcome,
+  view,
+}: {
+  outcome: AnswerOperationOutcome
+  view: AnswerOperationResultView
+}) {
   const result = outcome.result
-  const completed = result.kind === 'ok' || result.kind === 'completed'
-  const label = completed
-    ? 'Operation completed'
-    : result.kind === 'refused'
-      ? 'Operation not run'
-      : result.kind === 'pending'
-        ? 'Operation pending'
-        : result.kind === 'needs_authority'
-          ? 'Approval required'
-          : result.kind === 'reconciliation_required'
-            ? 'Reconciliation required'
-            : 'Operation failed'
-  const output = result.kind === 'ok' || result.kind === 'completed'
-    ? boundedOutcomeJson(result.output)
-    : undefined
+  const presentation = view.presentation
+  const rawOutput = view.output === undefined ? undefined : boundedOutcomeJson(view.output)
 
   return (
-    <section className={cn(REVEAL_ENTER, 'grid gap-4 rounded-md border border-border bg-card p-4')} aria-label="Operation outcome">
+    <section className={cn(REVEAL_ENTER, 'grid min-w-0 gap-4 rounded-md border border-border bg-card p-4')} aria-label="Operation outcome">
       <header className="grid gap-1">
-        <p className="text-sm font-semibold text-foreground">{label}</p>
-        <Link
-          to="/operations/$operationRef"
-          params={{ operationRef: outcome.operationRef }}
-          className="w-fit break-all text-xs text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{outcome.operationRef}</code>
-        </Link>
+        <p className="text-sm font-semibold text-foreground">{view.stateLabel}</p>
+        {presentation === undefined ? null : (
+          <h2
+            dir="auto"
+            style={{ unicodeBidi: 'isolate' }}
+            className="break-words font-heading text-lg font-semibold text-foreground"
+          >
+            {neutralizeBidiFormattingControls(presentation.operationLabel)}
+          </h2>
+        )}
       </header>
 
-      {'invocationRef' in result ? (
-        <div className="grid gap-2">
-          <p className="text-xs font-medium text-muted-foreground">Invocation reference</p>
-          <code dir="ltr" style={{ unicodeBidi: 'isolate' }} className="break-all text-xs text-foreground">
-            {result.invocationRef}
-          </code>
-          <Link
-            to="/operations/invocations/$invocationRef"
-            params={{ invocationRef: result.invocationRef }}
-            className="w-fit text-sm font-semibold text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            View current status
-          </Link>
-        </div>
-      ) : null}
-
-      {output === undefined ? null : (
-        <div className="grid gap-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Output</p>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs text-foreground">
-            {output}
-          </pre>
-        </div>
+      {view.output === undefined ? (
+        <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words text-sm leading-relaxed text-foreground">
+          {result.kind === 'pending'
+            ? 'The operation is still pending. Check its current status before relying on a result.'
+            : result.kind === 'needs_authority'
+              ? 'The operation needs approval before it can run.'
+              : result.kind === 'reconciliation_required'
+                ? 'The outcome is uncertain and must be reconciled before retrying.'
+                : result.kind === 'error'
+                  ? neutralizeBidiFormattingControls(result.reason)
+                  : result.kind === 'refused'
+                    ? `The operation was not run: ${formatMachineLabel(
+                        'code' in result ? result.code : result.reason,
+                      )}.`
+                    : 'No result was recorded.'}
+        </p>
+      ) : (
+        <section className="grid min-w-0 gap-2" aria-label="Result">
+          <h3 dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words text-xs font-medium text-muted-foreground">
+            {neutralizeBidiFormattingControls(
+              view.annotations.find((annotation) => annotation.pointer === '')?.label ?? 'Result',
+            )}
+          </h3>
+          <ResultValue
+            value={view.output}
+            pointer=""
+            annotations={view.annotations}
+            depth={0}
+          />
+        </section>
       )}
 
-      <dl className="grid gap-3 text-sm sm:grid-cols-2">
-        {result.kind === 'completed' ? (
-          <>
-            <OutcomeFact label="Charge state" value={formatMachineLabel(result.usage.chargeState)} />
-            <OutcomeFact label="Exact amount" value={formatCurrencyAmount(result.usage.amount)} />
-            <OutcomeFact label="Usage ref" value={result.usage.usageRef} />
-            <OutcomeFact label="Observed" value={formatObservedAt(result.usage.observedAt)} />
-            <OutcomeFact label="Price digest" value={result.usage.priceDigest} />
-            <OutcomeFact label="Transaction ref" value={result.usage.transactionRef ?? 'Not recorded'} />
-            <OutcomeFact label="Duration" value={result.usage.durationMs === undefined ? 'Not recorded' : `${result.usage.durationMs} ms`} />
-            <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
-          </>
-        ) : result.kind === 'ok' ? (
-          <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
-        ) : result.kind === 'pending' ? (
-          <>
-            <OutcomeFact label="Retry after" value={`${result.retryAfterMs} ms`} />
-          </>
-        ) : result.kind === 'needs_authority' ? (
-          <>
-            <OutcomeFact label="Consequence" value={formatMachineLabel(result.authorityRequest.consequence)} />
-            <OutcomeFact label="Retry class" value={formatMachineLabel(result.authorityRequest.retryClass)} />
-            <OutcomeFact label="Maximum spend" value={result.authorityRequest.maximumSpend === undefined ? 'Not specified' : formatCurrencyAmount(result.authorityRequest.maximumSpend)} />
-            <OutcomeFact label="Data fields" value={result.authorityRequest.dataFields.length === 0 ? 'None' : result.authorityRequest.dataFields.join(', ')} />
-            <OutcomeFact label="Authority expires" value={result.authorityRequest.expiresAt ?? 'Not specified'} />
-          </>
-        ) : result.kind === 'reconciliation_required' ? (
-          <>
-            <OutcomeFact label="Attempt ref" value={result.evidence.attemptRef} />
-            <OutcomeFact label="Effect generation" value={String(result.evidence.effectGeneration)} />
-            <OutcomeFact label="Required at" value={result.evidence.requiredAt} />
-            <OutcomeFact label="Retry policy" value={formatMachineLabel(result.evidence.retry)} />
-            <OutcomeFact label="Evidence source" value={result.evidence.evidenceSource} />
-          </>
-        ) : result.kind === 'error' ? (
-          <>
-            <OutcomeFact label="Code" value={formatMachineLabel(result.code)} />
-            <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} />
-            <OutcomeFact label="Detail" value={result.reason} />
-            {result.composition === undefined ? null : <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} />}
-          </>
-        ) : (
-          <>
-            <OutcomeFact label="Reason" value={formatMachineLabel('reason' in result ? result.reason : result.code)} />
-            {'retryable' in result ? <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} /> : null}
-            {'nextAction' in result && result.nextAction !== undefined ? <OutcomeFact label="Next action" value={result.nextAction} /> : null}
-            {'composition' in result && result.composition !== undefined ? <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} /> : null}
-          </>
-        )}
-        <OutcomeFact label="Canonical result digest" value={outcome.resultDigest} />
-        <OutcomeFact label="Tool record digest" value={outcome.toolCallDigest} />
-      </dl>
+      <div className="grid min-w-0 gap-1 border-t border-border pt-3 text-sm">
+        <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words font-medium text-foreground">
+          {presentation === undefined
+            ? 'Recorded operation'
+            : neutralizeBidiFormattingControls(presentation.sourceLabel)}
+        </p>
+        <p className="break-words text-muted-foreground">
+          {presentation === undefined
+            ? 'Runtime actor and time were not recorded.'
+            : `Run by AE runtime · ${formatObservedAt(presentation.observedAt)}`}
+        </p>
+      </div>
+
+      <details className="group min-w-0 rounded-md border border-border">
+        <summary className="flex min-h-11 cursor-pointer items-center px-3 py-2 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Technical details
+        </summary>
+        <div className="grid min-w-0 gap-4 border-t border-border p-3">
+          <div className="grid gap-2">
+            <Link
+              to="/operations/$operationRef"
+              params={{ operationRef: outcome.operationRef }}
+              className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-xs text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{outcome.operationRef}</code>
+            </Link>
+            {'invocationRef' in result ? (
+              <Link
+                to="/operations/invocations/$invocationRef"
+                params={{ invocationRef: result.invocationRef }}
+                aria-label="View current status"
+                className="inline-flex min-h-6 w-fit items-center text-sm font-semibold text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{result.invocationRef}</code>
+              </Link>
+            ) : null}
+          </div>
+
+          <dl className="grid min-w-0 gap-3 text-sm sm:grid-cols-2">
+            {result.kind === 'completed' ? (
+              <>
+                <OutcomeFact label="Charge state" value={formatMachineLabel(result.usage.chargeState)} />
+                <OutcomeFact label="Exact amount" value={formatCurrencyAmount(result.usage.amount)} />
+                <OutcomeFact label="Usage ref" value={result.usage.usageRef} />
+                <OutcomeFact label="Observed" value={formatObservedAt(result.usage.observedAt)} />
+                <OutcomeFact label="Price digest" value={result.usage.priceDigest} />
+                <OutcomeFact label="Transaction ref" value={result.usage.transactionRef ?? 'Not recorded'} />
+                <OutcomeFact label="Duration" value={result.usage.durationMs === undefined ? 'Not recorded' : `${result.usage.durationMs} ms`} />
+                <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
+              </>
+            ) : result.kind === 'ok' ? (
+              <OutcomeFact label="Evidence hash" value={result.evidenceHash} />
+            ) : result.kind === 'pending' ? (
+              <OutcomeFact label="Retry after" value={`${result.retryAfterMs} ms`} />
+            ) : result.kind === 'needs_authority' ? (
+              <>
+                <OutcomeFact label="Consequence" value={formatMachineLabel(result.authorityRequest.consequence)} />
+                <OutcomeFact label="Retry class" value={formatMachineLabel(result.authorityRequest.retryClass)} />
+                <OutcomeFact label="Maximum spend" value={result.authorityRequest.maximumSpend === undefined ? 'Not specified' : formatCurrencyAmount(result.authorityRequest.maximumSpend)} />
+                <OutcomeFact label="Data fields" value={result.authorityRequest.dataFields.length === 0 ? 'None' : result.authorityRequest.dataFields.join(', ')} />
+                <OutcomeFact label="Authority expires" value={result.authorityRequest.expiresAt ?? 'Not specified'} />
+              </>
+            ) : result.kind === 'reconciliation_required' ? (
+              <>
+                <OutcomeFact label="Attempt ref" value={result.evidence.attemptRef} />
+                <OutcomeFact label="Effect generation" value={String(result.evidence.effectGeneration)} />
+                <OutcomeFact label="Required at" value={result.evidence.requiredAt} />
+                <OutcomeFact label="Retry policy" value={formatMachineLabel(result.evidence.retry)} />
+                <OutcomeFact label="Evidence source" value={result.evidence.evidenceSource} />
+              </>
+            ) : result.kind === 'error' ? (
+              <>
+                <OutcomeFact label="Code" value={formatMachineLabel(result.code)} />
+                <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} />
+                <OutcomeFact label="Detail" value={result.reason} />
+                {result.composition === undefined ? null : <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} />}
+              </>
+            ) : result.kind === 'unsafe_output' ? (
+              <OutcomeFact label="Code" value="Result withheld" />
+            ) : (
+              <>
+                <OutcomeFact
+                  label="Code"
+                  value={formatMachineLabel('code' in result ? result.code : result.reason)}
+                />
+                {'retryable' in result ? <OutcomeFact label="Retryable" value={result.retryable ? 'Yes' : 'No'} /> : null}
+                {'nextAction' in result && result.nextAction !== undefined ? <OutcomeFact label="Next action" value={result.nextAction} /> : null}
+                {'composition' in result && result.composition !== undefined ? <OutcomeFact label="Composition" value={JSON.stringify(result.composition)} /> : null}
+              </>
+            )}
+            {presentation === undefined ? null : (
+              <>
+                <OutcomeFact label="Descriptor digest" value={presentation.descriptorDigest} />
+                <OutcomeFact label="Output schema digest" value={presentation.outputSchemaDigest} />
+                <OutcomeFact label="Runtime actor" value="ae_runtime" />
+              </>
+            )}
+            <OutcomeFact label="Canonical result digest" value={outcome.resultDigest} />
+            <OutcomeFact label="Tool record digest" value={outcome.toolCallDigest} />
+          </dl>
+
+          {rawOutput === undefined ? null : (
+            <div className="grid min-w-0 gap-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Raw bounded JSON</p>
+              <pre className="max-h-80 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs text-foreground">
+                {rawOutput}
+              </pre>
+            </div>
+          )}
+        </div>
+      </details>
     </section>
+  )
+}
+
+function ResultValue({
+  value,
+  pointer,
+  annotations,
+  depth,
+}: {
+  value: unknown
+  pointer: string
+  annotations: readonly AnswerOperationResultAnnotation[]
+  depth: number
+}) {
+  const annotation = annotations.find((item) => item.pointer === pointer)
+  if (annotation?.href !== undefined) {
+    return (
+      <a
+        href={annotation.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        referrerPolicy="no-referrer"
+        className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {neutralizeBidiFormattingControls(annotation.label)}
+      </a>
+    )
+  }
+  if (value === null || typeof value !== 'object') {
+    return (
+      <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words text-sm leading-relaxed text-foreground">
+        {value === null
+          ? 'null'
+          : typeof value === 'string'
+            ? neutralizeBidiFormattingControls(value)
+            : String(value)}
+      </span>
+    )
+  }
+  if (depth >= 5) {
+    return (
+      <span className="break-words text-sm text-muted-foreground">
+        Additional nested data is available in Technical details.
+      </span>
+    )
+  }
+  if (Array.isArray(value)) {
+    const items: readonly unknown[] = value
+    return (
+      <ol className="grid min-w-0 gap-2">
+        {items.slice(0, 24).map((item, index) => {
+          const itemPointer = `${pointer}/${index}`
+          const itemAnnotation = annotations.find((candidate) => candidate.pointer === itemPointer)
+          return (
+            <li key={itemPointer} className="grid min-w-0 gap-1 rounded-md bg-muted p-3">
+              <span className="text-xs font-medium text-muted-foreground">
+                {itemAnnotation === undefined
+                  ? `Item ${index + 1}`
+                  : neutralizeBidiFormattingControls(itemAnnotation.label)}
+              </span>
+              <ResultValue value={item} pointer={itemPointer} annotations={annotations} depth={depth + 1} />
+            </li>
+          )
+        })}
+        {items.length > 24 ? (
+          <li className="text-sm text-muted-foreground">
+            {items.length - 24} more items are available in Technical details.
+          </li>
+        ) : null}
+      </ol>
+    )
+  }
+  if (!isRecord(value)) {
+    return null
+  }
+  const entries = Object.entries(value)
+  return (
+    <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+      {entries.slice(0, 24).map(([key, item]) => {
+        const itemPointer = `${pointer}/${key.replace(/~/gu, '~0').replace(/\//gu, '~1')}`
+        const itemAnnotation = annotations.find((candidate) => candidate.pointer === itemPointer)
+        return (
+          <div key={itemPointer} className="grid min-w-0 gap-1">
+            <dt dir="auto" style={{ unicodeBidi: 'isolate' }} className="break-words text-xs font-medium text-muted-foreground">
+              {neutralizeBidiFormattingControls(itemAnnotation?.label ?? formatMachineLabel(key))}
+            </dt>
+            <dd className="min-w-0">
+              <ResultValue value={item} pointer={itemPointer} annotations={annotations} depth={depth + 1} />
+            </dd>
+          </div>
+        )
+      })}
+      {entries.length > 24 ? (
+        <div className="text-sm text-muted-foreground">
+          {entries.length - 24} more fields are available in Technical details.
+        </div>
+      ) : null}
+    </dl>
   )
 }
 
@@ -1062,7 +989,7 @@ function OutcomeFact({ label, value }: { label: string; value: string }) {
 }
 
 function boundedOutcomeJson(value: unknown): string {
-  const json = JSON.stringify(value, null, 2) ?? 'null'
+  const json = neutralizeBidiFormattingControls(JSON.stringify(value, null, 2) ?? 'null')
   return new TextEncoder().encode(json).byteLength <= OPERATION_JSON_MAX_BYTES
     ? json
     : 'Output exceeded the 256 KiB answer-artifact limit. Use the canonical result digest and recovery surface.'
@@ -1147,7 +1074,7 @@ function SelectedSource({ provider, threadId }: { provider: AnswerSource; thread
           {initial}
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
-          <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended</p>
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended</p>
           <p className="truncate font-heading text-base font-medium leading-snug text-foreground">
             {detailIsInternal ? (
               <Link
@@ -1229,7 +1156,7 @@ function SourcesList({
   return (
     <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Sources">
       <header className="grid gap-0.5">
-        <p className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
+        <p className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
         <p className="text-sm text-muted-foreground">
           {listingCountLabel(providers.length)} compared on published area, response, and next step.
         </p>
@@ -1280,7 +1207,7 @@ function SourceCard({
         </ItemDescription>
       </ItemContent>
       <ItemActions className="hidden shrink-0 sm:flex">
-        <Badge variant="outline" className="font-mono text-2xs tabular-nums">
+        <Badge variant="outline" className="font-mono text-xs tabular-nums">
           {source.citationIndex}
         </Badge>
       </ItemActions>
@@ -1327,7 +1254,7 @@ function ProviderCompareTable({
           <p className="block text-sm font-medium text-muted-foreground">Compare</p>
           <p className="font-heading text-base text-foreground">Published details, side by side</p>
         </div>
-        <p className="shrink-0 font-mono text-2xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
+        <p className="shrink-0 font-mono text-xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
       </header>
       <Table className="min-w-[44rem] border-collapse">
         <TableCaption className="sr-only">Comparison based on published business details.</TableCaption>
@@ -1335,7 +1262,7 @@ function ProviderCompareTable({
           <TableRow>
             <TableHead
               scope="col"
-              className="sticky left-0 z-10 h-auto w-[13.5rem] border-b border-border bg-card px-4 py-3 font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+              className="sticky left-0 z-10 h-auto w-[13.5rem] border-b border-border bg-card px-4 py-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground"
             >
               Business
             </TableHead>
@@ -1343,7 +1270,7 @@ function ProviderCompareTable({
               <TableHead
                 key={field}
                 scope="col"
-                className="h-auto border-b border-border px-4 py-3 font-mono text-2xs font-medium uppercase tracking-wider text-muted-foreground"
+                className="h-auto border-b border-border px-4 py-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground"
               >
                 {compareFieldLabel(field)}
               </TableHead>
@@ -1387,13 +1314,13 @@ function ProviderCompareRow({
           >
             {providerName}
           </Link>
-          <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-mono text-2xs text-muted-foreground">{category}</span>
+          <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-mono text-xs text-muted-foreground">{category}</span>
         </span>
       </TableHead>
       {fields.map((field) => (
         <TableCell
           key={`${provider.slug}-${field}`}
-          className={cn('border-t border-border px-4 py-3 align-top whitespace-normal tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-2xs tracking-wide')}
+          className={cn('border-t border-border px-4 py-3 align-top whitespace-normal tabular-nums text-muted-foreground', field === 'freshness' && 'font-mono text-xs tracking-wide')}
           dir="auto"
           style={{ unicodeBidi: 'isolate' }}
         >

@@ -23,7 +23,7 @@ export const Route = createFileRoute('/t/$threadId')({
     if (loaderData?.seo === undefined) {
       return {
         meta: [
-          { title: 'Thread unavailable | Agentic Economy' },
+          { title: 'Chat unavailable | Agentic Economy' },
           { name: 'robots', content: 'noindex' },
           { name: 'referrer', content: 'no-referrer' },
         ],

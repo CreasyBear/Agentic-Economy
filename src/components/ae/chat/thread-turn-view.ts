@@ -52,7 +52,7 @@ export function presenterPhaseForTurnStatus(status: PublicThreadTurn['status']):
 export function turnStatusCopy(status: PublicThreadTurn['status']): string | null {
   switch (status) {
     case 'pending':
-      return 'This answer is still pending. Reload to check its durable status.'
+      return 'This response is taking longer than expected.'
     case 'stopped':
       return 'Answer stopped.'
     case 'error':
@@ -60,4 +60,13 @@ export function turnStatusCopy(status: PublicThreadTurn['status']): string | nul
     case 'complete':
       return null
   }
+}
+
+export function turnProblemCopy(problem: PublicThreadTurn['problem']): string | null {
+  if (problem?.status === 404 || problem?.kind === 'NOT_FOUND') {
+    return 'This response is no longer available.'
+  }
+  return problem?.detail !== undefined && problem.detail.trim().length > 0
+    ? problem.detail
+    : null
 }

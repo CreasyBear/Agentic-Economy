@@ -10,6 +10,7 @@ import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
 import {
   presenterPhaseForTurnStatus,
+  turnProblemCopy,
   turnStatusCopy,
   type ThreadTurnViewModel,
 } from './thread-turn-view'
@@ -34,6 +35,7 @@ export function AeThreadTurnReplaySection({
   const canStop = turn.status === 'pending' && onStopPending !== undefined
   const presenterPhase = presenterPhaseForTurnStatus(turn.status)
   const statusCopy = turnStatusCopy(turn.status)
+  const problemCopy = turnProblemCopy(turn.problem)
 
   async function requestStop(): Promise<void> {
     if (onStopPending === undefined || turn.status !== 'pending' || stopState === 'requested') {
@@ -54,20 +56,17 @@ export function AeThreadTurnReplaySection({
       workSteps={turn.workLog}
       errorMessage={turn.status === 'error' ? (
         <>
-          {turn.problem?.detail ?? 'This answer could not be completed.'}{' '}
-          {onRetry === undefined ? null : (
-            <Button
-              type="button"
-              variant="link"
-              className="inline h-auto cursor-pointer p-0 font-semibold text-foreground underline underline-offset-4 hover:text-foreground"
-              onClick={onRetry}
-            >
-              Try again
+          {problemCopy === null ? null : <p>{problemCopy}</p>}
+          <div className="flex flex-wrap gap-2 pt-2">
+            {onRetry === undefined ? null : (
+              <Button type="button" size="sm" onClick={onRetry}>
+                Try again
+              </Button>
+            )}
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/">New chat</Link>
             </Button>
-          )}{' '}
-          <Link to="/" className="text-foreground underline underline-offset-4">
-            Start a new ask
-          </Link>
+          </div>
         </>
       ) : turn.status === 'stopped' ? statusCopy : null}
       {...(canStop && stopState !== 'requested' ? { onStop: () => void requestStop() } : {})}
@@ -92,7 +91,7 @@ export function AeThreadTurnReplaySection({
                 <p className="text-sm text-muted-foreground">{statusCopy}</p>
               )}
               {turn.status === 'pending' && stopState === 'requested' ? <p className="text-sm text-muted-foreground">Stopping…</p> : null}
-              {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-red-vivid" role="alert">Stop was not confirmed. The answer is still pending; try Stop again.</p> : null}
+              {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-destructive" role="alert">Stop was not confirmed. The response is still pending; try Stop again.</p> : null}
               {fallback}
             </BubbleContent>
           </Bubble>

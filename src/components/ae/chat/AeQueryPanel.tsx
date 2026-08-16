@@ -6,6 +6,7 @@ import { AeAnswerPromptInput } from './AeAnswerPromptInput'
 
 export type AeQueryPanelProps = {
   onSubmit: (query: string, timing: AeSearchContext['timing'], timingDate?: string) => void
+  onStop?: () => void
   defaultValue?: string
   busy?: boolean
   searchContext?: AeSearchContext
@@ -20,6 +21,7 @@ export type AeQueryPanelProps = {
 
 export function AeQueryPanel({
   onSubmit,
+  onStop,
   defaultValue = '',
   busy = false,
   searchContext,
@@ -37,6 +39,7 @@ export function AeQueryPanel({
     <div className="flex w-full min-w-0 flex-col gap-2">
       <AeAnswerPromptInput
         onSubmit={onSubmit}
+        {...(onStop === undefined ? {} : { onStop })}
         defaultValue={defaultValue}
         initialTiming={initialTiming}
         initialTimingDate={initialTimingDate}
@@ -47,37 +50,42 @@ export function AeQueryPanel({
         {...(placeholder === undefined ? {} : { placeholder })}
       />
       {loopHint !== undefined && loopHint.length > 0 ? (
-        <p className="font-mono text-xs leading-snug text-muted-foreground">{loopHint}</p>
+        <p className="text-sm leading-snug text-muted-foreground">{loopHint}</p>
       ) : null}
       {showExamples ? (
-        <p className="font-mono text-xs leading-snug text-muted-foreground">Answers based on business information.</p>
+        <p className="text-sm leading-snug text-muted-foreground">
+          Answers can use published business information or available live data.
+        </p>
       ) : null}
     </div>
   )
 }
 
-function buildContextExamples(searchContext: AeSearchContext | undefined): readonly string[] {
+function buildContextExamples(searchContext: AeSearchContext | undefined): readonly {
+  label: string
+  value: string
+}[] {
   if (searchContext?.mode !== 'near_me') {
     return [
-      'I need an emergency plumber in Parramatta',
-      'I need a locksmith right now',
-      'I need an electrician today',
+      { label: 'Emergency plumber', value: 'I need an emergency plumber in Parramatta' },
+      { label: 'Locksmith now', value: 'I need a locksmith right now' },
+      { label: 'Electrician today', value: 'I need an electrician today' },
     ]
   }
 
   const label = aeSearchContextLocationLabel(searchContext)
   if (label === undefined) {
     return [
-      'I need an emergency plumber near me',
-      'I need a locksmith near me right now',
-      'I need an electrician near me today',
+      { label: 'Emergency plumber', value: 'I need an emergency plumber near me' },
+      { label: 'Locksmith now', value: 'I need a locksmith near me right now' },
+      { label: 'Electrician today', value: 'I need an electrician near me today' },
     ]
   }
 
   const place = label.replace(/,\s*[A-Z]{2,3}$/i, '')
   return [
-    `I need an emergency plumber near ${place}`,
-    `I need a locksmith near ${place} right now`,
-    `I need an electrician near ${place} today`,
+    { label: 'Emergency plumber', value: `I need an emergency plumber near ${place}` },
+    { label: 'Locksmith now', value: `I need a locksmith near ${place} right now` },
+    { label: 'Electrician today', value: `I need an electrician near ${place} today` },
   ]
 }

@@ -43,6 +43,7 @@ export function AeAssistantInstallFunnel({
   onDismissIssuedSecret,
 }: AeAssistantInstallFunnelProps) {
   const baseUrl = trimTrailingSlashes(canonicalBaseUrl)
+  const apiKeyOrigin = new URL(canonicalBaseUrl).origin
   const cli = 'npm run -s ae --'
   const steps = [
     {
@@ -74,10 +75,17 @@ export function AeAssistantInstallFunnel({
       code: `${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
     },
     {
+      id: 'direct-keyless',
+      title: 'Use the direct-keyless MCP lane',
+      access: 'No caller key',
+      description: 'When exact detail advertises an anonymous execute continuation for a free, keyless, read-only Operation, call the MCP tool ae_operation_execute. This lane neither requires nor issues an AE caller key.',
+      code: 'ae_operation_execute',
+    },
+    {
       id: 'connect',
-      title: 'Connect one AE caller key',
-      access: 'Owner approval',
-      description: 'Complete the OAuth device flow, or validate an existing AE_API_KEY against the authenticated gateway. A nonempty environment string is never treated as connected. The caller key identifies the caller at AE; it does not contain provider credentials or silently approve spending.',
+      title: 'Authenticated lane: connect one AE caller key',
+      access: 'Only when required',
+      description: 'Connect before invoking through the authenticated gateway. Complete the OAuth device flow, or validate an existing AE_API_KEY against the authenticated gateway. A nonempty environment string is never treated as connected. The caller key identifies the caller at AE; it does not contain provider credentials or silently approve spending.',
       code: `${cli} connect --json`,
     },
     {
@@ -103,10 +111,14 @@ ${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPO
       code: `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
     },
   ] as const
-  const keyCommand = issuedSecret === undefined ? undefined : `export AE_API_KEY='${issuedSecret.replaceAll("'", "'\\''")}'`
+  const keyCommand = issuedSecret === undefined ? undefined : `export AE_API_KEY='${issuedSecret.replaceAll("'", "'\\''")}'
+export AE_API_KEY_ORIGIN='${apiKeyOrigin}'`
   const keyDownload = issuedSecret === undefined
     ? undefined
-    : `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ key: issuedSecret }))}`
+    : `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
+      AE_API_KEY: issuedSecret,
+      AE_API_KEY_ORIGIN: apiKeyOrigin,
+    }))}`
   const [copyNotice, setCopyNotice] = useState<string>()
   const [keyCopyNotice, setKeyCopyNotice] = useState<string>()
 
@@ -123,7 +135,7 @@ ${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPO
       <CardHeader>
         <h2 className="text-xl font-semibold tracking-tight text-foreground">From a job to a durable result</h2>
         <CardDescription>
-          Read first without a key. Connect only when you are ready to invoke, then keep one stable idempotency key through status and recovery.
+          Read and compare without a key. Eligible direct-keyless Operations can run through anonymous MCP; connect only when you need the authenticated invoke, status, or recovery lane.
         </CardDescription>
       </CardHeader>
 
@@ -159,8 +171,8 @@ ${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPO
       {onIssue === undefined ? null : (
         <CardContent className="grid gap-3 border-t border-border pt-5">
           <div className="grid gap-1">
-            <h3 className="font-semibold text-foreground">Create a caller key from this signed-in console</h3>
-            <p className="text-sm text-muted-foreground">This key identifies your agent at AE and never contains a supplier credential. It does not silently grant paid or consequential authority.</p>
+            <h3 className="font-semibold text-foreground">Create a caller key for authenticated invocation</h3>
+            <p className="text-sm text-muted-foreground">Direct-keyless MCP does not need this key. For authenticated invocation, the key identifies your agent at AE and never contains a supplier credential or silently grants paid or consequential authority.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" className="min-h-11" disabled={issuing || issueDisabled} onClick={onIssue}>
@@ -172,12 +184,12 @@ ${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPO
           {keyCommand === undefined || keyDownload === undefined ? null : (
             <div className="grid min-w-0 gap-3" aria-labelledby="issued-key-title">
               <div className="grid gap-1">
-                <h4 id="issued-key-title" className="font-semibold text-foreground">Save this key now</h4>
-                <p className="text-sm text-muted-foreground">This is the only reveal. Copy the environment command or download the JSON file, then dismiss it.</p>
+                <h4 id="issued-key-title" className="font-semibold text-foreground">Save this access now</h4>
+                <p className="text-sm text-muted-foreground">This is the only key reveal. The command and JSON file already include the canonical AE origin, so save either artifact before dismissing it.</p>
               </div>
               <CodeBlock code={keyCommand} language="bash" className="min-w-0 [&_code]:break-all [&_pre]:whitespace-pre-wrap">
                 <CodeBlockHeader>
-                  <CodeBlockTitle>AE_API_KEY environment command</CodeBlockTitle>
+                  <CodeBlockTitle>AE caller environment commands</CodeBlockTitle>
                   <CodeBlockActions>
                     <CodeBlockCopyButton
                       className="min-h-11 min-w-11"

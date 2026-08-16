@@ -20,7 +20,7 @@ export function buildFollowUpComposerCopy(
   }
   if (completedTurns.at(-1)?.layoutProfile === 'data_answer') {
     return {
-      placeholder: 'Ask a follow-up or try another live data lookup',
+      placeholder: 'Ask a follow-up',
       loopHint: '',
     }
   }
@@ -29,32 +29,32 @@ export function buildFollowUpComposerCopy(
   if (state.selectedProvider !== undefined) {
     return providerHasInquiryPath(state.selectedProvider)
       ? {
-          placeholder: 'Ask limits, refine, or continue with the selected business',
-          loopHint: 'That business stays in context. It confirms timing, quote, and availability.',
+          placeholder: 'Ask a follow-up',
+          loopHint: '',
         }
       : {
-          placeholder: 'Ask limits, refine, or review the selected business',
+          placeholder: 'Ask a follow-up',
           loopHint: 'This business does not have a request form yet. Review its page before contacting it.',
         }
   }
 
   if (state.hasInquiryReadyProvider) {
     return {
-      placeholder: 'Narrow, compare, or ask the business',
-      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
+      placeholder: 'Ask a follow-up',
+      loopHint: '',
     }
   }
 
   if (state.hasListedProvider) {
     return {
-      placeholder: 'Narrow, compare, or ask for the contact step',
+      placeholder: 'Ask a follow-up',
       loopHint: 'These options do not have a request form yet.',
     }
   }
 
   return {
-    placeholder: 'Refine the request or ask what can happen next',
-    loopHint: 'A match is needed before comparing options or contacting a business.',
+    placeholder: 'Try a different question',
+    loopHint: '',
   }
 }
 
@@ -62,33 +62,33 @@ function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: numbe
   switch (intent) {
     case 'filter_known':
       return {
-        placeholder: 'Narrowing matches from this thread',
-        loopHint: 'Narrowing the matches before any contact step.',
+        placeholder: 'Narrowing matches from this chat',
+        loopHint: '',
       }
     case 'compare_known':
       return {
-        placeholder: 'Comparing options from this thread',
-        loopHint: 'Comparing details from the businesses already found.',
+        placeholder: 'Comparing options from this chat',
+        loopHint: '',
       }
     case 'inquiry_handoff':
       return {
         placeholder: 'Preparing a request to the business',
-        loopHint: 'Carrying the selected business into a request. It still confirms timing, quote, and availability.',
+        loopHint: 'The business still confirms timing, quote, and availability.',
       }
     case 'explain_boundary':
       return {
         placeholder: 'Checking what can happen next',
-        loopHint: 'Keeping the current goal and showing the next step this business supports.',
+        loopHint: '',
       }
     case 'unsupported':
       return {
         placeholder: 'Finding another way forward',
-        loopHint: 'Keeping the goal and returning the nearest useful next step.',
+        loopHint: '',
       }
     case 'refine_search':
       return {
-        placeholder: completedTurnCount > 0 ? 'Checking what is available again with this thread in mind' : "Checking what's available",
-        loopHint: "Checking what's available before any contact step.",
+        placeholder: completedTurnCount > 0 ? 'Checking what is available again' : "Checking what's available",
+        loopHint: '',
       }
   }
 }

@@ -92,7 +92,7 @@ export function RootWorkTreeLoop({ readback }: Readonly<{ readback: RootWorkTree
             ? 'This plan belongs to someone else. Nothing has changed.'
             : 'That plan reference isn’t available. Nothing has changed.'}
         </p>
-        <Button asChild variant="default" className="min-h-11 justify-self-start"><Link to="/">Start a new ask</Link></Button>
+        <Button asChild variant="default" className="min-h-11 justify-self-start"><Link to="/">Start a new chat</Link></Button>
       </Card>
     )
   }

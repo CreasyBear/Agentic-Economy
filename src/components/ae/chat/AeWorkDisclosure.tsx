@@ -3,10 +3,13 @@ import { ChevronRightIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import {
   neutralizeBidiFormattingControls,
   type AnswerWorkStep,
@@ -25,6 +28,8 @@ export type AeWorkDisclosureProps = {
   thinkingStep?: ThinkingStep
   checkSummary?: PublicAnswerCheckSummary
   query?: string
+  /** Overrides only the initial automatic disclosure policy; users can still toggle it. */
+  defaultOpen?: boolean
 }
 
 const EmptyThinkingSteps: readonly string[] = []
@@ -43,113 +48,102 @@ export function AeWorkDisclosure({
   thinkingSteps = EmptyThinkingSteps,
   thinkingLabel,
   checkSummary,
+  defaultOpen,
 }: AeWorkDisclosureProps) {
-  const [managedOpen, setManagedOpen] = useState<boolean | null>(null)
   const runningStep = workSteps.find((step) => step.status === 'running')
   const isActive = isStreaming || runningStep !== undefined
-  const hasError = workSteps.some((step) => step.status === 'error')
-  const wasStopped = workSteps.some((step) => step.status === 'stopped')
+  // Natural-language thread: accumulated labels plus the live label.
+  const thread = buildThinkingThread(thinkingSteps, thinkingLabel)
+  const hasProvence = workSteps.length > 0 || checkSummary !== undefined
 
-  if (
-    workSteps.length === 0 &&
-    thinkingSteps.length === 0 &&
-    checkSummary === undefined &&
-    !isActive
-  ) {
+  if (thread.length === 0 && !hasProvence && !isActive) {
     return null
   }
 
-  const elapsedLabel =
-    checkSummary === undefined
-      ? workedForLabel(workSteps)
-      : formatElapsed(checkSummary.elapsedMs)
-  const stepCountLabel = stepCountText(workSteps.length)
-  const primary = isActive
-    ? runningStep?.title ||
-      (thinkingLabel.trim().length > 0 ? thinkingLabel : 'Thinking…')
-    : hasError
-      ? 'Work failed'
-      : wasStopped
-        ? 'Work stopped'
-        : elapsedLabel.length > 0
-          ? `Worked for ${elapsedLabel}`
-          : stepCountLabel || 'Worked'
-  const secondary =
-    isActive || checkSummary === undefined
-      ? ''
-      : answerCheckLine(checkSummary)
-  const open = managedOpen ?? (isActive || hasError || wasStopped)
-
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setManagedOpen}
-      data-ae-work-disclosure
-    >
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="group flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          data-ae-work-trigger
+    <div className="grid gap-1" data-ae-work-disclosure>
+      {thread.length > 0 ? (
+        <ol
+          className="grid gap-1 text-xs text-muted-foreground"
+          aria-label="Answer thinking"
+          data-ae-work-thinking
         >
-          <span
-            className="min-w-0 flex-1 truncate font-medium text-foreground"
-            dir="auto"
-            style={{ unicodeBidi: 'isolate' }}
-          >
-            {neutralizeBidiFormattingControls(primary)}
-          </span>
-          {secondary.length > 0 ? (
-            <span
-              className="shrink-0 text-xs"
-              dir="auto"
-              style={{ unicodeBidi: 'isolate' }}
-            >
-              {neutralizeBidiFormattingControls(secondary)}
-            </span>
-          ) : null}
-          <ChevronRightIcon
-            className="size-4 shrink-0 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-90"
-            aria-hidden="true"
-          />
-        </button>
-      </CollapsibleTrigger>
+          {thread.map((label, index) => {
+            const isLive = isStreaming && index === thread.length - 1
+            return (
+              <li
+                key={`${index}-${label}`}
+                dir="auto"
+                style={{ unicodeBidi: 'isolate' }}
+                className={isLive ? 'font-medium text-foreground' : undefined}
+              >
+                {neutralizeBidiFormattingControls(label)}
+              </li>
+            )
+          })}
+        </ol>
+      ) : null}
 
-      <CollapsibleContent>
-        <div className="ml-2 border-l border-border py-1 pl-3">
-          {thinkingSteps.length > 0 ? (
-            <ul
-              className="grid gap-1 pb-2 text-xs text-muted-foreground"
-              aria-label="Answer thinking"
-              data-ae-work-thinking
+      {hasProvence ? (
+        <Sheet {...(defaultOpen === undefined ? {} : { defaultOpen })}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              className="group flex min-h-9 w-fit items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-ae-work-trigger
             >
-              {thinkingSteps.map((label, index) => (
-                <li
-                  key={`${index}-${label}`}
-                  dir="auto"
-                  style={{ unicodeBidi: 'isolate' }}
+              How this was checked
+              <ChevronRightIcon
+                className="size-3.5 shrink-0 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-90"
+                aria-hidden="true"
+              />
+            </button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
+            <SheetHeader className="border-b border-border">
+              <SheetTitle className="font-heading text-base">
+                How this was checked
+              </SheetTitle>
+              <SheetDescription className="sr-only">
+                The steps and checks behind this answer.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {workSteps.length > 0 ? (
+                <ol
+                  className="divide-y divide-border"
+                  aria-label="Answer work steps"
                 >
-                  {neutralizeBidiFormattingControls(label)}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+                  {workSteps.map((step) => (
+                    <WorkStep key={step.id} step={step} />
+                  ))}
+                </ol>
+              ) : null}
 
-          {workSteps.length > 0 ? (
-            <ol className="divide-y divide-border" aria-label="Answer work steps">
-              {workSteps.map((step) => (
-                <WorkStep key={step.id} step={step} />
-              ))}
-            </ol>
-          ) : null}
-
-          {checkSummary === undefined ? null : (
-            <CheckSummaryFacts summary={checkSummary} />
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+              {checkSummary === undefined ? null : (
+                <CheckSummaryFacts summary={checkSummary} />
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
+    </div>
   )
+}
+
+function buildThinkingThread(
+  thinkingSteps: readonly string[],
+  thinkingLabel: string,
+): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const label of [...thinkingSteps, thinkingLabel]) {
+    const trimmed = label.trim()
+    if (trimmed.length === 0 || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
 }
 
 function WorkStep({ step }: { step: AnswerWorkStep }) {
@@ -265,54 +259,4 @@ function CheckSummaryFacts({ summary }: { summary: PublicAnswerCheckSummary }) {
       </div>
     </dl>
   )
-}
-
-function workedForLabel(steps: readonly AnswerWorkStep[]): string {
-  const durations = steps
-    .map((step) => step.durationMs ?? 0)
-    .filter((duration) => duration > 0)
-  if (durations.length > 0) {
-    return formatElapsed(
-      durations.reduce((total, duration) => total + duration, 0),
-    )
-  }
-
-  const startedAt = steps
-    .map((step) => step.startedAtMs)
-    .filter((value): value is number => value !== undefined)
-  const completedAt = steps
-    .map((step) => step.completedAtMs)
-    .filter((value): value is number => value !== undefined)
-  if (startedAt.length > 0 && completedAt.length > 0) {
-    const span = Math.max(...completedAt) - Math.min(...startedAt)
-    if (span > 0) {
-      return formatElapsed(span)
-    }
-  }
-  return ''
-}
-
-function stepCountText(count: number): string {
-  if (count > 1) return `Ran ${count} steps`
-  if (count === 1) return 'Ran 1 step'
-  return ''
-}
-
-function answerCheckLine(summary: PublicAnswerCheckSummary): string {
-  const total = summary.checksPassed + summary.checksFailed
-  return [
-    summary.listedBusinesses > 0
-      ? `compared ${summary.listedBusinesses} ${summary.listedBusinesses === 1 ? 'match' : 'matches'}`
-      : '',
-    total > 0 ? `checked ${total} ${total === 1 ? 'fact' : 'facts'}` : '',
-  ]
-    .filter((part) => part.length > 0)
-    .join('; ')
-}
-
-function formatElapsed(ms: number): string {
-  if (ms <= 0) return '<1s'
-  if (ms < 1_000) return `${ms}ms`
-  if (ms < 10_000) return `${(ms / 1_000).toFixed(1)}s`
-  return `${Math.round(ms / 1_000)}s`
 }

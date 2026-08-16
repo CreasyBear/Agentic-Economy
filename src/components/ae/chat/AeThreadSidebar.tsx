@@ -16,6 +16,17 @@ import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
 import { toast } from '@/lib/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
   Dialog,
   DialogContent,
   DialogTitle,
@@ -63,15 +74,15 @@ export function AeThreadSidebar({
       : 'flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-background px-1 py-2'
 
   return (
-    <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent questions">
+    <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent chats">
       <div className="flex flex-col gap-3 p-1">
         <div className="flex min-h-7 items-center justify-between gap-2">
-          <span className="truncate font-mono text-xs font-medium uppercase leading-tight text-muted-foreground">Recent questions</span>
+          <span className="truncate font-mono text-xs font-medium uppercase leading-tight tracking-wider text-muted-foreground">Recent chats</span>
           <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-card font-mono text-xs leading-none tabular-nums text-muted-foreground" data-numeric>{threads.length}</span>
         </div>
-        <Button variant="secondary" size="sm" className="min-h-11 w-full" onClick={onNewQuestion}>
+        <Button variant="secondary" size="sm" className="min-h-11 w-full" onClick={onNewQuestion} data-ae-sidebar-primary>
           <PlusIcon aria-hidden="true" />
-          New question
+          New chat
         </Button>
       </div>
       {isStructuredAnswerModeEnabled() ? (
@@ -81,7 +92,7 @@ export function AeThreadSidebar({
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5">
         {threads.length === 0 ? (
-          <p className="m-1 rounded-lg border border-dashed border-border p-3 text-sm leading-snug text-muted-foreground">No recent questions yet.</p>
+          <p className="m-1 p-3 text-sm leading-snug text-muted-foreground">No chats yet. Start a new chat to see it here.</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {threads.map((thread) => (
@@ -89,6 +100,7 @@ export function AeThreadSidebar({
                 key={thread.threadId}
                 thread={thread}
                 active={thread.threadId === activeThreadId}
+                layout={layout}
                 onDelete={onDelete}
                 onNavigate={onNavigate}
                 onNewQuestion={onNewQuestion}
@@ -142,7 +154,7 @@ function AnswerModelSelector() {
             aria-label="Choose answer model"
             aria-labelledby={`${listboxId}-label`}
           >
-            <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted font-mono text-2xs font-semibold uppercase text-muted-foreground" aria-hidden="true">
+            <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted font-mono text-xs font-semibold uppercase text-muted-foreground" aria-hidden="true">
               {selectedModel.provider.slice(0, 1)}
             </span>
             <span className="max-w-44 truncate">{selectedModel.name}</span>
@@ -205,12 +217,14 @@ function AnswerModelSelector() {
 function AeThreadSidebarRow({
   thread,
   active,
+  layout,
   onDelete,
   onNavigate,
   onNewQuestion,
 }: {
   thread: AnswerThreadRecord
   active: boolean
+  layout: 'desktop' | 'mobile'
   onDelete: ((threadId: string) => void) | undefined
   onNavigate: (() => void) | undefined
   onNewQuestion: (() => void) | undefined
@@ -265,15 +279,21 @@ function AeThreadSidebarRow({
   }
 
   return (
-    <li className="group/row grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
+    <li
+      className={cn(
+        'group/row grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-lg border transition-colors',
+        active ? 'border-brand bg-brand-muted' : 'border-transparent hover:border-border-strong hover:bg-card',
+      )}
+    >
+      <AlertDialog>
       <Link
         to="/t/$threadId"
         params={{ threadId: thread.threadId }}
-        className={cn('flex min-h-[2.875rem] flex-col gap-1 rounded-lg border px-3 py-2 no-underline transition-colors hover:bg-card', active ? 'border-border-strong bg-card' : 'border-transparent hover:border-border-strong')}
+        className="flex min-h-[2.875rem] min-w-0 flex-col gap-1 rounded-lg px-3 py-2 no-underline"
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
       >
-        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm leading-snug text-foreground">{displayTitle}</span>
+        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className={cn('truncate text-sm leading-snug', active ? 'text-brand-strong' : 'text-foreground')}>{displayTitle}</span>
         <ClientRelativeTime timestamp={thread.updatedAt} />
       </Link>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -283,7 +303,13 @@ function AeThreadSidebarRow({
             variant="ghost"
             size="icon"
             aria-label={`Actions for ${displayTitle}`}
-            className="min-h-11 min-w-11 self-center text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+            className={cn(
+              'min-h-11 min-w-11 self-center transition-opacity hover:text-foreground',
+              active ? 'text-brand-strong' : 'text-muted-foreground',
+              layout === 'mobile'
+                ? 'opacity-100'
+                : 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
+            )}
           >
             <EllipsisVerticalIcon aria-hidden="true" />
           </Button>
@@ -296,7 +322,7 @@ function AeThreadSidebarRow({
               onNavigate?.()
             }}
           >
-            Open thread
+            Open chat
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void copyShareLink()} disabled={shareBusy !== null}>
             <CopyIcon aria-hidden="true" />
@@ -314,15 +340,32 @@ function AeThreadSidebarRow({
               onNavigate?.()
             }}
           >
-            Start new question
+            New chat
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void handleDelete()}>
-            <TrashIcon aria-hidden="true" />
-            Delete
-          </DropdownMenuItem>
+          <AlertDialogTrigger asChild>
+            <DropdownMenuItem>
+              <TrashIcon aria-hidden="true" />
+              Delete chat
+            </DropdownMenuItem>
+          </AlertDialogTrigger>
         </DropdownMenuContent>
       </DropdownMenu>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the chat and stops its share links from working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void handleDelete()}>
+              Delete chat
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   )
 }

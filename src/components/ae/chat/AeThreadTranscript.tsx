@@ -27,6 +27,7 @@ export type AeThreadTranscriptProps = {
   onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
   onStreamEnd?: (outcome: TurnStreamOutcome) => void
   onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
+  onLiveStopChange?: (stop: (() => Promise<void>) | null) => void
   onFollowUp?: (query: string) => void
   onChangeCriteria?: () => void
   onRetry?: (query: string) => void
@@ -46,6 +47,7 @@ export function AeThreadTranscript({
   onThreadCreated,
   onStreamEnd,
   onSettledTurn,
+  onLiveStopChange,
   onFollowUp,
   onChangeCriteria,
   onStopPendingTurn,
@@ -136,11 +138,9 @@ export function AeThreadTranscript({
 
   return (
     <>
-      {statusAnnouncement === null ? null : (
-        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {statusAnnouncement}
-        </p>
-      )}
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {statusAnnouncement ?? ''}
+      </p>
       {displayedTurns.map((turn, index) => {
         const isLastSettled = index === displayedTurns.length - 1
         const isLastCompleted = turn.status === 'complete' && turn.turnId === completedTurns.at(-1)?.turnId
@@ -192,7 +192,11 @@ export function AeThreadTranscript({
               )}
               {terminalProps !== null && terminalProps.timing !== 'today' ? <AeShortlistTerminal {...terminalProps} /> : showsTerminal ? null : isLastCompleted && liveTurn === null ? (
                 <>
-                  {isNoMatchTurn(turn) ? <p className="text-muted-foreground">Nothing was sent.</p> : null}
+                  {isNoMatchTurn(turn) ? (
+                    <p className="text-muted-foreground">
+                      No matching businesses were found. Try changing the service or location.
+                    </p>
+                  ) : null}
                   <AeFollowUpChips
                     turn={followUpContext?.turn ?? turn}
                     contextPlacement={followUpContext?.contextPlacement ?? 'current'}
@@ -224,6 +228,7 @@ export function AeThreadTranscript({
               {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
               {...(onThreadCreated === undefined ? {} : { onThreadCreated })}
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
+              {...(onLiveStopChange === undefined ? {} : { onStopChange: onLiveStopChange })}
               onSettledTurn={handleSettledTurn}
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}
               {...(onOperationSelect === undefined ? {} : { onOperationSelect })}

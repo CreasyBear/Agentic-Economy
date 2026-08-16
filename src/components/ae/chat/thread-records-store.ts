@@ -42,7 +42,7 @@ export function upsertOptimisticThread(
   const optimistic: AnswerThreadRecord = {
     threadId: input.threadId,
     pseudonymousSessionId: '',
-    title: input.title.length > 0 ? input.title : 'New question',
+    title: input.title.length > 0 ? input.title : 'New chat',
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   }
@@ -58,7 +58,7 @@ export function writeStoredThreadRecords(threads: readonly AnswerThreadRecord[])
       preferFallbackThreadRecordsSnapshot = false
     } catch {
       preferFallbackThreadRecordsSnapshot = true
-      // Recent questions still work in-memory when storage is unavailable.
+      // Recent chats still work in-memory when storage is unavailable.
     }
   }
   notifyThreadRecordsSubscribers()
@@ -143,7 +143,7 @@ function sanitizeThreadRecord(thread: AnswerThreadRecord): AnswerThreadRecord {
   return {
     threadId: thread.threadId,
     pseudonymousSessionId: '',
-    title: thread.title.trim().length > 0 ? thread.title.trim() : 'New question',
+    title: thread.title.trim().length > 0 ? thread.title.trim() : 'New chat',
     createdAt: finiteTimestamp(thread.createdAt),
     updatedAt: finiteTimestamp(thread.updatedAt),
   }

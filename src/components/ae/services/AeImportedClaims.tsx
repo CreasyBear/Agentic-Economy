@@ -18,7 +18,7 @@ export function AeImportedClaims({ claims, query }: AeImportedClaimsProps) {
       <header className="grid gap-1 border-b border-border pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">Imported Claims</Badge>
-          <span className="font-mono text-2xs uppercase tracking-wider text-muted-foreground">From the web</span>
+          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">From the web</span>
         </div>
         <p className="font-heading text-xl text-foreground">Bring a business into the network</p>
         <p className="block max-w-3xl text-muted-foreground">

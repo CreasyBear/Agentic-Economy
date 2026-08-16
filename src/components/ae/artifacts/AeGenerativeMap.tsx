@@ -16,7 +16,7 @@ export function AeGenerativeMap({ label, placeQuery }: AeGenerativeMapProps) {
 
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
-      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
+      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
         Area for this query: {displayLabel}
       </figcaption>
       <iframe
@@ -48,7 +48,7 @@ export function AeOfficeMap({ address, businessName }: AeOfficeMapProps) {
 
   return (
     <figure className="overflow-hidden rounded-lg border border-border bg-card">
-      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-muted-foreground">
+      <figcaption dir="auto" style={{ unicodeBidi: 'isolate' }} className="border-b border-border px-4 py-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
         Office — {displayBusinessName}
       </figcaption>
       <iframe

@@ -45,7 +45,7 @@ export function AeThreadScroller({
         <MessageScrollerViewport aria-label="Chat transcript">
           <MessageScrollerContent
             className={cn(
-              'mx-auto w-full max-w-2xl gap-6 px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6',
+              'w-full gap-6 px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6',
               contentClassName,
             )}
           >

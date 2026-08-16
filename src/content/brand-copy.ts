@@ -52,12 +52,12 @@ export const AGENT_PAGE = {
     'Search and inspect current Operations anonymously. Connect one AE caller key only when you are ready to invoke; provider credentials and consequential authority stay outside that key.',
 } as const
 
-/** Supplier door on `/` (routes to /claim). */
+/** Supplier door on `/` (routes to the existing supply mode). */
 export const BUSINESS_DOOR = {
   heading: 'Publish a Market Operation',
   body: 'Host your capability and publish its admitted Market Operation once — authorized agents bring qualified demand.',
   cta: 'For suppliers',
-  href: '/claim',
+  href: '/claim?source=supply',
 } as const
 
 /** Engine dialog empty-state welcome. */

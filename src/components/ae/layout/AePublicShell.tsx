@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
-import { cva } from 'class-variance-authority'
 import { MenuIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -67,7 +66,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
         Skip to content
       </a>
       <header className={immersive ? 'flex-none border-b border-border bg-card' : 'border-b border-border bg-card'}>
-        <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 md:px-6">
+        <div className="flex min-h-16 w-full items-center gap-3 px-4 md:px-6">
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <PublicNavActions mobileNavOpen={mobileNavOpen} onMobileNavOpenChange={setMobileNavOpen} />
@@ -78,7 +77,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
         <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1' : undefined}>
           {children}
         </main>
-        <PublicFooter immersive={immersive} />
+        {immersive ? null : <PublicFooter />}
       </div>
     </div>
   )
@@ -144,27 +143,10 @@ function PublicBrandLink() {
   )
 }
 
-const publicFooter = cva('', {
-  variants: {
-    immersive: {
-      true: 'flex-none border-t border-border bg-card',
-      false: 'border-t border-border bg-card',
-    },
-  },
-})
-const publicFooterInner = cva('mx-auto flex w-full max-w-6xl items-center justify-center gap-3 px-4', {
-  variants: {
-    immersive: {
-      true: 'py-2 text-xs leading-5 text-muted-foreground md:px-6',
-      false: 'py-3 text-xs leading-5 text-muted-foreground md:px-6 md:py-4 md:text-sm',
-    },
-  },
-})
-
-function PublicFooter({ immersive }: { immersive: boolean }) {
+function PublicFooter() {
   return (
-    <footer className={publicFooter({ immersive })}>
-      <div className={publicFooterInner({ immersive })}>
+    <footer className="border-t border-border bg-card">
+      <div className="flex w-full items-center justify-center gap-3 px-4 py-3 text-xs leading-5 text-muted-foreground md:px-6 md:py-4 md:text-sm">
         <nav aria-label="Footer" className="flex flex-wrap justify-center gap-x-3 gap-y-1 md:gap-x-4">
           <Link to="/for-agents" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For agents</Link>
           <a href="/llms.txt" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Assistants</a>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -12,6 +13,7 @@ import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
 import {
   presenterPhaseForTurnStatus,
+  turnProblemCopy,
   turnStatusCopy,
   type ThreadTurnViewModel,
 } from './thread-turn-view'
@@ -34,6 +36,7 @@ export function AeThreadTurnCollapsed({
   const canStop = turn.status === 'pending' && onStopPending !== undefined
   const presenterPhase = presenterPhaseForTurnStatus(turn.status)
   const statusCopy = turnStatusCopy(turn.status)
+  const problemCopy = turnProblemCopy(turn.problem)
 
   async function requestStop(): Promise<void> {
     if (onStopPending === undefined || turn.status !== 'pending' || stopState === 'requested') {
@@ -89,7 +92,7 @@ export function AeThreadTurnCollapsed({
                     <p className="text-sm text-muted-foreground">{statusCopy}</p>
                   )}
                   {turn.status === 'pending' && stopState === 'requested' ? <p className="text-sm text-muted-foreground">Stopping…</p> : null}
-                  {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-red-vivid" role="alert">Stop was not confirmed. The answer is still pending; try Stop again.</p> : null}
+                  {turn.status === 'pending' && stopState === 'failed' ? <p className="text-sm text-destructive" role="alert">Stop was not confirmed. The response is still pending; try Stop again.</p> : null}
                   <AeGenerativeAnswer
                     artifacts={turn.artifacts}
                     query={turn.query}
@@ -98,7 +101,16 @@ export function AeThreadTurnCollapsed({
                     phase={presenterPhase}
                     workSteps={turn.workLog}
                     errorMessage={turn.status === 'error'
-                      ? (turn.problem?.detail ?? 'This answer could not be completed.')
+                      ? (
+                          <>
+                            {problemCopy === null ? null : <p>{problemCopy}</p>}
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              <Button asChild size="sm" variant="ghost">
+                                <Link to="/">New chat</Link>
+                              </Button>
+                            </div>
+                          </>
+                        )
                       : turn.status === 'stopped' ? statusCopy : null}
                     {...(canStop && stopState !== 'requested' ? { onStop: () => void requestStop() } : {})}
                     {...(turn.answerCheckSummary === undefined ? {} : { checkSummary: turn.answerCheckSummary })}

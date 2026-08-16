@@ -48,7 +48,7 @@ export function mergeProjectionWithOptimisticTurns(input: {
       ? null
       : {
           threadId: input.streamingThreadId,
-          title: accepted[0]?.query ?? 'New question',
+          title: accepted[0]?.query ?? 'New chat',
           turns: accepted,
         }
   }

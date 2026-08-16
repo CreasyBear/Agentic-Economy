@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { PanelLeftIcon, XIcon } from 'lucide-react'
+import { XIcon } from 'lucide-react'
 import { z } from 'zod'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -45,8 +45,6 @@ import {
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
 import { AeQueryPanel } from './AeQueryPanel'
-import { AeSessionContextPanel } from './AeSessionContextPanel'
-import { AeSessionJourney } from './AeSessionJourney'
 import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
@@ -168,6 +166,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(initialLiveTurn)
   const generationRef = useRef(initialLiveTurn === null ? 0 : 1)
   const [streamingBusy, setStreamingBusy] = useState(initialLiveTurn !== null)
+  const [activeTurnStop, setActiveTurnStop] = useState<(() => Promise<void>) | null>(null)
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(initialDraft?.threadId ?? null)
   const [optimisticTurns, setOptimisticTurns] = useState<readonly OptimisticTurnRecord[]>([])
   const searchContext = DEFAULT_AE_SEARCH_CONTEXT
@@ -181,6 +180,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const readbackSupportedTurnIdsRef = useRef(new Set<string>())
   const mobileSidebarOpenerRef = useRef<HTMLElement | null>(null)
   const routeFocusHeadingRef = useRef<HTMLHeadingElement | null>(null)
+  const previousRouteThreadIdRef = useRef(routeThreadId)
 
   useEffect(() => {
     setRefinementComposerOpen(false)
@@ -190,17 +190,30 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [threads])
 
   useLayoutEffect(() => {
+    const routeChanged = previousRouteThreadIdRef.current !== routeThreadId
+    previousRouteThreadIdRef.current = routeThreadId
     const activeElement = document.activeElement
     const activeControl = activeElement !== null
       && activeElement !== document.body
       && activeElement.matches('a[href], button, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])')
-    if (activeControl) {
+    if (!routeChanged && activeControl) {
       return
     }
 
-    const target = routeFocusHeadingRef.current ?? document.getElementById('main-content')
-    target?.focus({ preventScroll: true })
+    document.getElementById('main-content')?.focus({ preventScroll: true })
   }, [routeThreadId])
+
+  const liveTurnGeneration = liveTurn?.generation
+  const previousLiveTurnGenerationRef = useRef<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    const generationChanged = previousLiveTurnGenerationRef.current !== liveTurnGeneration
+    previousLiveTurnGenerationRef.current = liveTurnGeneration
+    if (effectiveRouteThreadId !== null || liveTurnGeneration === undefined || !generationChanged) {
+      return
+    }
+
+    routeFocusHeadingRef.current?.focus({ preventScroll: true })
+  }, [effectiveRouteThreadId, liveTurnGeneration])
 
   const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
     const nextThreads = typeof updater === 'function' ? updater(threadsRef.current) : updater
@@ -292,9 +305,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [effectiveRouteThreadId, terminalShortlist])
 
 
-  const wasShowingWelcomeRef = useRef(showWelcome)
-  const [leavingWelcome, setLeavingWelcome] = useState(showWelcome)
-
   const refreshThreads = useCallback(async () => {
     try {
       const response = await fetch('/api/answer/threads', { credentials: 'same-origin' })
@@ -340,23 +350,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     void refreshProjection(effectiveRouteThreadId)
   }, [effectiveRouteThreadId, initialProjection, refreshProjection])
 
-
-  useEffect(() => {
-    if (showWelcome) {
-      wasShowingWelcomeRef.current = true
-      setLeavingWelcome(true)
-      return
-    }
-
-    if (wasShowingWelcomeRef.current) {
-      wasShowingWelcomeRef.current = false
-      setLeavingWelcome(true)
-      const timer = window.setTimeout(() => setLeavingWelcome(false), 220)
-      return () => window.clearTimeout(timer)
-    }
-
-    setLeavingWelcome(false)
-  }, [showWelcome])
   function openMobileSidebar() {
     const activeElement = document.activeElement
     mobileSidebarOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null
@@ -365,6 +358,16 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function closeMobileSidebar() {
     setMobileSidebarOpen(false)
+  }
+
+  function toggleDesktopSidebar() {
+    const nextVisible = !sidebarVisible
+    setSidebarManuallyOpen(nextVisible)
+    if (nextVisible) {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('#ae-thread-sidebar button')?.focus()
+      })
+    }
   }
 
   function startTurn(
@@ -561,6 +564,10 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     handleSubmit(query, composerTiming, composerTimingDate)
   }
 
+  const handleLiveStopChange = useCallback((stop: (() => Promise<void>) | null) => {
+    setActiveTurnStop(() => stop)
+  }, [])
+
   function handleChangeCriteria() {
     setRefinementComposerOpen(true)
   }
@@ -611,15 +618,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     }
   }
 
-  const landingMode = showWelcome || leavingWelcome
 
   const sidebarContextActive = effectiveRouteThreadId !== null || liveTurn !== null
   const showSidebarToggle = sidebarContextActive || threads.length > 0 || sidebarManuallyOpen === true
-  const sidebarVisible = sidebarManuallyOpen ?? sidebarContextActive
+  const sidebarVisible = sidebarManuallyOpen ?? threads.length > 0
   const showThreadChrome = effectiveRouteThreadId !== null && projection !== null
-  // Session-level business orientation is premature during the first stream and
-  // incompatible with terminal data, no-match, refusal, and boundary profiles.
-  const showSessionChrome = completedTurnCount >= 1 && showBusinessComposerControls
+  const showCompactHeader = showThreadChrome || liveTurn !== null || threads.length > 0
+  const compactHeaderTitle = showThreadChrome ? projection.title : (liveTurn?.query ?? 'New chat')
 
   // Keep scroller mounted while a turn streams - sessionThreadId updates mid-stream must not remount.
   const scrollerKey = effectiveRouteThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
@@ -630,7 +635,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       ? buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
       : {
           placeholder: terminalLayoutProfile === 'empty_state'
-            ? 'Refine your request or ask a different question'
+            ? 'Try a different question'
             : 'Ask a different question',
           loopHint: '',
         }
@@ -642,7 +647,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     ? 'lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]'
     : 'lg:grid-cols-[0rem_minmax(0,1fr)]'
   const shell = (
-    <div className={cn('grid h-full min-h-0 w-full bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard', sidebarGridCols)}>
+    <div className={cn('grid h-full min-h-0 w-full grid-cols-[minmax(0,1fr)] bg-background motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard', sidebarGridCols)}>
       <Sheet
         open={mobileSidebarOpen}
         onOpenChange={(isOpen) => {
@@ -660,25 +665,27 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             event.preventDefault()
             const opener = mobileSidebarOpenerRef.current
             mobileSidebarOpenerRef.current = null
-            if (opener?.isConnected) opener.focus()
+            window.requestAnimationFrame(() => {
+              if (opener?.isConnected) opener.focus()
+            })
           }}
         >
           <SheetHeader className="border-b border-border">
             <div className="flex min-h-11 items-center justify-between gap-3">
-              <SheetTitle className="font-heading text-base">Recent questions</SheetTitle>
+              <SheetTitle className="font-heading text-base">Recent chats</SheetTitle>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="min-h-11 min-w-11"
-                aria-label="Close recent questions"
+                aria-label="Close recent chats"
                 data-autofocus=""
                 onClick={closeMobileSidebar}
               >
                 <XIcon aria-hidden="true" />
               </Button>
             </div>
-            <SheetDescription className="sr-only">Choose a recent question to reopen.</SheetDescription>
+            <SheetDescription className="sr-only">Choose a recent chat to reopen.</SheetDescription>
           </SheetHeader>
           <AeThreadSidebar
             threads={threads}
@@ -692,43 +699,16 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         </SheetContent>
       </Sheet>
       <AeThreadSidebar threads={threads} activeThreadId={effectiveRouteThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} onNewQuestion={handleNewQuestion} />
-      <div className="flex h-full min-h-0 w-full flex-col bg-background lg:col-start-2">
-        {showSidebarToggle ? (
-          <div className={cn('mx-auto flex min-h-10 w-full max-w-2xl items-center px-4 pt-2 md:px-6', showThreadChrome && 'hidden lg:flex')}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 text-muted-foreground lg:hidden"
-              aria-label="Open recent questions"
-              onClick={openMobileSidebar}
-              aria-controls="ae-thread-mobile-sidebar"
-              aria-expanded={mobileSidebarOpen}
-            >
-              <PanelLeftIcon aria-hidden="true" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 hidden text-muted-foreground lg:inline-flex"
-              aria-label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
-              onClick={() => setSidebarManuallyOpen((value) => !(value ?? sidebarContextActive))}
-              aria-controls="ae-thread-sidebar"
-              aria-expanded={sidebarVisible}
-            >
-              <PanelLeftIcon aria-hidden="true" />
-            </Button>
-          </div>
-        ) : null}
-        {showThreadChrome ? (
+      <div className="flex h-full min-h-0 min-w-0 w-full flex-col bg-background lg:col-start-2">
+        {showCompactHeader ? (
           <AeThreadHeader
-            key={projection.threadId}
-            title={projection.title}
-            threadId={projection.threadId}
+            title={compactHeaderTitle}
+            {...(showThreadChrome ? { threadId: projection.threadId } : {})}
             showSidebarButton={showSidebarToggle}
-            onOpenSidebar={openMobileSidebar}
-            sidebarOpen={mobileSidebarOpen}
+            onOpenMobileSidebar={openMobileSidebar}
+            mobileSidebarOpen={mobileSidebarOpen}
+            onToggleDesktopSidebar={toggleDesktopSidebar}
+            desktopSidebarExpanded={sidebarVisible}
             onNewQuestion={handleNewQuestion}
           />
         ) : null}
@@ -737,107 +717,74 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             Answering your question
           </h1>
         ) : null}
-        <div className="relative flex min-h-0 flex-1 flex-col max-sm:[&_[role=radio]]:min-h-11 max-sm:[&_input[type=date]]:min-h-11 max-sm:[&_button[type=submit]]:min-h-11 max-sm:[&_button[type=submit]]:min-w-11">
+        <div className={cn('relative flex min-h-0 flex-1 flex-col max-sm:[&_[role=combobox]]:min-h-11 max-sm:[&_[role=radio]]:min-h-11 max-sm:[&_input[type=date]]:min-h-11 max-sm:[&_button[type=submit]]:min-h-11 max-sm:[&_button[type=submit]]:min-w-11', showWelcome && 'gap-5 sm:gap-8')}>
           <AeThreadScroller
             key={scrollerKey}
             autoScroll={liveTurn !== null}
             defaultScrollPosition={defaultScrollPosition}
             streaming={streamingBusy}
-            showJumpButton={liveTurn !== null}
+            showJumpButton
+            {...(showWelcome ? { className: 'mt-auto h-auto flex-none [&_[data-slot=message-scroller-content]]:min-h-0 [&_[data-slot=message-scroller-viewport]]:h-auto' } : {})}
+            contentClassName={showWelcome || showThreadUnavailable ? 'justify-center' : '[&>[data-slot=message-scroller-item]:first-of-type]:mt-auto'}
           >
+            {showWelcome ? <AeChatWelcome /> : null}
             {showThreadUnavailable ? (
-              <div className="my-12 w-full">
-                <Empty className="border border-border bg-card p-5">
-                  <EmptyHeader>
-                    <h1 className="text-lg font-medium tracking-tight">Thread unavailable</h1>
-                    <EmptyDescription>This answer thread could not be found or loaded. Start a fresh search to keep going.</EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
-                    <Button asChild variant="secondary" size="sm">
-                      <a href="/">Start a new search</a>
-                    </Button>
-                  </EmptyContent>
-                </Empty>
-              </div>
-            ) : null}
-            {showSessionChrome ? (
+              <Empty className="w-full">
+                <EmptyHeader>
+                  <h1 className="text-lg font-medium tracking-tight">Chat unavailable</h1>
+                  <EmptyDescription>This chat couldn’t be loaded. Start a new chat to continue.</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button asChild variant="secondary" size="sm">
+                    <a href="/">Start a new chat</a>
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            ) : (
               <>
-                <AeSessionJourney projection={sessionProjection} liveTurn={liveTurn} />
-                <AeSessionContextPanel projection={sessionProjection} liveTurn={liveTurn} />
+                {hasNonAuthoritativeOptimisticTurn ? (
+                  <p className="w-full pb-2 text-sm text-muted-foreground" role="status">
+                    Local answer preview — not authoritative until the saved answer is confirmed by readback.
+                  </p>
+                ) : null}
+                <AeThreadTranscript
+                  threadId={streamingThreadId}
+                  projection={projection}
+                  liveTurn={liveTurn}
+                  turnRenderKeys={turnRenderKeys}
+                  onThreadCreated={handleThreadCreated}
+                  onStreamEnd={handleStreamEnd}
+                  onSettledTurn={handleSettledTurn}
+                  onLiveStopChange={handleLiveStopChange}
+                  {...(effectiveRouteThreadId === null ? {} : { onFollowUp: handleFollowUp })}
+                  {...(effectiveRouteThreadId === null || !showBusinessComposerControls ? {} : { onChangeCriteria: handleChangeCriteria })}
+                  onStopPendingTurn={handleStopPendingTurn}
+                  onRetry={handleRetry}
+                />
               </>
-            ) : null}
-            {hasNonAuthoritativeOptimisticTurn ? (
-              <p className="w-full pb-2 text-sm text-muted-foreground" role="status">
-                Local answer preview — not authoritative until the saved answer is confirmed by readback.
-              </p>
-            ) : null}
-            <AeThreadTranscript
-              threadId={streamingThreadId}
-              projection={projection}
-              liveTurn={liveTurn}
-              turnRenderKeys={turnRenderKeys}
-              onThreadCreated={handleThreadCreated}
-              onStreamEnd={handleStreamEnd}
-              onSettledTurn={handleSettledTurn}
-              {...(effectiveRouteThreadId === null ? {} : { onFollowUp: handleFollowUp })}
-              {...(effectiveRouteThreadId === null || !showBusinessComposerControls ? {} : { onChangeCriteria: handleChangeCriteria })}
-              onStopPendingTurn={handleStopPendingTurn}
-              onRetry={handleRetry}
-            />
-            {showThreadChrome ? (
-              <div className="w-full pb-4" role="note" aria-label="Thread access and retention">
-                <p className="block text-sm text-muted-foreground">
-                  Private to this browser by default. Explicit share links are read-only and remain active until revoked or this thread is deleted.
-                </p>
-              </div>
-            ) : null}
+            )}
           </AeThreadScroller>
-          {!showWelcome && (terminalShortlist === null || refinementComposerOpen) ? (
-            <div className="mx-auto w-full max-w-2xl flex-none bg-background px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
+          {!showThreadUnavailable ? (
+            <div className={cn('w-full flex-none bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6', showWelcome ? 'mb-auto pt-0' : 'pt-2')}>
               {draftStorageError !== null ? (
-                <p role="alert" className="pb-2 text-sm text-red-vivid">
+                <p role="alert" className="pb-2 text-sm text-destructive">
                   This browser could not save the answer draft. Nothing was sent; try again.
                 </p>
               ) : null}
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
+                {...(streamingBusy && activeTurnStop !== null ? { onStop: () => void activeTurnStop() } : {})}
                 searchContext={searchContext}
-                showExamples={false}
-                defaultValue={refinementComposerOpen ? (latestProjectedTurn?.query ?? '') : ''}
+                showExamples={showWelcome}
+                defaultValue={refinementComposerOpen ? (latestProjectedTurn?.query ?? '') : showWelcome ? initialRouteQuery : ''}
                 focusOnMount={refinementComposerOpen}
                 initialTiming={composerTiming}
                 showTiming={showComposerTiming}
                 {...(composerTimingDate === undefined ? {} : { initialTimingDate: composerTimingDate })}
-                {...(followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}
-                {...(followUpComposerCopy === null ? {} : { loopHint: followUpComposerCopy.loopHint })}
+                {...(showWelcome || followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}
+                {...(showWelcome || followUpComposerCopy === null ? {} : { loopHint: followUpComposerCopy.loopHint })}
               />
-            </div>
-          ) : null}
-          {landingMode ? (
-            <div
-              className={cn('absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-background px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard', !showWelcome && 'pointer-events-none invisible opacity-0')}
-              aria-hidden={!showWelcome}
-            >
-              <div className="mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-8">
-                <AeChatWelcome />
-                {showWelcome ? (
-                  <>
-                    {draftStorageError !== null ? (
-                      <p role="alert" className="text-sm text-red-vivid">
-                        This browser could not save the answer draft. Nothing was sent; try again.
-                      </p>
-                    ) : null}
-                    <AeQueryPanel
-                      onSubmit={handleSubmit}
-                      busy={streamingBusy}
-                      searchContext={searchContext}
-                      showExamples
-                      {...(initialRouteQuery.length === 0 ? {} : { defaultValue: initialRouteQuery })}
-                    />
-                  </>
-                ) : null}
-              </div>
             </div>
           ) : null}
         </div>

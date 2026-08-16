@@ -23,7 +23,7 @@ export const Route = createFileRoute('/t/new')({
   validateSearch: validateNewThreadSearch,
   head: () => ({
     meta: [
-      { title: 'New question | Agentic Economy' },
+      { title: 'New chat | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
       { name: 'referrer', content: 'no-referrer' },
     ],

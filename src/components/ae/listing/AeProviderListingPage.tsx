@@ -462,7 +462,7 @@ function WhatTheyOfferCard({
       </div>
 
       <div className="grid gap-3">
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Where they work</span>
+        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Where they work</span>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-1">
             <p className="text-sm font-medium text-muted-foreground">Service area</p>
@@ -482,7 +482,7 @@ function WhatTheyOfferCard({
       <Separator />
 
       <div className="grid gap-3">
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Offerings</span>
+        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Offerings</span>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-1">
             <p className="text-sm font-medium text-muted-foreground">Offering</p>
@@ -508,7 +508,7 @@ function WhatTheyOfferCard({
         <>
           <Separator />
           <div className="grid gap-3">
-            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-muted-foreground">About</span>
+            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">About</span>
             <p className="block max-w-3xl text-pretty text-foreground">
               {presentation.primaryOfferingSummary}
             </p>

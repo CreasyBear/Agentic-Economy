@@ -102,7 +102,7 @@ export function AeFindMyBusiness({
             </Button>
           </FieldGroup>
         </form>
-        {lookupError === undefined ? null : <p role="alert" className="text-sm text-red-vivid">{lookupError}</p>}
+        {lookupError === undefined ? null : <p role="alert" className="text-sm text-destructive">{lookupError}</p>}
 
         {searched && results.length > 0 ? (
           <div className="grid gap-3" aria-label="Matching businesses">

@@ -26,32 +26,6 @@ body {
   color: var(--ae-fg);
 }
 
-button,
-a,
-input,
-textarea,
-select {
-  font: inherit;
-}
-
-html *:focus-visible {
-  outline: 2px solid var(--ae-ring);
-  outline-offset: 2px;
-  box-shadow: var(--ae-focus-ring);
-}
-
-h1,
-h2,
-h3 {
-  text-wrap: balance;
-}
-
-p,
-li,
-dd {
-  text-wrap: pretty;
-}
-
 img {
   outline: 1px solid var(--ae-image-outline);
   outline-offset: -1px;
@@ -78,6 +52,14 @@ img {
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;

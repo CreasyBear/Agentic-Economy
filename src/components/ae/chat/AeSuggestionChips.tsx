@@ -46,6 +46,7 @@ export function AeAnswerSuggestions({
 
   return (
     <Suggestions
+      variant={variant}
       {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel })}
     >
       {items.map((item) => (

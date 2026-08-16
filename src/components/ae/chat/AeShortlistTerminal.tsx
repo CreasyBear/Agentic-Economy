@@ -49,11 +49,11 @@ export function AeShortlistTerminal({
     : null
   if (closed) {
     return (
-      <section className="grid gap-3 rounded-lg border border-border bg-card p-4" aria-labelledby="shortlist-closed-heading">
-        <h2 id="shortlist-closed-heading" className="text-xl font-semibold text-foreground">Options closed</h2>
-        <p className="text-muted-foreground">Nothing was sent.</p>
-        <Button asChild variant="secondary" className="min-h-11 justify-self-start">
-          <a href="/">Return home</a>
+      <section className="grid gap-3 rounded-lg border border-border bg-card p-4" aria-label="Shortlist closed">
+        <p className="text-sm font-semibold text-foreground">No request was sent to a business.</p>
+        <p className="text-sm text-muted-foreground">You can return to the options or change the search criteria.</p>
+        <Button type="button" variant="outline" onClick={() => setClosed(false)}>
+          Reopen options
         </Button>
       </section>
     )

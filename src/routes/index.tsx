@@ -150,7 +150,6 @@ function ServicesRoute() {
                   name="q"
                   type="search"
                   value={queryValue}
-                  maxLength={QUERY_MAX_LENGTH}
                   required
                   placeholder="e.g. Get a quote for solar installation, or the current price of bitcoin"
                   autoComplete="off"
@@ -163,16 +162,6 @@ function ServicesRoute() {
                   onInvalid={(event) => {
                     event.preventDefault()
                     setQueryError(event.currentTarget.validity.valueMissing ? 'required' : 'too-long')
-                  }}
-                  onPaste={(event) => {
-                    const pasted = event.clipboardData?.getData('text') ?? ''
-                    const start = event.currentTarget.selectionStart ?? queryValue.length
-                    const end = event.currentTarget.selectionEnd ?? queryValue.length
-                    const nextLength = queryValue.length - (end - start) + pasted.length
-                    if (nextLength > QUERY_MAX_LENGTH) {
-                      event.preventDefault()
-                      setQueryError('too-long')
-                    }
                   }}
                   className="h-14 border-border bg-card px-4 py-3 text-base text-foreground max-sm:h-14 md:text-base"
                 />
@@ -231,9 +220,15 @@ function ServicesRoute() {
                   <p className="block text-sm text-muted-foreground">
                     {door.body}
                   </p>
-                  <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
-                    {door.cta}
-                  </Link>
+                  {door.href === '/claim?source=supply' ? (
+                    <Link to="/claim" search={{ source: 'supply' }} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
+                      {door.cta}
+                    </Link>
+                  ) : (
+                    <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
+                      {door.cta}
+                    </Link>
+                  )}
                 </Card>
               ))}
             </div>

@@ -53,7 +53,13 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
   const invokeInput = inputExample === undefined
     ? '"$AE_INPUT_JSON"'
     : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
-
+  const accessMode = operation.availability.posture !== 'routeable'
+    ? 'inspect_only'
+    : operation.navigation.some(({ relation }) => relation === 'execute')
+      ? 'anonymous_execute'
+      : operation.navigation.some(({ relation }) => relation === 'invoke')
+        ? 'authenticated_invoke'
+        : 'inspect_only'
   return (
     <AePublicShell>
       <article className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 md:px-6 md:py-12">
@@ -176,47 +182,89 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
             </details>
           </div>
 
-          {operation.availability.posture === 'routeable' ? (
-            <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
-              <Card className="gap-5">
-                <CardHeader>
-                  <h2 id="execution-title" className="text-xl font-semibold text-foreground">Use this exact Operation</h2>
-                  <CardDescription>Inspect, connect once, invoke with a stable idempotency key, then follow the returned invocation reference.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ol className="m-0 grid list-none gap-5 p-0">
-                    <CommandStep number={1} title="Inspect" code={`npm run -s ae -- inspect '${operation.operationRef}' --json`} />
-                    <CommandStep number={2} title="Connect" code="npm run -s ae -- connect --json" />
-                    <CommandStep number={3} title="Invoke" code={`npm run -s ae -- invoke '${operation.operationRef}' ${invokeInput} --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`} />
-                    <CommandStep number={4} title="Status" code={'npm run -s ae -- status "$AE_INVOCATION_REF" --json'} />
-                  </ol>
-                </CardContent>
-                <CardContent className="border-t border-border pt-5">
-                  <p className="text-sm text-muted-foreground">Connect may reveal an AE caller key once. Save it securely when shown; this page never receives, stores, or displays that secret. Replace only your input, idempotency key, and returned invocation reference.</p>
-                </CardContent>
-              </Card>
-            </aside>
-          ) : (
-            <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="availability-title">
-              <Card className="gap-5">
-                <CardHeader>
-                  <h2 id="availability-title" className="text-xl font-semibold text-foreground">
-                    {operation.availability.posture === 'integrated' ? 'Setup required before invocation' : 'Currently unavailable'}
-                  </h2>
-                  <CardDescription>
-                    AE reports {label(operation.availability.reason ?? operation.availability.posture)} for this exact Operation. Its current contract, commercial, and provenance facts remain available to inspect, but it cannot be invoked now.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  <Button asChild className="min-h-11"><Link to="/" search={{ q: operation.operationRef }}>Search current Operations</Link></Button>
-                  <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-                </CardContent>
-              </Card>
-            </aside>
-          )}
+          <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} />
         </div>
       </article>
     </AePublicShell>
+  )
+}
+
+function OperationAccessSidecard({
+  operation,
+  accessMode,
+  invokeInput,
+}: Readonly<{
+  operation: PublicOperationDescriptor
+  accessMode: 'anonymous_execute' | 'authenticated_invoke' | 'inspect_only'
+  invokeInput: string
+}>) {
+  if (accessMode === 'anonymous_execute') {
+    return (
+      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
+        <Card className="gap-5">
+          <CardHeader>
+            <h2 id="execution-title" className="text-xl font-semibold text-foreground">Run through direct-keyless MCP</h2>
+            <CardDescription>This exact descriptor advertises anonymous execution for a free, keyless, read-only Operation. No AE caller key is used on this lane.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="m-0 grid list-none gap-5 p-0">
+              <CommandStep number={1} title="Inspect" code={`npm run -s ae -- inspect '${operation.operationRef}' --json`} />
+              <CommandStep
+                number={2}
+                title="Call the MCP tool"
+                code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=<JSON matching the published schema>`}
+              />
+            </ol>
+          </CardContent>
+          <CardContent className="border-t border-border pt-5">
+            <p className="text-sm text-muted-foreground">Pass only the published input fields. Anonymous execution is available through MCP and the internal Answer runtime, not a public HTTP or CLI execute command.</p>
+          </CardContent>
+        </Card>
+      </aside>
+    )
+  }
+
+  if (accessMode === 'authenticated_invoke') {
+    return (
+      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
+        <Card className="gap-5">
+          <CardHeader>
+            <h2 id="execution-title" className="text-xl font-semibold text-foreground">Use this exact Operation</h2>
+            <CardDescription>Inspect, connect once, invoke with a stable idempotency key, then follow the returned invocation reference.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="m-0 grid list-none gap-5 p-0">
+              <CommandStep number={1} title="Inspect" code={`npm run -s ae -- inspect '${operation.operationRef}' --json`} />
+              <CommandStep number={2} title="Connect" code="npm run -s ae -- connect --json" />
+              <CommandStep number={3} title="Invoke" code={`npm run -s ae -- invoke '${operation.operationRef}' ${invokeInput} --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`} />
+              <CommandStep number={4} title="Status" code={'npm run -s ae -- status "$AE_INVOCATION_REF" --json'} />
+            </ol>
+          </CardContent>
+          <CardContent className="border-t border-border pt-5">
+            <p className="text-sm text-muted-foreground">Connect may reveal an AE caller key once. Save it securely when shown; this page never receives, stores, or displays that secret. Recovery is offered only from a recorded uncertain invocation and must preserve its original identity.</p>
+          </CardContent>
+        </Card>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="availability-title">
+      <Card className="gap-5">
+        <CardHeader>
+          <h2 id="availability-title" className="text-xl font-semibold text-foreground">
+            {operation.availability.posture === 'integrated' ? 'Setup required before invocation' : 'Currently unavailable'}
+          </h2>
+          <CardDescription>
+            AE reports {label(operation.availability.reason ?? operation.availability.posture)} for this exact Operation. Its current contract, commercial, and provenance facts remain available to inspect, but it cannot be invoked now.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Button asChild className="min-h-11"><Link to="/" search={{ q: operation.operationRef }}>Search current Operations</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+        </CardContent>
+      </Card>
+    </aside>
   )
 }
 

@@ -164,7 +164,7 @@ function CustomerRecordNotFound() {
             <p className="text-muted-foreground">Use the complete private link you saved after sending.</p>
             <div>
               <Button asChild variant="secondary">
-                <a href="/">Start a new ask</a>
+                <a href="/">Start a new chat</a>
               </Button>
             </div>
           </CardContent>

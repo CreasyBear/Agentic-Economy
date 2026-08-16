@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -54,6 +55,11 @@ function anonymousReads(canonicalBaseUrl: string) {
       description: 'Compare exact current Operations without invoking them.',
     },
     {
+      command: `${CLI_ENTRYPOINT} inspect-plan "<operationRef1>" "<operationRef2>" --json`,
+      route: operationMarketRoute(OPERATION_MARKET_INSPECT_PLAN_PATH),
+      description: 'Inspect aggregate cost, data sharing, and effects for a bounded plan of exact Operations.',
+    },
+    {
       command: `curl -fsSL ${canonicalBaseUrl}/.well-known/ucp`,
       route: 'GET /.well-known/ucp',
       description: 'Read the raw machine handshake before installing the repo-local CLI.',
@@ -105,13 +111,13 @@ function ForAgentsRoute() {
 
         <section aria-labelledby="agent-contract" className="grid gap-5">
           <div className="grid max-w-3xl gap-1">
-            <h2 id="agent-contract" className="text-xl font-semibold text-foreground">The boundary is visible before you connect</h2>
+            <h2 id="agent-contract" className="text-xl font-semibold text-foreground">Choose the execution boundary after exact detail</h2>
             <p className="block text-muted-foreground">
-              Search, detail, compare, and plan inspection are anonymous reads. Invoke, status, and recovery require one revocable AE caller key.
+              Search, detail, compare, and plan inspection are anonymous reads. A qualified free, keyless, read-only Operation can run through MCP without a key. Controlled market work follows Connect → Invoke → Status with one revocable AE caller key.
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-3">
             <Card className="gap-4">
               <CardHeader>
                 <CardTitle>Anonymous reads</CardTitle>
@@ -134,7 +140,25 @@ function ForAgentsRoute() {
 
             <Card className="gap-4">
               <CardHeader>
-                <CardTitle>Authenticated invoke and recovery</CardTitle>
+                <CardTitle>Qualified direct-keyless MCP</CardTitle>
+                <CardDescription>No key. Use only after exact detail advertises the anonymous execute continuation for a current free, keyless, read-only Operation.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4">
+                  <div className="grid gap-1">
+                    <dt className="font-mono text-sm font-semibold text-foreground">ae_operation_execute</dt>
+                    <dd className="grid gap-1 text-sm text-muted-foreground">
+                      <code>operation.execute · authentication: none</code>
+                      <span>Pass the exact operationRef and only its published input fields. Never fall back to this lane when detail does not advertise it.</span>
+                    </dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card className="gap-4">
+              <CardHeader>
+                <CardTitle>Authenticated Connect → Invoke → Status</CardTitle>
                 <CardDescription>The AE key identifies the caller. AE keeps provider credentials separate and still enforces explicit authority.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -153,11 +177,17 @@ function ForAgentsRoute() {
             </Card>
           </div>
         </section>
+        <section aria-labelledby="mcp-lifecycle" className="grid gap-3 border-t border-border pt-6">
+          <h2 id="mcp-lifecycle" className="text-xl font-semibold text-foreground">MCP SDK lifecycle</h2>
+          <p className="block max-w-3xl text-muted-foreground">
+            Connect a Streamable HTTP client to <code>{canonicalBaseUrl}/mcp</code> using protocol <code>{MCP_LATEST_PROTOCOL_VERSION}</code>. The installed SDK performs <code>initialize</code>, sends <code>notifications/initialized</code>, then permits <code>tools/list</code> and <code>tools/call</code>. Close the transport when the session is finished.
+          </p>
+        </section>
 
         <section aria-labelledby="agent-next-step" className="grid gap-3 border-t border-border pt-6">
-          <h2 id="agent-next-step" className="text-xl font-semibold text-foreground">Own a business instead?</h2>
+          <h2 id="agent-next-step" className="text-xl font-semibold text-foreground">Need published businesses instead?</h2>
           <p className="block max-w-3xl text-muted-foreground">
-            Publish what you do once, and these are the surfaces agents read it from.
+            The business catalog and <code>registry.search</code>/<code>registry.detail</code> are business-only. They return Providers and offering portfolios; they do not select an admitted Market Operation. An Agent Service means one admitted Market Operation.
           </p>
           <Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/claim">List your business</Link></Button>
         </section>

@@ -1,5 +1,4 @@
 import {
-  type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
   useEffect,
@@ -7,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArrowUpIcon } from 'lucide-react'
+import { ArrowUpIcon, SquareIcon } from 'lucide-react'
 
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -31,14 +30,15 @@ import { cn } from '@/lib/utils'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
 
-import { AeAnswerSuggestions } from './AeSuggestionChips'
+import { AeAnswerSuggestions, type AeSuggestionItem } from './AeSuggestionChips'
 
 export type AeAnswerPromptInputProps = {
   onSubmit: (query: string, timing: NeedTiming, timingDate?: string) => void
   defaultValue?: string
+  onStop?: () => void
   initialTiming?: NeedTiming
   initialTimingDate?: string
-  examples?: readonly string[]
+  examples?: readonly string[] | readonly AeSuggestionItem[]
   busy?: boolean
   compact?: boolean
   showTiming?: boolean
@@ -50,10 +50,10 @@ export type AeAnswerPromptInputProps = {
   focusOnMount?: boolean
 }
 
-const DEFAULT_EXAMPLES: readonly string[] = [
-  'I need an emergency plumber in Brunswick',
-  'I need a locksmith in Footscray right now',
-  'I need an electrician in Geelong today',
+const DEFAULT_EXAMPLES: readonly AeSuggestionItem[] = [
+  { label: 'Emergency plumber', value: 'I need an emergency plumber in Brunswick' },
+  { label: 'Locksmith now', value: 'I need a locksmith in Footscray right now' },
+  { label: 'Electrician today', value: 'I need an electrician in Geelong today' },
 ]
 
 
@@ -91,13 +91,14 @@ function AeAnswerPromptInputInner({
   initialTimingDate,
   onSubmit,
   examples,
+  onStop,
   busy = false,
   showTiming = true,
   compact: compactOverride,
-  placeholder = 'e.g. Get a quote for solar installation, or the current price of bitcoin',
+  placeholder = 'Get a solar installation quote',
   inputLabel = SEARCHBOX_LABEL,
   ariaLabel = 'Ask a question or describe what you need done',
-  submitLabel = 'Ask',
+  submitLabel = 'Send',
   focusOnMount = false,
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples' | 'initialTiming' | 'initialTimingDate'> & {
   inputId: string
@@ -112,11 +113,10 @@ function AeAnswerPromptInputInner({
   const timingDateId = `${inputId}-timing-date`
   const [value, setValue] = useState(initialValue)
   const composingRef = useRef(false)
-  const [queryError, setQueryError] = useState(false)
+  const [queryError, setQueryError] = useState<'empty' | 'too-long' | null>(null)
   const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
   const [timingDate, setTimingDate] = useState(initialTimingDate)
-  const timingDateValid = timing !== 'date' || (timingDate.length > 0 && timingDate >= localToday())
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const queryTooLong = value.length > QUERY_MAX_LENGTH
   const showCharacterLimit = queryTooLong || charactersRemaining <= 40
@@ -126,22 +126,25 @@ function AeAnswerPromptInputInner({
     if (focusOnMount) document.getElementById(inputId)?.focus()
   }, [focusOnMount, inputId])
 
-
   function updateValue(nextValue: string) {
     setValue(nextValue)
-    setQueryError(false)
+    setQueryError(null)
   }
 
   function submitQuery(query: string) {
-    if (query.length > QUERY_MAX_LENGTH) {
-      setQueryError(true)
-      return
-    }
     const trimmed = query.trim()
-    if (trimmed.length === 0 || busy || !timingDateValid) {
+    if (trimmed.length === 0) {
+      setQueryError('empty')
+      document.getElementById(inputId)?.focus()
       return
     }
-    setQueryError(false)
+    if (query.length > QUERY_MAX_LENGTH) {
+      setQueryError('too-long')
+      document.getElementById(inputId)?.focus()
+      return
+    }
+    if (busy) return
+    setQueryError(null)
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
   }
 
@@ -161,16 +164,6 @@ function AeAnswerPromptInputInner({
     event.currentTarget.form?.requestSubmit()
   }
 
-  function handlePromptPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const pasted = event.clipboardData?.getData('text') ?? ''
-    const start = event.currentTarget.selectionStart ?? value.length
-    const end = event.currentTarget.selectionEnd ?? value.length
-    const nextLength = value.length - (end - start) + pasted.length
-    if (nextLength > QUERY_MAX_LENGTH) {
-      event.preventDefault()
-      setQueryError(true)
-    }
-  }
 
 
   return (
@@ -193,7 +186,6 @@ function AeAnswerPromptInputInner({
             )}
             placeholder={placeholder}
             value={value}
-            maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
             onCompositionStart={() => {
               composingRef.current = true
@@ -201,16 +193,14 @@ function AeAnswerPromptInputInner({
             onCompositionEnd={() => {
               composingRef.current = false
             }}
-            onInvalid={() => setQueryError(true)}
             onKeyDown={handlePromptKeyDown}
-            onPaste={handlePromptPaste}
             role="searchbox"
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
             rows={1}
-            aria-describedby={`${placeholderId} ${hintId} ${counterId}`}
-            aria-invalid={queryError || queryTooLong ? 'true' : undefined}
+            aria-describedby={`${placeholderId} ${hintId}${showCharacterLimit ? ` ${counterId}` : ''}`}
+            aria-invalid={queryError !== null ? 'true' : undefined}
             aria-label={inputLabel}
             disabled={busy || !hydrated}
           />
@@ -228,7 +218,7 @@ function AeAnswerPromptInputInner({
                   <SelectTrigger
                     size="sm"
                     aria-label="When do you need this?"
-                    className="max-w-full flex-none"
+                    className="max-w-full flex-none max-sm:min-h-11"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -257,50 +247,55 @@ function AeAnswerPromptInputInner({
                       min={localToday()}
                       required
                       disabled={!hydrated}
-                      className="h-8 w-auto min-w-0 bg-card px-2 text-xs max-sm:h-8 md:text-xs"
+                      className="h-8 w-auto min-w-0 bg-card px-2 text-base max-sm:h-8 md:text-xs"
                       onChange={(event) => setTimingDate(event.currentTarget.value)}
                     />
                   </Field>
                 ) : null}
               </>
             )}
-            {!compact ? (
-              <>
-                <span
-                  id={counterId}
-                  className={cn('font-mono text-xs leading-none text-muted-foreground', showCharacterLimit ? 'opacity-100' : 'opacity-0')}
-                  data-numeric
-                  aria-live={showCharacterLimit ? 'polite' : undefined}
-                >
-                  {value.length} / {QUERY_MAX_LENGTH} characters
-                </span>
-                <span className="hidden text-xs text-muted-foreground sm:block">
-                  Answers based on business information.
-                </span>
-              </>
-            ) : (
+            {showCharacterLimit ? (
               <span
                 id={counterId}
-                className="font-mono text-xs tabular-nums text-muted-foreground"
+                className="font-mono text-xs leading-none text-muted-foreground"
                 data-numeric
-                aria-live={showCharacterLimit ? 'polite' : undefined}
+                aria-live="polite"
               >
                 {value.length} / {QUERY_MAX_LENGTH} characters
               </span>
-            )}
+            ) : null}
             <InputGroupButton
-              type="submit"
+              type={busy ? 'button' : 'submit'}
               size="icon-sm"
               variant="default"
-              aria-label={busy ? 'Starting your thread' : submitLabel}
+              aria-label={busy && onStop !== undefined ? 'Stop generating' : busy ? 'Sending' : submitLabel}
               className="ml-auto flex-none"
-              disabled={busy || !hydrated || value.trim().length === 0 || queryTooLong || !timingDateValid}
+              disabled={busy ? onStop === undefined : !hydrated}
+              onClick={busy ? onStop : undefined}
             >
-              {busy ? <Spinner /> : <ArrowUpIcon />}
+              {busy ? (onStop === undefined ? <Spinner /> : <SquareIcon />) : <ArrowUpIcon />}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
       </form>
+      <p
+        id={hintId}
+        className={cn(
+          'text-sm leading-snug',
+          queryError !== null
+            ? 'text-destructive'
+            : compact
+              ? 'sr-only'
+              : 'text-muted-foreground',
+        )}
+        role={queryError !== null ? 'alert' : undefined}
+      >
+        {queryError === 'empty'
+          ? 'Enter a question or describe what you need before sending.'
+          : queryError === 'too-long'
+            ? `Your question is too long. Keep it to ${QUERY_MAX_LENGTH} characters or fewer.`
+          : `Add a location if it matters. ${QUERY_MAX_LENGTH} characters max.`}
+      </p>
 
       {examples.length > 0 ? (
         <AeAnswerSuggestions
@@ -309,17 +304,12 @@ function AeAnswerPromptInputInner({
           aria-label="Example queries"
           onSelect={(example) => {
             setValue(example)
-            setQueryError(false)
+            setQueryError(null)
             document.getElementById(inputId)?.focus()
           }}
         />
       ) : null}
 
-      <p id={hintId} className={compact ? 'sr-only' : 'text-sm leading-snug text-muted-foreground'}>
-        {queryError || queryTooLong
-          ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
-          : `Describe what you need done. Add a place if it matters. Up to ${QUERY_MAX_LENGTH} characters.`}
-      </p>
     </div>
   )
 }
