@@ -25,16 +25,22 @@ Nothing deleted. Live money stays fail-closed. Each card runs executor → valid
 | --- | --- | --- | --- |
 | P1-b | Immutable Delivery / Qualified Use receipts after contract-valid delivery + replay/conflict tests | P0 | committed |
 | HK-ts-standards | Close the three `test:ts-standards` violations the settlement slice left behind | P1-b | committed |
-| P1-a | Re-key buyer money to organization `accountId` (ledger, credential budget, Convex money schema). Precondition: zero balances | P0 | recon |
+| P1-e-1 | Refuse the provider-direct x402 lane in production; keep it open below production for conformance proof | P0 | committed |
+| HK-faux-runtime | Move local-E2E bypass authority out of `capability-execution` deployable graph | P1-b | committed |
+| P1-a-core | Pool buyer money on the Clerk owner (`owner:{ownerId}:{currency}`); keep per-key attribution on transactions, usage, budgets | P0 | validating |
+| P1-e-2 | Canonical `/api/v1/operations/call`; dual-serve `/execute` identically; no new action registered | P0 | validating |
+| P1-a-proj | `callVia` + `paymentLane` on operation detail projections | P1-a-core, P1-e-2 | pending |
 | P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b | recon |
 | P1-d | Idempotent daily settlement cron | P1-c | recon |
-| P1-e | Canonical `/api/v1/operations/call`; dual-serve `/execute`; `callVia` + `paymentLane` on detail; refuse non-brokered lanes | P1-a | recon |
-| P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers | P1-e | recon |
+| P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers; agent keys publish under a narrow owner-bound scope; withdraw drains rather than cancels | P1-e-2 | recon |
 | P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 | recon |
-| HK-faux-runtime | Move local-E2E bypass authority out of `capability-execution` deployable graph | P1-b | pending |
 
 P1-b ran ahead of P1-a: the receipt keys on `businessId` and `invocationRef`, neither of which the
 account re-key touches, so the dependency the plan assumed does not exist in the code.
+
+P1-a and P1-e each split once reconnaissance measured them. The brokered-only refusal (P1-e-1) was
+independent of the route rename and shipped first; the route work (P1-e-2) turned out not to depend
+on the account re-key, since `/execute` was already the paid invoke path.
 
 ## Phase 2 — Decouple without changing behavior
 
