@@ -594,7 +594,7 @@ export {
   appendRefundReversal,
   markOutcomeUnknown,
   reconcileCharge,
-  accountRefForOperator,
+  legacyPerKeyAccountRef,
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,

@@ -123,7 +123,8 @@ export function accountRefForOwner(ownerId: string, currency: string): string {
   return `owner:${ownerId}:${currency}`
 }
 
-export function accountRefForOperator(principalId: string, currency: string): string {
+/** Names pre-re-key per-key wallet rows for detection only; do not create or debit accounts with it. */
+export function legacyPerKeyAccountRef(principalId: string, currency: string): string {
   return `clerk_api_key:${principalId.replace(/^clerk_api_key:/, '')}:${currency}`
 }
 
