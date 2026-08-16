@@ -177,3 +177,43 @@ zero (`convex/moneyLedger.ts:1233-1244`), and `beginPayoutTransfer` can then pro
 period being closed or the review window being reached. `payoutReviewWindow`
 (`src/modules/money/internal/payout-policy.ts:130-149`) exists but is never wired to settlement.
 P1-d absorbs this.
+
+### P1-f and P1-g — the plumbing exists, the surfaces do not
+
+Publish, withdraw, and earnings are all fully implemented as owner-authenticated Convex mutations
+and TanStack server functions over the existing OpenAPI and MCP importers
+(`src/modules/capability-supply/internal/publication-importers.ts`,
+`internal/publication/publish.ts`, `internal/publication/withdraw.ts`,
+`convex/moneyLedger.ts:7700`). What is missing is only the standard-artifact action layer: no
+`supply.publish`, `supply.withdraw`, or `supply.earnings` exists in the registry. P1-f is therefore
+a surfacing card, not a build-from-scratch card, which is what the plan intended.
+
+Two things P1-f must settle before it can be written as a no-discretion card:
+
+1. **Authority.** Publishing today requires an authenticated Clerk owner passing both
+   `requireSourceWrite('catalog_publish')` and `ownsPublishedBusiness`. Exposing supply writes as
+   standard actions means deciding whether an agent API key may publish on behalf of its owner's
+   business, and under which scope. That is a new write authority for agent keys and needs a
+   founder decision before dispatch.
+2. **Action budget.** The registry holds 43 actions and the frontier manifest pins the inventory
+   exactly (`tests/imports/product-frontier-manifest.test.ts:41-57`), so three new actions require a
+   manifest update. The end-state guardrail targets roughly 14 active actions; the reduction comes
+   from quarantining the 13 `customerRequest.*`, 8 `workTree.*`, and 2 `study.*` actions in Phase 5,
+   not from refusing supply actions the target product requires.
+
+Incidental find: `storefrontImportDraftAction` is imported into `src/modules/actions/index.ts:55`
+but never added to the `actions` array, so it is registered nowhere and reachable through no
+surface. Dead import, carded separately rather than swept up here.
+
+For P1-g the evidence spine already persists market tool calls: `answerToolCalls` rows carry
+`toolId` of `operation.execute` or `operation.invoke` with input, result, and result hash, and
+`answerTurns.evidenceJson` freezes the operation artifacts. The gap is narrower than the card
+implies. The model calls a dynamically named tool `capability.{operationRef}`
+(`answer-tool-use-agent.ts:2267-2320`) but execution is recorded under the canonical
+`operation.execute` identity, so an audit cannot reconstruct which model-facing tool produced a
+given call. The broker `invocationRef` also has no dedicated evidence field. Both are attribution
+gaps rather than missing persistence, so P1-g-1 is scoped to identity and cross-reference.
+
+P1-g-2 (traffic instrumentation) split out and dispatched independently: it shares no files with
+the evidence work and unblocks the frozen-surface retirement decision, which needs measured data
+rather than a guess.
