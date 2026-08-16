@@ -8,18 +8,8 @@ export default {
   },
   ignore: {
     files: [
-      // Routing Kernel v1 is retired production authority. Keep the retirement
-      // response and historical schema/readback scanned; exclude only dormant
-      // implementation files that otherwise distort the active-code baseline.
-      'src/modules/routing-kernel/authorization.ts',
-      'src/modules/routing-kernel/http-capability-binding.ts',
-      'src/modules/routing-kernel/http.ts',
-      'src/modules/routing-kernel/internal/data-authorization-budget.ts',
-      'src/modules/routing-kernel/internal/kernel.ts',
-      'src/modules/routing-kernel/internal/store.ts',
-      'src/modules/routing-kernel/mcp.ts',
-      'src/modules/routing-kernel/structured-quote-preparation-store.ts',
-      'src/modules/routing-kernel/structured-quote-preparation.ts',
+      // Generated Playwright HTML report (gitignored) — not product source.
+      'playwright-report/**',
     ],
   },
   supplyChain: {

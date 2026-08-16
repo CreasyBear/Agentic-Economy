@@ -117,6 +117,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}
       AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}
+      AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
@@ -139,7 +140,9 @@ jobs:
         run: npm install --global npm@11.5.1
 
       - name: Frozen dependency install for independent readback
-        run: npm ci
+        # Job env carries production secrets; skip lifecycle scripts so install
+        # cannot read them (react-doctor/build-pipeline-secret-boundary).
+        run: npm ci --ignore-scripts
       - name: Refuse incomplete target production deployment manifest
         run: npm run verify:deployment-manifest -- --environment production
 
@@ -284,6 +287,7 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}
       AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}
+      AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
       AE_SOURCE_WRITE_KEY_INQUIRY: ${{ secrets.AE_SOURCE_WRITE_KEY_INQUIRY }}
       AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
       AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
@@ -326,7 +330,9 @@ jobs:
         run: npm install --global npm@11.5.1
 
       - name: Frozen dependency install
-        run: npm ci
+        # Job env carries production secrets; skip lifecycle scripts so install
+        # cannot read them (react-doctor/build-pipeline-secret-boundary).
+        run: npm ci --ignore-scripts
       - name: Verify production deployment manifest before live smoke
         run: npm run verify:deployment-manifest -- --environment production
 
