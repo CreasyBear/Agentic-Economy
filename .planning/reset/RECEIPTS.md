@@ -337,3 +337,33 @@ key's registered owner, never from caller input, so a key cannot reach another o
 Withdraw drains rather than cancels: in-flight invocations finish and settle, and withdrawal only
 stops new ones. The buyer of an already-authorized call is owed delivery or a refund, and cancelling
 mid-flight would create exactly the unresolved-outcome state the money model works to avoid.
+
+## P1-a-core — validator RED, partially unattributable
+
+Branch `p1a-core-owner-account` at `c792f9c3`. Lint, targeted money/schema units, ts-standards, and
+product frontier passed. Typecheck and four suite commands failed.
+
+Two failures are deterministic and branch-caused:
+
+- `npm run typecheck` — `tests/unit/ui/demand-console.test.tsx:53` omits the now-required
+  `accountId` on the demand console fixture.
+- `tests/unit/convex/money-ledger-pagination.test.ts:168` — the usage-summary readback returns
+  `{ kind: 'refused', code: 'billing_identity_missing' }` where it previously returned the summary.
+  This is an assertion failure, not a timeout, so load cannot explain it.
+
+The remaining failures are **not attributable from this run**: 29 integration failures across 7
+files, plus three unit/imports failures, are all bare `Test timed out` at the suite's 5s/15s/30s
+budgets, with no assertion text. This validator ran concurrently with the P1-e-2 validator on the
+same machine, and both were executing full suites. Concurrent CPU starvation produces exactly this
+signature. `main` was measured green on 85 integration files at `fd833e0b` and has since taken only
+docs commits, so the baseline is not in question — the attribution of these specific timeouts is.
+
+Orchestration fault, not worker fault: the two validators were dispatched in parallel. Rule 7a now
+forbids concurrent full-suite validation. Re-measurement runs serially on a quiet machine before any
+fix card is written for the timeout set.
+
+The structural checks all held. Supplier payout policy and the delivery-receipt files are untouched,
+and the provider and rake account ref formats are byte-identical to base
+(`business:{businessId}:{currency}`, `ae:rake:{currency}`), so the re-key stayed on the buyer side.
+`accountRefForOperator` still exists and is still exported — expected, since per-key attribution
+survives pooling, but its remaining call sites are a reviewer question.

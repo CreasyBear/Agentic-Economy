@@ -68,6 +68,10 @@ which is worse than an unlabelled one. Concretely:
 7. Parallel only with `depends_on: []` and non-overlapping paths; separate worktrees. Before
    dispatching a parallel wave, the orchestrator diffs the cards' `ALLOWED_PATHS` against each
    other; any shared path means the cards serialize instead.
+7a. Parallel applies to editing, not to measuring. Two full-suite validators never run at the same
+   time on one machine: the suites carry 5s–30s per-test timeouts, so concurrent runs manufacture
+   timeout failures that are indistinguishable from real ones and cost a differential investigation
+   to unpick. Executors may overlap; validators queue.
 8. Commit as you go. A card is incomplete until its commit exists.
 9. Clean tree is a hard gate between cards.
 
