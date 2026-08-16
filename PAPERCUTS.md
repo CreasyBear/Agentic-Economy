@@ -1421,3 +1421,7 @@ workstreams, duplicate observations, and explicit remediation status.
 187. opus-5: Wrote validator cards using 'grep -rn pattern path --include=*.ts'; zsh expands the unquoted glob before grep runs, so the check dies with 'no matches found' and returns no evidence. Repo guidance should point at rg (or quoted --include) for agent-authored scans.
 
 188. opus-5: Orchestrating across git worktrees, a persistent shell kept its cwd inside a worker's worktree across turns, so a later commit and a papercut write landed in the wrong tree and dirtied an executor's workspace mid-task. Worktree-touching commands should use an explicit -C/working_directory rather than a sticky cd.
+
+189. opus-5: Symlinking a git worktree's node_modules at the main checkout (the documented workaround for worktrees having no deps) breaks Convex component resolution: convex/projectSpine.test.ts fails 3/4 in the worktree and passes on main with identical content. Worktree gate runs silently cannot certify anything component-dependent.
+
+190. opus-5: npm ci exits EUSAGE on main: package.json and package-lock.json are out of sync (~25 missing entries incl. gcp-metadata, @vercel/functions, jose, zod). Clean installs, CI, fresh clones and new worktrees all fail at install; needs an npm install to resync the lock.

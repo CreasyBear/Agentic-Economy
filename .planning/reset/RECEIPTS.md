@@ -394,3 +394,43 @@ reading them from `OPERATION_INVOKE_ROUTE_CONTRACT`, which is what the file-base
 which does leave the contract and the router able to disagree silently. And checks 17 and 18 in the
 card were unusable: they were written as `grep -rn --include=*.ts`, and zsh expanded the unquoted
 glob before grep saw it. Card-authoring fault, not worker fault.
+
+## Serial re-measurement — the timeouts were all contention
+
+One validator, both branches, back to back on an idle machine, full
+`test:release:source:after-codegen`. A3 took 6m21s, B3 took 6m08s.
+
+Every timeout-suspect file passed on both branches: market-terminal `cli-errors` and `doctor`,
+`capability-supply/development-evidence-surface` and `curated-seed-drift-idempotency`,
+`action-invocation/full-yolo`, and `integration/capability-operation-workpool` plus the
+customer-request aggregate and curated provider registry integration files. Not one `Test timed out`
+appeared in either phase. All ~35 earlier failures were manufactured by dispatching two full-suite
+validators concurrently. Neither branch was ever implicated.
+
+Unit counts: 499 files / 4074 tests green on P1-a-core, 498 / 4073 on P1-e-2.
+
+## `projectSpine` is a worktree artifact, not a branch failure
+
+Both phases then failed identically on three assertions in `convex/projectSpine.test.ts`, a file
+neither branch touches. Differential:
+
+| Where | Result |
+| --- | --- |
+| `main`, file in isolation | passes (4/4) |
+| `main`, full `test:release:integration` | passes (85 files, 581 tests) |
+| worktree, file in isolation, same file content | fails 3/4 |
+
+The worktrees symlink `node_modules` at the main checkout, which is how the orchestrator told
+validators to bootstrap them. Convex component resolution walks that path, so the workflow/workpool
+spike resolves against the wrong root and the workflow reports `failed` instead of `inProgress`.
+Only the component-dependent test is affected, which is why the other 84 integration files pass.
+The acceptance surface is `main`, and `main` is green, so this blocks neither card. It does mean a
+worktree gate run cannot certify anything component-dependent.
+
+## `npm ci` is broken on `main` — pre-existing, unrelated to the reset
+
+Discovered while trying to give a worktree real dependencies. `npm ci` exits `EUSAGE` on `main`:
+`package.json` and `package-lock.json` are out of sync, with `gcp-metadata`, `@vercel/functions`,
+`@vercel/oidc`, `jose`, `zod@4.1.11` and roughly twenty more missing from the lock file. Any clean
+install — CI, a fresh clone, a new worktree — fails at dependency install. This predates the reset
+and is filed as `HK-lockfile-drift`.
