@@ -45,6 +45,7 @@ import {
 } from '@/modules/capability-supply/route-transport-runtime'
 import {
   chargeSettlementOutcome,
+  paymentLaneAdmission,
   paymentObservationDigest,
   readGuardedX402EvmReceipt,
   readX402PaymentPayer,
@@ -405,6 +406,10 @@ export const run = internalAction({
     if (!descriptor.validateInput(input)) return await refuseBeforeClaim(ctx, dispatch, 'input_invalid', false)
     const isX402 = operation.identity.adapterId === 'x402-fetch:v2'
     const economicRail: EconomicRail = isX402 ? 'provider_direct_x402' : 'ae_internal'
+    const laneAdmission = paymentLaneAdmission({ rail: economicRail, environment: dispatch.environment })
+    if (laneAdmission.kind === 'refused') {
+      return await refuseBeforeClaim(ctx, dispatch, laneAdmission.code, false, 'This operation settles provider-direct; invoke a brokered operation instead.')
+    }
     if (isX402 && operation.binding.authority.kind !== 'provider_connection') {
       return await refuseBeforeClaim(ctx, dispatch, 'provider_refused', false, 'x402 payment requires provider connection custody.')
     }

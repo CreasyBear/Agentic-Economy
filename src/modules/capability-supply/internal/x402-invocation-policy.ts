@@ -6,6 +6,42 @@ import type { RouteTransportObservation } from '../route-transport-runtime'
 
 export type EconomicRail = 'provider_direct_x402' | 'ae_internal'
 
+export type PaymentLaneAdmission =
+  | Readonly<{ kind: 'admitted'; lane: 'brokered' }>
+  | Readonly<{
+    kind: 'refused'
+    lane: 'provider_direct_x402'
+    code: 'payment_lane_not_brokered'
+  }>
+
+/**
+ * V1 brokers every paid call so AE can validate the output before value moves, take its rake on
+ * settlement, and answer for the charge when the buyer disputes it. A provider-direct rail settles
+ * between buyer and provider outside AE's ledger and forfeits all three, so production admits only
+ * the brokered lane. Non-production keeps the direct rail open because the host-parity and
+ * provider-conformance scenarios are our only executable proof that the x402 machinery still works.
+ */
+export function paymentLaneAdmission(
+  input: Readonly<{ rail: EconomicRail; environment: string }>,
+): PaymentLaneAdmission {
+  switch (input.rail) {
+    case 'ae_internal':
+      return { kind: 'admitted', lane: 'brokered' }
+    case 'provider_direct_x402':
+      return input.environment === 'production'
+        ? {
+          kind: 'refused',
+          lane: 'provider_direct_x402',
+          code: 'payment_lane_not_brokered',
+        }
+        : { kind: 'admitted', lane: 'brokered' }
+    default: {
+      const _exhaustive: never = input.rail
+      return _exhaustive
+    }
+  }
+}
+
 export function x402SettlementStatusForObservation(
   observation: RouteTransportObservation,
 ): ExternalSpendSettlementStatus {

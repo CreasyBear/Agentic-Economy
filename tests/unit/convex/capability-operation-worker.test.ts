@@ -98,6 +98,7 @@ const digest = (digit: string) => `sha256:${digit.repeat(64)}`
 
 type WorkerKind = 'x402' | 'http'
 type WorkerOptions = Readonly<{
+  environment?: 'sandbox' | 'production'
   operatorAccountVersion?: number
   priceUnits?: string
   actualOperatorAccountVersion?: number
@@ -163,9 +164,21 @@ function operationFor(kind: WorkerKind, validUntil: number, priceUnits = '1'): P
   }
 }
 
+function inRuntimeEnvironment(
+  operation: PublishedOperation,
+  runtimeEnvironment: 'sandbox' | 'production',
+): PublishedOperation {
+  const identity: PublishedOperation['identity'] & { runtimeEnvironment: 'sandbox' | 'production' } = {
+    ...operation.identity,
+    runtimeEnvironment,
+  }
+  return { ...operation, runtimeEnvironment, identity }
+}
+
 function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Record<string, unknown>; state: WorkerState } {
   const now = Date.now()
-  const operation = operationFor(kind, now + 120_000, options.priceUnits)
+  const environment = options.environment ?? 'sandbox'
+  const operation = inRuntimeEnvironment(operationFor(kind, now + 120_000, options.priceUnits), environment)
   const operatorAccountVersion = options.operatorAccountVersion ?? 0
   const actualOperatorAccountVersion = options.actualOperatorAccountVersion ?? operatorAccountVersion
 
@@ -202,7 +215,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     ownerId: 'owner:test-worker',
     credentialId: 'credential:test-worker',
     applicationRef: 'application:test-worker',
-    environment: 'sandbox',
+    environment,
     state: 'pending',
     operationRef: operation.operationId,
     idempotencyKey: 'idempotency:test-worker',
@@ -221,7 +234,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     principalId: 'principal:test-worker',
     credentialId: 'credential:test-worker',
     applicationRef: 'application:test-worker',
-    environment: 'sandbox',
+    environment,
     operationRef: operation.operationId,
     idempotencyKey: 'idempotency:test-worker',
     inputDigest,
@@ -703,6 +716,19 @@ describe('capability operation invocation worker', () => {
         usageRef: `operation-x402-payment:${invocationRef}:${attemptRef}`,
       }),
     ])
+  })
+  it('refuses a production provider-direct x402 lane before transport or money effects', async () => {
+    const worker = createWorker('x402', { environment: 'production' })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.transportCalls).toBe(0)
+    expect(worker.state.money).toBeUndefined()
+    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) => path.startsWith('moneyLedger:'))).toHaveLength(0)
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'payment_lane_not_brokered', retryable: false },
+    })
   })
   it('refuses missing x402 payer custody before money reservation or transport', async () => {
     vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')

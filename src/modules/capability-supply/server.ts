@@ -19,11 +19,13 @@ export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
 export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
 export {
   chargeSettlementOutcome,
+  paymentLaneAdmission,
   paymentObservationDigest,
   transportObservationDigest,
   x402ActionEffectStatus,
   x402SettlementStatusForObservation,
   type EconomicRail,
+  type PaymentLaneAdmission,
 } from './internal/x402-invocation-policy'
 
 export {
