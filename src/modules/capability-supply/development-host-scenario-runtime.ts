@@ -226,10 +226,19 @@ export function developmentReleasedRefusalRuntime(
         return await base.send(url, init)
       }
       effects.provider += 1
+      const requirement = developmentChallenge(endpoint, url).accepts[0]!
+      // Settlement must verify so the refusal is attributable to the invalid
+      // body rather than to an undecodable payment proof.
       return new Response(JSON.stringify({ unexpected: true }), {
         status: 200,
         headers: {
-          'payment-response': 'mock:payment-proof',
+          'payment-response': encodePaymentResponseHeader({
+            success: true,
+            transaction: 'development:mock-payment-refusal',
+            network: requirement.network,
+            amount: requirement.amount,
+            payer: 'development:mock-payer',
+          }),
           'provider-receipt': 'mock:provider-refusal-receipt',
         },
       })

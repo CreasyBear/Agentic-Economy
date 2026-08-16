@@ -53,6 +53,7 @@ const durableTables = [
   'moneyCredentialBudgetStates',
   'moneyUsageEvents',
   'moneyCredentialUsageSummaries',
+  'moneyExternalSpendReservations',
   'moneyFreeTierCounters',
   'moneyTopupCommands',
   'moneyConnectAccountCommands',
