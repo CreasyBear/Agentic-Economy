@@ -244,3 +244,74 @@ was left behind.
 The two surviving branches are not discarded — an executor commit on an isolated branch is exactly
 the artifact the pipeline expects at that stage. Both were rebased onto current `main` and entered
 the pipeline at the validator step, which is where they should have gone in the first place.
+
+## P1-e-1 — Brokered-only payment lane
+
+**Merged as `61624a78` + `0ea45ad6`. Executor → validator → reviewer → fix → re-validator → merge.**
+
+The brokered-only rule existed only on paper. The invocation worker routed any operation with the
+`x402-fetch:v2` adapter down a `provider_direct_x402` rail that skipped
+`moneyLedger.authorizeInvocationCharge` entirely, so money moved between buyer and provider outside
+AE's ledger and AE could neither validate output before settlement, take its rake, nor answer for a
+dispute. `paymentLaneAdmission` now refuses that rail before any transport call or money mutation.
+
+Refusal is scoped to production. Non-production keeps the direct rail because the host-parity and
+provider-conformance scenarios are the only executable proof the x402 machinery still works, and
+the guardrails forbid retiring a proof without an equivalent.
+
+**Review caught two defects that a green suite could not.** Both matter more than the feature:
+
+1. `refuseBeforeClaim` accepts `code: string` and Convex persists `code: v.string()`, so
+   `payment_lane_not_brokered` compiled, stored, and passed 547 tests while being absent from
+   `operationInvokeRefusalCodeValues` — the union every surface parses results against. HTTP, MCP,
+   and CLI would each have rejected our own refusal as malformed and returned
+   `operation_invoke_result_invalid` in place of the reason. A loosely typed parameter let a new
+   failure mode reach production surfaces without appearing in any contract.
+2. The admitted variant could not represent `lane: 'provider_direct_x402'`, so a sandbox
+   provider-direct call was labelled `brokered`. Inert today, wrong the moment P1-e-3 sources a
+   public `paymentLane` field from it.
+
+`GATEWAY_PROBLEM_CODES` correctly needed no entry: domain refusals travel as HTTP 200 typed bodies,
+and existing domain codes such as `grant_expired` are likewise absent from it.
+
+## HK-faux-runtime — local-E2E authority relocated, not deleted
+
+**Merged as `df107004` + `737ef01f`.**
+
+The first attempt deleted two local-E2E guards from
+`src/modules/capability-execution/operation-approval.functions.ts` after concluding they were dead
+code. Review proved otherwise. These are `createServerFn` HTTP endpoints reachable independently of
+the operator UI, and local E2E strips Clerk request middleware entirely (`src/start.ts:90`), so an
+unauthenticated caller reaches the handler, which then authenticates to Convex with
+`CONVEX_SELF_HOSTED_ADMIN_KEY` as `dev-seed-owner-session`. Convex checks only that an identity
+exists and owns the row — and that subject *is* the seeded owner. Deleting the guards would have
+moved an unauthenticated local caller from "refused" to "decides operation approvals as the owner".
+
+The executor's investigation was not careless: it correctly verified the React tree short-circuits
+before calling either function. It stopped at the component boundary, and these endpoints do not
+care about the component.
+
+The refusal moved to `src/lib/server/operation-approval-source.ts`, the layer that already owns
+local-E2E authority alongside `local-e2e-bypass.ts`, `convex-source.ts`, and `rate-limit.ts`. The
+guardrail bans this call inside listed deployable domain graphs, not everywhere, so relocation
+honors its intent where deletion did not. Behavior was verified textually identical to the original.
+
+**The deleted behavior had no test.** That is why removing it looked safe — the suite was green
+because nothing described the behavior, not because the behavior was unnecessary. A test now pins
+both guards and fails on either the wrong return value or an unexpected Convex call.
+
+Non-blocking follow-up: `operation-approval-source.ts` takes its types from the `capability-execution`
+module that imports its functions back. The type edge is erased at runtime and `lib/server` depending
+on `modules/` for contracts is this repo's convention; only the back-edge to the same `*.functions.ts`
+is unusual. Carded as cleanup.
+
+## Measured: two failures that were not ours
+
+A full-suite run on the brokered-lane branch reported the faux-runtime guardrail failing and a
+market-terminal CLI test timing out at 30s. A differential against clean `main` settled both by
+measurement rather than argument: the guardrail failed identically on base with the same violation
+string, and base ran the full 4063-test unit suite with no timeout while the CLI test passed three
+of three isolated runs on the branch. Load flake, not regression.
+
+The guardrail red was self-inflicted card authoring — the validator was told to run all of
+`tests/imports` on a branch that did not fix the one test known to be red there.
