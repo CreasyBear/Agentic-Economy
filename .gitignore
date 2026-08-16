@@ -46,3 +46,6 @@ eval/parity/results.tsv
 
 # knowledge-graph dumps are generated, never tracked
 .planning/graphs/
+
+# local ae CLI session state
+/.ae-cli/
