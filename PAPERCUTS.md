@@ -1405,3 +1405,9 @@ workstreams, duplicate observations, and explicit remediation status.
 179. cursor-auto: Adding one required field to AnswerRequestInterpretationSchema meant hand-editing eight duplicated interpretation literals across tests, eval, and the OpenRouter contract-server helper before typecheck went green. A shared test builder (e.g. answerInterpretation({...})) would make preflight schema evolution a one-line change.
 
 180. cursor-auto: Remapping after product evolution: STATE.md, ARCHITECTURE.md, and wayfinder still describe gateway remediation and historical BAS framing while the live tree is dominated by Answer + operation market adapters; founders need a single CAPABILITY-MAP layering core vs proving-ground vs parked or they re-litigate what 'the product' is every session.
+
+181. opus-5: Ran the release source gate while still editing files, so a failure I caused mid-run looked like a baseline failure. The gate writes to a log but has no notion of a pinned tree; a --require-clean flag would make it refuse to start on a dirty worktree.
+
+182. opus-5: npm run test:ts-standards runs after test:release:unit in test:release:source:after-codegen, so three real TS violations sat undetected for the length of the x402 settlement work because an unrelated unit test was red first. Cheap static scans should run before slow suites.
+
+183. opus-5: The react-doctor pre-commit hook rewrote convex/_generated/server.d.ts after staging, so the codegen landed one commit behind the schema change that caused it. The hook should re-stage files it rewrites, or fail loudly.
