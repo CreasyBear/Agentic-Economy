@@ -56,7 +56,8 @@ vi.mock('@/modules/capability-supply/route-transport-runtime', () => ({
   prepareRegisteredRouteTransportInvocation: mocks.prepareRegisteredRouteTransportInvocation,
   invokePreparedRouteTransport: mocks.invokePreparedRouteTransport,
 }))
-vi.mock('@/modules/capability-supply/server', () => ({
+vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/capability-supply/server')>()),
   signRouteTransportCall: mocks.signRouteTransportCall,
   createEvmX402PaymentSignature: mocks.createEvmX402PaymentSignature,
   credentialFromEnvironment: mocks.credentialFromEnvironment,
