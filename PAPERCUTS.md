@@ -1411,3 +1411,5 @@ workstreams, duplicate observations, and explicit remediation status.
 182. opus-5: npm run test:ts-standards runs after test:release:unit in test:release:source:after-codegen, so three real TS violations sat undetected for the length of the x402 settlement work because an unrelated unit test was red first. Cheap static scans should run before slow suites.
 
 183. opus-5: The react-doctor pre-commit hook rewrote convex/_generated/server.d.ts after staging, so the codegen landed one commit behind the schema change that caused it. The hook should re-stage files it rewrites, or fail loudly.
+
+184. composer-2.5: Every git worktree starts without node_modules and the repo has no .cursor/worktrees.json, so each worktree-based task discovers this by hitting a failure and then hand-running npm ci (~18s). A worktrees.json with an npm ci setup command, or a documented symlink to the main checkout's node_modules, would remove the step.
