@@ -143,7 +143,7 @@ describe('Site discovery manifest', () => {
     })
     expect(operationInvoke).toMatchObject({
       method: 'POST',
-      path: '/api/v1/operations/execute',
+      path: '/api/v1/operations/call',
       authentication: 'clerk_api_key',
       requiredScope: 'market_operations:invoke',
       requiredHeaders: {

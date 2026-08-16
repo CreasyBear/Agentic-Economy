@@ -93,6 +93,7 @@ import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.serv
 import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
 import { Route as ApiV1OperationsExecuteRouteImport } from './routes/api.v1.operations.execute'
+import { Route as ApiV1OperationsCallRouteImport } from './routes/api.v1.operations.call'
 import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v1.operations.$invocationRef'
 import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1.market-operations.search'
 import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
@@ -572,6 +573,11 @@ const ApiV1OperationsExecuteRoute = ApiV1OperationsExecuteRouteImport.update({
   path: '/api/v1/operations/execute',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1OperationsCallRoute = ApiV1OperationsCallRouteImport.update({
+  id: '/api/v1/operations/call',
+  path: '/api/v1/operations/call',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1OperationsInvocationRefRoute =
   ApiV1OperationsInvocationRefRouteImport.update({
     id: '/api/v1/operations/$invocationRef',
@@ -944,6 +950,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
@@ -1073,6 +1080,7 @@ export interface FileRoutesByTo {
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
@@ -1204,6 +1212,7 @@ export interface FileRoutesById {
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
+  '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
@@ -1335,6 +1344,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/call'
     | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
@@ -1464,6 +1474,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/call'
     | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
@@ -1594,6 +1605,7 @@ export interface FileRouteTypes {
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
+    | '/api/v1/operations/call'
     | '/api/v1/operations/execute'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/schema'
@@ -1682,6 +1694,7 @@ export interface RootRouteChildren {
   ApiV1MarketOperationsInspectPlanRoute: typeof ApiV1MarketOperationsInspectPlanRoute
   ApiV1MarketOperationsSearchRoute: typeof ApiV1MarketOperationsSearchRoute
   ApiV1OperationsInvocationRefRoute: typeof ApiV1OperationsInvocationRefRouteWithChildren
+  ApiV1OperationsCallRoute: typeof ApiV1OperationsCallRoute
   ApiV1OperationsExecuteRoute: typeof ApiV1OperationsExecuteRoute
   ApiV1WorkTreeOperationRoute: typeof ApiV1WorkTreeOperationRoute
 }
@@ -2274,6 +2287,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/operations/execute'
       fullPath: '/api/v1/operations/execute'
       preLoaderRoute: typeof ApiV1OperationsExecuteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/operations/call': {
+      id: '/api/v1/operations/call'
+      path: '/api/v1/operations/call'
+      fullPath: '/api/v1/operations/call'
+      preLoaderRoute: typeof ApiV1OperationsCallRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/operations/$invocationRef': {
@@ -3081,6 +3101,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MarketOperationsSearchRoute: ApiV1MarketOperationsSearchRoute,
   ApiV1OperationsInvocationRefRoute:
     ApiV1OperationsInvocationRefRouteWithChildren,
+  ApiV1OperationsCallRoute: ApiV1OperationsCallRoute,
   ApiV1OperationsExecuteRoute: ApiV1OperationsExecuteRoute,
   ApiV1WorkTreeOperationRoute: ApiV1WorkTreeOperationRoute,
 }

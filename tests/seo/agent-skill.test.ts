@@ -40,7 +40,7 @@ describe('public agent skill', () => {
     ]) {
       expect(body).toContain(`POST https://ae.example${path}`)
     }
-    expect(body).toContain('POST https://ae.example/api/v1/operations/execute')
+    expect(body).toContain('POST https://ae.example/api/v1/operations/call')
     expect(body).toContain('GET https://ae.example/api/v1/operations/{invocationRef}')
     expect(body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/reconcile')
     expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))

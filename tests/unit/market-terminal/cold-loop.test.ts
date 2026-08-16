@@ -339,7 +339,7 @@ describe('external-agent Market Operation cold loop', () => {
       ) {
         return jsonResponse(unavailableRead)
       }
-      if (route === '/api/v1/operations/execute') {
+      if (route === '/api/v1/operations/call') {
         if (authorization !== 'Bearer ae-test-caller-key') {
           throw new Error('invoke must be authenticated')
         }
@@ -468,10 +468,10 @@ describe('external-agent Market Operation cold loop', () => {
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/detail' },
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/compare' },
       { method: 'POST', url: 'https://market.example/api/v1/market-operations/inspect-plan' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
       { method: 'GET', url: `https://market.example/api/v1/operations/${encodeURIComponent(invocationRef)}` },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
-      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/call' },
     ])
     expect(requests.map(({ authorization }) => authorization)).toEqual([
       null,

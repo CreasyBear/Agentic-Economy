@@ -317,7 +317,7 @@ describe('CLI operation recovery projections', () => {
         kind: 'UNAVAILABLE',
         code: 'provider_unavailable',
         retryable: true,
-        message: '/api/v1/operations/execute returned 503: Unavailable',
+        message: '/api/v1/operations/call returned 503: Unavailable',
       } satisfies Partial<CliFailure>)
   })
 

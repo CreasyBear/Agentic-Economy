@@ -20,8 +20,11 @@ export const OPERATION_INVOKE_ROUTE_CONTRACT = {
     actionId: 'operation.invoke',
     contractVersion: 'operation.invoke:v1',
     method: 'POST',
-    path: '/api/v1/operations/execute',
-    routerPath: '/api/v1/operations/execute',
+    path: '/api/v1/operations/call',
+    routerPath: '/api/v1/operations/call',
+    legacyPath: '/api/v1/operations/execute',
+    legacyRouterPath: '/api/v1/operations/execute',
+    servedPaths: ['/api/v1/operations/call', '/api/v1/operations/execute'] as const,
     requiredHeaders: ['Authorization', 'Content-Type'] as const,
   },
   status: {

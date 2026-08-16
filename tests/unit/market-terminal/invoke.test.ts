@@ -101,7 +101,7 @@ describe('market-terminal authenticated operation invocation', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(writeError).not.toHaveBeenCalled()
     const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/v1/operations/execute')
+    expect(url).toBe('https://market.example/api/v1/operations/call')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
     expect(init?.redirect).toBe('manual')
     expect(JSON.parse(String(init?.body))).toEqual({
