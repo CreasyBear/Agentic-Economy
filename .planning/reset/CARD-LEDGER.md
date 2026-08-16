@@ -30,6 +30,8 @@ Nothing deleted. Live money stays fail-closed. Each card runs executor → valid
 | P1-a-core | Pool buyer money on the Clerk owner (`owner:{ownerId}:{currency}`); keep per-key attribution on transactions, usage, budgets | P0 | validated |
 | P1-e-2 | Canonical `/api/v1/operations/call`; dual-serve `/execute` identically; no new action registered | P0 | validated |
 | HK-lockfile-drift | `npm ci` fails `EUSAGE` on `main`: `package.json` and `package-lock.json` are out of sync, so no clean install succeeds | — | pending |
+| HK-topup-derivation | `beginCreditTopupThroughSource` prefix-checks a caller-supplied `accountRef` and digests that value; derive it server-side from the principal's owner instead. Convex `reserveCreditTopup` still re-derives and refuses mismatches, so this is defence in depth, not a hole | P1-a-core | pending |
+| P1-a-sweep | Decide and implement what happens to any legacy `clerk_api_key:*` buyer balance. P1-a-core only refuses when one is found; moving money needs its own card and evidence | P1-a-core | pending |
 | P1-a-proj | `callVia` + `paymentLane` on operation detail projections | P1-a-core, P1-e-2 | pending |
 | P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b | recon |
 | P1-d | Idempotent daily settlement cron | P1-c | recon |

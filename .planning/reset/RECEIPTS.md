@@ -427,6 +427,46 @@ Only the component-dependent test is affected, which is why the other 84 integra
 The acceptance surface is `main`, and `main` is green, so this blocks neither card. It does mean a
 worktree gate run cannot certify anything component-dependent.
 
+## Both Phase 1 cards reviewed — pass, with findings acted on
+
+Both reviews returned no blockers. Neither approved on the strength of the test runs; each judged the
+diff directly.
+
+**P1-a-core.** Money conservation holds: the buyer debit and the supplier-plus-rake credit still come
+from the same floor-rounded split. Owner identity is derived from the registered `agentAccessPrincipals`
+row on every money path and a caller-supplied account ref that disagrees is refused, so no key can
+reach another owner's wallet — the highest-severity class of failure for this card, and it is closed.
+Per-key `principalId` and `credentialId` survive on transactions, usage events, and budget rows, so
+pooling did not cost per-key visibility. Idempotency keys and replay semantics are unchanged.
+
+**P1-e-2.** Both paths funnel into one untouched handler, the action inventory is unchanged, and
+`/execute` still serves identically with no redirect and no deprecation header. Authorization parity
+holds on both doors including the method guards.
+
+Two findings were promoted out of "non-blocking" and fixed before merge rather than filed.
+
+The first is money going missing. The re-key reads only `owner:*` wallets, so a pre-existing
+`clerk_api_key:*` row with a non-zero balance is never selected: the owner would see a fresh empty
+wallet and the funds would be stranded with no error raised anywhere. The card assumed zero balances;
+nothing enforced it. Both `authorizeInvocationCharge` and `reserveCreditTopup` now refuse when a legacy
+row with a non-zero balance exists. The guard only refuses — sweeping the money is a separate decision
+with its own card (`P1-a-sweep`), because moving funds needs its own evidence. `accountRefForOperator`
+survives as `legacyPerKeyAccountRef`, whose only remaining job is naming those rows for detection.
+
+The second is advertising a deprecation we have not decided. `listOperationRouteDescriptors` spread
+the whole contract entry into the public descriptor, so `legacyPath` and `servedPaths` reached the UCP
+handshake and `ae manifest --json` — telling every agent that `/execute` is legacy, ahead of the Phase 5
+card that owns notice and `Deprecation`/`Sunset` headers. Those fields are now kept out of the public
+descriptor, `servedPaths` is deleted as a third restatement of `path` plus `legacyPath`, and a binding
+test imports both route modules and pins their literals to the contract, since the existing dual-serve
+tests inject the service and never prove the doors are wired.
+
+Filed rather than fixed: `HK-topup-derivation` (an outer prefix check digests a caller-supplied
+account ref while the authoritative Convex path still re-derives and refuses mismatches, so it is
+defence in depth) and a noted overclaim in the `readKeyUsage` commit message, which describes a
+canonical-zero fallback that does not apply when the summary and the principal row are both absent —
+in that case no currency exponent exists and refusing is correct.
+
 ## `npm ci` is broken on `main` — pre-existing, unrelated to the reset
 
 Discovered while trying to give a worktree real dependencies. `npm ci` exits `EUSAGE` on `main`:
