@@ -18,7 +18,7 @@ describe('payment lane admission', () => {
     for (const environment of ['sandbox', 'development'] as const) {
       expect(paymentLaneAdmission({ rail: 'provider_direct_x402', environment })).toEqual({
         kind: 'admitted',
-        lane: 'brokered',
+        lane: 'provider_direct_x402',
       })
     }
   })

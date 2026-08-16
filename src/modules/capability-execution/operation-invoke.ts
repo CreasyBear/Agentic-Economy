@@ -55,6 +55,7 @@ export const operationInvokeRefusalCodeValues = [
   'provider_refused',
   'pre_release_failed',
   'outcome_unknown',
+  'payment_lane_not_brokered',
   'reconciliation_required',
   'invocation_not_found',
   'invocation_cancelled',

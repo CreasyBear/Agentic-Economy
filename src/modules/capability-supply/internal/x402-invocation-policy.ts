@@ -7,7 +7,7 @@ import type { RouteTransportObservation } from '../route-transport-runtime'
 export type EconomicRail = 'provider_direct_x402' | 'ae_internal'
 
 export type PaymentLaneAdmission =
-  | Readonly<{ kind: 'admitted'; lane: 'brokered' }>
+  | Readonly<{ kind: 'admitted'; lane: 'brokered' | 'provider_direct_x402' }>
   | Readonly<{
     kind: 'refused'
     lane: 'provider_direct_x402'
@@ -34,7 +34,7 @@ export function paymentLaneAdmission(
           lane: 'provider_direct_x402',
           code: 'payment_lane_not_brokered',
         }
-        : { kind: 'admitted', lane: 'brokered' }
+        : { kind: 'admitted', lane: 'provider_direct_x402' }
     default: {
       const _exhaustive: never = input.rail
       return _exhaustive
