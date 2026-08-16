@@ -1,8 +1,10 @@
 # Capability Map — what you actually built
 
 **Mapped:** 2026-08-16  
+**Bound to revision:** `baseline/pre-atomic-market-reset` (`main` @ `9d7aaef6`)  
 **Evidence class:** source + product-frontier manifest + founder category authority  
-**Companions:** `PROJECT.md`, `VISION-conceptual-map.md`, `product-frontier-baseline/`, existing `ARCHITECTURE.md` / `STRUCTURE.md`
+**Companions:** `PROJECT.md`, `VISION-conceptual-map.md`, `product-frontier-baseline/`, existing `ARCHITECTURE.md` / `STRUCTURE.md`  
+**Successor plan:** [`../reset/OPERATING-MODEL.md`](../reset/OPERATING-MODEL.md) — this map is the input; the reset acts on it. Layer 0 stays, Layer 3 orchestration is quarantined.
 
 Use this when the tree feels larger than the product. It separates **category core** from **adapters**, **proving ground**, and **parked/historical**.
 

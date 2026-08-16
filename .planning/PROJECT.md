@@ -32,7 +32,36 @@ behavior decide what exists now. This charter owns the destination; the former
 `PRODUCT.md` and `DESIGN.md` were removed on 2026-07-25 and are no longer
 authority.
 
-## Current program
+## Current program — Atomic Operation Market Reset
+
+The active program is the reset contracted in
+[`reset/OPERATING-MODEL.md`](reset/OPERATING-MODEL.md). It narrows AE to one market
+kernel with thin MCP/CLI/chat adapters and removes AE-owned workflow orchestration.
+
+```text
+Phase 0 — Preserve the current baseline                complete (tag baseline/pre-atomic-market-reset)
+Phase 1 — Close the category additively                open
+Phase 2 — Decouple without changing behavior           pending
+Phase 3 — Port proof before quarantine                 pending
+Phase 4 — Replace chat orchestration                   pending
+Phase 5 — Quarantine and deprecate                     pending
+Phase 6 — Retire data separately                       pending
+```
+
+**What AE owns after the reset:** operation identity and contract, authorization,
+exactly-once durable invocation, delivery evidence, and brokered money. Consuming agents
+own planning and orchestration. The core loop is
+`publish → admit → search/get/compare → execute-or-invoke → validate → receipt → settle`.
+
+**What leaves the core:** deterministic chat intent routing, Customer Request workflow
+handoff, WorkTree, and Study. These are quarantined — writes frozen, evidence preserved,
+no data dropped — not deleted.
+
+**V1 money is AE-brokered only.** The organization/account owns funds and aggregate
+budget; API keys receive narrower grants. x402 remains import/discovery metadata and is
+refused as a live payment lane.
+
+### Prior program (historical)
 
 ```text
 Phase 1 — Action Invocation foundation                 complete
@@ -40,10 +69,10 @@ Phase 2 — One action plane across human/agent hosts    accepted_narrowed
 Phase 3 — Paid-operation product conversion            complete in declared evidence classes
 Phase 4 — Business Account and routeable supply        source complete; hosted proof uncertified
 Phase 5 — Public Offering decision loop                source landed on main
-Phase 6 — Single-Key Capability Gateway                remediation open; seven workstreams focused-verified; settlement policy decided, source implementation open; hosted certification blocked
+Phase 6 — Single-Key Capability Gateway                converged into the reset baseline
 ```
 
-## Single-Key Capability Gateway — current workstream
+## Single-Key Capability Gateway — folded into the reset baseline
 
 **Status:** remediation campaign open; seven workstreams focused-verified; automatic daily supplier-settlement policy decided in ADR-034 but source implementation remains open; Node 22 post-codegen source gate green; production policy values, manifest, and hosted certification blocked  
 **ADR:** [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md)  
@@ -122,9 +151,17 @@ remain deferred.
 
 ## Current evidence
 
-The checked-out base is `6639c106f540f3cf08dc236f0ee6c053b3b60883`; later source is staged in the current index
-and concurrent owner work remains uncommitted in the working tree; neither is a
-revision-bound release. The 2026-08-11 source closeout record is historical
+The revision-bound baseline is `baseline/pre-atomic-market-reset` on `main`
+(`9d7aaef6`), pushed 2026-08-16 with a clean working tree. It carries the gateway
+convergence, the structured answer effect policy, and machine-readable CLI failure exits.
+Typecheck and lint pass at that revision; the outer production release gate still fails
+closed at deployment-manifest validation for missing operator-owned production
+configuration. Measured gate results are in
+[`reset/RECEIPTS.md`](reset/RECEIPTS.md).
+
+### Historical evidence
+
+The 2026-08-11 source closeout record is historical
 source/local evidence: it passed Node 22 typecheck, Convex codegen dry-run, lint,
 production build, the 45-file/312-test integration release suite, and the
 13-case/15-turn Answer evaluation, plus focused gateway, recovery, money,

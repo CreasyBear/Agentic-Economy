@@ -1,20 +1,51 @@
 ---
 gsd_state_version: 1.0
-milestone: protocol-kernel-product-conversion
-milestone_name: Protocol/kernel to product conversion
-status: remediation_open; product_frontier_cleanup_low_risk_landed; source_gate_partial; supplier_settlement_policy_decided; payout_source_implementation_open; hosted_certification_blocked
-stopped_at: 2026-08-15 Product-Frontier Cleanup Batches 0–3 landed (manifest, dead deps, shipping trim, evidence quarantine); Batches 4–6 recorded as prove/park/defer — WorkTree/Customer Request smokes env-blocked; no destructive schema retirement
-last_updated: "2026-08-15"
+milestone: atomic-operation-market-reset
+milestone_name: Atomic operation market reset
+status: phase_0_baseline_committed; stashes_retired; baseline_tagged_and_pushed; phase_1_open
+stopped_at: 2026-08-16 Phase 0 complete — 13 stashes archived as tags and cleared, 308 dirty paths sliced into 10 attributable commits, baseline tagged `baseline/pre-atomic-market-reset` and pushed
+last_updated: "2026-08-16"
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 0
-  percent: 17
-current_phase: 06
-current_phase_name: single-key-capability-gateway
+  completed_plans: 1
+  percent: 14
+current_phase: 01
+current_phase_name: close-the-category-additively
 
 # Current state
+
+## Atomic Operation Market Reset — 2026-08-16
+
+The program is now the reset described in
+[`reset/OPERATING-MODEL.md`](reset/OPERATING-MODEL.md), with cards in
+[`reset/CARD-LEDGER.md`](reset/CARD-LEDGER.md) and measured evidence in
+[`reset/RECEIPTS.md`](reset/RECEIPTS.md).
+
+Target: AE owns operation identity/contract, authorization, exactly-once durable
+invocation, delivery evidence, and brokered money. Consuming agents own planning and
+orchestration. MCP, CLI, and chat are thin adapters over one market kernel.
+
+**Phase 0 landed.** Working-tree archaeology is closed:
+
+- 13 stashes from the retired `gsd/plan-21.x` architecture triaged as abandon, archived
+  as `archive/stash-00..12` tags (recoverable), stash list cleared. Every path they touched
+  (`convex/ownerInbox*`, `src/lib/billing/`, `src/views/`, `src/routes/v1/`) is deleted in
+  the current tree.
+- 308 dirty paths sliced into 10 attributable commits by concern: gitignore, planning docs,
+  release config, market kernel, answer runtime, CLI, protocol surfaces, UI, unit tests,
+  boundary tests. No mega-commit.
+- Baseline tagged `baseline/pre-atomic-market-reset` and pushed with `main`
+  at `9d7aaef6`. Typecheck and lint green at that revision.
+
+**Open:** Phase 1 closes the category additively — organization-owned money, Delivery /
+Qualified Use receipts, disputes and reversals, idempotent settlement, canonical
+`/api/v1/operations/call`, standard supply publish actions. Nothing is deleted in Phase 1
+and live money stays fail-closed.
+
+## Historical state
+
 
 ## Product-Frontier Cleanup — 2026-08-15
 
