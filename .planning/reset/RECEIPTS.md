@@ -484,3 +484,32 @@ product failure. Its replacement, pinned to `9c2377`, passed typecheck, `git dif
 `tests/unit/money/owner-account-pooling.test.ts` (1 file / 9 tests). The independent reviewer found no
 blocking correctness, security, scope, or test issue and verified the absent-wallet distinction plus
 both guarded paths.
+
+
+## P1-c — committed
+
+The exact reversal, dispute, and supplier `recoveryDue` authority is integrated. Its atomic
+outcome is no-write for refused or conflicting terminal decisions, with terminal state remaining
+monotonic.
+
+Integration order: clean `main` at `ceb0b39216adb611647bb38b1bbc04e820abcd78`, then cherry-pick
+feature commit `e97b62a524771a0e838bf334ffd80792ac926999`, producing integrated `main` at
+`b3cecc5f753469634948aa9e18cb2755c22e5a2d`.
+
+Fresh Node 22 validation on integrated `main`:
+
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- `npm run check:convex-codegen`: PASS against the local self-hosted deployment.
+- Focused validation: 18 files / 268 tests PASS.
+
+Independent security review: PASS. The correctness review's only P1 blocker — required
+`recoveryDueUnits` on populated rows — was closed with a safe widen/migrate/narrow bridge: the field
+is optional, undefined legacy reads as zero, and a bounded idempotent backfill preserves present
+debt. Tests cover the bridge.
+
+No hosted migration was run. Later narrowing requires running every cursor page to `done: true` on
+every target deployment and verifying zero missing fields. Main was not pushed. Live money remains
+fail-closed. Final main porcelain was empty.
+
+This records the committed card only; it is not a full release-gate result or hosted acceptance.
