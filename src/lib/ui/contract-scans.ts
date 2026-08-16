@@ -435,6 +435,11 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
       violation.excerpt,
     );
   }
+  if (violation.file === "src/lib/mcp-protocol.ts") {
+    return /from\s+['"]@modelcontextprotocol\/sdk\/types\.js['"]/.test(
+      violation.excerpt,
+    );
+  }
   if (violation.file === "src/modules/money/internal/exact-amount.ts") {
     return /from\s+['"]@x402\/core\/utils['"]/.test(violation.excerpt);
   }

@@ -252,8 +252,38 @@ const GATEWAY_CODE_KIND: Readonly<Record<string, ProblemKind>> = {
 
 const PUBLIC_STABLE_CODE_PATTERN = /^[a-z][a-z0-9_:-]{0,95}$/u
 
+/** True when an untrusted value is a stable machine token safe to surface as `code`. */
+export function isStableProblemCode(value: unknown): value is string {
+  return typeof value === 'string' && PUBLIC_STABLE_CODE_PATTERN.test(value)
+}
+
 function publicGatewayCode(code: string | undefined, fallback: GatewayProblemCode): string {
   return code !== undefined && PUBLIC_STABLE_CODE_PATTERN.test(code) ? code : fallback
+}
+
+/**
+ * Project an untrusted remote problem body (another deployment, a proxy, or a
+ * hostile `--base-url`) onto the shared model. Only the stable `code`, the
+ * canonical `kind`, and retryability cross the boundary: remote `title` and
+ * `detail` are arbitrary backend prose and are never copied, for the same
+ * reason {@link gatewayFailureToProblem} does not copy provider text. Human
+ * text is rebuilt locally from the kind. `no_data` is an ok-outcome kind and
+ * is never accepted from a failure body.
+ */
+export function remoteProblemToProblem(input: {
+  status: number
+  body: Readonly<Record<string, unknown>>
+}): ProblemDetails {
+  const declaredKind = PROBLEM_KINDS.find(
+    (candidate) => candidate !== 'no_data' && candidate === input.body.kind,
+  )
+  const retryable = input.body.retryable
+  return buildProblem({
+    kind: declaredKind ?? kindForStatus(input.status),
+    code: isStableProblemCode(input.body.code) ? input.body.code : String(input.status),
+    status: input.status,
+    ...(typeof retryable === 'boolean' ? { retryable } : {}),
+  })
 }
 
 /**

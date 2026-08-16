@@ -56,7 +56,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
   { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
-  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
   { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
 ]
 
@@ -230,6 +230,7 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) validateProductionClerkCredentials(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
+  validateX402RpcUrls(environment, add)
 
   const convex = present(environment, 'CONVEX_URL')
   const viteConvex = present(environment, 'VITE_CONVEX_URL')
@@ -344,6 +345,30 @@ function validateProductionClerkCredentials(
     add('malformed', 'clerk_secret_key_invalid', ['CLERK_SECRET_KEY'], 'clerk')
   }
 }
+function validateX402RpcUrls(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  const value = present(environment, 'AE_X402_RPC_URLS_JSON')
+  if (value === undefined) return
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (
+      typeof parsed !== 'object'
+      || parsed === null
+      || Array.isArray(parsed)
+      || Object.keys(parsed).length === 0
+      || Object.keys(parsed).length > 32
+      || Object.entries(parsed).some(([network, url]) =>
+        !/^eip155:[1-9]\d*$/u.test(network)
+        || typeof url !== 'string'
+        || !validUrl(url, true)
+      )
+    ) throw new Error('invalid')
+  } catch {
+    add('malformed', 'x402_rpc_urls_invalid', ['AE_X402_RPC_URLS_JSON'], 'x402-payment')
+  }
+}
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
   const value = present(environment, rule.name)
   if (value === undefined || !isMalformed(rule, value, production)) return
@@ -387,6 +412,7 @@ function isSecretDeploymentName(name: string): boolean {
     || name === 'VITE_POSTHOG_KEY'
     || name === 'VITE_STRIPE_PUBLISHABLE_KEY'
   ) return false
+  if (name === 'AE_X402_RPC_URLS_JSON') return true
   return name === 'STRIPE_WEBHOOK_SECRET'
     || name.startsWith('AE_SOURCE_WRITE_KEY_')
     || name.startsWith('AE_SOURCE_WRITE_PREVIOUS_KEYS_')

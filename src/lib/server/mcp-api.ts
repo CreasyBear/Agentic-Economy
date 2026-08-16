@@ -12,7 +12,7 @@ import { getMethodLiteral, toJsonSchemaCompat } from '@modelcontextprotocol/sdk/
 import { ErrorCode, ListToolsRequestSchema, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
 import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
-import { ZodObject, z } from 'zod'
+import { z } from 'zod'
 
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
@@ -39,7 +39,6 @@ export type McpAccessTier = Readonly<{
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
-
 type SdkServerHandler = (
   request: unknown,
   extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
@@ -65,7 +64,6 @@ class ConciseMcpRequestError extends McpError {
     this.message = INVALID_MCP_REQUEST_PARAMETERS_MESSAGE
   }
 }
-
 class SafeMcpSdkServer extends Server {
   private readonly captureToolsListHandler: ((handler: SdkServerHandler) => void) | undefined
 
@@ -90,7 +88,6 @@ class SafeMcpSdkServer extends Server {
       }
       return await handler(parsed.data, extra)
     }
-
     if (method === 'tools/list') {
       this.captureToolsListHandler?.(safeHandler)
     }
@@ -147,11 +144,10 @@ function mcpToolError(failure: McpToolFailure): {
     }],
   }
 }
-
 /**
- * SDK 1.30's high-level list projection only emits object-shaped output
- * schemas. Project the canonical action schema through that same SDK converter
- * here so unions remain present without a second hand-maintained schema.
+ * The SDK's high-level tool registration only emits object-shaped output
+ * schemas. Project each canonical action schema explicitly so union outputs
+ * remain visible without a second schema owner.
  */
 function projectMcpToolsList(
   value: unknown,
@@ -291,6 +287,9 @@ export function createAeMcpServer(
   })
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer
+  // The SDK's high-level output validator only accepts object schemas. Canonical
+  // action results are often top-level unions, so validate once in the callback
+  // with the action schema and project the full canonical JSON schema in tools/list below.
 
   for (const action of admittedActions) {
     server.registerTool(
@@ -299,7 +298,6 @@ export function createAeMcpServer(
         title: action.name,
         description: `${action.summary}\n\nBoundaries:\n${action.boundaries.map((boundary) => `- ${boundary}`).join('\n')}`,
         inputSchema: action.schema,
-        ...(action.outputSchema instanceof ZodObject ? { outputSchema: action.outputSchema } : {}),
         annotations: {
           readOnlyHint: action.readOnly,
           destructiveHint: !action.readOnly,
@@ -342,13 +340,13 @@ export function createAeMcpServer(
       },
     )
   }
-
   const baseToolsListHandler = toolsListHandler
   if (baseToolsListHandler === undefined) throw new Error('MCP tools/list handler was not registered.')
   sdkServer.removeRequestHandler('tools/list')
   sdkServer.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
     return projectMcpToolsList(await baseToolsListHandler(request, extra), admittedActions)
   })
+
   return server
 }
 
