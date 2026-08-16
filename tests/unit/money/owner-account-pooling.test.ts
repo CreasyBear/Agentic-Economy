@@ -690,6 +690,30 @@ describe('legacy per-key balance guard', () => {
     })
   })
 
+  it('refuses authorizeInvocationCharge and reserveCreditTopup when a legacy per-key wallet has an unparseable balance', async () => {
+    const chargeDb = new ConvexMemoryDb()
+    seedConvexChargeFixture(chargeDb)
+    seedLegacyPerKeyAccount(chargeDb, 'not-canonical')
+    await expect(
+      authorizeCharge({ db: chargeDb, auth: convexAuth }, convexAuthorizationArgs()),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'billing_identity_mismatch',
+      retryable: false,
+    })
+
+    const topupDb = new ConvexMemoryDb()
+    seedConvexTopupPrincipal(topupDb)
+    seedLegacyPerKeyAccount(topupDb, 'not-canonical')
+    await expect(
+      reserveTopup({ db: topupDb, auth: convexAuth }, convexTopupArgs()),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'billing_identity_mismatch',
+      retryable: false,
+    })
+  })
+
   it('does not block authorizeInvocationCharge or reserveCreditTopup when the legacy per-key wallet has a zero balance', async () => {
     const chargeDb = new ConvexMemoryDb()
     seedConvexChargeFixture(chargeDb)

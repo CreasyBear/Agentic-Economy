@@ -3271,7 +3271,7 @@ async function refuseIfLegacyPerKeyBalanceStranded(
     legacyRow.balanceUnits,
     legacyRow.exponent,
   )
-  if (balance !== undefined && balance.units !== '0') {
+  if (balance === undefined || balance.units !== '0') {
     return {
       kind: 'refused' as const,
       code: 'billing_identity_mismatch' as const,
