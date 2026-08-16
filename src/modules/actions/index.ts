@@ -148,14 +148,12 @@ const operationRouteContracts = [
   OPERATION_INVOKE_ROUTE_CONTRACT.reconcile,
 ] as const
 
-type PublicOperationRouteDescriptorBase = Readonly<{
-  actionId: string
-  contractVersion: string
-  method: string
-  path: string
-  routerPath: string
-  requiredHeaders: readonly string[]
-}>
+type OperationRouteContractEntry = (typeof operationRouteContracts)[number]
+
+type PublicOperationRouteDescriptorBase = Pick<
+  OperationRouteContractEntry,
+  'actionId' | 'contractVersion' | 'method' | 'path' | 'routerPath' | 'requiredHeaders'
+>
 
 export type PublicOperationRouteDescriptor = PublicOperationRouteDescriptorBase & Readonly<{
   inputJsonSchema?: AgentToolDescriptor['inputJsonSchema']
