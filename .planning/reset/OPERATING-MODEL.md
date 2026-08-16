@@ -28,6 +28,35 @@ Core loop: `publish → admit → search/get/compare → execute-or-invoke → v
 | Committer | Stage only the card's allowed paths, one attributable commit, verify clean status | Amend foreign commits, force-push, reset --hard, commit secrets |
 | Evidence scribe | Update named planning/evidence files with measured receipts | Change product code or policy |
 
+## Model assignment
+
+Orchestration is the only role that carries judgment, so it is the only role that runs on the
+reasoning model. Everything downstream executes a written card and must not be reasoning about
+whether the card is right.
+
+| Role | Model |
+| --- | --- |
+| Orchestrator | Opus 5 |
+| Executor | Composer 2.5 |
+| Validator | Composer 2.5 |
+| Reviewer | Grok 4.6 high |
+| Committer | Composer 2.5, or the orchestrator directly for merges |
+| Evidence scribe | Orchestrator |
+
+Reconnaissance is read-only and carries no write authority, so it may run on any model.
+
+## Role separation is not optional
+
+An executor never runs its own acceptance gates and never lands its own work on the product
+branch. An executor that self-certifies has produced an unreviewed diff with a green label on it,
+which is worse than an unlabelled one. Concretely:
+
+- The executor changes files and commits **on its own branch in its own worktree**. That is how the
+  diff is preserved and the worktree stays clean. It is not the card's acceptance.
+- A separate validator runs the exact command list and reports measured pass/fail. It may not fix.
+- A separate reviewer reads the diff against the card's invariants. It may not rewrite.
+- Only after both are green does the work merge to the product branch.
+
 ## Hard rules
 
 1. One card = one concern. No "implement Phase 1".
@@ -36,7 +65,9 @@ Core loop: `publish → admit → search/get/compare → execute-or-invoke → v
 4. No destructive Git. Never reset --hard, force-push, amend foreign commits, or drop tables without a landed retention receipt.
 5. Validators are separate agents from the executor.
 6. Reviewers are separate agents for every product-code card.
-7. Parallel only with `depends_on: []` and non-overlapping paths; separate worktrees.
+7. Parallel only with `depends_on: []` and non-overlapping paths; separate worktrees. Before
+   dispatching a parallel wave, the orchestrator diffs the cards' `ALLOWED_PATHS` against each
+   other; any shared path means the cards serialize instead.
 8. Commit as you go. A card is incomplete until its commit exists.
 9. Clean tree is a hard gate between cards.
 

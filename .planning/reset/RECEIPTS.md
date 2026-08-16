@@ -217,3 +217,30 @@ gaps rather than missing persistence, so P1-g-1 is scoped to identity and cross-
 P1-g-2 (traffic instrumentation) split out and dispatched independently: it shares no files with
 the evidence work and unblocks the frozen-surface retirement decision, which needs measured data
 rather than a guess.
+
+## Orchestration correction — first Phase 1 dispatch wave withdrawn
+
+**Four executor cards cancelled mid-run. No product branch was touched.**
+
+The first wave diverged from the operating model in three ways, all of them the orchestrator's
+error rather than any worker's:
+
+1. **Executors self-certified.** Each card told one agent to make the change, run its own
+   acceptance gates, and write its own commit. That collapses executor, validator, and committer
+   into a single role and contradicts hard rules 5 and 6 and the pipeline diagram. The point of
+   separation is that a diff arrives for review without a green label already attached to it.
+2. **Two parallel cards claimed the same file.** `P1-e-1` and `P1-a-core` both listed
+   `convex/capabilityOperationInvocationWorker.ts` in `ALLOWED_PATHS`, which hard rule 7 forbids and
+   which would have collided on merge. The rule now carries an explicit pre-dispatch check.
+3. **Workers ran on the reasoning model.** Cards are meant to remove discretion, so executing one
+   does not need a model chosen for judgment. Model assignment per role is now pinned in the
+   operating model.
+
+Cancellation was clean. Two workers had already committed on their own isolated branches
+(`p1-e-1-brokered-only-lane`, `hk-faux-runtime-bypass`); two had produced nothing and their
+worktrees were removed. `main` never moved, the stash list stayed empty, and no orphaned worktree
+was left behind.
+
+The two surviving branches are not discarded — an executor commit on an isolated branch is exactly
+the artifact the pipeline expects at that stage. Both were rebased onto current `main` and entered
+the pipeline at the validator step, which is where they should have gone in the first place.
