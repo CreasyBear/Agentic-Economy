@@ -8,7 +8,7 @@ let client: PostHog | undefined
 
 function getPostHogServerClient(): PostHog | undefined {
   const config = readObservabilityServerConfig()
-  if (config.posthogKey === undefined) {
+  if (!config.enabled || config.posthogKey === undefined) {
     return undefined
   }
 
@@ -39,16 +39,32 @@ export function captureServerEvent(
   event: string,
   properties?: Record<string, string | number | boolean | null>,
 ): void {
-  const posthog = getPostHogServerClient()
-  if (posthog === undefined) {
-    return
+  try {
+    const posthog = getPostHogServerClient()
+    if (posthog === undefined) {
+      return
+    }
+    posthog.capture({
+      distinctId: String(sanitizeTelemetryValue(distinctId)),
+      event: String(sanitizeTelemetryValue(event)),
+      ...(properties === undefined ? {} : {
+        properties: sanitizeTelemetryValue(properties) as Record<string, string | number | boolean | null>,
+      }),
+    })
+  } catch {
+    // Diagnostics must never alter application behavior.
   }
-  posthog.capture({
-    distinctId: String(sanitizeTelemetryValue(distinctId)),
-    event: String(sanitizeTelemetryValue(event)),
-    ...(properties === undefined ? {} : {
-      properties: sanitizeTelemetryValue(properties) as Record<string, string | number | boolean | null>,
-    }),
+}
+
+export function captureLegacyRegistryApiRequest(
+  routeFamily: 'businesses' | 'services',
+  routeKind: 'list' | 'search' | 'detail',
+): void {
+  captureServerEvent('ae-legacy-registry-api', 'legacy_registry_api_request', {
+    route_family: routeFamily,
+    route_kind: routeKind,
+    $process_person_profile: false,
+    $geoip_disable: true,
   })
 }
 

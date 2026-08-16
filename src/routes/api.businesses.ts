@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { captureLegacyRegistryApiRequest } from '@/lib/observability/posthog.server'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
@@ -11,7 +12,10 @@ import type { Action, ActionResult } from '@/modules/common/action'
 export const Route = createFileRoute('/api/businesses')({
   server: {
     handlers: {
-      GET: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleDurableListBusinessesRequest(request)),
+      GET: ({ request }) => {
+        captureLegacyRegistryApiRequest('businesses', 'list')
+        return withHttpRateLimit(request, 'public-read', () => handleDurableListBusinessesRequest(request))
+      },
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),

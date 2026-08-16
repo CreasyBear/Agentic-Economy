@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const captureLegacyRegistryApiRequestMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/observability/posthog.server', () => ({
+  captureLegacyRegistryApiRequest: captureLegacyRegistryApiRequestMock,
+}))
+
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
 import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 
@@ -23,15 +29,26 @@ import type {
   RegistrySourceState,
 } from '@/modules/registry/public'
 import { readPublicTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
-import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
-import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { Route as BusinessesRoute, handleDurableListBusinessesRequest } from '@/routes/api.businesses'
 import {
+  Route as BusinessDetailRoute,
+  handleDurableBusinessDetailRequest,
+} from '@/routes/api.businesses.$slug'
+import {
+  Route as BusinessSearchRoute,
   handleDurableSearchBusinessesRequest,
   optionalHasPrice,
   optionalMaxPrice,
 } from '@/routes/api.businesses.search'
-import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
+import { Route as ServicesRoute, handleDurableListServicesRequest } from '@/routes/api.v1.services'
+import {
+  Route as ServiceDetailRoute,
+  handleDurableServiceDetailRequest,
+} from '@/routes/api.v1.services.$serviceId'
+import {
+  Route as ServiceSearchRoute,
+  handleDurableSearchServicesRequest,
+} from '@/routes/api.v1.services.search'
 
 const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
   (fixture) => fixture.inquiryAdmission === 'admitted',
@@ -315,12 +332,78 @@ describe('registry public API routes', () => {
       vi.stubEnv('CONVEX_URL', undefined)
       vi.stubEnv('VITE_CONVEX_URL', undefined)
       restoreLocalSource = installLocalE2eRegistrySourceForTests()
+      captureLegacyRegistryApiRequestMock.mockReset()
     })
 
     afterEach(() => {
       restoreLocalSource?.()
       restoreLocalSource = undefined
       vi.unstubAllEnvs()
+    })
+
+    it('captures each public legacy GET adapter once without changing its response', async () => {
+      const cases = [
+        {
+          route: BusinessesRoute,
+          input: { request: new Request('https://ae.example/api/businesses'), params: {} },
+          direct: () => handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')),
+          expected: ['businesses', 'list'],
+        },
+        {
+          route: BusinessSearchRoute,
+          input: { request: new Request('https://ae.example/api/businesses/search?q=plumber'), params: {} },
+          direct: () => handleDurableSearchBusinessesRequest(new Request('https://ae.example/api/businesses/search?q=plumber')),
+          expected: ['businesses', 'search'],
+        },
+        {
+          route: BusinessDetailRoute,
+          input: {
+            request: new Request('https://ae.example/api/businesses/plumbing-demo'),
+            params: { slug: 'plumbing-demo' },
+          },
+          direct: () => handleDurableBusinessDetailRequest(
+            'plumbing-demo',
+            new Request('https://ae.example/api/businesses/plumbing-demo'),
+          ),
+          expected: ['businesses', 'detail'],
+        },
+        {
+          route: ServicesRoute,
+          input: { request: new Request('https://ae.example/api/v1/services'), params: {} },
+          direct: () => handleDurableListServicesRequest(new Request('https://ae.example/api/v1/services')),
+          expected: ['services', 'list'],
+        },
+        {
+          route: ServiceSearchRoute,
+          input: { request: new Request('https://ae.example/api/v1/services/search?q=plumber'), params: {} },
+          direct: () => handleDurableSearchServicesRequest(new Request('https://ae.example/api/v1/services/search?q=plumber')),
+          expected: ['services', 'search'],
+        },
+        {
+          route: ServiceDetailRoute,
+          input: {
+            request: new Request('https://ae.example/api/v1/services/plumbing-demo'),
+            params: { serviceId: 'plumbing-demo' },
+          },
+          direct: () => handleDurableServiceDetailRequest(
+            'plumbing-demo',
+            new Request('https://ae.example/api/v1/services/plumbing-demo'),
+          ),
+          expected: ['services', 'detail'],
+        },
+      ] as const
+
+      for (const testCase of cases) {
+        captureLegacyRegistryApiRequestMock.mockClear()
+        const response = await getLegacyGetHandler(testCase.route)(testCase.input)
+        const directResponse = await testCase.direct()
+
+        expect(captureLegacyRegistryApiRequestMock).toHaveBeenCalledOnce()
+        expect(captureLegacyRegistryApiRequestMock).toHaveBeenCalledWith(...testCase.expected)
+        expect(response.status).toBe(directResponse.status)
+        expect(response.headers.get('Cache-Control')).toBe(directResponse.headers.get('Cache-Control'))
+        expect(await response.json()).toEqual(await directResponse.json())
+      }
     })
 
     it('lists eligible public business supply without private fields', async () => {
@@ -886,3 +969,31 @@ function correlationId(value: string) {
   return brandNonEmpty(`corr:registry-durable-test:${value}`, 'CorrelationId')
 }
 
+
+type LegacyGetHandler = (input: {
+  request: Request
+  params: Record<string, string>
+}) => Promise<Response>
+
+function getLegacyGetHandler(route: unknown): LegacyGetHandler {
+  if (typeof route !== 'object' || route === null || !('options' in route)) {
+    throw new Error('Legacy registry route is missing options.')
+  }
+  const options = route.options
+  if (typeof options !== 'object' || options === null || !('server' in options)) {
+    throw new Error('Legacy registry route is missing server handlers.')
+  }
+  const server = options.server
+  if (typeof server !== 'object' || server === null || !('handlers' in server)) {
+    throw new Error('Legacy registry route is missing server handlers.')
+  }
+  const handlers = server.handlers
+  if (typeof handlers !== 'object' || handlers === null) {
+    throw new Error('Legacy registry route is missing server handlers.')
+  }
+  const get = Reflect.get(handlers, 'GET')
+  if (typeof get !== 'function') {
+    throw new Error('Legacy registry route is missing its GET handler.')
+  }
+  return get as LegacyGetHandler
+}

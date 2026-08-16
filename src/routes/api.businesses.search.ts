@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { captureLegacyRegistryApiRequest } from '@/lib/observability/posthog.server'
 import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { registrySearchAction } from '@/modules/registry/registry.actions'
@@ -9,7 +10,10 @@ export { optionalHasPrice, optionalMaxPrice } from '@/lib/http/search-query'
 export const Route = createFileRoute('/api/businesses/search')({
   server: {
     handlers: {
-      GET: ({ request }) => withHttpRateLimit(request, 'public-read', () => handleDurableSearchBusinessesRequest(request)),
+      GET: ({ request }) => {
+        captureLegacyRegistryApiRequest('businesses', 'search')
+        return withHttpRateLimit(request, 'public-read', () => handleDurableSearchBusinessesRequest(request))
+      },
       POST: () => methodNotAllowed(['GET']),
       PUT: () => methodNotAllowed(['GET']),
       PATCH: () => methodNotAllowed(['GET']),
