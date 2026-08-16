@@ -14,6 +14,7 @@ import type {
   KeylessExecutableSourcePort,
   OperationExecuteDeps,
 } from '../../../src/modules/capability-execution/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '../../../src/modules/capability-execution/operation-invoke-entry'
 import {
   isPublicOperationRef,
   serializeOperationDescriptor,
@@ -112,6 +113,8 @@ async function seedOnlyPublicOperation(): Promise<PublicOperationDescriptor> {
   return {
     operationRef: SEED_ONLY_CAPABILITY_OPERATION_REF,
     operationId: `capability:${executable.capabilityId}`,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: 'brokered',
     contract: {
       capabilityId: executable.capabilityId,
       version: 1,

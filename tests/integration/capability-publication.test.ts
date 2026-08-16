@@ -18,6 +18,7 @@ import type {
   KeylessExecutableToolDescriptor,
 } from '@/modules/capability-execution'
 import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   isPublicOperationRef,
   parseHttpJsonTransportConfiguration,
@@ -707,6 +708,10 @@ describe('capability publication', () => {
     expect(operationDetail.kind).toBe('found')
     if (operationDetail.kind !== 'found')
       throw new Error(`operation_detail_unavailable:${operationDetail.kind}`)
+    expect(operationDetail.operation).toMatchObject({
+      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      paymentLane: 'brokered',
+    })
     expect(operationDetail.operation.commercial.priceEvidence).toEqual(
       expect.objectContaining({
         priceDigest: expect.any(String),

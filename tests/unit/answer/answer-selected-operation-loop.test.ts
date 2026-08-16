@@ -10,6 +10,7 @@ import {
 import { isPublicOperationRef, type PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import type * as AnswerThreadTooling from '@/modules/answer-thread/tooling'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
@@ -113,6 +114,8 @@ if (!isPublicOperationRef(selectedPublicOperationRef)) {
 const selectedPublicOperation = {
   operationRef: selectedPublicOperationRef,
   operationId: 'operation:test.live-value',
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: 'brokered',
   contract: {
     capabilityId: selectedDescriptor.capabilityId,
     version: 1,

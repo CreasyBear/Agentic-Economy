@@ -25,6 +25,7 @@ import {
 } from "./public";
 import { operationMarketNavigation } from "@/modules/registry/operation-entry";
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from "@/modules/capability-execution/operation-invoke-entry";
+import { paymentLaneAdmission } from "./internal/x402-invocation-policy";
 import type { X402CatalogPayment } from "./internal/transport-adapters";
 
 export {
@@ -212,6 +213,8 @@ export type PublicOperationNavigationRelation = Readonly<{
 export type PublicOperationDescriptor = Readonly<{
   operationRef: PublicOperationRef;
   operationId: string;
+  callVia: typeof OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path;
+  paymentLane: "brokered";
   contract: Readonly<{
     capabilityId: string;
     version: number;
@@ -525,6 +528,8 @@ export type InspectPlanResult =
 export type OperationSurfaceWireDescriptor = {
   operationRef: PublicOperationRef;
   operationId: string;
+  callVia: PublicOperationDescriptor["callVia"];
+  paymentLane: PublicOperationDescriptor["paymentLane"];
   contract: {
     capabilityId: string;
     version: number;
@@ -776,6 +781,16 @@ const SEARCH_STOP_WORDS = new Set([
   "result",
   "results",
 ]);
+const V1_PAYMENT_LANE_ADMISSION = paymentLaneAdmission({
+  rail: "ae_internal",
+  environment: "production",
+});
+if (
+  V1_PAYMENT_LANE_ADMISSION.kind !== "admitted" ||
+  V1_PAYMENT_LANE_ADMISSION.lane !== "brokered"
+)
+  throw new Error("v1_payment_lane_not_brokered");
+const V1_PAYMENT_LANE = V1_PAYMENT_LANE_ADMISSION.lane;
 const EXECUTE_NAVIGATION: PublicOperationNavigationRelation = {
   relation: "execute",
   method: "POST",
@@ -1125,6 +1140,8 @@ export function projectCapabilityOperation(
   return {
     operationRef,
     operationId: record.operationId,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: V1_PAYMENT_LANE,
     contract: {
       capabilityId: record.contract.ref.capabilityId,
       version: record.contract.ref.version,
@@ -1318,6 +1335,8 @@ export function serializeOperationDescriptor(
   return {
     operationRef: operation.operationRef,
     operationId: operation.operationId,
+    callVia: operation.callVia,
+    paymentLane: operation.paymentLane,
     contract: {
       capabilityId: operation.contract.capabilityId,
       version: operation.contract.version,
@@ -1487,6 +1506,8 @@ export function deserializeOperationDescriptor(
   return {
     operationRef: operation.operationRef,
     operationId: operation.operationId,
+    callVia: operation.callVia,
+    paymentLane: operation.paymentLane,
     contract: {
       capabilityId: operation.contract.capabilityId,
       version: operation.contract.version,

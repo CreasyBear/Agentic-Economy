@@ -9,6 +9,7 @@ import {
   inspectCapabilityOperationPlan,
   isAnonymousKeylessOperationEligible,
   operationDetailInputSchema,
+  operationDetailOutputSchema,
   operationSearchInputSchema,
   projectCapabilityOperation,
   serializeOperationCompareResult,
@@ -91,6 +92,8 @@ describe('public operation read contract', () => {
   it('shares canonical input schemas with registry actions', () => {
     expect(registryOperationsSearchAction.schema).toBe(operationSearchInputSchema)
     expect(registryOperationsDetailAction.schema).toBe(operationDetailInputSchema)
+    expect(registryOperationsDetailAction.outputSchema).toBe(operationDetailOutputSchema)
+    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['answerThread', 'mcp']))
   })
   it('emits only navigation entries backed by registered actions', async () => {
     const projected = [
@@ -119,6 +122,8 @@ describe('public operation read contract', () => {
 
   it('projects the current publication price digest without source material', () => {
     const operation = projectCapabilityOperation(operationRecord, 2_000)
+    expect(operation.callVia).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path)
+    expect(operation.paymentLane).toBe('brokered')
     expect(operation.commercial.priceEvidence).toEqual({ priceDigest: 'digest:publication-price', evidenceRefs: [] })
     expect(operation.transport).toMatchObject({
       responseStatus: 201,
@@ -197,7 +202,10 @@ describe('public operation read contract', () => {
       surfaces: ['answerThread', 'mcp'],
       precondition: 'free_keyless_read_only',
     })
-    expect(deserializeOperationDescriptor(serializeOperationDescriptor(free)).navigation).toEqual(free.navigation)
+    const roundTripped = deserializeOperationDescriptor(serializeOperationDescriptor(free))
+    expect(roundTripped.navigation).toEqual(free.navigation)
+    expect(roundTripped.callVia).toBe(free.callVia)
+    expect(roundTripped.paymentLane).toBe(free.paymentLane)
     expect(free.navigation.some(({ relation }) => relation === 'invoke')).toBe(false)
 
     const paid = projectCapabilityOperation(operationRecord, 2_000)
@@ -226,6 +234,9 @@ describe('public operation read contract', () => {
       provenance: { ...freeKeylessRecord.provenance, sourceKind: 'x402' },
       answerExecutable: true,
     }, 2_000)
+    expect(x402.authentication).toEqual({ kind: 'x402' })
+    expect(x402.provenance.sourceKind).toBe('x402')
+    expect(x402.paymentLane).toBe('brokered')
     expect(x402.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
     expect(x402.navigation.some(({ relation }) => relation === 'invoke')).toBe(true)
 

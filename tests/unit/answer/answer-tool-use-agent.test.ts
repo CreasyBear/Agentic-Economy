@@ -24,6 +24,7 @@ import {
 } from "@/modules/answer/answer-schema";
 import type { JsonValue } from "@/modules/capability-contract/public";
 import type { PublicOperationDescriptor } from "@/modules/capability-supply/public";
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from "@/modules/capability-execution/operation-invoke-entry";
 import type { AnswerSource } from "@/modules/answer/answer-synthesizer";
 import type {
   AnswerToolCallRecord,
@@ -310,6 +311,8 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
     const publicOperation: PublicOperationDescriptor = {
       operationRef: operationRef as PublicOperationDescriptor["operationRef"],
       operationId: descriptor.capabilityId,
+      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      paymentLane: "brokered",
       contract: {
         capabilityId: descriptor.capabilityId,
         version: 1,
@@ -524,6 +527,8 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
     const publicOperation: PublicOperationDescriptor = {
       operationRef: operationRef as PublicOperationDescriptor["operationRef"],
       operationId: descriptor.capabilityId,
+      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      paymentLane: "brokered",
       contract: {
         capabilityId: descriptor.capabilityId,
         version: 1,

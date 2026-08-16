@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AnswerEvent } from '@/modules/answer/public'
 import type { KeylessExecutableSourcePort, KeylessExecutableToolDescriptor } from '@/modules/capability-execution'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { answerTurnRequestDigest, streamAnswerTurn } from '@/modules/answer-thread/server'
 import { reserveAnswerTurn } from '@/modules/answer-thread/answer-thread.functions'
 import {
@@ -50,6 +51,8 @@ function publicOperationFor(
   return {
     operationRef,
     operationId: `operation:${descriptor.capabilityId}`,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: 'brokered',
     contract: {
       capabilityId: descriptor.capabilityId,
       version: 1,

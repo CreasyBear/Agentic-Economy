@@ -7,6 +7,7 @@ import {
   sanitizeAnswerOperationOutcome,
 } from '@/modules/answer/internal/operation-result-presentation'
 import { isPublicOperationRef, type PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   answerOperationDescriptorMaterialDigest,
   buildOperationArtifactsFromToolCalls,
@@ -20,6 +21,8 @@ if (!isPublicOperationRef(operationRefText)) throw new Error('fixture_operation_
 const descriptor = {
   operationRef: operationRefText,
   operationId: 'fixture.result',
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: 'brokered',
   contract: {
     capabilityId: 'fixture.result',
     version: 3,

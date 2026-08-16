@@ -7,6 +7,7 @@ import {
   operationInspectPlanOutputSchema,
   operationSearchOutputSchema,
 } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { isRecord } from '@/modules/common/is-record'
 import {
@@ -240,6 +241,24 @@ describe('discovery route parity', () => {
     expect(listBody.page.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
     expect(registryDetailAction.outputSchema.safeParse(detailBody).success).toBe(true)
     const restoreMarketOperationSource = installMarketOperationSource()
+    const operationDetailResponse = await routeHandler(MarketOperationDetailRoute, 'POST')({
+      request: new Request(`${origin}${OPERATION_MARKET_DETAIL_PATH}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operationRef: MARKET_OPERATION_DETAIL_REF }),
+      }),
+      params: {},
+    })
+    expect(operationDetailResponse.status).toBe(200)
+    const operationDetailBody: unknown = await operationDetailResponse.json()
+    expect(operationDetailOutputSchema.safeParse(operationDetailBody).success).toBe(true)
+    expect(operationDetailBody).toMatchObject({
+      kind: 'found',
+      operation: {
+        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+        paymentLane: 'brokered',
+      },
+    })
     try {
       for (const route of apiRoutes) {
         expect(await resolveAdvertisedRoute(route, state), `${route.method} ${route.url}`).toBe(true)
@@ -292,6 +311,44 @@ type MarketOperationRouteCase = Readonly<{
   outputSchema: OutputSchema
 }>
 
+const MARKET_OPERATION_DETAIL_REF = `operation:v1:${'f'.repeat(64)}`
+const MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR = {
+  operationRef: MARKET_OPERATION_DETAIL_REF,
+  operationId: 'reference-operation',
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: 'brokered',
+  contract: {
+    capabilityId: 'reference.lookup',
+    version: 1,
+    inputJsonSchema: '{"type":"object","properties":{},"required":[],"additionalProperties":false}',
+    outputJsonSchema: '{"type":"object","properties":{},"required":[],"additionalProperties":false}',
+    customerAnnotations: [],
+  },
+  business: { businessId: 'business:reference', slug: 'reference-business', name: 'Reference Business' },
+  offering: {
+    offeringRef: 'offering:reference',
+    revision: 1,
+    label: 'Reference lookup',
+    summary: 'Reference lookup operation.',
+  },
+  summary: 'Reference lookup operation.',
+  commercial: {
+    price: { kind: 'on_request' },
+    materialTerms: [],
+    relationship: { kind: 'none', summary: 'No commercial relationship.' },
+  },
+  dataUse: [],
+  effects: [],
+  evidence: [],
+  cancellation: { kind: 'unsupported' },
+  recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+  authentication: { kind: 'keyless' },
+  transport: { method: 'POST', requestTimeoutMs: 1_000 },
+  provenance: { publisher: 'ae_curated_external', sourceKind: 'ae_envelope' },
+  availability: { posture: 'integrated' },
+  navigation: [],
+} as const
+
 const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
   {
     path: OPERATION_MARKET_SEARCH_PATH,
@@ -302,7 +359,7 @@ const MARKET_OPERATION_ROUTE_CASES: readonly MarketOperationRouteCase[] = [
   {
     path: OPERATION_MARKET_DETAIL_PATH,
     route: MarketOperationDetailRoute,
-    input: { operationRef: `operation:v1:${'f'.repeat(64)}` },
+    input: { operationRef: MARKET_OPERATION_DETAIL_REF },
     outputSchema: operationDetailOutputSchema,
   },
   {
@@ -450,10 +507,9 @@ function installMarketOperationSource(): () => void {
           return Response.json({
             status: 'success',
             value: {
-              kind: 'not_found',
+              kind: 'found',
               schemaVersion: 'registry-operations:v1',
-              operationRef: `operation:v1:${'f'.repeat(64)}`,
-              navigation: [],
+              operation: MARKET_OPERATION_DETAIL_WIRE_DESCRIPTOR,
             },
           })
         case 'capabilitySupplyOperations:compare':

@@ -10,12 +10,15 @@ import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import { runImportCommand } from '../../../tools/ae/commands/import'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 
 type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
 
 function operationDescriptor(operationRef: string, summary = 'Current reference lookup'): OperationDescriptorFixture {
   return {
     operationRef,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: 'brokered',
     operationId: 'reference.lookup',
     contract: {
       capabilityId: 'reference.lookup',
@@ -241,8 +244,21 @@ describe('external-agent Market Operation cold loop', () => {
       operationDetailResult(operationDescriptor(operationRef, 'Extract invoices')),
     ), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
 
-    await runInspectCommand([operationRef], options)
+    try {
+      await runInspectCommand([operationRef], options)
+    } finally {
+      output.restore()
+    }
+
+    expect(JSON.parse(output.read())).toMatchObject({
+      kind: 'found',
+      operation: {
+        callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+        paymentLane: 'brokered',
+      },
+    })
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('https://market.example/api/v1/market-operations/detail')

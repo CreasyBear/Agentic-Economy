@@ -1,5 +1,6 @@
 import { internalQueryGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 
 import {
   verifyCustomerRequestServiceAssertion,
@@ -178,6 +179,8 @@ const publicInputExample = v.object({
 })
 const publicDescriptor = v.object({
   operationRef: v.string(),
+  callVia: v.literal(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path),
+  paymentLane: v.literal('brokered'),
   operationId: v.string(),
   contract: v.object({
     capabilityId: v.string(),

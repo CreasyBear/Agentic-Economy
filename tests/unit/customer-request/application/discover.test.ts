@@ -15,6 +15,7 @@ import {
 import { requestRegistrySnapshotDigest, type RegisteredEvaluationBinding } from '@/modules/customer-request/evaluation'
 import { bindCustomerCapabilityDescriptor, type ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 import type { OperationSearchResult, PublicOperationDescriptor, PublicOperationRef } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import { createTestOperationLineage } from '../../../helpers/customer-request-lineage'
 import { capabilityContractV2 } from '../../../fixtures/capability-contract-v2'
@@ -235,6 +236,8 @@ function operationDescriptorFor(graph: RequestGraph, operationRef: PublicOperati
   return {
     operationRef,
     operationId: `operation:${source.name}`,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: 'brokered',
     contract: {
       capabilityId: source.name,
       version: 1,

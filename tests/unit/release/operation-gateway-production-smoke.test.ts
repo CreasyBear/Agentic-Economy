@@ -23,6 +23,7 @@ import {
   type PublicOperationDescriptor,
   type PublicOperationRef,
 } from "../../../src/modules/capability-supply/public";
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from "../../../src/modules/capability-execution/operation-invoke-entry";
 
 const clerkBackendMock = vi.hoisted(() => ({
   createClerkClient: vi.fn(),
@@ -44,6 +45,8 @@ const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 const operation = {
   operationRef,
   operationId: "operation:provider:paid",
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: "brokered",
   contract: {
     capabilityId: "provider.paid",
     version: 1,

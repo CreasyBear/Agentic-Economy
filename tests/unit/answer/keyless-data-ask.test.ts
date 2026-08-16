@@ -11,6 +11,7 @@ import {
   type PublicOperationDescriptor,
   type PublicOperationRef,
 } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import {
   ANSWER_OPERATION_INPUT_MAX_BYTES,
@@ -72,6 +73,8 @@ function publicOperationFor(
   return {
     operationRef,
     operationId: `operation:${descriptor.capabilityId}`,
+    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    paymentLane: 'brokered',
     contract: {
       capabilityId: descriptor.capabilityId,
       version: 1,

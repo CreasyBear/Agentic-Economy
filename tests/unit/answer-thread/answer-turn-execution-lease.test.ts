@@ -9,6 +9,7 @@ import type {
 import type * as AnswerThreadTooling from '@/modules/answer-thread/tooling'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
@@ -89,6 +90,8 @@ describe('answer turn execution lease durability', () => {
     const publicOperation = {
       operationRef,
       operationId: descriptor.capabilityId,
+      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      paymentLane: 'brokered',
       contract: {
         capabilityId: descriptor.capabilityId,
         version: 1,

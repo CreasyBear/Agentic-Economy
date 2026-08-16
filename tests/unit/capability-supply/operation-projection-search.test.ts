@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  compareCapabilityOperations,
   deserializeOperationDescriptor,
+  detailCapabilityOperation,
   operationDetailOutputSchema,
   projectCapabilityOperation,
   rankOperationSearchText,
@@ -9,6 +11,7 @@ import {
   serializeOperationDescriptor,
   type CapabilityOperationSourceRecord,
 } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 const sourceRecord = (operationId: string, summary: string, searchTerms: readonly string[], inputExamples?: CapabilityOperationSourceRecord['contract']['inputExamples']): CapabilityOperationSourceRecord => ({
   operationId,
   publicationRef: `publication:${operationId}`,
@@ -196,6 +199,13 @@ describe('capability operation search ranking', () => {
     })
 
     const wire = serializeOperationDescriptor(operation)
+    expect(operation.callVia).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path)
+    expect(operation.paymentLane).toBe('brokered')
+    expect(wire.callVia).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path)
+    expect(wire.paymentLane).toBe('brokered')
+    const deserialized = deserializeOperationDescriptor(wire)
+    expect(deserialized.callVia).toBe(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path)
+    expect(deserialized.paymentLane).toBe('brokered')
     expect(wire.authentication).toEqual(operation.authentication)
     expect(wire.transport).toEqual(operation.transport)
     expect(wire.commercial.priceEvidence).toEqual(operation.commercial.priceEvidence)
@@ -217,6 +227,14 @@ describe('capability operation search ranking', () => {
 
     const result = { kind: 'found' as const, schemaVersion: 'registry-operations:v1' as const, operation }
     expect(operationDetailOutputSchema.safeParse(result).success).toBe(true)
+    expect(operationDetailOutputSchema.safeParse({
+      ...result,
+      operation: { ...operation, callVia: '/api/v1/operations/execute' },
+    }).success).toBe(false)
+    expect(operationDetailOutputSchema.safeParse({
+      ...result,
+      operation: { ...operation, paymentLane: 'provider_direct_x402' },
+    }).success).toBe(false)
 
     const wire = serializeOperationDescriptor(operation)
     expect(wire.contract.inputExamples).toEqual(examples)
@@ -243,6 +261,39 @@ describe('capability operation search ranking', () => {
     const withoutExamplesWire = serializeOperationDescriptor(withoutExamples)
     expect(withoutExamplesWire.contract).not.toHaveProperty('inputExamples')
     expect(deserializeOperationDescriptor(withoutExamplesWire).contract).not.toHaveProperty('inputExamples')
+  })
+  it('keeps canonical call metadata coherent across search, detail, and compare', async () => {
+    const record = sourceRecord('capability:bitcoin.coherent', 'Bitcoin price', ['bitcoin', 'price'])
+    const projected = projectCapabilityOperation(record, 2_000)
+    const port = {
+      listCurrent: async () => ({ operations: [record], snapshotKey: 'snapshot:coherence' }),
+      loadCurrent: async (operationRef: string) => operationRef === projected.operationRef ? record : null,
+    }
+
+    const search = await searchCapabilityOperations(port, { query: 'bitcoin price' }, 2_000)
+    expect(search.kind).toBe('ok')
+    if (search.kind !== 'ok') return
+    const detail = await detailCapabilityOperation(port, { operationRef: projected.operationRef }, 2_000)
+    expect(detail.kind).toBe('found')
+    if (detail.kind !== 'found') return
+    const compare = await compareCapabilityOperations(port, { operationRefs: [projected.operationRef] }, 2_000)
+    expect(compare.kind).toBe('ok')
+    if (compare.kind !== 'ok') return
+
+    expect([
+      search.items[0]?.callVia,
+      detail.operation.callVia,
+      compare.operations[0]?.callVia,
+    ]).toEqual([
+      OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    ])
+    expect([
+      search.items[0]?.paymentLane,
+      detail.operation.paymentLane,
+      compare.operations[0]?.paymentLane,
+    ]).toEqual(['brokered', 'brokered', 'brokered'])
   })
   it('keeps contract input names when transport mappings rename query fields', () => {
     const record = sourceRecord('capability:frankfurter.single-rate', 'Frankfurter rate', ['fx', 'rate'])

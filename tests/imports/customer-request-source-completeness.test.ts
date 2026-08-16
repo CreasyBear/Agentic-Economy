@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
+import { isRecord } from '@/modules/common/is-record'
 import { describeActionForAgent } from '@/modules/common/action'
 import { findAction, listMcpActionDescriptors } from '@/modules/actions'
 import { findFiles } from '@/lib/ui/contract-scans'
@@ -30,6 +31,28 @@ const productionAuthority = {
   optionsHttp: 'src/lib/server/customer-options-api.ts',
   humanUi: 'src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx',
 } as const
+
+function containsRequiredJsonSchemaProperties(
+  value: unknown,
+  requiredNames: readonly string[],
+): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => containsRequiredJsonSchemaProperties(item, requiredNames))
+  }
+  if (!isRecord(value)) return false
+
+  const required = value.required
+  const properties = value.properties
+  if (
+    Array.isArray(required)
+    && isRecord(properties)
+    && requiredNames.every((name) => required.includes(name) && Object.prototype.hasOwnProperty.call(properties, name))
+  ) {
+    return true
+  }
+
+  return Object.values(value).some((child) => containsRequiredJsonSchemaProperties(child, requiredNames))
+}
 
 describe('CustomerRequest source completeness', () => {
   it('keeps every essential product responsibility in canonical production TypeScript', () => {
@@ -284,20 +307,30 @@ describe('CustomerRequest source completeness', () => {
       const action = findAction(entry.actionId)
       expect(action, `Market action ${entry.actionId} is not registered`).toBeDefined()
       if (action === undefined) continue
+      const agentDescriptor = describeActionForAgent(action)
 
       expect(entry.inputSchema, `Market action ${entry.actionId} schema drifted from its action`).toEqual(
-        describeActionForAgent(action).inputJsonSchema,
+        agentDescriptor.inputJsonSchema,
       )
       expect(entry.surfaces, `Market action ${entry.actionId} surfaces drifted from its action`).toEqual(action.surfaces)
 
       const descriptor = mcpDescriptors.find((candidate) => candidate.id === entry.actionId)
       expect(descriptor, `Market action ${entry.actionId} is not an MCP descriptor`).toBeDefined()
+      expect(descriptor?.outputJsonSchema, `MCP descriptor ${entry.actionId} output schema drifted from its action`).toEqual(
+        agentDescriptor.outputJsonSchema,
+      )
       expect(entry.inputSchema, `Market action ${entry.actionId} missing public input schema`).toMatchObject({
         type: 'object',
       })
       expect(descriptor?.inputJsonSchema, `MCP descriptor ${entry.actionId} missing input schema`).toMatchObject({
         type: 'object',
       })
+      if (entry.actionId === 'registry.operations.detail') {
+        expect(
+          containsRequiredJsonSchemaProperties(agentDescriptor.outputJsonSchema, ['callVia', 'paymentLane']),
+          'registry.operations.detail output schema must require callVia and paymentLane',
+        ).toBe(true)
+      }
     }
 
     for (const marker of [
