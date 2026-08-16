@@ -15,6 +15,7 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
+import { recordQualifiedUsePayoutAllocation } from './moneyLedger'
 import type { Id } from './_generated/dataModel'
 
 const identifier = v.string()
@@ -171,13 +172,52 @@ export const recordQualifiedUse = internalMutation({
       return { kind: 'excluded' as const, reason: eligibility.reason }
     const candidate = buildQualifiedUseReceipt(args)
     const existing = await readReceiptByRef(ctx, candidate.qualifiedUseRef)
+    if (
+      existing !== undefined &&
+      (existing.usageRef !== candidate.usageRef ||
+        existing.transactionRef !== candidate.transactionRef)
+    )
+      return {
+        kind: 'refused' as const,
+        code: 'qualified_use_identity_conflict' as const,
+      }
     const decision = decideQualifiedUseWrite({ existing, candidate })
     switch (decision.kind) {
       case 'refused':
         return { kind: 'refused' as const, code: decision.code }
       case 'replay':
+        if (
+          decision.receipt.usageRef !== undefined &&
+          decision.receipt.transactionRef !== undefined
+        ) {
+          const allocationResult = await recordQualifiedUsePayoutAllocation(
+            ctx,
+            decision.receipt,
+            args.principalId,
+          )
+          if (allocationResult === 'excluded_refunded_before_delivery')
+            return {
+              kind: 'excluded' as const,
+              reason: 'refunded_before_delivery' as const,
+            }
+        }
         return { kind: 'replayed' as const, receipt: toWire(decision.receipt) }
       case 'write': {
+        if (
+          decision.receipt.usageRef !== undefined &&
+          decision.receipt.transactionRef !== undefined
+        ) {
+          const allocationResult = await recordQualifiedUsePayoutAllocation(
+            ctx,
+            decision.receipt,
+            args.principalId,
+          )
+          if (allocationResult === 'excluded_refunded_before_delivery')
+            return {
+              kind: 'excluded' as const,
+              reason: 'refunded_before_delivery' as const,
+            }
+        }
         await ctx.db.insert('qualifiedUseReceipts', toWire(decision.receipt))
         return { kind: 'recorded' as const, receipt: toWire(decision.receipt) }
       }

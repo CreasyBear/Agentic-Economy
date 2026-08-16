@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+
 vi.mock('../../../convex/sourceWriteAdmission', () => ({
   sourceWriteArgs: {},
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
@@ -25,6 +27,7 @@ import {
   markPayoutTransferOutcomeUnknown,
   recordConnectAccountEvent,
 } from '../../../convex/moneyLedger'
+import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
 type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
@@ -179,6 +182,43 @@ const amount = { currency: 'USD', units: '5000', exponent: 2 }
 const identity = {
   getUserIdentity: async () => ({ tokenIdentifier: 'principal:test' }),
 }
+const dailyPayoutPeriodStart = '2026-07-01T00:00:00.000Z'
+const dailyPayoutPeriodEnd = '2026-07-02T00:00:00.000Z'
+const normalTransferObservedAt = Date.parse(dailyPayoutPeriodEnd) + 1
+const normalProviderRecoveryDeadlineAt =
+  normalTransferObservedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS
+const normalProviderEvidenceObservedAt = normalTransferObservedAt + 1
+const dailyPayoutRef = canonicalDigest({
+  format: 'money-daily-payout:v1',
+  businessId: 'business-1',
+  currency: 'USD',
+  periodStart: dailyPayoutPeriodStart,
+  periodEnd: dailyPayoutPeriodEnd,
+} as const)
+const dailyPayoutQualifiedUseRef = 'qualified-use:payout-1'
+const dailyPayoutMaterialDigest = 'sha256:payout-material'
+const dailyPayoutAllocationRef = canonicalDigest({
+  format: 'money-qualified-use-allocation:v1',
+  qualifiedUseRef: dailyPayoutQualifiedUseRef,
+  materialDigest: dailyPayoutMaterialDigest,
+} as const)
+const secondDailyPayoutPeriodStart = '2026-08-01T00:00:00.000Z'
+const secondDailyPayoutPeriodEnd = '2026-08-02T00:00:00.000Z'
+const secondPayoutTransferObservedAt = Date.parse(secondDailyPayoutPeriodEnd) + 1
+const secondDailyPayoutRef = canonicalDigest({
+  format: 'money-daily-payout:v1',
+  businessId: 'business-1',
+  currency: 'USD',
+  periodStart: secondDailyPayoutPeriodStart,
+  periodEnd: secondDailyPayoutPeriodEnd,
+} as const)
+const secondDailyPayoutQualifiedUseRef = 'qualified-use:payout-2'
+const secondDailyPayoutMaterialDigest = 'sha256:payout-material-2'
+const secondDailyPayoutAllocationRef = canonicalDigest({
+  format: 'money-qualified-use-allocation:v1',
+  qualifiedUseRef: secondDailyPayoutQualifiedUseRef,
+  materialDigest: secondDailyPayoutMaterialDigest,
+} as const)
 
 function seedPayout(
   db: MemoryDb,
@@ -217,7 +257,7 @@ function seedPayout(
   })
   db.seed('moneyPayouts', {
     _id: 'moneyPayouts:1',
-    payoutRef: 'payout-1',
+    payoutRef: dailyPayoutRef,
     businessId: 'business-1',
     currency: 'USD',
     exponent: 2,
@@ -225,12 +265,32 @@ function seedPayout(
     rakeUnits: '500',
     providerNetUnits: '5000',
     minimumPayoutUnits: '1000',
+    cadence: 'daily',
     state,
-    periodStart: '2026-07-01',
-    periodEnd: '2026-07-31',
+    periodStart: dailyPayoutPeriodStart,
+    periodEnd: dailyPayoutPeriodEnd,
+    providerAccountRef: 'provider:business-1:USD',
     idempotencyKey: 'payout-old',
     createdAt: 1,
     updatedAt: 1,
+  })
+  db.seed('moneyPayoutAllocations', {
+    _id: 'moneyPayoutAllocations:1',
+    allocationRef: dailyPayoutAllocationRef,
+    payoutRef: dailyPayoutRef,
+    qualifiedUseRef: dailyPayoutQualifiedUseRef,
+    transactionRef: 'transaction:payout-1',
+    usageRef: 'usage:payout-1',
+    businessId: 'business-1',
+    currency: 'USD',
+    exponent: 2,
+    grossAccrualUnits: '5500',
+    rakeUnits: '500',
+    providerNetUnits: '5000',
+    qualifiedAt: Date.parse(dailyPayoutPeriodStart) + 1,
+    sourceDigest: 'sha256:payout-source',
+    materialDigest: dailyPayoutMaterialDigest,
+    createdAt: 1,
   })
 }
 
@@ -241,13 +301,13 @@ function commandArgs(): Record<string, unknown> {
     amount,
     providerAccountRef: 'provider:business-1:USD',
     destinationAccountId: 'acct_1',
-    payoutRef: 'payout-1',
+    payoutRef: dailyPayoutRef,
     commandId: 'command-1',
     inputDigest: 'sha256:input-1',
     requestDigest: 'sha256:request-1',
     idempotencyKey: 'payout-idempotency-1',
-    providerRecoveryDeadlineAt: 82_800_010,
-    observedAt: 10,
+    providerRecoveryDeadlineAt: normalProviderRecoveryDeadlineAt,
+    observedAt: normalTransferObservedAt,
     ...sourceArgs,
   }
 }
@@ -264,7 +324,7 @@ function evidence(
     status,
     requestDigest: 'sha256:request-1',
     evidenceDigest: digest,
-    observedAt: 11,
+    observedAt: normalProviderEvidenceObservedAt,
   }
 }
 
@@ -299,6 +359,71 @@ describe('Convex payout persistence', () => {
     ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'paid' } })
     expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('0')
     expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+  })
+  it('refuses a transfer before the daily period closes without changing payout state or ledger', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const observedAt = Date.parse(dailyPayoutPeriodEnd) - 1
+    const args = {
+      ...commandArgs(),
+      observedAt,
+      providerRecoveryDeadlineAt:
+        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+    }
+    const beforePayouts = structuredClone(db.rows('moneyPayouts'))
+    const beforeLedgerEntries = structuredClone(db.rows('moneyLedgerEntries'))
+    await expect(begin({ db, auth: identity }, args)).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payout_not_ready',
+    })
+    expect(db.rows('moneyPayouts')).toEqual(beforePayouts)
+    expect(db.rows('moneyLedgerEntries')).toEqual(beforeLedgerEntries)
+  })
+  it.each([
+    {
+      name: 'undefined cadence',
+      mutate: (db: MemoryDb) => {
+        const payout = db.rows('moneyPayouts')[0]
+        if (payout === undefined) throw new Error('payout_fixture_missing')
+        delete payout.cadence
+      },
+    },
+    {
+      name: 'noncanonical daily identity',
+      mutate: (db: MemoryDb) => {
+        const payout = db.rows('moneyPayouts')[0]
+        if (payout === undefined) throw new Error('payout_fixture_missing')
+        payout.periodStart = '2026-07-01'
+      },
+    },
+    {
+      name: 'missing allocation composition',
+      mutate: (db: MemoryDb) => {
+        const allocation = db.rows('moneyPayoutAllocations')[0]
+        if (allocation === undefined)
+          throw new Error('allocation_fixture_missing')
+        allocation.payoutRef = 'payout-missing'
+      },
+    },
+    {
+      name: 'drifted allocation composition',
+      mutate: (db: MemoryDb) => {
+        const allocation = db.rows('moneyPayoutAllocations')[0]
+        if (allocation === undefined)
+          throw new Error('allocation_fixture_missing')
+        allocation.providerNetUnits = '4999'
+      },
+    },
+  ])('refuses begin for $name before any transfer transition', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    mutate(db)
+    const before = structuredClone(db.rows('moneyPayouts'))
+    await expect(begin({ db, auth: identity }, commandArgs())).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payout_not_ready',
+    })
+    expect(db.rows('moneyPayouts')).toEqual(before)
   })
   it('uses the latest payout snapshot when ledger history exceeds the bounded read', async () => {
     const db = new MemoryDb(1_000)
@@ -515,7 +640,7 @@ describe('Convex payout persistence', () => {
     )
     db.seed('moneyPayouts', {
       _id: 'moneyPayouts:2',
-      payoutRef: 'payout-2',
+      payoutRef: secondDailyPayoutRef,
       businessId: 'business-1',
       currency: 'USD',
       exponent: 2,
@@ -523,16 +648,36 @@ describe('Convex payout persistence', () => {
       rakeUnits: '500',
       providerNetUnits: '5000',
       minimumPayoutUnits: '1000',
+      cadence: 'daily',
       state: 'held_threshold',
-      periodStart: '2026-08-01',
-      periodEnd: '2026-08-31',
+      periodStart: secondDailyPayoutPeriodStart,
+      periodEnd: secondDailyPayoutPeriodEnd,
+      providerAccountRef: 'provider:business-1:USD',
       idempotencyKey: 'payout-old-2',
       createdAt: 2,
       updatedAt: 2,
     })
+    db.seed('moneyPayoutAllocations', {
+      _id: 'moneyPayoutAllocations:2',
+      allocationRef: secondDailyPayoutAllocationRef,
+      payoutRef: secondDailyPayoutRef,
+      qualifiedUseRef: secondDailyPayoutQualifiedUseRef,
+      transactionRef: 'transaction:payout-2',
+      usageRef: 'usage:payout-2',
+      businessId: 'business-1',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '5500',
+      rakeUnits: '500',
+      providerNetUnits: '5000',
+      qualifiedAt: Date.parse(secondDailyPayoutPeriodStart) + 1,
+      sourceDigest: 'sha256:payout-source-2',
+      materialDigest: secondDailyPayoutMaterialDigest,
+      createdAt: 2,
+    })
     const second = {
       ...args,
-      payoutRef: 'payout-2',
+      payoutRef: secondDailyPayoutRef,
       commandId: 'command-2',
       inputDigest: 'sha256:input-2',
       requestDigest: 'sha256:request-2',
@@ -545,6 +690,9 @@ describe('Convex payout persistence', () => {
         requestDigest: 'sha256:request-2',
         transferId: 'tr_2',
       },
+      providerRecoveryDeadlineAt:
+        secondPayoutTransferObservedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+      observedAt: secondPayoutTransferObservedAt,
     }
     await expect(begin({ db, auth: identity }, second)).resolves.toMatchObject({
       kind: 'accepted',
@@ -593,6 +741,28 @@ describe('Convex payout persistence', () => {
       kind: 'refused',
       code: 'ledger_idempotency_conflict',
     })
+  })
+  it('preserves daily cadence when failed completion replaces the payout row', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    await expect(
+      complete(
+        { db, auth: identity },
+        {
+          ...args,
+          transactionRef: 'transaction-cadence-failed',
+          sourceDigest: 'sha256:source-cadence-failed',
+          evidenceRefs: ['stripe:transfer:tr_1'],
+          evidence: evidence('failed'),
+        },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'held_threshold', transferStatus: 'failed' },
+    })
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({ cadence: 'daily' })
   })
 
   it('reconciles unknown not-released evidence back to held without a debit', async () => {
@@ -648,7 +818,7 @@ describe('Convex payout persistence', () => {
         status: 'failed' as const,
         requestDigest: 'sha256:request-1',
         evidenceDigest: 'sha256:group-empty',
-        observedAt: 11,
+        observedAt: normalProviderEvidenceObservedAt,
       },
       outcome: 'not_released' as const,
     }
@@ -682,14 +852,18 @@ describe('Convex payout persistence', () => {
     await expect(
       markUnknown(
         { db, auth: identity },
-        { ...args, failureCode: 'payout_outcome_unknown', observedAt: 11 },
+        {
+          ...args,
+          failureCode: 'payout_outcome_unknown',
+          observedAt: normalProviderEvidenceObservedAt,
+        },
       ),
     ).resolves.toMatchObject({
       kind: 'accepted',
       transfer: {
         state: 'outcome_unknown',
         transferStatus: 'outcome_unknown',
-        providerRecoveryDeadlineAt: 82_800_010,
+        providerRecoveryDeadlineAt: normalProviderRecoveryDeadlineAt,
       },
     })
     expect(db.rows('moneyPayouts')[0]).not.toHaveProperty('stripeTransferId')

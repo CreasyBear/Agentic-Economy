@@ -2,6 +2,7 @@ import { RateLimiter } from '@convex-dev/rate-limiter'
 import { describe, expect, it, vi } from 'vitest'
 
 import { completeWork } from '../../../convex/capabilityOperationInvocations'
+import { recordQualifiedUse } from '../../../convex/qualifiedUse'
 import {
   authorizeInvocationCharge,
   readOperatorAccountVersion,
@@ -28,7 +29,11 @@ import {
 } from '@/modules/capability-supply/public'
 
 type Row = Record<string, unknown> & { _id: string }
-type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
+type QueryBuilder = {
+  eq: (field: string, value: unknown) => QueryBuilder
+  gte: (field: string, value: unknown) => QueryBuilder
+  lt: (field: string, value: unknown) => QueryBuilder
+}
 type Query = {
   withIndex: (
     name: string,
@@ -67,6 +72,22 @@ class MemoryDb {
         const builder: QueryBuilder = {
           eq: (field, value) => {
             filters.push((row) => row[field] === value)
+            return builder
+          },
+          gte: (field, value) => {
+            filters.push((row) =>
+              typeof row[field] === 'number' &&
+              typeof value === 'number' &&
+              row[field] >= value,
+            )
+            return builder
+          },
+          lt: (field, value) => {
+            filters.push((row) =>
+              typeof row[field] === 'number' &&
+              typeof value === 'number' &&
+              row[field] < value,
+            )
             return builder
           },
         }
@@ -131,6 +152,7 @@ const authorizeExport = authorizeInvocationCharge as unknown as HandlerExport
 const reconcileExport = reconcileInvocationCharge as unknown as HandlerExport
 const markerExport = markChargeOutcomeUnknown as unknown as HandlerExport
 const disputeExport = reverseDisputedQualifiedUse as unknown as HandlerExport
+const qualifiedUseExport = recordQualifiedUse as unknown as HandlerExport
 const completionExport = completeWork as unknown as HandlerExport
 const accountVersionExport = readOperatorAccountVersion as unknown as HandlerExport
 const authorizeHandler = authorizeExport._handler
@@ -138,6 +160,7 @@ const markerHandler = markerExport._handler
 const accountVersionHandler = accountVersionExport._handler
 const reconcileHandler = reconcileExport._handler
 const disputeHandler = disputeExport._handler
+const qualifiedUseHandler = qualifiedUseExport._handler
 const completionHandler = completionExport._handler
 const invocationRef = 'operation-invocation:test-money'
 const principalId = 'principal:test-money'
@@ -153,23 +176,30 @@ const now = 1_000
 
 function reconciliationArgs(
   outcome: 'not_released' | 'released' = 'not_released',
+  identity: Readonly<{
+    invocationRef: string
+    attemptRef: string
+    transactionRef: string
+  }> = { invocationRef, attemptRef, transactionRef },
 ): Record<string, unknown> {
+  const nextRefundTransactionRef =
+    `operation-money-refund:${identity.invocationRef}:${identity.attemptRef}:1`
   return {
-    invocationRef,
+    invocationRef: identity.invocationRef,
     principalId,
     credentialId,
-    attemptRef,
-    transactionRef,
+    attemptRef: identity.attemptRef,
+    transactionRef: identity.transactionRef,
     inputDigest,
     outcome,
-    refundTransactionRef,
-    refundIdempotencyKey: refundTransactionRef,
+    refundTransactionRef: nextRefundTransactionRef,
+    refundIdempotencyKey: nextRefundTransactionRef,
     refundInputDigest: canonicalDigest({
       format: 'operation-money-refund:v1',
-      invocationRef,
-      attemptRef,
+      invocationRef: identity.invocationRef,
+      attemptRef: identity.attemptRef,
       inputDigest,
-      transactionRef,
+      transactionRef: identity.transactionRef,
       outcome,
     }),
     sourceDigest,
@@ -810,9 +840,11 @@ function settleSeededChargeBudget(
   if (transaction === undefined) throw new Error('charge_fixture_missing')
   transaction.credentialId = originalCredentialId
   transaction.budgetState = 'settled'
+  transaction.budgetEnvironment = 'production'
   if (withSettledAt) transaction.settledAt = now
   transaction.state = 'applied'
   for (const row of db.rows('moneyCredentialBudgetStates')) {
+    row.environment = 'production'
     row.credentialId = originalCredentialId
     row.settledUnits = row.windowKind === 'concurrency' ? '0' : '100'
     row.reservedUnits = '0'
@@ -821,6 +853,282 @@ function settleSeededChargeBudget(
   const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
   if (usage === undefined) throw new Error('usage_fixture_missing')
   usage.credentialId = usageCredentialId
+}
+function qualifiedUseArgs(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    invocationRef,
+    attemptRef,
+    effectGeneration: 1,
+    businessId: 'business:money',
+    operationRef: 'operation:money',
+    publicationRef: 'publication:money',
+    publicationRevision: 1,
+    contractDigest: 'sha256:contract-qualified',
+    bindingDigest: 'sha256:binding-qualified',
+    principalClass: 'agent_key',
+    requestDigest: 'sha256:request-qualified',
+    responseDigest: 'sha256:response-qualified',
+    evidenceRefs: ['evidence:qualified'],
+    principalId,
+    environment: 'production',
+    qualifiedAt: now,
+    usageRef: `${invocationRef}:usage`,
+    transactionRef,
+    ...overrides,
+  }
+}
+type FreeTierFixture = Readonly<{
+  invocationRef: string
+  attemptRef: string
+  transactionRef: string
+  usageRef: string
+  principalId: string
+  businessId: string
+  operationRef: string
+}>
+function seedCanonicalFreeTierCharge(db: MemoryDb): FreeTierFixture {
+  const fixture = {
+    invocationRef: 'operation-invocation:free-tier',
+    attemptRef: 'operation-attempt:free-tier:1',
+    transactionRef: 'operation-money:free-tier:1',
+    usageRef: 'operation-invocation:free-tier:usage',
+    principalId: 'principal:free-tier',
+    businessId: 'business:free-tier',
+    operationRef: 'operation:free-tier',
+  }
+  db.seed('moneyTransactions', {
+    _id: 'transaction:free-tier',
+    transactionRef: fixture.transactionRef,
+    kind: 'charge',
+    idempotencyKey: fixture.transactionRef,
+    inputDigest: 'sha256:free-tier-input',
+    principalId: fixture.principalId,
+    accountId: 'owner:free-tier',
+    currency: 'USD',
+    credentialId: 'credential:free-tier',
+    budgetPolicyRef: 'budget:free-tier',
+    budgetGeneration: 1,
+    budgetEnvironment: 'production',
+    budgetDayStart: '1970-01-01',
+    budgetMonthStart: '1970-01',
+    budgetState: 'settled',
+    amountUnits: '0',
+    exponent: 2,
+    state: 'applied',
+    expectedAccountVersion: 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  db.seed('moneyUsageEvents', {
+    _id: 'usage:free-tier',
+    usageRef: fixture.usageRef,
+    principalId: fixture.principalId,
+    accountId: 'owner:free-tier',
+    credentialId: 'credential:free-tier',
+    currency: 'USD',
+    exponent: 2,
+    serviceRef: 'service:free-tier',
+    offeringRef: 'offering:free-tier',
+    businessId: fixture.businessId,
+    invocationRef: fixture.invocationRef,
+    attemptRef: fixture.attemptRef,
+    operationKey: fixture.operationRef,
+    priceDigest: 'sha256:free-tier-price',
+    chargeState: 'free_tier',
+    amountUnits: '0',
+    transactionRef: fixture.transactionRef,
+    observedAt: now,
+  })
+  return fixture
+}
+
+function freeTierQualifiedUseArgs(
+  fixture: FreeTierFixture,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return qualifiedUseArgs({
+    invocationRef: fixture.invocationRef,
+    attemptRef: fixture.attemptRef,
+    principalId: fixture.principalId,
+    businessId: fixture.businessId,
+    operationRef: fixture.operationRef,
+    usageRef: fixture.usageRef,
+    transactionRef: fixture.transactionRef,
+    ...overrides,
+  })
+}
+
+function seedDailyAllocationComposition(
+  db: MemoryDb,
+  count = 1_000,
+): string {
+  const periodStart = '1970-01-01T00:00:00.000Z'
+  const periodEnd = '1970-01-02T00:00:00.000Z'
+  const payoutRef = canonicalDigest({
+    format: 'money-daily-payout:v1',
+    businessId: 'business:money',
+    currency: 'USD',
+    periodStart,
+    periodEnd,
+  })
+  db.seed('moneyPayouts', {
+    _id: 'payout:allocation-limit',
+    payoutRef,
+    businessId: 'business:money',
+    currency: 'USD',
+    exponent: 2,
+    grossAccrualUnits: String(count * 100),
+    rakeUnits: String(count),
+    providerNetUnits: String(count * 99),
+    minimumPayoutUnits: '0',
+    cadence: 'daily',
+    state: 'held_threshold',
+    periodStart,
+    periodEnd,
+    providerAccountRef: accountRefForProvider('business:money', 'USD'),
+    idempotencyKey: payoutRef,
+    createdAt: now,
+    updatedAt: now,
+  })
+  for (let index = 0; index < count; index += 1) {
+    const qualifiedUseRef = `qualified-use:allocation-limit:${index}`
+    const materialDigest = `sha256:allocation-limit-material:${index}`
+    db.seed('moneyPayoutAllocations', {
+      _id: `allocation:limit:${index}`,
+      allocationRef: canonicalDigest({
+        format: 'money-qualified-use-allocation:v1',
+        qualifiedUseRef,
+        materialDigest,
+      }),
+      payoutRef,
+      qualifiedUseRef,
+      transactionRef: `transaction:allocation-limit:${index}`,
+      usageRef: `usage:allocation-limit:${index}`,
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+      qualifiedAt: now,
+      sourceDigest: 'sha256:allocation-limit-source',
+      materialDigest,
+      createdAt: now,
+    })
+  }
+  return payoutRef
+}
+
+function seedSecondPaidCharge(
+  db: MemoryDb,
+  nextInvocationRef: string,
+  nextAttemptRef: string,
+  nextTransactionRef: string,
+  observedAt: number,
+): void {
+  const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
+  const transaction = db.rows('moneyTransactions').find(
+    (row) => row._id === 'transaction:charge',
+  )
+  if (usage === undefined || transaction === undefined)
+    throw new Error('charge_fixture_missing')
+  const currentTransactionRef = String(transaction.transactionRef)
+  const currentInvocationRef = String(usage.invocationRef)
+  const currentAttemptRef = String(usage.attemptRef)
+  const entries = db.rows('moneyLedgerEntries').filter(
+    (row) => row.transactionRef === currentTransactionRef,
+  )
+  db.seed('moneyTransactions', {
+    ...transaction,
+    _id: 'transaction:charge-second',
+    transactionRef: nextTransactionRef,
+    idempotencyKey: nextTransactionRef,
+    state: 'applied',
+    budgetState: 'settled',
+    settledAt: observedAt,
+    createdAt: observedAt,
+    updatedAt: observedAt,
+  })
+  db.seed('moneyUsageEvents', {
+    ...usage,
+    _id: 'usage:money-second',
+    usageRef: `${nextInvocationRef}:usage`,
+    invocationRef: nextInvocationRef,
+    attemptRef: nextAttemptRef,
+    transactionRef: nextTransactionRef,
+    observedAt,
+  })
+  for (const entry of entries) {
+    db.seed('moneyLedgerEntries', {
+      ...entry,
+      _id: `${String(entry._id)}:second`,
+      entryRef: String(entry.entryRef).replace(
+        currentTransactionRef,
+        nextTransactionRef,
+      ),
+      transactionRef: nextTransactionRef,
+      idempotencyKey: nextTransactionRef,
+      invocationRef:
+        entry.invocationRef === currentInvocationRef
+          ? nextInvocationRef
+          : entry.invocationRef,
+      attemptRef:
+        entry.attemptRef === currentAttemptRef
+          ? nextAttemptRef
+          : entry.attemptRef,
+      createdAt: observedAt,
+    })
+  }
+}
+function seedProviderRefundCorrection(
+  db: MemoryDb,
+  allocation: Row,
+  overrides: Record<string, unknown> = {},
+  linked = true,
+  suffix = 'one',
+): void {
+  db.seed('moneyLedgerEntries', {
+    _id: `entry:provider-refund-correction:${suffix}`,
+    entryRef: `transaction:provider-refund-correction:${suffix}:provider`,
+    accountRef: accountRefForProvider('business:money', 'USD'),
+    entryType: 'refund',
+    direction: 'debit',
+    amountUnits: allocation.providerNetUnits,
+    currency: 'USD',
+    exponent: 2,
+    transactionRef: `transaction:provider-refund-correction:${suffix}`,
+    idempotencyKey: `transaction:provider-refund-correction:${suffix}`,
+    businessId: 'business:money',
+    sourceDigest: 'sha256:provider-refund-correction',
+    evidenceRefs: ['evidence:provider-refund-correction'],
+    reversalOf: allocation.transactionRef,
+    createdAt: now + 1,
+    ...(linked
+      ? {
+          payoutRef: allocation.payoutRef,
+          allocationRef: allocation.allocationRef,
+          allocationCorrectionUnits: allocation.providerNetUnits,
+        }
+      : {}),
+    ...overrides,
+  })
+}
+function rebindSeededCharge(
+  db: MemoryDb,
+  nextInvocationRef: string,
+  nextAttemptRef: string,
+  nextTransactionRef: string,
+  observedAt: number,
+): void {
+  seedSecondPaidCharge(
+    db,
+    nextInvocationRef,
+    nextAttemptRef,
+    nextTransactionRef,
+    observedAt,
+  )
 }
 
 function seedDisputeFixture(
@@ -1247,6 +1555,7 @@ describe('exact invocation money reconciliation', () => {
           'accountRef',
           'direction',
           'amountUnits',
+          'allocationCorrectionUnits',
           'currency',
           'exponent',
           'principalId',
@@ -1274,6 +1583,7 @@ describe('exact invocation money reconciliation', () => {
     else if (field === 'accountRef') entry.accountRef = 'forged:refund-account'
     else if (field === 'direction') entry.direction = entry.direction === 'credit' ? 'debit' : 'credit'
     else if (field === 'amountUnits') entry.amountUnits = '101'
+    else if (field === 'allocationCorrectionUnits') entry.allocationCorrectionUnits = '98'
     else if (field === 'currency') entry.currency = 'EUR'
     else if (field === 'exponent') entry.exponent = 3
     else if (field === 'principalId') entry.principalId = 'forged:principal'
@@ -1876,11 +2186,64 @@ describe('exact invocation money reconciliation', () => {
   it('refuses transfer-pending dispute reversal without mutating settled credential budget', async () => {
     const db = new MemoryDb()
     seedDisputeFixture(db, 'key-a', 'key-a')
+    const receipt = db
+      .rows('qualifiedUseReceipts')
+      .find((row) => row._id === 'receipt:money')
+    if (receipt === undefined) throw new Error('receipt_fixture_missing')
+    const periodStart = '1970-01-01T00:00:00.000Z'
+    const periodEnd = '1970-01-02T00:00:00.000Z'
+    const payoutRef = canonicalDigest({
+      format: 'money-daily-payout:v1',
+      businessId: 'business:money',
+      currency: 'USD',
+      periodStart,
+      periodEnd,
+    })
+    db.seed('moneyPayoutAllocations', {
+      _id: 'allocation:dispute-transfer-pending',
+      allocationRef: canonicalDigest({
+        format: 'money-qualified-use-allocation:v1',
+        qualifiedUseRef: receipt.qualifiedUseRef,
+        materialDigest: receipt.materialDigest,
+      }),
+      payoutRef,
+      qualifiedUseRef: receipt.qualifiedUseRef,
+      materialDigest: receipt.materialDigest,
+      qualifiedAt: receipt.qualifiedAt,
+      usageRef: receipt.usageRef,
+      transactionRef: receipt.transactionRef,
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+      sourceDigest,
+      createdAt: now,
+    })
+    db.seed('moneyPayouts', {
+      _id: 'payout:dispute-transfer-pending',
+      payoutRef,
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+      minimumPayoutUnits: '0',
+      cadence: 'daily',
+      state: 'transfer_pending',
+      periodStart,
+      periodEnd,
+      providerAccountRef: accountRefForProvider('business:money', 'USD'),
+      idempotencyKey: payoutRef,
+      createdAt: now,
+      updatedAt: now,
+    })
     const payout = db
       .rows('moneyPayouts')
-      .find((row) => row._id === 'payout:dispute')
+      .find((row) => row._id === 'payout:dispute-transfer-pending')
     if (payout === undefined) throw new Error('payout_fixture_missing')
-    payout.state = 'transfer_pending'
     const before = {
       accounts: structuredClone(db.rows('moneyAccounts')),
       budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
@@ -2004,38 +2367,10 @@ describe('exact invocation money reconciliation', () => {
       transaction: db.rows('moneyTransactions'),
     }).toEqual(before)
   })
-  it('accrues a released charge into the current period after the prior period is paid', async () => {
+  it('settles a released paid charge without creating a payout period', async () => {
     const db = new MemoryDb()
     seedBudget(db)
     seedPaidCharge(db, 'outcome_unknown')
-    const payoutRef = canonicalDigest({
-      format: 'money-payout-period:v1',
-      businessId: 'business:money',
-      currency: 'USD',
-      periodStart: '1969-12-01',
-      periodEnd: '1969-12-31',
-    })
-    db.seed('moneyPayouts', {
-      _id: 'payout:paid',
-      payoutRef,
-      businessId: 'business:money',
-      currency: 'USD',
-      exponent: 2,
-      grossAccrualUnits: '100',
-      rakeUnits: '1',
-      providerNetUnits: '99',
-      minimumPayoutUnits: '0',
-      state: 'paid',
-      periodStart: '1969-12-01',
-      periodEnd: '1969-12-31',
-      idempotencyKey: payoutRef,
-      providerHeldBeforeUnits: '99',
-      providerHeldAfterUnits: '0',
-      providerPaidBeforeUnits: '0',
-      providerPaidAfterUnits: '99',
-      createdAt: now,
-      updatedAt: now,
-    })
 
     await expect(
       reconcileHandler({ db }, reconciliationArgs('released')),
@@ -2049,22 +2384,1008 @@ describe('exact invocation money reconciliation', () => {
       budgetState: 'settled',
       settledAt: now,
     })
-    expect(db.rows('moneyPayouts')).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          _id: 'payout:paid',
-          state: 'paid',
-          grossAccrualUnits: '100',
-        }),
-        expect.objectContaining({
-          state: 'held_threshold',
-          periodStart: '1970-01-01',
-          periodEnd: '1970-01-31',
-          grossAccrualUnits: '100',
-          providerNetUnits: '99',
-        }),
-      ]),
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+  })
+  it('allocates matching production Qualified Use into one daily payout', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({
+      kind: 'recorded',
+    })
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      cadence: 'daily',
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+      periodStart: '1970-01-01T00:00:00.000Z',
+      periodEnd: '1970-01-02T00:00:00.000Z',
+      state: 'held_threshold',
+      minimumPayoutUnits: '0',
+    })
+    expect(db.rows('moneyPayoutAllocations')[0]).toMatchObject({
+      qualifiedUseRef: `qualified-use:v1:${invocationRef}:${attemptRef}:1`,
+      transactionRef,
+      usageRef: `${invocationRef}:usage`,
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+      qualifiedAt: now,
+      sourceDigest,
+      materialDigest: qualifiedUseMaterialDigest({
+        invocationRef,
+        attemptRef,
+        effectGeneration: 1,
+        businessId: 'business:money',
+        operationRef: 'operation:money',
+        publicationRef: 'publication:money',
+        publicationRevision: 1,
+        contractDigest: 'sha256:contract-qualified',
+        bindingDigest: 'sha256:binding-qualified',
+        principalClass: 'agent_key',
+        requestDigest: 'sha256:request-qualified',
+        responseDigest: 'sha256:response-qualified',
+        evidenceRefs: ['evidence:qualified'],
+      }),
+    })
+  })
+
+  it('replays exactly and pools a second event by UTC day', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const firstArgs = qualifiedUseArgs()
+
+    await expect(
+      qualifiedUseHandler({ db }, firstArgs),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    await expect(
+      qualifiedUseHandler({ db }, firstArgs),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+    })
+
+    const secondInvocationRef = 'operation-invocation:test-money:second'
+    const secondAttemptRef = `${secondInvocationRef}:attempt:1`
+    const secondTransactionRef = `operation-money:${secondInvocationRef}:${secondAttemptRef}:1`
+    const secondQualifiedAt = now + 1
+    rebindSeededCharge(
+      db,
+      secondInvocationRef,
+      secondAttemptRef,
+      secondTransactionRef,
+      secondQualifiedAt,
     )
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: secondInvocationRef,
+          attemptRef: secondAttemptRef,
+          transactionRef: secondTransactionRef,
+          usageRef: `${secondInvocationRef}:usage`,
+          qualifiedAt: secondQualifiedAt,
+          responseDigest: 'sha256:response-qualified-second',
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(2)
+    expect(db.rows('moneyPayouts')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '200',
+      rakeUnits: '2',
+      providerNetUnits: '198',
+    })
+
+    const thirdInvocationRef = 'operation-invocation:test-money:third'
+    const thirdAttemptRef = `${thirdInvocationRef}:attempt:1`
+    const thirdTransactionRef = `operation-money:${thirdInvocationRef}:${thirdAttemptRef}:1`
+    const thirdQualifiedAt = Date.UTC(1970, 0, 2)
+    rebindSeededCharge(
+      db,
+      thirdInvocationRef,
+      thirdAttemptRef,
+      thirdTransactionRef,
+      thirdQualifiedAt,
+    )
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: thirdInvocationRef,
+          attemptRef: thirdAttemptRef,
+          transactionRef: thirdTransactionRef,
+          usageRef: `${thirdInvocationRef}:usage`,
+          qualifiedAt: thirdQualifiedAt,
+          responseDigest: 'sha256:response-qualified-third',
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(3)
+    expect(db.rows('moneyPayouts')).toHaveLength(2)
+    expect(
+      new Set(db.rows('moneyPayouts').map((row) => row.payoutRef)).size,
+    ).toBe(2)
+    expect(
+      db.rows('moneyPayouts').find(
+        (row) => row.periodStart === '1970-01-02T00:00:00.000Z',
+      ),
+    ).toMatchObject({
+      periodEnd: '1970-01-03T00:00:00.000Z',
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+    })
+  })
+  it.each([
+    { name: 'transfer_pending', payoutState: 'transfer_pending' },
+    { name: 'outcome_unknown', payoutState: 'outcome_unknown' },
+    { name: 'paid', payoutState: 'paid' },
+    { name: 'reversed', payoutState: 'reversed' },
+  ])('replays an exact allocation after $name', async ({ payoutState }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const payout = db.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('allocation_fixture_missing')
+    payout.state = payoutState
+    const before = {
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    const insert = vi.spyOn(db, 'insert')
+    const patch = vi.spyOn(db, 'patch')
+    try {
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'replayed' })
+      expect(insert).not.toHaveBeenCalled()
+      expect(patch).not.toHaveBeenCalled()
+      expect({
+        allocations: db.rows('moneyPayoutAllocations'),
+        payouts: db.rows('moneyPayouts'),
+      }).toEqual(before)
+    } finally {
+      insert.mockRestore()
+      patch.mockRestore()
+    }
+  })
+  it('replays an exact allocation after a canonical refund without re-accrual', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    const before = {
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    const insert = vi.spyOn(db, 'insert')
+    const patch = vi.spyOn(db, 'patch')
+    try {
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'replayed' })
+      expect(insert).not.toHaveBeenCalled()
+      expect(patch).not.toHaveBeenCalled()
+      expect({
+        allocations: db.rows('moneyPayoutAllocations'),
+        payouts: db.rows('moneyPayouts'),
+      }).toEqual(before)
+    } finally {
+      insert.mockRestore()
+      patch.mockRestore()
+    }
+  })
+
+  it('rejects a substituted eligibility principal before any allocation write', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ principalId: 'principal:substitute' }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects a sandbox source behind a production Qualified Use receipt atomically', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    if (transaction === undefined) throw new Error('charge_fixture_missing')
+    transaction.budgetEnvironment = 'sandbox'
+    for (const row of db.rows('moneyCredentialBudgetStates'))
+      row.environment = 'sandbox'
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects replay when the recorded payout is missing or drifted', async () => {
+    const missing = new MemoryDb()
+    seedBudget(missing)
+    seedPaidCharge(missing)
+    settleSeededChargeBudget(missing, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db: missing }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    missing.remove('moneyPayouts', () => true)
+    await expect(
+      qualifiedUseHandler({ db: missing }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(missing.rows('moneyPayoutAllocations')).toHaveLength(1)
+
+    const drifted = new MemoryDb()
+    seedBudget(drifted)
+    seedPaidCharge(drifted)
+    settleSeededChargeBudget(drifted, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db: drifted }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const payout = drifted.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('payout_fixture_missing')
+    payout.periodEnd = '1970-01-03T00:00:00.000Z'
+    await expect(
+      qualifiedUseHandler({ db: drifted }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+  })
+
+  it.each([
+    {
+      name: 'noncanonical source reversal',
+      mutate: (db: MemoryDb) => {
+        const transaction = db.rows('moneyTransactions').find(
+          (row) => row._id === 'transaction:charge',
+        )
+        if (transaction === undefined) throw new Error('charge_fixture_missing')
+        transaction.state = 'reversed'
+      },
+    },
+    {
+      name: 'journal source digest drift',
+      mutate: (db: MemoryDb) => {
+        const provider = db.rows('moneyLedgerEntries').find(
+          (row) => row._id === 'entry:provider',
+        )
+        if (provider === undefined) throw new Error('provider_entry_missing')
+        provider.sourceDigest = 'sha256:replay-drift'
+      },
+    },
+  ])('rejects replay after $name', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const before = {
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    mutate(db)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect({
+      allocations: db.rows('moneyPayoutAllocations'),
+      payouts: db.rows('moneyPayouts'),
+    }).toEqual(before)
+  })
+
+  it('records the 1000th daily allocation with bounded source reads', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    seedDailyAllocationComposition(db, 999)
+    const query = vi.spyOn(db, 'query')
+    try {
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'recorded' })
+      expect(db.rows('moneyPayoutAllocations')).toHaveLength(1_000)
+      expect(
+        query.mock.calls.filter(([table]) => table === 'moneyPayoutAllocations'),
+      ).toHaveLength(4)
+    } finally {
+      query.mockRestore()
+    }
+  })
+
+  it('refuses the 1001st daily allocation before any write', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    seedDailyAllocationComposition(db)
+    const before = {
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    const insert = vi.spyOn(db, 'insert')
+    const patch = vi.spyOn(db, 'patch')
+    try {
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+      expect(insert).not.toHaveBeenCalled()
+      expect(patch).not.toHaveBeenCalled()
+      expect(db.rows('moneyPayoutAllocations')).toHaveLength(1_000)
+      expect({
+        allocations: db.rows('moneyPayoutAllocations'),
+        payouts: db.rows('moneyPayouts'),
+      }).toEqual(before)
+    } finally {
+      insert.mockRestore()
+      patch.mockRestore()
+    }
+  })
+
+  it('replays reversed canonical free-tier use without payout rows', async () => {
+    const db = new MemoryDb()
+    const fixture = seedCanonicalFreeTierCharge(db)
+    const args = freeTierQualifiedUseArgs(fixture)
+    await expect(
+      qualifiedUseHandler({ db }, args),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:free-tier',
+    )
+    if (transaction === undefined) throw new Error('free_tier_transaction_missing')
+    transaction.state = 'reversed'
+    await expect(
+      qualifiedUseHandler({ db }, args),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        freeTierQualifiedUseArgs(fixture, {
+          responseDigest: 'sha256:free-tier-changed',
+        }),
+      ),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'qualified_use_identity_conflict',
+    })
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('refuses paid replay when its allocation is missing', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const args = qualifiedUseArgs()
+    await expect(
+      qualifiedUseHandler({ db }, args),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    db.remove('moneyPayoutAllocations', () => true)
+    await expect(
+      qualifiedUseHandler({ db }, args),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(1)
+  })
+
+  it('refuses malformed free-tier linkage atomically', async () => {
+    const db = new MemoryDb()
+    const fixture = seedCanonicalFreeTierCharge(db)
+    const usage = db.rows('moneyUsageEvents').find(
+      (row) => row._id === 'usage:free-tier',
+    )
+    if (usage === undefined) throw new Error('free_tier_usage_missing')
+    usage.amountUnits = '1'
+    const insert = vi.spyOn(db, 'insert')
+    try {
+      await expect(
+        qualifiedUseHandler({ db }, freeTierQualifiedUseArgs(fixture)),
+      ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+      expect(insert).not.toHaveBeenCalled()
+      expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+      expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+      expect(db.rows('moneyPayouts')).toHaveLength(0)
+    } finally {
+      insert.mockRestore()
+    }
+  })
+
+  it('excludes a refunded-before-delivery Qualified Use without writing evidence', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const before = {
+      receipts: structuredClone(db.rows('qualifiedUseReceipts')),
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toEqual({
+      kind: 'excluded',
+      reason: 'refunded_before_delivery',
+    })
+    expect({
+      receipts: db.rows('qualifiedUseReceipts'),
+      allocations: db.rows('moneyPayoutAllocations'),
+      payouts: db.rows('moneyPayouts'),
+    }).toEqual(before)
+  })
+
+  it('decrements a held daily payout once and replays refund without subtracting twice', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '0',
+      rakeUnits: '0',
+      providerNetUnits: '0',
+    })
+    const entriesBeforeReplay = structuredClone(
+      db.rows('moneyLedgerEntries'),
+    )
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    expect(db.rows('moneyLedgerEntries')).toEqual(entriesBeforeReplay)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '0',
+      rakeUnits: '0',
+      providerNetUnits: '0',
+    })
+  })
+
+  it.each([
+    {
+      name: 'orphaned allocation reference',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, {
+          allocationRef: 'allocation:missing',
+        }),
+    },
+    {
+      name: 'duplicate allocation correction',
+      mutate: (db: MemoryDb, allocation: Row) => {
+        seedProviderRefundCorrection(db, allocation, {}, true, 'one')
+        seedProviderRefundCorrection(db, allocation, {}, true, 'two')
+      },
+    },
+    {
+      name: 'missing allocation correction',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, {
+          allocationCorrectionUnits: undefined,
+        }),
+    },
+    {
+      name: 'wrong allocation correction',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, {
+          allocationCorrectionUnits: '98',
+        }),
+    },
+    {
+      name: 'allocation correction greater than full provider refund',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, {
+          allocationCorrectionUnits: '100',
+        }),
+    },
+    {
+      name: 'full provider refund below allocation correction',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, { amountUnits: '98' }),
+    },
+    {
+      name: 'mismatched source transaction',
+      mutate: (db: MemoryDb, allocation: Row) =>
+        seedProviderRefundCorrection(db, allocation, {
+          reversalOf: 'transaction:other',
+        }),
+    },
+  ])('refuses a $name payout correction before any allocation write', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    mutate(db, allocation)
+    const before = {
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+    }
+    const secondInvocationRef = 'operation-invocation:test-money:correction'
+    const secondAttemptRef = `${secondInvocationRef}:attempt:1`
+    const secondTransactionRef =
+      `operation-money:${secondInvocationRef}:${secondAttemptRef}:1`
+    seedSecondPaidCharge(
+      db,
+      secondInvocationRef,
+      secondAttemptRef,
+      secondTransactionRef,
+      now + 1,
+    )
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: secondInvocationRef,
+          attemptRef: secondAttemptRef,
+          transactionRef: secondTransactionRef,
+          usageRef: `${secondInvocationRef}:usage`,
+          responseDigest: 'sha256:response-correction',
+          qualifiedAt: now + 1,
+        }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect({
+      allocations: db.rows('moneyPayoutAllocations'),
+      payouts: db.rows('moneyPayouts'),
+    }).toEqual(before)
+  })
+  it('does not let an unlinked provider refund exclude an allocation', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    seedProviderRefundCorrection(db, allocation, {}, false)
+    const secondInvocationRef = 'operation-invocation:test-money:unlinked-refund'
+    const secondAttemptRef = `${secondInvocationRef}:attempt:1`
+    const secondTransactionRef =
+      `operation-money:${secondInvocationRef}:${secondAttemptRef}:1`
+    seedSecondPaidCharge(
+      db,
+      secondInvocationRef,
+      secondAttemptRef,
+      secondTransactionRef,
+      now + 1,
+    )
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: secondInvocationRef,
+          attemptRef: secondAttemptRef,
+          transactionRef: secondTransactionRef,
+          usageRef: `${secondInvocationRef}:usage`,
+          responseDigest: 'sha256:response-unlinked-refund',
+          qualifiedAt: now + 1,
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '200',
+      rakeUnits: '2',
+      providerNetUnits: '198',
+    })
+  })
+
+
+  it('refunds a held pooled allocation and composes a later same-day allocation', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const allocationAfterA = structuredClone(db.rows('moneyPayoutAllocations'))
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '0',
+      rakeUnits: '0',
+      providerNetUnits: '0',
+    })
+    expect(db.rows('moneyPayoutAllocations')).toEqual(allocationAfterA)
+    const refundEntries = db
+      .rows('moneyLedgerEntries')
+      .filter((row) => row.transactionRef === refundTransactionRef)
+    expect(refundEntries).toHaveLength(3)
+    const operatorRefund = refundEntries.find(
+      (row) => row.entryRef === `${refundTransactionRef}:operator`,
+    )
+    const providerRefund = refundEntries.find(
+      (row) => row.entryRef === `${refundTransactionRef}:provider`,
+    )
+    const rakeRefund = refundEntries.find(
+      (row) => row.entryRef === `${refundTransactionRef}:rake`,
+    )
+    if (
+      operatorRefund === undefined ||
+      providerRefund === undefined ||
+      rakeRefund === undefined ||
+      allocationAfterA[0] === undefined
+    )
+      throw new Error('refund_entry_fixture_missing')
+    expect(operatorRefund).not.toHaveProperty('payoutRef')
+    expect(operatorRefund).not.toHaveProperty('allocationRef')
+    expect(operatorRefund).not.toHaveProperty('allocationCorrectionUnits')
+    expect(rakeRefund).not.toHaveProperty('payoutRef')
+    expect(rakeRefund).not.toHaveProperty('allocationRef')
+    expect(rakeRefund).not.toHaveProperty('allocationCorrectionUnits')
+    expect(providerRefund).toMatchObject({
+      payoutRef: allocationAfterA[0].payoutRef,
+      allocationRef: allocationAfterA[0].allocationRef,
+      allocationCorrectionUnits: allocationAfterA[0].providerNetUnits,
+    })
+
+    const secondInvocationRef = 'operation-invocation:test-money:refund-second'
+    const secondAttemptRef = `${secondInvocationRef}:attempt:1`
+    const secondTransactionRef =
+      `operation-money:${secondInvocationRef}:${secondAttemptRef}:1`
+    seedSecondPaidCharge(
+      db,
+      secondInvocationRef,
+      secondAttemptRef,
+      secondTransactionRef,
+      now + 1,
+    )
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: secondInvocationRef,
+          attemptRef: secondAttemptRef,
+          transactionRef: secondTransactionRef,
+          usageRef: `${secondInvocationRef}:usage`,
+          responseDigest: 'sha256:response-refund-second',
+          qualifiedAt: now + 1,
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const allocationsAfterB = structuredClone(
+      db.rows('moneyPayoutAllocations'),
+    )
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+    })
+    expect(
+      db
+        .rows('moneyPayoutAllocations')
+        .find((row) => row.qualifiedUseRef === allocationAfterA[0]?.qualifiedUseRef),
+    ).toEqual(allocationAfterA[0])
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: secondInvocationRef,
+          attemptRef: secondAttemptRef,
+          transactionRef: secondTransactionRef,
+          usageRef: `${secondInvocationRef}:usage`,
+          responseDigest: 'sha256:response-refund-second',
+          qualifiedAt: now + 1,
+        }),
+      ),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+    expect(db.rows('moneyPayoutAllocations')).toEqual(allocationsAfterB)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '100',
+      rakeUnits: '1',
+      providerNetUnits: '99',
+    })
+  })
+  it('replays a recovery-adjusted full refund and composes a later same-day allocation', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const provider = db
+      .rows('moneyAccounts')
+      .find((row) => row._id === 'account:provider')
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '89'
+    db.seed('moneyLedgerEntries', {
+      _id: 'entry:provider-recovery',
+      entryRef: `${transactionRef}:provider-recovery`,
+      accountRef: accountRefForProvider('business:money', 'USD'),
+      entryType: 'payout_accrual',
+      direction: 'debit',
+      amountUnits: '10',
+      currency: 'USD',
+      exponent: 2,
+      transactionRef,
+      idempotencyKey: transactionRef,
+      invocationRef,
+      attemptRef,
+      businessId: 'business:money',
+      sourceDigest,
+      evidenceRefs: ['evidence:money'],
+      createdAt: now,
+    })
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const allocationAfterA = structuredClone(
+      db.rows('moneyPayoutAllocations'),
+    )
+    expect(allocationAfterA[0]).toMatchObject({
+      grossAccrualUnits: '90',
+      rakeUnits: '1',
+      providerNetUnits: '89',
+    })
+
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    const providerRefund = db
+      .rows('moneyLedgerEntries')
+      .find((row) => row.entryRef === `${refundTransactionRef}:provider`)
+    if (providerRefund === undefined || allocationAfterA[0] === undefined)
+      throw new Error('refund_entry_fixture_missing')
+    expect(providerRefund).toMatchObject({
+      amountUnits: '99',
+      allocationCorrectionUnits: '89',
+      payoutRef: allocationAfterA[0].payoutRef,
+      allocationRef: allocationAfterA[0].allocationRef,
+    })
+    expect(provider).toMatchObject({
+      balanceUnits: '0',
+      recoveryDueUnits: '10',
+    })
+    providerRefund.allocationCorrectionUnits = '88'
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'reconciliation_required' })
+    providerRefund.allocationCorrectionUnits = '89'
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    expect(
+      db.rows('moneyTransactions').filter((row) => row.kind === 'refund'),
+    ).toHaveLength(1)
+
+    const secondInvocationRef = 'operation-invocation:test-money:recovery-second'
+    const secondAttemptRef = `${secondInvocationRef}:attempt:1`
+    const secondTransactionRef =
+      `operation-money:${secondInvocationRef}:${secondAttemptRef}:1`
+    seedSecondPaidCharge(
+      db,
+      secondInvocationRef,
+      secondAttemptRef,
+      secondTransactionRef,
+      now + 1,
+    )
+    const secondArgs = qualifiedUseArgs({
+      invocationRef: secondInvocationRef,
+      attemptRef: secondAttemptRef,
+      transactionRef: secondTransactionRef,
+      usageRef: `${secondInvocationRef}:usage`,
+      responseDigest: 'sha256:response-recovery-second',
+      qualifiedAt: now + 1,
+    })
+    await expect(
+      qualifiedUseHandler({ db }, secondArgs),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(2)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      grossAccrualUnits: '90',
+      rakeUnits: '1',
+      providerNetUnits: '89',
+    })
+    expect(
+      db
+        .rows('moneyPayoutAllocations')
+        .find((row) => row.qualifiedUseRef === allocationAfterA[0]?.qualifiedUseRef),
+    ).toEqual(allocationAfterA[0])
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+    await expect(
+      qualifiedUseHandler({ db }, secondArgs),
+    ).resolves.toMatchObject({ kind: 'replayed' })
+  })
+
+  it.each(['transfer_pending', 'outcome_unknown'] as const)(
+    'refuses a %s payout refund before any write',
+    async (state) => {
+      const db = new MemoryDb()
+      seedBudget(db)
+      seedPaidCharge(db)
+      settleSeededChargeBudget(db, credentialId, credentialId, true)
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'recorded' })
+      const payout = db.rows('moneyPayouts')[0]
+      if (payout === undefined) throw new Error('payout_fixture_missing')
+      payout.state = state
+      const before = {
+        accounts: structuredClone(db.rows('moneyAccounts')),
+        budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+        entries: structuredClone(db.rows('moneyLedgerEntries')),
+        payouts: structuredClone(db.rows('moneyPayouts')),
+        transactions: structuredClone(db.rows('moneyTransactions')),
+      }
+      await expect(
+        reconcileHandler({ db }, reconciliationArgs()),
+      ).resolves.toEqual({ kind: 'reconciliation_required' })
+      expect({
+        accounts: db.rows('moneyAccounts'),
+        budgets: db.rows('moneyCredentialBudgetStates'),
+        entries: db.rows('moneyLedgerEntries'),
+        payouts: db.rows('moneyPayouts'),
+        transactions: db.rows('moneyTransactions'),
+      }).toEqual(before)
+    },
+  )
+
+  it('preserves a paid historical payout and creates recoveryDue on refund', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    const payout = db.rows('moneyPayouts')[0]
+    const provider = db.rows('moneyAccounts').find(
+      (row) => row._id === 'account:provider',
+    )
+    if (payout === undefined || provider === undefined)
+      throw new Error('paid_payout_fixture_missing')
+    payout.state = 'paid'
+    payout.providerHeldBeforeUnits = '99'
+    payout.providerHeldAfterUnits = '99'
+    payout.providerPaidBeforeUnits = '0'
+    payout.providerPaidAfterUnits = '99'
+    provider.balanceUnits = '0'
+    const before = structuredClone(db.rows('moneyPayouts'))
+    await expect(
+      reconcileHandler({ db }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+    expect(db.rows('moneyPayouts')).toEqual(before)
+    expect(provider).toMatchObject({ balanceUnits: '0', recoveryDueUnits: '99' })
+  })
+
+  it('keeps provider-direct Qualified Use evidence without allocating payout', async () => {
+    const db = new MemoryDb()
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ transactionRef: undefined }),
+      ),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it.each([
+    {
+      name: 'business',
+      mutate: (_db: MemoryDb) => undefined,
+      args: { businessId: 'business:other' },
+    },
+    {
+      name: 'currency',
+      mutate: (db: MemoryDb) => {
+        const provider = db.rows('moneyLedgerEntries').find((row) => row._id === 'entry:provider')
+        if (provider === undefined) throw new Error('provider_entry_missing')
+        provider.currency = 'EUR'
+      },
+      args: {},
+    },
+    {
+      name: 'amount',
+      mutate: (db: MemoryDb) => {
+        const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
+        if (usage === undefined) throw new Error('usage_fixture_missing')
+        usage.amountUnits = '101'
+      },
+      args: {},
+    },
+    {
+      name: 'journal provenance',
+      mutate: (db: MemoryDb) => {
+        const provider = db.rows('moneyLedgerEntries').find((row) => row._id === 'entry:provider')
+        if (provider === undefined) throw new Error('provider_entry_missing')
+        provider.sourceDigest = 'sha256:other-source'
+      },
+      args: {},
+    },
+    {
+      name: 'reversed source',
+      mutate: (db: MemoryDb) => {
+        const transaction = db.rows('moneyTransactions').find((row) => row._id === 'transaction:charge')
+        if (transaction === undefined) throw new Error('transaction_fixture_missing')
+        transaction.state = 'reversed'
+      },
+      args: {},
+    },
+    {
+      name: 'refunded source',
+      mutate: (db: MemoryDb) => {
+        const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
+        if (usage === undefined) throw new Error('usage_fixture_missing')
+        usage.chargeState = 'refunded'
+      },
+      args: {},
+    },
+  ])('fails closed on $name journal identity drift', async ({ mutate, args }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    mutate(db)
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs(args)),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
   })
 
   it('returns none when no accepted charge exists', async () => {

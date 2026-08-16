@@ -4,6 +4,7 @@ import type { Doc } from '../../convex/_generated/dataModel'
 import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
+import { recordQualifiedUsePayoutAllocation } from '../../convex/moneyLedger'
 import schema from '../../convex/schema'
 import {
   accountRefForOwner,
@@ -12,6 +13,7 @@ import {
   qualifiedUseMaterialDigest,
   qualifiedUseRef,
 } from '@/modules/money/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createConvexServerFunctionAssertion } from '@/lib/server/convex-source'
 import {
   convexModules as modules,
@@ -27,7 +29,7 @@ if (readOwnerProviderEarnings === undefined)
   throw new Error('moneyLedger.readOwnerProviderEarnings missing')
 
 describe('supplier money readback', () => {
-  it('materializes one current payout period from a released charge, replays, and applies a refund', async () => {
+  it('does not materialize a payout from a released charge until Qualified Use, then replays and applies a refund', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
@@ -106,7 +108,7 @@ describe('supplier money readback', () => {
           credentialId,
           accountId: ownerAccountId,
           budgetPolicyRef: `budget:${businessRef}`,
-          environment: 'sandbox',
+          environment: 'production',
           generation: 1,
           windowKind,
           windowStart,
@@ -132,7 +134,7 @@ describe('supplier money readback', () => {
         credentialId,
         budgetPolicyRef: `budget:${businessRef}`,
         budgetGeneration: 1,
-        budgetEnvironment: 'sandbox',
+        budgetEnvironment: 'production',
         budgetDayStart: '1970-01-01',
         budgetMonthStart: '1970-01',
         budgetState: 'reserved',
@@ -232,11 +234,7 @@ describe('supplier money readback', () => {
           payout: {
             kind: 'ok',
             accountState: 'ready',
-            payoutState: 'held_threshold',
-            payoutRef: expect.any(String),
-            idempotencyKey: expect.any(String),
-            stripeAccountId: `acct_${businessRef}`,
-            providerNet: { currency: 'USD', units: '900', exponent: 2 },
+            providerNet: { currency: 'USD', units: '0', exponent: 2 },
             minimumPayout: { currency: 'USD', units: '0', exponent: 2 },
           },
         },
@@ -245,8 +243,11 @@ describe('supplier money readback', () => {
     })
     if (first.kind !== 'available')
       throw new Error('owner earnings unavailable after release')
-    const payoutRef = first.accounts[0]?.payout.payoutRef
-    expect(payoutRef).toEqual(expect.any(String))
+    const firstPayout = first.accounts[0]?.payout
+    if (firstPayout === undefined) throw new Error('payout readback missing')
+    expect(firstPayout).not.toHaveProperty('payoutState')
+    expect(firstPayout).not.toHaveProperty('payoutRef')
+    expect(firstPayout).not.toHaveProperty('idempotencyKey')
     const qualifiedIdentity = {
       invocationRef: `invocation:${businessRef}`,
       attemptRef: `attempt:${businessRef}`,
@@ -267,7 +268,16 @@ describe('supplier money readback', () => {
     }
     const qualifiedRef = qualifiedUseRef(qualifiedIdentity)
     const materialDigest = qualifiedUseMaterialDigest(qualifiedMaterial)
-    await backend.run(async (ctx) => {
+    const qualifiedReceipt = {
+      qualifiedUseRef: qualifiedRef,
+      materialDigest,
+      ...qualifiedMaterial,
+      environment: 'production' as const,
+      qualifiedAt: 2,
+      usageRef: `usage:${businessRef}`,
+      transactionRef,
+    }
+    const payoutRef = await backend.run(async (ctx) => {
       await ctx.db.insert('moneyUsageEvents', {
         usageRef: `usage:${businessRef}`,
         principalId,
@@ -287,19 +297,34 @@ describe('supplier money readback', () => {
         transactionRef,
         observedAt: 1,
       })
-      await ctx.db.insert('qualifiedUseReceipts', {
-        qualifiedUseRef: qualifiedRef,
-        materialDigest,
-        ...qualifiedMaterial,
-        environment: 'production',
-        qualifiedAt: 2,
-        usageRef: `usage:${businessRef}`,
-        transactionRef,
+      await recordQualifiedUsePayoutAllocation(ctx, qualifiedReceipt, principalId)
+      await ctx.db.insert('qualifiedUseReceipts', qualifiedReceipt)
+      const payouts = await ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_updatedAt', (q) =>
+          q.eq('businessId', businessRef).eq('currency', 'USD'),
+        )
+        .order('desc')
+        .take(1)
+      const dailyPayout = payouts[0]
+      if (dailyPayout === undefined) throw new Error('daily payout missing')
+      return dailyPayout.payoutRef
+    })
+    await backend.run(async (ctx) => {
+      const providerAccount = await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef))
+        .unique()
+      const payout = await ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_payoutRef', (q) => q.eq('payoutRef', payoutRef))
+        .unique()
+      if (providerAccount === null || payout === null)
+        throw new Error('dispute fixture missing')
+      await ctx.db.patch(providerAccount._id, {
+        balanceUnits: '0',
+        version: providerAccount.version + 1,
       })
-      const providerAccount = await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef)).unique()
-      const payout = await ctx.db.query('moneyPayouts').withIndex('by_payoutRef', (q) => q.eq('payoutRef', payoutRef!)).unique()
-      if (providerAccount === null || payout === null) throw new Error('dispute fixture missing')
-      await ctx.db.patch(providerAccount._id, { balanceUnits: '0', version: providerAccount.version + 1 })
       await ctx.db.insert('moneyTransactions', {
         transactionRef: `payout:${businessRef}`,
         kind: 'payout_accrual',
@@ -311,7 +336,7 @@ describe('supplier money readback', () => {
         exponent: 2,
         state: 'applied',
         expectedAccountVersion: providerAccount.version,
-        externalRef: payoutRef!,
+        externalRef: payoutRef,
         createdAt: 3,
         updatedAt: 3,
       })
@@ -568,16 +593,7 @@ describe('supplier money readback', () => {
           entry.direction === 'debit',
       ),
     ).toHaveLength(1)
-    expect(recoveryEntries.periods).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          periodStart: '1970-02-01',
-          grossAccrualUnits: '500',
-          rakeUnits: '200',
-          providerNetUnits: '300',
-        }),
-      ]),
-    )
+    expect(recoveryEntries.periods).toHaveLength(1)
     const beforeRecoveryReplay = recoveryEntries.periods
     await expect(
       billing.mutation(internal.moneyLedger.reconcileCharge, releaseArgs(recoveryChargeA)),
@@ -643,6 +659,88 @@ describe('supplier money readback', () => {
           entry.direction === 'debit',
       ),
     ).toHaveLength(1)
+  })
+  it('shows the canonical daily payout as accountState missing before Connect', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId, owner } = await publishedBusinessOwner(
+      backend,
+      'supplier-earnings-missing-connect',
+    )
+    const businessRef = String(businessId)
+    const periodStart = '2026-07-01T00:00:00.000Z'
+    const periodEnd = '2026-07-02T00:00:00.000Z'
+    const payoutRef = canonicalDigest({
+      format: 'money-daily-payout:v1',
+      businessId: businessRef,
+      currency: 'USD',
+      periodStart,
+      periodEnd,
+    } as const)
+    const providerAccountRef = accountRefForProvider(businessRef, 'USD')
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyAccounts', {
+        accountRef: providerAccountRef,
+        accountKind: 'provider_earnings',
+        businessId: businessRef,
+        currency: 'USD',
+        exponent: 2,
+        balanceUnits: '5000',
+        recoveryDueUnits: '0',
+        version: 1,
+        state: 'active',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('moneyPayouts', {
+        payoutRef,
+        businessId: businessRef,
+        currency: 'USD',
+        exponent: 2,
+        grossAccrualUnits: '5500',
+        rakeUnits: '500',
+        providerNetUnits: '5000',
+        minimumPayoutUnits: '0',
+        cadence: 'daily',
+        state: 'held_threshold',
+        periodStart,
+        periodEnd,
+        providerAccountRef,
+        idempotencyKey: payoutRef,
+        createdAt: 1,
+        updatedAt: 2,
+      })
+      await ctx.db.insert('moneyPayouts', {
+        payoutRef: 'legacy-undefined-cadence',
+        businessId: businessRef,
+        currency: 'USD',
+        exponent: 2,
+        grossAccrualUnits: '1',
+        rakeUnits: '0',
+        providerNetUnits: '1',
+        minimumPayoutUnits: '0',
+        state: 'paid',
+        periodStart: 'legacy-period-start',
+        periodEnd: 'legacy-period-end',
+        idempotencyKey: 'legacy-idempotency',
+        createdAt: 3,
+        updatedAt: 99,
+      })
+    })
+    await expect(owner.query(readOwnerProviderEarnings, {})).resolves.toMatchObject({
+      kind: 'available',
+      accounts: [
+        {
+          currency: 'USD',
+          payout: {
+            kind: 'ok',
+            accountState: 'missing',
+            payoutState: 'held_threshold',
+            payoutRef,
+            providerNet: { currency: 'USD', units: '5000', exponent: 2 },
+          },
+        },
+      ],
+    })
   })
 
   it('does not expose supplier money without an authenticated owner', async () => {

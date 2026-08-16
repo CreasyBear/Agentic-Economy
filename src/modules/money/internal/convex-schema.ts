@@ -31,6 +31,7 @@ export const moneyTables = {
     entryType: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake')),
     direction: v.union(v.literal('credit'), v.literal('debit')),
     amountUnits: units,
+    allocationCorrectionUnits: v.optional(units),
     currency,
     exponent,
     transactionRef: identifier,
@@ -39,6 +40,8 @@ export const moneyTables = {
     businessId: v.optional(identifier),
     invocationRef: v.optional(identifier),
     attemptRef: v.optional(identifier),
+    payoutRef: v.optional(identifier),
+    allocationRef: v.optional(identifier),
     sourceDigest: identifier,
     evidenceRefs,
     reversalOf: v.optional(identifier),
@@ -47,7 +50,8 @@ export const moneyTables = {
     .index('by_transactionRef', ['transactionRef'])
     .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
     .index('by_principalId_and_createdAt', ['principalId', 'createdAt'])
-    .index('by_businessId_and_createdAt', ['businessId', 'createdAt']),
+    .index('by_businessId_and_createdAt', ['businessId', 'createdAt'])
+    .index('by_payoutRef_and_allocationRef', ['payoutRef', 'allocationRef']),
   moneyTransactions: defineTable({
     transactionRef: identifier,
     kind: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake')),
@@ -349,6 +353,7 @@ export const moneyTables = {
     rakeUnits: units,
     providerNetUnits: units,
     minimumPayoutUnits: units,
+    cadence: v.optional(v.literal('daily')),
     state: v.union(v.literal('review'), v.literal('held_kyc'), v.literal('held_threshold'), v.literal('transfer_pending'), v.literal('paid'), v.literal('reversed'), v.literal('failed'), v.literal('outcome_unknown')),
     periodStart: identifier,
     periodEnd: identifier,
@@ -377,5 +382,30 @@ export const moneyTables = {
     .index('by_periodStart_and_state', ['periodStart', 'state'])
     .index('by_stripeTransferId', ['stripeTransferId'])
     .index('by_payoutRef', ['payoutRef'])
-    .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt']),
+    .index('by_businessId_and_currency_and_updatedAt', ['businessId', 'currency', 'updatedAt'])
+    .index('by_businessId_and_currency_and_cadence_and_updatedAt', ['businessId', 'currency', 'cadence', 'updatedAt']),
+  moneyPayoutAllocations: defineTable({
+    allocationRef: identifier,
+    payoutRef: identifier,
+    qualifiedUseRef: identifier,
+    transactionRef: identifier,
+    usageRef: identifier,
+    businessId: identifier,
+    currency,
+    exponent,
+    grossAccrualUnits: units,
+    rakeUnits: units,
+    providerNetUnits: units,
+    qualifiedAt: v.number(),
+    sourceDigest: identifier,
+    materialDigest: identifier,
+    createdAt: v.number(),
+  })
+    .index('by_allocationRef', ['allocationRef'])
+    .index('by_qualifiedUseRef', ['qualifiedUseRef'])
+    .index('by_transactionRef', ['transactionRef'])
+    .index('by_payoutRef_and_qualifiedAt', ['payoutRef', 'qualifiedAt'])
+    .index('by_businessId_and_currency_and_qualifiedAt', [
+      'businessId', 'currency', 'qualifiedAt',
+    ]),
 } as const

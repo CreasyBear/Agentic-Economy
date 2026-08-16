@@ -60,6 +60,7 @@ const durableTables = [
   'moneyStripeEvents',
   'moneyPayoutAccounts',
   'moneyPayouts',
+  'moneyPayoutAllocations',
   'qualifiedUseReceipts',
   'businessSupplyProjectionSnapshots',
   'capabilityLaunchSupportRecords',
@@ -252,6 +253,13 @@ const durableTables = [
 
 const requiredIndexes = {
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
+  moneyLedgerEntries: [
+    'by_transactionRef',
+    'by_accountRef_and_createdAt',
+    'by_principalId_and_createdAt',
+    'by_businessId_and_createdAt',
+    'by_payoutRef_and_allocationRef',
+  ],
   moneyTransactions: ['by_idempotencyKey', 'by_transactionRef', 'by_principalId_and_createdAt', 'by_externalRef', 'by_reversalOf'],
   moneyCredentialBudgetStates: ['by_principal_credential_env_generation_window', 'by_credentialId_and_environment_and_generation_and_windowKind'],
   moneyUsageEvents: ['by_principalId_and_credentialId_and_currency_and_observedAt', 'by_businessId_and_observedAt', 'by_invocationRef', 'by_usageRef'],
@@ -261,7 +269,8 @@ const requiredIndexes = {
   moneyConnectAccountCommands: ['by_commandRef', 'by_businessId_and_currency', 'by_businessId_and_currency_and_idempotencyKey', 'by_idempotencyKey'],
   moneyStripeEvents: ['by_stripeEventId'],
   moneyPayoutAccounts: ['by_businessId_and_currency', 'by_stripeAccountId'],
-  moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt'],
+  moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
+  moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   qualifiedUseReceipts: ['by_qualifiedUseRef', 'by_businessId_and_qualifiedAt', 'by_invocationRef', 'by_operationRef_and_qualifiedAt'],
   owners: ['by_clerkUserId'],
   ownerNotificationPreferences: ['by_ownerId'],
@@ -541,8 +550,80 @@ describe('Convex schema', () => {
     )
 
     for (const [tableName, indexes] of Object.entries(requiredIndexes)) {
-      expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
+      if (tableName === 'moneyPayoutAllocations')
+        expect(tableIndexes[tableName]).toEqual(indexes)
+      else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+  it('pins the new ledger and payout index field order', () => {
+    const index = (tableName: string, indexDescriptor: string) =>
+      exported.tables
+        .find((table) => table.tableName === tableName)
+        ?.indexes.find((item) => item.indexDescriptor === indexDescriptor)
+
+    expect(index('moneyLedgerEntries', 'by_payoutRef_and_allocationRef')).toEqual({
+      indexDescriptor: 'by_payoutRef_and_allocationRef',
+      fields: ['payoutRef', 'allocationRef'],
+    })
+    expect(
+      index(
+        'moneyPayouts',
+        'by_businessId_and_currency_and_cadence_and_updatedAt',
+      ),
+    ).toEqual({
+      indexDescriptor: 'by_businessId_and_currency_and_cadence_and_updatedAt',
+      fields: ['businessId', 'currency', 'cadence', 'updatedAt'],
+    })
+  })
+  it('accepts optional payout and allocation linkage on canonical refund ledger rows', async () => {
+    const backend = convexTest(schema, convexModules)
+    const rows = await backend.run(async (ctx) => {
+      const linkedId = await ctx.db.insert('moneyLedgerEntries', {
+        entryRef: 'refund:linked',
+        accountRef: 'provider:business:USD',
+        entryType: 'refund',
+        direction: 'debit',
+        amountUnits: '1',
+        currency: 'USD',
+        exponent: 2,
+        transactionRef: 'transaction:refund:linked',
+        idempotencyKey: 'refund:linked',
+        payoutRef: 'payout:daily',
+        allocationRef: 'allocation:daily',
+        allocationCorrectionUnits: '1',
+        sourceDigest: 'sha256:refund',
+        evidenceRefs: [],
+        reversalOf: 'transaction:charge',
+        createdAt: 1,
+      })
+      const unlinkedId = await ctx.db.insert('moneyLedgerEntries', {
+        entryRef: 'refund:unlinked',
+        accountRef: 'provider:business:USD',
+        entryType: 'refund',
+        direction: 'debit',
+        amountUnits: '1',
+        currency: 'USD',
+        exponent: 2,
+        transactionRef: 'transaction:refund:unlinked',
+        idempotencyKey: 'refund:unlinked',
+        sourceDigest: 'sha256:refund',
+        evidenceRefs: [],
+        reversalOf: 'transaction:charge',
+        createdAt: 2,
+      })
+      return {
+        linked: await ctx.db.get(linkedId),
+        unlinked: await ctx.db.get(unlinkedId),
+      }
+    })
+    expect(rows.linked).toMatchObject({
+      payoutRef: 'payout:daily',
+      allocationRef: 'allocation:daily',
+      allocationCorrectionUnits: '1',
+    })
+    expect(rows.unlinked).not.toHaveProperty('payoutRef')
+    expect(rows.unlinked).not.toHaveProperty('allocationRef')
+    expect(rows.unlinked).not.toHaveProperty('allocationCorrectionUnits')
   })
 
   it('defines the public registry search-document index used by Convex search', () => {

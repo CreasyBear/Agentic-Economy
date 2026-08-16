@@ -63,6 +63,7 @@ import {
   type ExactAmount,
   type MoneyAccount,
   type MoneyPayout,
+  type QualifiedUseReceipt,
 } from '../src/modules/money/public'
 import {
   decideExternalSpendFinalization,
@@ -1454,6 +1455,7 @@ function validateCanonicalChargeJournal(
 }
 
 type PayoutAccrualAmounts = Readonly<{
+  transactionRef: string
   businessId: string
   currency: string
   exponent: number
@@ -1462,36 +1464,6 @@ type PayoutAccrualAmounts = Readonly<{
   providerNet: ExactAmount
 }>
 
-function payoutPeriodIdentity(
-  businessId: string,
-  currency: string,
-  now: number,
-): Readonly<{
-  payoutRef: string
-  periodStart: string
-  periodEnd: string
-}> {
-  const date = new Date(now)
-  const year = date.getUTCFullYear()
-  const month = date.getUTCMonth()
-  const periodStart = new Date(Date.UTC(year, month, 1))
-    .toISOString()
-    .slice(0, 10)
-  const periodEnd = new Date(Date.UTC(year, month + 1, 0))
-    .toISOString()
-    .slice(0, 10)
-  return {
-    payoutRef: canonicalDigest({
-      format: 'money-payout-period:v1',
-      businessId,
-      currency,
-      periodStart,
-      periodEnd,
-    }),
-    periodStart,
-    periodEnd,
-  }
-}
 
 async function readPayoutAccrualAmounts(
   ctx: Pick<MutationCtx, 'db'>,
@@ -1569,6 +1541,7 @@ async function readPayoutAccrualAmounts(
   )
     return undefined
   return {
+    transactionRef: transaction.transactionRef,
     businessId: selected.provider.businessId,
     currency: providerAccount.currency,
     exponent: providerAccount.exponent,
@@ -1578,119 +1551,1016 @@ async function readPayoutAccrualAmounts(
   }
 }
 
-type PreparedPayoutPeriodUpdate =
+const DAILY_PAYOUT_ALLOCATION_READ_LIMIT = 1_000
+
+type QualifiedUsePayoutAmounts = Readonly<{
+  businessId: string
+  currency: string
+  exponent: number
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+  sourceDigest: string
+}>
+type QualifiedUsePayoutResolution =
   | Readonly<{
-      kind: 'insert'
-      value: Omit<Doc<'moneyPayouts'>, '_id' | '_creationTime'>
+      kind: 'eligible'
+      amounts: QualifiedUsePayoutAmounts
     }>
   | Readonly<{
-      kind: 'patch'
-      row: Doc<'moneyPayouts'>
-      patch: Readonly<{
-        grossAccrualUnits: string
-        rakeUnits: string
-        providerNetUnits: string
-        updatedAt: number
-      }>
+      kind: 'excluded'
+      reason: 'free_tier'
+    }>
+  | Readonly<{
+      kind: 'excluded'
+      reason: 'refunded_before_delivery'
+      amounts: QualifiedUsePayoutAmounts
     }>
 
-async function preparePayoutPeriodUpdate(
+type DailyPayoutIdentity = Readonly<{
+  payoutRef: string
+  periodStart: string
+  periodEnd: string
+  periodStartAt: number
+  periodEndAt: number
+}>
+
+function dailyPayoutIdentity(
+  businessId: string,
+  currency: string,
+  qualifiedAt: number,
+): DailyPayoutIdentity {
+  const timestamp = new Date(qualifiedAt).getTime()
+  if (!Number.isFinite(timestamp))
+    throw new Error('qualified_use_payout_allocation_invalid')
+  const date = new Date(timestamp)
+  const periodStartAt = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+  )
+  const periodEndAt = periodStartAt + 86_400_000
+  const periodStart = new Date(periodStartAt).toISOString()
+  const periodEnd = new Date(periodEndAt).toISOString()
+  return {
+    payoutRef: canonicalDigest({
+      format: 'money-daily-payout:v1',
+      businessId,
+      currency,
+      periodStart,
+      periodEnd,
+    } as StableHashValue),
+    periodStart,
+    periodEnd,
+    periodStartAt,
+    periodEndAt,
+  }
+}
+function dailyPayoutIdentityFromRow(
+  row: Doc<'moneyPayouts'>,
+): DailyPayoutIdentity | undefined {
+  if (row.cadence !== 'daily') return undefined
+  const periodStartAt = Date.parse(row.periodStart)
+  if (!Number.isFinite(periodStartAt)) return undefined
+  let period: DailyPayoutIdentity
+  try {
+    period = dailyPayoutIdentity(row.businessId, row.currency, periodStartAt)
+  } catch {
+    return undefined
+  }
+  return row.payoutRef === period.payoutRef &&
+    row.periodStart === period.periodStart &&
+    row.periodEnd === period.periodEnd
+    ? period
+    : undefined
+}
+
+function qualifiedUseAllocationRef(
+  receipt: Pick<QualifiedUseReceipt, 'qualifiedUseRef' | 'materialDigest'>,
+): string {
+  return canonicalDigest({
+    format: 'money-qualified-use-allocation:v1',
+    qualifiedUseRef: receipt.qualifiedUseRef,
+    materialDigest: receipt.materialDigest,
+  } as StableHashValue)
+}
+
+function qualifiedUsePayoutFailure(): never {
+  throw new Error('qualified_use_payout_allocation_invalid')
+}
+function isCanonicalFreeTierCharge(
+  receipt: QualifiedUseReceipt,
+  principalId: string,
+  transaction: Doc<'moneyTransactions'>,
+  usage: Doc<'moneyUsageEvents'>,
+  entries: readonly MoneyLedgerEntryRow[],
+  allowReversedTransaction: boolean,
+): boolean {
+  const transactionAmount =
+    transaction.amountUnits === undefined
+      ? undefined
+      : amountFromParts(
+          transaction.currency,
+          transaction.amountUnits,
+          transaction.exponent,
+        )
+  const usageAmount = amountFromParts(
+    usage.currency,
+    usage.amountUnits,
+    usage.exponent,
+  )
+  return (
+    entries.length === 0 &&
+    transactionAmount !== undefined &&
+    usageAmount !== undefined &&
+    transaction.kind === 'charge' &&
+    (transaction.state === 'applied' ||
+      (allowReversedTransaction && transaction.state === 'reversed')) &&
+    transaction.idempotencyKey === transaction.transactionRef &&
+    transaction.transactionRef === receipt.transactionRef &&
+    transaction.accountId !== undefined &&
+    transaction.accountId === usage.accountId &&
+    transaction.principalId === principalId &&
+    usage.principalId === principalId &&
+    transaction.budgetEnvironment === receipt.environment &&
+    receipt.environment === 'production' &&
+    transaction.currency === usage.currency &&
+    transaction.exponent === usage.exponent &&
+    transactionAmount.units === '0' &&
+    usage.usageRef === receipt.usageRef &&
+    usage.transactionRef === receipt.transactionRef &&
+    usage.chargeState === 'free_tier' &&
+    usageAmount.units === '0' &&
+    usage.businessId === receipt.businessId &&
+    usage.invocationRef === receipt.invocationRef &&
+    usage.attemptRef === receipt.attemptRef &&
+    usage.operationKey === receipt.operationRef &&
+    usage.serviceRef.trim().length > 0 &&
+    usage.offeringRef.trim().length > 0 &&
+    usage.observedAt === transaction.createdAt
+  )
+}
+
+async function readQualifiedUsePayoutAmounts(
   ctx: Pick<MutationCtx, 'db'>,
-  accrual: PayoutAccrualAmounts,
-  now: number,
-  direction: 'credit' | 'debit',
-): Promise<PreparedPayoutPeriodUpdate | undefined> {
-  const period = payoutPeriodIdentity(accrual.businessId, accrual.currency, now)
-  const currentRow = await ctx.db
+  receipt: QualifiedUseReceipt,
+  eligibilityPrincipalId: string,
+  allowReversedFreeTier = false,
+): Promise<QualifiedUsePayoutResolution> {
+  if (
+    eligibilityPrincipalId.trim().length === 0 ||
+    receipt.environment !== 'production' ||
+    receipt.qualifiedUseRef !== qualifiedUseRef(receipt) ||
+    receipt.materialDigest !== qualifiedUseMaterialDigest(receipt) ||
+    receipt.qualifiedUseRef.length === 0 ||
+    receipt.materialDigest.length === 0 ||
+    receipt.transactionRef === undefined ||
+    receipt.transactionRef.length === 0 ||
+    receipt.usageRef === undefined ||
+    receipt.usageRef.length === 0
+  )
+    return qualifiedUsePayoutFailure()
+  const [transaction, usage, entries] = await Promise.all([
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_transactionRef', (query) =>
+        query.eq('transactionRef', receipt.transactionRef!),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyUsageEvents')
+      .withIndex('by_usageRef', (query) =>
+        query.eq('usageRef', receipt.usageRef!),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyLedgerEntries')
+      .withIndex('by_transactionRef', (query) =>
+        query.eq('transactionRef', receipt.transactionRef!),
+      )
+      .take(10),
+  ])
+  if (transaction === null || usage === null)
+    return qualifiedUsePayoutFailure()
+  if (
+    transaction.principalId !== eligibilityPrincipalId ||
+    usage.principalId !== eligibilityPrincipalId ||
+    transaction.budgetEnvironment !== receipt.environment ||
+    receipt.environment !== 'production'
+  )
+    return qualifiedUsePayoutFailure()
+  if (
+    transaction.amountUnits === '0' ||
+    usage.chargeState === 'free_tier'
+  )
+    return isCanonicalFreeTierCharge(
+      receipt,
+      eligibilityPrincipalId,
+      transaction,
+      usage,
+      entries,
+      allowReversedFreeTier,
+    )
+      ? { kind: 'excluded' as const, reason: 'free_tier' as const }
+      : qualifiedUsePayoutFailure()
+  const refundedBeforeDelivery =
+    transaction.state === 'reversed' &&
+    transaction.budgetState === 'released' &&
+    transaction.settledAt !== undefined
+  const settledPaidCharge =
+    transaction.state === 'applied' &&
+    transaction.budgetState === 'settled' &&
+    transaction.settledAt !== undefined
+  if (
+    (!settledPaidCharge && !refundedBeforeDelivery) ||
+    transaction.amountUnits === undefined ||
+    transaction.amountUnits === '0' ||
+    usage.usageRef !== receipt.usageRef ||
+    usage.transactionRef !== receipt.transactionRef ||
+    usage.chargeState !== 'paid' ||
+    usage.invocationRef !== receipt.invocationRef ||
+    usage.attemptRef !== receipt.attemptRef ||
+    usage.businessId !== receipt.businessId ||
+    usage.operationKey !== receipt.operationRef
+  )
+    return qualifiedUsePayoutFailure()
+  const journal = validateCanonicalChargeJournal(
+    transaction,
+    usage,
+    selectChargeLedgerEntries(entries),
+  )
+  if (
+    journal === undefined ||
+    journal.businessId !== receipt.businessId ||
+    journal.usage.invocationRef !== receipt.invocationRef ||
+    journal.usage.attemptRef !== receipt.attemptRef ||
+    journal.selected.charge.sourceDigest.length === 0
+  )
+    return qualifiedUsePayoutFailure()
+  const [operatorAccount, providerAccount, rakeAccount] = await Promise.all([
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', journal.selected.charge.accountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', journal.selected.provider.accountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', journal.selected.rake.accountRef),
+      )
+      .unique(),
+  ])
+  const operatorDomain =
+    operatorAccount === null ? undefined : accountFromRow(operatorAccount)
+  const providerDomain =
+    providerAccount === null ? undefined : accountFromRow(providerAccount)
+  const rakeDomain =
+    rakeAccount === null ? undefined : accountFromRow(rakeAccount)
+  if (
+    operatorAccount === null ||
+    providerAccount === null ||
+    rakeAccount === null ||
+    operatorDomain === undefined ||
+    providerDomain === undefined ||
+    rakeDomain === undefined ||
+    operatorAccount.accountRef !== accountRefForOwner(journal.accountId, transaction.currency) ||
+    operatorAccount.accountKind !== 'operator_credit' ||
+    operatorAccount.accountId !== journal.accountId ||
+    operatorAccount.businessId !== undefined ||
+    providerAccount.accountRef !== accountRefForProvider(journal.businessId, transaction.currency) ||
+    providerAccount.accountKind !== 'provider_earnings' ||
+    providerAccount.businessId !== journal.businessId ||
+    providerAccount.accountId !== undefined ||
+    rakeAccount.accountRef !== accountRefForRake(transaction.currency) ||
+    rakeAccount.accountKind !== 'ae_rake' ||
+    rakeAccount.accountId !== undefined ||
+    rakeAccount.businessId !== undefined ||
+    operatorAccount.currency !== transaction.currency ||
+    providerAccount.currency !== transaction.currency ||
+    rakeAccount.currency !== transaction.currency ||
+    operatorAccount.exponent !== transaction.exponent ||
+    providerAccount.exponent !== transaction.exponent ||
+    rakeAccount.exponent !== transaction.exponent ||
+    new Set([
+      journal.selected.charge.accountRef,
+      journal.selected.provider.accountRef,
+      journal.selected.rake.accountRef,
+    ]).size !== 3
+  )
+    return qualifiedUsePayoutFailure()
+  const recoveryAmount = providerRecoveryAmount(journal.selected, transaction)
+  const fullGross = amountAtScale(
+    journal.chargeAmount,
+    providerAccount.currency,
+    providerAccount.exponent,
+  )
+  const fullRake = amountAtScale(
+    journal.rakeAmount,
+    providerAccount.currency,
+    providerAccount.exponent,
+  )
+  const fullProvider = amountAtScale(
+    journal.providerAmount,
+    providerAccount.currency,
+    providerAccount.exponent,
+  )
+  const recoveryAtScale =
+    recoveryAmount === undefined
+      ? undefined
+      : amountAtScale(
+          recoveryAmount,
+          providerAccount.currency,
+          providerAccount.exponent,
+        )
+  if (
+    fullGross === undefined ||
+    fullRake === undefined ||
+    fullProvider === undefined ||
+    recoveryAtScale === undefined
+  )
+    return qualifiedUsePayoutFailure()
+  const grossAccrual = subtractExactAmounts(fullGross, recoveryAtScale)
+  const providerNet = subtractExactAmounts(fullProvider, recoveryAtScale)
+  const expectedGross =
+    grossAccrual === undefined || providerNet === undefined
+      ? undefined
+      : addExactAmounts(providerNet, fullRake)
+  if (
+    grossAccrual === undefined ||
+    providerNet === undefined ||
+    expectedGross === undefined ||
+    compareExactAmounts(expectedGross, grossAccrual) !== 0
+  )
+    return qualifiedUsePayoutFailure()
+  const amounts = {
+    businessId: journal.businessId,
+    currency: providerAccount.currency,
+    exponent: providerAccount.exponent,
+    grossAccrual,
+    rake: fullRake,
+    providerNet,
+    sourceDigest: journal.selected.charge.sourceDigest,
+  }
+  return refundedBeforeDelivery
+    ? {
+        kind: 'excluded' as const,
+        reason: 'refunded_before_delivery' as const,
+        amounts,
+      }
+    : { kind: 'eligible' as const, amounts }
+}
+
+function allocationAmountsFromRow(
+  row: Doc<'moneyPayoutAllocations'>,
+): Readonly<{
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+}> | undefined {
+  const grossAccrual = amountFromParts(
+    row.currency,
+    row.grossAccrualUnits,
+    row.exponent,
+  )
+  const rake = amountFromParts(row.currency, row.rakeUnits, row.exponent)
+  const providerNet = amountFromParts(
+    row.currency,
+    row.providerNetUnits,
+    row.exponent,
+  )
+  const expectedGross =
+    rake === undefined || providerNet === undefined
+      ? undefined
+      : addExactAmounts(providerNet, rake)
+  return grossAccrual === undefined ||
+    rake === undefined ||
+    providerNet === undefined ||
+    expectedGross === undefined ||
+    compareExactAmounts(expectedGross, grossAccrual) !== 0
+    ? undefined
+    : { grossAccrual, rake, providerNet }
+}
+
+type DailyPayoutComposition = Readonly<{
+  rows: readonly Doc<'moneyPayoutAllocations'>[]
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+}>
+async function readDailyPayoutComposition(
+  ctx: Pick<MutationCtx, 'db'>,
+  period: DailyPayoutIdentity,
+  businessId: string,
+  currency: string,
+  exponent: number,
+): Promise<DailyPayoutComposition> {
+  const rows = await ctx.db
+    .query('moneyPayoutAllocations')
+    .withIndex('by_payoutRef_and_qualifiedAt', (query) =>
+      query.eq('payoutRef', period.payoutRef),
+    )
+    .take(DAILY_PAYOUT_ALLOCATION_READ_LIMIT + 1)
+  if (rows.length > DAILY_PAYOUT_ALLOCATION_READ_LIMIT)
+    return qualifiedUsePayoutFailure()
+  const allocations = new Map<string, Doc<'moneyPayoutAllocations'>>()
+  let grossAccrual = zeroAmount(currency, exponent)
+  let rake = zeroAmount(currency, exponent)
+  let providerNet = zeroAmount(currency, exponent)
+  if (grossAccrual === undefined || rake === undefined || providerNet === undefined)
+    return qualifiedUsePayoutFailure()
+  for (const row of rows) {
+    const amounts = allocationAmountsFromRow(row)
+    if (
+      amounts === undefined ||
+      row.allocationRef !== qualifiedUseAllocationRef({
+        qualifiedUseRef: row.qualifiedUseRef,
+        materialDigest: row.materialDigest,
+      }) ||
+      row.allocationRef.trim().length === 0 ||
+      row.payoutRef !== period.payoutRef ||
+      row.businessId !== businessId ||
+      row.currency !== currency ||
+      row.exponent !== exponent ||
+      row.qualifiedAt < period.periodStartAt ||
+      row.qualifiedAt >= period.periodEndAt ||
+      row.sourceDigest.trim().length === 0 ||
+      row.materialDigest.trim().length === 0 ||
+      allocations.has(row.allocationRef)
+    )
+      return qualifiedUsePayoutFailure()
+    allocations.set(row.allocationRef, row)
+  }
+  const corrections = await ctx.db
+    .query('moneyLedgerEntries')
+    .withIndex('by_payoutRef_and_allocationRef', (query) =>
+      query.eq('payoutRef', period.payoutRef),
+    )
+    .take(DAILY_PAYOUT_ALLOCATION_READ_LIMIT + 1)
+  if (corrections.length > DAILY_PAYOUT_ALLOCATION_READ_LIMIT)
+    return qualifiedUsePayoutFailure()
+  const correctedAllocations = new Map<string, ExactAmount>()
+  for (const correction of corrections) {
+    const allocation =
+      correction.allocationRef === undefined
+        ? undefined
+        : allocations.get(correction.allocationRef)
+    const allocationAmounts =
+      allocation === undefined
+        ? undefined
+        : allocationAmountsFromRow(allocation)
+    const correctionAmount = amountFromParts(
+      correction.currency,
+      correction.amountUnits,
+      correction.exponent,
+    )
+    const allocationCorrectionAmount =
+      correction.allocationCorrectionUnits === undefined
+        ? undefined
+        : amountFromParts(
+            correction.currency,
+            correction.allocationCorrectionUnits,
+            correction.exponent,
+          )
+    const expectedAllocationCorrectionAmount =
+      allocation === undefined
+        ? undefined
+        : amountFromParts(
+            allocation.currency,
+            allocation.providerNetUnits,
+            allocation.exponent,
+          )
+    if (
+      allocation === undefined ||
+      allocationAmounts === undefined ||
+      correction.entryType !== 'refund' ||
+      correction.direction !== 'debit' ||
+      correction.accountRef !== accountRefForProvider(businessId, currency) ||
+      correction.businessId !== businessId ||
+      correction.payoutRef !== period.payoutRef ||
+      correction.allocationRef !== allocation.allocationRef ||
+      correction.reversalOf !== allocation.transactionRef ||
+      correction.allocationCorrectionUnits !== allocation.providerNetUnits ||
+      correction.currency !== currency ||
+      correction.exponent !== exponent ||
+      correctionAmount === undefined ||
+      allocationCorrectionAmount === undefined ||
+      expectedAllocationCorrectionAmount === undefined ||
+      compareExactAmounts(
+        allocationCorrectionAmount,
+        expectedAllocationCorrectionAmount,
+      ) !== 0 ||
+      compareExactAmounts(correctionAmount, allocationCorrectionAmount) === -1 ||
+      correction.sourceDigest.trim().length === 0 ||
+      correction.transactionRef.trim().length === 0 ||
+      correctedAllocations.has(allocation.allocationRef)
+    )
+      return qualifiedUsePayoutFailure()
+    correctedAllocations.set(
+      allocation.allocationRef,
+      allocationCorrectionAmount,
+    )
+  }
+  for (const row of rows) {
+    const correctionAmount = correctedAllocations.get(row.allocationRef)
+    const amounts = allocationAmountsFromRow(row)
+    if (correctionAmount !== undefined) {
+      if (
+        amounts === undefined ||
+        compareExactAmounts(amounts.providerNet, correctionAmount) !== 0
+      )
+        return qualifiedUsePayoutFailure()
+      continue
+    }
+    if (amounts === undefined) return qualifiedUsePayoutFailure()
+    const nextGross = addExactAmounts(grossAccrual, amounts.grossAccrual)
+    const nextRake = addExactAmounts(rake, amounts.rake)
+    const nextProvider = addExactAmounts(providerNet, amounts.providerNet)
+    if (nextGross === undefined || nextRake === undefined || nextProvider === undefined)
+      return qualifiedUsePayoutFailure()
+    grossAccrual = nextGross
+    rake = nextRake
+    providerNet = nextProvider
+  }
+  return { rows, grossAccrual, rake, providerNet }
+}
+
+function allocationReplayMatchesReceipt(
+  row: Doc<'moneyPayoutAllocations'>,
+  receipt: QualifiedUseReceipt,
+  allocationRef: string,
+): boolean {
+  const amounts = allocationAmountsFromRow(row)
+  let period: DailyPayoutIdentity
+  try {
+    period = dailyPayoutIdentity(
+      row.businessId,
+      row.currency,
+      row.qualifiedAt,
+    )
+  } catch {
+    return false
+  }
+  return (
+    receipt.environment === 'production' &&
+    receipt.qualifiedUseRef.length > 0 &&
+    receipt.materialDigest.length > 0 &&
+    receipt.qualifiedUseRef === qualifiedUseRef(receipt) &&
+    receipt.materialDigest === qualifiedUseMaterialDigest(receipt) &&
+    row.allocationRef === allocationRef &&
+    row.qualifiedUseRef === receipt.qualifiedUseRef &&
+    row.transactionRef === receipt.transactionRef &&
+    row.usageRef === receipt.usageRef &&
+    row.businessId === receipt.businessId &&
+    row.qualifiedAt === receipt.qualifiedAt &&
+    row.materialDigest === receipt.materialDigest &&
+    row.sourceDigest.trim().length > 0 &&
+    row.materialDigest.trim().length > 0 &&
+    row.payoutRef === period.payoutRef &&
+    amounts !== undefined
+  )
+}
+async function validateQualifiedUseAllocationReplay(
+  ctx: Pick<MutationCtx, 'db'>,
+  receipt: QualifiedUseReceipt,
+  eligibilityPrincipalId: string,
+  allocation: Doc<'moneyPayoutAllocations'>,
+  allocationRef: string,
+): Promise<void> {
+  if (
+    !allocationReplayMatchesReceipt(allocation, receipt, allocationRef) ||
+    receipt.transactionRef === undefined ||
+    receipt.usageRef === undefined
+  )
+    return qualifiedUsePayoutFailure()
+  const period = dailyPayoutIdentity(
+    allocation.businessId,
+    allocation.currency,
+    allocation.qualifiedAt,
+  )
+  const resolution = await readQualifiedUsePayoutAmounts(
+    ctx,
+    receipt,
+    eligibilityPrincipalId,
+    true,
+  )
+  const sourceAmounts =
+    resolution.kind === 'eligible'
+      ? resolution.amounts
+      : resolution.reason === 'refunded_before_delivery'
+        ? resolution.amounts
+        : undefined
+  const allocationAmounts = allocationAmountsFromRow(allocation)
+  if (
+    sourceAmounts === undefined ||
+    allocationAmounts === undefined ||
+    sourceAmounts.businessId !== allocation.businessId ||
+    sourceAmounts.currency !== allocation.currency ||
+    sourceAmounts.exponent !== allocation.exponent ||
+    allocation.sourceDigest !== sourceAmounts.sourceDigest ||
+    compareExactAmounts(sourceAmounts.grossAccrual, allocationAmounts.grossAccrual) !==
+      0 ||
+    compareExactAmounts(sourceAmounts.rake, allocationAmounts.rake) !== 0 ||
+    compareExactAmounts(sourceAmounts.providerNet, allocationAmounts.providerNet) !==
+      0
+  )
+    return qualifiedUsePayoutFailure()
+  const [payout, providerAccount] = await Promise.all([
+    ctx.db
+      .query('moneyPayouts')
+      .withIndex('by_payoutRef', (query) =>
+        query.eq('payoutRef', period.payoutRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq(
+          'accountRef',
+          accountRefForProvider(allocation.businessId, allocation.currency),
+        ),
+      )
+      .unique(),
+  ])
+  const composition = await readDailyPayoutComposition(
+    ctx,
+    period,
+    allocation.businessId,
+    allocation.currency,
+    allocation.exponent,
+  )
+  const currentGross =
+    payout === null
+      ? undefined
+      : amountFromParts(
+          payout.currency,
+          payout.grossAccrualUnits,
+          payout.exponent,
+        )
+  const currentRake =
+    payout === null
+      ? undefined
+      : amountFromParts(payout.currency, payout.rakeUnits, payout.exponent)
+  const currentProvider =
+    payout === null
+      ? undefined
+      : amountFromParts(
+          payout.currency,
+          payout.providerNetUnits,
+          payout.exponent,
+        )
+  const minimumPayout =
+    payout === null
+      ? undefined
+      : amountFromParts(
+          payout.currency,
+          payout.minimumPayoutUnits,
+          payout.exponent,
+        )
+  const currentExpectedGross =
+    currentRake === undefined || currentProvider === undefined
+      ? undefined
+      : addExactAmounts(currentProvider, currentRake)
+  if (
+    payout === null ||
+    providerAccount === null ||
+    currentGross === undefined ||
+    currentRake === undefined ||
+    currentProvider === undefined ||
+    minimumPayout === undefined ||
+    currentExpectedGross === undefined ||
+    payout.payoutRef !== period.payoutRef ||
+    payout.cadence !== 'daily' ||
+    payout.businessId !== allocation.businessId ||
+    payout.currency !== allocation.currency ||
+    payout.exponent !== allocation.exponent ||
+    payout.periodStart !== period.periodStart ||
+    payout.periodEnd !== period.periodEnd ||
+    payout.providerAccountRef !==
+      accountRefForProvider(allocation.businessId, allocation.currency) ||
+    payout.idempotencyKey !== period.payoutRef ||
+    minimumPayout.units !== '0' ||
+    compareExactAmounts(currentExpectedGross, currentGross) !== 0 ||
+    providerAccount.accountRef !== payout.providerAccountRef ||
+    providerAccount.accountKind !== 'provider_earnings' ||
+    providerAccount.businessId !== allocation.businessId ||
+    providerAccount.accountId !== undefined ||
+    providerAccount.currency !== allocation.currency ||
+    providerAccount.exponent !== allocation.exponent
+  )
+    return qualifiedUsePayoutFailure()
+  if (
+    payout.state === 'review' ||
+    payout.state === 'held_kyc' ||
+    payout.state === 'held_threshold' ||
+    payout.state === 'failed'
+  ) {
+    if (
+      compareExactAmounts(currentGross, composition.grossAccrual) !== 0 ||
+      compareExactAmounts(currentRake, composition.rake) !== 0 ||
+      compareExactAmounts(currentProvider, composition.providerNet) !== 0
+    )
+      return qualifiedUsePayoutFailure()
+  }
+}
+
+function sameQualifiedUseReceipt(
+  row: Doc<'qualifiedUseReceipts'>,
+  receipt: QualifiedUseReceipt,
+): boolean {
+  if (!Array.isArray(row.evidenceRefs)) return false
+  const identity = {
+    invocationRef: row.invocationRef,
+    attemptRef: row.attemptRef,
+    effectGeneration: row.effectGeneration,
+  }
+  const material = {
+    ...identity,
+    businessId: row.businessId,
+    operationRef: row.operationRef,
+    publicationRef: row.publicationRef,
+    publicationRevision: row.publicationRevision,
+    contractDigest: row.contractDigest,
+    bindingDigest: row.bindingDigest,
+    principalClass: row.principalClass,
+    requestDigest: row.requestDigest,
+    responseDigest: row.responseDigest,
+    evidenceRefs: row.evidenceRefs,
+  }
+  return (
+    qualifiedUseRef(identity) === row.qualifiedUseRef &&
+    qualifiedUseMaterialDigest(material) === row.materialDigest &&
+    row.qualifiedUseRef === receipt.qualifiedUseRef &&
+    row.materialDigest === receipt.materialDigest &&
+    row.invocationRef === receipt.invocationRef &&
+    row.attemptRef === receipt.attemptRef &&
+    row.effectGeneration === receipt.effectGeneration &&
+    row.businessId === receipt.businessId &&
+    row.operationRef === receipt.operationRef &&
+    row.publicationRef === receipt.publicationRef &&
+    row.publicationRevision === receipt.publicationRevision &&
+    row.contractDigest === receipt.contractDigest &&
+    row.bindingDigest === receipt.bindingDigest &&
+    row.principalClass === receipt.principalClass &&
+    row.requestDigest === receipt.requestDigest &&
+    row.responseDigest === receipt.responseDigest &&
+    row.evidenceRefs.length === receipt.evidenceRefs.length &&
+    row.evidenceRefs.every((ref, index) => ref === receipt.evidenceRefs[index]) &&
+    row.environment === receipt.environment &&
+    row.qualifiedAt === receipt.qualifiedAt &&
+    row.usageRef === receipt.usageRef &&
+    row.transactionRef === receipt.transactionRef
+  )
+}
+
+/**
+ * Records the only payout allocation authority for Qualified Use. The receipt
+ * carries the journal link; all economic and period identity is recovered here.
+ */
+export async function recordQualifiedUsePayoutAllocation(
+  ctx: Pick<MutationCtx, 'db'>,
+  receipt: QualifiedUseReceipt,
+  eligibilityPrincipalId: string,
+): Promise<
+  'allocated' | 'excluded_free_tier' | 'excluded_refunded_before_delivery'
+> {
+  if (receipt.transactionRef === undefined || receipt.usageRef === undefined)
+    return qualifiedUsePayoutFailure()
+  const persistedReceipt = await ctx.db
+    .query('qualifiedUseReceipts')
+    .withIndex('by_qualifiedUseRef', (query) =>
+      query.eq('qualifiedUseRef', receipt.qualifiedUseRef),
+    )
+    .unique()
+  if (
+    persistedReceipt !== null &&
+    !sameQualifiedUseReceipt(persistedReceipt, receipt)
+  )
+    return qualifiedUsePayoutFailure()
+  const allocationRef = qualifiedUseAllocationRef(receipt)
+  const [allocationByRef, allocationByQualifiedUse, allocationByTransaction] =
+    await Promise.all([
+      ctx.db
+        .query('moneyPayoutAllocations')
+        .withIndex('by_allocationRef', (query) =>
+          query.eq('allocationRef', allocationRef),
+        )
+        .unique(),
+      ctx.db
+        .query('moneyPayoutAllocations')
+        .withIndex('by_qualifiedUseRef', (query) =>
+          query.eq('qualifiedUseRef', receipt.qualifiedUseRef),
+        )
+        .unique(),
+      ctx.db
+        .query('moneyPayoutAllocations')
+        .withIndex('by_transactionRef', (query) =>
+          query.eq('transactionRef', receipt.transactionRef!),
+        )
+        .unique(),
+    ])
+  const sameAllocation =
+    allocationByRef !== null &&
+    allocationByQualifiedUse !== null &&
+    allocationByTransaction !== null &&
+    allocationByQualifiedUse._id === allocationByRef._id &&
+    allocationByTransaction._id === allocationByRef._id
+  if (
+    (allocationByRef !== null ||
+      allocationByQualifiedUse !== null ||
+      allocationByTransaction !== null) &&
+    (persistedReceipt === null || !sameAllocation)
+  )
+    return qualifiedUsePayoutFailure()
+  if (allocationByRef !== null) {
+    await validateQualifiedUseAllocationReplay(
+      ctx,
+      receipt,
+      eligibilityPrincipalId,
+      allocationByRef,
+      allocationRef,
+    )
+    return 'allocated'
+  }
+  const resolution = await readQualifiedUsePayoutAmounts(
+    ctx,
+    receipt,
+    eligibilityPrincipalId,
+    persistedReceipt !== null,
+  )
+  if (resolution.kind === 'excluded') {
+    if (resolution.reason === 'free_tier') return 'excluded_free_tier'
+    if (persistedReceipt !== null) return qualifiedUsePayoutFailure()
+    return 'excluded_refunded_before_delivery'
+  }
+  if (persistedReceipt !== null) return qualifiedUsePayoutFailure()
+  const amounts = resolution.amounts
+  const period = dailyPayoutIdentity(
+    amounts.businessId,
+    amounts.currency,
+    receipt.qualifiedAt,
+  )
+  const payout = await ctx.db
     .query('moneyPayouts')
     .withIndex('by_payoutRef', (query) =>
       query.eq('payoutRef', period.payoutRef),
     )
     .unique()
-  if (currentRow === null) {
-    if (direction === 'debit') return undefined
-    const minimum = zeroAmount(accrual.currency, accrual.exponent)
-    if (minimum === undefined) return undefined
-    return {
-      kind: 'insert',
-      value: {
-        payoutRef: period.payoutRef,
-        businessId: accrual.businessId,
-        currency: accrual.currency,
-        exponent: accrual.exponent,
-        grossAccrualUnits: accrual.grossAccrual.units,
-        rakeUnits: accrual.rake.units,
-        providerNetUnits: accrual.providerNet.units,
-        minimumPayoutUnits: minimum.units,
-        state: 'held_threshold',
-        periodStart: period.periodStart,
-        periodEnd: period.periodEnd,
-        providerAccountRef: accountRefForProvider(
-          accrual.businessId,
-          accrual.currency,
-        ),
-        idempotencyKey: period.payoutRef,
-        createdAt: now,
-        updatedAt: now,
-      },
-    }
-  }
-  const current = payoutFromRow(currentRow)
-  if (
-    current === undefined ||
-    current.businessId !== accrual.businessId ||
-    current.periodStart !== period.periodStart ||
-    current.periodEnd !== period.periodEnd ||
-    current.state === 'paid' ||
-    current.state === 'reversed' ||
-    current.state === 'transfer_pending' ||
-    current.state === 'outcome_unknown'
+  const composition = await readDailyPayoutComposition(
+    ctx,
+    period,
+    amounts.businessId,
+    amounts.currency,
+    amounts.exponent,
   )
-    return undefined
+  if (payout === null) {
+    if (composition.rows.length > 0)
+      return qualifiedUsePayoutFailure()
+  } else {
+    const currentGross = amountFromParts(
+      payout.currency,
+      payout.grossAccrualUnits,
+      payout.exponent,
+    )
+    const currentRake = amountFromParts(
+      payout.currency,
+      payout.rakeUnits,
+      payout.exponent,
+    )
+    const currentProvider = amountFromParts(
+      payout.currency,
+      payout.providerNetUnits,
+      payout.exponent,
+    )
+    const currentExpectedGross =
+      currentRake === undefined || currentProvider === undefined
+        ? undefined
+        : addExactAmounts(currentProvider, currentRake)
+    if (
+      payout.cadence !== 'daily' ||
+      payout.payoutRef !== period.payoutRef ||
+      payout.businessId !== amounts.businessId ||
+      payout.currency !== amounts.currency ||
+      payout.exponent !== amounts.exponent ||
+      payout.periodStart !== period.periodStart ||
+      payout.periodEnd !== period.periodEnd ||
+      payout.providerAccountRef !==
+        accountRefForProvider(amounts.businessId, amounts.currency) ||
+      payout.idempotencyKey !== period.payoutRef ||
+      payout.minimumPayoutUnits !== '0' ||
+      payout.state === 'paid' ||
+      payout.state === 'reversed' ||
+      payout.state === 'transfer_pending' ||
+      payout.state === 'outcome_unknown' ||
+      currentGross === undefined ||
+      currentRake === undefined ||
+      currentProvider === undefined ||
+      currentExpectedGross === undefined ||
+      compareExactAmounts(currentExpectedGross, currentGross) !== 0 ||
+      compareExactAmounts(currentGross, composition.grossAccrual) !== 0 ||
+      compareExactAmounts(currentRake, composition.rake) !== 0 ||
+      compareExactAmounts(currentProvider, composition.providerNet) !== 0
+    )
+      return qualifiedUsePayoutFailure()
+  }
+  if (composition.rows.length >= DAILY_PAYOUT_ALLOCATION_READ_LIMIT)
+    return qualifiedUsePayoutFailure()
+  await ctx.db.insert('moneyPayoutAllocations', {
+    allocationRef,
+    payoutRef: period.payoutRef,
+    qualifiedUseRef: receipt.qualifiedUseRef,
+    transactionRef: receipt.transactionRef!,
+    usageRef: receipt.usageRef!,
+    businessId: amounts.businessId,
+    currency: amounts.currency,
+    exponent: amounts.exponent,
+    grossAccrualUnits: amounts.grossAccrual.units,
+    rakeUnits: amounts.rake.units,
+    providerNetUnits: amounts.providerNet.units,
+    qualifiedAt: receipt.qualifiedAt,
+    sourceDigest: amounts.sourceDigest,
+    materialDigest: receipt.materialDigest,
+    createdAt: receipt.qualifiedAt,
+  })
+  if (payout === null) {
+    await ctx.db.insert('moneyPayouts', {
+      payoutRef: period.payoutRef,
+      businessId: amounts.businessId,
+      currency: amounts.currency,
+      exponent: amounts.exponent,
+      grossAccrualUnits: amounts.grossAccrual.units,
+      rakeUnits: amounts.rake.units,
+      providerNetUnits: amounts.providerNet.units,
+      minimumPayoutUnits: '0',
+      cadence: 'daily',
+      state: 'held_threshold',
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      providerAccountRef: accountRefForProvider(
+        amounts.businessId,
+        amounts.currency,
+      ),
+      idempotencyKey: period.payoutRef,
+      createdAt: receipt.qualifiedAt,
+      updatedAt: receipt.qualifiedAt,
+    })
+    return 'allocated'
+  }
+  const currentGross = amountFromParts(
+    payout.currency,
+    payout.grossAccrualUnits,
+    payout.exponent,
+  )
+  const currentRake = amountFromParts(
+    payout.currency,
+    payout.rakeUnits,
+    payout.exponent,
+  )
+  const currentProvider = amountFromParts(
+    payout.currency,
+    payout.providerNetUnits,
+    payout.exponent,
+  )
   const nextGross =
-    direction === 'credit'
-      ? addExactAmounts(current.grossAccrual, accrual.grossAccrual)
-      : subtractExactAmounts(current.grossAccrual, accrual.grossAccrual)
+    currentGross === undefined
+      ? undefined
+      : addExactAmounts(currentGross, amounts.grossAccrual)
   const nextRake =
-    direction === 'credit'
-      ? addExactAmounts(current.rake, accrual.rake)
-      : subtractExactAmounts(current.rake, accrual.rake)
-  const nextProviderNet =
-    direction === 'credit'
-      ? addExactAmounts(current.providerNet, accrual.providerNet)
-      : subtractExactAmounts(current.providerNet, accrual.providerNet)
-  if (
-    nextGross === undefined ||
-    nextRake === undefined ||
-    nextProviderNet === undefined
-  )
-    return undefined
-  return {
-    kind: 'patch',
-    row: currentRow,
-    patch: {
-      grossAccrualUnits: nextGross.units,
-      rakeUnits: nextRake.units,
-      providerNetUnits: nextProviderNet.units,
-      updatedAt: now,
-    },
-  }
+    currentRake === undefined
+      ? undefined
+      : addExactAmounts(currentRake, amounts.rake)
+  const nextProvider =
+    currentProvider === undefined
+      ? undefined
+      : addExactAmounts(currentProvider, amounts.providerNet)
+  if (nextGross === undefined || nextRake === undefined || nextProvider === undefined)
+    return qualifiedUsePayoutFailure()
+  await ctx.db.patch(payout._id, {
+    grossAccrualUnits: nextGross.units,
+    rakeUnits: nextRake.units,
+    providerNetUnits: nextProvider.units,
+    updatedAt: Math.max(payout.updatedAt, receipt.qualifiedAt),
+  })
+  return 'allocated'
 }
 
-async function applyPreparedPayoutPeriodUpdate(
-  ctx: Pick<MutationCtx, 'db'>,
-  prepared: PreparedPayoutPeriodUpdate,
-): Promise<void> {
-  if (prepared.kind === 'insert')
-    await ctx.db.insert('moneyPayouts', prepared.value)
-  else await ctx.db.patch(prepared.row._id, prepared.patch)
-}
-
+type PayoutAllocationRefundLink = Readonly<{
+  payoutRef: string
+  allocationRef: string
+  allocationCorrectionUnits: string
+}>
 type PreparedPayoutAccrualReversalForRefund =
-  | Readonly<{ kind: 'no_op' }>
+  | Readonly<{ kind: 'no_op'; allocation?: PayoutAllocationRefundLink }>
   | Readonly<{
       kind: 'patch'
       row: Doc<'moneyPayouts'>
+      allocation: PayoutAllocationRefundLink
       patch: Readonly<{
         grossAccrualUnits: string
         rakeUnits: string
@@ -1704,32 +2574,86 @@ async function preparePayoutAccrualReversalForRefund(
   accrual: PayoutAccrualAmounts,
   settledAt: number,
 ): Promise<PreparedPayoutAccrualReversalForRefund | undefined> {
-  const period = payoutPeriodIdentity(accrual.businessId, accrual.currency, settledAt)
+  const allocation = await ctx.db
+    .query('moneyPayoutAllocations')
+    .withIndex('by_transactionRef', (query) =>
+      query.eq('transactionRef', accrual.transactionRef),
+    )
+    .unique()
+  if (allocation === null) return { kind: 'no_op' }
+  const amounts = allocationAmountsFromRow(allocation)
+  let period: DailyPayoutIdentity
+  try {
+    period = dailyPayoutIdentity(
+      allocation.businessId,
+      allocation.currency,
+      allocation.qualifiedAt,
+    )
+  } catch {
+    return undefined
+  }
+  if (
+    amounts === undefined ||
+    allocation.allocationRef.trim().length === 0 ||
+    allocation.qualifiedUseRef.trim().length === 0 ||
+    allocation.allocationRef !== qualifiedUseAllocationRef({
+      qualifiedUseRef: allocation.qualifiedUseRef,
+      materialDigest: allocation.materialDigest,
+    }) ||
+    allocation.transactionRef !== accrual.transactionRef ||
+    allocation.businessId !== accrual.businessId ||
+    allocation.currency !== accrual.currency ||
+    allocation.exponent !== accrual.exponent ||
+    allocation.sourceDigest.trim().length === 0 ||
+    allocation.materialDigest.trim().length === 0 ||
+    allocation.payoutRef !== period.payoutRef ||
+    compareExactAmounts(amounts.grossAccrual, accrual.grossAccrual) !== 0 ||
+    compareExactAmounts(amounts.rake, accrual.rake) !== 0 ||
+    compareExactAmounts(amounts.providerNet, accrual.providerNet) !== 0
+  )
+    return undefined
+  const allocationLink = {
+    payoutRef: allocation.payoutRef,
+    allocationRef: allocation.allocationRef,
+    allocationCorrectionUnits: allocation.providerNetUnits,
+  } as const
   const row = await ctx.db
     .query('moneyPayouts')
-    .withIndex('by_payoutRef', (query) => query.eq('payoutRef', period.payoutRef))
+    .withIndex('by_payoutRef', (query) =>
+      query.eq('payoutRef', allocation.payoutRef),
+    )
     .unique()
   if (row === null) return undefined
   const current = payoutFromRow(row)
   if (
     current === undefined ||
-    current.businessId !== accrual.businessId ||
+    row.businessId !== accrual.businessId ||
+    row.currency !== accrual.currency ||
+    row.exponent !== accrual.exponent ||
+    current.payoutRef !== allocation.payoutRef ||
     current.periodStart !== period.periodStart ||
-    current.periodEnd !== period.periodEnd ||
-    current.state === 'transfer_pending' ||
-    current.state === 'outcome_unknown'
+    current.periodEnd !== period.periodEnd
   )
     return undefined
+  if (current.state === 'transfer_pending' || current.state === 'outcome_unknown')
+    return undefined
   if (current.state === 'paid' || current.state === 'reversed')
-    return { kind: 'no_op' }
+    return { kind: 'no_op', allocation: allocationLink }
+  if (
+    current.state !== 'review' &&
+    current.state !== 'held_kyc' &&
+    current.state !== 'held_threshold' &&
+    current.state !== 'failed'
+  )
+    return undefined
   const nextGross = subtractExactAmounts(
     current.grossAccrual,
-    accrual.grossAccrual,
+    amounts.grossAccrual,
   )
-  const nextRake = subtractExactAmounts(current.rake, accrual.rake)
+  const nextRake = subtractExactAmounts(current.rake, amounts.rake)
   const nextProviderNet = subtractExactAmounts(
     current.providerNet,
-    accrual.providerNet,
+    amounts.providerNet,
   )
   if (
     nextGross === undefined ||
@@ -1740,6 +2664,7 @@ async function preparePayoutAccrualReversalForRefund(
   return {
     kind: 'patch',
     row,
+    allocation: allocationLink,
     patch: {
       grossAccrualUnits: nextGross.units,
       rakeUnits: nextRake.units,
@@ -5623,6 +6548,7 @@ function payoutTransferRow(
     rakeUnits: row.rakeUnits,
     providerNetUnits: row.providerNetUnits,
     minimumPayoutUnits: row.minimumPayoutUnits,
+    ...(row.cadence === undefined ? {} : { cadence: row.cadence }),
     state: input.state,
     periodStart: row.periodStart,
     periodEnd: row.periodEnd,
@@ -5752,7 +6678,10 @@ export const beginPayoutTransfer = mutation({
       payoutAccount === null ||
       providerAccount === null ||
       providerAccount.accountKind !== 'provider_earnings' ||
-      providerAccount.accountRef !== args.providerAccountRef
+      providerAccount.accountRef !== args.providerAccountRef ||
+      providerAccount.businessId !== args.businessId ||
+      providerAccount.currency !== requested.currency ||
+      payout.providerAccountRef !== args.providerAccountRef
     )
       return refusedTopup('payout_not_ready', false)
     const current = payoutFromRow(payout)
@@ -5780,6 +6709,49 @@ export const beginPayoutTransfer = mutation({
       amount === undefined ||
       providerNet === undefined ||
       compareExactAmounts(amount, providerNet) !== 0
+    )
+      return refusedTopup('payout_not_ready', false)
+    const period = dailyPayoutIdentityFromRow(payout)
+    let composition: DailyPayoutComposition | undefined
+    if (period !== undefined) {
+      try {
+        composition = await readDailyPayoutComposition(
+          ctx,
+          period,
+          payout.businessId,
+          payout.currency,
+          payout.exponent,
+        )
+      } catch {
+        composition = undefined
+      }
+    }
+    const payoutGross = amountFromParts(
+      payout.currency,
+      payout.grossAccrualUnits,
+      payout.exponent,
+    )
+    const payoutRake = amountFromParts(
+      payout.currency,
+      payout.rakeUnits,
+      payout.exponent,
+    )
+    const payoutProviderNet = amountFromParts(
+      payout.currency,
+      payout.providerNetUnits,
+      payout.exponent,
+    )
+    if (
+      period === undefined ||
+      composition === undefined ||
+      payoutGross === undefined ||
+      payoutRake === undefined ||
+      payoutProviderNet === undefined ||
+      args.observedAt < period.periodEndAt ||
+      providerAccount.exponent !== payout.exponent ||
+      compareExactAmounts(payoutGross, composition.grossAccrual) !== 0 ||
+      compareExactAmounts(payoutRake, composition.rake) !== 0 ||
+      compareExactAmounts(payoutProviderNet, composition.providerNet) !== 0
     )
       return refusedTopup('payout_not_ready', false)
     if (priorByIdempotency !== null) {
@@ -6998,7 +7970,7 @@ async function appendRefundBody(
         code: 'ledger_idempotency_conflict' as const,
         retryable: false,
       }
-    const [replayEntries, currentReversals] = await Promise.all([
+    const [replayEntries, currentReversals, allocation] = await Promise.all([
       ctx.db
         .query('moneyLedgerEntries')
         .withIndex('by_transactionRef', (q) =>
@@ -7011,7 +7983,30 @@ async function appendRefundBody(
           q.eq('reversalOf', original.transactionRef),
         )
         .take(2),
+      ctx.db
+        .query('moneyPayoutAllocations')
+        .withIndex('by_transactionRef', (q) =>
+          q.eq('transactionRef', original.transactionRef),
+        )
+        .unique(),
     ])
+    const replayAllocationLink =
+      allocation === null
+        ? undefined
+        : allocation.allocationRef.trim().length > 0 &&
+            allocation.qualifiedUseRef.trim().length > 0 &&
+            allocation.payoutRef.trim().length > 0 &&
+            allocation.allocationRef ===
+              qualifiedUseAllocationRef({
+                qualifiedUseRef: allocation.qualifiedUseRef,
+                materialDigest: allocation.materialDigest,
+              })
+          ? {
+              payoutRef: allocation.payoutRef,
+              allocationRef: allocation.allocationRef,
+              allocationCorrectionUnits: allocation.providerNetUnits,
+            }
+          : null
     const operatorRefund = replayEntries.find(
       (entry) => entry.entryRef === `${prior.transactionRef}:operator`,
     )
@@ -7047,6 +8042,9 @@ async function appendRefundBody(
       operatorRefund.businessId !== undefined ||
       operatorRefund.invocationRef !== undefined ||
       operatorRefund.attemptRef !== undefined ||
+      operatorRefund.payoutRef !== undefined ||
+      operatorRefund.allocationRef !== undefined ||
+      operatorRefund.allocationCorrectionUnits !== undefined ||
       providerRefund.accountRef !== provider.accountRef ||
       providerRefund.entryType !== 'refund' ||
       providerRefund.direction !== 'debit' ||
@@ -7058,6 +8056,11 @@ async function appendRefundBody(
       providerRefund.businessId !== journal.businessId ||
       providerRefund.invocationRef !== undefined ||
       providerRefund.attemptRef !== undefined ||
+      replayAllocationLink === null ||
+      providerRefund.payoutRef !== replayAllocationLink?.payoutRef ||
+      providerRefund.allocationRef !== replayAllocationLink?.allocationRef ||
+      providerRefund.allocationCorrectionUnits !==
+        replayAllocationLink?.allocationCorrectionUnits ||
       rakeRefund.accountRef !== rake.accountRef ||
       rakeRefund.entryType !== 'refund' ||
       rakeRefund.direction !== 'debit' ||
@@ -7069,6 +8072,9 @@ async function appendRefundBody(
       rakeRefund.businessId !== journal.businessId ||
       rakeRefund.invocationRef !== undefined ||
       rakeRefund.attemptRef !== undefined ||
+      rakeRefund.payoutRef !== undefined ||
+      rakeRefund.allocationRef !== undefined ||
+      rakeRefund.allocationCorrectionUnits !== undefined ||
       [operatorRefund, providerRefund, rakeRefund].some(
         (entry) =>
           entry.transactionRef !== prior.transactionRef ||
@@ -7197,6 +8203,7 @@ async function appendRefundBody(
     evidenceRefs: [...args.evidenceRefs],
     createdAt: args.observedAt,
   }
+  const payoutAllocation = preparedPayoutReversal?.allocation
   await ctx.db.insert('moneyLedgerEntries', {
     ...common,
     entryRef: `${args.transactionRef}:operator`,
@@ -7219,6 +8226,7 @@ async function appendRefundBody(
     currency: providerRefund.currency,
     exponent: providerRefund.exponent,
     businessId: journal.businessId,
+    ...(payoutAllocation === undefined ? {} : payoutAllocation),
     reversalOf: args.originalTransactionRef,
   })
   await ctx.db.insert('moneyLedgerEntries', {
@@ -7505,26 +8513,12 @@ async function reconcileChargeBody(
         code: 'charge_reconciliation_required' as const,
         retryable: false,
       }
-    let preparedPayout: PreparedPayoutPeriodUpdate | undefined
     if (
       transaction.amountUnits !== '0' &&
       transaction.settledAt === undefined &&
       transaction.budgetState !== 'settled'
     ) {
-      const payoutAccrual = await readPayoutAccrualAmounts(ctx, transaction)
-      if (payoutAccrual === undefined)
-        return {
-          kind: 'refused' as const,
-          code: 'charge_reconciliation_required' as const,
-          retryable: false,
-        }
-      preparedPayout = await preparePayoutPeriodUpdate(
-        ctx,
-        payoutAccrual,
-        args.observedAt,
-        'credit',
-      )
-      if (preparedPayout === undefined)
+      if ((await readPayoutAccrualAmounts(ctx, transaction)) === undefined)
         return {
           kind: 'refused' as const,
           code: 'charge_reconciliation_required' as const,
@@ -7541,8 +8535,6 @@ async function reconcileChargeBody(
       )
     if (shouldApplyState) {
       await applyPreparedCredentialBudgetTransition(ctx, preparedBudget)
-      if (preparedPayout !== undefined)
-        await applyPreparedPayoutPeriodUpdate(ctx, preparedPayout)
       await ctx.db.patch(transaction._id, {
         state: 'applied',
         ...(transaction.amountUnits !== '0' &&
@@ -8353,66 +9345,67 @@ async function readPayoutStatusForRows(
   account: Doc<'moneyPayoutAccounts'> | null,
   providerAccount: Doc<'moneyAccounts'> | null,
 ): Promise<PayoutStatusReadResult> {
-  if (account === null) {
-    const provider =
-      providerAccount === null ? undefined : accountFromRow(providerAccount)
-    if (
-      provider === undefined ||
-      provider.accountKind !== 'provider_earnings'
-    ) {
-      return { kind: 'refused' as const, code: 'payout_not_ready' as const }
-    }
-    const zero = zeroAmount(
-      provider.balance.currency,
-      provider.balance.exponent,
-    )
-    return zero === undefined
-      ? { kind: 'refused' as const, code: 'payout_not_ready' as const }
-      : {
-          kind: 'ok' as const,
-          businessId,
-          accountState: 'missing' as const,
-          providerNet: zero,
-          minimumPayout: zero,
-          evidence: 'source' as const,
-        }
-  }
+  const provider =
+    providerAccount === null ? undefined : accountFromRow(providerAccount)
+  if (
+    provider === undefined ||
+    provider.accountKind !== 'provider_earnings' ||
+    providerAccount === null ||
+    providerAccount.accountRef !== accountRefForProvider(businessId, currency) ||
+    providerAccount.businessId !== businessId ||
+    providerAccount.currency !== currency
+  )
+    return { kind: 'refused' as const, code: 'payout_not_ready' as const }
   const current = (
     await ctx.db
       .query('moneyPayouts')
-      .withIndex('by_businessId_and_currency_and_updatedAt', (q) =>
-        q.eq('businessId', businessId).eq('currency', currency),
+      .withIndex('by_businessId_and_currency_and_cadence_and_updatedAt', (q) =>
+        q.eq('businessId', businessId).eq('currency', currency).eq('cadence', 'daily'),
       )
       .order('desc')
       .take(1)
   )[0]
-  const zero = zeroAmount(account.currency, account.exponent)
+  const zero = zeroAmount(provider.balance.currency, provider.balance.exponent)
   if (zero === undefined)
     return { kind: 'refused' as const, code: 'payout_not_ready' as const }
+  const accountProjection =
+    account === null
+      ? {}
+      : {
+          accountState: account.state,
+          stripeAccountId: account.stripeAccountId,
+          ...(account.version === undefined
+            ? {}
+            : { accountVersion: account.version }),
+          ...(account.lastStripeEventId === undefined
+            ? {}
+            : { lastStripeEventId: account.lastStripeEventId }),
+          ...(account.lastStripePayloadDigest === undefined
+            ? {}
+            : { lastStripePayloadDigest: account.lastStripePayloadDigest }),
+          ...(account.providerObjectDigest === undefined
+            ? {}
+            : { providerObjectDigest: account.providerObjectDigest }),
+        }
   if (current === undefined)
     return {
       kind: 'ok' as const,
       businessId,
-      accountState: account.state,
-      stripeAccountId: account.stripeAccountId,
-      ...(account.version === undefined
-        ? {}
-        : { accountVersion: account.version }),
-      ...(account.lastStripeEventId === undefined
-        ? {}
-        : { lastStripeEventId: account.lastStripeEventId }),
-      ...(account.lastStripePayloadDigest === undefined
-        ? {}
-        : { lastStripePayloadDigest: account.lastStripePayloadDigest }),
-      ...(account.providerObjectDigest === undefined
-        ? {}
-        : { providerObjectDigest: account.providerObjectDigest }),
+      accountState: account === null ? ('missing' as const) : account.state,
+      ...accountProjection,
       providerNet: zero,
       minimumPayout: zero,
       evidence: 'source' as const,
     }
   const payout = payoutFromRow(current)
-  if (payout === undefined)
+  if (
+    payout === undefined ||
+    current.businessId !== businessId ||
+    current.currency !== currency ||
+    current.exponent !== providerAccount.exponent ||
+    current.providerAccountRef !== providerAccount.accountRef ||
+    dailyPayoutIdentityFromRow(current) === undefined
+  )
     return {
       kind: 'refused' as const,
       code: 'payout_reconciliation_required' as const,
@@ -8420,7 +9413,8 @@ async function readPayoutStatusForRows(
   return {
     kind: 'ok' as const,
     businessId,
-    accountState: account.state,
+    accountState: account === null ? ('missing' as const) : account.state,
+    ...accountProjection,
     payoutState: current.state,
     payoutRef: current.payoutRef,
     ...(current.payoutCommandId === undefined
@@ -8476,19 +9470,6 @@ async function readPayoutStatusForRows(
     ...(payout.providerPaidAfter === undefined
       ? {}
       : { providerPaidAfter: payout.providerPaidAfter }),
-    stripeAccountId: account.stripeAccountId,
-    ...(account.version === undefined
-      ? {}
-      : { accountVersion: account.version }),
-    ...(account.lastStripeEventId === undefined
-      ? {}
-      : { lastStripeEventId: account.lastStripeEventId }),
-    ...(account.lastStripePayloadDigest === undefined
-      ? {}
-      : { lastStripePayloadDigest: account.lastStripePayloadDigest }),
-    ...(account.providerObjectDigest === undefined
-      ? {}
-      : { providerObjectDigest: account.providerObjectDigest }),
     providerNet: payout.providerNet,
     minimumPayout: payout.minimumPayout,
     evidence: 'source' as const,

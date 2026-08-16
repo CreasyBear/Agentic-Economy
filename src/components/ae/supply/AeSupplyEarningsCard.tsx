@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,28 +8,23 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { AeConfirmDialog } from "@/components/ae/feedback/AeConfirmDialog";
 import type { OwnerProviderEarningsReadback } from "@/modules/capability-supply/supply-funnel.functions";
 import {
-  beginOwnerPayoutTransferServer,
   createOwnerConnectAccountServer,
   createOwnerOnboardingLinkServer,
   readOwnerPayoutTransferServer,
-  recoverOwnerPayoutTransferServer,
   type OwnerConnectReadinessReadback,
-  type OwnerPayoutTransferResult,
 } from "@/modules/money/server";
-import {
-  compareExactAmounts,
-  formatCurrencyAmount,
-} from "@/modules/money/public";
+import { formatCurrencyAmount } from "@/modules/money/public";
 
 export function AeSupplyEarningsCard({
   readback,
   connect,
+  onStatusRefreshed,
 }: Readonly<{
   readback: OwnerProviderEarningsReadback;
   connect?: OwnerConnectReadinessReadback;
+  onStatusRefreshed?: () => void | Promise<void>;
 }>) {
   return (
     <Card>
@@ -83,6 +78,7 @@ export function AeSupplyEarningsCard({
                 key={account.currency}
                 account={account}
                 {...(connect === undefined ? {} : { connect })}
+                {...(onStatusRefreshed === undefined ? {} : { onStatusRefreshed })}
                 businessId={readback.businessId}
               />
             ))}
@@ -106,28 +102,20 @@ type OwnerEarningsAccount = Extract<
   OwnerProviderEarningsReadback,
   { kind: "available" }
 >["accounts"][number];
-type OwnerPayoutTransferView = Extract<
-  OwnerPayoutTransferResult,
-  { kind: "ok" }
->["transfer"];
 
 function EarningsCurrencyCard({
   account,
   connect,
+  onStatusRefreshed,
   businessId,
 }: Readonly<{
   account: OwnerEarningsAccount;
   connect?: OwnerConnectReadinessReadback;
+  onStatusRefreshed?: () => void | Promise<void>;
   businessId: string;
 }>) {
   const [busy, setBusy] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
-  const [transfer, setTransfer] = useState<
-    OwnerPayoutTransferView | undefined
-  >();
-  const [payoutConfirmOpen, setPayoutConfirmOpen] = useState(false);
-  const payoutInFlight = useRef(false);
-  const payoutTriggerRef = useRef<HTMLButtonElement>(null);
   const canonical =
     connect?.kind === "available"
       ? connect.accounts.find((item) => item.currency === account.currency)
@@ -145,37 +133,48 @@ function EarningsCurrencyCard({
     (account.payout.accountState === "missing"
       ? "not_started"
       : account.payout.accountState);
-  const payoutState = transfer?.state ?? account.payout.payoutState;
-  const payoutRef = transfer?.payoutRef ?? account.payout.payoutRef;
-  const idempotencyKey =
-    transfer?.idempotencyKey ??
-    optionalString(account.payout, "idempotencyKey");
-  const recoveryState =
-    transfer?.recoveryState ?? optionalString(account.payout, "recoveryState");
-  const payoutThresholdComparison = compareExactAmounts(
-    account.payout.providerNet,
-    account.payout.minimumPayout,
-  );
-  const hasMinimumPayout =
-    payoutThresholdComparison === 0 || payoutThresholdComparison === 1;
-  const payoutCommandId =
-    transfer?.payoutCommandId ?? account.payout.payoutCommandId;
-  const stripeTransferId =
-    transfer?.stripeTransferId ?? account.payout.stripeTransferId;
-  const destinationAccountId =
-    transfer?.destinationAccountId ?? account.payout.destinationAccountId;
-  const requestDigest = transfer?.requestDigest ?? account.payout.requestDigest;
-  const evidenceDigest =
-    transfer?.evidenceDigest ?? account.payout.evidenceDigest;
-  const providerHeldBefore =
-    transfer?.providerHeldBefore ?? account.payout.providerHeldBefore;
-  const providerHeldAfter =
-    transfer?.providerHeldAfter ?? account.payout.providerHeldAfter;
-  const providerPaidBefore =
-    transfer?.providerPaidBefore ?? account.payout.providerPaidBefore;
-  const providerPaidAfter =
-    transfer?.providerPaidAfter ?? account.payout.providerPaidAfter;
-  const payoutDestination = destinationAccountId ?? stripeAccountId;
+  const payoutState = account.payout.payoutState;
+  const payoutRef = account.payout.payoutRef;
+  const recoveryState = account.payout.recoveryState;
+  const payoutCommandId = account.payout.payoutCommandId;
+  const idempotencyKey = account.payout.idempotencyKey;
+  const stripeTransferId = account.payout.stripeTransferId;
+  const destinationAccountId = account.payout.destinationAccountId;
+  const requestDigest = account.payout.requestDigest;
+  const evidenceDigest = account.payout.evidenceDigest;
+  const providerHeldBefore = account.payout.providerHeldBefore;
+  const providerHeldAfter = account.payout.providerHeldAfter;
+  const providerPaidBefore = account.payout.providerPaidBefore;
+  const providerPaidAfter = account.payout.providerPaidAfter;
+  const hasPersistedPayout =
+    payoutCommandId !== undefined &&
+    payoutCommandId.length > 0 &&
+    payoutRef !== undefined &&
+    payoutRef.length > 0 &&
+    idempotencyKey !== undefined &&
+    idempotencyKey.length > 0;
+  const canReadRecordedTransfer =
+    hasPersistedPayout &&
+    (payoutState === "paid" ||
+      payoutState === "outcome_unknown" ||
+      (payoutState === "transfer_pending" &&
+        stripeTransferId !== undefined &&
+        stripeTransferId.length > 0));
+  const verifiedPaidEvidence =
+    payoutState === "paid" &&
+    account.payout.transferStatus === "succeeded" &&
+    stripeTransferId !== undefined &&
+    stripeTransferId.length > 0 &&
+    evidenceDigest !== undefined &&
+    evidenceDigest.length > 0;
+  const recoveryGuidance =
+    recoveryState === "admin_intervention"
+      ? "Transfer outcome requires system reconciliation. Contact support with the durable command ID; do not retry the transfer."
+      : recoveryState === "provider_id" ||
+          recoveryState === "idempotency_key" ||
+          payoutState === "outcome_unknown"
+        ? "AE is reconciling the recorded transfer. Do not retry it."
+        : undefined;
 
   async function createAccount() {
     setBusy("connect");
@@ -232,46 +231,14 @@ function EarningsCurrencyCard({
       setBusy(undefined);
     }
   }
-
-  async function startPayout() {
+  async function refreshRecordedStatus() {
     if (
+      !canReadRecordedTransfer ||
       payoutRef === undefined ||
-      payoutDestination === undefined ||
-      payoutInFlight.current
-    ) {
+      account.payout.idempotencyKey === undefined
+    )
       return;
-    }
-    payoutInFlight.current = true;
-    setBusy("payout");
-    setMessage(undefined);
-    try {
-      const result = await beginOwnerPayoutTransferServer({
-        data: {
-          businessId,
-          currency: account.currency,
-          payoutRef,
-          amount: account.payout.providerNet,
-          idempotencyKey: `owner-payout:${crypto.randomUUID()}`,
-        },
-      });
-      setTransferResult(result);
-    } catch {
-      setMessage(
-        "Payout start was interrupted. Reload to recover the durable transfer state before retrying.",
-      );
-    } finally {
-      payoutInFlight.current = false;
-      setBusy(undefined);
-      setPayoutConfirmOpen(false);
-    }
-  }
-
-  async function readPayout() {
-    if (payoutRef === undefined || idempotencyKey === undefined) {
-      setMessage("No durable payout identity is available yet.");
-      return;
-    }
-    setBusy("status");
+    setBusy("refresh");
     setMessage(undefined);
     try {
       const result = await readOwnerPayoutTransferServer({
@@ -279,53 +246,24 @@ function EarningsCurrencyCard({
           businessId,
           currency: account.currency,
           payoutRef,
-          idempotencyKey,
+          idempotencyKey: account.payout.idempotencyKey,
         },
       });
-      setTransferResult(result);
-    } catch {
-      setMessage(
-        "Transfer status is temporarily unavailable. No payout state was changed.",
-      );
-    } finally {
-      setBusy(undefined);
-    }
-  }
-
-  async function recoverPayout() {
-    if (payoutRef === undefined || idempotencyKey === undefined) {
-      setMessage("No durable payout identity is available yet.");
-      return;
-    }
-    setBusy("recover");
-    setMessage(undefined);
-    try {
-      const result = await recoverOwnerPayoutTransferServer({
-        data: {
-          businessId,
-          currency: account.currency,
-          payoutRef,
-          amount: account.payout.providerNet,
-          idempotencyKey,
-        },
-      });
-      setTransferResult(result);
-    } catch {
-      setMessage(
-        "Transfer recovery was interrupted. Reload before taking another payout action.",
-      );
-    } finally {
-      setBusy(undefined);
-    }
-  }
-
-  function setTransferResult(result: OwnerPayoutTransferResult) {
-    if (result.kind !== "ok") {
+      if (result.kind === "ok") {
+        await onStatusRefreshed?.();
+        if (onStatusRefreshed === undefined) {
+          window.location.reload();
+        }
+        return;
+      }
       setMessage(actionMessage(result.code));
-      return;
+    } catch {
+      setMessage(
+        "Recorded transfer status is temporarily unavailable. Reload and try again.",
+      );
+    } finally {
+      setBusy(undefined);
     }
-    setTransfer(result.transfer);
-    setMessage(transferMessage(result.transfer));
   }
 
   return (
@@ -379,14 +317,6 @@ function EarningsCurrencyCard({
         </div>
         <div className="grid gap-1">
           <dt className="text-sm font-medium text-muted-foreground">
-            Minimum payout
-          </dt>
-          <dd className="m-0 text-foreground">
-            {formatCurrencyAmount(account.payout.minimumPayout)}
-          </dd>
-        </div>
-        <div className="grid gap-1">
-          <dt className="text-sm font-medium text-muted-foreground">
             Payout account
           </dt>
           <dd className="m-0 text-foreground">
@@ -398,24 +328,28 @@ function EarningsCurrencyCard({
             Payout state
           </dt>
           <dd className="m-0 text-foreground">
-            {payoutStateLabel(transfer?.state ?? payoutState)}
+            {verifiedPaidEvidence
+              ? "Transferred to Stripe"
+              : payoutStateLabel(payoutState)}
           </dd>
         </div>
       </dl>
-      {payoutCommandId === undefined ? null : (
+      {!hasPersistedPayout ? null : (
         <div className="grid gap-2 rounded-md border border-border p-3">
           <p className="m-0 text-sm font-medium text-foreground">
             Durable transfer evidence
           </p>
           <dl className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1">
-              <dt className="text-xs font-medium text-muted-foreground">
-                Command
-              </dt>
-              <dd className="m-0 break-all font-mono text-xs text-foreground">
-                {payoutCommandId}
-              </dd>
-            </div>
+            {payoutCommandId === undefined ? null : (
+              <div className="grid gap-1">
+                <dt className="text-xs font-medium text-muted-foreground">
+                  Command
+                </dt>
+                <dd className="m-0 break-all font-mono text-xs text-foreground">
+                  {payoutCommandId}
+                </dd>
+              </div>
+            )}
             {stripeTransferId === undefined ? null : (
               <div className="grid gap-1">
                 <dt className="text-xs font-medium text-muted-foreground">
@@ -481,13 +415,29 @@ function EarningsCurrencyCard({
               </div>
             )}
           </dl>
+          {recoveryGuidance === undefined ? null : (
+            <p className="m-0 text-sm text-muted-foreground">
+              {recoveryGuidance}
+            </p>
+          )}
+          {canReadRecordedTransfer ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="min-h-11 w-fit"
+              disabled={busy !== undefined}
+              onClick={() => void refreshRecordedStatus()}
+            >
+              {busy === "refresh"
+                ? "Refreshing recorded status…"
+                : "Refresh recorded status"}
+            </Button>
+          ) : null}
         </div>
       )}
       <div className="grid gap-2 rounded-md bg-muted/40 p-3">
         <p className="m-0 text-sm text-muted-foreground">
-          {accountState === "ready"
-            ? "Ready only after a verified account event and exact current account readback."
-            : "Hosted onboarding return is not proof of readiness. Complete onboarding, then check status."}
+          AE records eligible net earnings in a daily payout balance. Live transfers remain held while the live-money gate is closed.
         </p>
         <div className="flex flex-wrap gap-2">
           {accountState === "ready" ? null : stripeAccountId === undefined ? (
@@ -517,65 +467,7 @@ function EarningsCurrencyCard({
                   : "Update Connect details"}
             </Button>
           )}
-          {accountState === "ready" &&
-          hasMinimumPayout &&
-          payoutRef !== undefined &&
-          payoutDestination !== undefined &&
-          (payoutState === "held_threshold" || payoutState === "held_kyc") ? (
-            <Button
-              ref={payoutTriggerRef}
-              type="button"
-              className="min-h-11"
-              disabled={busy !== undefined}
-              onClick={() => setPayoutConfirmOpen(true)}
-            >
-              Start payout
-            </Button>
-          ) : null}
-          {recoveryState === "provider_id" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={busy !== undefined}
-              onClick={() => void readPayout()}
-            >
-              {busy === "status"
-                ? "Checking transfer…"
-                : "Check transfer status"}
-            </Button>
-          ) : null}
-          {recoveryState === "idempotency_key" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={busy !== undefined}
-              onClick={() => void recoverPayout()}
-            >
-              {busy === "recover" ? "Recovering transfer…" : "Recover transfer"}
-            </Button>
-          ) : null}
-          {recoveryState === "admin_intervention" ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={busy !== undefined}
-              onClick={() => void recoverPayout()}
-            >
-              {busy === "recover"
-                ? "Reconciling transfer…"
-                : "Reconcile transfer"}
-            </Button>
-          ) : null}
         </div>
-        {recoveryState === "admin_intervention" ? (
-          <p className="m-0 text-sm text-destructive">
-            Recovery could not prove exactly one Stripe transfer. Retry
-            reconciliation; AE will not create a replacement transfer.
-          </p>
-        ) : null}
         <div
           role="status"
           aria-live="polite"
@@ -584,18 +476,6 @@ function EarningsCurrencyCard({
           {message}
         </div>
       </div>
-      {payoutRef === undefined || payoutDestination === undefined ? null : (
-        <AeConfirmDialog
-          open={payoutConfirmOpen}
-          onOpenChange={setPayoutConfirmOpen}
-          returnFocusRef={payoutTriggerRef}
-          title="Confirm payout"
-          description={`Transfer ${formatCurrencyAmount(account.payout.providerNet)} to ${destinationAccountId === undefined ? "Connect account" : "destination account"} ${payoutDestination}. Durable payout reference: ${payoutRef}.`}
-          confirmLabel="Confirm payout"
-          pending={busy === "payout"}
-          onConfirm={startPayout}
-        />
-      )}
       {account.earnings.truncated ? (
         <p className="text-sm text-muted-foreground">
           The source ledger read was capped at the latest 100 entries for this
@@ -624,31 +504,7 @@ function optionalString(value: unknown, key: string): string | undefined {
 function actionMessage(code: string): string {
   if (code === "billing_identity_missing")
     return "Sign in again as the owner to manage payouts.";
-  if (code === "live_money_gate_open")
-    return "Payouts are held until the required counsel and live-money approvals are complete.";
   if (code === "stripe_setup_required")
     return "Stripe payout setup is unavailable or configured for the wrong mode. Try again later.";
-  if (code === "payout_not_ready")
-    return "Complete Connect onboarding and wait for verified readiness before retrying.";
-  if (code === "payout_below_threshold")
-    return "Your held provider balance is below the payout minimum.";
-  if (code === "payout_outcome_unknown")
-    return "Transfer outcome is still unknown. Check status before retrying.";
-  if (code === "payout_reconciliation_required")
-    return "AE needs an exact transfer readback before changing payout state.";
-  return "Payout action was refused. Try again later.";
-}
-
-function transferMessage(transfer: OwnerPayoutTransferView): string {
-  if (transfer.state === "paid")
-    return "Paid only after verified succeeded transfer evidence.";
-  if (transfer.recoveryState === "provider_id")
-    return "Transfer is bound to Stripe. Check status; do not start another transfer.";
-  if (transfer.recoveryState === "idempotency_key")
-    return "Transfer outcome is unknown. Recover only with the original idempotency key.";
-  if (transfer.recoveryState === "admin_intervention")
-    return "Automatic recovery expired. Funds remain held until AE support reconciles the command.";
-  if (transfer.state === "held_threshold" || transfer.state === "held_kyc")
-    return "Funds remain held until payout requirements are met.";
-  return `Payout state: ${transfer.state.replaceAll("_", " ")}.`;
+  return "Payout setup was refused. Try again later.";
 }

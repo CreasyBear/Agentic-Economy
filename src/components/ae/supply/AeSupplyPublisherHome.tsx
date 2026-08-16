@@ -128,10 +128,27 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
           <p className="text-sm text-muted-foreground">{isProductionLiquidity ? 'These are operational observations only. They are not Qualified Use or revenue, and setup or test calls do not create earnings.' : `These are ${liquidity.environment} operational observations only. They are not production proof, Qualified Use, or revenue, and setup or test calls do not create earnings.`}</p>
         </CardContent>
       </Card>
-      <AeSupplyEarningsCard readback={earnings} {...(connect === undefined ? {} : { connect })} />
+      <OwnerEarningsCard
+        earnings={earnings}
+        {...(connect === undefined ? {} : { connect })}
+      />
     </div>
   )
 }
+function OwnerEarningsCard({ earnings, connect }: Readonly<{
+  earnings: OwnerProviderEarningsReadback
+  connect?: OwnerConnectReadinessReadback
+}>) {
+  const router = useRouter()
+  return (
+    <AeSupplyEarningsCard
+      readback={earnings}
+      {...(connect === undefined ? {} : { connect })}
+      onStatusRefreshed={() => router.invalidate()}
+    />
+  )
+}
+
 function OwnerProviderConnections({ businessId, connections }: Readonly<{
   businessId: string
   connections: readonly OwnerProviderConnection[]

@@ -437,6 +437,7 @@ export type PayoutStatusView = Readonly<{
   payoutState?: PayoutState;
   payoutRef?: string;
   payoutCommandId?: string;
+  idempotencyKey?: string;
   providerNet: ExactAmount;
   minimumPayout: ExactAmount;
   stripeTransferId?: string;
