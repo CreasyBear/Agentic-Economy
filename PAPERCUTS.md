@@ -1415,3 +1415,5 @@ workstreams, duplicate observations, and explicit remediation status.
 184. composer-2.5: Every git worktree starts without node_modules and the repo has no .cursor/worktrees.json, so each worktree-based task discovers this by hitting a failure and then hand-running npm ci (~18s). A worktrees.json with an npm ci setup command, or a documented symlink to the main checkout's node_modules, would remove the step.
 
 185. opus-5: tests/unit/market-terminal/cli-errors.test.ts 'scopes valid command help' timed out at 30s once under a full tests/unit run, but passed 3/3 in isolation and in two later full runs. It spawns CLI processes with a 30s budget that is too tight under parallel full-suite load; a per-file testTimeout or reduced concurrency for that file would stop it costing a false RED and a differential investigation.
+
+186. opus-5: Long-running `npm run dev:local` (14.7h) died with exit 1 after a single failed Convex telemetry POST to api.convex.dev/api/local_deployment/record_activity returning 500. A cloud activity-heartbeat failure shouldn't kill a local deployment dev loop; it should warn and retry.
