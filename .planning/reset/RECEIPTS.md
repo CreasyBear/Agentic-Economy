@@ -120,3 +120,60 @@ Three violations, each fixed at the cause rather than the symptom:
 release script, so it never blocked a gate. The fix is a behavioral decision — the precedent is
 `tests/helpers/inquiry-local-e2e-adapter.ts`, where the bypass affordance was moved to the test
 helper layer — so it is carded rather than patched in passing.
+
+## Phase 1 reconnaissance — three plan corrections
+
+Four read-only agents mapped the Phase 1 cards against the actual code before any card was
+written. Three findings changed the plan.
+
+### P1-a is not a re-key
+
+The card assumed buyer money was keyed on something re-keyable to an organization `accountId`.
+It is keyed **per API key**: `principalId` is literally `clerk_api_key:{keyId}` and the ledger
+account ref is `clerk_api_key:{keyId}:{currency}` (`src/modules/money/internal/ledger.ts:119-121`).
+No organization concept exists in the money module. Clerk's `orgId` is captured at auth and
+deliberately ignored for billing, with a test pinning that
+(`tests/unit/server/agent-access-auth.test.ts:34-48`). The console sums per-key balances and tells
+the user "Keep credit separate for each assistant"
+(`src/components/ae/console/AeAgentOperatorConsole.tsx:109`).
+
+**Founder decision:** the account keys on the existing Clerk `ownerId`, not a Clerk organization.
+`ownerId` is already the money authorization authority (`convex/moneyLedger.ts:1457-1480`), so
+pooling funds there needs no new identity provider wiring. The console becomes one pooled balance
+showing each key's grant and usage against it, which is why per-key attribution
+(`principalId`/`credentialId` on transactions, usage, and budget rows) is retained rather than
+replaced. Buyer refs become `owner:{ownerId}:{currency}`; the `account:` prefix was rejected
+because supplier provider connections already use it for OAuth resources.
+
+### The brokered-only rule is not enforced today
+
+The plan treats "V1 money is AE-brokered only" as settled policy. It is not implemented. The
+invocation worker selects `economicRail: 'provider_direct_x402'` for any operation with
+`adapterId === 'x402-fetch:v2'` (`convex/capabilityOperationInvocationWorker.ts:406-407`) and that
+branch skips `moneyLedger.authorizeInvocationCharge` entirely. An x402 operation moves real money
+outside AE's ledger, so AE cannot validate before settlement, take rake, or own the dispute.
+
+Closing this refuses the lane in production only. Non-production keeps the path alive because the
+development host-parity and provider-conformance scenarios are the only executable proof of the
+x402 machinery, and the guardrails forbid retiring a proof without an equivalent.
+
+### `/execute` is already the paid invoke path
+
+`/api/v1/operations/execute` serves `operation.invoke` behind bearer auth and source-write
+admission. Anonymous keyless `operation.execute` is MCP-only and has no HTTP route at all. So P1-e
+is a rename plus two projection fields, not a new capability, and it needs no new registered
+action — the frontier manifest pins the action inventory exactly
+(`tests/imports/product-frontier-manifest.test.ts:41-57`) and adding `operation.call` would break
+it for no gain.
+
+Also noted for P1-d: operation gateway routes carry no HTTP-edge rate limit at all. Limits are
+enforced inside Convex at reservation time (`convex/capabilityOperationInvocations.ts:470-483`), so
+any new gateway route added outside that path would be unlimited.
+
+### Pre-existing defect found, not yet carded
+
+First period accrual creates a `moneyPayouts` row in `held_threshold` with `minimumPayoutUnits`
+zero (`convex/moneyLedger.ts:1233-1244`), and `beginPayoutTransfer` can then proceed without the
+period being closed or the review window being reached. `payoutReviewWindow`
+(`src/modules/money/internal/payout-policy.ts:130-149`) exists but is never wired to settlement.
+P1-d absorbs this.
