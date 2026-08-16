@@ -2,11 +2,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import {
-  callSourceMutation,
-  callSourceQuery,
-  sourceMutation,
-  sourceQuery,
-} from '@/lib/server/convex-source'
+  decideOperationApprovalThroughSource,
+  listPendingOperationApprovalsThroughSource,
+} from '@/lib/server/operation-approval-source'
 
 import type { PublicAuthorityRequest } from './operation-invoke'
 
@@ -32,13 +30,6 @@ export type OperationApprovalDecisionResult =
         | 'invocation_invalid'
     }>
 
-const listPendingOperationApprovalsQuery = sourceQuery<Record<string, never>, readonly PendingOperationApproval[]>(
-  'capabilityOperationInvocations:listPendingOperationApprovals',
-)
-const decideOperationApprovalMutation = sourceMutation<
-  Readonly<{ invocationRef: string; decision: 'approve' | 'deny' }>,
-  OperationApprovalDecisionResult
->('capabilityOperationInvocations:decideOperationApproval')
 const decisionInputSchema = z.strictObject({
   invocationRef: z.string().min(1),
   decision: z.enum(['approve', 'deny']),
@@ -46,11 +37,11 @@ const decisionInputSchema = z.strictObject({
 
 export const listPendingOperationApprovalsServer = createServerFn({ method: 'GET' })
   .handler(async (): Promise<readonly PendingOperationApproval[]> => {
-    return callSourceQuery(listPendingOperationApprovalsQuery, {})
+    return listPendingOperationApprovalsThroughSource()
   })
 
 export const decideOperationApprovalServer = createServerFn({ method: 'POST' })
   .validator((data) => decisionInputSchema.parse(data))
   .handler(async ({ data }): Promise<OperationApprovalDecisionResult> => {
-    return callSourceMutation(decideOperationApprovalMutation, data)
+    return decideOperationApprovalThroughSource(data)
   })
