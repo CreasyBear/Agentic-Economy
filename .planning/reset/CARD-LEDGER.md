@@ -21,15 +21,20 @@ Exit gate: porcelain empty, stash list resolved, baseline tag on remote, gate re
 
 Nothing deleted. Live money stays fail-closed. Each card runs executor → validator → reviewer → committer.
 
-| Card | Concern | Depends on |
-| --- | --- | --- |
-| P1-a | Re-key buyer money to organization `accountId` (ledger, credential budget, Convex money schema). Precondition: zero balances | P0 |
-| P1-b | Immutable Delivery / Qualified Use receipts after contract-valid delivery + replay/conflict tests | P1-a |
-| P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b |
-| P1-d | Idempotent daily settlement cron | P1-c |
-| P1-e | Canonical `/api/v1/operations/call`; dual-serve `/execute`; `callVia` + `paymentLane` on detail; refuse non-brokered lanes | P1-a |
-| P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers | P1-e |
-| P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 |
+| Card | Concern | Depends on | Status |
+| --- | --- | --- | --- |
+| P1-b | Immutable Delivery / Qualified Use receipts after contract-valid delivery + replay/conflict tests | P0 | committed |
+| HK-ts-standards | Close the three `test:ts-standards` violations the settlement slice left behind | P1-b | committed |
+| P1-a | Re-key buyer money to organization `accountId` (ledger, credential budget, Convex money schema). Precondition: zero balances | P0 | recon |
+| P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b | recon |
+| P1-d | Idempotent daily settlement cron | P1-c | recon |
+| P1-e | Canonical `/api/v1/operations/call`; dual-serve `/execute`; `callVia` + `paymentLane` on detail; refuse non-brokered lanes | P1-a | recon |
+| P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers | P1-e | recon |
+| P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 | recon |
+| HK-faux-runtime | Move local-E2E bypass authority out of `capability-execution` deployable graph | P1-b | pending |
+
+P1-b ran ahead of P1-a: the receipt keys on `businessId` and `invocationRef`, neither of which the
+account re-key touches, so the dependency the plan assumed does not exist in the code.
 
 ## Phase 2 — Decouple without changing behavior
 
