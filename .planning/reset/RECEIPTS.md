@@ -474,3 +474,13 @@ Discovered while trying to give a worktree real dependencies. `npm ci` exits `EU
 `@vercel/oidc`, `jose`, `zod@4.1.11` and roughly twenty more missing from the lock file. Any clean
 install — CI, a fresh clone, a new worktree — fails at dependency install. This predates the reset
 and is filed as `HK-lockfile-drift`.
+
+## P1-a-core — committed
+
+`main` fast-forwarded to `9c2377c37d7ce3701c774ffa7a5735f111f190f2`. The initial and final
+`git status --porcelain=v1` were clean. The first dirty-diff validator failed only because the expected
+diff was concurrently committed before it ran; this is preserved as orchestration evidence, not a
+product failure. Its replacement, pinned to `9c2377`, passed typecheck, `git diff --check`, and
+`tests/unit/money/owner-account-pooling.test.ts` (1 file / 9 tests). The independent reviewer found no
+blocking correctness, security, scope, or test issue and verified the absent-wallet distinction plus
+both guarded paths.

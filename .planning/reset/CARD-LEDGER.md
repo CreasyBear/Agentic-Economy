@@ -27,7 +27,7 @@ Nothing deleted. Live money stays fail-closed. Each card runs executor → valid
 | HK-ts-standards | Close the three `test:ts-standards` violations the settlement slice left behind | P1-b | committed |
 | P1-e-1 | Refuse the provider-direct x402 lane in production; keep it open below production for conformance proof | P0 | committed |
 | HK-faux-runtime | Move local-E2E bypass authority out of `capability-execution` deployable graph | P1-b | committed |
-| P1-a-core | Pool buyer money on the Clerk owner (`owner:{ownerId}:{currency}`); keep per-key attribution on transactions, usage, budgets | P0 | validated |
+| P1-a-core | Pool buyer money on the Clerk owner (`owner:{ownerId}:{currency}`); keep per-key attribution on transactions, usage, budgets | P0 | committed |
 | P1-e-2 | Canonical `/api/v1/operations/call`; dual-serve `/execute` identically; no new action registered | P0 | committed |
 | HK-lockfile-drift | `npm ci` fails `EUSAGE` on `main`: `package.json` and `package-lock.json` are out of sync, so no clean install succeeds | — | pending |
 | HK-topup-derivation | `beginCreditTopupThroughSource` prefix-checks a caller-supplied `accountRef` and digests that value; derive it server-side from the principal's owner instead. Convex `reserveCreditTopup` still re-derives and refuses mismatches, so this is defence in depth, not a hole | P1-a-core | pending |
