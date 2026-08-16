@@ -1417,3 +1417,7 @@ workstreams, duplicate observations, and explicit remediation status.
 185. opus-5: tests/unit/market-terminal/cli-errors.test.ts 'scopes valid command help' timed out at 30s once under a full tests/unit run, but passed 3/3 in isolation and in two later full runs. It spawns CLI processes with a 30s budget that is too tight under parallel full-suite load; a per-file testTimeout or reduced concurrency for that file would stop it costing a false RED and a differential investigation.
 
 186. opus-5: Long-running `npm run dev:local` (14.7h) died with exit 1 after a single failed Convex telemetry POST to api.convex.dev/api/local_deployment/record_activity returning 500. A cloud activity-heartbeat failure shouldn't kill a local deployment dev loop; it should warn and retry.
+
+187. opus-5: Wrote validator cards using 'grep -rn pattern path --include=*.ts'; zsh expands the unquoted glob before grep runs, so the check dies with 'no matches found' and returns no evidence. Repo guidance should point at rg (or quoted --include) for agent-authored scans.
+
+188. opus-5: Orchestrating across git worktrees, a persistent shell kept its cwd inside a worker's worktree across turns, so a later commit and a papercut write landed in the wrong tree and dirtied an executor's workspace mid-task. Worktree-touching commands should use an explicit -C/working_directory rather than a sticky cd.

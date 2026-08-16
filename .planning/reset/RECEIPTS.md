@@ -367,3 +367,30 @@ and the provider and rake account ref formats are byte-identical to base
 (`business:{businessId}:{currency}`, `ae:rake:{currency}`), so the re-key stayed on the buyer side.
 `accountRefForOperator` still exists and is still exported — expected, since per-key attribution
 survives pooling, but its remaining call sites are a reviewer question.
+
+## P1-e-2 — validator RED, and the red proves the concurrency fault
+
+Branch `p1-e-2-canonical-call-route` at `2f6b839f`. Typecheck, lint, targeted server/discovery/SEO
+units, product frontier, and ts-standards all passed. The three suite commands failed, and every
+single failure is a bare `Test timed out` with no assertion text, in files this branch does not
+touch: market-terminal `cli-errors` and `doctor`, `action-invocation/full-yolo`,
+`capability-supply/curated-seed-drift-idempotency` and `development-evidence-surface`, and
+`imports/customer-request-source-completeness`.
+
+This settles the attribution question left open on P1-a-core. Both validators ran concurrently, and
+three files timed out in **both** runs — `cli-errors`, `development-evidence-surface`, and
+`customer-request-source-completeness`. Two branches with disjoint diffs cannot produce the same
+failures; one saturated machine can. Neither branch is implicated by its timeout set. Rule 7a exists
+because of this pair of runs.
+
+The structural evidence for the card is strong. Both route files exist and delegate to the same
+`handleOperationInvokePost`; the shared handler diff is empty, so the two paths cannot drift; the
+product-frontier baseline diff is empty, confirming no new action was registered; and the new tests
+assert `/call` and `/execute` agree both on a served request and on the unauthenticated problem
+shape.
+
+Two notes for review. The route files hardcode their path literals in `createFileRoute` instead of
+reading them from `OPERATION_INVOKE_ROUTE_CONTRACT`, which is what the file-based router requires but
+which does leave the contract and the router able to disagree silently. And checks 17 and 18 in the
+card were unusable: they were written as `grep -rn --include=*.ts`, and zsh expanded the unquoted
+glob before grep saw it. Card-authoring fault, not worker fault.
