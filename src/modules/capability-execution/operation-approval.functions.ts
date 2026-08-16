@@ -7,7 +7,6 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
-import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 
 import type { PublicAuthorityRequest } from './operation-invoke'
 
@@ -47,15 +46,11 @@ const decisionInputSchema = z.strictObject({
 
 export const listPendingOperationApprovalsServer = createServerFn({ method: 'GET' })
   .handler(async (): Promise<readonly PendingOperationApproval[]> => {
-    if (isLocalE2EAuthBypassEnabled()) return []
     return callSourceQuery(listPendingOperationApprovalsQuery, {})
   })
 
 export const decideOperationApprovalServer = createServerFn({ method: 'POST' })
   .validator((data) => decisionInputSchema.parse(data))
   .handler(async ({ data }): Promise<OperationApprovalDecisionResult> => {
-    if (isLocalE2EAuthBypassEnabled()) {
-      return { kind: 'refused', code: 'authentication_required' }
-    }
     return callSourceMutation(decideOperationApprovalMutation, data)
   })
