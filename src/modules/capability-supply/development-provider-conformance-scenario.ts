@@ -1,4 +1,3 @@
-import { encodePaymentResponseHeader } from '@x402/core/http'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -32,7 +31,10 @@ import type {
   RouteTransportRuntime,
   X402RouteTransportRuntime,
 } from './route-transport-runtime'
-import { encodeX402PaymentRequiredHeader } from './server'
+import {
+  encodeX402PaymentRequiredHeader,
+  encodeX402PaymentResponseHeader,
+} from './server'
 
 type ProviderKey = 'A' | 'B'
 type Counters = { authorizations: number; signatures: number; sends: number }
@@ -372,7 +374,7 @@ function paymentRuntime(
       return new Response(JSON.stringify(payload), {
         status: 200,
         headers: {
-          'payment-response': encodePaymentResponseHeader({
+          'payment-response': encodeX402PaymentResponseHeader({
             success: true,
             transaction: `development:${operation.identity.businessId}`,
             network: challenge.accepts[0]!.network,

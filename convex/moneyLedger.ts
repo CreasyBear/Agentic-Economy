@@ -74,7 +74,7 @@ import {
   type ExternalSpendMutationResult,
   type ExternalSpendReservation,
   type ExternalSpendRefusalCode,
-} from '../src/modules/money/internal/external-spend'
+} from '../src/modules/money/public'
 import type { AgentAccessRatePolicy } from '../src/modules/agent-access/policy'
 
 type MoneyUsageEventInput = Omit<

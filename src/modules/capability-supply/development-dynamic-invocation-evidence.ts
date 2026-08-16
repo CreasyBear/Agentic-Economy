@@ -1,4 +1,3 @@
-import { encodePaymentResponseHeader } from '@x402/core/http'
 import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
@@ -26,6 +25,7 @@ import type { ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   encodeX402PaymentRequiredHeader,
+  encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
 } from './server'
 
@@ -924,7 +924,7 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
     }), {
       status: 200,
       headers: {
-        'payment-response': encodePaymentResponseHeader({
+        'payment-response': encodeX402PaymentResponseHeader({
           success: true,
           transaction: 'development:mock-payment',
           network: challenge.accepts[0]!.network,

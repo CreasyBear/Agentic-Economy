@@ -1,6 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ExternalSpendSettlementStatus } from '@/modules/money/internal/external-spend'
+import type { ExternalSpendSettlementStatus } from '@/modules/money/public'
 
 import type { RouteTransportObservation } from '../route-transport-runtime'
 

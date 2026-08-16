@@ -682,14 +682,22 @@ export type {
 } from "./internal/credential-budget";
 export { reverseCredentialBudget } from "./internal/credential-budget";
 export {
+  decideExternalSpendFinalization,
+  decideExternalSpendReconciliation,
+  decideExternalSpendReversal,
+  externalSpendFinalizationCommandRefusal,
   externalSpendIdentityDigest,
+  externalSpendIdentityMaterialValid,
   externalSpendFinalizationDigest,
+  externalSpendReconciliationCommandRefusal,
   externalSpendReconciliationDigest,
+  externalSpendReversalCommandRefusal,
   externalSpendReversalDigest,
   sameExternalSpendIdentity,
   externalSpendStateForSettlement,
 } from "./internal/external-spend";
 export type {
+  ExternalSpendFinalizationCommand,
   ExternalSpendIdentity,
   ExternalSpendReservation,
   ExternalSpendReservationState,

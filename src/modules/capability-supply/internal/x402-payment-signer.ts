@@ -3,6 +3,7 @@ import {
   decodePaymentRequiredHeader,
   decodePaymentSignatureHeader,
   encodePaymentRequiredHeader,
+  encodePaymentResponseHeader,
   x402HTTPClient,
 } from '@x402/core/http'
 import { validatePaymentRequired, type PaymentRequired as X402SchemaPaymentRequired } from '@x402/core/schemas'
@@ -51,6 +52,12 @@ export function encodeX402PaymentRequiredHeader(paymentRequired: X402PaymentRequ
 
 export function decodeX402PaymentRequiredHeader(header: string): unknown {
   return decodePaymentRequiredHeader(header)
+}
+
+export function encodeX402PaymentResponseHeader(
+  response: X402SettlementResponse,
+): string {
+  return encodePaymentResponseHeader(response as SettleResponse)
 }
 
 export function decodeX402PaymentResponseHeader(header: string): unknown {

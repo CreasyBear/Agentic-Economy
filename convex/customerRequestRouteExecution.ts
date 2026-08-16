@@ -30,7 +30,7 @@ import { connectionAuthoritySnapshotValue } from '@/modules/capability-supply/co
 import {
   x402PaymentReconciliationEvidenceValue,
   x402PaymentSettlementStatusValue,
-} from '@/modules/customer-request/internal/route-mandate-convex-schema'
+} from '@/modules/customer-request/convex'
 import {
   projectBusinessProblem,
   projectSupportProblemExport,

@@ -413,6 +413,14 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   }
   if (
     violation.file ===
+      "src/modules/capability-supply/internal/x402-settlement-verifier.ts" ||
+    violation.file ===
+      "src/modules/capability-supply/internal/x402-evm-receipt-reader.ts"
+  ) {
+    return /from\s+['"]viem['"]/.test(violation.excerpt);
+  }
+  if (
+    violation.file ===
     "src/modules/capability-supply/internal/transport-adapters.ts"
   ) {
     return /from\s+['"](?:@x402\/core\/schemas|@modelcontextprotocol\/sdk\/types\.js)['"]/.test(

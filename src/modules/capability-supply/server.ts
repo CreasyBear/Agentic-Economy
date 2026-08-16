@@ -6,8 +6,25 @@ export { signRouteTransportCall } from './internal/route-call-signing'
 export {
   createEvmX402PaymentSignature,
   encodeX402PaymentRequiredHeader,
+  encodeX402PaymentResponseHeader,
+  readX402PaymentPayer,
 } from './internal/x402-payment-signer'
-export type { X402PaymentRequired } from './internal/x402-payment-signer'
+export type {
+  X402PaymentRequired,
+  X402SettlementResponse,
+} from './internal/x402-payment-signer'
+
+export { verifyExactEvmX402Settlement } from './internal/x402-settlement-verifier'
+export type { X402EvmReceipt } from './internal/x402-settlement-verifier'
+export { readGuardedX402EvmReceipt } from './internal/x402-evm-receipt-reader'
+export {
+  chargeSettlementOutcome,
+  paymentObservationDigest,
+  transportObservationDigest,
+  x402ActionEffectStatus,
+  x402SettlementStatusForObservation,
+  type EconomicRail,
+} from './internal/x402-invocation-policy'
 
 export {
   qualifySuppliedCandidate,

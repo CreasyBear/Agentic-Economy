@@ -1,4 +1,3 @@
-import { encodePaymentResponseHeader } from '@x402/core/http'
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
@@ -9,6 +8,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
   encodeX402PaymentRequiredHeader,
+  encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
 } from './server'
 import { developmentProviderConnectionAuthorityDigest } from './development-published-operation-evidence'
@@ -72,7 +72,7 @@ export function developmentSuccessRuntime(
     }), {
       status: 200,
       headers: {
-        'payment-response': encodePaymentResponseHeader({
+        'payment-response': encodeX402PaymentResponseHeader({
           success: true,
           transaction: 'development:mock-payment',
           network: developmentChallenge(endpoint, url).accepts[0]!.network,
@@ -232,7 +232,7 @@ export function developmentReleasedRefusalRuntime(
       return new Response(JSON.stringify({ unexpected: true }), {
         status: 200,
         headers: {
-          'payment-response': encodePaymentResponseHeader({
+          'payment-response': encodeX402PaymentResponseHeader({
             success: true,
             transaction: 'development:mock-payment-refusal',
             network: requirement.network,

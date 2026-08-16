@@ -44,18 +44,16 @@ import {
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import {
-  verifyExactEvmX402Settlement,
-} from '@/modules/capability-supply/internal/x402-settlement-verifier'
-import { readGuardedX402EvmReceipt } from '@/modules/capability-supply/internal/x402-evm-receipt-reader'
-import {
   chargeSettlementOutcome,
   paymentObservationDigest,
+  readGuardedX402EvmReceipt,
+  readX402PaymentPayer,
   transportObservationDigest,
+  verifyExactEvmX402Settlement,
   x402ActionEffectStatus,
   x402SettlementStatusForObservation,
   type EconomicRail,
-} from '@/modules/capability-supply/internal/x402-invocation-policy'
-import { readX402PaymentPayer } from '@/modules/capability-supply/internal/x402-payment-signer'
+} from '@/modules/capability-supply/server'
 import {
   accountRefForOperator,
   accountRefForProvider,
@@ -68,7 +66,7 @@ import {
 import type {
   ExternalSpendIdentity,
   ExternalSpendSettlementStatus,
-} from '@/modules/money/internal/external-spend'
+} from '@/modules/money/public'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
@@ -89,7 +87,7 @@ import {
 } from '@/modules/capability-execution/operation-invoke'
 import {
   x402PaymentReconciliationEvidenceValue,
-} from '@/modules/customer-request/internal/route-mandate-convex-schema'
+} from '@/modules/customer-request/convex'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import {
