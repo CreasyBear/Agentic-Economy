@@ -50,8 +50,8 @@ const coingecko = capability('coingecko.simple-price', 'CoinGecko simple price',
 const geocoding = capability('open-meteo.geocoding', 'Open-Meteo geocoding search',
   'Searches place names and returns matching coordinates and metadata through the keyless Open-Meteo geocoding API.',
   ['geocode', 'geocoding', 'place search', 'place lookup', 'city coordinates', 'coordinates lookup', 'location lookup', 'find location'])
-const cat = capability('thecatapi.image-search', 'Random cat image search',
-  'Returns random cat image URLs and dimensions through the keyless TheCatAPI image search endpoint.',
+const cat = capability('mockster.cat-images', 'Mockster random cat images',
+  'Returns an exact bounded count of random cat image URLs through the keyless Mockster image endpoint.',
   ['cat', 'cat images', 'random cat', 'cat photo', 'cute cat pictures'])
 const fx = capability('frankfurter.single-rate', 'Foreign exchange single rate',
   'Return a current European Central Bank reference rate for a currency pair.',

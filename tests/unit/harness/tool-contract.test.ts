@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 
-import { defineAction, listActions } from '@/modules/actions'
+import { defineAction, findAction, listActions } from '@/modules/actions'
 import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
-  AnswerModelToolIds,
   actionToHarnessTool,
   actionToHarnessToolContract,
   buildHarnessToolContracts,
@@ -22,14 +21,10 @@ describe('harness tool contract', () => {
     const answerContracts = filterAnswerModelToolContracts(contracts)
     const descriptors = answerContracts.map(describeHarnessToolForAnswerModel)
 
-    expect(answerContracts.map((contract) => contract.id)).toEqual([...AnswerModelToolIds])
-    // The answer model's harness toolset is exactly the DIRECT model toolset.
-    // `operation.execute` is a record-only id (the seam behind dynamic per-op
-    // capability tools), persisting to Convex but not itself a callable tool.
-    expect(AnswerModelToolIds).toEqual(ANSWER_READ_TOOL_IDS)
+    expect(answerContracts.map((contract) => contract.id)).toEqual(ANSWER_READ_TOOL_IDS)
     expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
     expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)
-    expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual([...AnswerModelToolIds])
+    expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual(ANSWER_READ_TOOL_IDS)
     expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })
 
@@ -41,6 +36,20 @@ describe('harness tool contract', () => {
 
       expect(modelProjection.descriptorHash).toBe(contract.schemas.descriptorHash)
       expect(modelProjection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
+    }
+  })
+  it('builds canonical operation read contracts and preserves full input schemas', () => {
+    for (const actionId of ['registry.operations.compare', 'registry.operations.inspectPlan'] as const) {
+      const action = findAction(actionId)
+      expect(action).toBeDefined()
+      expect(() => actionToHarnessToolContract(action!)).not.toThrow('canonical_digest_value_invalid')
+
+      const contract = actionToHarnessToolContract(action!)
+      const projection = describeHarnessToolForAnswerModel(contract)
+
+      expect(contract.schemas.descriptorHash).toMatch(/^sha256:[0-9a-f]{64}$/)
+      expect(contract.schemas.inputJsonSchema).toBeDefined()
+      expect(projection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
     }
   })
 

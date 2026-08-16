@@ -62,6 +62,27 @@ describe('rationale compact prose', () => {
     expect(prose.summary).toContain('operation response did not match its contract')
     expect(prose.oneLine).not.toContain('Comparing')
   })
+
+  it('recalls a frozen operation choice and exact result without suggesting a rerun', () => {
+    const prose = buildRationaleFollowUpProse({
+      constraints: [],
+      operationRecall: {
+        operationLabel: 'Coin price lookup',
+        sourceLabel: 'Example prices',
+        rationale: 'Returns current prices and the requested 24-hour change.',
+        result: {
+          kind: 'ok',
+          output: { bitcoin: { usd: 63_039, usd_24h_change: -0.15 } },
+        },
+      },
+    })
+
+    expect(prose.oneLine).toContain('Coin price lookup')
+    expect(prose.summary).toContain('Returns current prices')
+    expect(prose.summary).toContain('"usd":63039')
+    expect(prose.summary).toContain('"usd_24h_change":-0.15')
+    expect(prose.nextStep).toContain('No operation was run')
+  })
 })
 describe('inquiry handoff compact prose', () => {
   it('does not claim a selected business when no provider or request route exists', () => {

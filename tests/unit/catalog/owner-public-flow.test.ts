@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  getDefaultPublicOwnerStatusReadback,
-  getPublicBusinessPageReadback,
   publicOwnerDefaultClaimInput,
   submitPublicOwnerClaimFlow,
   validatePublicOwnerClaimFlowInput,
@@ -11,6 +9,10 @@ import {
   confirmStorefrontImportDraft,
   extractStorefrontDraftFromHtml,
 } from '@/modules/storefront/public'
+import {
+  getDefaultPublicOwnerStatusReadback,
+  getPublicBusinessPageReadback,
+} from '../../helpers/owner-default-claim'
 
 describe('public owner claim flow', () => {
   it('publishes the Sam service page from browser-safe facts only', () => {
@@ -142,8 +144,9 @@ describe('public owner claim flow', () => {
 
 
   it('serves the default public page by slug and reports unknown slugs as no such business', () => {
-    expect(getDefaultPublicOwnerStatusReadback().catalog.name).toBe('Parramatta Emergency Plumbing')
-    expect(getPublicBusinessPageReadback('parramatta-emergency-plumbing')).toMatchObject({ kind: 'available' })
-    expect(getPublicBusinessPageReadback('unknown-service')).toEqual({ kind: 'not_found', reason: 'no_such_business' })
+    const readback = getDefaultPublicOwnerStatusReadback()
+    expect(readback.catalog.name).toBe('Parramatta Emergency Plumbing')
+    expect(getPublicBusinessPageReadback(readback.catalog, 'parramatta-emergency-plumbing')).toMatchObject({ kind: 'available' })
+    expect(getPublicBusinessPageReadback(readback.catalog, 'unknown-service')).toEqual({ kind: 'not_found', reason: 'no_such_business' })
   })
 })

@@ -260,6 +260,7 @@ describe('Customer Request OAuth HTTP adapter', () => {
     expect(JSON.stringify(body)).not.toContain('HTTPError')
   })
 
+
   it('binds device consent to the signed-in owner and returns no key secret', async () => {
     const store = storeFixture()
     await store.insertGrant({ grantRef: 'device:1', flow: 'device_code', clientId: 'client-local', requestedScopes: ['customer_requests:create', 'customer_requests:inspect_only'], deviceCodeHash: 'd', userCodeHash: await hashOAuthValue('ABCD-EFGH'), status: 'pending', createdAt: 1_000, expiresAt: 601_000, nextPollAt: 1_000, displayName: 'Local assistant' })

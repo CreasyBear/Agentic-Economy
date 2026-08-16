@@ -409,27 +409,38 @@ describe('answer harness operation persistence bridge', () => {
     const journalKinds = journalEntries.map((entry) => entry.kind)
     const reportedReport = JSON.parse(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson ?? '{}').harnessRun
     expect(reportedReport?.summary.run.status).toBe('ok')
-    expect(reportedReport?.summary.tools.byName['registry.search']).toMatchObject({
-      total: 1,
-      ok: 1,
+    expect(reportedReport?.summary.tools).toMatchObject({
+      total: 4,
+      ok: 4,
+      byName: {
+        'registry.search': expect.objectContaining({
+          total: 4,
+          ok: 4,
+        }),
+      },
     })
-    // The safety preflight is the first model request; the agent then performs
-    // one tool round and one tool-less prose round.
+    // The staged navigation fixture records the read activity in the aggregate
+    // harness counters; it does not promise one legacy registry.search key.
+    // The safety preflight is the first model request; the staged agent can
+    // use up to four read rounds before one tool-less prose round.
     const modelRequests: { seq: number; provider: string; model: string; status: string }[]
       = reportedReport?.privateTelemetry?.modelRequests ?? []
-    expect(modelRequests.map(({ seq, provider, model, status }) => ({ seq, provider, model, status }))).toEqual([
-      { seq: 0, provider: 'openrouter', model: 'test-model', status: 'ok' },
-      { seq: 1, provider: 'openrouter', model: 'test-model', status: 'ok' },
-      { seq: 2, provider: 'openrouter', model: 'test-model', status: 'ok' },
-    ])
+    expect(modelRequests).toHaveLength(5)
+    expect(modelRequests.map(({ seq }) => seq)).toEqual([0, 1, 2, 3, 4])
+    expect(modelRequests.every(
+      ({ provider, model, status }) =>
+        provider === 'openrouter' &&
+        model === 'test-model' &&
+        status === 'ok',
+    )).toBe(true)
     expect(Object.keys(reportedReport?.summary.models?.byModel ?? {})).toEqual(['test-model'])
     expect(reportedReport?.summary.models?.byModel['test-model']).toMatchObject({
-      total: 3,
-      ok: 3,
+      total: 5,
+      ok: 5,
     })
     expect(reportedReport?.summary.models?.byProvider.openrouter).toMatchObject({
-      total: 3,
-      ok: 3,
+      total: 5,
+      ok: 5,
     })
     expect(reportedReport?.coverage.phases).toEqual(
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
@@ -441,8 +452,10 @@ describe('answer harness operation persistence bridge', () => {
       'context.loaded',
       'intent.routed',
       'intent.routed',
-      'tool.started',
-      'tool.completed',
+      ...Array.from({ length: 4 }, () => [
+        'tool.started',
+        'tool.completed',
+      ]).flat(),
       'gate.evaluated',
       'turn.persisted',
       'run.reported',
@@ -450,8 +463,8 @@ describe('answer harness operation persistence bridge', () => {
     expect(journalKinds.filter((kind) => kind === 'model.started')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'model.completed')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'intent.routed')).toHaveLength(2)
-    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(1)
-    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(1)
+    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(4)
+    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(4)
     expect(journalKinds).not.toContain('tool.failed')
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
     expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
@@ -601,13 +614,13 @@ describe('answer harness operation persistence bridge', () => {
     expect(stored?.status).toBe('error')
     expect(reservationRow).toMatchObject({ state: 'finalized', finalStatus: 'error' })
     const persistedEvidence = JSON.parse(stored?.evidenceJson ?? '{}') as {
-      operationCandidates?: unknown
-      operationOutcome?: unknown
-      operationSelection?: unknown
+      providers?: unknown
+      toolCalls?: unknown
+      answerRun?: unknown
     }
-    expect(persistedEvidence.operationCandidates).toEqual(expect.any(Array))
-    expect(persistedEvidence.operationOutcome).toEqual(expect.any(Object))
-    expect(persistedEvidence.operationSelection).toEqual(expect.any(Object))
+    expect(persistedEvidence.providers).toEqual(expect.any(Array))
+    expect(persistedEvidence.toolCalls).toEqual(expect.any(Array))
+    expect(persistedEvidence.answerRun).toEqual(expect.any(Object))
     const replay = await reserveAnswerTurn({
       sessionId: 'session-stream-finalization-fail',
       query,
@@ -768,9 +781,9 @@ describe('answer harness operation persistence bridge', () => {
           keylessExecutableSource: emptyKeylessSource,
         },
         ({ event }) => {
-          if (event.type === 'one-line' && !injected) {
+          if (event.type === 'work-step' && !injected) {
             injected = true
-            throw new Error('ordinary assemble phase failure')
+            throw new Error('ordinary model phase failure')
           }
           events.push(event)
         },
@@ -795,10 +808,10 @@ describe('answer harness operation persistence bridge', () => {
       }
     }
 
-    // The initial turn performs classifier, tool, and prose requests; replay
-    // returns the durable error without re-executing any of them.
+    // The safety classifier request occurs before the injected work-step
+    // failure; replay below must not add any further model request.
     expect(injected).toBe(true)
-    expect(server.requests).toHaveLength(3)
+    expect(server.requests).toHaveLength(1)
     expect(events.at(-1)).toMatchObject({
       type: 'error',
       problem: { code: 'answer_turn_persist_failed' },
@@ -844,7 +857,7 @@ describe('answer harness operation persistence bridge', () => {
       type: 'error',
       problem: { code: 'answer_turn_persist_failed' },
     })
-    expect(server.requests).toHaveLength(3)
+    expect(server.requests).toHaveLength(1)
   })
 
 })

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import type { KeylessExecutableSourcePort, KeylessExecutableToolDescriptor } from '@/modules/capability-execution'
+import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import { answerTurnRequestDigest, streamAnswerTurn } from '@/modules/answer-thread/server'
 import { reserveAnswerTurn } from '@/modules/answer-thread/answer-thread.functions'
 import {
@@ -9,10 +10,113 @@ import {
   installAnswerThreadTestPort,
   type AnswerThreadTestStore,
 } from '../../helpers/answer-thread-test-port'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import {
+  openRouterToolResponse,
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
+import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
+
+const operationSourceMocks = vi.hoisted(() => ({
+  readCapabilityOperationSearch: vi.fn(),
+  readCapabilityOperationDetail: vi.fn(),
+  readCapabilityOperationCompare: vi.fn(),
+  readCapabilityOperationInspectPlan: vi.fn(),
+  readCatalogOfferingOperationMap: vi.fn(async () => []),
+}))
+
+vi.mock('@/modules/capability-supply/operation-source', () => operationSourceMocks)
+
+function navigationClarifyResponse(question: string): unknown {
+  return {
+    id: 'chatcmpl-navigation-clarify',
+    model: 'test-model',
+    choices: [{
+      finish_reason: 'stop',
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({ kind: 'clarify', question }),
+      },
+    }],
+    usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
+  }
+}
+
+function publicOperationFor(
+  descriptor: KeylessExecutableToolDescriptor,
+): PublicOperationDescriptor {
+  const operationRef = descriptor.operationRef as PublicOperationDescriptor['operationRef']
+  return {
+    operationRef,
+    operationId: `operation:${descriptor.capabilityId}`,
+    contract: {
+      capabilityId: descriptor.capabilityId,
+      version: 1,
+      inputJsonSchema: descriptor.inputSchema as PublicOperationDescriptor['contract']['inputJsonSchema'],
+      outputJsonSchema: {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+        additionalProperties: false,
+      },
+      customerAnnotations: [],
+    },
+    business: {
+      businessId: `business:${descriptor.capabilityId}`,
+      slug: descriptor.capabilityId,
+      name: descriptor.name,
+    },
+    offering: {
+      offeringRef: `offering:${descriptor.capabilityId}`,
+      revision: 1,
+      label: descriptor.name,
+      summary: descriptor.summary,
+    },
+    summary: descriptor.summary,
+    commercial: {
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'No commercial relationship.' },
+    },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    cancellation: { kind: 'unsupported' },
+    recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+    authentication: { kind: 'keyless' },
+    transport: { method: 'GET', requestTimeoutMs: 5_000 },
+    provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+    availability: { posture: 'routeable' },
+    navigation: [{
+      relation: 'execute',
+      method: 'POST',
+      actionId: 'operation.execute',
+      authentication: 'none',
+      surfaces: ['answerThread'],
+    }],
+  }
+}
+
+function operationSearchResultFor(
+  descriptors: readonly KeylessExecutableToolDescriptor[],
+): unknown {
+  const operations = descriptors.map(publicOperationFor)
+  return {
+    kind: 'ok',
+    schemaVersion: 'registry-operations:v1',
+    query: 'current measurement for Sydney',
+    items: operations,
+    matchedCount: operations.length,
+    ranking: operations.map((operation, index) => ({
+      operationRef: operation.operationRef,
+      rank: index + 1,
+      score: operations.length - index,
+    })),
+    pagination: { limit: 20, hasMore: false },
+    navigation: [],
+  }
+}
 
 const emptyKeylessSource: KeylessExecutableSourcePort = {
   list: async () => [],
@@ -67,14 +171,27 @@ async function runTurn(query: string, keylessExecutableSource = emptyKeylessSour
 
 
 describe('answer reference boundary', () => {
-  it('keeps an unavailable Wikipedia summary request out of business search', async () => {
+  it('uses staged operation reads before explaining an unavailable Wikipedia request', async () => {
+    operationSourceMocks.readCapabilityOperationSearch.mockResolvedValue({
+      kind: 'no_candidates',
+      schemaVersion: 'registry-operations:v1',
+      query: 'Wikipedia page summary Ada Lovelace',
+      appliedFilters: {},
+      matchedCount: 0,
+      ranking: [],
+      navigation: [],
+    })
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{
+        toolId: 'registry.operations.search',
+        input: { query: 'Wikipedia page summary Ada Lovelace', limit: 3 },
+      }],
       prose: {
-        oneLine: 'No prose should be needed for this boundary.',
-        summary: 'No prose should be needed for this boundary.',
-        whatToDoNow: 'Ask a supported question.',
+        oneLine: 'No admitted live capability matched this request.',
+        summary: 'The registered operation search returned no executable capability for Wikipedia.',
+        whatToDoNow: 'Ask for a supported live data lookup.',
       },
-    }))
+    }), { preflightRoute: 'operation' })
     const restoreOpenRouter = server.installEnv()
     try {
       const result = await runTurn('Give me a Wikipedia page summary of Ada Lovelace')
@@ -83,23 +200,34 @@ describe('answer reference boundary', () => {
       if (complete?.type !== 'complete') throw new Error('expected a complete boundary answer')
 
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.oneLine).toContain('cannot search the web')
-      expect(complete.answer.summary).toContain('No web search was run')
+      expect(complete.answer.oneLine).toBe('No admitted live capability matched this request.')
+      expect(complete.answer.summary).toContain('registered operation search')
       expect(complete.answer.nextStep).not.toMatch(/business|contact|timing|match/i)
-      expect(complete.answer.layoutProfile).toBe('data_answer')
 
       const turn = result.store.turns.get(result.turnId)
       const evidence = JSON.parse(turn?.evidenceJson ?? '{}') as {
-        toolCalls?: readonly { toolId?: string }[]
+        toolCalls?: readonly { toolId?: string; status?: string }[]
       }
-      expect(evidence.toolCalls ?? []).toEqual([])
+      expect(evidence.toolCalls ?? []).toHaveLength(4)
+      expect(evidence.toolCalls ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          toolId: 'registry.operations.search',
+          status: 'complete',
+        }),
+      ]))
+      expect((evidence.toolCalls ?? []).every(
+        ({ toolId }) => toolId === 'registry.operations.search',
+      )).toBe(true)
+      expect(server.requests.filter(
+        (request) => request.response_format?.json_schema?.name === 'answer_navigation',
+      ).length).toBeGreaterThanOrEqual(2)
     } finally {
       restoreOpenRouter()
       await server.close()
     }
   })
 
-  it('keeps ambiguous live operations out of business retrieval and model selection', async () => {
+  it('lets the model clarify ambiguous live operations without executing or business-searching', async () => {
     const descriptors: readonly KeylessExecutableToolDescriptor[] = [
       {
         operationRef: `operation:v1:${'a'.repeat(64)}`,
@@ -128,14 +256,28 @@ describe('answer reference boundary', () => {
         },
       },
     ]
+    operationSourceMocks.readCapabilityOperationSearch.mockResolvedValue(
+      operationSearchResultFor(descriptors),
+    )
     const keylessSource: KeylessExecutableSourcePort = {
       list: async () => descriptors,
       read: async () => null,
       search: async () => descriptors.map(({ operationRef }) => operationRef),
     }
-    const server = await startOpenRouterContractServer(() => {
-      throw new Error('model must not choose among ambiguous operations')
-    })
+    const server = await startOpenRouterContractServer((request) => {
+      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
+        throw new Error('ambiguous operation fixture expected navigation requests')
+      }
+      const completedReads = request.messages.filter((message) => message.role === 'tool').length
+      if (completedReads === 0) {
+        return openRouterToolResponse([{
+          id: 'call-operation-search',
+          toolId: 'registry.operations.search',
+          input: { query: 'current measurement for Sydney', limit: 3 },
+        }])
+      }
+      return navigationClarifyResponse('Which live source should I use?')
+    }, { preflightRoute: 'operation' })
     const restoreOpenRouter = server.installEnv()
     try {
       const result = await runTurn('Get the current measurement for Sydney', keylessSource)
@@ -144,52 +286,80 @@ describe('answer reference boundary', () => {
       if (complete?.type !== 'complete') throw new Error('expected a complete ambiguous answer')
 
       expect(complete.answer.oneLine).toBe('Which live source should I use?')
+      expect(complete.answer.nextStep).toBe('Which live source should I use?')
       expect(complete.answer.providers).toEqual([])
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests[0]?.response_format?.json_schema?.name).toBe('answer_query_safety')
-      expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests.filter(
+        (request) => request.response_format?.json_schema?.name === 'answer_navigation',
+      ).length).toBeGreaterThanOrEqual(2)
       const evidence = JSON.parse(result.store.turns.get(result.turnId)?.evidenceJson ?? '{}') as {
-        toolCalls?: readonly unknown[]
+        toolCalls?: readonly { toolId?: string; status?: string }[]
       }
-      expect(evidence.toolCalls ?? []).toEqual([])
+      expect(evidence.toolCalls ?? []).toEqual([
+        expect.objectContaining({
+          toolId: 'registry.operations.search',
+          status: 'complete',
+        }),
+      ])
+      expect(evidence.toolCalls?.some(
+        ({ toolId }) => toolId === 'registry.search'
+          || toolId === 'operation.execute'
+          || toolId === 'operation.invoke',
+      )).toBe(false)
     } finally {
       restoreOpenRouter()
       await server.close()
     }
   })
 
-  it('still routes a general local-business request through business retrieval', async () => {
+
+  it('keeps local-business retrieval authoritative when preflight chooses operation', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick', limit: 3 } }],
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'I need an emergency plumber near Perth', limit: 3 } }],
       prose: {
-        oneLine: 'A Brunswick emergency plumber may fit.',
+        oneLine: 'A Perth emergency plumber may fit.',
         summary: 'Listed plumbing options still need confirmation of scope and availability.',
         whatToDoNow: 'Review the listed provider options.',
       },
-    }))
+    }), { preflightRoute: 'operation' })
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
     const previousViteConvexUrl = process.env.VITE_CONVEX_URL
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    const restoreRegistry = setPublicRegistrySourcePortForTests(
+      createLocalE2eRegistrySourcePort(),
+    )
     delete process.env.CONVEX_URL
     delete process.env.VITE_CONVEX_URL
 
     try {
-      const result = await runTurn('Emergency plumber Brunswick')
+      const result = await runTurn('I need an emergency plumber near Perth')
       const complete = result.events.at(-1)
       expect(server.requests.length).toBeGreaterThan(0)
       expect(result.events.some(
         (event) => event.type === 'work-step'
-          && event.step.phase === 'search'
-          && event.step.title === 'Searching for matches',
+          && event.step.phase === 'search',
       )).toBe(true)
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') throw new Error('expected a complete local-business answer')
       expect(complete.answer.layoutProfile).toBe('empty_state')
+      const evidence = JSON.parse(
+        result.store.turns.get(result.turnId)?.evidenceJson ?? '{}',
+      ) as {
+        toolCalls?: readonly { toolId?: string }[]
+      }
+      expect(evidence.toolCalls ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ toolId: 'registry.search' }),
+      ]))
+      expect(
+        (evidence.toolCalls ?? []).some(({ toolId }) =>
+          toolId?.startsWith('registry.operations.') === true,
+        ),
+      ).toBe(false)
     } finally {
       restoreOpenRouter()
       await server.close()
+      restoreRegistry()
       if (previousLocalRegistry === undefined) delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       else process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       if (previousConvexUrl === undefined) delete process.env.CONVEX_URL

@@ -1,6 +1,6 @@
+import { encodePaymentRequiredHeader } from '@x402/core/http'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -197,7 +197,7 @@ describe('x402 payment reconciliation evidence', () => {
 
 type ChallengeRequirement = Readonly<{
   scheme: 'exact'
-  network: string
+  network: `${string}:${string}`
   amount: string
   asset: string
   payTo: string
@@ -257,11 +257,11 @@ function challengeHeader(overrides: Partial<ChallengeRequirement> = {}): string 
     extra: {},
     ...overrides,
   }
-  return Buffer.from(JSON.stringify({
+  return encodePaymentRequiredHeader({
     x402Version: 2,
     resource: { url: 'https://provider.example/paid' },
     accepts: [requirement],
-  })).toString('base64')
+  })
 }
 
 function amount(currency: string, units: string, exponent: number): ExactAmount {

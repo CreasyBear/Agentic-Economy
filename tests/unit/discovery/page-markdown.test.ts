@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import {
   buildBusinessMarkdown,
@@ -59,6 +60,7 @@ describe('site brief markdown', () => {
     expect(body).toContain('curl -fsSL https://ae.example/.well-known/ucp')
     expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
     expect(body).toContain('npm run -s ae -- inspect "$AE_OPERATION_REF" --json')
+    expect(body).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -68,6 +70,8 @@ describe('site brief markdown', () => {
     expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
     expect(body).toContain('The request JSON body field `idempotencyKey` is required for invoke, cancel, and reconcile; choose it once for the intended invocation and retain it.')
     expect(body).toContain('Authenticated: invoke, status, cancel, reconcile.')
+    expect(body).toContain('qualified direct-keyless MCP execution does not')
+    expect(body).toContain('Business reads are business-only')
   })
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
@@ -75,8 +79,11 @@ describe('site brief markdown', () => {
     expect(guide).toContain('curl -fsSL https://ae.example/.well-known/ucp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
+    expect(guide).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
     expect(guide).toContain('npm run -s ae -- advanced cancel')
     expect(guide).not.toContain('npm run -s ae -- advanced reconcile')
+    expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
+    expect(guide).toContain('`initialize` then `notifications/initialized`')
   })
 
   it('trims the trailing slash off the canonical base', () => {

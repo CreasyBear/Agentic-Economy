@@ -100,7 +100,9 @@ describe('operation-bound capability tools', () => {
     const operationTool = tools[openRouterToolName(`capability.${descriptor.operationRef}`)]
     expect(operationTool?.description).not.toMatch(/[<>]/)
     expect(operationTool?.description).toContain('[data-tag]')
-    expect(operationTool?.description).toContain('[data-tag]EUR[data-tag]')
+    expect(operationTool?.inputExamples).toEqual([{
+      input: { from: '[data-tag]EUR[data-tag]', to: 'USD' },
+    }])
     expect(operationTool?.strict).toBe(true)
     const operationSchema = operationTool?.inputSchema
     if (operationSchema === undefined || !('jsonSchema' in operationSchema)) {

@@ -1,3 +1,4 @@
+import { encodePaymentResponseHeader } from '@x402/core/http'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -108,7 +109,17 @@ describe('route transport durable identity binding', () => {
       const paymentRequired = Buffer.from(JSON.stringify(challenge)).toString('base64')
       const send = vi.fn<RouteTransportFetch>()
         .mockResolvedValueOnce(new Response(null, { status: 402, headers: { 'Payment-Required': paymentRequired } }))
-        .mockResolvedValueOnce(Response.json({ ok: true }, { headers: { 'Payment-Response': 'settled' } }))
+        .mockResolvedValueOnce(Response.json({ ok: true }, {
+          headers: {
+            'Payment-Response': encodePaymentResponseHeader({
+              success: true,
+              transaction: 'test:identity-binding',
+              network: challenge.accepts[0]!.network,
+              amount: challenge.accepts[0]!.amount,
+              payer: 'test:identity-binding',
+            }),
+          },
+        }))
       const runtime: RouteTransportRuntime = {
         send,
         resolveCredential: () => undefined,
@@ -122,6 +133,7 @@ describe('route transport durable identity binding', () => {
         },
         readX402PaymentAuthorization: async () => 'signed-payment',
         readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
+        verifyX402Settlement: async () => true,
       }
       return await invokePreparedRouteTransport(await prepare(invocation(operationKeyDigest, 'x402-fetch:v2')), runtime)
     }

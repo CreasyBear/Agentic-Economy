@@ -28,7 +28,11 @@ vi.mock('@/components/ae/chat/turn-stream-session', () => ({
   abortAnswerTurnStream: streamSession.abort,
   attachAnswerTurnStream: streamSession.attach,
 }))
-vi.mock('@tanstack/react-router', () => ({ Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }))
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
+}))
 vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
   AeGenerativeAnswer: ({
     busy,
@@ -130,6 +134,45 @@ describe('thread turn stream lifecycle', () => {
     firstAttachment.subscriber.onThread?.({ threadId: 'thread:late', turnId: 'turn:late', turnSeq: 2 })
     expect(freshThreadCreated).toHaveBeenCalledTimes(1)
   })
+
+  it('exposes the same active stop authority to the shell composer', async () => {
+    const onStopChange = vi.fn<(stop: (() => Promise<void>) | null) => void>()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-composer-stop"
+        generation={1}
+        onStopChange={onStopChange}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+    act(() => {
+      attachment.subscriber.onFrame?.({
+        seq: 0,
+        event: {
+          type: 'thread',
+          threadId: 'thread:composer-stop',
+          turnId: 'turn:composer-stop',
+          turnSeq: 1,
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(onStopChange.mock.calls.some(([stop]) => stop !== null)).toBe(true)
+    })
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+
+    const exposedStop = onStopChange.mock.calls.findLast(([stop]) => stop !== null)?.[0]
+    if (exposedStop === null || exposedStop === undefined) throw new Error('missing exposed stop')
+    await act(async () => {
+      await exposedStop()
+    })
+    expect(stopState.request).toHaveBeenCalledWith({
+      threadId: 'thread:composer-stop',
+      turnId: 'turn:composer-stop',
+    })
+  })
   it('withholds operation selection until the current turn has durable completion', async () => {
     const completeTurn = {
       turnId: 'turn:selection',
@@ -218,12 +261,14 @@ describe('thread turn stream lifecycle', () => {
     } satisfies PublicThreadTurn
     const stoppedTurn = { ...pendingTurn, status: 'stopped' } satisfies PublicThreadTurn
     const onSettledTurn = vi.fn()
+    const onStopChange = vi.fn<(stop: (() => Promise<void>) | null) => void>()
     render(
       <AeThreadTurnStreamSection
         query="Find a plumber"
         clientTurnKey="turn-key-stop"
         generation={1}
         onSettledTurn={onSettledTurn}
+        onStopChange={onStopChange}
       />,
     )
     const attachment = streamSession.attach.mock.calls[0]?.[0]
@@ -238,7 +283,7 @@ describe('thread turn stream lifecycle', () => {
       attachment.subscriber.onResult?.({ kind: 'complete' })
     })
 
-    expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
     pendingReadback.resolve({
       kind: 'ok',
       projection: { threadId: 'thread:stop', title: 'Find a plumber', turns: [pendingTurn] },
@@ -247,10 +292,15 @@ describe('thread turn stream lifecycle', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
-    expect(screen.getByText('This answer is still pending. Reload this thread to check its durable status.')).toBeTruthy()
+    expect(screen.getByText('This response is taking longer than expected.')).toBeTruthy()
+    await waitFor(() => {
+      expect(onStopChange.mock.calls.some(([stop]) => stop !== null)).toBe(true)
+    })
+    const exposedStop = onStopChange.mock.calls.findLast(([stop]) => stop !== null)?.[0]
+    if (exposedStop === null || exposedStop === undefined) throw new Error('missing exposed stop')
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      void exposedStop()
       await Promise.resolve()
     })
     expect(stopState.request).toHaveBeenCalledWith({ threadId: 'thread:stop', turnId: 'turn:stop' })
@@ -298,12 +348,14 @@ describe('thread turn stream lifecycle', () => {
         detail: 'The stop request could not be reached.',
       },
     })
+    const onStopChange = vi.fn<(stop: (() => Promise<void>) | null) => void>()
 
     render(
       <AeThreadTurnStreamSection
         query="Find a plumber"
         clientTurnKey="turn-key-stop-network"
         generation={1}
+        onStopChange={onStopChange}
       />,
     )
     const attachment = streamSession.attach.mock.calls[0]?.[0]
@@ -322,8 +374,13 @@ describe('thread turn stream lifecycle', () => {
       await Promise.resolve()
     })
 
+    await waitFor(() => {
+      expect(onStopChange.mock.calls.some(([stop]) => stop !== null)).toBe(true)
+    })
+    const exposedStop = onStopChange.mock.calls.findLast(([stop]) => stop !== null)?.[0]
+    if (exposedStop === null || exposedStop === undefined) throw new Error('missing exposed stop')
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      void exposedStop()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -333,7 +390,8 @@ describe('thread turn stream lifecycle', () => {
       turnId: 'turn:stop-network',
     })
     expect(streamSession.abort).not.toHaveBeenCalled()
-    expect(screen.getByText('Stop was not confirmed. The answer is still running; try Stop again.')).toBeTruthy()
+    const stopFailure = screen.getByText('Stop was not confirmed. The response is still running; try Stop again.')
+    expect(stopFailure.classList.contains('text-destructive')).toBe(true)
     expect(document.querySelector('[data-lifecycle="pending"]')).not.toBeNull()
   })
 
@@ -495,5 +553,46 @@ describe('thread turn stream lifecycle', () => {
     expect(onStreamEnd).toHaveBeenCalledWith('error')
     await waitFor(() => expect(screen.getByText('The answer service is temporarily unavailable.')).toBeTruthy())
     expect(screen.queryByText(/durable turn identity/i)).toBeNull()
+  })
+
+  it('uses direct not-found recovery copy with actionable retry and new-chat links', async () => {
+    const onRetry = vi.fn()
+    render(
+      <AeThreadTurnStreamSection
+        query="Find a plumber"
+        clientTurnKey="turn-key-not-found"
+        generation={1}
+        onRetry={onRetry}
+      />,
+    )
+    const attachment = streamSession.attach.mock.calls[0]?.[0]
+    if (attachment === undefined) throw new Error('missing stream attachment')
+
+    await act(async () => {
+      attachment.subscriber.onFrame?.({
+        seq: 0,
+        event: {
+          type: 'thread',
+          threadId: 'thread:not-found',
+          turnId: 'turn:not-found',
+          turnSeq: 1,
+        },
+      })
+      attachment.subscriber.onResult({ kind: 'complete' })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('This response is no longer available.')).toBeTruthy()
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    expect(retry.getAttribute('data-variant')).toBe('default')
+    expect(retry.getAttribute('data-size')).toBe('sm')
+    fireEvent.click(retry)
+    expect(onRetry).toHaveBeenCalledOnce()
+    const newChat = screen.getByRole('link', { name: 'New chat' })
+    expect(newChat.getAttribute('href')).toBe('/')
+    expect(newChat.getAttribute('data-variant')).toBe('ghost')
+    expect(newChat.getAttribute('data-size')).toBe('sm')
   })
 })

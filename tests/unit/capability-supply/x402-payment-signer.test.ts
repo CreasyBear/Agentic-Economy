@@ -40,4 +40,25 @@ describe('x402 route payment signer', () => {
     })
     expect(extractPaymentIdentifier(payload)).toBe(`ae_sha256_${'ab'.repeat(32)}`)
   })
+  it('refuses to sign when the challenge does not bind the payment identifier extension', async () => {
+    const requirement = {
+      scheme: 'exact',
+      network: 'eip155:84532' as const,
+      amount: '10000',
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      maxTimeoutSeconds: 60,
+      extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' },
+    }
+    await expect(createEvmX402PaymentSignature({
+      credential: `0x${'11'.repeat(32)}`,
+      paymentIdentifier: `sha256:${'ab'.repeat(32)}`,
+      selectedRequirement: requirement,
+      challenge: {
+        x402Version: 2,
+        resource: { url: 'https://provider.example/paid' },
+        accepts: [requirement],
+      },
+    })).resolves.toBeUndefined()
+  })
 })

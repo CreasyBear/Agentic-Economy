@@ -11,12 +11,19 @@ import {
   AnswerArtifactSchema,
   answerOperationCandidateSetDigest,
   type AnswerOperationCandidate,
+  type AnswerOperationComparison,
   type AnswerOperationOutcome,
+  type AnswerOperationPlan,
   type AnswerOperationSelection,
 } from '@/modules/answer/answer-schema'
+import { isPublicOperationRef } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { publicWorkLog } from '@/modules/answer-thread/internal/public-worklog'
+import {
+  sanitizeAnswerOperationOutcome,
+  sanitizeAnswerOperationToolCallRecord,
+} from '@/modules/answer/internal/operation-result-presentation'
 import {
   buildPublicThreadProjectionWithReservations,
   countAnswerThreadTurns,
@@ -163,6 +170,34 @@ describe('public thread projection', () => {
     }
 
     const operation = operationMaterial()
+    const operationRef = operation.operationCandidates[0]!.operationRef
+    if (!isPublicOperationRef(operationRef)) {
+      throw new Error('fixture_operation_ref_invalid')
+    }
+    const operationComparison: AnswerOperationComparison = {
+      operationRefs: [operationRef],
+      facts: [{
+        field: 'availability',
+        values: [{
+          operationRef,
+          value: { posture: 'integrated' },
+          source: 'readiness',
+          observedAt: 10,
+          validUntil: 20,
+        }],
+      }],
+    }
+    const operationPlan: AnswerOperationPlan = {
+      inspectPlanRef: 'inspect-plan:v1:test',
+      operationRefs: [operationRef],
+      mappingRefs: [],
+      summary: {
+        maximumCost: { kind: 'requires_preparation' },
+        dataUse: [],
+        effects: [],
+        expiry: 30,
+      },
+    }
     const turn: AnswerTurnRecord = {
       turnId: 'turn-1',
       threadId: 'thread-1',
@@ -190,6 +225,23 @@ describe('public thread projection', () => {
           },
         ],
         ...operation,
+        operationComparison,
+        operationPlan,
+        interpretation: {
+          route: 'operation',
+          requestedIntents: [{
+            intentId: 'current-value',
+            phrase: 'current value',
+            requestedResult: 'current value',
+          }],
+          continuation: 'new',
+          effectPolicy: 'run_when_ready',
+        },
+        requestedIntents: [{
+          intentId: 'current-value',
+          phrase: 'current value',
+          requestedResult: 'current value',
+        }],
         allowedSlugs: ['preston-plumbing'],
         agentJsonUrl: '/api/businesses/search?q=plumber',
         toolCalls: operation.toolCalls,
@@ -213,7 +265,7 @@ describe('public thread projection', () => {
         summary: 'The business handles timing, price, and availability.',
         nextStep: 'Open a provider page.',
       }),
-      artifactKindsJson: '["one-line","operation-candidates","operation-outcome","provider-cards"]',
+      artifactKindsJson: '["one-line","operation-candidates","operation-comparison","operation-plan","operation-outcome","provider-cards"]',
       status: 'complete',
       errorCopyId: 'err-secret',
       createdAt: 3_000,
@@ -228,6 +280,8 @@ describe('public thread projection', () => {
     expect(projectedTurn).toBeDefined()
     const candidatesArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-candidates')
     const outcomeArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-outcome')
+    const comparisonArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-comparison')
+    const planArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-plan')
     expect(candidatesArtifact).toEqual({
       kind: 'operation-candidates',
       candidates: operation.operationCandidates,
@@ -238,6 +292,19 @@ describe('public thread projection', () => {
       kind: 'operation-outcome',
       outcome: operation.operationOutcome,
     })
+    expect(comparisonArtifact).toEqual({
+      kind: 'operation-comparison',
+      ...operationComparison,
+    })
+    expect(planArtifact).toEqual({
+      kind: 'operation-plan',
+      ...operationPlan,
+    })
+    expect(projectedTurn?.requestedIntents).toEqual([{
+      intentId: 'current-value',
+      phrase: 'current value',
+      requestedResult: 'current value',
+    }])
     expect(projection.turns[0]?.workLog).toEqual([])
     expect(projection.turns[0]?.answerCheckSummary).toMatchObject({
       catalogSearches: 0,
@@ -292,6 +359,36 @@ describe('public thread projection', () => {
     }
     expect(projectWithOperationChanges({
       operationSelection: wrongDescriptorSelection,
+    })?.status).toBe('error')
+    expect(projectWithOperationChanges({
+      interpretation: {
+        route: 'operation',
+        requestedIntents: [{
+          intentId: 'weather',
+          phrase: 'weather in Paris',
+          requestedResult: 'Paris',
+        }],
+        continuation: 'new',
+      },
+      requestedIntents: [{
+        intentId: 'weather',
+        phrase: 'weather in London',
+        requestedResult: 'London',
+      }],
+    })?.status).toBe('error')
+    expect(projectWithOperationChanges({
+      continuationSource: {
+        priorTurnId: '',
+        priorTurnSeq: -1,
+        priorSnapshotHash: '',
+        priorTerminalCheckpointDigest: '',
+      },
+    })?.status).toBe('error')
+    expect(projectWithOperationChanges({
+      pendingDecision: {
+        kind: 'authority_required',
+        operationRef: operation.operationSelection.operationRef,
+      },
     })?.status).toBe('error')
     const missingToolOutcome: AnswerOperationOutcome = {
       toolId: operation.operationOutcome.toolId,
@@ -359,6 +456,88 @@ describe('public thread projection', () => {
     expect(failedOutcomeArtifact.outcome.result).not.toHaveProperty('output')
     expect(JSON.stringify(failedTurn)).not.toContain('provider-secret')
     expect(JSON.stringify(failedTurn)).not.toContain('signed-payment-secret')
+  })
+  it('omits manually unsafe raw operation output from the share-safe projection', () => {
+    const operation = operationMaterial()
+    const sourceToolCall = operation.toolCalls[0]
+    if (sourceToolCall === undefined) {
+      throw new Error('Operation fixture must include a tool call.')
+    }
+    const rawResult = {
+      ...operation.operationOutcome.result,
+      output: { token: 'TOPSECRET', safe: 'ok' },
+    }
+    const rawResultJson = JSON.stringify(rawResult)
+    const rawResultDigest = canonicalDigest(rawResult).toString()
+    const rawToolCallHash = canonicalDigest({
+      toolId: sourceToolCall.toolId,
+      input: sourceToolCall.inputJson,
+      summary: sourceToolCall.resultSummaryJson,
+      resultJson: rawResultJson,
+      status: 'complete',
+    }).toString()
+    const rawToolCall = {
+      ...sourceToolCall,
+      resultJson: rawResultJson,
+      resultHash: rawToolCallHash,
+    }
+    const sanitizedToolCall = sanitizeAnswerOperationToolCallRecord(rawToolCall)
+    const rawOutcome = {
+      ...operation.operationOutcome,
+      result: rawResult,
+      resultDigest: rawResultDigest,
+      toolCallDigest: sanitizedToolCall.resultHash,
+    }
+    const sanitizedOutcome = sanitizeAnswerOperationOutcome(rawOutcome)
+    const rawSelection = {
+      ...operation.operationSelection,
+      resultDigest: sanitizedOutcome.resultDigest,
+    }
+    const thread: AnswerThreadRecord = {
+      threadId: 'thread-unsafe',
+      pseudonymousSessionId: 'session-unsafe',
+      title: 'Unsafe output',
+      createdAt: 1,
+      updatedAt: 2,
+    }
+    const turn: AnswerTurnRecord = {
+      turnId: 'turn-unsafe',
+      threadId: thread.threadId,
+      seq: 1,
+      query: 'unsafe output',
+      intent: 'refine_search',
+      evidenceJson: JSON.stringify(withAnswerRun({
+        providers: [],
+        operationCandidates: operation.operationCandidates,
+        operationCandidatesDigest: operation.operationCandidatesDigest,
+        operationOutcome: sanitizedOutcome,
+        operationSelection: rawSelection,
+        allowedSlugs: [],
+        agentJsonUrl: '',
+        toolCalls: [rawToolCall],
+        timings: [],
+        workLog: [],
+      })),
+      snapshotHash: 'snapshot-unsafe',
+      proseJson: JSON.stringify({
+        oneLine: 'The live result was withheld.',
+        summary: 'The result could not be safely displayed.',
+        nextStep: 'Try a different request.',
+        layoutProfile: 'data_answer',
+      }),
+      artifactKindsJson: '["one-line","operation-candidates","operation-outcome"]',
+      status: 'complete',
+      createdAt: 3,
+    }
+
+    const projected = buildPublicThreadProjection(thread, [turn])
+    const serialized = JSON.stringify(projected)
+    expect(serialized).not.toContain('TOPSECRET')
+    const outcomeArtifact = projected.turns[0]?.artifacts.find(
+      (artifact) => artifact.kind === 'operation-outcome',
+    )
+    expect(outcomeArtifact).toBeUndefined()
+    expect(serialized).not.toContain('unsafe_output')
   })
   it('rejects operation artifact selections that are not tied to one member digest', () => {
     const operation = operationMaterial()

@@ -9,15 +9,34 @@ import {
   regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
+import {
+  createDefaultRegistrySourceState,
+} from '@/modules/registry/public'
+import { testOnlyDiscoveryManifestAdapter } from '../../helpers/discovery-fixture-source-state'
 import type { AdminMembership } from '@/modules/security/public'
 
 describe('discovery manifest attempts', () => {
   it('regenerates a public manifest with readback and replays duplicate source hashes', () => {
     const state = discoveryState()
     const business = firstBusiness(state)
-    const first = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
-    const replayed = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_100 })
+    const first = regenerateDiscoveryManifest(
+      state,
+      { businessId: business.businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 3_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
+    const replayed = regenerateDiscoveryManifest(
+      state,
+      { businessId: business.businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 3_100,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
     const health = readDiscoveryHealth(state, business.businessId)
 
     expect(first).toMatchObject({
@@ -65,7 +84,15 @@ describe('discovery manifest attempts', () => {
       }
     )
     const failedHealth = readDiscoveryHealth(state, business.businessId)
-    const repaired = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 4_000 })
+    const repaired = regenerateDiscoveryManifest(
+      state,
+      { businessId: business.businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 4_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
 
     expect(failed).toMatchObject({
       kind: 'error',
@@ -103,7 +130,15 @@ describe('discovery manifest attempts', () => {
   it('invalidates manifests from suppression intents and hides suppressed catalogs from regeneration', () => {
     const state = discoveryState()
     const business = firstBusiness(state)
-    const generated = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
+    const generated = regenerateDiscoveryManifest(
+      state,
+      { businessId: business.businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 3_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
 
     if (generated.kind !== 'ok') {
       throw new Error('Expected generated discovery manifest.')
@@ -129,7 +164,15 @@ describe('discovery manifest attempts', () => {
       reasonCode: 'owner-requested-removal',
       now: 5_100,
     })
-    const regenerated = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 5_200 })
+    const regenerated = regenerateDiscoveryManifest(
+      state,
+      { businessId: business.businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 5_200,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
     const health = readDiscoveryHealth(state, business.businessId)
 
     expect(invalidated).toMatchObject({

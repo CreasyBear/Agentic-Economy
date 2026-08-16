@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   HarnessRunLoop,
@@ -15,6 +15,63 @@ import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
+const operationRef = `operation:v1:${'a'.repeat(64)}`
+const operationDescriptor = {
+  operationRef,
+  operationId: 'test.current',
+  contract: {
+    capabilityId: 'test.current',
+    version: 1,
+    inputJsonSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    outputJsonSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false },
+    customerAnnotations: [],
+  },
+  business: { businessId: 'business:test', slug: 'test', name: 'Test' },
+  offering: { offeringRef: 'offering:test', revision: 1, label: 'Test', summary: 'Test operation' },
+  summary: 'Return a current test value.',
+  commercial: {
+    price: { kind: 'on_request' },
+    materialTerms: [],
+    relationship: { kind: 'none', summary: 'No commercial relationship.' },
+  },
+  dataUse: [],
+  effects: [],
+  evidence: [],
+  cancellation: { kind: 'unsupported' },
+  recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+  authentication: { kind: 'keyless' },
+  transport: { method: 'GET', requestTimeoutMs: 5_000 },
+  provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+  availability: { posture: 'routeable', observedAt: 1_000, validUntil: 10_000 },
+  navigation: [],
+}
+const operationDetailResult = {
+  kind: 'found' as const,
+  schemaVersion: 'registry-operations:v1' as const,
+  operation: operationDescriptor,
+}
+const inspectPlanResult = {
+  kind: 'ok' as const,
+  schemaVersion: 'registry-operations:v1' as const,
+  inspectPlanRef: 'inspect-plan:test',
+  operationRefs: [operationRef],
+  mappingRefs: [],
+  summary: {
+    maximumCost: { kind: 'requires_preparation' as const },
+    dataUse: [],
+    effects: [],
+    expiry: 10_000,
+  },
+  navigation: [],
+}
+
+vi.mock('@/modules/capability-supply/operation-source', () => ({
+  readCapabilityOperationSearch: vi.fn(),
+  readCapabilityOperationDetail: vi.fn(async () => operationDetailResult),
+  readCapabilityOperationCompare: vi.fn(),
+  readCapabilityOperationInspectPlan: vi.fn(async () => inspectPlanResult),
+  readCatalogOfferingOperationMap: vi.fn(async () => []),
+}))
 
 afterEach(() => {
   delete process.env.OPENROUTER_API_KEY
@@ -365,6 +422,50 @@ describe('runAnswerToolCall', () => {
       }
     }
   })
+  it('runs registry.operations.detail and records a found operation without business providers', async () => {
+    const result = await runAnswerToolCall({
+      toolId: 'registry.operations.detail',
+      input: { operationRef },
+      turnId: TURN_ID,
+      seq: BASE_SEQ,
+    })
+
+    expect(result.record).toMatchObject({
+      status: 'complete',
+      toolId: 'registry.operations.detail',
+      turnId: TURN_ID,
+      seq: BASE_SEQ,
+    })
+    expect(result.record.resultHash).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(result.providers).toEqual([])
+    expect(result.allowedSlugs).toEqual(new Set())
+    expect(JSON.parse(result.record.resultSummaryJson)).toEqual({ slugs: [], count: 1 })
+    expect(result.resultJson).toBe(result.record.resultJson)
+    expect(JSON.parse(result.record.resultJson)).toEqual(operationDetailResult)
+  })
+
+  it('runs registry.operations.inspectPlan and records an ok plan without business providers', async () => {
+    const result = await runAnswerToolCall({
+      toolId: 'registry.operations.inspectPlan',
+      input: { operationRefs: [operationRef] },
+      turnId: TURN_ID,
+      seq: BASE_SEQ + 1,
+    })
+
+    expect(result.record).toMatchObject({
+      status: 'complete',
+      toolId: 'registry.operations.inspectPlan',
+      turnId: TURN_ID,
+      seq: BASE_SEQ + 1,
+    })
+    expect(result.record.resultHash).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(result.providers).toEqual([])
+    expect(result.allowedSlugs).toEqual(new Set())
+    expect(JSON.parse(result.record.resultSummaryJson)).toEqual({ slugs: [], count: 1 })
+    expect(result.resultJson).toBe(result.record.resultJson)
+    expect(JSON.parse(result.record.resultJson)).toEqual(inspectPlanResult)
+  })
+
 })
 
 describe('toolCallRecordsToGateInput', () => {

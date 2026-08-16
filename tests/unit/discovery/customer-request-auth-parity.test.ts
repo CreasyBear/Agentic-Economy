@@ -52,6 +52,7 @@ describe('Customer Request public authentication parity', () => {
     expect(skill).toContain(MARKET_OPERATIONS_INVOKE_SCOPE)
     expect(llms).toContain(MARKET_OPERATIONS_INVOKE_SCOPE)
     expect(skill).toContain('Authorization: Bearer $AE_API_KEY')
+    expect(skill).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
 
     expect(metadata).toMatchObject({
       bearer_methods_supported: [CUSTOMER_REQUEST_AGENT_BEARER_METHOD],

@@ -90,7 +90,7 @@ describe('plan-first home', () => {
     expect(exampleLinks.map((link) => link.getAttribute('href')))
       .toContain(`/t/new?${new URLSearchParams({ q: firstAsk }).toString()}`)
     expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim')).toBe(true)
+    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim?source=supply')).toBe(true)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
   })
 
@@ -171,7 +171,7 @@ describe('plan-first home', () => {
 
     const query = 'q'.repeat(length)
     const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
-    expect(searchbox.maxLength).toBe(QUERY_MAX_LENGTH)
+    expect(searchbox.maxLength).toBe(-1)
     fireEvent.change(searchbox, { target: { value: query } })
     expect(searchbox.value).toBe(query)
     expect(screen.getByText(`${length} / ${QUERY_MAX_LENGTH} characters`)).toBeTruthy()

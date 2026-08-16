@@ -73,6 +73,7 @@ async function run(
   descriptor: OperationExecutableDescriptor | null,
   input: Record<string, unknown>,
   fetchImpl?: FetchFn,
+  signal?: AbortSignal,
 ): Promise<{ result: OperationExecuteResult; lastUrl: string | undefined }> {
   let lastUrl: string | undefined
   const callFetch = fetchImpl ?? okFetch((url) => {
@@ -83,7 +84,12 @@ async function run(
   })
   const result = await executeOperation(
     { operationRef: FX.operationRef, input },
-    { readDescriptor: async () => descriptor, isPublicTarget: async () => true, fetchImpl: callFetch },
+    {
+      readDescriptor: async () => descriptor,
+      isPublicTarget: async () => true,
+      fetchImpl: callFetch,
+      ...(signal === undefined ? {} : { signal }),
+    },
   )
   return { result, lastUrl }
 }
@@ -100,6 +106,51 @@ describe('operation.execute executor (pure, DB-driven)', () => {
     expect(lastUrl).toContain('from=EUR')
     expect(lastUrl).toContain('to=USD')
   })
+
+  it('preserves the canonical AbortError rejection for a pre-aborted caller', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const fetch = vi.fn()
+
+    await expect(run(
+      FX,
+      { from: 'EUR', to: 'USD' },
+      fetch as unknown as FetchFn,
+      controller.signal,
+    )).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('returns non-retryable fetch_failed when the caller aborts after dispatch', async () => {
+    const controller = new AbortController()
+    const fetch = vi.fn(
+      (_input: URL | string | Request, init?: RequestInit) => new Promise<never>((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal == null) throw new Error('missing request abort signal')
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        controller.abort()
+      }),
+    )
+
+    const { result } = await run(
+      FX,
+      { from: 'EUR', to: 'USD' },
+      fetch as unknown as FetchFn,
+      controller.signal,
+    )
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      kind: 'error',
+      operationRef: FX.operationRef,
+      code: 'fetch_failed',
+      retryable: false,
+      reason: 'The operation did not respond in time.',
+    })
+    expect(result).not.toHaveProperty('executed', false)
+    expect(result.kind).not.toBe('ok')
+  })
+
   it('refuses a paid keyless descriptor before network access', async () => {
     const paid: OperationExecutableDescriptor = {
       ...FX,
@@ -301,6 +352,31 @@ describe('operation.execute executor (pure, DB-driven)', () => {
     }))
     const { result } = await run(withOutput, { from: 'EUR', to: 'USD' }, fetch)
     expect(result).toMatchObject({ kind: 'error', code: 'response_invalid', retryable: false })
+  })
+  it('rejects structurally overlarge schema-valid provider output before evidence digesting', async () => {
+    const withOutput: OperationExecutableDescriptor = {
+      ...FX,
+      outputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'array',
+        items: { type: 'number' },
+      },
+    }
+    const output = Array.from({ length: 10_001 }, (_, index) => index)
+    const fetch = () => Promise.resolve(new Response(JSON.stringify(output), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }))
+
+    const { result } = await run(withOutput, { from: 'EUR', to: 'USD' }, fetch)
+
+    expect(result).toEqual({
+      kind: 'error',
+      operationRef: FX.operationRef,
+      code: 'response_invalid',
+      retryable: false,
+      reason: 'The operation response exceeded the bounded JSON limit.',
+    })
   })
 
   it('validates immutable contract output schemas without mutating them', async () => {

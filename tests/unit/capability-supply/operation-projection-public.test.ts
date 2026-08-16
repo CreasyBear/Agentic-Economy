@@ -3,14 +3,18 @@ import { describe, expect, it } from 'vitest'
 import { findAction } from '@/modules/actions'
 
 import {
+  compareCapabilityOperations,
+  deserializeOperationCompareResult,
   deserializeOperationDescriptor,
   inspectCapabilityOperationPlan,
   isAnonymousKeylessOperationEligible,
   operationDetailInputSchema,
   operationSearchInputSchema,
   projectCapabilityOperation,
+  serializeOperationCompareResult,
   serializeOperationDescriptor,
   type CapabilityOperationSourceRecord,
+  type OperationCompareResult,
 } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { registryOperationsDetailAction, registryOperationsSearchAction } from '@/modules/registry/operations.actions'
@@ -57,6 +61,24 @@ const operationRecord: CapabilityOperationSourceRecord = {
   readiness: { observedAt: 1_000, validUntil: 10_000 },
   searchTerms: ['reference', 'lookup'],
   snapshotKey: 'publication:reference.lookup:3',
+}
+const populatedDataUseRecord: CapabilityOperationSourceRecord = {
+  ...operationRecord,
+  operationId: 'capability:reference.lookup.data-use',
+  publicationRef: 'publication:reference.lookup.data-use',
+  contract: {
+    ...operationRecord.contract,
+    capabilityId: 'reference.lookup.data-use',
+    ref: { capabilityId: 'reference.lookup.data-use', version: 1, contractDigest: 'digest:data-use' },
+    dataUse: [{
+      effectId: 'query_release',
+      inputPointer: '/query',
+      classification: 'public',
+      phase: 'execution',
+      recipient: { kind: 'selected_binding' },
+      purposes: ['lookup_reference'],
+    }],
+  },
 }
 const freeKeylessRecord: CapabilityOperationSourceRecord = {
   ...operationRecord,
@@ -135,15 +157,25 @@ describe('public operation read contract', () => {
     expect(isAnonymousKeylessOperationEligible({ ...base, price: { kind: 'on_request' } })).toBe(false)
   })
 
-  it('links only current executable descriptors to the canonical invoke route', () => {
-    const operation = projectCapabilityOperation(operationRecord, 2_000)
+  it('projects keyed access as authenticated invoke only', () => {
+    const operation = projectCapabilityOperation({
+      ...operationRecord,
+      authentication: {
+        kind: 'platform_credential',
+        scheme: 'api_key',
+        in: 'header',
+        name: 'X-Provider-Key',
+      },
+    }, 2_000)
     expect(operation.navigation).toContainEqual({
       relation: 'invoke',
       pathTemplate: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
       method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
       actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       authentication: 'required',
+      surfaces: ['answerThread'],
     })
+    expect(operation.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
 
     for (const record of [
       { ...operationRecord, routeable: false, integrated: true },
@@ -162,10 +194,11 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'operation.execute',
       authentication: 'none',
-      surfaces: ['mcp'],
+      surfaces: ['answerThread', 'mcp'],
       precondition: 'free_keyless_read_only',
     })
     expect(deserializeOperationDescriptor(serializeOperationDescriptor(free)).navigation).toEqual(free.navigation)
+    expect(free.navigation.some(({ relation }) => relation === 'invoke')).toBe(false)
 
     const paid = projectCapabilityOperation(operationRecord, 2_000)
     expect(paid.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
@@ -185,5 +218,89 @@ describe('public operation read contract', () => {
     for (const record of ineligibleRecords) {
       expect(projectCapabilityOperation(record, 2_000).navigation.some(({ relation }) => relation === 'execute')).toBe(false)
     }
+  })
+  it('never projects anonymous execute for x402 and keeps unavailable descriptors non-executable', () => {
+    const x402 = projectCapabilityOperation({
+      ...freeKeylessRecord,
+      authentication: { kind: 'x402' },
+      provenance: { ...freeKeylessRecord.provenance, sourceKind: 'x402' },
+      answerExecutable: true,
+    }, 2_000)
+    expect(x402.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
+    expect(x402.navigation.some(({ relation }) => relation === 'invoke')).toBe(true)
+
+    const unavailable = projectCapabilityOperation({
+      ...operationRecord,
+      integrated: false,
+      routeable: false,
+    }, 2_000)
+    expect(unavailable.navigation.some(({ relation }) => (
+      relation === 'execute' || relation === 'invoke' || relation === 'reconcile'
+    ))).toBe(false)
+  })
+
+  it('does not advertise routine recovery from descriptor lifecycle policy', () => {
+    const operation = projectCapabilityOperation({
+      ...operationRecord,
+      contract: {
+        ...operationRecord.contract,
+        lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
+      },
+    }, 2_000)
+    expect(operation.recovery.recovery).toBe('reconcile_required')
+    expect(operation.navigation.some(({ relation }) => relation === 'reconcile')).toBe(false)
+  })
+  it('compares populated data-use through the canonical wire schema and rejects object recipients', async () => {
+    const operation = projectCapabilityOperation(populatedDataUseRecord, 2_000)
+    const result = await compareCapabilityOperations({
+      listCurrent: async () => ({ operations: [populatedDataUseRecord], snapshotKey: 'snapshot:compare' }),
+      loadCurrent: async (operationRef) => operationRef === operation.operationRef ? populatedDataUseRecord : null,
+    }, { operationRefs: [operation.operationRef] }, 2_000)
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    const dataUseFact = result.facts.find(({ field }) => field === 'dataUse')
+    expect(dataUseFact?.values[0]?.value).toEqual([{
+      effectId: 'query_release',
+      inputPointer: '/query',
+      classification: 'public',
+      phase: 'execution',
+      recipient: 'selected_binding',
+      purposes: ['lookup_reference'],
+    }])
+
+    const wire = serializeOperationCompareResult(result)
+    if (wire.kind !== 'ok') return
+    const wireDataUseFact = wire.facts.find(({ field }) => field === 'dataUse')
+    expect(wireDataUseFact?.values[0]?.value).toEqual([{
+      effectId: 'query_release',
+      inputPointer: '/query',
+      classification: 'public',
+      phase: 'execution',
+      recipient: 'selected_binding',
+      purposes: ['lookup_reference'],
+    }])
+    expect(deserializeOperationCompareResult(wire)).toEqual(result)
+
+    const invalid = {
+      ...result,
+      facts: result.facts.map((fact) => fact.field !== 'dataUse'
+        ? fact
+        : {
+            ...fact,
+            values: fact.values.map((value) => ({
+              ...value,
+              value: [{
+                effectId: 'query_release',
+                inputPointer: '/query',
+                classification: 'public',
+                phase: 'execution',
+                recipient: { kind: 'selected_binding' },
+                purposes: ['lookup_reference'],
+              }],
+            })),
+          }),
+    } as unknown as OperationCompareResult
+    expect(() => serializeOperationCompareResult(invalid)).toThrow('operation_comparison_value_invalid')
   })
 })

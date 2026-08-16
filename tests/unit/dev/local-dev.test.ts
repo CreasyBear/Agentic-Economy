@@ -4,6 +4,7 @@ import {
   buildConvexDevArgs,
   buildConvexSelectArgs,
   childExitStatus,
+  createSupervisor,
   isConvexReadyOutput,
   isViteReadyOutput,
   signalProcessTree,
@@ -53,5 +54,44 @@ describe('local development launcher', () => {
     const refusingKill = () => { throw new Error('process group unavailable') }
     expect(signalProcessTree(fallbackChild, 'SIGTERM', refusingKill)).toBe(true)
     expect(directSignal).toBe('SIGTERM')
+  })
+  it('reaps only supervisor-owned children after restart and parent signal', async () => {
+    let resolveOwned!: () => void
+    const ownedDone = new Promise<void>((resolve) => { resolveOwned = resolve })
+    const ownedCalls: unknown[][] = []
+    const owned = {
+      done: ownedDone,
+      terminate: (...args: readonly unknown[]) => {
+        ownedCalls.push([...args])
+        resolveOwned()
+      },
+    }
+    let staleTerminated = false
+    const stale = {
+      done: new Promise<void>(() => {}),
+      terminate: () => { staleTerminated = true },
+    }
+    const supervisor = createSupervisor()
+    supervisor.add(owned)
+    const waitingForRestart = supervisor.waitForChildren()
+    supervisor.terminateAll('SIGINT', 'peer-failure')
+    await waitingForRestart
+    expect(ownedCalls).toEqual([['SIGINT', 'peer-failure', 'SIGINT']])
+    expect(staleTerminated).toBe(false)
+    void stale
+
+    let resolveSignalled!: () => void
+    const signalledDone = new Promise<void>((resolve) => { resolveSignalled = resolve })
+    const signalledCalls: unknown[][] = []
+    supervisor.add({
+      done: signalledDone,
+      terminate: (...args: readonly unknown[]) => {
+        signalledCalls.push([...args])
+        resolveSignalled()
+      },
+    })
+    supervisor.signal('SIGTERM')
+    await supervisor.waitForChildren()
+    expect(signalledCalls).toEqual([['SIGINT', 'signal', 'SIGTERM']])
   })
 })

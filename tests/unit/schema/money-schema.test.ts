@@ -9,7 +9,14 @@ describe('money schema ownership', () => {
     const tables = JSON.parse(String(exported.call(schema))).tables as readonly { tableName: string; indexes: readonly { indexDescriptor: string; fields: readonly string[] }[] }[]
     const byName = new Map(tables.map((table) => [table.tableName, table]))
     expect([...byName.keys()].filter((name) => name.startsWith('money'))).toEqual(expect.arrayContaining([
-      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyFreeTierCounters', 'moneyTopupCommands', 'moneyConnectAccountCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
+      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyExternalSpendReservations', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyFreeTierCounters', 'moneyTopupCommands', 'moneyConnectAccountCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
+    ]))
+    expect(byName.get('moneyExternalSpendReservations')?.indexes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ indexDescriptor: 'by_reservationRef', fields: ['reservationRef'] }),
+      expect.objectContaining({ indexDescriptor: 'by_idempotencyDigest', fields: ['idempotencyDigest'] }),
+      expect.objectContaining({ indexDescriptor: 'by_invocationRef_and_attemptRef_and_effectGeneration', fields: ['invocationRef', 'attemptRef', 'effectGeneration'] }),
+      expect.objectContaining({ indexDescriptor: 'by_paymentIdentifier_and_challengeDigest', fields: ['paymentIdentifier', 'challengeDigest'] }),
+      expect.objectContaining({ indexDescriptor: 'by_state_and_updatedAt', fields: ['state', 'updatedAt'] }),
     ]))
     expect(byName.get('moneyLedgerEntries')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_accountRef_and_createdAt', fields: ['accountRef', 'createdAt'] }),

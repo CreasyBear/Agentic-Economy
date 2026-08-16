@@ -81,6 +81,16 @@ describe('market terminal manifest OAuth contract', () => {
     )
     const operationExecute = findAction('operation.execute')
     if (operationExecute === undefined) throw new Error('operation.execute action missing')
+    const operationReads = ((manifest.anonymous as JsonRecord).operationReads as readonly JsonRecord[])
+    expect(operationReads).toHaveLength(listOperationRouteDescriptors().length)
+    for (const operationRead of operationReads) {
+      const route = operationRead.route as JsonRecord
+      const action = operationRead.action as JsonRecord
+      expect(action.id).toBe(route.actionId)
+      expect(action.invocationContract).toMatchObject({ version: expect.any(String) })
+      expect(action.inputJsonSchema).toEqual(expect.any(Object))
+      expect(action.outputJsonSchema).toEqual(expect.any(Object))
+    }
     expect((manifest.directKeyless as JsonRecord).mcpTool).toBe(mcpToolName(operationExecute))
     const response = await handleOAuthRegisterPost(request, { store: oauthStore(), now: () => 1_000 })
     expect(response.status).toBe(201)

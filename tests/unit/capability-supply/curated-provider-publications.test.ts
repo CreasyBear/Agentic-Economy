@@ -23,7 +23,7 @@ describe('curated provider publications', () => {
         : result.reason
     ))).toEqual([
       'exa.search', 'exa.contents', 'frankfurter.single-rate',
-      'open-meteo.forecast', 'open-meteo.geocoding', 'wikipedia-rest.page-summary', 'thecatapi.image-search',
+      'open-meteo.forecast', 'open-meteo.geocoding', 'wikipedia-rest.page-summary', 'mockster.cat-images',
       'coingecko.simple-price', 'ipify.public-ip', 'openweathermap.current-weather', 'tavily.search',
       'serpapi.google-search', 'coingecko.simple-price-demo',
       'exa-search-x402', 'timezone-convert-x402', 'wolframalpha-query-x402', 'coinmarketcap-quotes-x402',
@@ -95,7 +95,7 @@ describe('curated provider publications', () => {
       byCapability.set(document.capabilityId, bucket)
     }
     const seeded = new Map<string, unknown>([
-      ['open-meteo.forecast', { latitude: 48.857, longitude: 2.352 }],
+      ['open-meteo.forecast', { latitude: 48.857, longitude: 2.352, current_weather: true }],
       ['open-meteo.geocoding', { name: 'Paris', count: 5 }],
       ['frankfurter.single-rate', { base: 'EUR', quote: 'USD' }],
       ['exa.search', { query: 'latest AI news' }],
@@ -103,6 +103,9 @@ describe('curated provider publications', () => {
       ['openweathermap.current-weather', { q: 'London' }],
       ['serpapi.google-search', { q: 'agent economy', num: 3 }],
       ['coingecko.simple-price-demo', {}],
+      ['wikipedia-rest.page-summary', { title: 'Paris' }],
+      ['mockster.cat-images', { count: 1 }],
+      ['ipify.public-ip', {}],
     ])
     for (const [capabilityId, input] of seeded) {
       const docs = byCapability.get(capabilityId) ?? []
@@ -120,6 +123,36 @@ describe('curated provider publications', () => {
     for (const [, docs] of unseeded) {
       for (const document of docs) {
         expect(document.inputExamples).toBeUndefined()
+      }
+    }
+  })
+
+  it('gives every keyless cluster-A op a probe-target-valid inputExample (drops input_unrepresentable)', async () => {
+    const normalized = await Promise.all(CURATED_PROVIDER_PUBLICATIONS.map(({ publication }) =>
+      normalizeCapabilityPublication(publication),
+    ))
+    const clusterAKeyless = new Set([
+      'open-meteo.forecast',
+      'open-meteo.geocoding',
+      'wikipedia-rest.page-summary',
+      'mockster.cat-images',
+      'ipify.public-ip',
+    ])
+    const byCapability = new Map<string, Readonly<{ capabilityId: string; inputSchema?: Schema; inputExamples?: Array<{ input: unknown }> }>>()
+    for (const result of normalized) {
+      if (result.kind !== 'normalized') continue
+      const document = JSON.parse(result.draft.documentJson) as Readonly<{ capabilityId: string; inputSchema?: Schema; inputExamples?: Array<{ input: unknown }> }>
+      if (clusterAKeyless.has(document.capabilityId)) byCapability.set(document.capabilityId, document)
+    }
+    expect([...byCapability.keys()].sort()).toEqual([...clusterAKeyless].sort())
+    for (const [capabilityId, document] of byCapability) {
+      expect(document.inputSchema, `${capabilityId} inputSchema`).toBeTruthy()
+      const examples = document.inputExamples ?? []
+      expect(examples.length, `${capabilityId} must seed at least one inputExample`).toBeGreaterThan(0)
+      const validator = new Validator(document.inputSchema as Schema)
+      for (const { input } of examples) {
+        const result = validator.validate(input)
+        expect(result.valid, `${capabilityId} example ${JSON.stringify(input)} must satisfy inputSchema`).toBe(true)
       }
     }
   })
@@ -427,6 +460,50 @@ describe('curated provider wire-shape contracts', () => {
     })
   })
 
+  it('pins Mockster to cats and publishes an exact-count annotated HTTPS-link result', async () => {
+    const cat = CURATED_PROVIDER_PUBLICATIONS.find(({ publication }) => (
+      publication.kind === 'openapi_http'
+      && publication.contract.capabilityId === 'mockster.cat-images'
+    ))
+    if (cat === undefined || cat.publication.kind !== 'openapi_http') {
+      throw new Error('curated_publication_missing:mockster.cat-images')
+    }
+    expect(cat.publication.contract).toMatchObject({
+      version: 1,
+      customerAnnotations: [{
+        document: 'output',
+        pointer: '/0/url',
+        label: 'Cat image link',
+        role: 'completion_evidence',
+        semanticIdentity: 'https-link',
+      }],
+    })
+    const normalized = await normalizeCapabilityPublication(cat.publication)
+    expect(normalized).toMatchObject({
+      kind: 'normalized',
+      draft: {
+        binding: {
+          adapter: {
+            config: {
+              method: 'GET',
+              query: [{ inputPointer: '/count', parameter: 'count' }],
+              fixedQuery: [{ parameter: 'category', value: 'cats' }],
+            },
+          },
+        },
+      },
+    })
+    const document = await normalizedDocument('mockster.cat-images')
+    expect(inputValid(document, { count: 5 })).toBe(true)
+    expect(inputValid(document, { count: 11 })).toBe(false)
+    expect(outputValid(document, Array.from({ length: 5 }, (_, index) => ({
+      name: `cats_${index + 1}.jpg`,
+      url: `https://loremflickr.com/640/480/cats?lock=${index + 1}`,
+    })))).toBe(true)
+    expect(cat.publication.commercial.offering.offeringId).toContain(':v1')
+    expect(cat.publication.commercial.bindingId).toContain(':v1')
+  })
+
   it('removes ipify format from model input and pins the JSON wire request', async () => {
     const ipify = await normalizedDocument('ipify.public-ip')
     expect(ipify.inputSchema).toMatchObject({
@@ -457,6 +534,17 @@ describe('curated provider wire-shape contracts', () => {
     })
     if (normalized.kind === 'normalized') {
       expect(normalized.draft.binding.adapter.config).not.toHaveProperty('query')
+    }
+    if (normalized.kind === 'normalized') {
+      const document = JSON.parse(normalized.draft.documentJson) as {
+        description: string
+        customerAnnotations: Array<{ pointer: string; label: string }>
+      }
+      expect(document.description).toContain('AE runtime server egress')
+      expect(document.description).not.toContain('caller')
+      expect(document.customerAnnotations).toContainEqual(
+        expect.objectContaining({ pointer: '/ip', label: 'AE runtime public IP' }),
+      )
     }
   })
 })

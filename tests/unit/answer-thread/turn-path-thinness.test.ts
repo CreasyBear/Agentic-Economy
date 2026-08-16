@@ -33,12 +33,24 @@ const movedFunctionSymbols = [
 
 const turnPathExports = [
   'clarificationTurnPath',
-  'retrievalFirstTurnPath',
   'insufficientFrozenTurnPath',
   'frozenKnownTurnPath',
   'agentTurnPath',
   'inquiryHandoffTurnPath',
   'boundaryTurnPath',
+] as const
+
+const continuationHelpers = [
+  'selectedInputDigestFor',
+  'pendingDecisionFor',
+  'readPriorContinuationState',
+  'priorTurnStatus',
+  'priorTurnOperation',
+  'latestPriorOperationPresentation',
+  'readOperationInputFromToolCalls',
+  'readPriorOperationInput',
+  'readDurableFailureEvidence',
+  'buildRationaleEvidence',
 ] as const
 
 describe('answer-thread turn-path thinness', () => {
@@ -50,6 +62,31 @@ describe('answer-thread turn-path thinness', () => {
       expect(orchestratorSource).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
       expect(orchestratorSource).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
     }
+  })
+
+  it('keeps continuation/frozen-evidence helpers outside the orchestrator', () => {
+    expect(orchestratorSource).toMatch(
+      /from\s+['"]\.\/answer-continuation-state['"]/,
+    )
+    for (const symbol of continuationHelpers) {
+      expect(orchestratorSource).not.toMatch(
+        new RegExp(`(?:^|\\n)(?:export\\s+)?function\\s+${symbol}\\b`),
+      )
+      expect(orchestratorSource).toContain(symbol)
+    }
+    expect(orchestratorSource).not.toMatch(
+      /(?:^|\n)(?:export\s+)?function\s+shouldOverrideOperationRouteForBusiness\b/,
+    )
+  })
+
+  it('keeps effective route policy outside the orchestrator', () => {
+    expect(orchestratorSource).toMatch(
+      /from\s+['"]\.\/effective-answer-route['"]/,
+    )
+    expect(orchestratorSource).toContain('resolveEffectiveAnswerRoute')
+    expect(orchestratorSource).not.toMatch(
+      /(?:^|\n)(?:export\s+)?function\s+resolveEffectiveAnswerRoute\b/,
+    )
   })
 
   it('imports TurnPath adapters from ./turns', () => {

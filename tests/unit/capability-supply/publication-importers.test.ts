@@ -1712,6 +1712,8 @@ describe("capability publication importers", () => {
     "https://172.16.0.1/lookup",
     "https://192.168.1.1/lookup",
     "https://169.254.169.254/latest/meta-data",
+    "https://198.18.0.1/lookup",
+    "https://[fec0::1]/lookup",
     "https://2130706433/lookup",
     "https://0x7f000001/lookup",
   ])(

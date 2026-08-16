@@ -40,6 +40,12 @@ const testState = vi.hoisted(() => {
           onChangeCriteria?: () => void
         }
       | undefined,
+    latestScrollerProps: undefined as
+      | {
+          showJumpButton?: boolean
+          contentClassName?: string
+        }
+      | undefined,
     navigate(input: unknown) {
       state.navigateCalls.push(input)
       return state.navigateResult
@@ -72,15 +78,41 @@ vi.mock('@/lib/observability/funnel-client', () => ({
 }))
 
 vi.mock('@/components/ae/chat/AeThreadScroller', () => ({
-  AeThreadScroller: ({ children }: { children: ReactNode }) => <div data-testid="thread-scroller">{children}</div>,
+  AeThreadScroller: ({
+    children,
+    ...props
+  }: {
+    children: ReactNode
+    showJumpButton?: boolean
+    contentClassName?: string
+  }) => {
+    testState.latestScrollerProps = props
+    return <div data-testid="thread-scroller">{children}</div>
+  },
 }))
 
 vi.mock('@/components/ae/chat/AeThreadSidebar', () => ({
-  AeThreadSidebar: ({ visible, onNewQuestion }: { visible?: boolean; onNewQuestion?: () => void }) => {
+  AeThreadSidebar: ({
+    visible,
+    layout = 'desktop',
+    onNewQuestion,
+  }: {
+    visible?: boolean
+    layout?: 'desktop' | 'mobile'
+    onNewQuestion?: () => void
+  }) => {
     if (onNewQuestion !== undefined) {
       testState.newQuestionCallbacks.push(onNewQuestion)
     }
-    return <aside data-testid="thread-sidebar" data-visible={visible === true ? 'true' : 'false'} />
+    return (
+      <aside
+        id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'}
+        data-testid="thread-sidebar"
+        data-visible={visible === true ? 'true' : 'false'}
+      >
+        {visible ? <button type="button">First recent chat</button> : null}
+      </aside>
+    )
   },
 }))
 
@@ -125,6 +157,7 @@ describe('AeChat route promotion', () => {
     testState.latestTranscriptProps = undefined
     testState.observedClientTurnKeys.length = 0
     testState.newQuestionCallbacks.length = 0
+    testState.latestScrollerProps = undefined
   })
 
   it('keeps one initial turn identity across a route remount', () => {
@@ -430,9 +463,16 @@ describe('AeChat route promotion', () => {
     })
   })
   it('keeps a storage failure typed and does not start a second turn identity', async () => {
-    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('storage blocked')
-    })
+    vi.stubGlobal('sessionStorage', {
+      clear: () => undefined,
+      getItem: () => null,
+      key: () => null,
+      length: 0,
+      removeItem: () => undefined,
+      setItem: () => {
+        throw new Error('storage blocked')
+      },
+    } satisfies Storage)
     render(<AeChat />)
 
     const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
@@ -442,7 +482,6 @@ describe('AeChat route promotion', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
     expect(window.sessionStorage.getItem(PENDING_DRAFT_STORAGE_KEY)).toBeNull()
-    setItem.mockRestore()
   })
 
 
@@ -457,7 +496,7 @@ describe('AeChat route promotion', () => {
     expect(document.activeElement).toBe(headings[0])
   })
 
-  it('focuses the main landmark on thread handoff without stealing focus from a control', () => {
+  it('focuses the main landmark on thread and new-chat route changes even when a control was focused', () => {
     const first = render(<AeChat initialQuery="duplicate probe" />)
     const pendingHeading = screen.getByRole('heading', { level: 1, name: 'Answering your question' })
     pendingHeading.blur()
@@ -465,14 +504,19 @@ describe('AeChat route promotion', () => {
     first.rerender(
       <AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />,
     )
-    expect(document.activeElement).toBe(screen.getByRole('main'))
+    const main = screen.getByRole('main')
+    expect(document.activeElement).toBe(main)
 
-    const sidebarToggle = screen.getAllByRole('button', { name: 'Open recent questions' })[0] as HTMLButtonElement
+    const sidebarToggle = screen.getAllByRole('button', { name: 'Open recent chats' })[0] as HTMLButtonElement
     sidebarToggle.focus()
     first.rerender(
       <AeChat threadId="thread-two" initialProjection={buildProjection('thread-two', 'Second answer')} />,
     )
-    expect(document.activeElement).toBe(sidebarToggle)
+    expect(document.activeElement).toBe(main)
+
+    sidebarToggle.focus()
+    first.rerender(<AeChat />)
+    expect(document.activeElement).toBe(main)
   })
 
   it('keeps the active answer shell mounted while promoting a new home turn to its thread route', async () => {
@@ -481,13 +525,17 @@ describe('AeChat route promotion', () => {
     render(<AeChat />)
 
     expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
+    expect(testState.latestScrollerProps).toMatchObject({
+      showJumpButton: true,
+      contentClassName: 'justify-center',
+    })
 
     await submitQuery('businesses in Perth')
-    // The welcome composer is now unexposed after promotion; this previously passed only because its accessible name varied.
     expect(screen.getAllByRole('searchbox')).toHaveLength(1)
-    const refinementComposer = screen.getByRole('searchbox', { name: 'What do you need done?' })
-    expect(computeAccessibleDescription(refinementComposer)).toContain("Checking what's available")
-    expect(screen.queryByTestId('live-turn')).not.toBeNull()
+    const composer = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    expect(computeAccessibleDescription(composer)).toContain("Checking what's available")
+    expect(testState.latestScrollerProps?.showJumpButton).toBe(true)
+    expect(testState.latestScrollerProps?.contentClassName).toBe('[&>[data-slot=message-scroller-item]:first-of-type]:mt-auto')
 
     await act(async () => {
       testState.latestTranscriptProps?.onThreadCreated?.('thread-promoted-1')
@@ -526,34 +574,36 @@ describe('AeChat route promotion', () => {
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
   })
 
-  it('honors an explicit desktop sidebar toggle after its active-thread default', () => {
+  it('keeps an empty desktop history rail closed until explicitly opened', async () => {
+    window.sessionStorage.setItem('ae.recentThreads.v1', '[]')
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 
-    expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('true')
-    const toggle = screen.getByRole('button', { name: 'Hide recent questions' })
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('false')
+    const toggle = screen.getByRole('button', { name: 'Show recent chats' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.click(toggle)
 
-    const closedToggle = screen.getByRole('button', { name: 'Show recent questions' })
-    expect(closedToggle.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('false')
+    const openToggle = screen.getByRole('button', { name: 'Hide recent chats' })
+    expect(openToggle.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('true')
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('First recent chat'))
 
-    fireEvent.click(closedToggle)
-    expect(screen.getByRole('button', { name: 'Hide recent questions' }).getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(openToggle)
+    expect(screen.getByRole('button', { name: 'Show recent chats' }).getAttribute('aria-expanded')).toBe('false')
   })
-  it('restores focus to the Recent Questions opener after Escape closes the controlled dialog', async () => {
+  it('restores focus to the Recent chats opener after Escape closes the controlled dialog', async () => {
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 
-    const opener = within(screen.getByRole('banner')).getByRole('button', { name: 'Open recent questions' })
+    const opener = within(screen.getByRole('banner')).getByRole('button', { name: 'Open recent chats' })
     opener.focus()
     fireEvent.click(opener)
 
-    const dialog = await screen.findByRole('dialog', { name: 'Recent questions' })
+    const dialog = await screen.findByRole('dialog', { name: 'Recent chats' })
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Recent questions' })).toBeNull()
+      expect(screen.queryByRole('dialog', { name: 'Recent chats' })).toBeNull()
       expect(document.activeElement).toBe(opener)
     })
   })
@@ -567,7 +617,7 @@ describe('AeChat route promotion', () => {
       <AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />,
     )
 
-    const trigger = screen.getByRole('button', { name: 'Thread actions' })
+    const trigger = screen.getByRole('button', { name: 'Chat actions' })
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Revoke share link' }))
     await waitFor(() => expect(trigger.getAttribute('aria-busy')).not.toBe('true'))
@@ -579,7 +629,7 @@ describe('AeChat route promotion', () => {
 
     rerender(<AeChat threadId="thread-two" initialProjection={buildProjection('thread-two', 'Second answer')} />)
 
-    const secondTrigger = screen.getByRole('button', { name: 'Thread actions' })
+    const secondTrigger = screen.getByRole('button', { name: 'Chat actions' })
     fireEvent.pointerDown(secondTrigger, { button: 0, ctrlKey: false })
     const revokeForSecondThread = screen.getByRole('menuitem', { name: 'Revoke share link' })
     expect(revokeForSecondThread.getAttribute('aria-disabled')).not.toBe('true')
@@ -592,8 +642,8 @@ describe('AeChat route promotion', () => {
 
     const header = screen.getByRole('banner')
     expect(within(header).getByRole('heading', { level: 1, name: 'First answer' })).toBeTruthy()
-    expect(within(header).getByRole('button', { name: 'Ask another' })).toBeTruthy()
-    const trigger = within(header).getByRole('button', { name: 'Thread actions' })
+    expect(within(header).getByRole('button', { name: 'New chat' })).toBeTruthy()
+    const trigger = within(header).getByRole('button', { name: 'Chat actions' })
     expect(screen.queryByRole('menu')).toBeNull()
 
     trigger.focus()
@@ -632,8 +682,7 @@ describe('AeChat route promotion', () => {
     })
 
     render(<AeChat threadId="thread-recovered" initialProjection={null} />)
-
-    expect(screen.queryByText('Thread unavailable')).toBeNull()
+    expect(screen.queryByText('Chat unavailable')).toBeNull()
     await waitFor(() => {
       expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-recovered')
     })
@@ -648,9 +697,14 @@ describe('AeChat route promotion', () => {
     ))
 
     render(<AeChat threadId="thread-missing" initialProjection={null} />)
-
-    expect(await screen.findByText('Thread unavailable')).toBeTruthy()
-    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Chat unavailable' })).toBeTruthy()
+    expect(screen.getByText('This chat couldn’t be loaded. Start a new chat to continue.')).toBeTruthy()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Start a new chat' })).toHaveLength(1)
+    expect(testState.latestScrollerProps).toMatchObject({
+      showJumpButton: true,
+      contentClassName: 'justify-center',
+    })
   })
 
   it('does not read back a matching non-null SSR projection', async () => {
@@ -669,16 +723,14 @@ describe('AeChat route promotion', () => {
     expect(detailRequests).toHaveLength(0)
   })
 
-  it('places the retention disclosure after the rendered transcript results', () => {
+  it('does not render retention policy copy in the transcript', () => {
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 
-    const transcript = screen.getByTestId('thread-transcript')
-    const retention = screen.getByRole('note', { name: 'Thread access and retention' })
-
-    expect(transcript.compareDocumentPosition(retention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(screen.queryByRole('note', { name: 'Chat access and retention' })).toBeNull()
+    expect(screen.queryByText(/Private to this browser by default/iu)).toBeNull()
   })
 
-  it('opens focused prior criteria without creating a live or answer turn', async () => {
+  it('keeps the terminal shortlist composer and focuses prior criteria on request', async () => {
     const baseProjection = buildProjection('thread-one', 'First answer', [
       { kind: 'provider-cards', providers: [provider({ publishedPhone: '0412 345 678' })] },
     ])
@@ -691,7 +743,8 @@ describe('AeChat route promotion', () => {
 
     const transcript = screen.getByTestId('thread-transcript')
     const settledTurnCount = transcript.getAttribute('data-turn-count')
-    expect(screen.queryByRole('searchbox')).toBeNull()
+    const existingComposer = screen.getByRole('searchbox') as HTMLTextAreaElement
+    expect(existingComposer.value).toBe('')
 
     fireEvent.click(screen.getByRole('button', { name: 'Change criteria' }))
 
@@ -705,7 +758,7 @@ describe('AeChat route promotion', () => {
     expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
   })
 
-  it('closes an open refinement composer on a new thread until that thread requests it', async () => {
+  it('resets refinement prefill on a new chat until that chat requests it', async () => {
     const firstProjection = buildProjection('thread-one', 'First answer', [
       { kind: 'provider-cards', providers: [provider({ publishedPhone: '0412 345 678' })] },
     ])
@@ -733,8 +786,9 @@ describe('AeChat route promotion', () => {
     )
 
     rerender(<AeChat threadId="thread-two" initialProjection={secondProjection} />)
-
-    await waitFor(() => expect(screen.queryByRole('searchbox')).toBeNull())
+    await waitFor(() => {
+      expect((screen.getByRole('searchbox') as HTMLTextAreaElement).value).toBe('')
+    })
     expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-two')
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-two')
 
@@ -754,7 +808,7 @@ describe('AeChat route promotion', () => {
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
     expectComposerCopy(
       'Preparing a request to the business',
-      'Carrying the selected business into a request. It still confirms timing, quote, and availability.',
+      'The business still confirms timing, quote, and availability.',
     )
   })
 
@@ -807,51 +861,6 @@ describe('AeChat route promotion', () => {
     })
   })
 
-  it('updates session chrome from a settled optimistic turn while the live stream is still mounted', async () => {
-    const initialProjection = buildProjection('thread-one', 'Selected provider', [
-      { kind: 'selected-provider', provider: provider({ name: 'Demo Plumbing', slug: 'demo-plumbing' }) },
-    ])
-    render(<AeChat threadId="thread-one" initialProjection={initialProjection} />)
-
-    expect(screen.getByRole('region', { name: /next steps/i }).textContent).toContain(
-      'Demo Plumbing selected for contact',
-    )
-
-    await submitQuery('Compare plumbers in Parramatta', 'Ask limits, refine, or continue with the selected business')
-    await act(async () => {
-      testState.latestTranscriptProps?.onThreadCreated?.('thread-one', { turnId: 'thread-one-turn-2', turnSeq: 2 })
-      await Promise.resolve()
-    })
-
-    const replacementTurn = {
-      turnId: 'thread-one-turn-2',
-      seq: 2,
-      query: 'Compare plumbers in Parramatta',
-      intent: 'refine_search' as const,
-      status: 'complete' as const,
-      oneLine: 'Two listed businesses match.',
-      workLog: [],
-      artifacts: [
-        {
-          kind: 'provider-cards' as const,
-          providers: [
-            provider({ name: 'Demo Plumbing', slug: 'demo-plumbing' }),
-            provider({ citationIndex: 2, name: 'Parramatta Emergency Plumbing', slug: 'parramatta-emergency-plumbing' }),
-          ],
-        },
-      ],
-    } satisfies PublicThreadProjection['turns'][number]
-
-    await act(async () => {
-      testState.latestTranscriptProps?.onSettledTurn?.(replacementTurn, 1)
-      await Promise.resolve()
-    })
-
-    const inquiryPath = screen.getByRole('region', { name: /next steps/i })
-    expect(inquiryPath.textContent).toContain('2 matches ready to compare')
-    expect(inquiryPath.textContent).not.toContain('Demo Plumbing selected for contact')
-    expect(screen.getByRole('region', { name: /session context/i }).textContent).not.toContain('Selected business')
-  })
 
   it('restores Today as the selected timing for a completed persisted turn', () => {
     const baseProjection = buildProjection('thread-one', 'First answer')
@@ -866,8 +875,8 @@ describe('AeChat route promotion', () => {
   })
 
   it.each([
-    ['data_answer', 'Ask a follow-up or try another live data lookup'],
-    ['empty_state', 'Refine your request or ask a different question'],
+    ['data_answer', 'Ask a follow-up'],
+    ['empty_state', 'Try a different question'],
     ['boundary_explain', 'Ask a different question'],
     ['safety_refusal', 'Ask a different question'],
   ] as const)('removes business composer controls for the %s terminal profile', (layoutProfile, placeholder) => {
@@ -885,7 +894,6 @@ describe('AeChat route promotion', () => {
     expect(screen.queryByText('When do you need this?')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Change criteria' })).toBeNull()
     expect(screen.queryByText(/match is needed|selected business|contacting a business/i)).toBeNull()
-    expect(screen.queryByRole('region', { name: /next steps|session context/i })).toBeNull()
   })
 
   it('retains business composer controls for a clarification profile', () => {
@@ -905,10 +913,7 @@ describe('AeChat route promotion', () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    expectComposerCopy(
-      'Refine the request or ask what can happen next',
-      'A match is needed before comparing options or contacting a business.',
-    )
+    expectComposerCopy('Try a different question')
   })
 
   it('guides the composer toward inquiry once a listed business publishes that path', () => {
@@ -917,10 +922,7 @@ describe('AeChat route promotion', () => {
     ]))
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    expectComposerCopy(
-      'Narrow, compare, or ask the business',
-      'Narrow or compare the matches, then ask the business when one fits.',
-    )
+    expectComposerCopy('Ask a follow-up')
   })
 
   it('guides the composer toward contact limits when listings lack inquiry paths', () => {
@@ -930,7 +932,7 @@ describe('AeChat route promotion', () => {
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
     expectComposerCopy(
-      'Narrow, compare, or ask for the contact step',
+      'Ask a follow-up',
       'These options do not have a request form yet.',
     )
   })
@@ -941,10 +943,7 @@ describe('AeChat route promotion', () => {
     ])
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    expectComposerCopy(
-      'Ask limits, refine, or continue with the selected business',
-      'That business stays in context. It confirms timing, quote, and availability.',
-    )
+    expectComposerCopy('Ask a follow-up')
   })
 })
 
@@ -967,10 +966,12 @@ async function submitQuery(query: string, placeholder = 'What do you need done?'
   })
 }
 
-function expectComposerCopy(placeholder: string, loopHint: string) {
+function expectComposerCopy(placeholder: string, loopHint?: string) {
   const input = screen.getByRole('searchbox', { name: 'What do you need done?' })
   expect(input.getAttribute('placeholder')).toBe(placeholder)
-  expect(screen.getByText(loopHint)).toBeTruthy()
+  if (loopHint !== undefined) {
+    expect(screen.getByText(loopHint)).toBeTruthy()
+  }
 }
 
 type TestArtifact = PublicThreadProjection['turns'][number]['artifacts'][number]

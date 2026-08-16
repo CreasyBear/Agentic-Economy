@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { emptyDiscoverySourceState } from '../../fixtures/source-state'
 import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
+import {
+  createFixtureDiscoverySourceState,
+  testOnlyDiscoveryManifestAdapter,
+} from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   evaluateDiscoveryProjectionGate,
@@ -48,7 +51,15 @@ const privateP2FieldNames = [
 describe('developer discovery route readback', () => {
   it('renders available public catalog facts with schema, example, download, and unsupported labels', async () => {
     const state = createFixtureDiscoverySourceState()
-    const generated = regenerateDiscoveryManifest(state, { businessId: firstBusiness(state).businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
+    const generated = regenerateDiscoveryManifest(
+      state,
+      { businessId: firstBusiness(state).businessId },
+      {
+        canonicalBaseUrl: 'https://agentic.test',
+        now: 3_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
+    )
 
     expect(generated.kind).toBe('ok')
 

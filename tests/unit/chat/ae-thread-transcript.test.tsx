@@ -177,7 +177,7 @@ describe('AeThreadTranscript', () => {
     ).toBe('tel:0412345678')
 
     const replayQuery = screen.getByText('Find plumbers near Parramatta')
-    const processCopy = screen.getByText('How this was checked', { selector: 'summary' })
+    const processCopy = screen.getByRole('button', { name: 'How this was checked' })
     expect(urgentContact.compareDocumentPosition(replayQuery) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(urgentContact.compareDocumentPosition(processCopy) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 
@@ -229,11 +229,11 @@ describe('AeThreadTranscript', () => {
 
     expect(screen.getByText('1 listed businesses match.')).toBeTruthy()
     expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
-    expect(screen.getByRole('alert').textContent).toContain('This answer could not be completed.')
-    expect(screen.getByRole('link', { name: 'Start a new ask' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('alert').textContent).toContain('Unable to finish this response.')
+    expect(screen.getByRole('link', { name: 'New chat' }).getAttribute('href')).toBe('/')
   })
 
-  it('renders the exact no-send disclosure after a no-match recovery turn', () => {
+  it('explains a no-match result and suggests how to recover', () => {
     const projection: PublicThreadProjection = {
       threadId: 'thread-no-match',
       title: 'Emergency roofer in Parramatta',
@@ -255,8 +255,10 @@ describe('AeThreadTranscript', () => {
 
     render(<AeThreadTranscript projection={projection} />)
 
-    expect(screen.getByText('Nothing was sent.', { exact: true }).textContent)
-      .toBe('Nothing was sent.')
+    expect(screen.getByText(
+      'No matching businesses were found. Try changing the service or location.',
+      { exact: true },
+    )).toBeTruthy()
   })
   it('shows owner Stop for pending replay rows but keeps shared transcripts read-only', async () => {
     const pendingProjection: PublicThreadProjection = {
@@ -292,7 +294,7 @@ describe('AeThreadTranscript', () => {
     cleanup()
     render(<AeThreadTranscript threadId={pendingProjection.threadId} projection={pendingProjection} />)
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
-    expect(screen.getByText('This answer is still pending. Reload to check its durable status.')).toBeTruthy()
+    expect(screen.getByText('This response is taking longer than expected.')).toBeTruthy()
   })
 
 
@@ -351,7 +353,7 @@ describe('AeThreadTranscript', () => {
     expect(selectedQuery).toBe('Show only businesses accepting requests')
   })
 
-  it('keeps one polite status for the current pending-to-terminal transition', () => {
+  it('keeps one stable polite status node and updates only its text', () => {
     const historyTurn = {
       turnId: 'turn-history',
       seq: 1,
@@ -377,14 +379,19 @@ describe('AeThreadTranscript', () => {
       title: 'Answer status',
       turns: [historyTurn, pendingTurn],
     }
-    const { rerender } = render(<AeThreadTranscript projection={pendingProjection} />)
+    const { rerender } = render(<AeThreadTranscript projection={null} />)
+    const status = screen.getByRole('status')
+
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(status.getAttribute('aria-atomic')).toBe('true')
+    expect(status.textContent).toBe('')
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
+
+    rerender(<AeThreadScroller><AeThreadTranscript projection={pendingProjection} /></AeThreadScroller>)
 
     expect(screen.getAllByRole('log')).toHaveLength(1)
     expect(screen.getAllByRole('status')).toHaveLength(1)
-    const status = screen.getByRole('status')
-    expect(status.getAttribute('aria-live')).toBe('polite')
-    expect(status.getAttribute('aria-atomic')).toBe('true')
-    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
+    expect(screen.getByRole('status')).toBe(status)
     expect(status.textContent).toBe('Answer is still pending.')
     expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
 
@@ -408,10 +415,11 @@ describe('AeThreadTranscript', () => {
 
     rerender(<AeThreadScroller><AeThreadTranscript projection={completeProjection} /></AeThreadScroller>)
 
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toBe(status)
+    expect(status.textContent).toBe('')
     expect(screen.getByText('Earlier answer remains available.')).toBeTruthy()
     expect(screen.getByText('Current answer is ready.')).toBeTruthy()
-    expect(document.querySelectorAll('[aria-live]')).toHaveLength(0)
+    expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1)
   })
 
   it('renders all four bounded operation candidates as accessible one-shot choices and submits exact refs', () => {

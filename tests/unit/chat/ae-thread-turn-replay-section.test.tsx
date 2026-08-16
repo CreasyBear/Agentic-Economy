@@ -4,7 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a href="/">{children}</a>,
+  Link: ({ children, to, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }))
 vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
   AeGenerativeAnswer: ({
@@ -19,7 +21,12 @@ vi.mock('@/components/ae/artifacts/AeGenerativeAnswer', () => ({
     phase?: string
   }) => (
     <div data-testid="generic-answer" data-busy={busy === true ? 'true' : 'false'} data-phase={phase}>
-      {errorMessage}
+      {phase === 'error' ? (
+        <div role="alert">
+          <div>Unable to finish this response.</div>
+          {errorMessage}
+        </div>
+      ) : errorMessage}
       {onStop === undefined ? null : <button type="button" onClick={onStop}>Stop</button>}
     </div>
   ),
@@ -51,9 +58,9 @@ afterEach(cleanup)
 
 describe('thread turn replay', () => {
   it.each([
-    ['pending', 'streaming', true, 'This answer is still pending. Reload to check its durable status.'],
+    ['pending', 'streaming', true, 'This response is taking longer than expected.'],
     ['stopped', 'stopped', false, 'Answer stopped.'],
-    ['error', 'error', false, 'This answer could not be completed.'],
+    ['error', 'error', false, 'Unable to finish this response.'],
     ['complete', 'complete', false, null],
   ] as const)('preserves %s as its durable phase and copy', (status, phase, busy, copy) => {
     render(
@@ -71,6 +78,78 @@ describe('thread turn replay', () => {
       return
     }
     expect(screen.getByText(copy)).toBeTruthy()
+  })
+
+  it('preserves a specific problem detail in one actionable recovery block', () => {
+    const onRetry = vi.fn()
+    render(
+      <AeThreadTurnReplaySection
+        {...turn}
+        status="error"
+        problem={{
+          type: 'about:blank',
+          title: 'Failed',
+          status: 503,
+          kind: 'UNAVAILABLE',
+          code: 'unavailable',
+          detail: 'The provider timed out.',
+        }}
+        onRetry={onRetry}
+      />,
+    )
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByText('The provider timed out.')).toBeTruthy()
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    expect(retry.getAttribute('data-variant')).toBe('default')
+    expect(retry.getAttribute('data-size')).toBe('sm')
+    fireEvent.click(retry)
+    expect(onRetry).toHaveBeenCalledOnce()
+    const newChat = screen.getByRole('link', { name: 'New chat' })
+    expect(newChat.getAttribute('href')).toBe('/')
+    expect(newChat.getAttribute('data-variant')).toBe('ghost')
+    expect(newChat.getAttribute('data-size')).toBe('sm')
+  })
+
+  it('uses direct not-found copy without duplicating the new-chat action', () => {
+    render(
+      <AeThreadTurnReplaySection
+        {...turn}
+        status="error"
+        problem={{
+          type: 'about:blank',
+          title: 'Not found',
+          status: 404,
+          kind: 'NOT_FOUND',
+          code: 'thread_not_found',
+          detail: 'Stale internal detail.',
+        }}
+      />,
+    )
+
+    expect(screen.getByText('This response is no longer available.')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'New chat' })).toHaveLength(1)
+  })
+
+  it('uses the fallback recovery in an expanded collapsed error turn', () => {
+    render(
+      <AeThreadTurnCollapsed
+        {...turn}
+        status="error"
+        problem={{
+          type: 'about:blank',
+          title: 'Failed',
+          status: 500,
+          kind: 'INTERNAL',
+          code: 'answer_turn_failed',
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Expand/ }))
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByText('Unable to finish this response.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'New chat' }).getAttribute('href')).toBe('/')
   })
 
   it.each(['stopped', 'already_settled'] as const)('clears Stopping after the durable %s result', async (kind) => {
@@ -115,7 +194,9 @@ describe('thread turn replay', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('Stop was not confirmed. The answer is still pending; try Stop again.')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('Stop was not confirmed. The response is still pending; try Stop again.')
+    expect(alert.classList.contains('text-destructive')).toBe(true)
     expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy()
 
     rerender(<AeThreadTurnReplaySection {...turn} status="complete" threadId="thread-1" onStopPending={onStopPending} />)
@@ -137,7 +218,7 @@ describe('thread turn replay', () => {
     render(<AeThreadTurnReplaySection {...turn} status="pending" threadId="thread-1" />)
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
   })
-  it('keeps the durable status and scroll target on the assistant message', () => {
+  it('keeps the saved state and scroll target on the assistant message', () => {
     const { container } = render(
       <AeThreadTurnReplaySection {...turn} status="complete" scrollTargetId="turn:1" />,
     )

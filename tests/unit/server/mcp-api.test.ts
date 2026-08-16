@@ -1,4 +1,5 @@
 import { parseJsonEventStream } from '@ai-sdk/provider-utils'
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -178,9 +179,9 @@ describe('MCP host adapter', () => {
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
     const tools = result.tools as Array<Record<string, unknown>>
-    const expectedToolNames = listMcpActions()
+    const mcpActions = listMcpActions()
       .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
-      .map(mcpToolName)
+    const expectedToolNames = mcpActions.map(mcpToolName)
     expect(expectedToolNames).toEqual([
       'ae_registry_services_list',
       'ae_registry_services_search',
@@ -194,20 +195,30 @@ describe('MCP host adapter', () => {
     expect(expectedToolNames).not.toContain('ae_operation_invoke')
     expect(expectedToolNames).not.toContain('ae_operation_status')
     expect(tools.map((tool) => tool.name)).toEqual(expectedToolNames)
+    expect(tools).toHaveLength(expectedToolNames.length)
 
     for (const tool of tools) {
       const name = tool.name
-      const action = listMcpActions().find((candidate) => mcpToolName(candidate) === name)
+      const action = mcpActions.find((candidate) => mcpToolName(candidate) === name)
       if (action === undefined) {
         throw new Error(`No MCP action found for ${String(name)}.`)
       }
       expect(tool.description).toContain(action.boundaries[0])
-      expect(tool.inputSchema).toEqual(expect.objectContaining({ properties: expect.any(Object) }))
-      expect(tool.outputSchema).toEqual(expect.any(Object))
+      expect(tool.inputSchema).toEqual(expect.objectContaining({
+        type: 'object',
+        properties: expect.any(Object),
+        additionalProperties: false,
+      }))
+      expect(tool.outputSchema).toEqual(toJsonSchemaCompat(action.outputSchema, {
+        strictUnions: true,
+        pipeStrategy: 'output',
+      }))
     }
 
     const detail = tools.find((tool) => tool.name === 'ae_registry_detail')
     const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
+    const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
+    const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
     const search = tools.find((tool) => tool.name === 'ae_registry_services_search')
     const execute = tools.find((tool) => tool.name === 'ae_operation_execute')
     expect(detail?.inputSchema).toEqual(expect.objectContaining({
@@ -216,12 +227,31 @@ describe('MCP host adapter', () => {
     expect(search?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ query: expect.any(Object) }),
     }))
-    expect(detail?.outputSchema).toEqual(expect.objectContaining({ oneOf: expect.any(Array) }))
-    expect(operations?.outputSchema).toEqual(expect.objectContaining({ anyOf: expect.any(Array) }))
+    expect(operations?.inputSchema).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({ query: expect.any(Object) }),
+    }))
+    expect(compare?.inputSchema).toEqual(expect.objectContaining({
+      properties: expect.objectContaining({
+        operationRefs: expect.objectContaining({
+          type: 'array',
+          minItems: 1,
+          maxItems: 4,
+          items: expect.objectContaining({ type: 'string', pattern: expect.any(String) }),
+        }),
+      }),
+    }))
+    expect(inspectPlan?.inputSchema).toEqual(expect.objectContaining({
+      required: ['operationRefs'],
+      additionalProperties: false,
+      properties: expect.objectContaining({
+        operationRefs: expect.any(Object),
+        mappingRefs: expect.any(Object),
+        expiresInMs: expect.any(Object),
+      }),
+    }))
     expect(execute?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ operationRef: expect.any(Object), input: expect.any(Object) }),
     }))
-    expect(execute?.outputSchema).toEqual(expect.objectContaining({ oneOf: expect.any(Array) }))
     expect(execute?.description).toContain('keyless http-json:v1 GET or POST operations')
     expect(execute?.description).toContain('financial_exposure')
     expect(execute?.description).toContain('external_state_change')
@@ -300,6 +330,35 @@ describe('MCP host adapter', () => {
       output: { temperature: 21 },
       evidenceHash: 'evidence-hash',
     })
+  })
+
+  it('fails closed when a canonical action returns invalid structured output', async () => {
+    operationExecuteMocks.executeKeylessOperation.mockResolvedValue({
+      kind: 'ok',
+      operationRef: currentOperationRef,
+    })
+
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'operation-invalid-output',
+      method: 'tools/call',
+      params: {
+        name: 'ae_operation_execute',
+        arguments: {
+          operationRef: currentOperationRef,
+          input: {},
+        },
+      },
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    const result = body.result as Record<string, unknown>
+    expect(result).toMatchObject({ isError: true })
+    expect(result).not.toHaveProperty('structuredContent')
+    expect(result.content).toEqual(expect.arrayContaining([
+      { type: 'text', text: expect.stringContaining('action_output_invalid') },
+    ]))
   })
 
   it('returns literal stale and non-keyless refusals from the canonical executor', async () => {

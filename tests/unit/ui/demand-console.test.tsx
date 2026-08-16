@@ -92,6 +92,11 @@ describe('assistant access components', () => {
     expect(screen.getByText(/npm run -s ae -- connect --json/u)).toBeTruthy()
     expect(screen.getByText(/npm run -s ae -- recover/u)).toBeTruthy()
     expect(screen.getByText(/does not contain provider credentials or silently approve/iu)).toBeTruthy()
+    const directKeylessLane = screen.getByRole('heading', { name: /direct-keyless MCP lane/i }).closest('li')
+    expect(directKeylessLane?.textContent).toContain('No caller key')
+    expect(directKeylessLane?.textContent).toContain('neither requires nor issues an AE caller key')
+    expect(directKeylessLane?.textContent).toContain('ae_operation_execute')
+    expect(screen.queryByRole('button', { name: 'Create agent access key' })).toBeNull()
     expect(screen.queryByText(/\bae (?:feeds|run|study)\b/iu)).toBeNull()
     expect(screen.queryByText(/\bae (?:cancel|reconcile)\b/iu)).toBeNull()
 
@@ -103,14 +108,14 @@ describe('assistant access components', () => {
     expect(status.getAttribute('role')).toBe('status')
   })
 
-  it('issues a default key once and exposes only the one-time save controls', async () => {
+  it('issues a fresh origin-bound caller artifact once and exposes only the one-time save controls', async () => {
     const writeText = vi.fn(async () => undefined)
     const onIssue = vi.fn()
     const onDismissIssuedSecret = vi.fn()
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(
       <AeAssistantInstallFunnel
-        canonicalBaseUrl="https://ae.example/"
+        canonicalBaseUrl="https://AE.Example:443/"
         onIssue={onIssue}
         issuing={false}
         issueDisabled={false}
@@ -123,11 +128,18 @@ describe('assistant access components', () => {
     expect(onIssue).toHaveBeenCalledOnce()
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy agent access key command' }))
-    expect(writeText).toHaveBeenCalledWith("export AE_API_KEY='ae_secret_once'")
+    expect(writeText).toHaveBeenCalledWith([
+      "export AE_API_KEY='ae_secret_once'",
+      "export AE_API_KEY_ORIGIN='https://ae.example'",
+    ].join('\n'))
 
     const download = screen.getByRole('link', { name: 'Download agent-access.json' })
     const encodedJson = download.getAttribute('href')?.split(',', 2)[1]
-    expect(encodedJson === undefined ? undefined : decodeURIComponent(encodedJson)).toBe('{"key":"ae_secret_once"}')
+    const artifact = encodedJson === undefined ? undefined : JSON.parse(decodeURIComponent(encodedJson)) as unknown
+    expect(artifact).toEqual({
+      AE_API_KEY: 'ae_secret_once',
+      AE_API_KEY_ORIGIN: 'https://ae.example',
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'I saved it — hide key' }))
     expect(onDismissIssuedSecret).toHaveBeenCalledOnce()

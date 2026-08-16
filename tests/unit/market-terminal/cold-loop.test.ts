@@ -1,14 +1,74 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
+import { runCompareCommand } from '../../../tools/ae/commands/compare'
+import { runInspectPlanCommand } from '../../../tools/ae/commands/inspect-plan'
 import { runInspectCommand } from '../../../tools/ae/commands/inspect'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import { runImportCommand } from '../../../tools/ae/commands/import'
-import type { CliOptions } from '../../../tools/ae/lib/args'
+import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 
+type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
+
+function operationDescriptor(operationRef: string, summary = 'Current reference lookup'): OperationDescriptorFixture {
+  return {
+    operationRef,
+    operationId: 'reference.lookup',
+    contract: {
+      capabilityId: 'reference.lookup',
+      version: 1,
+      inputJsonSchema: { type: 'object' },
+      outputJsonSchema: { type: 'object' },
+      customerAnnotations: [],
+    },
+    business: { businessId: 'business:reference', slug: 'reference', name: 'Reference Services' },
+    offering: { offeringRef: 'offering:reference', revision: 1, label: 'Reference lookup', summary },
+    summary,
+    commercial: {
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '0', exponent: 2 } },
+      materialTerms: [],
+      relationship: { kind: 'none', summary: 'No commercial relationship.' },
+    },
+    dataUse: [],
+    effects: [],
+    evidence: [],
+    cancellation: { kind: 'unsupported' },
+    recovery: { idempotency: 'required', recovery: 'retry_safe' },
+    authentication: { kind: 'keyless' },
+    transport: { method: 'GET', pathTemplate: '/lookup', responseStatus: 200, responseContentType: 'application/json', requestTimeoutMs: 5_000 },
+    provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+    availability: { posture: 'integrated' },
+    navigation: [],
+  }
+}
+
+function operationSearchResult(query: string, operations: readonly OperationDescriptorFixture[]) {
+  return {
+    kind: 'ok' as const,
+    schemaVersion: 'registry-operations:v1' as const,
+    query,
+    items: operations,
+    matchedCount: operations.length,
+    ranking: operations.map((operation, index) => ({
+      operationRef: operation.operationRef,
+      rank: index + 1,
+      score: operations.length - index,
+    })),
+    pagination: { limit: 20, hasMore: false },
+    navigation: [],
+  }
+}
+
+function operationDetailResult(operation: OperationDescriptorFixture) {
+  return {
+    kind: 'found' as const,
+    schemaVersion: 'registry-operations:v1' as const,
+    operation,
+  }
+}
 const options: CliOptions = {
   baseUrl: 'https://market.example',
   json: true,
@@ -40,11 +100,10 @@ afterEach(() => {
 
 describe('external-agent Market Operation cold loop', () => {
   it('searches anonymously over the public Operation route', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'ok',
-      query: 'extract invoices',
-      items: [{ operationRef: 'operation:v1:current' }],
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const operationRef = `operation:v1:${'c'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
+      operationSearchResult('extract invoices', [operationDescriptor(operationRef)]),
+    ), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await runSearchCommand(['extract invoices'], options)
@@ -55,6 +114,58 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ query: 'extract invoices' })
   })
+  it('rejects a malformed successful search body with a safe CLI error', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'ok',
+      query: 'extract invoices',
+      items: [],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runSearchCommand(['extract invoices'], options)).rejects.toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'operation-search-result-invalid',
+    } satisfies Partial<CliFailure>)
+  })
+
+  it('sends canonical pagination/filter inputs and preserves the response cursor fields', async () => {
+    const operationRef = `operation:v1:${'d'.repeat(64)}`
+    const result = {
+      ...operationSearchResult('reference lookup', [operationDescriptor(operationRef)]),
+      pagination: { limit: 3, nextCursor: 'opaque-next-cursor', hasMore: true },
+    }
+    const output = captureStdout()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runSearchCommand(['reference lookup'], {
+      ...options,
+      limit: '3',
+      cursor: 'opaque-prior-cursor',
+      filters: JSON.stringify({ availability: ['routeable'] }),
+    })
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      query: 'reference lookup',
+      limit: 3,
+      cursor: 'opaque-prior-cursor',
+      filters: { availability: ['routeable'] },
+    })
+    expect(JSON.parse(output.read())).toEqual(result)
+  })
+  it('rejects an out-of-range search limit before network work', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runSearchCommand(['reference lookup'], { ...options, limit: '21' })).rejects.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'search-limit-invalid',
+    } satisfies Partial<CliFailure>)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
   it('rejects an overlong search query before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
@@ -64,6 +175,29 @@ describe('external-agent Market Operation cold loop', () => {
       code: 'search-query-too-long',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('parses search pagination and filter flags through the existing argument model', () => {
+    const parsed = parseArgs([
+      'search',
+      'reference lookup',
+      '--limit',
+      '3',
+      '--cursor',
+      'opaque-cursor',
+      '--filters',
+      '{"availability":["routeable"]}',
+    ])
+
+    expect(parsed).toMatchObject({
+      command: 'search',
+      positionals: ['reference lookup'],
+      options: {
+        limit: '3',
+        cursor: 'opaque-cursor',
+        filters: '{"availability":["routeable"]}',
+      },
+    })
   })
 
   it('imports one absolute HTTP URL through the demand route', async () => {
@@ -103,10 +237,9 @@ describe('external-agent Market Operation cold loop', () => {
 
   it('inspects one exact operation anonymously', async () => {
     const operationRef = `operation:v1:${'a'.repeat(64)}`
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'found',
-      operation: { operationRef, summary: 'Extract invoices' },
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(
+      operationDetailResult(operationDescriptor(operationRef, 'Extract invoices')),
+    ), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await runInspectCommand([operationRef], options)
@@ -116,6 +249,19 @@ describe('external-agent Market Operation cold loop', () => {
     expect(init?.method).toBe('POST')
     expect(new Headers(init?.headers).get('Authorization')).toBeNull()
     expect(JSON.parse(String(init?.body))).toEqual({ operationRef })
+  })
+  it('rejects a malformed successful detail body with a safe CLI error', async () => {
+    const operationRef = `operation:v1:${'e'.repeat(64)}`
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'found',
+      operation: { operationRef },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runInspectCommand([operationRef], options)).rejects.toMatchObject({
+      kind: 'UNAVAILABLE',
+      code: 'operation-detail-result-invalid',
+    } satisfies Partial<CliFailure>)
   })
 
   it('rejects a non-canonical OperationRef before network work', async () => {
@@ -127,6 +273,226 @@ describe('external-agent Market Operation cold loop', () => {
       code: 'operation-ref-invalid',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('completes the anonymous-to-authenticated operation lifecycle with durable replay', async () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const comparisonRef = `operation:v1:${'b'.repeat(64)}`
+    const invocationRef = `invocation:v1:${'c'.repeat(64)}`
+    const idempotencyKey = 'cold-loop-idempotency'
+    const initialInput = { query: 'bitcoin price' }
+    const changedInput = { query: 'ethereum price' }
+    const completedResult = {
+      kind: 'completed' as const,
+      invocationRef,
+      operationRef,
+      output: { value: 42, currency: 'USD' },
+      evidenceHash: 'sha256:cold-loop-effect',
+      usage: {
+        usageRef: 'usage:cold-loop',
+        observedAt: 1,
+        chargeState: 'free_tier' as const,
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+        priceDigest: 'sha256:cold-loop-price',
+      },
+    }
+    const unavailableRead = {
+      kind: 'unavailable' as const,
+      schemaVersion: 'registry-operations:v1' as const,
+      reason: 'operation_not_found' as const,
+      navigation: [],
+    }
+    const requests: Array<{
+      url: string
+      method: string
+      authorization: string | null
+      body: unknown
+    }> = []
+    const durableInvocations = new Map<string, {
+      operationRef: string
+      input: Record<string, unknown>
+      result: typeof completedResult
+    }>()
+    let providerEffects = 0
+    const jsonResponse = (body: unknown, status = 200, contentType = 'application/json') => (
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': contentType } })
+    )
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const authorization = new Headers(init?.headers).get('Authorization')
+      const body = init?.body === undefined ? undefined : JSON.parse(String(init.body))
+      requests.push({ url, method, authorization, body })
+      const route = new URL(url).pathname
+
+      if (route === '/api/v1/market-operations/search') {
+        return jsonResponse(operationSearchResult('bitcoin price', [
+          operationDescriptor(operationRef, 'Current bitcoin price'),
+          operationDescriptor(comparisonRef, 'Comparison bitcoin price'),
+        ]))
+      }
+      if (route === '/api/v1/market-operations/detail') {
+        return jsonResponse(operationDetailResult(operationDescriptor(operationRef, 'Current bitcoin price')))
+      }
+      if (
+        route === '/api/v1/market-operations/compare'
+        || route === '/api/v1/market-operations/inspect-plan'
+      ) {
+        return jsonResponse(unavailableRead)
+      }
+      if (route === '/api/v1/operations/execute') {
+        if (authorization !== 'Bearer ae-test-caller-key') {
+          throw new Error('invoke must be authenticated')
+        }
+        const request = body as {
+          operationRef: string
+          input: Record<string, unknown>
+          idempotencyKey: string
+        }
+        const existing = durableInvocations.get(request.idempotencyKey)
+        if (existing !== undefined) {
+          if (
+            existing.operationRef !== request.operationRef
+            || JSON.stringify(existing.input) !== JSON.stringify(request.input)
+          ) {
+            return jsonResponse({
+              type: 'about:blank',
+              title: 'Already exists',
+              status: 409,
+              kind: 'ALREADY_EXISTS',
+              code: 'idempotency_conflict',
+              detail: 'The idempotency key is already bound to different operation input.',
+              retryable: false,
+            }, 409, 'application/problem+json')
+          }
+          return jsonResponse(existing.result)
+        }
+
+        providerEffects += 1
+        durableInvocations.set(request.idempotencyKey, {
+          operationRef: request.operationRef,
+          input: request.input,
+          result: completedResult,
+        })
+        return jsonResponse({
+          kind: 'pending',
+          invocationRef,
+          operationRef: request.operationRef,
+          retryAfterMs: 100,
+        })
+      }
+      if (route === `/api/v1/operations/${encodeURIComponent(invocationRef)}`) {
+        if (authorization !== 'Bearer ae-test-caller-key') {
+          throw new Error('status must be authenticated')
+        }
+        const existing = durableInvocations.get(idempotencyKey)
+        if (existing === undefined) throw new Error('status read before invocation')
+        return jsonResponse({
+          kind: 'found',
+          invocationRef,
+          operationRef,
+          state: 'terminal',
+          evidenceHash: existing.result.evidenceHash,
+          result: existing.result,
+        })
+      }
+      throw new Error(`Unexpected CLI route: ${method} ${url}`)
+    })
+    const writes: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk))
+      return true
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await runSearchCommand(['bitcoin', 'price'], options)
+    await runInspectCommand([operationRef], options)
+    await expect(
+      runCompareCommand([operationRef, comparisonRef], options),
+    ).rejects.toMatchObject({
+      kind: 'NOT_FOUND',
+      code: 'operation_not_found',
+      exitCode: 1,
+    } satisfies Partial<CliFailure>)
+    await expect(
+      runInspectPlanCommand([operationRef, comparisonRef], options),
+    ).rejects.toMatchObject({
+      kind: 'NOT_FOUND',
+      code: 'operation_not_found',
+      exitCode: 1,
+    } satisfies Partial<CliFailure>)
+
+    setApiKey('ae-test-caller-key')
+    const invokeOptions = { ...options, idempotencyKey, wait: false }
+    const readJsonOutput = async (run: () => Promise<void>): Promise<Record<string, unknown>> => {
+      const start = writes.length
+      await run()
+      return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>
+    }
+    const pending = await readJsonOutput(() => runInvokeCommand(
+      [operationRef, JSON.stringify(initialInput)],
+      invokeOptions,
+    ))
+    expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef, idempotencyKey })
+
+    const status = await readJsonOutput(() => runStatusCommand([invocationRef], invokeOptions))
+    expect(status).toMatchObject({
+      kind: 'found',
+      invocationRef,
+      operationRef,
+      state: 'terminal',
+      result: completedResult,
+    })
+
+    const replay = await readJsonOutput(() => runInvokeCommand(
+      [operationRef, JSON.stringify(initialInput)],
+      invokeOptions,
+    ))
+    expect(replay).toEqual({
+      ...completedResult,
+      idempotencyKey,
+      nextCommand: `npm run -s ae -- status ${invocationRef}`,
+    })
+    expect(status.result).toEqual(completedResult)
+
+    await expect(runInvokeCommand(
+      [operationRef, JSON.stringify(changedInput)],
+      invokeOptions,
+    )).rejects.toMatchObject({
+      kind: 'ALREADY_EXISTS',
+      code: 'idempotency_conflict',
+    } satisfies Partial<CliFailure>)
+
+    expect(providerEffects).toBe(1)
+    expect(requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'POST', url: 'https://market.example/api/v1/market-operations/search' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-operations/detail' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-operations/compare' },
+      { method: 'POST', url: 'https://market.example/api/v1/market-operations/inspect-plan' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
+      { method: 'GET', url: `https://market.example/api/v1/operations/${encodeURIComponent(invocationRef)}` },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
+      { method: 'POST', url: 'https://market.example/api/v1/operations/execute' },
+    ])
+    expect(requests.map(({ authorization }) => authorization)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
+      'Bearer ae-test-caller-key',
+    ])
+    expect(requests.map(({ body }) => body)).toEqual([
+      { query: 'bitcoin price' },
+      { operationRef },
+      { operationRefs: [operationRef, comparisonRef] },
+      { operationRefs: [operationRef, comparisonRef] },
+      { operationRef, input: initialInput, idempotencyKey },
+      undefined,
+      { operationRef, input: initialInput, idempotencyKey },
+      { operationRef, input: changedInput, idempotencyKey },
+    ])
   })
 
   it('requires an explicit stable idempotency key before invoke network work', async () => {

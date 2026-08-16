@@ -5,6 +5,7 @@ import { assertAgentAccessRateAdmission } from '../../../convex/lib/rateLimit'
 import {
   admitCredentialBudget,
   credentialBudgetReservationDigest,
+  reverseCredentialBudget,
   releaseCredentialBudget,
   settleCredentialBudget,
   type CredentialBudgetPolicy,
@@ -79,6 +80,28 @@ describe('credential budget admission', () => {
     expect(credentialBudgetReservationDigest({ ...reservation, credentialId: 'credential-2' })).not.toBe(credentialBudgetReservationDigest(reservation))
     expect(reserve(emptyUsage())).toMatchObject({ kind: 'accepted' })
     expect(reserve(emptyUsage())).toMatchObject({ kind: 'accepted' })
+  })
+  it('reverses settled spend without restoring concurrency or touching reserved spend', () => {
+    const reversed = reverseCredentialBudget({
+      usage: {
+        daily: { settledSpend: amount('500'), reservedSpend: amount('0') },
+        monthly: { settledSpend: amount('500'), reservedSpend: amount('0') },
+        reservedConcurrency: 0,
+      },
+      amount: amount('500'),
+    })
+    expect(reversed).toEqual({
+      kind: 'accepted',
+      usage: {
+        daily: { settledSpend: amount('0'), reservedSpend: amount('0') },
+        monthly: { settledSpend: amount('0'), reservedSpend: amount('0') },
+        reservedConcurrency: 0,
+      },
+    })
+    expect(reverseCredentialBudget({
+      usage: emptyUsage(),
+      amount: amount('500'),
+    })).toEqual({ kind: 'refused', code: 'budget_reservation_conflict' })
   })
   it('rate-admits through the canonical application credential key', async () => {
     const limit = vi.spyOn(RateLimiter.prototype, 'limit').mockResolvedValue({ ok: true })

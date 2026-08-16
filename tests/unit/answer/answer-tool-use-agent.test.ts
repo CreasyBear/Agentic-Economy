@@ -5,16 +5,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateText, isStepCount } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
-import type {
-  KeylessExecutableSourcePort,
-  KeylessExecutableToolDescriptor,
-  OperationExecutableDescriptor,
+import {
+  operationExecutionBindingDigest,
+  type KeylessExecutableSourcePort,
+  type KeylessExecutableToolDescriptor,
+  type OperationExecutableDescriptor,
 } from "@/modules/capability-execution";
 import {
   runAnswerToolUseAgent,
   type AnswerToolUseAgentCheckpoint,
 } from "@/modules/answer/internal/answer-tool-use-agent";
-import { resolveKeylessDataAsk } from "@/modules/answer/internal/keyless-data-ask";
+import {
+  answerOperationCandidateFromPublicDescriptor,
+} from "@/modules/answer/internal/operation-artifacts";
+import {
+  answerOperationCandidateSetDigest,
+  type AnswerOperationCandidate,
+} from "@/modules/answer/answer-schema";
+import type { JsonValue } from "@/modules/capability-contract/public";
+import type { PublicOperationDescriptor } from "@/modules/capability-supply/public";
 import type { AnswerSource } from "@/modules/answer/answer-synthesizer";
 import type {
   AnswerToolCallRecord,
@@ -88,7 +97,7 @@ describe("actionToOpenRouterTool", () => {
     expect(spec.function.name).toBe("registry_search");
     expect(spec.function.parameters.type).toBe("object");
     expect(spec.function.parameters.properties.query?.type).toBe("string");
-    expect(spec.function.parameters.properties.limit?.type).toBe("number");
+    expect(spec.function.parameters.properties.limit?.type).toBe("integer");
     expect(spec.function.parameters.properties.mode?.enum).toEqual([
       "near_me",
       "whole_catalogue",
@@ -263,7 +272,7 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       await server.close();
     }
   });
-  it("resumes discovery checkpoints through binding and invokes exactly once", async () => {
+  it("resumes a discovery checkpoint from its explicit selection and invokes exactly once", async () => {
     const query = "what is the current test value for Sydney?";
     const operationRef = `operation:v1:${"f".repeat(64)}`;
     const descriptor: KeylessExecutableToolDescriptor = {
@@ -298,26 +307,88 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       inputSchema: descriptor.inputSchema,
       provenance: { publisher: "provider_owned", sourceKind: "openapi_http" },
     };
+    const publicOperation: PublicOperationDescriptor = {
+      operationRef: operationRef as PublicOperationDescriptor["operationRef"],
+      operationId: descriptor.capabilityId,
+      contract: {
+        capabilityId: descriptor.capabilityId,
+        version: 1,
+        inputJsonSchema: descriptor.inputSchema as Readonly<Record<string, JsonValue>>,
+        outputJsonSchema: {
+          type: "object",
+          properties: { value: { type: "string" } },
+          required: ["value"],
+          additionalProperties: false,
+        },
+        customerAnnotations: [
+          {
+            annotationId: "city",
+            document: "input",
+            pointer: "/city",
+            label: "City",
+            role: "request",
+          },
+        ],
+      },
+      business: {
+        businessId: "business:test-current-value",
+        slug: "test-current-value",
+        name: "Test current value",
+      },
+      offering: {
+        offeringRef: "offering:test-current-value",
+        revision: 1,
+        label: descriptor.name,
+        summary: descriptor.summary,
+      },
+      summary: descriptor.summary,
+      commercial: {
+        price: { kind: "on_request" },
+        materialTerms: [],
+        relationship: { kind: "none", summary: "No commercial relationship." },
+      },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      cancellation: { kind: "unsupported" },
+      recovery: { idempotency: "not_applicable", recovery: "retry_safe" },
+      authentication: { kind: "keyless" },
+      transport: { method: "GET", requestTimeoutMs: 5_000 },
+      provenance: { publisher: "provider_owned", sourceKind: "openapi_http" },
+      availability: { posture: "routeable" },
+      navigation: [{
+        relation: "execute",
+        method: "POST",
+        actionId: "operation.execute",
+        authentication: "none",
+        surfaces: ["answerThread"],
+      }],
+    };
     const source: KeylessExecutableSourcePort = {
       list: async () => [descriptor],
       read: async () => executable,
+      readPublic: async () => publicOperation,
       search: async () => [operationRef],
     };
-    const resolution = await resolveKeylessDataAsk(query, source);
-    if (
-      resolution.kind !== "resolved" ||
-      resolution.operationCandidates === undefined ||
-      resolution.candidateSetDigest === undefined
-    ) {
-      throw new Error("expected one selected operation candidate");
-    }
-    const selectedCandidate = resolution.operationCandidates[0];
+    const selectedCandidate = answerOperationCandidateFromPublicDescriptor(
+      publicOperation,
+      1,
+      {
+        includeInputSchema: true,
+        executionBindingDigest: operationExecutionBindingDigest(executable),
+      },
+    );
     if (
       selectedCandidate === undefined ||
       selectedCandidate.executionBindingDigest === undefined
     ) {
       throw new Error("expected selected execution binding");
     }
+    const operationCandidates: readonly AnswerOperationCandidate[] = [
+      selectedCandidate,
+    ];
+    const candidateSetDigest =
+      answerOperationCandidateSetDigest(operationCandidates);
     const discoveryCall: AnswerToolCallRecord = {
       toolCallId: "discovery-call",
       turnId: "resume-turn",
@@ -347,8 +418,8 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       priorAllowedSlugs: [],
       toolCalls: [discoveryCall],
       toolCallDigests: [],
-      operationCandidates: resolution.operationCandidates,
-      operationCandidatesDigest: resolution.candidateSetDigest,
+      operationCandidates,
+      operationCandidatesDigest: candidateSetDigest,
       selectedOperationRef: operationRef,
       selectedToolId: "operation.execute",
       descriptorDigest: selectedCandidate.descriptorDigest,
@@ -357,7 +428,7 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
         toolId: "operation.execute",
         descriptorDigest: selectedCandidate.descriptorDigest,
         executionBindingDigest: selectedCandidate.executionBindingDigest,
-        candidateSetDigest: resolution.candidateSetDigest,
+        candidateSetDigest,
       },
       modelRequests: [],
       replayMessagesJson: JSON.stringify([
@@ -397,21 +468,16 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
         resumeCheckpoint: checkpoint,
       });
       expect(fetchImpl).toHaveBeenCalledTimes(1);
-      expect(
-        server.requests[0]?.messages.some(
-          (message) => message.content === "saved registry result",
-        ),
-      ).toBe(true);
-      expect(
-        result.toolCalls.filter(
-          (call) => call.toolId === "registry.operations.search",
-        ),
-      ).toHaveLength(1);
+      expect(JSON.stringify(server.requests[0]?.messages)).toContain(query);
+      expect(result.modelRequests).toHaveLength(2);
       expect(
         result.toolCalls.filter((call) => call.toolId === "operation.execute"),
       ).toHaveLength(1);
       expect(result.snapshot.operationOutcome).toBeDefined();
       expect(server.requests).toHaveLength(2);
+      expect(
+        result.toolCalls.filter((call) => call.toolId === "registry.operations.search"),
+      ).toHaveLength(1);
     } finally {
       restoreOpenRouter();
       await server.close();
@@ -455,23 +521,83 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       .fn()
       .mockResolvedValueOnce(executable)
       .mockResolvedValue({ ...executable, endpointUrl: "https://api.example.test/changed" });
+    const publicOperation: PublicOperationDescriptor = {
+      operationRef: operationRef as PublicOperationDescriptor["operationRef"],
+      operationId: descriptor.capabilityId,
+      contract: {
+        capabilityId: descriptor.capabilityId,
+        version: 1,
+        inputJsonSchema: descriptor.inputSchema as Readonly<Record<string, JsonValue>>,
+        outputJsonSchema: {
+          type: "object",
+          properties: { value: { type: "string" } },
+          required: ["value"],
+          additionalProperties: false,
+        },
+        customerAnnotations: [
+          {
+            annotationId: "city",
+            document: "input",
+            pointer: "/city",
+            label: "City",
+            role: "request",
+          },
+        ],
+      },
+      business: {
+        businessId: "business:test-current-value",
+        slug: "test-current-value",
+        name: "Test current value",
+      },
+      offering: {
+        offeringRef: "offering:test-current-value",
+        revision: 1,
+        label: descriptor.name,
+        summary: descriptor.summary,
+      },
+      summary: descriptor.summary,
+      commercial: {
+        price: { kind: "on_request" },
+        materialTerms: [],
+        relationship: { kind: "none", summary: "No commercial relationship." },
+      },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      cancellation: { kind: "unsupported" },
+      recovery: { idempotency: "not_applicable", recovery: "retry_safe" },
+      authentication: { kind: "keyless" },
+      transport: { method: "GET", requestTimeoutMs: 5_000 },
+      provenance: { publisher: "provider_owned", sourceKind: "openapi_http" },
+      availability: { posture: "routeable" },
+      navigation: [{
+        relation: "execute",
+        method: "POST",
+        actionId: "operation.execute",
+        authentication: "none",
+        surfaces: ["answerThread"],
+      }],
+    };
     const source: KeylessExecutableSourcePort = {
       list: async () => [descriptor],
       read,
+      readPublic: async () => publicOperation,
       search: async () => [operationRef],
     };
-    const resolution = await resolveKeylessDataAsk(query, source);
-    if (
-      resolution.kind !== "resolved" ||
-      resolution.operationCandidates === undefined ||
-      resolution.candidateSetDigest === undefined
-    ) {
-      throw new Error("expected one selected operation candidate");
-    }
-    const candidate = resolution.operationCandidates[0];
+    const candidate = answerOperationCandidateFromPublicDescriptor(
+      publicOperation,
+      1,
+      {
+        includeInputSchema: true,
+        executionBindingDigest: operationExecutionBindingDigest(executable),
+      },
+    );
     if (candidate === undefined || candidate.executionBindingDigest === undefined) {
       throw new Error("expected execution binding digest");
     }
+    const operationCandidates: readonly AnswerOperationCandidate[] = [candidate];
+    const candidateSetDigest =
+      answerOperationCandidateSetDigest(operationCandidates);
     const checkpoint: AnswerTurnCheckpoint = {
       schemaVersion: 1,
       reservationKey: "drift-reservation",
@@ -489,8 +615,8 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       priorAllowedSlugs: [],
       toolCalls: [],
       toolCallDigests: [],
-      operationCandidates: resolution.operationCandidates,
-      operationCandidatesDigest: resolution.candidateSetDigest,
+      operationCandidates,
+      operationCandidatesDigest: candidateSetDigest,
       selectedOperationRef: operationRef,
       selectedToolId: "operation.execute",
       descriptorDigest: candidate.descriptorDigest,
@@ -499,21 +625,64 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
         toolId: "operation.execute",
         descriptorDigest: candidate.descriptorDigest,
         executionBindingDigest: candidate.executionBindingDigest,
-        candidateSetDigest: resolution.candidateSetDigest,
+        candidateSetDigest,
       },
       modelRequests: [],
       replayMessagesJson: JSON.stringify([{ role: "user", content: query }]),
     };
-    await expect(
-      runAnswerToolUseAgent({
-        query,
-        config: { apiKey: "test-key", model: "test-model" },
-        keylessExecutableSource: source,
-        resumeCheckpoint: checkpoint,
+    const operationToolName = openRouterToolName(`capability.${operationRef}`);
+    const server = await startOpenRouterContractServer([
+      openRouterToolResponse([
+        {
+          id: "stale-binding",
+          toolId: operationToolName,
+          input: { city: "Sydney" },
+        },
+      ]),
+      openRouterStructuredProseResponse({
+        oneLine: "The selected source cannot run.",
+        summary: "The source binding changed before execution.",
+        whatToDoNow: "Choose a current published source.",
       }),
-    ).rejects.toMatchObject({ code: "tool_unavailable" });
-    expect(read).toHaveBeenCalledTimes(2);
-    expect(aiSdkTestState.generateTextCalls).toHaveLength(0);
+    ]);
+    const restoreOpenRouter = server.installEnv();
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ value: "should-not-run" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    try {
+      const result = await runAnswerToolUseAgent({
+        query,
+        keylessExecutableSource: source,
+        operationExecuteDeps: {
+          isPublicTarget: async () => true,
+          fetchImpl,
+        },
+        resumeCheckpoint: checkpoint,
+      });
+      const operationCall = result.toolCalls.find(
+        (call) => call.toolId === "operation.execute",
+      );
+      expect(operationCall).toMatchObject({ status: "refused" });
+      expect(JSON.parse(operationCall!.resultJson)).toMatchObject({
+        kind: "refused",
+        reason: "operation_not_executable",
+      });
+      expect(result.prose.oneLine).toBe("I couldn't complete the live lookup.");
+      expect(result.prose.summary).toContain(
+        "selected source cannot run through this live lookup",
+      );
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(server.requests).toHaveLength(2);
+      expect(aiSdkTestState.generateTextCalls).toHaveLength(2);
+    } finally {
+      restoreOpenRouter();
+      await server.close();
+    }
   });
 });
 
@@ -589,6 +758,21 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
           checkpoints.push(checkpoint);
         },
       });
+      expect(result.toolCalls.map((call) => call.toolId)).toEqual([
+        "registry.search",
+      ]);
+      expect(
+        result.toolCalls.filter((call) =>
+          call.toolId.startsWith("registry.operations."),
+        ),
+      ).toHaveLength(0);
+      expect(
+        result.toolCalls.filter(
+          (call) =>
+            call.toolId === "operation.execute" ||
+            call.toolId === "operation.invoke",
+        ),
+      ).toHaveLength(0);
       expect(result.gate.ok).toBe(true);
       expect(result.providers.map((provider) => provider.slug)).toContain(
         "parramatta-emergency-plumbing",
@@ -777,7 +961,7 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     });
 
     expect(prompt).toContain("Search scope: near Perth, WA.");
-    expect(prompt).toContain('location="Perth"');
+    expect(prompt).toMatch(/confirmed context.*location-bound registered read/i);
   });
 
   it("fails closed if the model emits a tool call when tools are disabled", async () => {
@@ -1087,7 +1271,7 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     }
   });
 
-  it("refuses over-budget tool calls from the same assistant message and requests final prose without tools", async () => {
+  it("does not schedule additional tool calls after the per-turn budget is reached", async () => {
     const server = await startOpenRouterContractServer(
       openRouterToolThenProseResponses({
         toolCalls: [
@@ -1102,6 +1286,7 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
             input: { slug: "parramatta-emergency-plumbing" },
           },
         ],
+        emitAllToolCallsTogether: false,
         prose: matchingProviderProse(),
       }),
     );
@@ -1128,26 +1313,13 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
       expect(result.providers.map((provider) => provider.slug)).toContain(
         "parramatta-emergency-plumbing",
       );
-      expect(result.toolCalls).toHaveLength(2);
+      expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0]).toMatchObject({
         toolId: "registry.search",
         status: "complete",
       });
       expect(JSON.parse(result.toolCalls[0]!.resultSummaryJson)).toMatchObject({
         count: expect.any(Number),
-      });
-      expect(result.toolCalls[1]).toMatchObject({
-        toolCallId: "call-detail-over-budget",
-        toolId: "registry.detail",
-        status: "refused",
-      });
-      expect(JSON.parse(result.toolCalls[1]!.resultSummaryJson)).toMatchObject({
-        count: 0,
-        errorCode: "budget_exceeded",
-      });
-      expect(JSON.parse(result.toolCalls[1]!.resultJson)).toEqual({
-        kind: "refused",
-        code: "budget_exceeded",
       });
       expect(result.modelRequests).toHaveLength(2);
       expect(result.modelRequests[0]).toMatchObject({
@@ -1189,23 +1361,13 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     expect(server.requests[0]?.tool_choice).toBe("auto");
     expect(server.requests[1]?.tools).toBeUndefined();
     expect(server.requests[1]?.response_format?.type).toBe("json_schema");
-    expect(server.requests[1]?.messages.at(-1)?.content).toBe(
-      '{"kind":"refused","code":"budget_exceeded"}',
-    );
 
     const toolMessages =
       server.requests[1]?.messages.filter(
         (message) => message.role === "tool",
       ) ?? [];
-    expect(toolMessages).toHaveLength(2);
-    expect(toolMessages.map((message) => message.tool_call_id)).toEqual([
-      "call-search-allowed",
-      "call-detail-over-budget",
-    ]);
-    expect(JSON.parse(toolMessages[1]!.content)).toEqual({
-      kind: "refused",
-      code: "budget_exceeded",
-    });
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0]?.tool_call_id).toBe("call-search-allowed");
   });
 
   it("does not persist an unconfirmed default context on location-free registry searches", async () => {

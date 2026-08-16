@@ -307,7 +307,15 @@ function createWorker(options: WorkerOptions = {}): {
         throw new Error('x402 payment callbacks missing')
       }
       await markX402PaymentPossiblySubmitted(paymentEvent)
-      await observeX402PaymentAttempt({ ...paymentEvent, state: 'observed', evidenceRefs: ['evidence:one'] })
+      await observeX402PaymentAttempt({
+        ...paymentEvent,
+        state: 'reconciliation_required',
+        settlementEvidence: {
+          kind: 'unknown',
+          reason: 'test_reconciliation_required',
+        },
+        evidenceRefs: ['evidence:one'],
+      })
     }
     return successfulObservation(options)
   })

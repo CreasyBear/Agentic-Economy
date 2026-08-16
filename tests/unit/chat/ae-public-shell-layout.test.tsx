@@ -20,7 +20,7 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 describe('AePublicShell immersive layout', () => {
   afterEach(cleanup)
 
-  it('keeps the immersive footer in the flex flow after the main landmark', () => {
+  it('omits the footer from the immersive chat shell', () => {
     const { container } = render(
       <AePublicShell immersive>
         <div>Chat</div>
@@ -29,14 +29,11 @@ describe('AePublicShell immersive layout', () => {
 
     const outerShell = container.firstElementChild as HTMLElement
     const main = screen.getByRole('main')
-    const footer = screen.getByRole('contentinfo')
     const appShellMain = main.parentElement
     expect([...outerShell.classList]).toEqual(expect.arrayContaining(['h-dvh', 'flex', 'flex-col', 'overflow-hidden']))
     expect([...(appShellMain?.classList ?? [])]).toEqual(expect.arrayContaining(['min-h-0', 'flex-1', 'flex-col']))
     expect([...main.classList]).toEqual(expect.arrayContaining(['min-h-0', 'flex-1']))
-    expect(footer.classList).toContain('flex-none')
-    expect(footer.classList).not.toContain('fixed')
-    expect(main.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(screen.queryByRole('contentinfo')).toBeNull()
   })
 
   it('preserves the document-flow shell for non-immersive pages', () => {

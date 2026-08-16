@@ -1,3 +1,4 @@
+import { encodePaymentResponseHeader } from '@x402/core/http'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -2084,7 +2085,7 @@ function runtime(
     resource: { url: `${endpoint}?symbol=BTC&convert=USD` },
     accepts: [{
       scheme: 'exact',
-      network: 'eip155:8453',
+      network: 'eip155:8453' as const,
       amount: challengeAmount,
       asset: '0xmock-usdc',
       payTo: '0xmock-provider-recipient',
@@ -2097,7 +2098,16 @@ function runtime(
       return response(402, '', { 'payment-required': Buffer.from(JSON.stringify(challenge)).toString('base64') })
     }
     effects.provider += 1
-    return response(200, output, { 'payment-response': 'mock:payment-proof', 'provider-receipt': 'mock:receipt' })
+    return response(200, output, {
+      'payment-response': encodePaymentResponseHeader({
+        success: true,
+        transaction: 'test:dynamic-published-operation',
+        network: challenge.accepts[0]!.network,
+        amount: challenge.accepts[0]!.amount,
+        payer: 'test:dynamic-published-operation',
+      }),
+      'provider-receipt': 'mock:receipt',
+    })
   }
   return {
     send,
@@ -2106,6 +2116,7 @@ function runtime(
     readProviderConnectionCredentialRef: readDevelopmentProviderCredential,
     validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
     x402PaymentSigningAvailable: () => true,
+    verifyX402Settlement: async () => true,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,

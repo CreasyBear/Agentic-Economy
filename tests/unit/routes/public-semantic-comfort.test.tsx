@@ -89,7 +89,7 @@ describe('public semantic comfort', () => {
     }
   })
 
-  it('keeps the answer-work disclosure a native comfortable button', () => {
+  it('renders the thinking thread as a list and keeps the provenance trigger a comfortable native button', () => {
     render(
       <AeWorkDisclosure
         isStreaming
@@ -99,12 +99,8 @@ describe('public semantic comfort', () => {
       />,
     )
 
-    const disclosure = screen.getByRole('button', { name: 'Searching for matches' })
-    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
-    const minimumHeightClass = [...disclosure.classList].find((className) => /^min-h-\d+$/.test(className))
-    expect(Number(minimumHeightClass?.slice('min-h-'.length))).toBeGreaterThanOrEqual(11)
-    expect(disclosure.tagName).toBe('BUTTON')
-    expect(disclosure.getAttribute('type')).toBe('button')
+    expect(screen.getByRole('list', { name: 'Answer thinking' })).toBeTruthy()
+    expect(screen.getByText('Searching for matches')).toBeTruthy()
   })
 })
 

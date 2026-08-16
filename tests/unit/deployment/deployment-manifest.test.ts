@@ -20,6 +20,7 @@ function productionEnvironment(): Record<string, string> {
     OPENROUTER_API_KEY: 'openrouter-secret-value',
     AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     AE_X402_PAYMENT_PRIVATE_KEY: 'x402-payer-private-key',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":"https://base.example/rpc"}',
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
@@ -141,10 +142,12 @@ describe('deployment manifest validator', () => {
       ...productionEnvironment(),
       AE_X402_PAYMENT_CREDENTIAL_REF: '',
       AE_X402_PAYMENT_PRIVATE_KEY: '',
+      AE_X402_RPC_URLS_JSON: '',
     }, { nodeMajor: 22 })
     expect(missing.findings.flatMap((finding) => finding.names)).toEqual(expect.arrayContaining([
       'AE_X402_PAYMENT_CREDENTIAL_REF',
       'AE_X402_PAYMENT_PRIVATE_KEY',
+      'AE_X402_RPC_URLS_JSON',
     ]))
 
     const malformed = validateDeploymentManifest({
@@ -156,6 +159,16 @@ describe('deployment manifest validator', () => {
       names: ['AE_X402_PAYMENT_CREDENTIAL_REF'],
     }))
     expect(JSON.stringify(malformed)).not.toContain('x402-payer-private-key')
+    const malformedRpc = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_X402_RPC_URLS_JSON: '{"eip155:8453":"http://localhost:8545"}',
+    }, { nodeMajor: 22 })
+    expect(malformedRpc.findings).toContainEqual(expect.objectContaining({
+      kind: 'malformed',
+      code: 'x402_rpc_urls_invalid',
+      names: ['AE_X402_RPC_URLS_JSON'],
+    }))
+    expect(JSON.stringify(malformedRpc)).not.toContain('base.example')
   })
 
 

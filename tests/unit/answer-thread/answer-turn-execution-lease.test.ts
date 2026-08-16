@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import type {
@@ -6,6 +6,10 @@ import type {
   KeylessExecutableToolDescriptor,
   OperationExecutableDescriptor,
 } from '@/modules/capability-execution'
+import type * as AnswerThreadTooling from '@/modules/answer-thread/tooling'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
   answerTurnRequestDigest,
@@ -17,21 +21,34 @@ import {
   installAnswerThreadTestPort,
 } from '../../helpers/answer-thread-test-port'
 import {
-  openRouterToolThenProseResponses,
+  openRouterStructuredProseResponse,
+  openRouterToolResponse,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
+
+const answerToolMocks = vi.hoisted(() => ({
+  runAnswerToolCall: vi.fn(),
+}))
+
+vi.mock('@/modules/answer-thread/tooling', async (importOriginal) => {
+  const actual = await importOriginal<typeof AnswerThreadTooling>()
+  return {
+    ...actual,
+    runAnswerToolCall: answerToolMocks.runAnswerToolCall,
+  }
+})
 
 const resets: (() => void)[] = []
 
 afterEach(() => {
   while (resets.length > 0) resets.pop()?.()
+  answerToolMocks.runAnswerToolCall.mockReset()
 })
-
 describe('answer turn execution lease durability', () => {
   it('keeps a fresh replay out of the model and operation loop while the creator is live', async () => {
     const store = createAnswerThreadTestStore()
     resets.push(installAnswerThreadTestPort(store))
-    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const operationRef = `operation:v1:${'a'.repeat(64)}` as PublicOperationDescriptor['operationRef']
     const descriptor: KeylessExecutableToolDescriptor = {
       operationRef,
       capabilityId: 'test.current-value',
@@ -69,15 +86,159 @@ describe('answer turn execution lease durability', () => {
       read: async (ref) => ref === operationRef ? executable : null,
       search: async () => [operationRef],
     }
+    const publicOperation = {
+      operationRef,
+      operationId: descriptor.capabilityId,
+      contract: {
+        capabilityId: descriptor.capabilityId,
+        version: 1,
+        inputJsonSchema: descriptor.inputSchema as Record<string, JsonValue>,
+        outputJsonSchema: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+          additionalProperties: false,
+        },
+        customerAnnotations: [{
+          annotationId: 'city',
+          document: 'input',
+          pointer: '/city',
+          label: 'City',
+          role: 'request',
+        }],
+      },
+      business: {
+        businessId: 'business:test',
+        slug: 'test-provider',
+        name: 'Test provider',
+      },
+      offering: {
+        offeringRef: 'offering:test.current-value',
+        revision: 1,
+        label: descriptor.name,
+        summary: descriptor.summary,
+      },
+      summary: descriptor.summary,
+      commercial: {
+        price: {
+          kind: 'fixed',
+          amount: { currency: 'USD', units: '0', exponent: 2 },
+        },
+        materialTerms: [],
+        relationship: {
+          kind: 'none',
+          summary: 'No published commercial relationship.',
+        },
+      },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      cancellation: { kind: 'unsupported' },
+      recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+      authentication: { kind: 'keyless' },
+      transport: { method: 'GET', requestTimeoutMs: 5_000 },
+      provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+      availability: { posture: 'routeable' },
+      navigation: [{
+        relation: 'execute',
+        method: 'POST',
+        actionId: 'operation.execute',
+        authentication: 'none',
+        surfaces: ['answerThread'],
+      }],
+    } satisfies PublicOperationDescriptor
+    const stagedSearchResult = {
+      kind: 'ok' as const,
+      schemaVersion: 'registry-operations:v1' as const,
+      query: 'current test value',
+      items: [publicOperation],
+      matchedCount: 1,
+      ranking: [{ operationRef, rank: 1, score: 1 }],
+      pagination: { limit: 3, hasMore: false },
+      navigation: [],
+    }
+    const stagedDetailResult = {
+      kind: 'found' as const,
+      schemaVersion: 'registry-operations:v1' as const,
+      operation: publicOperation,
+    }
+    answerToolMocks.runAnswerToolCall.mockImplementation(async (callInput: {
+      toolId: string
+      input: unknown
+      turnId: string
+      seq: number
+    }) => {
+      const result = callInput.toolId === 'registry.operations.search'
+        ? stagedSearchResult
+        : callInput.toolId === 'registry.operations.detail'
+          ? stagedDetailResult
+          : undefined
+      if (result === undefined) {
+        throw new Error(`unexpected_read_tool:${callInput.toolId}`)
+      }
+      const resultJson = JSON.stringify(result)
+      return {
+        record: {
+          toolCallId: `call-${callInput.seq}`,
+          turnId: callInput.turnId,
+          seq: callInput.seq,
+          toolId: callInput.toolId,
+          inputJson: JSON.stringify(callInput.input),
+          resultSummaryJson: JSON.stringify({ slugs: [], count: 0 }),
+          resultJson,
+          resultHash: canonicalDigest(resultJson).toString(),
+          status: 'complete',
+          createdAt: Date.now(),
+        },
+        providers: [],
+        allowedSlugs: new Set<string>(),
+        timings: [],
+        resultJson,
+      }
+    })
     const operationTool = openRouterToolName(`capability.${operationRef}`)
-    const modelServer = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: operationTool, input: { city: 'Sydney' } }],
-      prose: {
+    const modelServer = await startOpenRouterContractServer((request) => {
+      if (request.response_format?.json_schema?.name === 'answer_navigation') {
+        const completedReads = request.messages.filter((message) => message.role === 'tool').length
+        if (completedReads === 0) {
+          return openRouterToolResponse([{
+            id: 'call-operation-search',
+            toolId: 'registry.operations.search',
+            input: { query: 'current test value' },
+          }])
+        }
+        if (completedReads === 1) {
+          return openRouterToolResponse([{
+            id: 'call-operation-detail',
+            toolId: 'registry.operations.detail',
+            input: { operationRef },
+          }])
+        }
+        return {
+          id: 'chatcmpl-navigation-call',
+          model: 'test-model',
+          choices: [{
+            finish_reason: 'stop',
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({ kind: 'call', operationRef }),
+            },
+          }],
+          usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
+        }
+      }
+      if ((request.tools?.length ?? 0) > 0) {
+        return openRouterToolResponse([{
+          toolId: operationTool,
+          input: { city: 'Sydney' },
+        }])
+      }
+      return openRouterStructuredProseResponse({
         oneLine: 'The current test value for Sydney is 42.',
         summary: 'The operation returned the current test value.',
         whatToDoNow: 'Use the returned value.',
-      },
-    }))
+      })
+    }, { preflightRoute: 'operation' })
     const restoreOpenRouter = modelServer.installEnv()
     const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL

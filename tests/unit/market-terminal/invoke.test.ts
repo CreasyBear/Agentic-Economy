@@ -99,8 +99,7 @@ describe('market-terminal authenticated operation invocation', () => {
     )
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(writeError).toHaveBeenCalledWith('Invocation identity: operationRef=operation:v1:test idempotencyKey=idem-cli-one\n')
-    expect(writeError.mock.invocationCallOrder[0]!).toBeLessThan(fetchMock.mock.invocationCallOrder[0]!)
+    expect(writeError).not.toHaveBeenCalled()
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('https://market.example/api/v1/operations/execute')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-test-caller-key')
@@ -189,7 +188,7 @@ describe('market-terminal authenticated operation invocation', () => {
     )).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
       code: 'provider_unavailable',
-      detail: 'The provider is unavailable.',
+      retryable: true,
     } satisfies Partial<CliFailure>)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })

@@ -40,6 +40,7 @@ function productionReadinessEnvironment(): Record<string, string> {
     OPENROUTER_API_KEY: 'openrouter-example',
     AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
     AE_X402_PAYMENT_PRIVATE_KEY: 'test-only-x402-payer-placeholder',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":"https://base.example/rpc"}',
     STRIPE_SECRET_KEY: 'test-only-stripe-secret',
     STRIPE_WEBHOOK_SECRET: 'test-only-stripe-webhook-secret',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',

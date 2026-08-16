@@ -476,7 +476,7 @@ describe('operation.invoke application service', () => {
     expect(abandon).toHaveBeenCalledOnce()
   })
 
-  it('fails closed when dispatch races reservation abandonment', async () => {
+  it('requires reconciliation when enqueue starts before reservation abandonment wins', async () => {
     const abandon = vi.fn(async () => ({ kind: 'dispatch_started' as const }))
     const { operationRef } = fixture()
     const service = createOperationInvokeApplication(runtime({
@@ -501,7 +501,7 @@ describe('operation.invoke application service', () => {
       input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-race' },
     })
 
-    expect(result).toMatchObject({ kind: 'refused', operationRef, code: 'invocation_runtime_unavailable', retryable: true })
+    expect(result).toMatchObject({ kind: 'reconciliation_required', operationRef })
     expect(abandon).toHaveBeenCalledOnce()
   })
 
@@ -657,6 +657,85 @@ describe('operation.invoke application service', () => {
     expect(dispatches).toBe(1)
     expect(adapters).toBe(0)
   })
+  it('keeps an explicitly unknown durable dispatch outcome reconcilable without abandoning the reservation', async () => {
+    const { operationRef } = fixture()
+    const abandon = vi.fn(async () => ({ kind: 'abandoned' as const }))
+    const dispatch = vi.fn(async () => ({ kind: 'outcome_unknown' as const }))
+    const service = createOperationInvokeApplication(runtime({
+      idempotency: {
+        reserve: async (reservation) => ({ kind: 'reserved' as const, reservation }),
+        abandon,
+      },
+      policy: {
+        ...runtime().policy,
+        evaluateAuthority: async () => ({
+          kind: 'approved' as const,
+          basis: { kind: 'approve_each' as const, authorityRef: 'authority:dispatch-ambiguity' },
+          expiresAt: new Date(Date.now() + 30_000).toISOString(),
+        }),
+      },
+      dispatch,
+    }))
+
+    const result = await service.invokeOperation({
+      principal,
+      correlationId: 'correlation:dispatch-ambiguity',
+      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:dispatch-ambiguity' },
+    })
+
+    expect(result).toMatchObject({
+      kind: 'reconciliation_required',
+      operationRef,
+      evidence: {
+        effectGeneration: 1,
+        retry: 'reconcile_before_retry',
+        evidenceSource: `operation:${operationRef}`,
+      },
+    })
+    if (result.kind === 'reconciliation_required') {
+      expect(result.invocationRef).toContain('operation-invocation:')
+      expect(result.evidence.attemptRef).toBe(`operation-attempt:${result.invocationRef}:1`)
+    }
+    expect(dispatch).toHaveBeenCalledOnce()
+    expect(abandon).not.toHaveBeenCalled()
+  })
+
+  it('abandons the reservation when durable dispatch rejects before enqueue commits', async () => {
+    const abandon = vi.fn(async () => ({ kind: 'abandoned' as const }))
+    const { operationRef } = fixture()
+    const service = createOperationInvokeApplication(runtime({
+      idempotency: {
+        reserve: async (reservation) => ({ kind: 'reserved' as const, reservation }),
+        abandon,
+      },
+      policy: {
+        ...runtime().policy,
+        evaluateAuthority: async () => ({
+          kind: 'approved' as const,
+          basis: { kind: 'approve_each' as const, authorityRef: 'authority:enqueue-failure' },
+          expiresAt: new Date(Date.now() + 30_000).toISOString(),
+        }),
+      },
+      dispatch: async () => {
+        throw new Error('enqueue_mutation_failed')
+      },
+    }))
+
+    const result = await service.invokeOperation({
+      principal,
+      correlationId: 'correlation:enqueue-failure',
+      input: { operationRef, input: { symbol: 'BTC', convert: 'USD' }, idempotencyKey: 'idem:enqueue-failure' },
+    })
+
+    expect(result).toMatchObject({
+      kind: 'refused',
+      operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+    })
+    expect(abandon).toHaveBeenCalledOnce()
+  })
+
   it('resumes orchestration when a replayed reservation has no persisted result', async () => {
     const { operationRef } = fixture()
     let reservation: Parameters<NonNullable<OperationInvokeRuntime['idempotency']['reserve']>>[0] | undefined

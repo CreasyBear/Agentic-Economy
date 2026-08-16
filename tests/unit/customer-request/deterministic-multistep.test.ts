@@ -178,8 +178,8 @@ describe('deterministic bounded multi-step recovery', () => {
   it('returns a bounded 2-selection plan with non-conflicting domains for a genuine geocode+weather compose', async () => {
     const geocode = geocodingCapability()
     const forecast = forecastCapability()
-    const cat = blockCapability('thecatapi.image-search', 'Random cat image search',
-      'Returns random cat image URLs and dimensions.', ['cat images'])
+    const cat = blockCapability('mockster.cat-images', 'Mockster random cat images',
+      'Returns an exact bounded count of random cat image URLs.', ['cat images'])
 
     const proposal = await createDeterministicCustomerRequestInterpreter().propose({
       customerJob: 'geocode Paris then what is the weather forecast',

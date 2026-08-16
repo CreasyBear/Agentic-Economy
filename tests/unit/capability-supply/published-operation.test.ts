@@ -438,6 +438,7 @@ function preparedX402Custody(
   'prepareX402PaymentAuthorization'
   | 'readX402PaymentAuthorization'
   | 'readX402PaymentAuthorizationByDigest'
+  | 'verifyX402Settlement'
 > {
   const custody = new Map<string, Readonly<{
     authorizationDigest: string
@@ -470,5 +471,6 @@ function preparedX402Custody(
         ? prepared.paymentSignature
         : undefined
     },
+    verifyX402Settlement: async () => true,
   }
 }

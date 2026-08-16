@@ -95,9 +95,11 @@ const literalNonPublicUrls = [
   'http://10.0.0.1/',
   'http://172.16.0.1/',
   'http://192.168.0.1/',
+  'http://198.18.0.1/',
   'http://169.254.169.254/latest/meta-data/',
   'http://[::1]/',
   'http://[fc00::1]/',
+  'http://[fec0::1]/',
   'http://[::ffff:127.0.0.1]/',
   'http://[::ffff:7f00:1]/',
   'http://[::ffff:10.0.0.1]/',
@@ -172,6 +174,7 @@ describe('storefront import draft', () => {
     '::ffff:c0a8:1',
     '::ffff:169.254.169.254',
     '::ffff:a9fe:a9fe',
+    '::ffff:198.18.0.1',
   ])('refuses mapped non-public address %s in guarded lookup', async (address) => {
     const mappedDns = privateDns(address)
 
@@ -188,6 +191,15 @@ describe('storefront import draft', () => {
     expect(result.err).toMatchObject({ code: 'ECONNREFUSED' })
     expect(result.address).toBe('')
   })
+  it.each(['198.18.0.1', 'fec0::1'])('rejects blocked DNS targets before fetching %s', async (address) => {
+    const fetchMock = vi.fn(async () => new Response(fixtureHtml, { status: 200, headers: { 'content-type': 'text/html' } }))
+    const dns = privateDns(address)
+
+    await expect(isPublicHttpTarget(new URL('https://blocked.example/'), dns)).resolves.toBe(false)
+    await expectFetchRejected('https://blocked.example/', { dns, fetch: fetchMock })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 
   it('refuses mixed public and private DNS answers in the guarded connect lookup', async () => {
     const mixedDns: ImportDnsResolver = {
@@ -201,6 +213,20 @@ describe('storefront import draft', () => {
 
     expect(result.err).toMatchObject({ code: 'ECONNREFUSED' })
     expect(result.address).toBe('')
+  })
+  it.each(['198.18.0.1', 'fec0::1'])('refuses mixed public and blocked DNS answers before fetching %s', async (address) => {
+    const fetchMock = vi.fn(async () => new Response(fixtureHtml, { status: 200, headers: { 'content-type': 'text/html' } }))
+    const mixedDns: ImportDnsResolver = {
+      lookup: async () => [
+        { address: '93.184.216.34', family: 4 },
+        { address, family: address.includes(':') ? 6 : 4 },
+      ],
+    }
+
+    await expect(isPublicHttpTarget(new URL('https://mixed.example/'), mixedDns)).resolves.toBe(false)
+    await expectFetchRejected('https://mixed.example/', { dns: mixedDns, fetch: fetchMock })
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('refuses DNS rebinding at the guarded connect-time lookup', async () => {
@@ -337,6 +363,16 @@ describe('storefront import draft', () => {
     const fetchMock = vi.fn(async () => new Response(null, {
       status: 302,
       headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+    }))
+
+    await expectFetchRejected('https://northside.example/', { fetch: fetchMock })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+  it.each(['http://198.18.0.1/', 'http://[fec0::1]/'])('rejects redirects to blocked targets before the second fetch: %s', async (location) => {
+    const fetchMock = vi.fn(async () => new Response(null, {
+      status: 302,
+      headers: { location },
     }))
 
     await expectFetchRejected('https://northside.example/', { fetch: fetchMock })

@@ -14,13 +14,15 @@ import {
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
 
-import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
-
+import { findAction } from '@/modules/actions'
 import { runActionCommand } from '../../../tools/ae/commands/actions'
 import { runAskCommand } from '../../../tools/ae/commands/ask'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure, callJson, requireOk, type HttpOutcome } from '../../../tools/ae/lib/output'
-import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
+import {
+  throwOperationReadFailure,
+  type OperationReadFailureReason,
+} from '../../../tools/ae/lib/operation-read-failure'
 
 function answerTurnResponse(frames: readonly AnswerTurnFrame[]): Response {
   const stream = createUIMessageStream<AnswerTurnUIMessage>({
@@ -131,6 +133,7 @@ describe('market-terminal CLI error contracts', () => {
       'search',
       'inspect',
       'compare',
+      'inspect-plan',
       'connect',
       'invoke',
       'status',
@@ -228,6 +231,24 @@ describe('market-terminal CLI error contracts', () => {
       exitCode: 1,
     })
   }, 15_000)
+
+  it('refuses MCP-only actions before generic CLI execution', async () => {
+    const action = findAction('operation.execute')
+    if (action === undefined) throw new Error('operation.execute action missing')
+    const run = vi.spyOn(action, 'run')
+
+    await expect(runActionCommand(['operation.execute', '{}'], {
+      baseUrl: 'http://127.0.0.1:3000',
+      json: true,
+      help: false,
+      allowWrite: false,
+      apply: false,
+    })).rejects.toMatchObject({
+      kind: 'PERMISSION_DENIED',
+      code: 'surface_not_allowed',
+    })
+    run.mockRestore()
+  })
 
   it('redacts malformed action JSON in both human and JSON output', () => {
     const rawInput = '{"apiKey":"TOPSECRET",}'
@@ -362,10 +383,15 @@ describe('market-terminal CLI error contracts', () => {
   }, 30_000)
 
   it('prints a terminal Ran line only after a human action succeeds', async () => {
-    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
+    const action = findAction('operation.status')
+    if (action === undefined) throw new Error('operation.status action missing')
+    const run = vi.spyOn(action, 'run').mockResolvedValue({
+      kind: 'found',
+      invocationRef: 'invocation:test',
+    })
     const output = captureStdout()
     try {
-      await runActionCommand(['registry.list', '{}'], {
+      await runActionCommand(['operation.status', '{"invocationRef":"invocation:test"}'], {
         baseUrl: 'http://127.0.0.1:3000',
         json: false,
         help: false,
@@ -374,14 +400,14 @@ describe('market-terminal CLI error contracts', () => {
       })
     } finally {
       output.restore()
-      restoreRegistry()
+      run.mockRestore()
     }
 
     const stdout = output.read()
-    expect(stdout).toContain('Ran registry.list')
-    expect(stdout).not.toContain('Running registry.list')
+    expect(stdout).toContain('Ran operation.status')
+    expect(stdout).not.toContain('Running operation.status')
     expect(stdout).not.toContain('authority:')
-    expect(stdout).toContain('result.kind =')
+    expect(stdout).toContain('result.kind = found')
   })
 
 
@@ -403,11 +429,74 @@ describe('market-terminal CLI error contracts', () => {
     expect(envelope).toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'invalid-arguments',
-      message: 'Invalid --base-url: not-a-url',
+      message: 'Invalid --base-url. Use an origin-only HTTP(S) URL.',
       exitCode: 1,
     })
     expect(envelope).not.toHaveProperty('stack')
   }, 15_000)
+  it('accepts only origin-only HTTP(S) base URLs and keeps a canonical origin', () => {
+    expect(parseArgs(['--base-url', 'https://market.example/', 'manifest']).options.baseUrl).toBe('https://market.example')
+    expect(parseArgs(['--base-url', 'http://127.0.0.1:3210/', 'manifest']).options.baseUrl).toBe('http://127.0.0.1:3210')
+  })
+
+  it.each([
+    'https://user:TOPSECRET@market.example',
+    'https://market.example/path/TOPSECRET',
+    'https://market.example/?q=TOPSECRET',
+    'https://market.example/#TOPSECRET',
+  ])('does not echo secrets from invalid base URL %s in human or JSON errors', (baseUrl) => {
+    for (const json of [false, true]) {
+      const result = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        '--base-url',
+        baseUrl,
+        ...(json ? ['--json'] : []),
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+
+      expect(result.status).toBe(1)
+      expect(result.stdout).not.toContain('TOPSECRET')
+      expect(result.stderr).not.toContain('TOPSECRET')
+      if (json) {
+        expect(result.stderr).toBe('')
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          kind: 'INVALID_ARGUMENT',
+          code: 'invalid-arguments',
+          exitCode: 1,
+        })
+      }
+    }
+  }, 30_000)
+
+  it('keeps connection-refused diagnostics to the safe origin', () => {
+    for (const json of [false, true]) {
+      const result = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        '--base-url',
+        'http://127.0.0.1:1',
+        'search',
+        'TOPSECRET',
+        ...(json ? ['--json'] : []),
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+
+      expect(result.status).toBe(1)
+      expect(result.stdout).not.toContain('TOPSECRET')
+      expect(result.stderr).not.toContain('TOPSECRET')
+      if (json) {
+        expect(result.stderr).toBe('')
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          kind: 'UNAVAILABLE',
+          code: 'connection_refused',
+          message: 'Could not reach http://127.0.0.1:1. Is the dev server running? Start it with: npm run dev',
+          exitCode: 1,
+        })
+      }
+    }
+  }, 30_000)
+
 
   it('falls back to the status kind for a malformed remote problem kind', () => {
     const body = {
@@ -438,8 +527,9 @@ describe('market-terminal CLI error contracts', () => {
     if (!(thrown instanceof CliFailure)) return
     expect(thrown.kind).toBe('UNAUTHENTICATED')
     expect(thrown.code).toBe('remote_auth_required')
-    expect(thrown.message).toBe('/api/example returned 401: Authentication required.')
-    expect(thrown.detail).toBe('Authentication\nrequired.')
+    expect(thrown.message).toBe('/api/example returned 401: Unauthenticated')
+    expect(thrown.detail).toBeUndefined()
+    expect(JSON.stringify(thrown)).not.toContain('Authentication')
   })
 
   it('does not accept no_data as a non-2xx problem kind', () => {
@@ -472,10 +562,10 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.kind).toBe('UNAUTHENTICATED')
   })
 
-  it('uses the title when remote detail is not a string', () => {
+  it('titles the failure from the canonical kind, not from remote prose', () => {
     const body = {
       type: 'https://agentic-economy.invalid/problems/auth-required',
-      title: 'Unauthenticated',
+      title: 'Remote deployment prose',
       status: 401,
       kind: 'not-a-problem-kind',
       code: 'remote_auth_required',
@@ -501,12 +591,13 @@ describe('market-terminal CLI error contracts', () => {
     if (!(thrown instanceof CliFailure)) return
     expect(thrown.detail).toBeUndefined()
     expect(thrown.message).toBe('/api/example returned 401: Unauthenticated')
+    expect(thrown.message).not.toContain('Remote deployment prose')
   })
   it.each([
-    [404, 'NOT_FOUND'],
-    [401, 'UNAUTHENTICATED'],
-    [500, 'INTERNAL'],
-  ] as const)('projects an application/json problem body for %s with its status kind', (status, kind) => {
+    [404, 'NOT_FOUND', 'Not found'],
+    [401, 'UNAUTHENTICATED', 'Unauthenticated'],
+    [500, 'INTERNAL', 'Internal error'],
+  ] as const)('projects an application/json problem body for %s with its status kind', (status, kind, title) => {
     const body = {
       type: 'about:blank',
       title: 'Remote failure',
@@ -534,8 +625,9 @@ describe('market-terminal CLI error contracts', () => {
     if (!(thrown instanceof CliFailure)) return
     expect(thrown.kind).toBe(kind)
     expect(thrown.code).toBe('proxy_failure')
-    expect(thrown.detail).toBe(body.detail)
-    expect(thrown.message).toBe(`/api/example returned ${status}: ${body.detail}`)
+    expect(thrown.detail).toBeUndefined()
+    expect(thrown.message).toBe(`/api/example returned ${status}: ${title}`)
+    expect(thrown.message).not.toContain(body.detail)
   })
 
   it('treats a legacy error/code JSON envelope as noncanonical', () => {
@@ -564,7 +656,7 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.message).toBe('/api/example returned 500')
     expect(thrown.message).not.toContain(body.secret)
   })
-  it('preserves retry and recovery fields from an RFC9457 problem', () => {
+  it('keeps stable retry signals from an RFC9457 problem and drops remote prose fields', () => {
     const body = {
       type: 'about:blank',
       title: 'Unavailable',
@@ -590,10 +682,14 @@ describe('market-terminal CLI error contracts', () => {
       requireOk(outcome, '/api/example')
     } catch (error) {
       if (!(error instanceof CliFailure)) return
+      expect(error.kind).toBe('UNAVAILABLE')
+      expect(error.code).toBe('provider_unavailable')
       expect(error.retryable).toBe(true)
       expect(error.retryAfter).toBe('7')
-      expect(error.recovery).toEqual(body.recovery)
-      expect(error.nextAction).toBe(body.nextAction)
+      expect(error.message).toBe('/api/example returned 503: Unavailable')
+      expect(error).not.toHaveProperty('recovery')
+      expect(error).not.toHaveProperty('nextAction')
+      expect(JSON.stringify(error)).not.toContain('invocation:one')
     }
   })
 
@@ -640,6 +736,61 @@ describe('market-terminal CLI error contracts', () => {
     expect(thrown.detail).toBeUndefined()
     expect(thrown.message).not.toContain('credentials')
   })
+
+  it('never copies arbitrary remote problem prose that misses secret-pattern redaction', () => {
+    const sentinel = 'backend detail FAKE_SENTINEL_PROBLEM_DETAIL_CURRENT_dd47'
+    const body = {
+      type: 'about:blank',
+      title: `remote title ${sentinel}`,
+      status: 502,
+      kind: 'INTERNAL',
+      code: 'proxy_failure',
+      detail: sentinel,
+    }
+    const outcome: HttpOutcome = {
+      status: 502,
+      ok: false,
+      durationMs: 1,
+      headers: new Headers({ 'content-type': 'application/problem+json' }),
+      body,
+      bodyText: JSON.stringify(body),
+    }
+
+    let thrown: unknown
+    try {
+      requireOk(outcome, '/api/example')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.message).toBe('/api/example returned 502: Internal error')
+    expect(thrown.detail).toBeUndefined()
+    expect(thrown.message).not.toContain(sentinel)
+    expect(JSON.stringify(thrown)).not.toContain(sentinel)
+  })
+
+  it('does not echo unknown-command tokens that may embed secrets', () => {
+    const secretToken = 'api_key=FAKE_SENTINEL_UNKNOWN_KEY_197e'
+    const result = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      secretToken,
+      '--json',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toBe('')
+    expect(result.stdout).not.toContain(secretToken)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'unknown-command',
+      message: 'Unknown command',
+      exitCode: 1,
+    })
+  }, 15_000)
 
 
   it('projects an ask problem response into a typed safe failure without raw JSON', async () => {
@@ -742,6 +893,121 @@ describe('market-terminal CLI error contracts', () => {
       thread: { threadId: 'thread:cli-follow-up' },
       status: 'complete',
     })
+  })
+  it('posts a natural-language query with only the prior thread identity', async () => {
+    const frames: AnswerTurnFrame[] = [
+      {
+        seq: 0,
+        event: {
+          type: 'thread',
+          threadId: 'thread:cli-follow-up',
+          turnId: 'turn:cli-follow-up',
+          turnSeq: 3,
+        },
+      },
+      {
+        seq: 1,
+        event: {
+          type: 'complete',
+          answer: {
+            query: 'What about ethereum in USD?',
+            oneLine: 'Ethereum is currently priced in USD.',
+            summary: 'The current quote was read from the selected operation.',
+            nextStep: 'Ask another question in this thread.',
+            providers: [],
+            agentJsonUrl: '/api/agent',
+          },
+        },
+      },
+    ]
+    let requestBody: unknown
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body))
+      return answerTurnResponse(frames)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    try {
+      await runAskCommand(['What', 'about', 'ethereum', 'in', 'USD?'], {
+        baseUrl: 'http://example.test',
+        json: true,
+        help: false,
+        allowWrite: false,
+        apply: false,
+        threadId: 'thread:prior',
+      })
+    } finally {
+      output.restore()
+    }
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(requestBody).toEqual({
+      threadId: 'thread:prior',
+      query: 'What about ethereum in USD?',
+    })
+    expect(JSON.parse(output.read())).toMatchObject({
+      thread: { threadId: 'thread:cli-follow-up' },
+      status: 'complete',
+    })
+  })
+  it('persists the origin-scoped Answer session and sends it on continuation', async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), 'ae-cli-answer-session-'))
+    vi.stubEnv('AE_CLI_STATE_DIR', stateDir)
+    const frames: AnswerTurnFrame[] = [
+      {
+        seq: 0,
+        event: {
+          type: 'thread',
+          threadId: 'thread:owned',
+          turnId: 'turn:owned',
+          turnSeq: 0,
+        },
+      },
+      {
+        seq: 1,
+        event: {
+          type: 'complete',
+          answer: {
+            query: 'Answer',
+            oneLine: 'Answer.',
+            summary: 'Answer.',
+            nextStep: 'Continue.',
+            providers: [],
+            agentJsonUrl: '/api/agent',
+          },
+        },
+      },
+    ]
+    const cookies: (string | null)[] = []
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      cookies.push(new Headers(init?.headers).get('cookie'))
+      const response = answerTurnResponse(frames)
+      return cookies.length === 1
+        ? new Response(response.body, {
+            status: response.status,
+            headers: [...response.headers, ['Set-Cookie', 'ae_session=session-owned; Path=/; HttpOnly; SameSite=Lax']],
+          })
+        : response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    const options: CliOptions = {
+      baseUrl: 'http://example.test',
+      json: true,
+      help: false,
+      allowWrite: false,
+      apply: false,
+    }
+    try {
+      await runAskCommand(['First'], options)
+      await runAskCommand(['Continue'], { ...options, threadId: 'thread:owned' })
+    } finally {
+      output.restore()
+      vi.unstubAllEnvs()
+      rmSync(stateDir, { recursive: true, force: true })
+    }
+
+    expect(cookies).toEqual([null, 'ae_session=session-owned'])
   })
   it('projects successful ask JSON and human output without raw event arrays', async () => {
     const frames: AnswerTurnFrame[] = [
@@ -963,6 +1229,46 @@ describe('market-terminal CLI error contracts', () => {
     expect(parsed.options.turnIds).toEqual(['turn:first', 'turn:second'])
   })
 
+  it('rejects options that the selected command does not consume', () => {
+    const result = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'manifest',
+      '--limit',
+      '3',
+      '--json',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'option-not-supported',
+      message: 'Option --limit is not valid for manifest.',
+      exitCode: 1,
+    })
+  }, 15_000)
+
+  it('parses plain conversational continuation and technical output flags', () => {
+    const parsed = parseArgs([
+      '--technical',
+      'demand',
+      'ask',
+      '--thread-id',
+      'thread:prior',
+      'What about ethereum in USD?',
+    ])
+
+    expect(parsed.options).toMatchObject({
+      technical: true,
+      threadId: 'thread:prior',
+    })
+    expect(parsed.options).not.toHaveProperty('operationRef')
+    expect(parsed.options).not.toHaveProperty('candidateDigest')
+    expect(parsed.positionals).toEqual(['ask', 'What about ethereum in USD?'])
+  })
+
   it('emits one machine-readable JSON help envelope and keeps root text help usable', () => {
     for (const [args, command] of [
       [['--json', '--help'], 'root'],
@@ -989,6 +1295,10 @@ describe('market-terminal CLI error contracts', () => {
           scope: 'market_operations:invoke',
         },
       })
+      expect(envelope.flags).toHaveProperty('--technical')
+      expect(envelope.flags).toHaveProperty('--limit')
+      expect(envelope.flags).toHaveProperty('--cursor')
+      expect(envelope.flags).toHaveProperty('--filters')
       if (command === 'connect') {
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
@@ -1027,4 +1337,136 @@ describe('market-terminal CLI error contracts', () => {
 
   }, 30_000)
 
+  it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
+    for (const [args, command] of [
+      [['demand', 'ask', '--json', '--help'], 'demand ask'],
+      [['recover', '--json', '--help'], 'recover'],
+      [['inspect-plan', '--json', '--help'], 'inspect-plan'],
+    ] as const) {
+      const json = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        ...args,
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+      expect(json.status).toBe(0)
+      expect(json.stderr).toBe('')
+      const envelope = JSON.parse(json.stdout) as {
+        kind: string
+        command: string
+        usage: string
+        summary: string
+        guidance?: readonly string[]
+        commands?: unknown
+      }
+      expect(envelope).toMatchObject({
+        kind: 'HELP',
+        command,
+        usage: expect.any(String),
+        summary: expect.any(String),
+      })
+      expect(envelope.commands).toBeUndefined()
+
+      const text = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        ...args.filter((arg) => arg !== '--json'),
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+      expect(text.status).toBe(0)
+      expect(text.stderr).toBe('')
+      expect(text.stdout).toContain(`Usage: ${envelope.usage}`)
+      expect(text.stdout).toContain(envelope.summary)
+      if (command === 'demand ask') {
+        expect(envelope.usage).toContain('--thread-id')
+        expect(envelope.summary).toContain('same thread')
+        expect(text.stdout).toContain('--thread-id')
+      }
+      if (command === 'recover') {
+        expect(envelope.summary).toContain('uncertain')
+        expect(envelope.summary).toContain('not a replay')
+        expect(envelope.guidance?.join(' ')).toContain('canonical evidence')
+        expect(text.stdout).toContain('not a replay')
+      }
+      if (command === 'inspect-plan') expect(envelope.usage).toContain('inspect-plan')
+    }
+
+    for (const [args, code] of [
+      [['typo', '--json', '--help'], 'unknown-command'],
+      [['help', 'typo', '--json'], 'unknown-command'],
+      [['demand', 'typo', '--json', '--help'], 'demand-subcommand'],
+      [['help', 'advanced', 'typo', '--json'], 'advanced-subcommand'],
+    ] as const) {
+      const result = spawnSync(process.execPath, [
+        '--import',
+        'tsx',
+        'tools/ae/cli.ts',
+        ...args,
+      ], { cwd: process.cwd(), encoding: 'utf8' })
+      expect(result.status).toBe(1)
+      expect(result.stderr).toBe('')
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        kind: 'INVALID_ARGUMENT',
+        code,
+        exitCode: 1,
+      })
+    }
+
+    const textTypo = spawnSync(process.execPath, [
+      '--import',
+      'tsx',
+      'tools/ae/cli.ts',
+      'demand',
+      'typo',
+      '--help',
+    ], { cwd: process.cwd(), encoding: 'utf8' })
+    expect(textTypo.status).toBe(1)
+    expect(textTypo.stdout).toBe('')
+    expect(textTypo.stderr).toContain('demand <subcommand>')
+  }, 30_000)
+
+})
+
+describe('operation read failures', () => {
+  it.each([
+    ['operation_not_found', 'NOT_FOUND'],
+    ['query_invalid', 'INVALID_ARGUMENT'],
+    ['setup_required', 'FAILED_PRECONDITION'],
+    ['under_review', 'FAILED_PRECONDITION'],
+    ['publisher_withdrew', 'FAILED_PRECONDITION'],
+    ['source_capacity_exceeded', 'RESOURCE_EXHAUSTED'],
+    ['source_unavailable', 'UNAVAILABLE'],
+    ['temporarily_unavailable', 'UNAVAILABLE'],
+  ] as const satisfies readonly (readonly [OperationReadFailureReason, string])[])(
+    'exits 1 and keeps the source reason as the machine code for %s',
+    (reason, kind) => {
+      let thrown: unknown
+      try {
+        throwOperationReadFailure({ reason })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(CliFailure)
+      if (!(thrown instanceof CliFailure)) return
+      expect(thrown.kind).toBe(kind)
+      expect(thrown.code).toBe(reason)
+      expect(thrown.exitCode).toBe(1)
+    },
+  )
+
+  it('names the cursor when an invalid query came from a supplied cursor', () => {
+    let thrown: unknown
+    try {
+      throwOperationReadFailure({ reason: 'query_invalid', cursorProvided: true })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe('INVALID_ARGUMENT')
+    expect(thrown.code).toBe('query_invalid')
+    expect(thrown.message).toContain('cursor')
+  })
 })

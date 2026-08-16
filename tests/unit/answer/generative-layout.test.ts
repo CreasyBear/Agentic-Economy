@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import { computeLayoutProfile, resolveLayoutProfile } from '@/modules/answer/internal/answer-layout-profile'
-import { buildMessagePartsFromSnapshot } from '@/modules/answer/internal/build-message-parts'
+import { artifactsToMessageParts, buildMessagePartsFromSnapshot } from '@/modules/answer/internal/build-message-parts'
 import { buildArtifactsFromSnapshot } from '@/modules/answer/internal/snapshot-artifacts'
+import { AnswerArtifactSchema, type AnswerArtifact } from '@/modules/answer/answer-schema'
 import { buildAnswerRunReport } from '@/modules/answer-thread/harness'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/internal/public-projection'
 import type { FrozenTurnEvidenceDraft } from '@/modules/answer-thread/harness'
@@ -142,6 +143,32 @@ describe('answer layout profile', () => {
 })
 
 describe('buildMessagePartsFromSnapshot', () => {
+  it('keeps legacy source artifacts in the canonical schema and message parts', () => {
+    const selected = {
+      kind: 'selected-provider',
+      provider: provider(),
+    } satisfies AnswerArtifact
+    const imported = {
+      kind: 'imported-claims',
+      claims: [{
+        businessName: 'Example Funerals',
+        suburb: 'Parramatta',
+        sourceUrl: 'https://example.test/funerals',
+      }],
+    } satisfies AnswerArtifact
+
+    expect(AnswerArtifactSchema.safeParse(selected).success).toBe(true)
+    expect(AnswerArtifactSchema.safeParse(imported).success).toBe(true)
+
+    const parts = artifactsToMessageParts([selected, imported], 'discovery_full', {
+      layoutProfile: 'discovery_full',
+      allowedKinds: ['selected-provider', 'imported-claims'],
+      maxArtifactCount: 2,
+      maxProviderCards: 0,
+    })
+    expect(parts.map((part) => part.kind)).toEqual(['selected-provider', 'imported-claims'])
+  })
+
   it('marks provider cards as scrollable for compact profiles', () => {
     const result = buildMessagePartsFromSnapshot({
       query: 'plumber Parramatta',

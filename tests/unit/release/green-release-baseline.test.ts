@@ -217,6 +217,7 @@ describe('green release baseline', () => {
     expect(dispatch?.inputs?.live_gateway_prepare_workflow_run_id?.type).toBe('string')
     expect(hosted?.env?.AE_X402_PAYMENT_CREDENTIAL_REF).toBe('${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}')
     expect(hosted?.env?.AE_X402_PAYMENT_PRIVATE_KEY).toBe('${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}')
+    expect(hosted?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
   })
 
   it('keeps React Doctor explicitly advisory', () => {

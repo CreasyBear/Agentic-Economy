@@ -5,36 +5,21 @@ import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 
 describe('chat composer loop copy', () => {
-  it('labels first live searches as a checked discovery loop', () => {
+  it('does not narrate routine live work below the composer', () => {
     expect(buildFollowUpComposerCopy([], 'refine_search')).toEqual({
       placeholder: 'Checking what\'s available',
-      loopHint: 'Checking what\'s available before any contact step.',
+      loopHint: '',
     })
-  })
-
-  it('labels live refinement after saved turns as a thread-aware search', () => {
-    expect(buildFollowUpComposerCopy([turn()], 'refine_search')).toEqual({
-      placeholder: 'Checking what is available again with this thread in mind',
-      loopHint: 'Checking what\'s available before any contact step.',
-    })
-  })
-
-  it('makes live compare and inquiry handoff state explicit', () => {
     expect(buildFollowUpComposerCopy([turn()], 'compare_known')).toEqual({
-      placeholder: 'Comparing options from this thread',
-      loopHint: 'Comparing details from the businesses already found.',
-    })
-
-    expect(buildFollowUpComposerCopy([turn()], 'inquiry_handoff')).toEqual({
-      placeholder: 'Preparing a request to the business',
-      loopHint: 'Carrying the selected business into a request. It still confirms timing, quote, and availability.',
+      placeholder: 'Comparing options from this chat',
+      loopHint: '',
     })
   })
 
-  it('keeps saved thread guidance when no turn is streaming', () => {
+  it('uses a settled follow-up placeholder without redundant guidance', () => {
     expect(buildFollowUpComposerCopy([turn()], null)).toEqual({
-      placeholder: 'Narrow, compare, or ask the business',
-      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
+      placeholder: 'Ask a follow-up',
+      loopHint: '',
     })
   })
 
@@ -47,7 +32,7 @@ describe('chat composer loop copy', () => {
         layoutProfile: 'data_answer',
       }),
     ], null)).toEqual({
-      placeholder: 'Ask a follow-up or try another live data lookup',
+      placeholder: 'Ask a follow-up',
       loopHint: '',
     })
   })
@@ -67,8 +52,8 @@ describe('chat composer loop copy', () => {
         oneLine: 'AE cannot book, charge, or dispatch.',
       }),
     ], null)).toEqual({
-      placeholder: 'Ask limits, refine, or continue with the selected business',
-      loopHint: 'That business stays in context. It confirms timing, quote, and availability.',
+      placeholder: 'Ask a follow-up',
+      loopHint: '',
     })
   })
 
@@ -92,8 +77,8 @@ describe('chat composer loop copy', () => {
         oneLine: 'One listed business matches.',
       }),
     ], null)).toEqual({
-      placeholder: 'Narrow, compare, or ask the business',
-      loopHint: 'Narrow or compare the matches, then ask the business when one fits.',
+      placeholder: 'Ask a follow-up',
+      loopHint: '',
     })
   })
 
@@ -105,8 +90,21 @@ describe('chat composer loop copy', () => {
         oneLine: 'This business needs listing review first.',
       }),
     ], null)).toEqual({
-      placeholder: 'Ask limits, refine, or review the selected business',
+      placeholder: 'Ask a follow-up',
       loopHint: 'This business does not have a request form yet. Review its page before contacting it.',
+    })
+  })
+
+  it('uses a different-question recovery when no matches are available', () => {
+    expect(buildFollowUpComposerCopy([
+      turn({
+        artifacts: [],
+        oneLine: 'No matching businesses were found.',
+        layoutProfile: 'empty_state',
+      }),
+    ], null)).toEqual({
+      placeholder: 'Try a different question',
+      loopHint: '',
     })
   })
 })

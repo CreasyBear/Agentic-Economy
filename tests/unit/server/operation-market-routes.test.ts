@@ -23,9 +23,24 @@ const detailResult = {
   navigation: [],
 }
 const compareResult = {
-  kind: 'unavailable' as const,
+  kind: 'ok' as const,
   schemaVersion: 'registry-operations:v1' as const,
-  reason: 'operation_not_found' as const,
+  operations: [],
+  facts: [{
+    field: 'dataUse' as const,
+    values: [{
+      operationRef: `operation:v1:${'a'.repeat(64)}`,
+      value: [{
+        effectId: 'query_release',
+        inputPointer: '/query',
+        classification: 'public' as const,
+        phase: 'execution' as const,
+        recipient: 'selected_binding' as const,
+        purposes: ['lookup_reference'],
+      }],
+      source: 'contract' as const,
+    }],
+  }],
   navigation: [],
 }
 

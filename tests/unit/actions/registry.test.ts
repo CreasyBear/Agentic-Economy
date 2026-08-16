@@ -126,6 +126,39 @@ describe('action registry', () => {
     ])
   })
 
+  it('describes operation composition arrays from their canonical schemas', () => {
+    const compare = findAction('registry.operations.compare')
+    const inspectPlan = findAction('registry.operations.inspectPlan')
+    expect(compare?.parameters).toEqual([
+      {
+        name: 'operationRefs',
+        type: 'array',
+        description: 'One to four opaque current operation references.',
+        required: true,
+      },
+    ])
+    expect(inspectPlan?.parameters).toEqual([
+      {
+        name: 'operationRefs',
+        type: 'array',
+        description: 'One to four opaque current operation references.',
+        required: true,
+      },
+      {
+        name: 'mappingRefs',
+        type: 'array',
+        description: 'Registered opaque mapping references.',
+        required: false,
+      },
+      {
+        name: 'expiresInMs',
+        type: 'number',
+        description: 'Ephemeral inspection lifetime, bounded to 24 hours.',
+        required: false,
+      },
+    ])
+  })
+
   it('keeps operation execution MCP-only and fail-closed at the action boundary', () => {
     const action = findAction('operation.execute')
     expect(action).toBeDefined()
@@ -358,6 +391,11 @@ describe('action registry', () => {
       parameters,
     }))
     expect(JSON.stringify(serviceProse)).not.toMatch(/MCP|OpenAPI|autonomous|DTO|fixture/i)
+    expect(serviceProse.map(({ name }) => name)).toEqual([
+      'Search published business portfolios',
+      'Read a published business portfolio',
+    ])
+    expect(serviceProse.map(({ summary }) => summary).join(' ')).toMatch(/does not (?:search|return).*Agent Services|not an Agent Service/u)
   })
 
   it('keeps inquiry.submit outside the internal answer-thread tools', () => {

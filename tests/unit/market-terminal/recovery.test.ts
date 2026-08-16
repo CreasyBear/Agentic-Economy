@@ -82,18 +82,23 @@ describe('CLI operation recovery projections', () => {
     const manifest = JSON.parse(output.read()) as {
       directKeyless: {
         action: string
+        contractVersion: string
         mcpTool: string
         authentication: string
         requiresOperationRef: boolean
         inputJsonSchema?: { required?: readonly string[] }
+        outputJsonSchema?: Record<string, unknown>
         invocationContract: unknown
       }
     }
     expect(manifest.directKeyless).toMatchObject({
       action: directAction.id,
+      contractVersion: directAction.invocationContract.version,
       mcpTool: mcpToolName(directAction),
       authentication: 'none',
       requiresOperationRef: true,
+      inputJsonSchema: expect.any(Object),
+      outputJsonSchema: expect.any(Object),
       invocationContract: directAction.invocationContract,
     })
     expect(manifest.directKeyless.inputJsonSchema?.required).toContain('operationRef')
@@ -108,6 +113,14 @@ describe('CLI operation recovery projections', () => {
     }
 
     const manifest = JSON.parse(output.read()) as {
+      commands: {
+        recover: { summary: string; guidance: readonly string[] }
+        demand: {
+          commands: {
+            ask: { args: string; summary: string; guidance: readonly string[] }
+          }
+        }
+      }
       gateway: {
         idempotency: {
           commandField: string
@@ -132,6 +145,12 @@ describe('CLI operation recovery projections', () => {
         }
       }
     }
+    expect(manifest.commands.recover.summary).toContain('not a replay')
+    expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
+    expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
+    expect(manifest.commands.demand.commands.ask.args).toContain('--thread-id')
+    expect(manifest.commands.demand.commands.ask.summary).toContain('same thread')
+    expect(manifest.commands.demand.commands.ask.guidance.join(' ')).toContain('follow-up')
     expect(manifest.gateway.idempotency).toMatchObject({
       commandField: 'idempotencyKey',
       commandFieldRequired: true,
@@ -225,10 +244,57 @@ describe('CLI operation recovery projections', () => {
       code: 'operation-transport-unknown',
       detail: {
         operationRef: 'operation:v1:test',
-        idempotencyKey: 'idem:one',
+        recovery: 'Repeat invoke with the same idempotency identity.',
+        identityPreserved: true,
       },
     } satisfies Partial<CliFailure>)
   })
+  it('does not echo invalid recovery identities in human or JSON error projections', async () => {
+    let thrown: unknown
+    try {
+      await runRecoverCommand(
+        ['invocation:TOPSECRET', JSON.stringify(evidence)],
+        { ...baseOptions, idempotencyKey: 'recover:TOPSECRET' },
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe('INVALID_ARGUMENT')
+    expect(thrown.code).toBe('recover-input')
+    expect(thrown.message).not.toContain('TOPSECRET')
+    expect(JSON.stringify({ kind: thrown.kind, code: thrown.code, message: thrown.message, detail: thrown.detail }))
+      .not.toContain('TOPSECRET')
+  })
+
+  it('does not echo recovery identities after a connection refusal', async () => {
+    setApiKey('ae-test-caller-key')
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(
+      new Error('connect ECONNREFUSED https://user:TOPSECRET@market.example/path?TOPSECRET#TOPSECRET'),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    let thrown: unknown
+    try {
+      await runRecoverCommand(
+        ['invocation:one', JSON.stringify(evidence)],
+        { ...baseOptions, idempotencyKey: 'recover:TOPSECRET' },
+      )
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(CliFailure)
+    if (!(thrown instanceof CliFailure)) return
+    expect(thrown.kind).toBe('UNAVAILABLE')
+    expect(thrown.code).toBe('operation-reconcile-transport-unknown')
+    expect(thrown.message).not.toContain('TOPSECRET')
+    expect(JSON.stringify({ kind: thrown.kind, code: thrown.code, message: thrown.message, detail: thrown.detail }))
+      .not.toContain('TOPSECRET')
+  })
+
   it('preserves a structured 503 refusal instead of relabelling it as unknown transport', async () => {
     setApiKey('ae-test-caller-key')
     const problem = {
@@ -250,8 +316,8 @@ describe('CLI operation recovery projections', () => {
       .rejects.toMatchObject({
         kind: 'UNAVAILABLE',
         code: 'provider_unavailable',
-        detail: problem.detail,
-        message: '/api/v1/operations/execute returned 503: The provider is unavailable.',
+        retryable: true,
+        message: '/api/v1/operations/execute returned 503: Unavailable',
       } satisfies Partial<CliFailure>)
   })
 

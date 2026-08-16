@@ -66,19 +66,20 @@ describe('Offering llms.txt index', () => {
     expect(result.urls).toHaveLength(10 + 50 * 3)
   })
 
-  it('teaches the ordered Operation path before the secondary business directory', () => {
+  it('teaches the ordered Operation path before the published business catalog', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
     const markers = [
       '1. No-install Step 1:',
       '2. Search a job anonymously',
       '3. Inspect one exact result',
       '4. Optional anonymous reads',
-      '5. Run `npm run -s ae -- connect --json`',
-      '6. Invoke with `npm run -s ae -- invoke',
-      '7. Read `npm run -s ae -- status',
-      '8. Cancel with `npm run -s ae -- advanced cancel',
-      '9. Reconcile uncertain work with `npm run -s ae -- recover',
-      'Published businesses (secondary directory):',
+      '5. After exact detail',
+      '6. Run `npm run -s ae -- connect --json`',
+      '7. Invoke with `npm run -s ae -- invoke',
+      '8. Read `npm run -s ae -- status',
+      '9. Cancel with `npm run -s ae -- advanced cancel',
+      '10. Reconcile uncertain work with `npm run -s ae -- recover',
+      'Published businesses (business catalog; never Agent Services):',
     ]
     let previous = -1
     for (const marker of markers) {
@@ -94,7 +95,7 @@ describe('Offering llms.txt index', () => {
   it('makes anonymous and authenticated boundaries explicit', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
 
-    expect(body).toContain('Anonymous: search, detail, compare, inspect-plan. Authenticated: invoke, status, cancel, reconcile.')
+    expect(body).toContain('Anonymous reads: search, detail, compare, inspect-plan. Qualified no-key execution: operation.execute through MCP')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
@@ -117,7 +118,7 @@ describe('Offering llms.txt index', () => {
   it('keeps the boundary and correction sections and says none for an empty directory', () => {
     const body = buildOfferingLlmsTxt([], { canonicalBaseUrl }).body
 
-    expect(body).toContain('Published businesses (secondary directory):\n- none')
+    expect(body).toContain('Published businesses (business catalog; never Agent Services):\n- none')
     expect(body).toContain('- total=0;')
     expect(body).toContain('Boundary:')
     expect(body).toContain('Privacy and correction:')

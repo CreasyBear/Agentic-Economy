@@ -105,6 +105,7 @@ type WorkerOptions = Readonly<{
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
   failPaymentObservation?: boolean
+  preparePaymentErrorState?: 'possibly_submitted'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentOperation?: (operation: PublishedOperation) => PublishedOperation
 }>
@@ -339,17 +340,10 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     }
     if (!isBoundedJsonValue(challenge) || !isBoundedJsonValue(selectedRequirement)) return null
     return {
+      ...request,
       state: 'prepared',
       custodyRef: 'custody:test-worker',
       authorizationDigest: digest('p'),
-      dispatchRef: invocationRef,
-      credentialRef: paymentCredentialRef,
-      attemptRef,
-      effectGeneration: 1,
-      paymentIdentifier,
-      challengeDigest: canonicalDigest(challenge),
-      challengeJson,
-      selectedRequirementJson,
       paymentIdentifierDigest: digest('i'),
     }
   }
@@ -470,15 +464,48 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
         throw new Error('x402 persistence callbacks missing')
       }
       await markX402PaymentPossiblySubmitted(event)
-      await observeX402PaymentAttempt({ ...event, state: 'observed', evidenceRefs: ['evidence:test-worker'] })
+      await observeX402PaymentAttempt({
+        ...event,
+        state: 'settled',
+        settlementEvidence: {
+          kind: 'settled',
+          response: {
+            success: true,
+            transaction: '0xworker-settled',
+            network: request.selectedRequirement.network,
+            amount: request.selectedRequirement.amount,
+          },
+          digest: digest('s'),
+        },
+        evidenceRefs: ['evidence:test-worker'],
+      })
     }
-    return options.observation ?? {
-      transport: kind === 'x402' ? 'x402' : 'http',
-      disposition: 'succeeded',
-      releaseStarted: true,
-      requestDigest: digest('c'),
-      outputJson: successfulOutputJson,
-    }
+    return options.observation ?? (kind === 'x402'
+      ? {
+          transport: 'x402',
+          disposition: 'succeeded',
+          releaseStarted: true,
+          requestDigest: digest('c'),
+          outputJson: successfulOutputJson,
+          paymentSubmissionStatus: 'observed',
+          settlementEvidence: {
+            kind: 'settled',
+            response: {
+              success: true,
+              transaction: '0xworker-settled',
+              network: 'eip155:8453',
+              amount: '10000',
+            },
+            digest: digest('s'),
+          },
+        }
+      : {
+          transport: 'http',
+          disposition: 'succeeded',
+          releaseStarted: true,
+          requestDigest: digest('c'),
+          outputJson: successfulOutputJson,
+        })
   })
   const chargeAmount = descriptor.price.kind === 'fixed'
     ? descriptor.price.amount
@@ -502,6 +529,15 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
         case 'capabilityProviderConnections:resolveLeaseCredentialRef': return { kind: 'resolved', credentialRef: providerCredentialRef }
         case 'customerRequestRouteExecution:readX402PaymentAuthorizationByDigest':
         case 'customerRequestRouteExecution:readX402PaymentAuthorization': return persistedPaymentMaterial()
+        case 'capabilityProviderConnections:validateLeaseAuthority': return { kind: 'valid' }
+        case 'customerRequestRouteExecution:readX402PaymentAttempt':
+          return state.payment.prepare === undefined
+            ? null
+            : {
+                ...state.payment.prepare,
+                state: options.preparePaymentErrorState ?? 'settled',
+                evidenceRefs: ['evidence:test-worker'],
+              }
         default: throw new Error(`unexpected_query:${functionPath(reference)}:${JSON.stringify(args)}`)
       }
     }),
@@ -567,8 +603,21 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
         case 'moneyLedger:markChargeOutcomeUnknown':
           state.unknownCharges.push(args)
           return { kind: 'refused', code: 'charge_reconciliation_required', retryable: false }
+        case 'moneyLedger:reserveExternalInvocationSpend':
+          return { kind: 'accepted', status: 'reserved', replayed: false }
+        case 'moneyLedger:finalizeExternalInvocationSpend':
+          return args.settlementStatus === 'unknown'
+            ? { kind: 'reconciliation_required' }
+            : {
+                kind: 'accepted',
+                status: args.settlementStatus === 'settled' ? 'settled' : 'released',
+                replayed: false,
+              }
         case 'customerRequestRouteExecution:prepareX402PaymentAuthorization':
           state.payment.prepare = args
+          if (options.preparePaymentErrorState !== undefined) {
+            throw new Error('x402_payment_attempt_reconciliation_required')
+          }
           return { custodyRef: 'custody:test-worker', authorizationDigest: digest('p') }
         case 'customerRequestRouteExecution:markX402PaymentPossiblySubmitted':
           state.payment.mark = args
@@ -578,6 +627,8 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
           return null
         case 'customerRequestRouteExecution:recordX402PaymentObservation':
           if (options.failPaymentObservation) throw new Error('payment_observation_unavailable')
+          return null
+        case 'customerRequestRouteExecution:recordX402PaymentSignature':
           return null
         default: throw new Error(`unexpected_mutation:${path}:${JSON.stringify(args)}`)
       }
@@ -610,7 +661,9 @@ describe('capability operation invocation worker', () => {
     const worker = createWorker('x402')
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     expect(worker.state.money).toBeUndefined()
-    expect(worker.state.mutationCalls.filter(({ path }) => path.startsWith('moneyLedger:'))).toHaveLength(0)
+    expect(worker.state.mutationCalls.map(({ path }) => path).filter((path) =>
+      path === 'moneyLedger:authorizeInvocationCharge'
+      || path === 'moneyLedger:reconcileInvocationCharge')).toHaveLength(0)
     expect(worker.state.reconciliations).toHaveLength(0)
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.records.find((record) => record.state === 'completed')).toMatchObject({
@@ -645,6 +698,28 @@ describe('capability operation invocation worker', () => {
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'refused',
       result: { kind: 'refused' },
+    })
+  })
+  it('keeps a possibly submitted x402 reservation for reconciliation after retry', async () => {
+    const worker = createWorker('x402', {
+      preparePaymentErrorState: 'possibly_submitted',
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    const finalizations = worker.state.mutationCalls.filter(
+      ({ path }) => path === 'moneyLedger:finalizeExternalInvocationSpend',
+    )
+    expect(finalizations).not.toContainEqual(expect.objectContaining({
+      args: expect.objectContaining({ submissionStatus: 'not_submitted' }),
+    }))
+    expect(finalizations).toContainEqual(expect.objectContaining({
+      args: expect.objectContaining({
+        submissionStatus: 'unknown',
+        settlementStatus: 'unknown',
+      }),
+    }))
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'reconciliation_required',
     })
   })
   it('uses the current operation when only readiness observation changes', async () => {
@@ -928,7 +1003,8 @@ describe('capability operation invocation worker', () => {
     expect(worker.state.money).toBeUndefined()
     expect(worker.state.unknownCharges).toHaveLength(0)
     expect(worker.state.reconciliations).toHaveLength(0)
-    expect(worker.state.mutationCalls.some(({ path }) => path.startsWith('moneyLedger:'))).toBe(false)
+    expect(worker.state.mutationCalls.map(({ path }) => path)).toContain('moneyLedger:reserveExternalInvocationSpend')
+    expect(worker.state.mutationCalls.map(({ path }) => path)).not.toContain('moneyLedger:finalizeExternalInvocationSpend')
     expect(worker.state.records.at(-1)).toMatchObject({
       state: 'reconciliation_required',
       dispatchState: 'reconciliation_required',

@@ -2,8 +2,12 @@ import { globSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
+import { describeActionForAgent, findAction } from '@/modules/actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildSiteDiscoveryManifest } from '@/modules/discovery/public'
 
 /**
@@ -117,6 +121,9 @@ describe('Site discovery manifest', () => {
     const answerTurn = manifest.endpoints.find((endpoint) => endpoint.kind === 'answer_turn')
     const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
     const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
+    const directKeylessAction = findAction('operation.execute')
+    if (directKeylessAction === undefined) throw new Error('operation.execute action missing')
+    const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
 
     // An agent that reads this as an open GET would fail its first real call.
     expect(submit).toMatchObject({
@@ -164,20 +171,46 @@ describe('Site discovery manifest', () => {
       mcp: {
         endpoint: `${origin}/mcp`,
         operationInvokeTool: 'ae_operation_invoke',
+        protocolVersion: LATEST_PROTOCOL_VERSION,
+        lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],
+        inputFields: expect.arrayContaining(['operationRef']),
       },
       executionModes: {
         directKeyless: {
           action: 'operation.execute',
+          contractVersion: 'operation.execute:v1',
+          invocationContract: expect.objectContaining({ version: 'operation.execute:v1' }),
+          mcpTool: 'ae_operation_execute',
           authentication: 'none',
           requiresOperationRef: true,
           eligibility: 'free_keyless_read_only',
           requiresExactDetailExecuteRelation: true,
+          inputJsonSchema: expect.any(Object),
+          outputJsonSchema: expect.any(Object),
           description: expect.stringContaining('exact current detail includes the execute relation'),
         },
         gateway: { action: 'operation.invoke', requiresOperationRef: true },
         catalogOnly: { action: null, executable: false },
       },
     })
+    const directKeyless = manifest.operationGateway.executionModes.directKeyless
+    expect(directKeyless).toMatchObject({
+      action: directKeylessAction.id,
+      contractVersion: directKeylessAction.invocationContract.version,
+      invocationContract: directKeylessAction.invocationContract,
+      inputJsonSchema: directKeylessDescriptor.inputJsonSchema,
+      outputJsonSchema: directKeylessDescriptor.outputJsonSchema,
+    })
+
+    for (const endpoint of operationReads) {
+      if (endpoint.actionId === undefined) throw new Error(`Operation endpoint is missing actionId: ${endpoint.path}`)
+      const action = findAction(endpoint.actionId)
+      if (action === undefined) throw new Error(`Operation endpoint action is not registered: ${endpoint.actionId}`)
+      const descriptor = describeActionForAgent(action)
+      expect(endpoint.contractVersion).toBe(action.invocationContract.version)
+      expect(endpoint.inputJsonSchema).toEqual(descriptor.inputJsonSchema)
+      expect(endpoint.outputJsonSchema).toEqual(descriptor.outputJsonSchema)
+    }
 
     expect(operationReads.map((endpoint) => endpoint.path)).toEqual([
       '/api/v1/market-operations/search',
@@ -244,8 +277,48 @@ describe('Site discovery manifest', () => {
     expect(paths).toEqual([...new Set(paths)])
   })
 
+  it('uses the unbounded descriptor digest for deterministic, schema-sensitive manifests', () => {
+    const rebuilt = buildSiteDiscoveryManifest({ canonicalBaseUrl: `${origin}/`, now: 1_700_000_000_000 })
+    expect(rebuilt.generatedHash).toBe(manifest.generatedHash)
+
+    const { generatedAt: _generatedAt, generatedHash: _generatedHash, ...body } = manifest
+    expect(schemaDescriptorDigest(body as StableHashValue)).toBe(manifest.generatedHash)
+
+    const firstRoute = body.operationGateway.routes[0]
+    if (firstRoute === undefined) throw new Error('Expected an operation route')
+    const changed = {
+      ...body,
+      operationGateway: {
+        ...body.operationGateway,
+        routes: body.operationGateway.routes.map((route, index) => (
+          index === 0 ? { ...route, contractVersion: `${route.contractVersion}:changed` } : route
+        )),
+      },
+    }
+    expect(schemaDescriptorDigest(changed as StableHashValue)).not.toBe(manifest.generatedHash)
+    const changedDirectKeylessAction = {
+      ...body,
+      operationGateway: {
+        ...body.operationGateway,
+        executionModes: {
+          ...body.operationGateway.executionModes,
+          directKeyless: {
+            ...body.operationGateway.executionModes.directKeyless,
+            action: 'operation.invoke',
+          },
+        },
+      },
+    }
+    expect(schemaDescriptorDigest(changedDirectKeylessAction as StableHashValue)).not.toBe(manifest.generatedHash)
+
+
+    const oversized = { values: Array.from({ length: 10_001 }, (_, index) => index) }
+    expect(() => canonicalDigest(oversized)).toThrow('canonical_digest_value_invalid')
+    expect(() => schemaDescriptorDigest(oversized as StableHashValue)).not.toThrow()
+  })
+
   it('carries the listing boundary and claims no capability AE withholds', () => {
-    expect(manifest.boundary).toContain('do not select or invoke an Operation')
+    expect(manifest.boundary).toContain('never select or invoke an Operation')
     expect(manifest.unsupportedCapabilities.map((capability) => capability.label)).toContain(
       'Commercial or owner-action authority'
     )

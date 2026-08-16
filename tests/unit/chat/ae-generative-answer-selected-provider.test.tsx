@@ -1,11 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
-import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
+import type { AnswerArtifact, AnswerSource, AnswerWorkStep } from '@/modules/answer/public'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import type { ReactElement } from 'react'
 
@@ -46,7 +46,47 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     expect(sources.contains(screen.getByText('Demo Plumbing'))).toBe(true)
     expect(sources.contains(screen.getByText('Plumber · Parramatta'))).toBe(true)
     expect(summary.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('How this was checked').closest('details')?.open).toBe(false)
+    // No decorative journey card competes with the sources rail.
+    expect(screen.queryByText('How this was put together')).toBeNull()
+  })
+
+  it('leads terminal errors with one alert and keeps durable work collapsed', () => {
+    const workSteps: AnswerWorkStep[] = [{
+      id: 'step-error',
+      phase: 'read',
+      status: 'error',
+      title: 'Reading provider evidence',
+      summary: 'The provider could not be reached.',
+      detailRows: [{ label: 'Source', value: 'operation:v1:demo.read' }],
+    }]
+
+    const { container } = renderWithRouter(
+      <AeGenerativeAnswer
+        artifacts={[]}
+        query="Find a plumber"
+        phase="error"
+        errorMessage="The provider timed out."
+        workSteps={workSteps}
+      />,
+    )
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.getByText('Unable to finish this response.')).toBeTruthy()
+    expect(screen.getByText('The provider timed out.')).toBeTruthy()
+    expect(screen.queryByText("Checking what's available")).toBeNull()
+
+    // Provenance (including the failed step) stays behind the quiet sheet.
+    const trigger = screen.getByRole('button', { name: 'How this was checked' })
+    expect(container.querySelector('[data-ae-work-step]')).toBeNull()
+    expect(
+      screen.getByRole('alert').compareDocumentPosition(trigger) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    fireEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'How this was checked' })
+    expect(dialog.querySelector('[data-ae-work-step][data-status="error"]')).toBeTruthy()
+    expect(dialog.textContent).toContain('The provider could not be reached.')
   })
 
   it('shows the chosen provider before routing to the inquiry form', () => {
