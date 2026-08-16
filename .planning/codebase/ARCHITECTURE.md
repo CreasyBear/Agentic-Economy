@@ -3,6 +3,10 @@
 
 **Analysis Date:** 2026-08-15
 
+[`PROMPT-DATA-FLOW.md`](PROMPT-DATA-FLOW.md) is the primary prompt and data-flow
+map. Any change to prompt construction, model/tool orchestration, evidence,
+persistence, replay, or projection boundaries MUST update it in the same batch.
+
 ## System Overview
 
 ```text
@@ -224,6 +228,16 @@
 - Location: `convex/crons.ts`
 - Triggers: Convex intervals.
 - Responsibilities: Supply readiness refresh and bounded cleanup of abuse buckets, source-write nonces, and OAuth grants.
+
+## Product frontier strength (2026-08-15)
+
+Cleanup must not hollow the market loop. Positive floor:
+
+- Manifest: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`
+- Verifier: `npm run check:product-frontier`
+- Protected proving ground: `src/modules/study/`, `src/modules/external-run/`, WorkTree re-entry via notification-outbox
+- Single spines: `operation-invoke.ts`, `route-transport-runtime.ts`, `moneyLedger.ts`
+- Deferred archaeology: routing-kernel history tables and project-spine code remain until hosted proof + successor characterization
 
 ## Architectural Constraints
 

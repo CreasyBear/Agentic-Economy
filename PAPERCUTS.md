@@ -1232,6 +1232,176 @@ campaign:
   canonical, Clerk, Convex, model, Stripe, x402-custody, and seven source-write
   authority families. No strict hosted receipt or live-money proof was earned.
 
-**Current verdict:** the bounded remediation campaign remains open only because
-PRA-003 lacks trusted policy input. Source verification is green; production
-configuration and hosted value-exchange certification are not.
+**Bounded-verification verdict at that point:** the campaign remained open
+because PRA-003 lacked trusted policy input. The design update below supersedes
+that policy-input claim only; source and hosted proof remain open.
+
+### 2026-08-12 payout-policy design update
+
+This design update supersedes only the claim that PRA-003 lacks policy input;
+it does not close the source defect or raise the proof ceiling.
+
+- ADR-034 now selects automatic daily full-balance AE-internal supplier
+  settlement, exact reservation before Stripe release, one sub-minor carry,
+  global per-currency liquidity serialization, and truthful
+  `transferred_to_stripe` semantics.
+- It rejects the fabricated zero/current-month authority, copied monthly review
+  window, commercial minimum, owner-selected amount, and manual payout button.
+- PRA-003 remains open until the source, tests, generated consumers, and owner
+  projection implement that contract.
+- Hosted live money remains blocked on signed reserve/payment-method/recovery/
+  jurisdiction/tax policy, valid production configuration, and the exact hosted
+  top-up → Qualified Use → Transfer → readback proof.
+
+### 2026-08-12 mock/demo/stub audit remediation
+
+1. A no-discretion contract included an async-vs-sync type detail (`readManifest`
+   as `Promise<readback>|readback`) that the on-disk type (sync `=> result`) didn't
+   match, and the implementer STOPPED on the mismatch instead of proceeding. The
+   detail was immaterial to the actual change; I had to re-dispatch. Lesson: keep
+   byte-precise contracts but hedge ``Promise<T>|T``-style type claims, or say
+   explicitly when a stated type detail is non-blocking.
+
+2. Two implementers (discovery canonical + manifest adapter) both edited the
+   shared `src/modules/discovery/public.ts` concurrently — one added the
+   `unconfigured` reason literal, the other made `adapter` required. Both ran tsc
+   green individually; only a post-hoc combined tsc + 21-file test pass proved
+   the merged file was coherent. Lesson: concurrent edits to one shared module
+   need an explicit post-merge gate, not per-agent verification alone.
+
+120. deepseek-v4-flash: Live answer probe (2026-08-13, local stack): 'Convert 500 US dollars to euros' executed Frankfurter but returned '500 USD is 707.1 AUD' — quote currency mis-bound to AUD despite no AUD token in the query; slot binding / synthesis seam needs the declared surface pre-parse (P2).
+
+121. openai-codex/gpt-5.6-sol: Starting npm run dev:local under the repo-pinned Node 22 stalls until the 120s timeout because Convex bundles @clerk/tanstack-react-start keyless fileStorage into a non-Node function graph and cannot resolve node:fs/node:path. The same dependency leak blocks convex codegen; isolate the Clerk server import behind a Node-only boundary.
+
+122. openai-codex/gpt-5.6-sol: Restarting npm run dev:local through the supervisor left an orphaned convex-local backend on port 3210, so the replacement stack failed until the backend PID was stopped manually. The supervisor/local-dev teardown should reap the Convex child reliably.
+
+123. gpt-5.6-sol: Running npm run test:conformance under Node 22 emitted many TimeoutOverflowWarning messages because future absolute timestamps were passed to setTimeout and clamped to 1 ms; the tests pass, but the warning flood hides useful gate output.
+
+124. gpt-5.6-sol: Live Answer re-probe: mixed weather+FX and crypto+FX requests searched both intents but executed one operation, then falsely claimed the other routeable capability was unavailable. The staged navigation/composition seam must preserve every requested part or narrow explicitly.
+
+125. gpt-5.6-sol: Live same-thread re-probe: CoinGecko follow-up reuse passed, but weather 'And tomorrow?/London', FX 'What about GBP?', and cat 'Make it five' lost the selected capability and fell into business/catalog fallback with zero operation outcome. Continuation remains capability-shape-specific rather than contract-driven.
+
+126. gpt-5.6-sol: Live API+CLI re-probe: requests for 2 or 3 cat images repeatedly returned 10 provider records, and two CoinGecko requests asking for 24-hour change returned price-only payloads. Optional published inputs are not reliably carried into the strict operation call.
+
+127. gpt-5.6-sol: Live Answer re-probe: unambiguous free keyless FX and cat asks nondeterministically executed or stopped at catalog prose asking permission; in one FX thread, the confirming follow-up 'Yes, execute it' was then falsely refused as physical harm. Safe zero-cost auto-call/consent policy is incoherent.
+
+128. gpt-5.6-sol: Live Answer re-probe: vague 'weather' and several capability follow-ups crossed into local-business discovery, while Wikipedia on CLI became 'No businesses match'. The business-versus-Market-Operation dispatch boundary still substitutes the wrong registry instead of capability clarification/unavailable.
+
+129. gpt-5.6-sol: Live Answer safety re-probe: harmless nonsense, prompt-injection text, a fabricated operation ref, and 'Yes, execute it' were labelled as requests that could cause physical harm; a benign named-city weather ask also stopped because the safety check was unavailable. Zero provider I/O held, but the refusal taxonomy is accusatory and blocks valid work.
+
+130. gpt-5.6-sol: Live ipify execution returned a real server-side result, but Answer called it 'Your public IP' and 'the public-facing IP address of your internet connection'. The operation truth/prose must identify AE runtime egress, not attribute server evidence to the browser user.
+
+131. gpt-5.6-sol: Live CLI compare failed twice, including two current routeable refs, with operation_read_unavailable; Convex logged capabilitySupplyOperations:compare uncaught operation_comparison_value_invalid. search, inspect, and inspect-plan passed, so the advertised canonical CLI loop breaks specifically at compare.
+
+132. gpt-5.6-sol: Live CLI natural follow-up cannot use --thread-id alone: demand ask exits INVALID_ARGUMENT ask-selection-args unless operation-ref and candidate-digest are also supplied. The machine-readable first result exposes those fields, but the CLI lacks a plain conversational same-thread continuation path.
+
+133. gpt-5.6-sol: Live browser re-probe: a successful TheCatAPI outcome exposed ten URLs in raw JSON but rendered zero images and zero clickable result links; the main transcript instead showed raw schema terms, an opaque operation ref, and digests. Structured provider results need safe user-facing projection with evidence moved behind disclosure.
+
+134. openai-codex/gpt-5.6-sol: Checking local dev ports -> lsof rejects repeated -sTCP:LISTEN when two -iTCP filters are supplied; inspect one port per invocation or use one combined port expression.
+
+135. openai-codex/gpt-5.6-sol: Running two focused Vitest cases -> Vitest accepts only one -t value, so combining two named filters fails before tests; run the files together or invoke each filter separately.
+
+136. openai-codex/gpt-5.6-sol: Restarting the supervised dev:local stack -> the parent stopped but its Convex child remained on 3210, so the restart immediately failed with 'local backend is still running'; start Vite separately or make supervisor teardown reap the Convex child reliably.
+
+137. openai-codex/gpt-5.6-sol: Running the conformance gate under Node 22 -> passing tests emit repeated TimeoutOverflowWarning values around 1.786e12ms, indicating a fake absolute timestamp reached setTimeout instead of a relative delay; clamp or convert the readiness scheduling delay in the test/runtime seam.
+
+138. openai-codex/gpt-5.6-sol: Diagnosing a persisted Answer projection required an ad hoc Vitest file: tsx could not import the ESM-only @tanstack/ai graph, and bare vite-node did not load the repo's @ alias. A supported one-shot server-module probe would make live persisted-shape debugging cheaper.
+
+## 2026-08-14 post-remediation 32-persona goblin campaign
+
+This historical audit-time campaign is consolidated in
+`.planning/evidence/goblin/goblin-campaign-report-2026-08-14.md`. Entries
+139–148 are its deduplicated promoted roots; later remediation may supersede
+their status. Existing roots such as SG-016, PRA-001–003, SG-004/013, and the
+operation-detail Provider/Supplier/Publisher labels retained their earlier
+ledger identities. Report P3-3 (MCP ordering) and P3-4 (inspect-plan wording)
+remained non-blocking ergonomics and were not promoted to ledger roots.
+
+139. openai-codex/gpt-5.6-sol: A live `I need an emergency plumber near Perth` turn persisted `interpretation.route = operation`; `turn-orchestrator.ts` then skipped deterministic business retrieval and produced Market Operation no-match plus no-businesses recovery UI. Require a positive capability signal before a model-selected Operation route can bypass the existing deterministic service lane.
+
+140. openai-codex/gpt-5.6-sol: `advanced action` resolves and directly runs any registered action with `caller: 'cli'` without enforcing `action.surfaces.includes('cli')` or the Harness `surface_not_allowed` policy. This makes MCP-only `operation.execute` CLI-reachable and leaves future actions exposed to a second undeclared surface.
+
+141. openai-codex/gpt-5.6-sol: Machine action projections drift from the canonical registration: live MCP `tools/list` omits supported `outputSchema`, site-manifest operation reads omit action ID/version/output schema, direct-keyless CLI metadata omits its output, and compare/inspect parameter metadata calls arrays objects. Derive these projections from the registered action descriptor instead of hand-copying partial contracts.
+
+142. openai-codex/gpt-5.6-sol: CLI public-read adapters consume only part of the canonical contract: search/detail accept any 2xx body without output-schema parsing, search exposes no limit/cursor/filter continuation, and compare rejects the canonical one-ref case. Reuse the existing input/output schemas and pagination fields in the thin adapters.
+
+143. openai-codex/gpt-5.6-sol: Imported web claims accept arbitrary string `websiteUrl`/`sourceUrl` values and render them directly as target-blank anchors, unlike Operation outcomes' HTTPS/credential/control/bidi validator. Reuse that validator before persisting/projecting web claims and omit invalid links.
+
+144. openai-codex/gpt-5.6-sol: Answer can call operation compare/inspect-plan but its artifact builder discards comparison facts and plan summaries; replay/share therefore loses fact source/validity and plan refs/cost/data/effects/expiry. Persist one bounded public artifact from the already-validated tool result, not private tool/model state.
+
+145. openai-codex/gpt-5.6-sol: Public builder examples use bare CLI commands that default to the hosted deployment even when read from a local `/for-agents`, and say to Connect whenever direct keyless execute is absent even if detail is inspect-only. Bind examples to the request-derived base URL and continue only through relations the exact detail advertises.
+
+146. openai-codex/gpt-5.6-sol: After a completed Answer follow-up, the enabled composer retains the submitted text because `submitQuery()` never clears local `value`. Clear it after accepted submission while preserving it on local validation or transport failure.
+
+147. openai-codex/gpt-5.6-sol: Unknown CLI command tokens bypass shared failure sanitization and are interpolated verbatim into human and JSON errors. Existing base-URL and malformed-JSON secret redaction is green; bound/redact the unknown token too.
+
+148. openai-codex/gpt-5.6-sol: The CLI manifest/README correctly avoid anonymous owner mutation but provide no supplier handoff to `/for-providers` or authenticated `/owner/supply` for publication, connection maintenance, earnings, or payout state. Add one explicit non-mutating owner-product handoff rather than CLI mutation commands.
+
+## Later workstream papercuts and remediation updates
+
+Entries below are not findings from the 32-persona campaign. They record later
+workstreams, duplicate observations, and explicit remediation status.
+
+149. openai-codex/gpt-5.6-sol: Node 22 conformance passed 390 tests but emitted repeated TimeoutOverflowWarning values around 1.786e12; a persisted absolute timestamp appears to reach setTimeout instead of a relative delay, producing noisy 1 ms timers.
+
+150. openai-codex/gpt-5.6-sol: Convex codegen fails before project validation because @clerk/tanstack-react-start server keyless fileStorage imports node:fs/node:path into a non-Node Convex bundle; isolate the Clerk server import or mark the owning Convex action use node.
+
+151. openai-codex/gpt-5.6-sol: The broad release integration gate timed out customerRequestRouteMandate's competing-repeat-use test at 15 s under full-suite load, while the identical isolated case passed in 837 ms; classify as suite-load flake and avoid raising the test timeout without a repeatable slow path.
+
+152. openai-codex/gpt-5.6-sol: Supplying a Node 22 PATH through the harness bash env still resolved node from the active Node 25 nvm shell; use the absolute Node 22 binary (and invoke npm/vitest through it) for release gates.
+
+153. openai-codex/gpt-5.6-sol: Convex codegen followed registry operation navigation into executable server actions, pulling Clerk's node:fs/node:path into the browser-platform bundle; keep navigation on pure action contracts instead of operations.actions.
+
+154. openai-codex/gpt-5.6-sol: Reading multiple skill:// resources concurrently through Eval Python threads failed with Missing session/run/name; direct parallel read calls are reliable, and Eval docs should clarify that Python threads are unsupported.
+
+155. openai-codex/gpt-5.6-sol: TypeScript diagnostics through the mounted LSP failed because no language server is configured for src/**/*.ts, forcing the slower full project typecheck for import and type feedback.
+
+156. openai-codex/gpt-5.6-sol: The mounted browser run tool switched from accepting a JS function body with top-level return to parsing only a single expression mid-session; multi-statement reload checks failed until wrapped in an async IIFE.
+
+157. auto: While running the GSD update workflow, every zsh command emitted a missing /Users/joelchan/.cargo/env startup error; the stale source line in ~/.zshenv adds noise to otherwise successful commands.
+
+158. auto: The GSD update context detected the active Codex install in the Orca-managed home, but the documented global installer command wrote to ~/.codex unless CODEX_HOME was explicitly exported; the first install therefore updated the wrong runtime root.
+
+159. auto: Full React Doctor audit scanned gitignored playwright-report assets as product source until doctor.config.ts ignored playwright-report/**; generated report crypto findings were noise.
+
+160. auto: During parallel codebase mapping, PROMPT-DATA-FLOW.md and IA-DATA-FLOW.md vanished from disk (git showed D) before their refresh agents finished writing; restored from HEAD so the maps were not lost mid-flight.
+
+161. composer-2: Product-Frontier Cleanup: WorkTree/Customer Request development smokes are env-blocked (no local Convex / missing AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY); recorded as blocked Tier B rather than silent pass.
+
+162. composer-2: Faux-runtime-surfaces import guard already fails on capability-execution/operation-approval.functions.ts isLocalE2EAuthBypassEnabled; left out of test:imports expansion during frontier cleanup to avoid mixing pre-existing failures into the batch gate.
+
+163. auto: The conformance suite passes but emits many Node TimeoutOverflowWarning messages under local Node 25 because future timestamps exceed the 32-bit timer range; the repo requires Node 22, so local gate output is noisy and can obscure real failures.
+
+164. auto: The evidence:* npm scripts expose no usable default and package.json does not document required run/verify path/revision arguments; direct gate invocation fails with usage errors, while official provider/mandate/yolo packets additionally refuse the intentionally dirty cleanup checkout.
+
+165. composer-2: Thermo-nuclear giant-module audit: first safe shrink is pure continuation helpers out of turn-orchestrator; moneyLedger/worker still need policy extraction behind the same Convex authority, not new spines.
+
+166. composer-2.5: Running npx eslint on Batch 2 files bypassed the repository lint wrapper and failed because ESLint 10 could not find a flat config. Use the package lint script/project wrapper instead of invoking ESLint directly.
+
+167. composer-2.5: A combined 'git diff --check; wc -l' command masked the diff-check failure because the shell returned wc's status; unrelated pre-existing whitespace errors were present. Run scoped diff-check separately or chain with && when status matters.
+
+168. gpt-5.6-sol-low: While inventorying the review diff, every zsh command emitted '/Users/joelchan/.zshenv:.:1: no such file or directory: /Users/joelchan/.cargo/env'; the shell bootstrap should guard sourcing the optional Cargo env file.
+
+169. gpt-5.6-sol-low: During the goblin CLI campaign, stopping npm run dev:local left Vite listening on 3024 while Convex was gone; the next managed startup failed on the occupied port and served only 503s. Supervisor shutdown must reap the detached Vite tree and verify its ports close.
+
+170. gpt-5.6-sol-low: During the goblin CLI campaign, dev:local reseeding failed with curated_provider_connection_refused:connection:exa:invalid_transition against existing local state. The development seed must be idempotent across routine restarts or repair stale curated connection state explicitly.
+
+171. composer: CI goblin CLI battery: default shell node was v25 until nvm use 22; zsh arrays are 1-indexed so REFS[0] silently emptied compare args and produced a false INVALID_ARGUMENT.
+
+172. composer-2: Privacy goblin: unknown-command echoed raw argv tokens and requireOk forwarded arbitrary remote problem detail; fixed by omitting the token and suppressing remote detail in favor of title/code.
+
+173. composer-2: CLI error projection had drifted from src/lib/errors.ts: tools/ae/lib/output.ts duplicated the canonical stable-code regex and hand-rolled its own remote-problem handling, so a privacy fix was first written as a bespoke rule instead of a shared projection. Added remoteProblemToProblem to the canonical model and deleted the CLI duplicate.
+
+174. composer-2: Collaborative goblin: exact candidate selection consistently dies with answer_turn_persist_failed (HTTP 500) across cat and CoinGecko threads — selection resolves then fencing/persistence fails closed.
+
+175. composer-2: Collaborative goblin: explicit search-only/do-not-execute instructions were ignored (CoinGecko executed); optional include_24hr_change was treated as a second operation intent; rationale/result recall still drops frozen operation outcome.
+
+176. gpt-5.6: While checking a CLI exit code under zsh, assigning to the conventional shell variable 'status' failed because zsh reserves it as read-only; use exit_code or capture the command status directly.
+
+177. gpt-5.6: A search-only Answer request now correctly blocks operation effects and returns the frozen candidate, but the completion prose says the live lookup failed and exposes route_tool_forbidden semantics; project an intentional candidate-selection completion instead of provider-failure recovery copy.
+
+178. gpt-5.6: Final git diff --check could not serve as a clean remediation gate because unrelated pre-existing planning/chat/answer diffs contain trailing whitespace and blank EOF lines; run a changed-path-scoped whitespace check or clean those diffs in their owning workstream.
+
+179. cursor-auto: Adding one required field to AnswerRequestInterpretationSchema meant hand-editing eight duplicated interpretation literals across tests, eval, and the OpenRouter contract-server helper before typecheck went green. A shared test builder (e.g. answerInterpretation({...})) would make preflight schema evolution a one-line change.
+
+180. cursor-auto: Remapping after product evolution: STATE.md, ARCHITECTURE.md, and wayfinder still describe gateway remediation and historical BAS framing while the live tree is dominated by Answer + operation market adapters; founders need a single CAPABILITY-MAP layering core vs proving-ground vs parked or they re-litigate what 'the product' is every session.

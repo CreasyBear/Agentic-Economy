@@ -107,7 +107,7 @@ The semantic model never receives route authority. `src/modules/customer-request
 3. The route computes a canonical request digest and a session/thread-scope/client-key reservation key, then calls the source-write-backed reservation seam (`src/routes/api.answer.turn.ts:134-168`; `src/modules/answer-thread/internal/turn-digests.ts`).
 4. `convex/answerThreads.ts:235-428` idempotently creates, replays, or takes over a reservation. It checks session/thread scope and request digest, denies foreign sessions, caps threads at 25 turns, and uses a 30-second generation-fenced lease. A live reserved row returns `in_progress`; an expired row increments generation and migrates only a valid checkpoint.
 5. Lease renewal validates reservation/session/thread/turn/request/generation identity. The orchestrator renews at at most one-third of the 30-second lease and stops heartbeat at the persistence handoff (`turn-orchestrator.ts:137-140,2170-2239,1781-1785`).
-6. Before registry/provider work, `classifyAnswerRequestPreflight` asks OpenRouter for strict `{safety, interpretation}`. Interpretation contains route `business | operation | confirmation | boundary`, 1–4 ordered unique `requestedIntents`, and continuation `new | refine_prior_operation | resolve_pending` (`answer-schema.ts:512-563`).
+6. Before registry/provider work, `classifyAnswerRequestPreflight` asks OpenRouter for strict `{safety, interpretation}`. Interpretation contains route `business | operation | confirmation | boundary`, 1–4 ordered unique `requestedIntents`, continuation `new | refine_prior_operation | resolve_pending`, and effect policy `run_when_ready | candidate_only` (`answer-schema.ts`). `candidate_only` is the structured form of a search-only request: `resolveEffectiveAnswerRoute` turns it into `effectAllowed: false`, which keeps operation reads available and stops the agent at a reviewable candidate.
 7. The preflight uses strict structured output, `temperature: 0`, `maxOutputTokens: 256`, `maxRetries: 0`, and up to three redacted prior turns. Missing credentials or provider/schema failure becomes typed `classifier_unavailable`; unsafe requests become `unsafe_request`. Both fail into deterministic safety copy, not permissive routing.
 8. Host routing remains deterministic. Business requests can clarify, take a direct registry retrieval path, reuse frozen providers, or invoke the agent. Operation requests stage operation search and exact detail. Confirmation without a bound pending decision clarifies. Boundary/refusal uses deterministic prose (`turn-orchestrator.ts:1173-1683`; `turns/boundary.ts`).
 9. `answer-response-planner.ts` owns business clarification and provider/artifact budgets: the search/visible provider limit is three; broad service-less or first-turn location-less queries clarify before search. This planner does not authorize operation execution.
@@ -127,7 +127,9 @@ The semantic model never receives route authority. `src/modules/customer-request
 - Anonymous calls use the fail-closed `operation.execute` path. It rereads the current descriptor, accepts only eligible keyless read operations, validates input, guards the public target, performs one HTTP JSON request, bounds the response to 512 KiB, validates status/content type/JSON/output schema, and returns typed evidence (`operation-execute.functions.ts`).
 - Authenticated calls use `operation.invoke`, not keyless fallback. The answer runtime derives an idempotency key from reservation key, turn ID, and persisted effect ordinal; the invocation service applies principal, policy, connection, spend, approval, and recovery state (`answer-tool-use-agent.ts:1994-2117`; `capability-execution/operation-invoke.ts`).
 - `operation-result-presentation.ts` now applies a server-side privacy decision before model, stream, or durable projection: recursively forbidden secret-like keys replace the result with an opaque `unsafe_output` failure and hashes. Public presentation resolves only declared JSON pointers, emits only validated credential-free HTTPS links, and neutralizes bidi/control hazards.
-- `src/modules/answer-thread/internal/self-description.ts` deterministically formats a routeable keyless capability surface, but no current runtime callsite references `buildSelfDescription`. It is source-integrated helper code, not a reachable Answer behavior.
+- Capability self-description helper was removed 2026-08-15 (orphan
+  `answer-thread/internal/self-description.ts`); Answer surface copy remains
+  owned by synthesizer/boundary prose paths.
 
 ### A3. Checkpoint, finalization, evidence, and replay
 
@@ -233,7 +235,6 @@ flowchart TD
 | Finalization | `answer-thread/internal/answer-turn-finalization.ts`; `convex/harnessSessions.ts` | frozen turn/evidence/journal → atomic settlement | source-owned replay authority |
 | UI stream | `answer/answer-ui-stream.ts:readAnswerTurnFrames` | SDK SSE chunks → contiguous typed frames | transient protocol observation |
 | Browser lifecycle | `chat/turn-stream-session.ts`; `use-answer-turn-lifecycle.ts` | frames/stop/result → reducer + readback | adapter; durable projection wins |
-| Unwired self-description | `answer-thread/internal/self-description.ts` | routeable surface → deterministic copy | no runtime callsite |
 | Customer Request model | `customer-request/openrouter-transport.ts` | bounded graph prompt → strict proposal | proposal only |
 | Interpreter settlement | `customer-request/application/interpret-compile/interpreter.ts` | curated pool/model result → grounded proposal/ask | deterministic domain/grounding floor |
 | Compiler | `customer-request/compiler.ts` | proposal + graph → digested aggregate/routes | deterministic contract/price/effect checks |
@@ -290,7 +291,6 @@ Configured capacities are bounds, not utilization observations.
 - Live utilization, saturation, queue depth, model context pressure, backpressure, active leases, Workpool occupancy, provider busy time, spend/credit totals, readiness pressure, and aggregate error/retry rates are unobserved: `?`.
 - Browser frame caching is unbounded in source and stream backpressure is not measured.
 - OpenRouter provider cost metadata may be absent; source records an unavailable reason. No current generated packet supplies aggregate cost.
-- `buildSelfDescription` has no runtime callsite, so current capability self-description behavior is unreachable despite the helper existing.
 - The Answer model loop has several bounded model phases (preflight, navigation, repair, forced effect, grounded prose). Source records each request, but there is no single simple per-turn model-call maximum across every conditional path beyond the individual stop/budget gates.
 - Local eval cases exercise realistic orchestration but replace Convex, registry, OpenRouter, and keyless provider boundaries. They cannot establish hosted transaction behavior or real provider/payment outcomes.
 - Source does not prove a current hosted deployment, real OpenRouter/provider response, customer value, payment submission/settlement, or reconciliation receipt. Those remain `?` until a revision-bound hosted/live packet and durable readback are named.
@@ -308,7 +308,6 @@ Configured capacities are bounds, not utilization observations.
 - `src/modules/answer/internal/operation-result-presentation.ts` — result privacy, declared-pointer projection, safe links.
 - `src/modules/answer-thread/internal/tool-runner.ts` — registered read execution and buffered evidence.
 - `src/modules/answer-thread/internal/answer-turn-checkpoint.ts`, `answer-turn-finalization.ts`, `public-projection.ts` — replay lineage, settlement material, safe readback.
-- `src/modules/answer-thread/internal/self-description.ts` — deterministic capability description helper; currently unwired.
 - `src/modules/model-gateway/public.ts` — shared AI SDK/OpenRouter provider seam and cost-unknown semantics.
 - `src/modules/answer/answer-ui-stream.ts`, `src/components/ae/chat/turn-stream-session.ts`, `use-answer-turn-lifecycle.ts` — transient frames and durable browser convergence.
 - `src/modules/capability-execution/operation-execute.functions.ts`, `operation-execute.server.ts` — canonical keyless executor.

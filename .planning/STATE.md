@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: protocol-kernel-product-conversion
 milestone_name: Protocol/kernel to product conversion
-status: remediation_open; seven_workstreams_focused_verified; source_gate_green; payout_period_policy_blocked; hosted_certification_blocked
-stopped_at: 2026-08-12 post-remediation verification: seven workstreams focused-verified and Node 22 post-codegen source gate green; remediation remains open because payout-period lifecycle lacks a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked
-last_updated: "2026-08-12"
+status: remediation_open; product_frontier_cleanup_low_risk_landed; source_gate_partial; supplier_settlement_policy_decided; payout_source_implementation_open; hosted_certification_blocked
+stopped_at: 2026-08-15 Product-Frontier Cleanup Batches 0–3 landed (manifest, dead deps, shipping trim, evidence quarantine); Batches 4–6 recorded as prove/park/defer — WorkTree/Customer Request smokes env-blocked; no destructive schema retirement
+last_updated: "2026-08-15"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -15,6 +15,42 @@ current_phase: 06
 current_phase_name: single-key-capability-gateway
 
 # Current state
+
+## Product-Frontier Cleanup — 2026-08-15
+
+Cleanup doctrine: smaller only where the complete market loop and WorkTree/Study
+proving ground get stronger. Positive frontier floor lives at
+[`.planning/evidence/product-frontier-baseline/`](evidence/product-frontier-baseline/)
+with `npm run check:product-frontier` and
+`tests/imports/product-frontier-manifest.test.ts`.
+
+**Landed (low-risk):**
+- Batch 0 — frontier manifest, golden journeys, dirty-tree baseline, Goblin
+  evidence relocated under `.planning/evidence/goblin/`
+- Batch 1 — removed unused `streamdown` family; deleted orphan
+  `self-description.ts`; stale `doctor.config.ts` ignores; `uniqueSorted`
+  consolidated onto shared helper
+- Batch 2 — deleted test-only `provider-integrations/shipping`; weekly memo
+  parked with notification-outbox as re-entry owner
+- Batch 3 — import quarantine for development evidence without move-only churn
+
+**Recorded, not destroyed:**
+- Batch 4 — Study characterization + market-loop proof doc; local smokes
+  env-blocked (`convex_dev_server_unavailable`, missing journey signing key);
+  Tier C not promoted
+- Batch 5 — WorkTree owns project-spine successor semantics; memo owned by
+  notification-outbox; both remain until wire/characterization
+- Batch 6 — routing-kernel history / table drops deferred post hosted proof
+
+**Gate truth:** cleanup-specific positive tests, lint, typecheck, codegen,
+conformance, SEO, UI contracts, evals, quality gate, and build pass. The full
+repository gate remains partial because unrelated in-flight gateway/settlement
+changes fail schema inventory, import/TS standards, one development-host parity
+case, and one paid-operation comprehension assertion. Full E2E and local smokes
+remain blocked by local Convex/signing-key state. See
+`evidence/product-frontier-baseline/CLEANUP-RECEIPT.md`.
+
+**Do not optimize for:** raw LOC, table count, or dependency vanity totals.
 
 ## Cloudflare OS production-readiness extraction — 2026-08-09
 
@@ -56,7 +92,7 @@ must be deliberately reset and reseeded before it can accept the clean schema.
 
 ## Single-Key Capability Gateway — current status — 2026-08-12
 
-**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked  
+**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; automatic daily supplier-settlement policy decided in ADR-034 but PRA-003 source implementation remains open; production policy values, manifest, and hosted certification blocked  
 **Decision:** [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md)  
 **Plan:** [`research/2026-08-09-single-key-capability-gateway-implementation-plan.md`](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
 **Historical closeout:** [`research/2026-08-11-goblin-source-remediation-plan.md`](research/2026-08-11-goblin-source-remediation-plan.md)
@@ -66,8 +102,8 @@ The 2026-08-11 remediation closeout and its source/local gate claims are histori
 The accepted gateway architecture and W0-W8 contract remain the scope. The
 2026-08-11 source-completion/local-gate claims are historical; the
 2026-08-12 re-audit leaves the remediation campaign open. Seven workstreams are
-focused-verified, but the payout-period lifecycle remains blocked because no
-trusted server-owned nonzero minimum-payout policy is available. The canonical
+focused-verified. ADR-034 now selects automatic daily full-balance supplier
+settlement, but PRA-003 source implementation remains open. The canonical
 protected action is
 `operation.invoke:v1` at `POST /api/v1/operations/execute`; MCP, CLI, and
 Answer are adapters over one application service. Existing
@@ -238,8 +274,8 @@ fixture result into hosted, provider, or customer evidence.
 
 The current gateway transition remains remediation, not only externally
 configured evidence. Seven workstreams are focused-verified and the complete
-Node 22 post-codegen source gate is green, but the payout-period lifecycle is
-blocked for lack of a trusted server-owned nonzero minimum-payout policy.
+Node 22 post-codegen source gate is green. ADR-034 now supplies the payout
+policy; automatic-settlement source implementation remains open.
 Hosted transition still requires a valid production deployment manifest, the
 exact source revision, the approved strict hosted
 discovery/invoke/replay/meter/revoke/withdraw receipt, independent parsing, and
@@ -260,7 +296,7 @@ configuration blocks certification; it does not close the remediation campaign.
 ## Session
 
 **Last session:** 2026-08-12  
-**Stopped at:** Post-remediation verification; seven workstreams focused-verified and Node 22 post-codegen source gate green; remediation remains open because payout-period lifecycle lacks a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked.  
+**Stopped at:** Payout-policy convergence; ADR-034 selects automatic daily full-balance supplier settlement; PRA-003 source implementation, operator/legal production values, manifest validation, and hosted certification remain open.  
 **Resume file:** `.planning/research/2026-08-12-p0-p1-architectural-remediation-plan.md`
 
 ### 2026-08-05 delta (Wayfinder journey)

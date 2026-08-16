@@ -21,7 +21,7 @@ That shorthand describes the destination, not an earned public category claim. A
 
 The strongest honest sentence before that proof is:
 
-> **Agentic Economy is a controlled transaction layer where authorized agents invoke admitted third-party Operations and suppliers are paid after contract-valid delivery.**
+> **Agentic Economy is a controlled transaction layer where authorized agents invoke admitted third-party Operations and suppliers accrue earnings only after Qualified Use plus separately authoritative reconciled settlement.**
 
 The purchasing principal is the human or organization that owns the budget and grants authority. The agent is its delegated shopper, never the principal. Developers host implementations wherever they choose; AE admits versioned callable Operations, enforces the transaction boundary and records attributable outcomes.
 
@@ -61,7 +61,7 @@ AE applies the same market structure to agent services:
 | Token price | Declared per-use price |
 | Provider routing | Compatible-operation discovery and selection |
 | Provider uptime/latency | Validated reliability and latency |
-| Usage accounting | Qualified Use and Settled Use |
+| Usage accounting | Qualified Use; earnings require separate authoritative reconciled settlement |
 
 The important difference is heterogeneity. Models mostly fit a shared generation interface. Agent services do not. A search operation, memory service, verifier, browser worker and payment action have different inputs, outputs, data-use policies, effects, authority requirements and failure modes.
 
@@ -146,7 +146,7 @@ A developer or business can:
 6. Publish a Market Operation.
 7. See validated calls, consumers, failures, latency and revenue.
 8. Revise, withdraw or replace the service.
-9. Accrue earnings and receive payouts.
+9. Accrue earnings only from Qualified Use plus separately authoritative reconciled settlement, then receive payouts.
 
 ### Agent side
 
@@ -224,7 +224,7 @@ running service → import contract → validate → price → publish
 
 This is not “free supply” or “money without an ask.” Suppliers still fund hosting, integration, support, compliance and payout friction. Raw repositories and static Skills are acquisition leads, not supply. The testable claim is only that admitting an already-running service costs less than recruiting and financing a greenfield provider, and that AE-attributed net revenue repays that marginal effort.
 
-Paid use may become a better demand signal than stars or installs, but only when it is non-owner, outcome-valid, reconciled and contribution-positive. Gross calls and gross payment volume do not prove supplier value.
+Non-owner contract-valid Qualified Use may become a better demand signal than stars or installs; a supplier-earnings or paid-use signal additionally requires separately authoritative reconciled settlement and contribution-positive economics. Gross calls and gross payment volume do not prove supplier value.
 
 ## Market mechanics
 
@@ -254,7 +254,7 @@ No provider accrual is released before validation. A payment rail that irreversi
 1. **Contract-valid delivery:** AE can verify identity, revision, input/output schema, artifact digest, freshness, idempotency and family-specific evidence without trusting a supplier counter.
 2. **Semantic quality or buyer utility:** the result was substantively correct or useful. Schema conformance alone never proves this; it needs buyer outcome, benchmark or authoritative external evidence.
 
-Settlement may follow contract-valid delivery. Reliability, quality and ranking claims must state which evidence class they use.
+Settlement may follow contract-valid delivery, but it remains separate from Qualified Use. Reliability, quality and ranking claims must state which evidence class they use.
 
 ### Qualified Use
 
@@ -267,34 +267,132 @@ One Qualified Use means:
 - with required result/effect evidence;
 - excluding tests, probes, retries, refunds, refusal, failure and unknown outcomes.
 
-Qualified Use is separate from semantic correctness and payment settlement. A conforming result does not prove usefulness, and a charge attempt does not prove a valid result.
+Qualified Use is independent of semantic correctness and payment settlement. It counts from the qualifying invocation and does not require settlement; supplier accrual and creator earnings require Qualified Use plus separately authoritative reconciled economic settlement. A conforming result does not prove usefulness, and a charge attempt does not prove a valid result.
+
+When a Qualified Use also has an authoritative settled charge, it is a stronger demand signal than a passive distribution observation such as a view, impression or exposure: a non-owner principal authorized spend, an actual invocation occurred, delivery passed the declared contract checks, and the payment survived reconciliation. Likes and other engagement signals can measure attention or discovery, but can also be owner traffic, bots, accidental impressions or engagement bait without delivery or economic commitment. A settled non-owner Qualified Use still does not prove semantic truth or customer utility. A result can satisfy the schema and provenance contract while being wrong, incomplete or not worth its price; semantic quality needs separate buyer-outcome, benchmark or authoritative external evidence.
 
 ### Economics
 
-The buyer pays the declared Operation price. AE reconciles the authoritative payment state, applies the declared platform fee, and accrues the remainder to the Supplier.
+The buyer pays the declared Operation price through the authorized economic path. AE reconciles the authoritative payment state separately from Qualified Use, applies the declared platform fee, and accrues the remainder to the Supplier only when both facts hold.
 
 The exact payment rail may be x402, prepaid balance, Stripe or another managed rail. The economic invariant stays constant:
 
 ```text
-validated use + authoritative settlement
+Qualified Use + authoritative reconciled settlement
 → provider net + platform rake + buyer receipt
 ```
 
 ### Competition
 
-Operations should compete on separate transparent facts:
+Operations should compete on separate transparent facts, selected in the context of the requested intent and constraints and labelled by evidence class:
 
-- successful uses;
-- distinct consumers;
-- reliability;
-- latency;
-- settled volume;
-- recent growth;
-- voluntary saves or favourites.
+- contract fit;
+- declared price;
+- freshness;
+- admission/readiness state;
+- non-owner Qualified Use, with its exclusions visible;
+- reliability and latency;
+- successful uses, distinct consumers, settled volume, recent growth and voluntary saves or favourites;
+- bounded, explicitly labelled exploration for eligible new supply.
 
-There should be no universal opaque quality score. Every metric must disclose its numerator, denominator, time window, evidence tier, freshness and exclusions.
+Gross calls, owner traffic, popularity or follower-like attention must not rank an Operation by themselves. There should be no universal opaque quality score. Every metric must disclose its numerator, denominator, time window, evidence tier, freshness and exclusions; schema-valid delivery and settlement remain distinct from semantic-quality or buyer-utility evidence.
+
+## Agent-native UGC operating model — analogy only, not a category rename
+
+Mature UGC and creator platforms provide an operating-model analogy: supply is created, admitted, distributed, consumed, measured and revised. This means Instagram/YouTube-style user-generated publishing, feed/catalog distribution, recommendation and exploration—not influencer or brand-campaign procurement, a creator-hiring marketplace or negotiated collaboration. The analogy does not rename AE's category, add a social-feed domain object or establish a runtime capability. AE remains an **Operation** market, with the **Market Operation** as its bounded unit and the existing Principal, Consuming Agent, Supplier/Provider, Qualified Use, admission, readiness and authority distinctions intact. The mechanics below are design hypotheses and source observations, not AE proof.
+
+#### Canonical mapping
+
+| Creator/UGC concept | AE canonical mapping | Boundary |
+|---|---|---|
+| Creator | Supplier / Provider | The Supplier/Provider owns the implementation and its rights; AE admits the callable supply. |
+| Post or asset | Immutable versioned Market Operation | A versioned Operation, not a social post, is what an agent can inspect and invoke. |
+| Feed, search or recommendation | Agent discovery and distribution | Distribution proposes an admitted Operation in context; it does not grant authority or prove quality. |
+| View, impression or exposure | Distribution observation | Passive distribution observation; it is not an invocation or Qualified Use. |
+| Active use | Invocation | Active use is an invocation; only a qualifying non-owner, contract-valid production invocation with required evidence and exclusions is Qualified Use. |
+| Qualified engagement or conversion | Non-owner contract-valid Qualified Use | Only a qualifying invocation counts; Qualified Use is independent of settlement, semantic truth and customer utility. |
+| Creator earnings | Supplier accrual after Qualified Use + settlement | Earnings require both Qualified Use and separately authoritative reconciled economic settlement; attention or passive exposure is not enough. |
+| Insights or trends | Privacy-safe aggregated demand gaps and operation-level evidence | Aggregates may guide supply; Principal prompts, data and raw supplier data are not discovery material. |
+
+#### Supplier creation and market loop
+
+The supplier creates or hosts an implementation outside AE, establishes source authorization or ownership, provenance, license or material-derivation rights and immutable lineage, then publishes an immutable Operation revision. The agent-native loop is:
+
+```text
+publish → admit → distribute → invoke → validate → Qualified Use
+→ [separate settlement reconciliation] → accrue earnings
+→ learn → revise/withdraw
+```
+
+`Admit` means the revision passes the applicable contract, provenance, source authorization/ownership, license or material-derivation rights, immutable lineage and publication-eligibility checks. Readiness and Principal/execution authority are later, independent routeability and invocation gates. `Distribute` means an agent or consuming runtime can find and receive a contextual recommendation. `Validate` means contract-valid terminal delivery and its required evidence; for a non-owner production invocation it establishes Qualified Use, never semantic truth. `Settle` means separately authoritative payment reconciliation; only together with Qualified Use can it support supplier accrual. A supplier may learn from operation-level evidence and privacy-safe aggregates, then publish a new immutable revision or withdraw; AE does not take custody of the supplier's implementation or payload merely to improve discovery.
+
+This is a low-commitment per-use exchange, not an ongoing bilateral buyer-supplier relationship. A Principal can use one admitted Operation, use another supplier on the next invocation or leave the market; the system does not require a standing brief, campaign, application, negotiated collaboration or direct supplier relationship.
+
+#### Agent distribution and consumption loop
+
+An agent runtime can consume and distribute admitted supply while pursuing a Principal's objective:
+
+```text
+need → discover → inspect contract and evidence
+→ obtain Principal authority → invoke → validate
+→ retain receipt and settle → pin, replace or request again
+```
+
+The Consuming Agent or its runtime is a delegated actor. It may search, recommend, invoke and distribute an Operation through its task flow, but it does not own the budget, grant itself authority or become the Principal. A recommendation or passive distribution observation is not an invocation. Active use is an invocation; only a qualifying non-owner, contract-valid production invocation with required evidence and exclusions becomes Qualified Use. Settlement remains separate.
+
+#### Privacy-safe demand gaps to bespoke supply
+
+The demand loop is intentionally aggregate:
+
+```text
+privacy-safe aggregate demand gap
+→ supplier proposes bespoke dataset or Operation
+→ prove provenance, source authorization/ownership, license/derivation rights, immutable lineage and contract
+→ admit → distribute → invoke → validate → Qualified Use
+→ [separate settlement reconciliation] → accrue earnings
+→ learn and revise
+```
+
+Repeated unmet intents, coverage gaps or operation-level evidence may indicate a gap worth serving. They may guide a supplier toward a bespoke dataset or Operation only as privacy-safe aggregates. AE must never leak Principal prompts, private data or task content, and must never expose supplier data raw merely to improve discovery. A demand gap is a lead for supply creation, not proof that the resulting dataset or Operation is useful; the same admission/publication, routeability/readiness, Principal/execution-authority, validation and proof ceilings apply. This is specialized production for an observed aggregate gap, not a campaign brief, negotiated commission or creator application flow.
+
+#### Separate gates and bounded new-supply exploration
+
+Admission/publication eligibility, routeability/readiness, recommendation/distribution, invocation authority, Qualified Use and supplier earnings/settlement are separate gates:
+
+| Gate | Decides | Does not imply |
+|---|---|---|
+| Admission / publication eligibility | Whether contract, provenance, source authorization/ownership, license or material-derivation rights and immutable lineage checks are satisfied for the revision. | It does not imply readiness, routeability, recommendation/distribution, Principal/execution authority, invocation, Qualified Use, settlement or earnings. |
+| Routeability / readiness | Whether an admitted revision is operationally ready and eligible to be routed under current policy. | It does not imply Principal/execution authority, invocation, Qualified Use, settlement, semantic truth or customer utility. |
+| Recommendation / distribution | Which admitted, routeable revisions fit the current intent and constraints, using labelled evidence for contract fit, price, freshness, Qualified Use, reliability and latency, plus bounded exploration for new supply. | Distribution does not grant Principal/execution authority, create an invocation or payment obligation, assert semantic quality or create Qualified Use. |
+| Principal / execution authority | Whether this Principal and delegated Consuming Agent may invoke the selected Operation under spend, effect, data-use and idempotency limits. | Authority does not imply contract-valid delivery, Qualified Use, settlement, semantic truth or customer utility. |
+| Qualified Use eligibility | Whether one non-owner production invocation against an admitted current Operation reached contract-valid terminal success with required result/effect evidence and exclusions. | Qualified Use is independent of settlement; it does not imply payment settlement, supplier accrual/earnings, semantic truth or customer utility. |
+| Supplier earnings / settlement eligibility | Whether a Qualified Use also has separately authoritative reconciled economic settlement sufficient for supplier accrual/earnings. | Settlement or earnings do not prove semantic truth or customer utility; settlement without Qualified Use does not create supplier earnings. |
+
+New-supply exploration is an explicitly bounded opportunity among admitted, ready-enough candidates; readiness is a routeability gate, not admission proof or a popularity contest. Any exploration exposure must remain contextual and evidence-class-labelled. Gross calls, owner traffic, popularity, follower-like attention or one opaque score cannot substitute for contract fit, Qualified Use or settlement evidence.
+
+#### Originality, provenance and rights
+
+The UGC idea of originality maps to source ownership/authorization, provenance, license or material-derivation rights, immutable lineage and an anti-copy/unauthorized-republication policy. Authorized licensed or materially derived supply is allowed when its rights and lineage are established; these controls distinguish it from unauthorized copy/republication and preserve the evidence chain across revisions. They establish lineage and permission boundaries only: schema-valid output must never be called truthful, and provenance does not by itself establish semantic correctness or customer utility.
+
+#### Explicit non-transfer list
+
+The analogy does **not** import:
+
+- a follower graph requirement;
+- engagement bait as a growth or ranking mechanism;
+- opaque popularity ranking;
+- ad-impression economics;
+- repost aggregation as independent supply or demand;
+- supplier-hosted payload custody by AE;
+- agent-as-Principal;
+- campaign briefs, apply/accept workflows or negotiated creator collaborations; or
+- an assumed ongoing bilateral buyer-supplier relationship.
+
+AE therefore does not need social followers, likes or views to establish a market; views, impressions and exposure are distribution observations, not invocations or Qualified Use. It does not reward attention instead of Qualified Use, aggregate reposts into market supply, take supplier payload custody for discovery, or treat an agent runtime as the budget-owning Principal. Provider-direct x402 remains a disjoint lane, and the existing V1 closed-family, authority, validation, settlement and proof gates remain unchanged.
 
 ## The possible flywheel — unproven
+
+The loop below is still a hypothesis, not demonstrated network effect or AE proof:
 
 ```text
 More useful services
@@ -415,6 +513,10 @@ The public category claim is earned only after a later, larger cohort reproduces
 - [OpenAI Plugins — package Skills and MCP servers](https://developers.openai.com/plugins/build/plugins)
 - [Stripe Machine Payments](https://docs.stripe.com/payments/machine)
 - [Cloudflare WebMCP developer preview](https://blog.cloudflare.com/webmcp/)
+- [Roblox — Recommendations and Ranking](https://en.help.roblox.com/hc/en-us/articles/21416941036564-Recommendations-and-Ranking-on-Roblox) — primary reference for contextual recommendation, ranking and exploration mechanics; observed mechanics are an analogy, not AE proof.
+- [Instagram Creators — Recommendations and Originality](https://creators.instagram.com/recommendations-and-originality) — primary reference for recommendation and originality/source-lineage considerations; not evidence of AE capability or outcomes.
+- [mod.io — How does mod.io Marketplace work?](https://support.mod.io/hc/en-us/articles/9860328171151-How-does-mod-io-Marketplace-work) — primary reference for creator publishing, marketplace distribution and monetization mechanics; not evidence of AE demand or settlement.
+- [YouTube — Partner Program eligibility](https://support.google.com/youtube/answer/1311392) — primary reference for creator monetization eligibility; it does not transfer ad-impression economics or prove AE utility.
 
 ## Related AE evidence
 

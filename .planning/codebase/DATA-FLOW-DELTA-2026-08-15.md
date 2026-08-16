@@ -44,7 +44,7 @@ Companion for map maintainers. `PROMPT-DATA-FLOW.md` has substantial uncommitted
 
 ## Open unknowns (? / not in source)
 
-- `buildSelfDescription` (`answer-thread/internal/self-description.ts`) has no callsites — capability self-description prose is not yet on the Answer data path.
+- `buildSelfDescription` orphan helper was deleted 2026-08-15 (Product-Frontier Cleanup Batch 1); capability self-description prose is not on the Answer data path.
 - Live x402 EVM receipt fetch depends on `AE_X402_RPC_URLS_JSON`; without it, settlement verification path availability is config-gated, not proven.
 - Aggregate utilization/saturation for external-spend rows, x402 RPC, and expanded Answer read-tool volume: no observation seam (`?`).
 - Whether `classifyAnswerQuerySafety` remains a supported public API for non-orchestrator callers beyond the thin wrapper: only `turn-orchestrator` and tests observed importing preflight path.

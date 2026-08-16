@@ -22,6 +22,9 @@ This sentence names the destination; the current evidence section does not claim
 
 AE hosts the market and transaction boundary, not supplier runtimes. Skills, SDKs and repositories remain acquisition, lineage and distribution inputs; they become market supply only through an admitted callable `Operation` with an evidence path.
 
+**Creator/UGC supplier-economy model (destination):** Mature Instagram/YouTube-style creator/UGC publishing and algorithmic distribution is an operating-model analogy, not a category rename: eligible businesses/developers publish supplier-generated Operations with supplier-hosted implementations and bespoke datasets; AE admits/indexes/recommends/distributes them into agents' normal workflows for low-commitment one-use consumption, not bilateral relationships or AE-hosted content/runtimes. Admission/publication/eligibility evaluate the exact contract, provenance, authorization/ownership, license/derivation rights and immutable lineage; readiness is a later independent routeability gate, and Principal/execution authority is a later independent invocation gate. Passive views, impressions and exposure are distribution observations, not invocations; active use is an invocation. Qualified Use is only a non-owner, contract-valid production invocation with required evidence and exclusions, independent of payment settlement. Supplier accrual/creator earnings require Qualified Use plus separately authoritative reconciled economic settlement. Authorized licensed or materially derived supply is allowed and distinguished from unauthorized copy/republication; provenance/validity never proves semantic truth, and anti-copy/unauthorized-republication controls do not ban authorized source use. The loop is publish → admit → distribute → invoke → validate → settle → learn → revise/withdraw; ordering uses contract fit, price, freshness, readiness, non-owner Qualified Use, reliability/latency and bounded exploration, never gross calls, owner traffic, popularity alone or one opaque score. Agent runtimes consume/distribute supply and are not Principals. This is not proof of independent supply, production settlement, recommendation quality or a functioning flywheel, and it is not influencer/brand procurement, creator-hiring marketplace work, briefs/applications or collaborations.
+
+
 **First-party demand application:** AE retains the person-facing execution loop as a subordinate demand-side application and proving ground for the platform. A Principal’s agent can discover admitted Market Operations, decide within granted authority and carry registered invocations through external effects, evidence and recovery. This application is not the platform category.
 
 `UBIQUITOUS_LANGUAGE.md` owns domain vocabulary. Live source and executable
@@ -37,12 +40,12 @@ Phase 2 — One action plane across human/agent hosts    accepted_narrowed
 Phase 3 — Paid-operation product conversion            complete in declared evidence classes
 Phase 4 — Business Account and routeable supply        source complete; hosted proof uncertified
 Phase 5 — Public Offering decision loop                source landed on main
-Phase 6 — Single-Key Capability Gateway                remediation open; seven workstreams focused-verified; payout-period policy blocked; hosted certification blocked
+Phase 6 — Single-Key Capability Gateway                remediation open; seven workstreams focused-verified; settlement policy decided, source implementation open; hosted certification blocked
 ```
 
 ## Single-Key Capability Gateway — current workstream
 
-**Status:** remediation campaign open; seven workstreams focused-verified; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; Node 22 post-codegen source gate green; production manifest and hosted certification blocked  
+**Status:** remediation campaign open; seven workstreams focused-verified; automatic daily supplier-settlement policy decided in ADR-034 but source implementation remains open; Node 22 post-codegen source gate green; production policy values, manifest, and hosted certification blocked  
 **ADR:** [`ADR-035`](adr/ADR-035-single-key-capability-gateway.md)  
 **Plan:** [`2026-08-09 implementation plan`](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
 **Historical closeout:** [`2026-08-11 goblin source remediation outcome`](research/2026-08-11-goblin-source-remediation-plan.md)
@@ -130,9 +133,9 @@ receipt, and UI-contract checks. No strict hosted gateway receipt exists in
 receipt and approved live-money block.
 
 Current status is not source-remediation complete: seven workstreams are
-focused-verified, the remediation campaign remains open, and the payout-period
-lifecycle is blocked for lack of a trusted server-owned nonzero minimum-payout
-policy. The complete Node 22 post-codegen source gate passed on 2026-08-12.
+focused-verified and ADR-034 now selects automatic daily full-balance supplier
+settlement, but PRA-003 source implementation remains open. The complete Node
+22 post-codegen source gate passed on 2026-08-12.
 The outer production release gate fails closed at deployment-manifest validation
 because operator-owned production configuration is absent or malformed. Hosted
 certification remains blocked.

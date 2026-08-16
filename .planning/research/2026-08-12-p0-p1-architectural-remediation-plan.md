@@ -64,7 +64,7 @@ SG-024 is the final proof boundary, not a parallel implementation lane. Live mon
 |---|---|---|---|
 | PRA-001 | `convex/capabilityOperationInvocationWorker.ts`; `convex/moneyLedger.ts`; x402 transport runtime | `isX402` is known, but charge authorization runs unconditionally before transport. | Repair. |
 | PRA-002 | operation worker output parser/validator; `reconcileCharge` | `reconcileAcceptedCharge` can settle/accrue before `parseContractOutput`. | Repair. |
-| PRA-003 | `moneyLedger.updatePayoutPeriod`; `beginPayoutTransfer`; `payout-policy.ts` | New current period is `held_threshold`, minimum is zero, and transfer does not require a closed period. | Repair, fail closed when production threshold policy is absent. |
+| PRA-003 | `moneyLedger.updatePayoutPeriod`; `beginPayoutTransfer`; `payout-policy.ts` | New current period is `held_threshold`, minimum is zero, and provider release can precede an immutable balance reservation. | Replace period/manual authority with ADR-034 automatic daily settlement; reserve exact available earnings before Stripe release; fail closed when required production policy is absent. |
 | PRA-004 | `answer-tool-use-agent.ts`; Answer reservation/checkpoint/finalization | `callInput.seq` already exists, but authenticated Operation idempotency hashes only turn, operation, and input. | Repair by carrying the existing ordinal; no new journal. |
 | PRA-005 | `operation-invoke.ts`; `capabilityOperationInvocations.ts` | `refuseBeforeDispatch` skips abandonment whenever reservation was replayed, even after authoritative empty replay readback. | Repair through existing guarded `abandon`. |
 | Buyer #2/#3 | Answer route/orchestrator/finalization; `AeChat` Stop and navigation | Route catch emits terminal error without durable convergence; New question clears client identity in place. | Repair through existing finalization and Stop seams. |
@@ -107,7 +107,7 @@ Brendan Gregg's USE Method is used only as an errors-first operational lens. For
 | Operation invocation reservations | reserved/replayed/work-bound/terminal state and attempt identity | pending workless age/count `?` until needed | idempotency conflict, guarded-abandon refusal, missing terminal, reconciliation required |
 | Shared Workpool slots | bound work ID/kind/attempt and component status | pending/running beyond callback grace; queue depth/provider quota `?` | failed/canceled/missing work, cleanup mismatch, `cleanup_required` |
 | Unresolved money outcomes | exact transaction/budget/outcome state and amount | total/oldest unknown and held budget `?` | charge/refund/reconciliation/idempotency refusals |
-| Open payout periods | period start/end, exact gross/rake/net/minimum/state | count/age of open/pending/unknown periods `?` | below-threshold, not-ready, reconciliation-required, provider failure |
+| Supplier settlement commands | exact available/reserved/transferred/recovery amounts, source high-watermark, allocation digest, provider outcome | oldest eligible/blocked/unknown command and unresolved global currency reservation `?` | KYC, liquidity/reserve, provider failure, outcome unknown, reconciliation required |
 
 USE cannot close any root in this plan. Each defect reproduces at one request and zero load. Do not add instrumentation unless a named acceptance criterion cannot otherwise be observed.
 
@@ -138,7 +138,7 @@ provider_direct_x402
   => no AE operator debit
   => no AE supplier accrual
   => no AE rake
-  => no AE payout period mutation
+  => no AE supplier-settlement mutation
 
 ae_internal
   => existing authorizeInvocationCharge
@@ -180,7 +180,7 @@ Extend incumbent tests, principally:
 
 Required cases:
 
-1. provider-direct x402 succeeds with payment evidence and contract-valid output; no AE charge, provider-accrual, rake, budget settlement, or payout-period mutation occurs;
+1. provider-direct x402 succeeds with payment evidence and contract-valid output; no AE charge, provider-accrual, rake, budget settlement, or supplier-settlement mutation occurs;
 2. AE-internal transport succeeds with valid output; exactly one charge settles and exactly one accrual/rake projection appears;
 3. AE-internal transport returns malformed or schema-invalid output after release; invocation is not completed and the authorized charge is reversed/not released with no surviving accrual;
 4. uncertain transport/output evidence remains `outcome_unknown`/`reconciliation_required` and is not automatically retried;
@@ -188,89 +188,153 @@ Required cases:
 
 **STOP conditions:** rail cannot be derived from the reserved immutable Operation; an x402 branch still calls charge authorization; output validation is duplicated; any unknown outcome is collapsed to success/refund/zero; conservation no longer balances exactly.
 
-## 5. Workstream B — closed payout periods and transfer admission
+## 5. Workstream B — automatic supplier settlement and transfer admission
 
 **Covers:** PRA-003.  
-**Owners:** `convex/moneyLedger.ts`, `src/modules/money/internal/payout-policy.ts`, owner earnings projection.  
-**Non-goal:** choose a production commercial threshold, claim bank arrival, or replace AE exact money with Stripe balance objects.
+**Owners:** `convex/moneyLedger.ts`, `src/modules/money/internal/payout-policy.ts`, Stripe money provider, owner earnings projection, incumbent Convex cron/Workpool.  
+**Decision:** ADR-034's AE-internal supplier settlement policy.  
+**Non-goal:** model Stripe bank payout, build a GAAP ledger, mix x402 with AE accrual, or invent a second scheduling/provider framework.
 
-### 5.1 Period invariant
+### 5.1 Purpose and market policy
 
-Add `open` to the incumbent `PayoutState`. `updatePayoutPeriod` writes accrual and valid reversals into the server-derived UTC period containing the contract-valid delivery. That current row remains mutable and non-transferable.
+Payout is marketplace clearing, not one bank payment per Operation call. Each
+definitively settled AE-internal Qualified Use creates exact provider accrual
+and rake. Provider-direct x402 remains disjoint and never creates an AE
+settlement command.
 
-The existing `beginPayoutTransfer` mutation is the executable transition caller; no second scheduler or payout workflow is added. Before transfer admission, it uses Convex server time—not the caller's timestamp—to atomically:
+Replace the current monthly/caller-driven policy with one automatic daily UTC
+settlement run:
 
-1. refuse a current/open period whose `periodEnd` has not passed;
-2. advance the exact closed prior-period row from `open` to `review`;
-3. apply the existing `payoutReviewWindow` and `transitionPayout` review/account gates;
-4. either hold/roll the period or admit the existing transfer transition.
+- initiate the full eligible Business/currency balance within 24 hours absent a
+  named blocker;
+- transfer at most once per Business/currency/day;
+- use no owner-selected amount, owner payout button, monthly review window, or
+  AE commercial minimum;
+- require a positive Stripe-minor-unit amount and leave any exact sub-minor
+  remainder once in provider earnings;
+- keep monthly periods, if needed, as reporting only.
 
-Required state ordering:
+The initial policy has zero AE ageing: definitive Qualified Use settlement is
+eligible immediately. AE accepts buyer payment-rail timing/fraud/chargeback
+exposure under Stripe's application fee/loss configuration. This policy cannot
+go live until finance/legal signs the reserve, payment-method, recovery, and
+jurisdiction inputs in §5.4.
+
+### 5.2 Authority, reservation, and accounting
+
+The caller supplies no Business, currency, amount, destination, cadence,
+minimum, reserve, or policy. The server derives all of them.
+
+Before any Stripe call, one Convex mutation must:
+
+1. read fresh active recipient-transfer capability and exact provider earnings;
+2. select FIFO settled accrual entries through a stable high-watermark;
+3. convert the full available amount to Stripe minor units, reserving only the
+   exactly representable ledger units;
+4. create an immutable settlement command plus pending `payout_transfer`
+   transaction;
+5. write the pending provider debit and decrement available earnings under OCC;
+6. bind Business, currency, ledger/rail exponents and units, allocation digest,
+   destination account/object digest, reserve-policy digest, and idempotency key.
+
+The pending debit is the reservation. Owner projections add pending reservations
+back only when showing total owed; they do not call them transferred. Exact
+provider success changes the transaction to applied without a second debit.
+Definitive non-release writes the inverse credit and restores availability.
+
+Command ordering:
 
 ```text
-open current-period accrual (not transferable)
-  -> review after the real UTC period close
-     -> held_kyc
-     -> held_threshold above threshold -> transfer_pending
-        -> paid | failed | outcome_unknown | reversed
-     -> held_threshold below threshold -> rolled_forward
-        -> next open period
+reserved
+  -> provider_pending
+     -> transferred
+     -> failed_released
+     -> outcome_unknown
+        -> transferred | failed_released
 ```
 
-A below-threshold rollover is an atomic payout-summary reclassification inside `moneyLedger`, not a second money movement: exact gross/rake/provider-net amounts are added once to the next open period, the source row is marked `rolled_forward` with the deterministic target payout reference, and the already-posted provider earnings balance is unchanged. OCC plus the source/target identity makes replay a no-op. A rolled source row can never transfer.
+There is no generic `reconciled` terminal. Before provider release, a targeted
+refund cancels the whole reservation, restores it, posts the adjustment, and
+lets the next run resnapshot. After provider release or an unknown outcome, the
+command remains immutable and the correction becomes supplier recovery due.
 
-`begin_transfer` must require all of:
+One runner holds the global platform-account/currency settlement lease,
+serializes supplier commands, and subtracts every unresolved global
+reservation. A fresh Stripe balance preflight must leave the versioned reserve,
+and platform automatic bank payouts must be disabled or coordinated. The
+preflight is a risk gate, not a mirror of or replacement for Stripe balance
+truth. Liquidity shortage uses oldest eligible high-watermark then Business id
+as the deterministic order.
 
-- the row's server-derived `periodEnd` is earlier than Convex server time;
-- the existing review window/policy has admitted the exact period;
-- payout account state is ready and recipient capability is active;
-- provider net, including an exact prior rollover, is at or above the nonzero server-owned threshold for that currency;
-- command ID, request digest, idempotency key, amount, destination, and provider identity are exact and immutable;
-- no prior transfer is pending, unknown, paid, reversed, or rolled forward except through its existing exact transition.
+### 5.3 Transfer, retry, events, and recovery
 
-### 5.2 Threshold policy
+Keep the semantic boundary exact:
 
-The repository records that production `minimumPayoutMinorByCurrency` is an owner/Stripe policy decision, not an implementer guess. Therefore:
+- AE settlement eligibility, liability, reservation, and allocation;
+- Stripe Transfer: platform balance to connected Stripe balance;
+- Stripe payout: connected balance to external bank/card, not represented in
+  AE v1.
 
-- remove the fabricated zero threshold;
-- make the exact threshold a trusted server-policy input, never a browser/action argument;
-- when production policy for a currency is absent, keep the period held and return the existing fail-closed not-ready/below-threshold result; do not invent a default or roll against an unknown threshold;
-- when a configured threshold is not met, use the exact rollover transition above rather than stranding independent monthly balances;
-- focused fixtures may use an explicit labelled test threshold (the existing plan uses `20_00` only as fixture data), never as production copy or configuration.
+Use the official Stripe SDK with one stable idempotency key and exact parameters.
+Preserve provider error/status and `Stripe-Should-Retry`. Retry the same
+parameters/key only inside AE's 23-hour recovery window. Network/no-response,
+provider `5xx`, or any ambiguous release becomes `outcome_unknown` with the
+reservation frozen. After the window, reconcile by provider id, unique
+`transfer_group`, bound metadata, and fresh object readback; absent exact proof
+requires manual intervention, never a fresh key.
 
-No hidden environment-variable family or general configuration framework is introduced without a named operator-owned production value. The production threshold remains an operator prerequisite for SG-024, not an implementer-selected default.
+Persist each pooled Transfer's exact Qualified Use allocations. A
+supplier-attributable post-Transfer correction creates an independent
+non-negative recovery-due fact and an idempotent partial Stripe reversal command
+capped by the amount allocated to that Transfer. Successful recovery clears
+only the exact recovered amount; unavailable recovery offsets future earnings.
+A rail reversal not caused by supplier fault restores supplier payable.
 
-### 5.3 Stripe semantic boundary
+Require raw-body Stripe signature verification and durable duplicate/order-safe
+dispatch for account, Checkout/top-up, refund/dispute, Transfer, and reversal
+events. Do not ingest or project connected-bank payout events.
 
-Keep these facts distinct:
+### 5.4 Operator/legal policy inputs
 
-- AE payout-period eligibility and exact amount;
-- Stripe transfer: platform balance → connected Stripe balance;
-- Stripe payout: connected balance → external bank/debit account;
-- transfer/payout reversal or later failure.
+Source must fail closed when any required production policy is absent:
 
-`transfer_group` is correlation only. Provider readback/webhooks and balance-transaction IDs are evidence inputs, not AE ledger replacements. A provider `500` or network loss is indeterminate and remains recoverable with the same idempotency key and parameters.
+- supported buyer payment methods and definitive-success rule;
+- per-currency platform reserve, replenishment, emergency stop, and automatic
+  platform payout setting;
+- supported countries/currencies/cross-border rules;
+- supplier-fault, refund/dispute, offset/recovery, insolvency, and later-win
+  treatment;
+- merchant-of-record, safeguarding, tax/invoice/reporting responsibility.
 
-### 5.4 Behavioral proof
+The code-selected shape is daily automatic settlement, zero AE ageing, no
+commercial minimum, and no supplier rolling reserve. Values and risk acceptance
+remain operator/legal authority, not implementer guesses.
 
-Extend:
+### 5.5 Behavioral proof
 
-- `tests/unit/convex/payout-ledger.test.ts`;
-- `tests/unit/money/payout-policy.test.ts`;
-- current owner-payout/Stripe adapter tests.
+Extend the current payout ledger/policy, Stripe adapter/server, and owner
+projection tests. Required cases:
 
-Required cases:
+1. exact AE-internal Qualified Use accrues; x402 never does;
+2. daily run reserves the full representable balance once and carries one
+   sub-minor remainder;
+3. concurrent suppliers cannot consume the same global currency liquidity;
+4. KYC, reserve, unsupported-currency, and reconciliation blockers stay owed
+   and are named;
+5. pre-release refund cancels/restores before adjustment; post-release
+   adjustment becomes exact recovery due;
+6. pooled partial recoveries are capped, repeat-safe, and allocation-bound;
+7. 4xx proven non-release restores; network/5xx freezes; exact readback resolves
+   unknown once; expired-key ambiguity requires manual intervention;
+8. duplicate/out-of-order Stripe events converge monotonically;
+9. owner UI says transferred to Stripe and exposes no manual amount/button or
+   bank-arrival claim.
 
-1. first accrual creates an `open` current-period row and cannot transfer;
-2. later same-month accrual and a valid reversal update the same open period without colliding with a terminal state;
-3. server time before `periodEnd` cannot advance the row; server time after the real UTC close advances the exact prior period into the existing review policy;
-4. a closed prior period below an explicit test threshold rolls its exact gross/rake/provider-net into the next open period once, leaves the provider earnings balance unchanged, and can never transfer from the source row;
-5. later accrual can take the rolled target above threshold; the closed eligible target enters transfer pending exactly once inside the admitted review policy;
-6. missing production threshold policy fails closed without rollover or transfer;
-7. unknown, reversed, failed, and duplicate provider outcomes preserve immutable original and compensating identities;
-8. owner UI never enables transfer for an open/rolled period or missing threshold policy.
-
-**STOP conditions:** threshold comes from an untrusted caller; code invents a production amount; caller time can close a period; an open period can transfer; rollover changes provider earnings or duplicates/strands value; paid/unknown/rolled rows accept accrual; transfer is described as bank payout without the corresponding provider lifecycle evidence.
+**STOP conditions:** caller controls money authority; an unvalidated/unknown/x402
+use accrues; Stripe is mirrored as an AE cash ledger; provider release precedes
+reservation; one amount can transfer twice; unknown is released without proof;
+partial recovery exceeds its allocation; production policy is invented; or a
+Transfer is described as bank payout.
 
 ## 6. Workstream C — effect identity, reservation cleanup, and buyer convergence
 
@@ -491,7 +555,7 @@ Workstreams are coordination labels only. Parallelism is allowed by file ownersh
 Run in parallel where file scopes permit:
 
 - A1: PRA-001 rail separation;
-- B1: PRA-003 period/threshold transfer admission;
+- B1: PRA-003 automatic daily settlement, exact reservation, and Stripe Transfer admission;
 - C1: PRA-004 ordinal identity and PRA-005 guarded abandonment;
 - C2: buyer terminal/New question convergence;
 - D1: SG-017 cleanup-attempt binding;
@@ -586,7 +650,7 @@ Suggested slices:
 | Slice | Exact ownership | Contract |
 |---|---|---|
 | Money worker | operation worker + worker tests | PRA-001/002 only; rail before authorization, validate before reconcile. |
-| Payout policy | money ledger/payout policy + payout tests | PRA-003 only; explicit open→review caller, exact below-threshold rollover, and fail-closed threshold/transfer admission. |
+| Payout policy | money ledger/payout policy/Stripe provider + payout tests | PRA-003 only; automatic daily full-balance settlement, pre-release exact reservation, sub-minor carry, global currency serialization, and fail-closed production policy. |
 | Answer effect identity | Answer tool-use agent/checkpoint tests | PRA-004 only; key by reservation/generation/ordinal, retain operation/input in conflicting request material, no new journal. |
 | Invocation abandonment | operation-invoke + reservation tests | PRA-005 only; empty replay can abandon, work-bearing cannot. |
 | Buyer convergence | Answer route/orchestrator/AeChat + route/UI tests | terminal durable parity and Stop-before-New-question. |
@@ -604,7 +668,7 @@ This plan's P1 source-remediation work is complete only when:
 - current callers, generated consumers, tests, and active status documents agree;
 - no compatibility shim, duplicate authority, fake fill, fake payout, or second framework remains;
 - source release gates pass under Node 22;
-- SG-024 remains explicitly blocked—not reassigned into this plan—until its separately owned P2 blockers, operator configuration, real period close, and one exact hosted receipt satisfy §10;
+- SG-024 remains explicitly blocked—not reassigned into this plan—until its separately owned P2 blockers, operator/legal settlement policy values, one real automatic settlement run, and one exact hosted receipt satisfy §10;
 - PAPERCUTS, PROJECT, STATE, ROADMAP, and this plan use the same proof ceiling and do not cite local/source success as hosted value exchange.
 
 ### Verification update — 2026-08-12
@@ -612,9 +676,11 @@ This plan's P1 source-remediation work is complete only when:
 The complete Node 22 post-codegen source gate passed from the current tree.
 PRA-001, PRA-002, PRA-004, PRA-005, buyer convergence, provider cleanup, x402
 readiness-only Test, and public projection repairs are focused-verified.
-PRA-003 remains intentionally blocked because no trusted server-owned nonzero
-minimum-payout policy exists. The outer production release gate fails closed at
-deployment-manifest validation for missing or malformed operator-owned
-production configuration; no hosted or live-money proof was earned.
+PRA-003 now has an accepted source design in ADR-034: automatic daily
+full-balance settlement with exact pre-release reservation and no invented
+commercial threshold. Its source implementation remains open. The outer
+production release gate still fails closed at deployment-manifest validation
+and on missing operator/legal settlement values; no hosted or live-money proof
+was earned.
 
 Until then, the honest product verdict is unchanged: AE has substantial source-complete admission, invocation, recovery, and money machinery, but it cannot yet safely claim that a buyer can finish paid value exchange, a supplier can receive reconciled payout, or a cold client can always complete/handoff/recover the full hosted loop.

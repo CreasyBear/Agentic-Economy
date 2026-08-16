@@ -10,6 +10,7 @@ Agentic-Economy/
 ├── .agents/skills/          # Repository-local AI/UI/Convex workflow guides
 ├── .github/workflows/       # CI and release-gate definitions
 ├── .planning/               # Product charter, roadmap, ADRs, research, maps, codebase docs
+│   └── evidence/            # Product-science packets, Goblin campaigns, frontier baseline
 ├── convex/                  # Convex source functions, schema composition, workers, schedules
 │   └── _generated/          # Generated Convex API/model bindings; do not edit
 ├── docs/                    # Maintained protocol, architecture, operations, and integration docs

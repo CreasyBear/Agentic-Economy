@@ -13,12 +13,12 @@
 > The current product is the market and controlled transaction layer for
 > supplier-hosted Market Operations. The remediation campaign remains open:
 > seven workstreams are focused-verified and the Node 22 post-codegen source
-> gate is green, but the payout-period lifecycle lacks a trusted server-owned
-> nonzero minimum-payout policy; production manifest validation and hosted
-> certification remain blocked. Do not infer from source/local fixtures that
+> gate is green. ADR-034 now selects automatic daily full-balance supplier
+> settlement, but PRA-003 source implementation, production policy values,
+> manifest validation, and hosted certification remain blocked. Do not infer
 > keyed provider execution, production settlement, or customer value is proven.
 
-**Status:** active; remediation open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period policy, production manifest, and hosted certification blocked  
+**Status:** active; remediation open; seven workstreams focused-verified; Node 22 post-codegen source gate green; settlement policy decided, source implementation open; production manifest and hosted certification blocked  
 
 **Rebaselined:** 2026-08-09  
 **Authority:** `PROJECT.md` → accepted ADRs → this roadmap
@@ -42,7 +42,7 @@ Phase 4 — Business Account and routeable-supply maturity (source complete; hos
                          ↓
 Phase 5 — Public Offering decision loop (source landed on main)
                          ↓
-Phase 6 — Single-Key Capability Gateway (remediation open; seven workstreams focused-verified; payout-period policy blocked; hosted certification blocked)
+Phase 6 — Single-Key Capability Gateway (remediation open; seven workstreams focused-verified; settlement policy decided, source implementation open; hosted certification blocked)
 ```
 
 ## Phase 1 — Action Invocation foundation
@@ -198,7 +198,7 @@ and retention mechanisms are deferred beyond this phase.
 
 ## Phase 6 — Single-Key Capability Gateway
 
-**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; production manifest and hosted certification blocked  
+**Status:** remediation campaign open; seven workstreams focused-verified; Node 22 post-codegen source gate green; automatic daily supplier-settlement policy decided in ADR-034 but PRA-003 source implementation remains open; production policy values, manifest, and hosted certification blocked  
 **ADR:** [ADR-035](adr/ADR-035-single-key-capability-gateway.md)  
 **Plan:** [single-key capability gateway implementation plan](research/2026-08-09-single-key-capability-gateway-implementation-plan.md)
 **Historical closeout:** [2026-08-11 goblin source remediation outcome](research/2026-08-11-goblin-source-remediation-plan.md)

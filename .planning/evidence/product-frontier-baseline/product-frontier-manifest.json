@@ -1,0 +1,291 @@
+{
+  "schemaVersion": "ae-product-frontier:v1",
+  "capturedAt": "2026-08-15",
+  "evidenceClass": "source-local",
+  "requiredActionIds": [
+    "supply.collectDevelopmentQuote",
+    "customerRequest.confirm",
+    "customerRequest.run",
+    "customerRequest.cancel",
+    "customerRequest.reportProblem",
+    "customerRequest.replyProblem",
+    "customerRequest.inspectEvidence",
+    "customerRequest.allowRepeatPermission",
+    "customerRequest.useRepeatPermission",
+    "customerRequest.inspectRepeatPermission",
+    "customerRequest.planPreview",
+    "customerRequest.listConnectedAssistants",
+    "customerRequest.withdrawRepeatPermission",
+    "inquiry.submit",
+    "inquiry.readCustomerRecord",
+    "registry.list",
+    "registry.services_detail",
+    "registry.services_list",
+    "registry.services_search",
+    "registry.search",
+    "registry.detail",
+    "registry.operations.search",
+    "registry.operations.detail",
+    "registry.operations.compare",
+    "registry.operations.inspectPlan",
+    "operation.execute",
+    "operation.invoke",
+    "operation.status",
+    "operation.cancel",
+    "operation.reconcile",
+    "storefront.enrichDraft",
+    "study.start",
+    "study.inspect",
+    "web.discover",
+    "demand.capture",
+    "workTree.create",
+    "workTree.inspect",
+    "workTree.apply",
+    "workTree.decide",
+    "workTree.reserveRepeatUse",
+    "workTree.finalizeRepeatUse",
+    "workTree.reconcileRepeatUse",
+    "workTree.inspectRepeatUse",
+    "settings.updateNotificationPreferences"
+  ],
+  "protectedActionIds": [
+    "study.start",
+    "study.inspect",
+    "operation.invoke",
+    "operation.execute",
+    "operation.status",
+    "operation.cancel",
+    "operation.reconcile",
+    "registry.operations.search",
+    "registry.operations.detail",
+    "registry.operations.compare",
+    "registry.operations.inspectPlan",
+    "customerRequest.confirm",
+    "customerRequest.run",
+    "customerRequest.cancel",
+    "workTree.create",
+    "workTree.inspect",
+    "workTree.apply",
+    "workTree.decide"
+  ],
+  "requiredMcpTools": [
+    {
+      "id": "registry.services_list",
+      "toolName": "ae_registry_services_list",
+      "readOnly": true
+    },
+    {
+      "id": "registry.services_search",
+      "toolName": "ae_registry_services_search",
+      "readOnly": true
+    },
+    {
+      "id": "registry.detail",
+      "toolName": "ae_registry_detail",
+      "readOnly": true
+    },
+    {
+      "id": "registry.operations.search",
+      "toolName": "ae_registry_operations_search",
+      "readOnly": true
+    },
+    {
+      "id": "registry.operations.detail",
+      "toolName": "ae_registry_operations_detail",
+      "readOnly": true
+    },
+    {
+      "id": "registry.operations.compare",
+      "toolName": "ae_registry_operations_compare",
+      "readOnly": true
+    },
+    {
+      "id": "registry.operations.inspectPlan",
+      "toolName": "ae_registry_operations_inspectPlan",
+      "readOnly": true
+    },
+    {
+      "id": "operation.execute",
+      "toolName": "ae_operation_execute",
+      "readOnly": true
+    },
+    {
+      "id": "operation.invoke",
+      "toolName": "ae_operation_invoke",
+      "readOnly": false
+    },
+    {
+      "id": "operation.status",
+      "toolName": "ae_operation_status",
+      "readOnly": true
+    },
+    {
+      "id": "operation.cancel",
+      "toolName": "ae_operation_cancel",
+      "readOnly": false
+    },
+    {
+      "id": "operation.reconcile",
+      "toolName": "ae_operation_reconcile",
+      "readOnly": false
+    }
+  ],
+  "requiredE2eSpecs": [
+    "tests/e2e/chat-discovery-inquiry-loop.spec.ts",
+    "tests/e2e/code-block-hit-target.spec.ts",
+    "tests/e2e/customer-request-decision-experience.spec.ts",
+    "tests/e2e/developer-discovery.spec.ts",
+    "tests/e2e/governed-send-review-record.spec.ts",
+    "tests/e2e/landing-answer.spec.ts",
+    "tests/e2e/local-auth-boundary.spec.ts",
+    "tests/e2e/paid-operation-development-surface.spec.ts",
+    "tests/e2e/protected-action-owner-flow.spec.ts",
+    "tests/e2e/public-owner-ui.spec.ts",
+    "tests/e2e/shortlist-export-preview.spec.ts",
+    "tests/e2e/thread-first.spec.ts"
+  ],
+  "requiredConformancePaths": [
+    "tests/unit/action-invocation/durable-action-invocation.test.ts",
+    "tests/unit/action-invocation/dynamic-published-operation.test.ts",
+    "tests/unit/action-invocation/paid-operation-provider-selection.test.ts",
+    "tests/unit/action-invocation/x402-payment-reconciliation.test.ts",
+    "tests/unit/capability-supply/provider-connection.test.ts",
+    "tests/unit/capability-supply/route-transport-runtime.test.ts",
+    "tests/unit/capability-supply/readiness-probe.test.ts",
+    "tests/unit/capability-supply/eligible-supply.test.ts",
+    "tests/unit/capability-supply/publication-importers.test.ts",
+    "tests/unit/capability-supply/provider-approval.test.ts",
+    "tests/unit/capability-supply/published-operation-provider-conformance.test.ts",
+    "tests/unit/capability-supply/provider-conformance-evidence.test.ts",
+    "tests/integration/capability-supply-owner-funnel.test.ts",
+    "tests/unit/customer-request/route-execution/transport-canonical.test.ts",
+    "tests/unit/customer-request/route-execution/cancellation-canonical.test.ts",
+    "tests/integration/customer-request-v2-multi-capability-route.test.ts",
+    "tests/unit/answer-thread/answer-harness-operation.test.ts",
+    "tests/unit/answer-thread/answer-turn-checkpoint.test.ts",
+    "tests/unit/answer-thread/answer-turn-finalization-convergence.test.ts",
+    "tests/integration/answer-thread-source-write.test.ts",
+    "tests/unit/deployment/deployment-manifest.test.ts",
+    "tests/unit/server/diagnostic-routes.test.ts",
+    "tests/unit/server/request-correlation.test.ts",
+    "tests/unit/server/start-observability.test.ts"
+  ],
+  "evalCoverageTags": [
+    "direct-retrieval-fast-path",
+    "visible-typo-recovery",
+    "empty-state",
+    "near-me-location-guard",
+    "broad-query-clarification",
+    "unsupported-action-boundary",
+    "persisted-tool-evidence",
+    "timing-trace",
+    "public-copy-boundary",
+    "public-copy-safety-scan",
+    "agent-json-link",
+    "frozen-evidence-follow-up",
+    "multi-turn-boundary",
+    "broad-catalog-scale",
+    "capability-tool-execution"
+  ],
+  "activeFrontierTables": [
+    "studies",
+    "studyEvents",
+    "workTrees",
+    "workTreeEvents",
+    "workTreeDecisionReceipts",
+    "externalRunManifests",
+    "externalRunStarts",
+    "externalRunEvidence",
+    "externalRunGateDecisions",
+    "capabilityOperationInvocations",
+    "moneyLedgerEntries",
+    "moneyUsageEvents",
+    "answerThreads",
+    "answerTurns",
+    "capabilityPublications",
+    "capabilityProviderConnections"
+  ],
+  "protectedModules": [
+    "src/modules/study",
+    "src/modules/external-run",
+    "src/modules/work-tree",
+    "src/modules/capability-execution",
+    "src/modules/capability-supply",
+    "src/modules/money",
+    "src/modules/customer-request",
+    "src/modules/answer",
+    "src/modules/answer-thread"
+  ],
+  "protectedVisionPrimitives": [
+    "Study",
+    "WorkTree",
+    "external-run-kill-gate",
+    "operation.invoke",
+    "money-ledger",
+    "capability-supply"
+  ],
+  "goldenJourneys": {
+    "machine": [
+      "public-discovery-cold-path",
+      "skill-cli-contract",
+      "http-market-operations-anonymous",
+      "http-operation-lifecycle-authenticated",
+      "mcp-tools-list",
+      "customer-request-dev-smoke",
+      "work-tree-dev-smoke-with-study",
+      "action-invocation-development-evidence"
+    ],
+    "person": [
+      "landing-ask-to-cited-answer",
+      "discovery-compare-listing-inquiry",
+      "customer-request-decision-review",
+      "protected-owner-action",
+      "developer-discovery",
+      "worktree-create-study-propose-inbox-reload"
+    ]
+  },
+  "parkedCapabilities": {
+    "workTreeWeeklyMemo": {
+      "status": "parked-owned",
+      "successor": "notification-outbox (work-tree-weekly-memo template)",
+      "successorDecisionRequired": false,
+      "paths": [
+        "src/modules/work-tree/internal/memo.tsx",
+        "src/modules/work-tree/internal/memo-notification.ts"
+      ],
+      "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#1-worktree-weekly-memo--async-re-entry"
+    },
+    "projectSpine": {
+      "status": "parked",
+      "successor": "WorkTree wayfinding/chase (characterization pending)",
+      "successorDecisionRequired": false,
+      "paths": [
+        "src/modules/project-spine",
+        "convex/projectSpine.ts"
+      ],
+      "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#2-project-spine-wayfinding--chase"
+    },
+    "routingKernelHistory": {
+      "status": "deferred-post-proof",
+      "paths": [
+        "src/modules/routing-kernel/internal/convex-schema.ts",
+        "convex/routingKernelV1History.ts"
+      ]
+    }
+  },
+  "intentionalRetirements": [
+    {
+      "id": "provider-integrations-shipping",
+      "retiredAt": "2026-08-15",
+      "paths": [
+        "src/modules/provider-integrations/shipping",
+        "tests/integration/shipping-provider-quote-input.test.ts",
+        "tests/unit/customer-request/shipping-quote-input.test.ts"
+      ],
+      "successor": "capability-supply + operation.invoke (no shipping-specific integration)",
+      "evidenceDisposition": "deleted; scenario vocabulary may remain in Customer Request fixtures",
+      "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#3-shipping-provider-integration-batch-2"
+    }
+  ],
+  "dirtyTreePathCount": 279
+}

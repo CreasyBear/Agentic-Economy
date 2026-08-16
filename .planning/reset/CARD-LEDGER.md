@@ -1,0 +1,83 @@
+# Atomic Operation Market Reset — Card Ledger
+
+Every unit of reset work is a card. The orchestrator owns this file; workers read their own row
+and write a receipt. Status values: `pending`, `dispatched`, `validated`, `reviewed`, `committed`, `blocked`.
+
+Receipts live in [`RECEIPTS.md`](RECEIPTS.md). Operating contract in [`OPERATING-MODEL.md`](OPERATING-MODEL.md).
+
+## Phase 0 — Preserve the current baseline
+
+| Card | Role | Concern | Status |
+| --- | --- | --- | --- |
+| P0-a | committer | Triage 13 stashes: archive refs, adopt/abandon note, no silent drop | committed |
+| P0-b | committer | Slice-commit 308 dirty paths by concern; no single mega-commit | committed |
+| P0-c | committer | Push branch and tag pre-reset baseline; verify remote SHA | committed |
+| P0-d | validator | Full source gate on the tagged revision; measured pass/fail receipt | validated |
+| P0-e | scribe | Rebase STATE / PROJECT / CAPABILITY-MAP to the tag | committed |
+
+Exit gate: porcelain empty, stash list resolved, baseline tag on remote, gate receipt filed.
+
+## Phase 1 — Close the category additively
+
+Nothing deleted. Live money stays fail-closed. Each card runs executor → validator → reviewer → committer.
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P1-a | Re-key buyer money to organization `accountId` (ledger, credential budget, Convex money schema). Precondition: zero balances | P0 |
+| P1-b | Immutable Delivery / Qualified Use receipts after contract-valid delivery + replay/conflict tests | P1-a |
+| P1-c | Disputes, exact reversals, supplier `recoveryDue` | P1-b |
+| P1-d | Idempotent daily settlement cron | P1-c |
+| P1-e | Canonical `/api/v1/operations/call`; dual-serve `/execute`; `callVia` + `paymentLane` on detail; refuse non-brokered lanes | P1-a |
+| P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers | P1-e |
+| P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 |
+
+## Phase 2 — Decouple without changing behavior
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P2-a | Move generic strict action-to-tool projection from `harness` into `actions`; keep replay-safe journal; remove custom run loop only after parity validator passes | P1 |
+| P2-b | Move development/curated fixtures out of `capability-supply` into test/seed ownership | P1 |
+| P2-c | Remove Layer-0 imports from Answer and Customer Request; split oversized invoke/projection modules | P2-a |
+| P2-d | Keep public five-state invocation vocabulary; keep lease/attempt states internal | P2-c |
+
+## Phase 3 — Port proof before quarantine
+
+Hard gate: no quarantine card runs until every P3 validator is green and each port is committed.
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P3-* | One card per Customer-Request-owned conformance path, ported to atomic `operation.invoke` / `operation.call` | P2 |
+| P3-val | Re-run full conformance floor (≥10); assert no path lost without equivalent | P3-* |
+| P3-rev | Ports do not weaken assertions or substitute fixtures for live kernel proof | P3-val |
+
+## Phase 4 — Replace chat orchestration
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P4-a | Rewrite `eval/answer/lib/cases.ts` first as the specification for model-chosen market tool use | P3 |
+| P4-b | Eval suite runs and documents expected tool-use behavior (no router tags) | P4-a |
+| P4-c | Drain in-flight router-named checkpoints; migrate thread tool IDs / optional intent; retain thread storage | P4-b |
+| P4-d | Replace named router files with one bounded AI SDK tool loop | P4-c |
+| P4-e | MCP/CLI/chat parity + "chat has no tool MCP lacks" structural assertion | P4-d |
+| P4-f | Review: no chat-only market capability; no quarantined surface reintroduced | P4-e |
+
+## Phase 5 — Quarantine and deprecate
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P5-a | Three-artifact frontier v2 receipt: manifest, `verify-product-frontier.mjs`, `product-frontier-manifest.test.ts` | P3, P4 |
+| P5-b | Freeze writes for Customer Request / WorkTree / Study / inquiries; deregister actions only after notice | P5-a |
+| P5-c | Advertise `Deprecation`/`Sunset` + successors in HTTP, MCP, UCP, `SKILL.md`, `llms.txt`, for-agents | P5-b |
+| P5-d | Later release card: RFC 9457 HTTP 410 tombstones | P5-c |
+| P5-e | Freeze business/services expansion; keep measured public URLs pending founder decision | P5-a |
+
+## Phase 6 — Retire data separately
+
+One table-family card at a time, separate deployments only.
+
+| Card | Concern | Depends on |
+| --- | --- | --- |
+| P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 |
+
+Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.
+Routing-kernel HTTP tombstones are permanent; historical tables drop only after approved checksummed export.

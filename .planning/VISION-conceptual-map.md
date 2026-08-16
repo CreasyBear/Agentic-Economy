@@ -26,6 +26,34 @@ AE hosts the market and transaction boundary, not provider code. Skills, SDKs an
 remain acquisition, lineage and distribution inputs; they become market supply only through an
 admitted callable `Operation` with an evidence path.
 
+## Creator/UGC supplier-economy operating model (destination)
+
+Mature Instagram/YouTube-style creator/UGC platforms are the operating-model analogy for AE's supply, discovery, distribution and monetization—not a category rename. Eligible businesses and developers publish supplier-generated Operations with supplier-hosted implementations, including bespoke datasets behind them; at the destination, AE admits and indexes them as immutable, versioned Market Operations and recommends/distributes them into normal agent workflows for low-commitment, one-use consumption. Supply is consumed by agents, not hosted as AE content.
+
+| Creator/UGC pattern | AE canonical mapping |
+| --- | --- |
+| creator | Supplier/Provider |
+| post/asset | immutable, versioned Market Operation |
+| feed/search/recommendation | agent discovery and distribution |
+| passive view/impression/exposure | distribution observation, not invocation |
+| active use | invocation |
+| qualifying engagement/conversion | non-owner, contract-valid production invocation with required evidence and exclusions = Qualified Use |
+| creator earnings | supplier accrual/settlement only after Qualified Use plus separately authoritative reconciled economic settlement |
+| insights/trends | privacy-safe aggregated demand gaps and operation-level evidence |
+
+The operating loop is **publish → admit → distribute → invoke → validate → settle → learn → revise/withdraw**. Three gates stay distinct:
+
+- **Admission/publication/eligibility:** the exact contract, provenance, authorization/ownership, license/derivation rights and immutable lineage determine which callable supplier Operation enters the market; readiness is a later independent routeability gate, and Principal/execution authority is a later independent invocation gate.
+- **Recommendation/distribution:** ordering is contextual and evidence-class-labelled, using contract fit, price, freshness, readiness, non-owner Qualified Use, reliability/latency and bounded exploration for new supply—never gross calls, owner traffic, popularity alone or one opaque score.
+- **Qualified Use and monetization/settlement:** Qualified Use is only a non-owner, contract-valid production invocation with required evidence and exclusions; passive views, impressions and exposure are distribution observations, active use is invocation, and Qualified Use is independent of payment settlement. Supplier accrual/settlement requires Qualified Use plus separately authoritative reconciled economic settlement. Owner traffic, invalid/refused/failed/unknown calls, stars, likes and popularity are not Qualified Use.
+
+**Supplier insight loop:** operation-level evidence and Qualified Use return privacy-safe aggregated demand gaps to suppliers; raw supplier data is never exposed merely to improve discovery. Aggregated demand gaps may induce bespoke datasets/Operations, but never leak Principal prompts or data. **Originality/provenance rule:** authorized licensed or materially derived supply is allowed and distinguished from unauthorized copy/republication; anti-copy/unauthorized-republication controls do not ban authorized source use; provenance/validity never proves semantic truth.
+
+**Analogy boundaries:** Agent runtimes consume and distribute supply but do not become Principals. This is one-to-many publishing/distribution and low-commitment one-use consumption—not influencer or brand-campaign procurement, creator hiring, briefs, applications, collaborations or a bilateral supplier relationship. AE does not host content or supplier runtimes; OpenRouter remains the structural analogy, and no analogy replaces Principal, Consuming Agent, Supplier/Provider, Operation, Market Operation or Qualified Use.
+
+This is a destination model, not proof of independent supply, production settlement, recommendation quality or a functioning flywheel. Primary analogy references: [Roblox recommendations and ranking](https://en.help.roblox.com/hc/en-us/articles/21416941036564-Recommendations-and-Ranking-on-Roblox), [Instagram recommendations and originality](https://creators.instagram.com/recommendations-and-originality), [mod.io Marketplace](https://support.mod.io/hc/en-us/articles/9860328171151-How-does-mod-io-Marketplace-work), and [YouTube Partner Programme](https://support.google.com/youtube/answer/1311392).
+
+
 ## World if it works
 
 This is a conditional economic picture, not a present-tense proof claim:

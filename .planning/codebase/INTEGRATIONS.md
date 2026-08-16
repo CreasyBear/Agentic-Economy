@@ -62,9 +62,7 @@
 - Curated data providers - Open-Meteo, Wikipedia, Mockster, CoinGecko, ipify, Exa, Frankfurter, OpenWeatherMap, Tavily, SerpAPI, WolframAlpha, CoinMarketCap, FlightAware, and other x402 resources are represented as executable publications in `src/modules/capability-supply/curated-cluster-a-publications.ts`, `src/modules/capability-supply/curated-cluster-b-publications.ts`, `src/modules/capability-supply/curated-cluster-c-publications.ts`, and `src/modules/capability-supply/curated-provider-publications.ts`.
   - SDK/Client: normalized OpenAPI/MCP/x402 transports under `src/modules/capability-supply/internal/` and `src/modules/capability-execution/`.
   - Auth: keyless sources require none; keyed sources use registered provider credential references rather than global raw keys, as enforced by `src/components/ae/supply/AeSupplyEndpointConfigStep.tsx`.
-- Shippo and EasyPost - shipping quote adapters exist in `src/modules/provider-integrations/shipping/server.ts`; current executable references are integration tests in `tests/integration/shipping-provider-quote-input.test.ts`.
-  - SDK/Client: bounded native `fetch` with provider-specific REST payloads in `src/modules/provider-integrations/shipping/server.ts`.
-  - Auth: adapter-injected Shippo token or EasyPost API key plus provider account and AE quote-signing key in `src/modules/provider-integrations/shipping/server.ts`.
+- Shippo / EasyPost shipping quote adapters — **retired 2026-08-15** (Product-Frontier Cleanup Batch 2). Market operations use capability-supply + `operation.invoke`; see `.planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md`.
 
 ## Data Storage
 
