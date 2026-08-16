@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AnswerEffectPolicy, AnswerRequestRoute } from '@/modules/answer/answer-schema'
 import type { AddressInfo } from 'node:net'
 import { json } from 'node:stream/consumers'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
@@ -36,6 +37,8 @@ export type OpenRouterContractResponseSource =
 
 export type OpenRouterContractServerOptions = {
   safetyDecision?: 'allow' | 'refuse'
+  preflightRoute?: AnswerRequestRoute
+  preflightEffectPolicy?: AnswerEffectPolicy
 }
 
 export async function startOpenRouterContractServer(
@@ -47,15 +50,22 @@ export async function startOpenRouterContractServer(
   let scenarioRequestCount = 0
   const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
     const body = await json(request) as OpenRouterContractRequest
+    const preflightSchemaName = body.response_format?.json_schema?.name
     const isSafetyRequest =
-      body.response_format?.json_schema?.name === 'answer_query_safety'
+      preflightSchemaName === 'answer_query_safety'
+      || preflightSchemaName === 'answer_request_preflight'
       || body.messages.some((message) =>
         message.role === 'system' && message.content.includes('Classify the user request'),
       )
     requests.push(body)
     let payload: unknown
     if (isSafetyRequest) {
-      payload = openRouterSafetyChoiceResponse(options.safetyDecision ?? 'allow')
+      payload = openRouterSafetyChoiceResponse(
+        options.safetyDecision ?? 'allow',
+        preflightSchemaName,
+        options.preflightRoute,
+        options.preflightEffectPolicy,
+      )
     } else {
       const responseIndex = scenarioRequestCount++
       payload = typeof responseSource === 'function'
@@ -157,7 +167,32 @@ export function openRouterProseResponse(
 
 function openRouterSafetyChoiceResponse(
   result: 'allow' | 'refuse',
+  schemaName?: string,
+  preflightRoute: AnswerRequestRoute = 'business',
+  preflightEffectPolicy: AnswerEffectPolicy = 'run_when_ready',
 ): unknown {
+  const content =
+    schemaName === 'answer_request_preflight'
+      ? {
+          safety: result,
+          interpretation: {
+            route: preflightRoute,
+            requestedIntents: [{
+              intentId: preflightRoute === 'operation'
+                ? 'operation-request'
+                : 'business-search',
+              phrase: preflightRoute === 'operation'
+                ? 'operation request'
+                : 'business search',
+              requestedResult: preflightRoute === 'operation'
+                ? 'requested live result'
+                : 'matching businesses',
+            }],
+            continuation: 'new',
+            effectPolicy: preflightEffectPolicy,
+          },
+        }
+      : { result }
   return {
     id: `chatcmpl-safety-${result}`,
     model: 'test-model',
@@ -165,7 +200,7 @@ function openRouterSafetyChoiceResponse(
       finish_reason: 'stop',
       message: {
         role: 'assistant',
-        content: JSON.stringify({ result }),
+        content: JSON.stringify(content),
       },
     }],
     usage: {
@@ -186,19 +221,25 @@ export function openRouterStructuredProseResponse(
 
 export function openRouterToolThenProseResponses(input: {
   toolCalls?: readonly OpenRouterToolCallPlan[]
+  navigationOperationRef?: string
+  stageOperationReads?: boolean
+  emitAllToolCallsTogether?: boolean
+  stageBusinessRecovery?: boolean
   prose: OpenRouterProsePlan
 }): OpenRouterContractResponseSource {
   const toolCalls = input.toolCalls ?? []
   return (request) => {
     // The safety preflight uses Output.choice, while answer prose uses Output.object.
     // Keep the fixture's ordinary response path unchanged after answering the choice.
+    const preflightSchemaName = request.response_format?.json_schema?.name
     if (
-      request.response_format?.json_schema?.name === 'answer_query_safety'
+      preflightSchemaName === 'answer_query_safety'
+      || preflightSchemaName === 'answer_request_preflight'
       || request.messages.some((message) =>
         message.role === 'system' && message.content.includes('Classify the user request'),
       )
     ) {
-      return openRouterSafetyChoiceResponse('allow')
+      return openRouterSafetyChoiceResponse('allow', preflightSchemaName)
     }
     // Route on request SHAPE, never call index: multi-turn tests reuse one
     // server and turns interleave discovery, tool, and structured requests.
@@ -214,23 +255,90 @@ export function openRouterToolThenProseResponses(input: {
           }],
         }
       }
-      // AI SDK tool rounds are not structured-output rounds. The next request
-      // with tool results must withhold tools and carry the prose JSON schema.
-      const hasToolResults = request.messages.some((message) => message.role === 'tool')
-      if (toolCalls.length > 0 && !hasToolResults) {
+      // AI SDK tool rounds are not structured-output rounds. Match the
+      // planned call to the currently exposed stage-specific toolset.
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const hasToolResults = request.messages.some(
+        (message) => message.role === 'tool',
+      )
+      const planned = toolCalls.filter((call) =>
+        activeNames.has(openRouterToolName(call.toolId)),
+      )
+      if (input.emitAllToolCallsTogether === true) {
         return openRouterToolResponse(toolCalls)
       }
-      throw new Error('unexpected_unstructured_tool_request')
+      if (planned.length > 0) {
+        return openRouterToolResponse([planned[0]!])
+      }
+      if (!hasToolResults) {
+        throw new Error('unexpected_unstructured_tool_request')
+      }
+      return openRouterStructuredProseResponse(input.prose)
+    }
+    if (
+      input.stageBusinessRecovery === true &&
+      request.response_format?.json_schema?.name === 'answer_navigation'
+    ) {
+      const completedReads = request.messages.filter(
+        (message) => message.role === 'tool',
+      ).length
+      const businessReads = toolCalls.filter((call) =>
+        call.toolId === 'registry.search' ||
+        call.toolId === 'registry.detail',
+      )
+      const businessRead = businessReads[completedReads]
+      return businessRead === undefined
+        ? openRouterProseResponse({
+            kind: 'answer',
+            prose: input.prose,
+          } as unknown as OpenRouterProsePlan)
+        : openRouterToolResponse([businessRead])
+    }
+    if (
+      input.stageOperationReads === true &&
+      input.navigationOperationRef !== undefined &&
+      request.response_format?.json_schema?.name === 'answer_navigation'
+    ) {
+      const completedReads = request.messages.filter(
+        (message) => message.role === 'tool',
+      ).length
+      const readCalls = toolCalls.filter((call) =>
+        call.toolId.startsWith('registry.operations.'),
+      )
+      const nextRead = readCalls[completedReads]
+      return nextRead === undefined
+        ? openRouterNavigationCallResponse(input.navigationOperationRef)
+        : openRouterToolResponse([nextRead])
     }
     if ((request.tools?.length ?? 0) > 0 && toolCalls.length > 0) {
-      // Tool round: tools exposed, planned calls unserved on this step chain.
-      const hasToolResults = request.messages.some((message) => message.role === 'tool')
-      if (!hasToolResults) {
-        return openRouterToolResponse(toolCalls)
-      }
-      throw new Error('expected_tools_withheld_on_structured_round')
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const planned = toolCalls.find((call) =>
+        activeNames.has(openRouterToolName(call.toolId)),
+      )
+      if (planned !== undefined) return openRouterToolResponse([planned])
     }
-    return openRouterStructuredProseResponse(input.prose)
+    return request.response_format?.json_schema?.name === 'answer_navigation'
+      ? openRouterProseResponse({ kind: 'answer', prose: input.prose } as never)
+      : openRouterStructuredProseResponse(input.prose)
+  }
+}
+
+function openRouterNavigationCallResponse(operationRef: string): unknown {
+  return {
+    id: 'chatcmpl-navigation-call',
+    model: 'test-model',
+    choices: [{
+      finish_reason: 'stop',
+      message: {
+        role: 'assistant',
+        content: JSON.stringify({ kind: 'call', operationRef }),
+      },
+    }],
+    usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
   }
 }
 

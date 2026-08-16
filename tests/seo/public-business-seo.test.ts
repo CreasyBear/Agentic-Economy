@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
+import { getDefaultPublicOwnerStatusReadback } from '../helpers/owner-default-claim'
 
 describe('public business SEO builder', () => {
   it('builds canonical metadata and schema without ratings, offers, or payments', () => {

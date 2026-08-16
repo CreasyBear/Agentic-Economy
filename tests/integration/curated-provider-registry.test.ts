@@ -76,6 +76,31 @@ describe('curated provider operation registry', () => {
       },
     })
   })
+  it('keeps the CoinGecko demo-key publication sandbox-only', async () => {
+    const sandbox = convexTest(schema, modules)
+    const sandboxSeed = await sandbox.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })
+    expect(sandboxSeed.businessSlugs).toContain('coingecko-simple-price-demo')
+    expect(sandboxSeed.publications.some(({ capabilityId }) => capabilityId === 'coingecko.simple-price-demo')).toBe(true)
+
+    const sandboxCurrent = await sandbox.run(async (ctx) => (
+      (await ctx.db.query('capabilityPublications').collect()).filter(({ disposition, publisherRef }) => (
+        disposition === 'current' && publisherRef === 'system:curated-provider-bootstrap'
+      ))
+    ))
+    expect(sandboxCurrent.some(({ capabilityId }) => capabilityId === 'coingecko.simple-price-demo')).toBe(true)
+
+    const production = convexTest(schema, modules)
+    const productionSeed = await production.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'production' })
+    expect(productionSeed.businessSlugs).not.toContain('coingecko-simple-price-demo')
+    expect(productionSeed.publications.some(({ capabilityId }) => capabilityId === 'coingecko.simple-price-demo')).toBe(false)
+
+    const productionCurrent = await production.run(async (ctx) => (
+      (await ctx.db.query('capabilityPublications').collect()).filter(({ disposition, publisherRef }) => (
+        disposition === 'current' && publisherRef === 'system:curated-provider-bootstrap'
+      ))
+    ))
+    expect(productionCurrent.some(({ capabilityId }) => capabilityId === 'coingecko.simple-price-demo')).toBe(false)
+  })
   it('creates curated provider connections before publication and keeps reruns duplicate-safe', async () => {
     const backend = convexTest(schema, modules)
     const firstSeed = await backend.mutation(internal.curatedProviders.seed, { runtimeEnvironment: 'sandbox' })

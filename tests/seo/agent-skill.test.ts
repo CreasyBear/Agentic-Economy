@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 import { AGENT_KEY_ISSUANCE_PATH } from '@/modules/answer-thread/public'
@@ -71,6 +72,13 @@ describe('public agent skill', () => {
     expect(body).toContain('not a guarantee for every Operation')
     expect(body).toContain('relation: "execute"')
     expect(body).toContain('anonymous MCP tool `ae_operation_execute`')
+  })
+  it('documents the installed MCP lifecycle and the business-only catalog boundary', () => {
+    expect(body).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
+    expect(body).toContain('`initialize` then `notifications/initialized`')
+    expect(body).toContain('`tools/list` before `tools/call`')
+    expect(body).toContain('Business catalog is business-only')
+    expect(body).toContain('`registry.search` and `registry.detail` read published businesses')
   })
 
   it('removes the old alternate entry vocabulary and unsupported claims', () => {

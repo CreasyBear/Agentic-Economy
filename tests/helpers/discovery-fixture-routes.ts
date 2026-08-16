@@ -9,7 +9,10 @@ import {
   type ReadCatalogDiscoveryManifestInput,
   type DiscoverySourceState,
 } from '../../src/modules/discovery/public'
-import { createFixtureDiscoverySourceState } from './discovery-fixture-source-state'
+import {
+  createFixtureDiscoverySourceState,
+  testOnlyDiscoveryManifestAdapter,
+} from './discovery-fixture-source-state'
 
 export function handleLlmsTxtRequest(request: Request): Response {
   const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
@@ -37,7 +40,11 @@ export function handleUcpManifestRequest(request: Request, slug: string, state: 
   const result = regenerateDiscoveryManifest(
     state,
     { slug: input.slug },
-    { canonicalBaseUrl: input.canonicalBaseUrl, now: input.now },
+    {
+      canonicalBaseUrl: input.canonicalBaseUrl,
+      now: input.now,
+      adapter: testOnlyDiscoveryManifestAdapter,
+    },
   )
   if (result.kind === 'error') {
     return result.code === 'discovery_manifest_not_public'

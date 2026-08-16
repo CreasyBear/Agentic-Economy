@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  getPublicBusinessPageReadback,
-  getPublicOwnerStatusReadbackBySlug,
   publicOwnerDefaultClaimInput,
   resetPublicOwnerRouteReadbacksForTest,
   submitDurablePublicOwnerClaimFlow,
   validatePublicOwnerClaimFlowInput,
 } from '@/modules/catalog/public'
+import {
+  getPublicBusinessPageReadback,
+  getPublicOwnerStatusReadbackBySlug,
+} from '../helpers/owner-default-claim'
 
 describe('durable public owner claim route readbacks', () => {
   beforeEach(() => {
@@ -37,6 +39,9 @@ describe('durable public owner claim route readbacks', () => {
     }
 
     const result = submitDurablePublicOwnerClaimFlow(customInput)
+    if (result.kind !== 'ok') {
+      throw new Error(`Expected durable owner claim to publish, got ${result.kind}.`)
+    }
 
     expect(result).toMatchObject({
       kind: 'ok',
@@ -61,7 +66,7 @@ describe('durable public owner claim route readbacks', () => {
       },
     })
 
-    const status = getPublicOwnerStatusReadbackBySlug('fremantle-priority-electrical')
+    const status = getPublicOwnerStatusReadbackBySlug(result.catalog, 'fremantle-priority-electrical')
     expect(status).toMatchObject({
       catalog: {
         slug: 'fremantle-priority-electrical',
@@ -71,7 +76,7 @@ describe('durable public owner claim route readbacks', () => {
     })
     expect(status?.catalog.name).not.toBe(publicOwnerDefaultClaimInput.businessName)
 
-    const page = getPublicBusinessPageReadback('fremantle-priority-electrical')
+    const page = getPublicBusinessPageReadback(result.catalog, 'fremantle-priority-electrical')
     expect(page).toMatchObject({
       kind: 'available',
       catalog: {

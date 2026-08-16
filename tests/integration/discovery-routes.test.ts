@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
+import {
+  createFixtureDiscoverySourceState,
+  testOnlyDiscoveryManifestAdapter,
+} from '../helpers/discovery-fixture-source-state'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
@@ -29,7 +32,11 @@ describe('discovery route handlers', () => {
     const generated = regenerateDiscoveryManifest(
       state,
       { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      { canonicalBaseUrl: 'https://ae.example', now: 0 },
+      {
+        canonicalBaseUrl: 'https://ae.example',
+        now: 0,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
     )
 
     if (generated.kind !== 'ok') {

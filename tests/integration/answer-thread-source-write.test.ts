@@ -572,6 +572,23 @@ describe('answer thread source-write admission', () => {
       generation: 0,
     })
 
+    const checkpointReadOperationKey = 'answer_thread:checkpoint:read:lease-generation'
+    await expect(backend.query(api.answerThreads.readAnswerTurnCheckpoint, await admitted({
+      reservationKey,
+      requestDigest,
+      sessionId,
+      threadId: first.threadId,
+      turnId: first.turnId,
+      turnSeq: first.turnSeq,
+      generation: first.generation,
+      operationKey: checkpointReadOperationKey,
+      correlationId: checkpointReadOperationKey,
+    }, 'nonce-lease-generation-checkpoint-read'))).resolves.toMatchObject({
+      kind: 'checkpoint',
+      checkpointDigest: serialized.checkpointDigest,
+      checkpointStep: checkpoint.stepOrdinal,
+    })
+
     const renewed = await backend.mutation(api.answerThreads.renewAnswerTurnLease, await admitted({
       reservationKey,
       requestDigest,

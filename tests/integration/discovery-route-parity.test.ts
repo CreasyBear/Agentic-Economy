@@ -38,7 +38,10 @@ import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-oper
 import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
 import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
-import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
+import {
+  createFixtureDiscoverySourceState,
+  testOnlyDiscoveryManifestAdapter,
+} from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
@@ -76,7 +79,11 @@ describe('discovery route parity', () => {
     const generated = regenerateDiscoveryManifest(
       state,
       { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      { canonicalBaseUrl: 'https://ae.example', now: 13_000 },
+      {
+        canonicalBaseUrl: 'https://ae.example',
+        now: 13_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
     )
     if (generated.kind !== 'ok') {
       throw new Error(`Expected source UCP manifest to generate: ${generated.reason}`)
@@ -124,7 +131,11 @@ describe('discovery route parity', () => {
     const suppressedGenerated = regenerateDiscoveryManifest(
       state,
       { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      { canonicalBaseUrl: 'https://ae.example', now: 13_000 },
+      {
+        canonicalBaseUrl: 'https://ae.example',
+        now: 13_000,
+        adapter: testOnlyDiscoveryManifestAdapter,
+      },
     )
     const suppressedLlms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
     const suppressedSitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })

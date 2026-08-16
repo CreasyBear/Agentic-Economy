@@ -176,10 +176,15 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(server.requests).toHaveLength(3)
-      const firstPrompt = server.requests[1]?.messages.find((message) => message.role === 'user')?.content ?? ''
-      expect(firstPrompt).toContain('User query: paramata')
-      expect(firstPrompt).not.toContain('<catalog_data>')
+      expect(server.requests).toHaveLength(5)
+      expect(server.requests[0]?.response_format?.json_schema?.name).toBe('answer_request_preflight')
+      const stagedAgentRequests = server.requests.slice(1)
+      expect(stagedAgentRequests).toHaveLength(4)
+      for (const request of stagedAgentRequests) {
+        const userPrompt = request.messages.find((message) => message.role === 'user')?.content ?? ''
+        expect(userPrompt).toContain('User query: paramata')
+        expect(userPrompt).not.toContain('<catalog_data>')
+      }
     } finally {
       restoreOpenRouter()
       await server.close()

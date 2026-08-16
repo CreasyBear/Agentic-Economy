@@ -31,7 +31,9 @@ function isSafetyModelRequest(request: {
   messages?: readonly { role: string; content: string }[]
   response_format?: { json_schema?: { name?: string } }
 }): boolean {
-  return request.response_format?.json_schema?.name === 'answer_query_safety'
+  const schemaName = request.response_format?.json_schema?.name
+  return schemaName === 'answer_query_safety'
+    || schemaName === 'answer_request_preflight'
     || request.messages?.some((message) =>
       message.role === 'system' && message.content.includes('Classify the user request'),
     ) === true
@@ -303,9 +305,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       // The public evidence retains only the immutable run reference. Full
       // harness telemetry lives in private harness-session entries.
       expect(evidence.harnessRunRef).toBe(thread.turnId)
-      expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
+      expect(evidence.timings?.map((timing) => timing.name)).toContain('retrieval.initial_search')
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
-      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(3)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(2)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -652,6 +654,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
   it('recovers a misspelled query through the tool-use agent choosing registry.search("parramatta")', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      stageBusinessRecovery: true,
       prose: {
         oneLine: 'One business may fit what you need.',
         summary:
@@ -701,9 +704,15 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
       ).toEqual(['paramata', 'parramatta'])
-      expect(evidence.toolCalls?.[1]?.seq).toBe(1)
-      expect((evidence.toolCalls as readonly { toolId?: string }[])[1]?.toolId).toBe('registry.search')
-      expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
+      expect((evidence.toolCalls as readonly { toolId?: string }[]).map(
+        (call) => call.toolId,
+      )).toEqual(['registry.search', 'registry.search'])
+      expect(evidence.timings?.map((timing) => timing.name)).toContain(
+        'retrieval.initial_search',
+      )
+      expect(evidence.timings?.map((timing) => timing.name)).toContain(
+        'model.agent_total',
+      )
     } finally {
       restoreOpenRouter()
       await server.close()

@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-
-import { listMcpActionDescriptors } from '@/modules/actions'
+import { describeActionForAgent } from '@/modules/common/action'
+import { findAction, listMcpActionDescriptors } from '@/modules/actions'
 import { findFiles } from '@/lib/ui/contract-scans'
 import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
@@ -277,17 +277,19 @@ describe('CustomerRequest source completeness', () => {
     const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
     const publicComprehension = readFileSync('src/modules/customer-request/public-comprehension.ts', 'utf8')
     const requestSchema = readFileSync('src/modules/customer-request/public-contract-schema.ts', 'utf8')
-    const marketEntrySource = readFileSync('src/modules/registry/operation-entry.ts', 'utf8')
 
-    for (const marker of [
-      'export const OPERATION_MARKET_ACTION_ENTRIES',
-      'inputSchema: z.toJSONSchema(schema)',
-    ]) {
-      expect(marketEntrySource, `canonical operation schema owner missing ${marker}`).toContain(marker)
-    }
     const mcpDescriptors = listMcpActionDescriptors()
     expect(OPERATION_MARKET_ACTION_ENTRIES).not.toHaveLength(0)
     for (const entry of OPERATION_MARKET_ACTION_ENTRIES) {
+      const action = findAction(entry.actionId)
+      expect(action, `Market action ${entry.actionId} is not registered`).toBeDefined()
+      if (action === undefined) continue
+
+      expect(entry.inputSchema, `Market action ${entry.actionId} schema drifted from its action`).toEqual(
+        describeActionForAgent(action).inputJsonSchema,
+      )
+      expect(entry.surfaces, `Market action ${entry.actionId} surfaces drifted from its action`).toEqual(action.surfaces)
+
       const descriptor = mcpDescriptors.find((candidate) => candidate.id === entry.actionId)
       expect(descriptor, `Market action ${entry.actionId} is not an MCP descriptor`).toBeDefined()
       expect(entry.inputSchema, `Market action ${entry.actionId} missing public input schema`).toMatchObject({
@@ -377,6 +379,7 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow).not.toContain('AE_GATEWAY_SMOKE_TOPUP_EXTERNAL_REF')
     expect(workflow).toContain('AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}')
     expect(workflow).toContain('AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}')
+    expect(workflow).toContain('AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}')
     const commandEnv = { ...process.env }
     delete commandEnv.AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND
     const command = spawnSync('npm', ['run', 'smoke:gateway:production', '--', '--receipt', 'output/release/command-seam.json'], {

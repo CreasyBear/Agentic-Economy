@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 import { handleUcpManifestRequest, handleLlmsTxtRequest, handleSitemapXmlRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
+import { getDefaultPublicOwnerStatusReadback } from '../helpers/owner-default-claim'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 

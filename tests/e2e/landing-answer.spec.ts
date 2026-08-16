@@ -54,7 +54,7 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByText(/No (?:businesses match|matches found)/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /See other options/i })).toBeVisible()
-    await expect(page.getByText('Nothing was sent.', { exact: true })).toBeVisible()
+    await expect(page.getByText('No request was sent to a business.', { exact: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Today' })).toHaveAttribute('aria-checked', 'true')
     const jsonAction = page.getByRole('button', { name: 'Data for AI assistants' })
     await jsonAction.click()

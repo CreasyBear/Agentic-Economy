@@ -133,11 +133,11 @@ test.describe('chat discovery to inquiry loop', () => {
     )
 
     const checks = page.getByRole('button', { name: /how this was checked/i }).last()
-    await expect(checks).toContainText(/compared 2 matches; checked 5 facts/i)
     await checks.click()
-    const checkSteps = page.getByRole('list', { name: /answer work steps/i }).last()
-    await expect(checkSteps).toContainText(/Reading the details already found/i)
-    await expect(checkSteps).toContainText(/Comparing the matches already in the answer thread/i)
+    const checkSheet = page.getByRole('dialog', { name: /how this was checked/i })
+    await expect(checkSheet.getByRole('list', { name: /answer work steps/i })).toContainText(/Reading the details already found/i)
+    await expect(checkSheet.getByRole('list', { name: /answer work steps/i })).toContainText(/Comparing the matches already in the answer thread/i)
+    await expect(checkSheet.getByText('Checks')).toBeVisible()
 
     const comparison = page.getByRole('region', { name: /business comparison/i })
     await expect(comparison).toContainText(/Published details, side by side/i)
@@ -172,7 +172,9 @@ test.describe('chat discovery to inquiry loop', () => {
     )
 
     const checks = page.getByRole('button', { name: /how this was checked/i }).last()
-    await expect(checks).toContainText(/compared 1 match; checked 5 facts/i)
+    await checks.click()
+    const checkSheet = page.getByRole('dialog', { name: /how this was checked/i })
+    await expect(checkSheet.getByText('Checks')).toBeVisible()
 
     const filteredShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
     await expect(filteredShortlist).toContainText(/1 match/i)
