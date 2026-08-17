@@ -1445,3 +1445,5 @@ workstreams, duplicate observations, and explicit remediation status.
 199. gpt-5.6: While verifying an Obsidian qmd query, piping qmd output through head caused qmd to crash with an unhandled EPIPE after the consumer closed. The CLI should handle a closed stdout pipe without emitting a Node stack trace.
 
 200. gpt-5.6: While spawning a research subagent with full-history inheritance, the orchestration API rejected an explicit default agent_type even though the requested type matched the parent. The schema permits the field but the runtime requires it omitted for full-history forks.
+
+201. gpt-5.6: A second gsd-ai-researcher dispatch failed because full-history forks cannot specify a specialist role. The orchestration interface makes role selection and context inheritance appear independently selectable; it should reject this combination earlier or document that specialist agents require fork_turns none/limited.
