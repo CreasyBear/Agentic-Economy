@@ -893,3 +893,16 @@ The exact seven successor suites and role mapping are:
 Observed Node `v22.22.0` focused proof: 7 files / 89 tests PASS. The Workpool durable proof uses convex-test real persistence; its history is `claim_before_effect` → `release_fence_before_network` → `terminal_returned`, versions 1 → 2 → 3, with a provider-time fence, exact output, public replay without a second effect, and canonical redaction. Durable cancellation covers both origins (`request_owned` and `standalone`) plus interrupted outer projection. The direct invoke, API, and recovery suites cover their mapped atomic proof.
 
 Independent reviewer: PASS `0.98`. This receipt claims no product behavior change, Customer Request runtime bridge or deletion, hosted proof, live-money proof, or push. P3 cutover, P3 validation, and P3 review remain pending.
+
+## Phase 3 cutover, validation, and review — accepted
+**Accepted commit:** `363338ca629a7483188db634f0a021a918420533` — `test: cut over phase three conformance`.
+The exact cutover arithmetic is `24-3+6=27`. The three removed Customer Request list paths are `tests/unit/customer-request/route-execution/transport-canonical.test.ts`, `tests/unit/customer-request/route-execution/cancellation-canonical.test.ts`, and `tests/integration/customer-request-v2-multi-capability-route.test.ts`.
+The three files and Customer Request runtime remain retained; only their list entries were removed. Existing `tests/unit/action-invocation/durable-action-invocation.test.ts` remains retained, and the six successor additions are already enumerated above.
+The package `test:conformance` list and product-frontier manifest `requiredConformancePaths` list are identical, ordered, unique, and all listed files exist.
+**Validators (Node 22):**
+- `test:conformance`: 27 files / 423 tests PASS.
+- `check:product-frontier`: `{ok:true,errors:[]}`.
+- `tests/imports/product-frontier-manifest.test.ts`: 1 file / 5 tests PASS.
+- `typecheck` / `diff-check`: PASS.
+Review: PASS 0.99; no assertion weakening or fixture substitution. Evidence includes real `convex-test` persistence, stateful both-origin cancellation (`request_owned` and `standalone`), and the prior 7-files / 89-tests mapping.
+Phase 3 is complete. No quarantine, deprecation, production-runtime, hosted, live-money, or push claim is made; Phase 4 is the next gate.
