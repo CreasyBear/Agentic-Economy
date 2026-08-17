@@ -1,7 +1,7 @@
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-} from './public'
+} from '@/modules/capability-supply/public'
 import { CLUSTER_A_PUBLICATIONS } from './curated-cluster-a-publications'
 import { CLUSTER_B_PUBLICATIONS } from './curated-cluster-b-publications'
 import { CLUSTER_C_PUBLICATIONS } from './curated-cluster-c-publications'

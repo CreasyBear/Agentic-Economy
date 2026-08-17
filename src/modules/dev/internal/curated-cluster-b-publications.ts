@@ -1,7 +1,7 @@
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-} from './public'
+} from '@/modules/capability-supply/public'
 
 // Cluster B (keyed HTTP operations): OpenWeatherMap current weather, Tavily
 // search, SerpAPI Google search, and CoinGecko simple price (demo key).

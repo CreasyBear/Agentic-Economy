@@ -8,10 +8,8 @@ import { openCapabilityDecisionModel } from '@/modules/capability-contract/publi
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
-import {
-  preparePublicationDraft,
-  frankfurterSingleRatePublicationImport,
-} from '@/modules/capability-supply/public'
+import { preparePublicationDraft } from '@/modules/capability-supply/public'
+import { frankfurterSingleRatePublicationImport } from '@/modules/dev/public'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,

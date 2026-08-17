@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { Validator, type Schema } from '@cfworker/json-schema'
 
 import {
+  normalizeCapabilityPublication,
+} from '@/modules/capability-supply/public'
+import {
   CURATED_PROVIDER_PUBLICATIONS,
   exaContentsPublicationImport,
   exaSearchPublicationImport,
   frankfurterSingleRatePublicationImport,
-  normalizeCapabilityPublication,
-} from '@/modules/capability-supply/public'
-import { CLUSTER_C_PUBLICATIONS } from '@/modules/capability-supply/curated-cluster-c-publications'
+} from '@/modules/dev/public'
+import { CLUSTER_C_PUBLICATIONS } from '@/modules/dev/internal/curated-cluster-c-publications'
 
 describe('curated provider publications', () => {
   it('normalizes every curated real-provider operation through the generic import boundary', async () => {

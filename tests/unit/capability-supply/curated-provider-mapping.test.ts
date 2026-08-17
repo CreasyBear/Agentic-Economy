@@ -9,11 +9,13 @@ import {
   buildExaSearchContentsMapping,
   createPublicOperationRef,
   createRegisteredOperationMappingRef,
-  exaContentsPublicationImport,
-  exaSearchPublicationImport,
   normalizeCapabilityPublication,
   type CapabilityPublicationImport,
 } from '@/modules/capability-supply/public'
+import {
+  exaContentsPublicationImport,
+  exaSearchPublicationImport,
+} from '@/modules/dev/public'
 import { composeRequestActions } from '@/modules/customer-request/compiler'
 import { exactContractRefKey } from '@/modules/customer-request/contract-ref-key'
 import type { ProposedRequestAction } from '@/modules/customer-request/evaluation'

@@ -1,7 +1,7 @@
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-} from './public'
+} from '@/modules/capability-supply/public'
 
 const AE_PUBLIC_NETWORK = 'ae:public'
 const KEYLESS_AUTHORITY = { kind: 'keyless' } as const

@@ -16,7 +16,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { CLUSTER_A_PUBLICATIONS } from '@/modules/capability-supply/curated-cluster-a-publications'
+import { CLUSTER_A_PUBLICATIONS } from '@/modules/dev/internal/curated-cluster-a-publications'
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,

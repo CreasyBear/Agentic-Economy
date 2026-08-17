@@ -11,8 +11,6 @@ import { normalizeSlug } from '@/modules/common/normalize-slug'
 import {
   buildExaSearchContentsMapping,
   createRegisteredOperationMappingRef,
-  CURATED_PROVIDER_PUBLICATIONS,
-  EXA_BUSINESS_SLUG,
   parseAdmittedTransportCatalogMetadata,
   decodeConvexPublicationSource,
   preparePublicationDraft,
@@ -26,6 +24,8 @@ import {
 } from '@/modules/capability-supply/provider-connection'
 import {
   buildDevSeedCatalogState,
+  CURATED_PROVIDER_PUBLICATIONS,
+  EXA_BUSINESS_SLUG,
   DEV_SEED_BUSINESS_FIXTURES,
   DEV_SEED_OWNER_CLERK_USER_ID,
   type DevSeedBusinessFixture,

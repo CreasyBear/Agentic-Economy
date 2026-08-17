@@ -16,7 +16,7 @@ import {
   type HttpJsonQueryParameterMapping,
 } from '../../src/modules/capability-supply/public'
 import { isRecord } from '../../src/modules/common/is-record'
-import { CURATED_PROVIDER_PUBLICATIONS } from '../../src/modules/capability-supply/curated-provider-publications'
+import { CURATED_PROVIDER_PUBLICATIONS } from '../../src/modules/dev/internal/curated-provider-publications'
 
 type AdapterConfig = {
   method?: 'GET' | 'POST'

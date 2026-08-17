@@ -1,7 +1,7 @@
 import type {
   CapabilityContractMetadata,
   CapabilityPublicationImport,
-} from './public'
+} from '@/modules/capability-supply/public'
 
 /**
  * Cluster C — observed Agentic-Market x402 listings. All were genuinely

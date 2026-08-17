@@ -475,14 +475,6 @@ export {
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
 
 export { buildExaSearchContentsMapping } from './curated-provider-mapping'
-export {
-  CURATED_PROVIDER_PUBLICATIONS,
-  EXA_BUSINESS_SLUG,
-  FRANKFURTER_BUSINESS_SLUG,
-  exaContentsPublicationImport,
-  exaSearchPublicationImport,
-  frankfurterSingleRatePublicationImport,
-} from './curated-provider-publications'
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
 const evidenceRefs = z.array(identifier).min(1).max(64)

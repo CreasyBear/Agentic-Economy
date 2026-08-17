@@ -25,8 +25,8 @@ import {
   type OperationExecuteResult,
 } from '@/modules/capability-execution/operation-execute.functions'
 import { convexKeylessExecutableSource } from '@/modules/capability-execution/operation-execute.actions'
+import { CURATED_PROVIDER_PUBLICATIONS } from '@/modules/dev/public'
 import {
-  CURATED_PROVIDER_PUBLICATIONS,
   isPublicOperationRef,
   normalizeCapabilityPublication,
 } from '@/modules/capability-supply/public'
