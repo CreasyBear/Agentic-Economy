@@ -7,7 +7,6 @@ import {
   applyTopup,
   authorizePaidCharge,
   createLedgerState,
-  legacyPerKeyAccountRef,
   type BeginTransactionInput,
   type MoneyAccount,
 } from '@/modules/money/public'
@@ -347,26 +346,6 @@ const convexAuthorizationAuthority = {
   decisionDigest: canonicalDigest(convexAuthorizationAuthorityMaterial as never),
 }
 
-function seedLegacyPerKeyAccount(
-  db: ConvexMemoryDb,
-  balanceUnits: string,
-): void {
-  db.seed('moneyAccounts', {
-    _id: 'moneyAccounts:legacy',
-    accountRef: legacyPerKeyAccountRef(keyOnePrincipal, 'USD'),
-    accountKind: 'operator_credit',
-    accountId: 'key-a',
-    currency: 'USD',
-    exponent: 2,
-    balanceUnits,
-    recoveryDueUnits: '0',
-    version: 0,
-    state: 'active',
-    createdAt: convexNow,
-    updatedAt: convexNow,
-  })
-}
-
 function seedConvexChargeFixture(db: ConvexMemoryDb): void {
   const leaseOwner = `operation-worker:${convexInvocationRef}`
   const canonicalAuthorityBinding = {
@@ -665,90 +644,6 @@ function convexTopupArgs(): Record<string, unknown> {
 const convexAuth = {
   getUserIdentity: async () => ({ subject: ownerId, tokenIdentifier: keyOnePrincipal }),
 }
-
-describe('legacy per-key balance guard', () => {
-  it('refuses authorizeInvocationCharge when a legacy per-key wallet has a non-zero balance', async () => {
-    const db = new ConvexMemoryDb()
-    seedConvexChargeFixture(db)
-    seedLegacyPerKeyAccount(db, '500')
-
-    await expect(
-      authorizeCharge({ db, auth: convexAuth }, convexAuthorizationArgs()),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'billing_identity_mismatch',
-      retryable: false,
-    })
-  })
-
-  it('refuses reserveCreditTopup when a legacy per-key wallet has a non-zero balance', async () => {
-    const db = new ConvexMemoryDb()
-    seedConvexTopupPrincipal(db)
-    seedLegacyPerKeyAccount(db, '500')
-
-    await expect(
-      reserveTopup({ db, auth: convexAuth }, convexTopupArgs()),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'billing_identity_mismatch',
-      retryable: false,
-    })
-  })
-
-  it('refuses authorizeInvocationCharge and reserveCreditTopup when a legacy per-key wallet has an unparseable balance', async () => {
-    const chargeDb = new ConvexMemoryDb()
-    seedConvexChargeFixture(chargeDb)
-    seedLegacyPerKeyAccount(chargeDb, 'not-canonical')
-    await expect(
-      authorizeCharge({ db: chargeDb, auth: convexAuth }, convexAuthorizationArgs()),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'billing_identity_mismatch',
-      retryable: false,
-    })
-
-    const topupDb = new ConvexMemoryDb()
-    seedConvexTopupPrincipal(topupDb)
-    seedLegacyPerKeyAccount(topupDb, 'not-canonical')
-    await expect(
-      reserveTopup({ db: topupDb, auth: convexAuth }, convexTopupArgs()),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'billing_identity_mismatch',
-      retryable: false,
-    })
-  })
-
-  it('does not block authorizeInvocationCharge or reserveCreditTopup when the legacy per-key wallet has a zero balance', async () => {
-    const chargeDb = new ConvexMemoryDb()
-    seedConvexChargeFixture(chargeDb)
-    seedLegacyPerKeyAccount(chargeDb, '0')
-    await expect(
-      authorizeCharge({ db: chargeDb, auth: convexAuth }, convexAuthorizationArgs()),
-    ).resolves.toMatchObject({ kind: 'accepted', chargeState: 'free_tier' })
-
-    const topupDb = new ConvexMemoryDb()
-    seedConvexTopupPrincipal(topupDb)
-    seedLegacyPerKeyAccount(topupDb, '0')
-    await expect(
-      reserveTopup({ db: topupDb, auth: convexAuth }, convexTopupArgs()),
-    ).resolves.toMatchObject({ kind: 'accepted', command: { state: 'pending' } })
-  })
-
-  it('does not block authorizeInvocationCharge or reserveCreditTopup when no legacy per-key wallet exists', async () => {
-    const chargeDb = new ConvexMemoryDb()
-    seedConvexChargeFixture(chargeDb)
-    await expect(
-      authorizeCharge({ db: chargeDb, auth: convexAuth }, convexAuthorizationArgs()),
-    ).resolves.toMatchObject({ kind: 'accepted', chargeState: 'free_tier' })
-
-    const topupDb = new ConvexMemoryDb()
-    seedConvexTopupPrincipal(topupDb)
-    await expect(
-      reserveTopup({ db: topupDb, auth: convexAuth }, convexTopupArgs()),
-    ).resolves.toMatchObject({ kind: 'accepted', command: { state: 'pending' } })
-  })
-})
 
 function transaction(overrides: Partial<BeginTransactionInput> = {}): BeginTransactionInput {
   return {

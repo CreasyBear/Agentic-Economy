@@ -35,7 +35,6 @@ import {
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
-  legacyPerKeyAccountRef,
   addExactAmounts,
   applyProviderAccountCredit,
   applyProviderAccountDebit,
@@ -3760,12 +3759,6 @@ export const authorizeInvocationCharge = internalMutation({
         code: 'billing_identity_mismatch' as const,
         retryable: false,
       }
-    const legacyRefusal = await refuseIfLegacyPerKeyBalanceStranded(
-      ctx,
-      durablePrincipalId,
-      currency,
-    )
-    if (legacyRefusal !== undefined) return legacyRefusal
     const [operatorPrepared, providerPrepared, rakePrepared] =
       await (async () => {
         const operator = await prepareCanonicalMoneyAccount(ctx, {
@@ -4660,40 +4653,6 @@ function refusedTopup(
   return { kind: 'refused', code, retryable }
 }
 
-async function refuseIfLegacyPerKeyBalanceStranded(
-  ctx: Pick<MutationCtx, 'db'>,
-  principalId: string,
-  currency: string,
-): Promise<
-  | Readonly<{
-      kind: 'refused'
-      code: 'billing_identity_mismatch'
-      retryable: false
-    }>
-  | undefined
-> {
-  const legacyRow = await ctx.db
-    .query('moneyAccounts')
-    .withIndex('by_accountRef', (q) =>
-      q.eq('accountRef', legacyPerKeyAccountRef(principalId, currency)),
-    )
-    .unique()
-  if (legacyRow === null) return undefined
-  const balance = amountFromParts(
-    legacyRow.currency,
-    legacyRow.balanceUnits,
-    legacyRow.exponent,
-  )
-  if (balance === undefined || balance.units !== '0') {
-    return {
-      kind: 'refused' as const,
-      code: 'billing_identity_mismatch' as const,
-      retryable: false,
-    }
-  }
-  return undefined
-}
-
 async function requireBillingSourceWrite(
   ctx: MutationCtx,
   args: {
@@ -4839,13 +4798,6 @@ export const reserveCreditTopup = mutation({
     )
     if (args.accountRef !== expectedAccountRef)
       return refusedTopup('billing_identity_mismatch', false)
-    const legacyRefusal = await refuseIfLegacyPerKeyBalanceStranded(
-      ctx,
-      args.principalId,
-      requestedAmount.currency,
-    )
-    if (legacyRefusal !== undefined)
-      return refusedTopup(legacyRefusal.code, legacyRefusal.retryable)
     const existing = await ctx.db
       .query('moneyAccounts')
       .withIndex('by_accountRef', (q) => q.eq('accountRef', expectedAccountRef))
