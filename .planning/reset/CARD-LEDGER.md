@@ -60,17 +60,20 @@ on the account re-key, since `/execute` was already the paid invoke path.
 
 Hard gate: no quarantine card runs until every P3 validator is green and each port is committed.
 
-| Card | Concern | Depends on |
-| --- | --- | --- |
-| P3-* | One card per Customer-Request-owned conformance path, ported to atomic `operation.invoke` / `operation.call` | P2 |
-| P3-val | Re-run full conformance floor (≥10); assert no path lost without equivalent | P3-* |
-| P3-rev | Ports do not weaken assertions or substitute fixtures for live kernel proof | P3-val |
+| Card | Concern | Depends on | Status |
+| --- | --- | --- | --- |
+| P3-transport-proof | Port only the market-owned claim, release, registered-transport, output, and redaction invariants from `transport-canonical.test.ts` to atomic worker/transport proof | P2 | pending |
+| P3-cancel-proof | Map only the atomic status, cancel, and reconcile invariants from `cancellation-canonical.test.ts`; explicitly exclude Customer Request provider-cancellation orchestration | P2 | pending |
+| P3-invoke-proof | Map only the single-operation identity, authority, replay, settlement, and recovery invariants from `customer-request-v2-multi-capability-route.test.ts`; exclude planning/DAG/confirmation/repeat/problem/support/progress semantics | P2 | pending |
+| P3-cutover | After all three proof cards, replace the three Customer Request entries in `npm run test:conformance` and the product-frontier `requiredConformancePaths` (24→26 paths) with these five atomic successors: `tests/unit/convex/capability-operation-worker.test.ts`, `tests/integration/capability-operation-workpool.test.ts`, `tests/unit/capability-execution/operation-recovery-actions.test.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/server/operation-invoke-api.test.ts` | P3-transport-proof, P3-cancel-proof, P3-invoke-proof | pending |
+| P3-val | Re-run full conformance floor (≥10); assert no path lost without equivalent | P3-cutover | pending |
+| P3-rev | Ports do not weaken assertions or substitute fixtures for live kernel proof | P3-val | pending |
 
 ## Phase 4 — Replace chat orchestration
 
 | Card | Concern | Depends on |
 | --- | --- | --- |
-| P4-a | Rewrite `eval/answer/lib/cases.ts` first as the specification for model-chosen market tool use | P3 |
+| P4-a | Rewrite `eval/answer/lib/cases.ts` first as the specification for model-chosen market tool use | P3-rev |
 | P4-b | Eval suite runs and documents expected tool-use behavior (no router tags) | P4-a |
 | P4-c | Drain in-flight router-named checkpoints; migrate thread tool IDs / optional intent; retain thread storage | P4-b |
 | P4-d | Replace named router files with one bounded AI SDK tool loop | P4-c |
@@ -81,7 +84,7 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 
 | Card | Concern | Depends on |
 | --- | --- | --- |
-| P5-a | Three-artifact frontier v2 receipt: manifest, `verify-product-frontier.mjs`, `product-frontier-manifest.test.ts` | P3, P4 |
+| P5-a | Three-artifact frontier v2 receipt: manifest, `verify-product-frontier.mjs`, `product-frontier-manifest.test.ts` | P3-rev, P4 |
 | P5-b | Freeze writes for Customer Request / WorkTree / Study / inquiries; deregister actions only after notice | P5-a |
 | P5-c | Advertise `Deprecation`/`Sunset` + successors in HTTP, MCP, UCP, `SKILL.md`, `llms.txt`, for-agents | P5-b |
 | P5-d | Later release card: RFC 9457 HTTP 410 tombstones | P5-c |

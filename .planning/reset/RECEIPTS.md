@@ -856,3 +856,26 @@ Under exact Node `v22.22.0`, all reported stages exited 0:
 Focused proof: demand projection `8 files / 104 tests`; evidence action `2 files / 29 tests` plus registry `25 tests`; boundary guard `1 / 7`; Node 22 typecheck; and independent correctness/boundary reviews PASS after TSX, alias/relative, and static-re-export corrections.
 
 No hosted, provider, live-money, push, or release claim is made. The deployment-manifest blocker is retained.
+
+## Phase 3 founder scope decision — lean atomic proof
+
+**Founder directive:** `slim and refactor if there is no home. simplify, dont drag in legacy complexity`
+
+**Source facts recorded before implementation:**
+
+- The current conformance floor is 24 paths. Exactly three are Customer Request files: `tests/unit/customer-request/route-execution/transport-canonical.test.ts` (6 assertions), `tests/unit/customer-request/route-execution/cancellation-canonical.test.ts` (4 assertions), and `tests/integration/customer-request-v2-multi-capability-route.test.ts` (36 assertions), for 46 assertions total.
+- `>=10` is only the manifest path-count floor; it is not permission to drop a named path or weaken an assertion.
+- The atomic kernel owns one-operation admission/authority/idempotency/claim/dispatch/output/settlement/recovery/call.
+- Customer Request-only planning/DAG/confirmation, repeat permissions, the customer problem/support/evidence workspace, multi-step provider cancellation, and progress/history have no atomic home and will not be bridged or reimplemented.
+
+The conformance cutover ports proof at the test/manifest boundary. It does not add a temporary Customer Request → `operation.invoke` runtime compatibility bridge. P3 performs no deletion or quarantine; Phase 5 deprecation/retention gates still govern removal.
+
+**Exact proof-card disposition and stop condition:**
+
+- `P3-transport-proof` ports only market-owned claim/release/registered-transport/output/redaction invariants from the transport canonical worker into atomic worker/transport proof.
+- `P3-cancel-proof` maps only atomic status/cancel/reconcile invariants from the cancellation canonical worker and excludes Customer Request provider-cancellation orchestration.
+- `P3-invoke-proof` maps only single-operation identity/authority/replay/settlement/recovery invariants from the multi-capability route and excludes planning/DAG/confirmation/repeat/problem/support/progress semantics.
+- `P3-cutover` removes those three Customer Request entries from the conformance command and product-frontier manifest and adds these five atomic successors, only after the three proof cards are complete: `tests/unit/convex/capability-operation-worker.test.ts`, `tests/integration/capability-operation-workpool.test.ts`, `tests/unit/capability-execution/operation-recovery-actions.test.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/server/operation-invoke-api.test.ts` (24→26 paths).
+- If an atomic invariant lacks production code, test it and fix the source at the atomic seam. If behavior is Customer Request-only, classify it for Phase 5; never fabricate equivalence.
+
+No test command was run; this receipt records scope and source facts only.
