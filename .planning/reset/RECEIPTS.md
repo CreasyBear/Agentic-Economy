@@ -535,3 +535,28 @@ Observed Node 22 evidence:
 - Correctness findings fixed, including period-close admission.
 
 Explicit exclusions: no cron, no pre-provider reservation, no hosted migration/provider transfer, and no full release gate.
+
+## P1-d2 — committed
+
+Product commit `63b7731d8fd6e2b8d41be6615e661d8b5d2da392`; `main` was clean immediately after the commit and the commit was not pushed.
+
+Core invariants:
+
+- `beginPayoutTransfer` atomically reserves supplier earnings before provider I/O: one deterministic pending payout transaction, one immutable provider debit, one account-version advance, and one frozen payout command.
+- Success applies that reservation without a second debit. Unknown outcomes remain frozen. Definitive failure or `not_released` appends one exact reversal transaction and credit; post-success reversal uses the same one-to-one mechanism.
+- Exact replay and owner readback share one bounded terminal-journal validator. Applied, reversed, and failed states require exact account, amount, evidence, snapshot, and reversal composition; mutable later payout composition cannot rewrite the attempted amount.
+- Pending/unknown payouts fence refunds and other payout commands. Delayed reversals and later credits cannot corrupt cumulative paid snapshots or hide the active payout from owner readback.
+- Earnings projections fail closed on orphan, cross-business, malformed recovery, or non-exact payout/reversal rows. Pending/unknown reservations reduce held funds but are not labelled `paidOut`.
+- Schema-free V1 admits one reservation command per canonical `payoutRef`. A different command cannot overwrite frozen evidence after failure. Failed residual funds remain held; deterministic carry-forward/manual reconciliation is an explicit P1-d3 dependency.
+
+Observed Node 22 evidence on the accepted product diff:
+
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- Focused payout/readback/schema tests: 209 PASS.
+- Remaining money/access regression tests: 69 PASS.
+- `git diff --check`: PASS.
+- Independent security/accounting review: PASS.
+- Independent correctness review: PASS after retracting an unreachable snapshot-bound concern and classifying failed-residual carry-forward under the explicit P1-d3 dependency.
+
+No hosted migration or real provider transfer ran. Live money remains source-closed and fail-closed. This is not a full release-gate or hosted-acceptance result.
