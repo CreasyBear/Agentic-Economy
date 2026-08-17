@@ -1433,3 +1433,7 @@ workstreams, duplicate observations, and explicit remediation status.
 193. gpt-5.6: Running repo research commands emits /Users/joelchan/.zshenv: no such file or directory for /Users/joelchan/.cargo/env on every shell invocation; the stale source line should be guarded or removed.
 
 194. gpt-5.6: qmd result URIs normalize spaces to hyphens and are not literal filesystem paths; attempting to open the displayed URI failed until the real filename was found with find.
+
+195. gpt-5.6: Spawning a typed GSD researcher with fork_turns=all failed because full-history forks inherit the parent agent type; the tool schema permits both fields but this combination is rejected only at runtime. Retrying with a bounded fork worked.
+
+196. gpt-5.6: Google Trends blocked the direct comparison request with HTTP 429 and pytrends is not installed, so relative keyword volume could not be verified from Trends in this pass; autocomplete can establish query families but not volume.
