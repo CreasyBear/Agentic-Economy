@@ -11,6 +11,11 @@ import {
 } from '@/modules/capability-supply/operation-schemas'
 import type { ActionParameter, ActionParameterType, ActionSurface } from '@/modules/common/action'
 import type { z } from 'zod'
+export {
+  operationCompareOutputSchema,
+  operationDetailOutputSchema,
+  operationInspectPlanOutputSchema,
+}
 
 const operationMarketActionSurfaces = [
   'http',

@@ -2,7 +2,7 @@ import {
   deserializeOperationDescriptor,
   type OperationSurfaceWireDescriptor,
   type PublicOperationDescriptor,
-} from "@/modules/capability-supply/public";
+} from "@/modules/registry/public";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 import { isRecord } from "@/modules/common/is-record";
 import {

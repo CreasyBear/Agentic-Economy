@@ -18,6 +18,7 @@ import {
   type HttpJsonQueryParameterMapping,
   type PublicOperationPrice,
 } from '@/modules/capability-supply/public'
+export { isAnonymousKeylessOperationEligible }
 
 /**
  * Keyless operation execution, fully DB-driven.

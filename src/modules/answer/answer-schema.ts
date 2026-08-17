@@ -6,11 +6,13 @@ import { operationInvokeResultSchema } from '@/modules/capability-execution/oper
 import {
   operationCompareOutputSchema,
   operationInspectPlanOutputSchema,
+} from '@/modules/registry/operation-action-contracts'
+import {
   publicOperationAuthenticationSchema,
   publicOperationParameterSchema,
   type InspectPlanResult,
   type OperationComparisonFact,
-} from '@/modules/capability-supply/public'
+} from '@/modules/registry/public'
 import { AnswerProseSchema } from './answer-prose'
 import type { AnswerSource } from './answer-synthesizer'
 export const WebDiscoveryClaimSchema = z.strictObject({

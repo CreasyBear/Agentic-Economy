@@ -12,14 +12,14 @@ import {
   type AnswerContinuation,
   type AnswerOperationCandidate,
 } from '../answer-schema'
+import { isAnonymousKeylessOperationEligible } from '@/modules/capability-execution'
+import { operationDetailOutputSchema } from '@/modules/registry/operation-action-contracts'
 import {
   isPublicOperationRef,
-  isAnonymousKeylessOperationEligible,
-  operationDetailOutputSchema,
   type PublicOperationDescriptor,
   type PublicOperationParameter,
   type PublicOperationRef,
-} from '@/modules/capability-supply/public'
+} from '@/modules/registry/public'
 import {
   operationExecutionBindingDigest,
   type OperationExecutableDescriptor,

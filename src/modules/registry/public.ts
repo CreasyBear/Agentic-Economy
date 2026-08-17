@@ -40,6 +40,9 @@ export {
   deserializeOperationDetailResult,
   serializeOperationCompareResult,
   deserializeOperationCompareResult,
+  isPublicOperationRef,
+  publicOperationAuthenticationSchema,
+  publicOperationParameterSchema,
 } from '@/modules/capability-supply/public'
 export type {
   CapabilityOperationSourcePort,
@@ -72,6 +75,7 @@ export type {
   PublicOperationOfferingRef,
   PublicOperationParameter,
   PublicOperationPrice,
+  PublicOperationRef,
   PublicOperationNavigationRelation,
   PublicRecoveryPolicy,
 } from '@/modules/capability-supply/public'

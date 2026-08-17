@@ -1,6 +1,7 @@
 export {
   executeOperation,
   operationExecutionBindingDigest,
+  isAnonymousKeylessOperationEligible,
   operationExecuteInputSchema,
   type OperationExecuteDeps,
   type OperationExecuteInput,

@@ -1,5 +1,5 @@
 import type { KeylessExecutableToolDescriptor } from '@/modules/capability-execution'
-import { operationDetailOutputSchema } from '@/modules/capability-supply/public'
+import { operationDetailOutputSchema } from '@/modules/registry/operation-action-contracts'
 import { isRecord } from '@/modules/common/is-record'
 import {
   isAnswerOperationReadToolId,

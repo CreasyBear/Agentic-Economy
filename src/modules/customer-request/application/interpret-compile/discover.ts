@@ -1,7 +1,7 @@
 import type {
   OperationSearchInput,
   OperationSearchResult,
-} from '@/modules/capability-supply/public'
+} from '@/modules/registry/public'
 import type { ServerCapabilityDescriptor } from '@/modules/customer-request/semantic-interpreter'
 
 import type { RequestGraph } from './types'

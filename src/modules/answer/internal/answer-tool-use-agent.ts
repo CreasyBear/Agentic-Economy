@@ -31,10 +31,8 @@ import {
   operationInvokeResultSchema,
   type OperationInvokeResult,
 } from '@/modules/capability-execution/operation-invoke-contracts'
-import {
-  operationDetailOutputSchema,
-  type PublicOperationDescriptor,
-} from '@/modules/capability-supply/public'
+import { operationDetailOutputSchema } from '@/modules/registry/operation-action-contracts'
+import type { PublicOperationDescriptor } from '@/modules/registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { findStrictToolSchemaViolation } from '@/modules/actions/strict-schema'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
