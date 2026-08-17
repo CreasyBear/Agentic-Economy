@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type * as PosthogServerModule from '@/lib/observability/posthog.server'
 import {
   HarnessRunLoop,
   type HarnessRuntimeEvent,
@@ -10,8 +11,16 @@ import {
 } from '@/modules/answer-thread/internal/tool-runner'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
+
+const captureLegacyRegistryActionRequestMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/observability/posthog.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof PosthogServerModule>()),
+  captureLegacyRegistryActionRequest: captureLegacyRegistryActionRequestMock,
+}))
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
@@ -19,6 +28,8 @@ const operationRef = `operation:v1:${'a'.repeat(64)}`
 const operationDescriptor = {
   operationRef,
   operationId: 'test.current',
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: 'brokered' as const,
   contract: {
     capabilityId: 'test.current',
     version: 1,
@@ -74,6 +85,7 @@ vi.mock('@/modules/capability-supply/operation-source', () => ({
 }))
 
 afterEach(() => {
+  captureLegacyRegistryActionRequestMock.mockReset()
   delete process.env.OPENROUTER_API_KEY
 })
 
@@ -109,6 +121,93 @@ describe('runAnswerToolCall', () => {
         'parramatta-emergency-plumbing',
       )
       expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
+    } finally {
+      restoreRegistry()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
+    }
+  })
+  it('captures only legacy registry reads on the Answer surface', async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.CONVEX_URL
+    delete process.env.VITE_CONVEX_URL
+    delete process.env.OPENROUTER_API_KEY
+    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
+
+    try {
+      const search = await runAnswerToolCall({
+        toolId: 'registry.search',
+        input: { query: 'parramatta' },
+        turnId: TURN_ID,
+        seq: BASE_SEQ,
+      })
+      const detail = await runAnswerToolCall({
+        toolId: 'registry.detail',
+        input: { slug: 'parramatta-emergency-plumbing' },
+        turnId: TURN_ID,
+        seq: BASE_SEQ + 1,
+      })
+      const nonlegacy = await runAnswerToolCall({
+        toolId: 'registry.operations.detail',
+        input: { operationRef },
+        turnId: TURN_ID,
+        seq: BASE_SEQ + 2,
+      })
+      const unknown = await runAnswerToolCall({
+        toolId: 'registry.nothing',
+        input: {},
+        turnId: TURN_ID,
+        seq: BASE_SEQ + 3,
+      })
+      const refused = await runAnswerToolCall({
+        toolId: 'web.discover',
+        input: { query: 'emergency plumber Brunswick' },
+        turnId: TURN_ID,
+        seq: BASE_SEQ + 4,
+      })
+
+      expect(search.record.status).toBe('complete')
+      expect(detail.record.status).toBe('complete')
+      expect(nonlegacy.record.status, nonlegacy.record.resultSummaryJson).toBe('complete')
+      expect(unknown.record.status).toBe('refused')
+      expect(refused.record.status).toBe('refused')
+      expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledTimes(4)
+      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
+        1,
+        'registry.search',
+        'answer',
+      )
+      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
+        2,
+        'registry.detail',
+        'answer',
+      )
+      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
+        3,
+        'registry.operations.detail',
+        'answer',
+      )
+      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
+        4,
+        'web.discover',
+        'answer',
+      )
     } finally {
       restoreRegistry()
       if (previousLocalRegistry === undefined) {
@@ -430,7 +529,7 @@ describe('runAnswerToolCall', () => {
       seq: BASE_SEQ,
     })
 
-    expect(result.record).toMatchObject({
+    expect(result.record, result.record.resultSummaryJson).toMatchObject({
       status: 'complete',
       toolId: 'registry.operations.detail',
       turnId: TURN_ID,

@@ -588,3 +588,17 @@ Observed Node 22 evidence:
 - Independent security: PASS.
 
 No hosted provider publication, provider network call, live money, or push was performed; this is not the Phase One acceptance packet or release gate.
+
+## P1-g — committed
+
+- This is the P1-g implementation commit about to be created; no SHA is assigned.
+- Dynamic operation calls continue through the canonical AnswerToolCallRecord → frozen operation artifacts → FrozenTurnEvidence → answerToolCalls path. Reporting-only Harness events cover direct `operation.execute`/`operation.invoke` calls with exactly one `tool.started` plus `tool.completed(ok)` or `tool.failed(refused/error)`, canonical `toolId`/original `toolCallId`, generic error codes, and no raw input/result/provider data.
+- Existing `legacy_registry_api_request` PostHog event covers exact legacy action IDs on MCP and Answer as well as HTTP, with only `route_family`, `route_kind`, `surface`, `$process_person_profile:false`, and `$geoip_disable:true`; unknown/nonlegacy IDs emit nothing.
+- MCP instrumentation occurs only inside admitted registered callbacks; Answer static instrumentation occurs after known/read-only/strict-schema gates. Auth/action/error/result behavior is unchanged.
+- Node 22 focused suite: 4 files / 82 tests PASS.
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS (Vercel nodejs22.x output); existing informational warnings only.
+- Independent correctness review: PASS.
+- Independent security/privacy review: PASS.
+- No hosted/live-provider call, network call, live money, push, release packet, or source-write was performed.

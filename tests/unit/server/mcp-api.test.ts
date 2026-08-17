@@ -14,6 +14,14 @@ import {
   registryDetailAction,
   registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
+import type * as PosthogServerModule from '@/lib/observability/posthog.server'
+
+const captureLegacyRegistryActionRequestMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/observability/posthog.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof PosthogServerModule>()),
+  captureLegacyRegistryActionRequest: captureLegacyRegistryActionRequestMock,
+}))
 
 const operationExecuteMocks = vi.hoisted(() => ({
   executeKeylessOperation: vi.fn(),
@@ -28,6 +36,7 @@ type JsonRpcBody = {
   result?: Record<string, unknown>
   error?: Record<string, unknown>
 }
+
 
 
 function pinEnv(): void {
@@ -88,6 +97,7 @@ describe('MCP host adapter', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
+    captureLegacyRegistryActionRequestMock.mockReset()
     operationExecuteMocks.executeKeylessOperation.mockReset()
     pinEnv()
   })
@@ -308,6 +318,11 @@ describe('MCP host adapter', () => {
       kind: 'ok',
       schemaVersion: 'public-services-api:v2',
     })
+    expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledTimes(1)
+    expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledWith(
+      'registry.services_search',
+      'mcp',
+    )
   })
   it('dispatches a publication artifact above 64 KiB below the MCP body cap', async () => {
     const publicationSourceBytes = 262_144
@@ -358,6 +373,10 @@ describe('MCP host adapter', () => {
     expect(result.result).toMatchObject({
       structuredContent: { result: { kind: 'refused', reason: 'boundary_probe' } },
     })
+    expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledWith(
+      'supply.publish',
+      'mcp',
+    )
   })
 
   it('delegates a valid MCP operation call to the canonical keyless executor once', async () => {
@@ -400,6 +419,10 @@ describe('MCP host adapter', () => {
       output: { temperature: 21 },
       evidenceHash: 'evidence-hash',
     })
+    expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledWith(
+      'operation.execute',
+      'mcp',
+    )
   })
 
   it('fails closed when a canonical action returns invalid structured output', async () => {

@@ -38,7 +38,7 @@ Nothing deleted. Live money stays fail-closed. Each card runs executor → valid
 | P1-d2 | Reserve provider earnings before provider transfer I/O; exact success/failure/unknown/reversal handling | P1-d1 | committed |
 | P1-d3 | Idempotent daily settlement cron | P1-d2 | recon |
 | P1-f | Standard-artifact `supply.publish` / `withdraw` / `earnings` over existing importers; agent keys publish under a narrow owner-bound scope; withdraw drains rather than cancels | P1-e-2 | committed |
-| P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 | recon |
+| P1-g | Persist dynamic operation tool calls in Answer evidence; instrument legacy business/services traffic | P0 | committed |
 
 P1-b ran ahead of P1-a: the receipt keys on `businessId` and `invocationRef`, neither of which the
 account re-key touches, so the dependency the plan assumed does not exist in the code.

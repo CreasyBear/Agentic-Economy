@@ -919,6 +919,15 @@ async function runRealToolUseAgent(
       const isOperationTool =
         callInput.toolId === OPERATION_EXECUTE_TOOL_ID ||
         callInput.toolId === OPERATION_INVOKE_TOOL_ID
+      if (isOperationTool && input.harnessLoop !== undefined) {
+        input.harnessLoop.recordRuntimeEvent({
+          type: 'tool.started',
+          runId: input.harnessLoop.runId,
+          toolCallId,
+          toolId: callInput.toolId,
+          at: toolStartedAt,
+        })
+      }
       const routeToolForbidden = answerRouteForbidsTool(
         input.effectiveRoute,
         callInput.toolId,
@@ -1018,6 +1027,30 @@ async function runRealToolUseAgent(
               ],
             }
           : result
+      if (isOperationTool && input.harnessLoop !== undefined) {
+        const toolCompletedAt = Date.now()
+        const complete = observedResult.record.status === 'complete'
+        input.harnessLoop.recordRuntimeEvent({
+          type: complete ? 'tool.completed' : 'tool.failed',
+          runId: input.harnessLoop.runId,
+          toolCallId,
+          toolId: observedResult.record.toolId,
+          at: toolCompletedAt,
+          status: complete
+            ? 'ok'
+            : observedResult.record.status === 'refused'
+              ? 'refused'
+              : 'error',
+          durationMs: roundNonNegative2(toolCompletedAt - toolStartedAt),
+          ...(complete
+            ? {}
+            : {
+                errorCode: observedResult.record.status === 'refused'
+                  ? 'tool_refused'
+                  : 'tool_error',
+              }),
+        })
+      }
       navigationState = reduceAnswerOperationNavigation(
         navigationState,
         { kind: 'tool_attempted', effect: isOperationTool },

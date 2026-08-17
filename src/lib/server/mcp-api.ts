@@ -23,6 +23,7 @@ import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/serv
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
+import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
@@ -269,6 +270,7 @@ export function createAeMcpServer(
       async (data: unknown) => {
         const startedAt = Date.now()
         try {
+          captureLegacyRegistryActionRequest(action.id, 'mcp')
           const result = await action.run({
             data,
             context: {

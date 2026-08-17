@@ -56,16 +56,47 @@ export function captureServerEvent(
   }
 }
 
-export function captureLegacyRegistryApiRequest(
+type LegacyRegistrySurface = 'http' | 'mcp' | 'answer'
+
+const legacyRegistryActionRoutes = {
+  'registry.list': { routeFamily: 'businesses', routeKind: 'list' },
+  'registry.search': { routeFamily: 'businesses', routeKind: 'search' },
+  'registry.detail': { routeFamily: 'businesses', routeKind: 'detail' },
+  'registry.services_list': { routeFamily: 'services', routeKind: 'list' },
+  'registry.services_search': { routeFamily: 'services', routeKind: 'search' },
+  'registry.services_detail': { routeFamily: 'services', routeKind: 'detail' },
+} as const
+
+function captureLegacyRegistryRequest(
   routeFamily: 'businesses' | 'services',
   routeKind: 'list' | 'search' | 'detail',
+  surface: LegacyRegistrySurface,
 ): void {
   captureServerEvent('ae-legacy-registry-api', 'legacy_registry_api_request', {
     route_family: routeFamily,
     route_kind: routeKind,
+    surface,
     $process_person_profile: false,
     $geoip_disable: true,
   })
+}
+
+export function captureLegacyRegistryApiRequest(
+  routeFamily: 'businesses' | 'services',
+  routeKind: 'list' | 'search' | 'detail',
+): void {
+  captureLegacyRegistryRequest(routeFamily, routeKind, 'http')
+}
+
+export function captureLegacyRegistryActionRequest(
+  actionId: string,
+  surface: 'mcp' | 'answer',
+): void {
+  if (!Object.hasOwn(legacyRegistryActionRoutes, actionId)) {
+    return
+  }
+  const route = legacyRegistryActionRoutes[actionId as keyof typeof legacyRegistryActionRoutes]
+  captureLegacyRegistryRequest(route.routeFamily, route.routeKind, surface)
 }
 
 export async function flushPostHogServer(): Promise<void> {

@@ -12,6 +12,7 @@ import {
   type HarnessToolStatus,
   type RunHarnessToolOutcome,
 } from '@/modules/harness/public'
+import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import type {
   InspectPlanResult,
   OperationCompareResult,
@@ -99,6 +100,7 @@ export async function runAnswerToolCall(
   }
   let outcome: RunHarnessToolOutcome
   const classifyResult = input.toolId === 'web.discover' ? classifyWebDiscoveryResult : undefined
+  captureLegacyRegistryActionRequest(action.id, 'answer')
   if (input.harnessLoop === undefined) {
     const rawOutcome = await runHarnessTool({
       tool,

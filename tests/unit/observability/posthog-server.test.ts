@@ -69,10 +69,62 @@ describe('PostHog server capture', () => {
       properties: {
         route_family: routeFamily,
         route_kind: routeKind,
+        surface: 'http',
         $process_person_profile: false,
         $geoip_disable: true,
       },
     })
+  })
+
+  it.each([
+    ['registry.list', 'businesses', 'list'],
+    ['registry.search', 'businesses', 'search'],
+    ['registry.detail', 'businesses', 'detail'],
+    ['registry.services_list', 'services', 'list'],
+    ['registry.services_search', 'services', 'search'],
+    ['registry.services_detail', 'services', 'detail'],
+  ] as const)('captures the exact %s action payload on both static surfaces', async (
+    actionId,
+    routeFamily,
+    routeKind,
+  ) => {
+    const { captureLegacyRegistryActionRequest } = await import('@/lib/observability/posthog.server')
+
+    captureLegacyRegistryActionRequest(actionId, 'mcp')
+    captureLegacyRegistryActionRequest(actionId, 'answer')
+
+    expect(posthogMocks.capture).toHaveBeenCalledTimes(2)
+    expect(posthogMocks.capture).toHaveBeenNthCalledWith(1, {
+      distinctId: 'ae-legacy-registry-api',
+      event: 'legacy_registry_api_request',
+      properties: {
+        route_family: routeFamily,
+        route_kind: routeKind,
+        surface: 'mcp',
+        $process_person_profile: false,
+        $geoip_disable: true,
+      },
+    })
+    expect(posthogMocks.capture).toHaveBeenNthCalledWith(2, {
+      distinctId: 'ae-legacy-registry-api',
+      event: 'legacy_registry_api_request',
+      properties: {
+        route_family: routeFamily,
+        route_kind: routeKind,
+        surface: 'answer',
+        $process_person_profile: false,
+        $geoip_disable: true,
+      },
+    })
+  })
+
+  it('does not capture unknown or dynamic operation action IDs', async () => {
+    const { captureLegacyRegistryActionRequest } = await import('@/lib/observability/posthog.server')
+
+    captureLegacyRegistryActionRequest('operation.execute', 'mcp')
+    captureLegacyRegistryActionRequest('registry.unknown', 'answer')
+
+    expect(posthogMocks.capture).not.toHaveBeenCalled()
   })
 
   it('does not let constructor exceptions escape', async () => {

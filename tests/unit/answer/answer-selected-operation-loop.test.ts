@@ -11,6 +11,7 @@ import { isPublicOperationRef, type PublicOperationDescriptor } from '@/modules/
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { HarnessRunLoop } from '@/modules/harness/public'
 import type * as AnswerThreadTooling from '@/modules/answer-thread/tooling'
 import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
@@ -601,6 +602,11 @@ describe('selected keyless operation answer loop', () => {
     })
     const restoreOpenRouter = server.installEnv()
 
+    const harnessLoop = new HarnessRunLoop({
+      runId: 'run-selected',
+      sessionId: 'session-selected',
+      tools: ['operation.execute'],
+    })
     try {
       const result = await runAnswerToolUseAgent({
         query: 'what is the live value for live-result?',
@@ -613,6 +619,7 @@ describe('selected keyless operation answer loop', () => {
         keylessDataAsk: selectedResolution,
         keylessExecutableSource: selectedSource,
         maxToolCalls: 1,
+        harnessLoop,
       })
 
       expect(result.gate.ok).toBe(true)
@@ -635,6 +642,32 @@ describe('selected keyless operation answer loop', () => {
         { operationRef: selectedDescriptor.operationRef, input: { value: 'live-result' } },
         selectedSource,
       )
+      const report = harnessLoop.completeRun()
+      const toolEvents = harnessLoop.events.filter((event) =>
+        event.type === 'tool.started'
+        || event.type === 'tool.completed'
+        || event.type === 'tool.failed')
+      expect(toolEvents).toMatchObject([
+        {
+          type: 'tool.started',
+          runId: 'run-selected',
+          toolCallId: 'call-selected',
+          toolId: 'operation.execute',
+        },
+        {
+          type: 'tool.completed',
+          runId: 'run-selected',
+          toolCallId: 'call-selected',
+          toolId: 'operation.execute',
+          status: 'ok',
+          durationMs: expect.any(Number),
+        },
+      ])
+      expect(toolEvents).toHaveLength(2)
+      expect(report.summary.tools.byName['operation.execute']).toMatchObject({
+        total: 1,
+        ok: 1,
+      })
 
       expect(server.requests).toHaveLength(2)
       expect(server.requests[1]?.tools ?? []).toHaveLength(0)
