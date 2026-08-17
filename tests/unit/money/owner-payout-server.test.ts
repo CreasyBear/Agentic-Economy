@@ -186,19 +186,20 @@ beforeEach(() => {
   })
 })
 describe('credit top-up reservation', () => {
-  it('refuses a closed live-money gate before reserving or calling Stripe', async () => {
+  it('refuses a closed live-money gate before resolving owner, reserving, or calling Stripe', async () => {
     const createOrRecoverCreditPayment = vi.fn()
+    const resolveOwnerId = vi.fn(async () => 'owner-1')
 
     const result = await beginCreditTopupThroughSource(
       {
         principalId: 'clerk_api_key:key-1',
-        accountRef: accountRefForOwner('owner-1', 'USD'),
         amount: { currency: 'USD', units: '1000', exponent: 2 },
         idempotencyKey: 'topup:test-1',
       },
       undefined,
       {
         provider: { createOrRecoverCreditPayment, readCreditPayment: vi.fn() },
+        resolveOwnerId,
       },
     )
 
@@ -208,26 +209,78 @@ describe('credit top-up reservation', () => {
       retryable: false,
     })
     expect(createOrRecoverCreditPayment).not.toHaveBeenCalled()
+    expect(resolveOwnerId).not.toHaveBeenCalled()
     expect(sourceMocks.sourceWriteAdmissionFromContext).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
+  })
+  it('derives the owner account ref before digesting or reserving a forged runtime input', async () => {
+    const input = {
+      principalId: 'clerk_api_key:key-1',
+      amount: { currency: 'USD', units: '1000', exponent: 2 },
+      idempotencyKey: 'topup:forged-account-ref',
+      accountRef: accountRefForOwner('attacker', 'USD'),
+    }
+    const provider = {
+      createOrRecoverCreditPayment: vi.fn(),
+      readCreditPayment: vi.fn(),
+    }
+    sourceMocks.callSourceMutation.mockResolvedValueOnce({
+      kind: 'refused',
+      code: 'billing_identity_mismatch',
+      retryable: false,
+    })
+
+    const result = await beginCreditTopupThroughSource(
+      input,
+      {},
+      {
+        provider,
+        gatePolicy: acceptedGate,
+        resolveOwnerId: async () => 'owner-1',
+      },
+    )
+
+    const accountRef = accountRefForOwner('owner-1', 'USD')
+    expect(result).toEqual({
+      kind: 'refused',
+      code: 'billing_identity_mismatch',
+      retryable: false,
+    })
+    expect(sourceMocks.callSourceMutation).toHaveBeenCalledOnce()
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
+      accountRef,
+      commandRef: canonicalDigest({
+        format: 'money-topup-command:v1',
+        principalId: input.principalId,
+        accountRef,
+        idempotencyKey: input.idempotencyKey,
+      }),
+      inputDigest: canonicalDigest({
+        format: 'money-topup-input:v1',
+        principalId: input.principalId,
+        accountRef,
+        amount: input.amount,
+        idempotencyKey: input.idempotencyKey,
+      }),
+    })
   })
 })
 describe('credit top-up outcome recovery', () => {
   const input = {
     principalId: 'clerk_api_key:key-1',
-    accountRef: accountRefForOwner('owner-1', 'USD'),
     amount: { currency: 'USD', units: '1000', exponent: 2 },
     idempotencyKey: 'topup:unknown-1',
   } as const
+  const accountRef = accountRefForOwner('owner-1', 'USD')
   const command = {
     commandRef: canonicalDigest({
       format: 'money-topup-command:v1',
       principalId: input.principalId,
-      accountRef: input.accountRef,
+      accountRef,
       idempotencyKey: input.idempotencyKey,
     }),
     principalId: input.principalId,
-    accountRef: input.accountRef,
+    accountRef,
     amountUnits: '1000',
     processingFeeUnits: '50',
     chargeAmountUnits: '1050',
@@ -265,12 +318,20 @@ describe('credit top-up outcome recovery', () => {
     const first = await beginCreditTopupThroughSource(
       input,
       {},
-      { provider, gatePolicy: acceptedGate },
+      {
+        provider,
+        gatePolicy: acceptedGate,
+        resolveOwnerId: async () => 'owner-1',
+      },
     )
     const replay = await beginCreditTopupThroughSource(
       input,
       {},
-      { provider, gatePolicy: acceptedGate },
+      {
+        provider,
+        gatePolicy: acceptedGate,
+        resolveOwnerId: async () => 'owner-1',
+      },
     )
 
     expect(first).toEqual({
@@ -337,12 +398,20 @@ describe('credit top-up outcome recovery', () => {
     const first = await beginCreditTopupThroughSource(
       input,
       {},
-      { provider, gatePolicy: acceptedGate },
+      {
+        provider,
+        gatePolicy: acceptedGate,
+        resolveOwnerId: async () => 'owner-1',
+      },
     )
     const second = await beginCreditTopupThroughSource(
       input,
       {},
-      { provider, gatePolicy: acceptedGate },
+      {
+        provider,
+        gatePolicy: acceptedGate,
+        resolveOwnerId: async () => 'owner-1',
+      },
     )
 
     expect(first).toEqual({

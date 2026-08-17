@@ -4330,12 +4330,16 @@ function createHostedRuntimeFromEnvironment(
     const begun = await beginCreditTopupThroughSource(
       {
         principalId,
-        accountRef,
         amount: topupAmount,
         idempotencyKey: topupIdempotencyKey,
       },
       context,
-      { env: options.env, mode: "live", config: stripeConfig },
+      {
+        env: options.env,
+        mode: "live",
+        config: stripeConfig,
+        resolveOwnerId: async () => ownerUserId,
+      },
     );
     if (begun.kind !== "ok")
       throw new GatewaySmokeError(`gateway_smoke_topup_${begun.code}`);

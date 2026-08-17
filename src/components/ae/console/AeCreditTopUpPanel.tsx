@@ -16,7 +16,6 @@ import { isMoneyRefusal, parseDecimalExactAmount, type CreditPaymentSession, typ
 import type { CreditTopupBeginInput, CreditTopupOutcomeUnknownResult, CreditTopupReadInput, CreditTopupStartResult } from '@/modules/money/server'
 export type CreditTopupTarget = Readonly<{
   principalId: string
-  accountRef: string
   currency: string
   exponent: number
 }>
@@ -123,7 +122,6 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
     try {
       const result = await port.begin({
         principalId: target.principalId,
-        accountRef: target.accountRef,
         amount,
         idempotencyKey: nextIdempotencyKey,
       })

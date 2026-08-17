@@ -10,6 +10,7 @@ import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/compone
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { CreditPaymentSession } from '@/modules/money/public'
+import type { CreditTopupBeginInput } from '@/modules/money/server'
 
 const stripeTestState = vi.hoisted(() => ({ confirm: vi.fn() }))
 
@@ -163,7 +164,7 @@ describe('assistant access components', () => {
       },
       clientSecret: 'cs_secret_transient_only',
     }
-    const begin = vi.fn(async () => ({ kind: 'ok' as const, commandRef: 'topup:one', session }))
+    const begin = vi.fn(async (_input: CreditTopupBeginInput) => ({ kind: 'ok' as const, commandRef: 'topup:one', session }))
     const read = vi.fn(async () => ({
       ...session,
       evidence: { ...session.evidence, status: 'pending' as const },
@@ -172,22 +173,23 @@ describe('assistant access components', () => {
     const onRefresh = vi.fn()
     render(
       <AeCreditTopUpPanel
-        target={{ principalId: 'clerk_api_key:key_ui_1', accountRef: 'operator:key_ui_1:USD', currency: 'USD', exponent: 2 }}
+        target={{ principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }}
         port={port}
         publishableKey="pk_test_ui"
         onRefresh={onRefresh}
-      />,
+      />
     )
 
     fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
     fireEvent.click(screen.getByRole('button', { name: /add credit/i }))
 
     expect(await screen.findByTestId('payment-element')).toBeTruthy()
-    expect(begin).toHaveBeenCalledWith(expect.objectContaining({
+    expect(begin).toHaveBeenCalledWith({
       principalId: 'clerk_api_key:key_ui_1',
-      accountRef: 'operator:key_ui_1:USD',
       amount: { currency: 'USD', units: '1000', exponent: 2 },
-    }))
+      idempotencyKey: expect.any(String),
+    })
+    expect(begin.mock.calls[0]?.[0]).not.toHaveProperty('accountRef')
     expect(screen.queryByText('cs_secret_transient_only')).toBeNull()
     expect(window.sessionStorage.getItem('ae.credit-topup.recovery.v1:clerk_api_key%3Akey_ui_1')).not.toContain('cs_secret_transient_only')
 
@@ -206,7 +208,7 @@ describe('assistant access components', () => {
       status: 'outcome_unknown' as const,
     }))
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'credit_topup_outcome_unknown' as const, retryable: true }))
-    const target = { principalId: 'clerk_api_key:key_ui_1', accountRef: 'operator:key_ui_1:USD', currency: 'USD', exponent: 2 }
+    const target = { principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }
     const port: CreditTopupPort = { begin, read }
     render(<AeCreditTopUpPanel target={target} port={port} publishableKey="pk_test_ui" />)
 
@@ -230,10 +232,10 @@ describe('assistant access components', () => {
     const read = vi.fn(async () => ({ kind: 'refused' as const, code: 'stripe_setup_required' as const, retryable: false }))
     render(
       <AeCreditTopUpPanel
-        target={{ principalId: 'clerk_api_key:key_ui_1', accountRef: 'operator:key_ui_1:USD', currency: 'USD', exponent: 2 }}
+        target={{ principalId: 'clerk_api_key:key_ui_1', currency: 'USD', exponent: 2 }}
         port={{ begin, read }}
         publishableKey="pk_test_ui"
-      />,
+      />
     )
     fireEvent.change(screen.getByLabelText(/credit amount/i), { target: { value: '10.00' } })
     fireEvent.click(screen.getByRole('button', { name: /add credit/i }))

@@ -12,7 +12,7 @@ import {
 
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
-import { accountRefForOwner, addExactAmounts, type ExactAmount } from '@/modules/money/public'
+import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
 import { formatTimestamp } from '@/lib/ui/format-time'
@@ -74,7 +74,6 @@ export function AeAgentOperatorConsole({
     if (item?.account === undefined) return undefined
     return {
       principalId: item.principalId,
-      accountRef: accountRefForOwner(item.account.accountId, item.account.balance.currency),
       currency: item.account.balance.currency,
       exponent: item.account.balance.exponent,
     }

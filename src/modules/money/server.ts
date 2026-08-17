@@ -1,3 +1,4 @@
+import { auth } from '@clerk/tanstack-react-start/server'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -27,6 +28,7 @@ import {
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
 import {
+  accountRefForOwner,
   accountRefForProvider,
   compareExactAmounts,
   exactAmountSchema,
@@ -98,7 +100,6 @@ type Environment = Readonly<Record<string, string | undefined>>
 
 export type CreditTopupBeginInput = Readonly<{
   principalId: string
-  accountRef: string
   amount: ExactAmount
   idempotencyKey: string
 }>
@@ -122,7 +123,6 @@ export type CreditTopupReadInput =
 
 const topupBeginInputSchema = z.strictObject({
   principalId: z.string().trim().min(1).max(500),
-  accountRef: z.string().trim().min(1).max(500),
   amount: z.strictObject({
     currency: z.string().regex(/^[A-Z][A-Z0-9]{2,19}$/u),
     units: z.string().regex(/^(0|[1-9]\d*)$/u),
@@ -171,13 +171,19 @@ export type CreditTopupServerRuntime = Readonly<{
   client?: StripeMoneyClient
   provider?: CreditPaymentPort
   gatePolicy?: LiveMoneyGatePolicy
+  resolveOwnerId?: () => Promise<string | undefined>
 }>
+async function defaultResolveOwnerId(): Promise<string | undefined> {
+  const { userId } = await auth()
+  return userId ?? undefined
+}
 type SourceWriteBoundArgs = Readonly<{
   sourceWrite: SourceWriteAdmission
   sourceWriteRequest: SourceWriteAdmissionRequest
 }>
 type ReserveTopupArgs = CreditTopupBeginInput &
   Readonly<{
+    accountRef: string
     commandRef: string
     inputDigest: string
     successReturnRef: string
@@ -285,20 +291,21 @@ export async function beginCreditTopupThroughSource(
     runtime.gatePolicy ?? LIVE_MONEY_GATE_POLICY,
   )
   if (gate.kind === 'refused') return refusal(gate.code, false)
-  if (!input.accountRef.startsWith('owner:'))
-    return refusal('billing_identity_mismatch', false)
+  const ownerId = await (runtime.resolveOwnerId ?? defaultResolveOwnerId)()
+  if (ownerId === undefined) return refusal('billing_identity_missing', false)
+  const accountRef = accountRefForOwner(ownerId, input.amount.currency)
   const provider = createCreditTopupProvider(runtime)
   if (isMoneyRefusal(provider)) return provider
   const commandRef = canonicalDigest({
     format: 'money-topup-command:v1',
     principalId: input.principalId,
-    accountRef: input.accountRef,
+    accountRef,
     idempotencyKey: input.idempotencyKey,
   })
   const inputDigest = canonicalDigest({
     format: 'money-topup-input:v1',
     principalId: input.principalId,
-    accountRef: input.accountRef,
+    accountRef,
     amount: input.amount,
     idempotencyKey: input.idempotencyKey,
   })
@@ -307,6 +314,7 @@ export async function beginCreditTopupThroughSource(
   const correlationId = commandRef
   const commandArgs = {
     ...input,
+    accountRef,
     commandRef,
     inputDigest,
     successReturnRef,
