@@ -101,9 +101,11 @@ issued credential output includes both `AE_API_KEY` and the exact
 `invoke`, `status`, `recover`, and `advanced cancel` require both
 environment variables. AE resolves the provider, endpoint, supplier credential,
 price, authority, and evidence server-side. `recover` is evidence-bound
-reconciliation after a genuinely uncertain outcome, not replay of a known
-result. Pending and terminal results preserve the canonical invocation
-reference, idempotency key, usage, evidence, and next command.
+reconciliation after a genuinely uncertain outcome, not replay of a known result.
+A pending invoke result is distinct from status/recovery responses; `terminal` is
+a status state, not an invoke result. Preserve the canonical invocation
+reference, idempotency key, usage, evidence, and next command. `invoke --wait`
+may return a status envelope.
 
 ## Evidence class
 

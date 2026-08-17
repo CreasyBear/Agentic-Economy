@@ -1,6 +1,7 @@
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke-contracts'
+import { operationInvokeStatusStateValues } from '@/modules/capability-execution/operation-recovery-contracts'
 import {
   AGENT_ACCESS_OAUTH_PATHS,
 } from '@/modules/agent-access/oauth-state'
@@ -44,6 +45,7 @@ export function buildPublicAgentSkillMarkdown(options: {
   const invokeHttpExample = JSON.stringify(invoke.example.http.body ?? {})
   const invokeInputSchema = JSON.stringify(invoke.route.inputJsonSchema ?? {})
   const operationOutcomes = operationInvokeResultKindValues.join(' | ')
+  const operationStatusStates = operationInvokeStatusStateValues.join(' | ')
   const cli = 'npm run -s ae --'
   return [
     '---',
@@ -112,7 +114,7 @@ export function buildPublicAgentSkillMarkdown(options: {
     `${cli} status "$AE_INVOCATION_REF" --json`,
     '```',
     '',
-    `HTTP: \`${status.route.method} ${base}${status.route.path}\`. Interpret \`${operationOutcomes}\` literally. Usage or evidence fields are authoritative only when present on this invocation’s recorded result.`,
+    `HTTP: \`${status.route.method} ${base}${status.route.path}\`. Only \`result.kind\` is the operation outcome when present: \`${operationOutcomes}\`. A status response's \`found.state\` is a recovery diagnostic, not an extra operation outcome: \`${operationStatusStates}\`. Usage or evidence fields are authoritative only when present on this invocation's recorded result.`,
     '',
     '## 7. Recover uncertain work',
     '',

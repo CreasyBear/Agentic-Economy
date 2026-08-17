@@ -183,8 +183,12 @@ Program context (2026-08-16): the repo is in the **atomic operation market reset
 **Operation invoke service:**
 - Purpose: Orchestrate grant, authority, idempotency, and Convex persistence for `operation.invoke`
 - Examples: `src/modules/capability-execution/operation-invoke.ts`, `createOperationInvokeService()` in `operation-invoke-api.ts`
-- Pattern: Inject readers for current operation, grant, authority; keep wire parsing in `operation-invoke-contracts.ts`
+- Pattern: Inject readers for current operation, grant, authority; keep invoke and status/recovery wire parsing in `operation-invoke-contracts.ts` and `operation-recovery-contracts.ts`
 
+**Invocation outcome and recovery status:**
+- `result.kind` is the only operation outcome when present, from `operation-invoke-contracts.ts`: `completed | pending | needs_authority | reconciliation_required | refused`
+- `found.state` is a recovery diagnostic, not an extra operation outcome, from `operation-recovery-contracts.ts` and `src/modules/action-invocation/`: `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`
+- Preserve the existing wire envelopes; CLI status/recovery and `invoke --wait` may expose the status envelope
 **Route contract:**
 - Purpose: Bind action ID to HTTP method, path, required headers, media types
 - Examples: `src/modules/capability-execution/operation-invoke-entry.ts`

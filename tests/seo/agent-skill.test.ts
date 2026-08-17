@@ -31,6 +31,15 @@ describe('public agent skill', () => {
     }
   })
 
+  it('distinguishes invoke outcomes from status diagnostics', () => {
+    expect(body).toContain(
+      'Only `result.kind` is the operation outcome when present: `completed | pending | needs_authority | reconciliation_required | refused`.',
+    )
+    expect(body).toContain(
+      "A status response's `found.state` is a recovery diagnostic, not an extra operation outcome: `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`.",
+    )
+  })
+
   it('names the anonymous read and authenticated invoke/recovery routes', () => {
     for (const path of [
       '/api/v1/market-operations/search',

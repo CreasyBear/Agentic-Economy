@@ -25,11 +25,13 @@ import {
   reconcileOwnerInvocationServer,
 } from '@/modules/capability-execution/operation-recovery.functions'
 import type {
-  OperationInvokeRecoveryResult,
   OperationInvokeResult,
-  OperationInvokeStatusResult,
   OperationInvokeUsageSummary,
 } from '@/modules/capability-execution/operation-invoke-contracts'
+import type {
+  OperationInvokeRecoveryResult,
+  OperationInvokeStatusResult,
+} from '@/modules/capability-execution/operation-recovery-contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { formatCurrencyAmount } from '@/modules/money/public'
 

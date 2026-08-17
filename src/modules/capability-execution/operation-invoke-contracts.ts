@@ -45,31 +45,6 @@ export const operationInvokeRefusalCodeValues = [
 ] as const
 export const operationInvokeRefusalCodeSchema = z.enum(operationInvokeRefusalCodeValues)
 
-export const operationInvokeStatusStateValues = [
-  'gathering_information',
-  'awaiting_authority',
-  'authorized',
-  'leased',
-  'in_progress',
-  'retryable',
-  'reconciliation_required',
-  'terminal',
-  'cancelled',
-  'invalidated',
-] as const
-export const operationInvokeStatusStateSchema = z.enum(operationInvokeStatusStateValues)
-
-export const operationInvokeStatusRefusalCodeValues = [
-  'invocation_not_found',
-  'grant_not_found',
-  'grant_revoked',
-  'grant_expired',
-  'grant_generation_stale',
-  'environment_mismatch',
-  'invocation_runtime_unavailable',
-] as const
-export const operationInvokeStatusRefusalCodeSchema = z.enum(operationInvokeStatusRefusalCodeValues)
-
 const operationInvokeChargeStateSchema = z.enum([
   'free_tier',
   'paid',
@@ -233,33 +208,3 @@ export function isPrincipalEnvironmentCompatibleWithOperation(
 ): boolean {
   return principalEnvironment === operation.runtimeEnvironment
 }
-
-export type OperationInvokeStatusState = z.infer<typeof operationInvokeStatusStateSchema>
-
-export type OperationInvokeStatusResult =
-  | Readonly<{
-      kind: 'found'
-      invocationRef: string
-      operationRef: string
-      state: OperationInvokeStatusState
-      usage?: OperationInvokeUsageSummary
-      evidenceHash?: string
-      attemptRef?: string
-      effectGeneration?: number
-      result?: OperationInvokeResult
-    }>
-  | Readonly<{
-      kind: 'refused'
-      invocationRef: string
-      code: Extract<OperationInvokeRefusalCode, 'invocation_not_found' | 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'invocation_runtime_unavailable'>
-      retryable: boolean
-      nextAction?: string
-    }>
-export type OperationInvokeRecoveryResult =
-  | OperationInvokeStatusResult
-  | Readonly<{
-      kind: 'reconciliation_required'
-      invocationRef: string
-      operationRef: string
-      evidence: PublicReconciliationState
-    }>

@@ -29,14 +29,16 @@ import {
   operationInvokeInputSchema,
   isPrincipalEnvironmentCompatibleWithOperation,
   type OperationInvokeInput,
-  type OperationInvokeRecoveryResult,
   type OperationInvokeRefusalCode,
   type OperationInvokeResult,
-  type OperationInvokeStatusResult,
   type OperationInvokeUsageSummary,
   type PublicAuthorityRequest,
   type PublicReconciliationState,
 } from './operation-invoke-contracts'
+import type {
+  OperationInvokeRecoveryResult,
+  OperationInvokeStatusResult,
+} from './operation-recovery-contracts'
 
 export type OperationInvokeRequest = Readonly<{
   input: OperationInvokeInput

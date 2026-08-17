@@ -10,9 +10,11 @@ import {
 import {
   operationInvokeResultKindValues,
   operationInvokeRefusalCodeValues,
+} from '@/modules/capability-execution/operation-invoke-contracts'
+import {
   operationInvokeStatusStateValues,
   operationInvokeStatusRefusalCodeValues,
-} from '@/modules/capability-execution/operation-invoke-contracts'
+} from '@/modules/capability-execution/operation-recovery-contracts'
 import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import {
   CUSTOMER_REQUEST_AGENT_ENTRYPOINT,

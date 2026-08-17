@@ -12,7 +12,7 @@ const operationRef = `operation:v1:${'a'.repeat(64)}`
 const invocationRef = `operation-invocation:v1:${'b'.repeat(64)}`
 const principal = {
   principalId: 'clerk_api_key:credential:one',
-  ownerId: 'owner:one',
+  ownerId: 'user_one',
   credentialId: 'credential:one',
   applicationRef: 'agentic-economy',
   environment: 'sandbox' as const,
