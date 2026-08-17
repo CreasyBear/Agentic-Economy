@@ -776,3 +776,63 @@ Git records the strict-schema move as R099; the accepted allowlist contained 13 
 normalization, and the Convex host remained runtime authorities. No
 source/Convex→tools import, aliases, runtime authority move, hosted/provider/
 network/live-money/push/release proof was performed.
+
+## P2-c — partial (splits committed; Layer-0 imports pending)
+
+**Accepted commit lineage from the P2-b HEAD:**
+
+| Commit | Parent | Message | Exact path scope |
+|---|---|---|---|
+| `aef1ab3e393a88c92331cfe80fcb7fd876f02a19` | `f805c50b7ecfe3ee1aa71224ef61224ce4558501` | `docs: record fixture ownership cutover` | 2 modified paths: `.planning/reset/CARD-LEDGER.md`, `.planning/reset/RECEIPTS.md` |
+| `2a8d92986ed58a121a27d59a09c8bf3959973c4a` | `aef1ab3e393a88c92331cfe80fcb7fd876f02a19` | `refactor: move service auth to agent access` | 26 changed records / 28 raw path endpoints: 24 modified consumers plus `R100 src/modules/customer-request/service-auth-envelope.ts → src/modules/agent-access/service-auth-envelope.ts` and `R097 tests/unit/customer-request/service-auth-envelope.test.ts → tests/unit/agent-access/service-auth-envelope.test.ts` |
+| `112ede5b2fbf9cdfd24e06eaf0518caf8b095747` | `2a8d92986ed58a121a27d59a09c8bf3959973c4a` | `refactor: move consumer adapter to demand` | 4 paths: `src/modules/customer-request/application/consumer-plan-projection.ts`, its `public.ts`, `src/modules/registry/public.ts`, `tests/unit/registry/services-api-projection.test.ts` |
+| `5739456916ad1245a0fc62096e82277b17a3b5ed` | `112ede5b2fbf9cdfd24e06eaf0518caf8b095747` | `refactor: remove answer type from capability execution` | 1 path: `src/modules/capability-execution/operation-execute.actions.ts` |
+| `1cfdbe10752b637bce1584a93ac1e9b86f067734` | `5739456916ad1245a0fc62096e82277b17a3b5ed` | `refactor: move answer tool selection out of harness` | 6 paths: Answer-thread tool registry/tooling, Harness public/tool-contract, and the two corresponding tests |
+| `c5f790b1f148dc0d965caeba799801da4674fc23` | `1cfdbe10752b637bce1584a93ac1e9b86f067734` | `refactor: move answer run viewer out of harness` | 8 changed records / 13 raw path endpoints: 3 source moves at `R100`, 2 test moves at `R099`, and 3 modified consumers (`AeHarnessRunViewer` plus the two admin run routes) |
+| `be76bdd5f62c76541ec3e2e43aef4a328541329f` | `c5f790b1f148dc0d965caeba799801da4674fc23` | `refactor: move inquiry proof out of harness` | 5 changed records / 7 raw path endpoints: proof source `R100`, proof test `R098`, plus `harness/public.ts`, `inquiries/public.ts`, and notification readback test edits |
+| `9db36a215316c6bac3b658a04819bfc994a8a648` | `be76bdd5f62c76541ec3e2e43aef4a328541329f` | `docs: map existing codebase` | 7 modified `.planning/codebase/{ARCHITECTURE,CONCERNS,CONVENTIONS,INTEGRATIONS,STACK,STRUCTURE,TESTING}.md` paths |
+| `9c8e6fbc4de7de66a2866694824e848b3774d343` | `9db36a215316c6bac3b658a04819bfc994a8a648` | `refactor: split oversized market modules` | 28 changed paths; added exactly `src/modules/capability-execution/operation-invoke-contracts.ts`, `src/modules/capability-supply/internal/operation-projection-wire.ts`, and `src/modules/registry/internal/projection-contracts.ts`; remaining paths are the existing invoke/projection/registry consumers, Convex invoke consumers, Answer/discovery consumers, operation route/tests, CLI, and release-smoke adapter |
+
+The target `9c8e6fbc4de7de66a2866694824e848b3774d343` is an ancestor of clean current HEAD `7fba18f317d8504d80974b5749ebd27403b60f77` on `main`.
+
+**Ownership and preserved behavior:** service-auth assertion ownership moved to `agent-access`; the Customer Request consumer adapter remains behind `customer-request/application`; Answer tool selection is owned by the canonical Answer-thread registry; the run viewer is owned by Answer Thread; inquiry proof is owned by Inquiries; and invoke/projection/registry wire contracts were extracted into leaf modules. Existing operation-result/status/refusal schemas, serializers/deserializers, validators, public barrel exports, invocation routing, dispatch, and runtime authority remained unchanged. The capability-supply and registry public barrels re-export the extracted wire/contract names. Reverse edges from the new wire/contracts modules are type-only; no runtime cycle, duplicate implementation, alias, or retired-path consumer remains. No Layer-0 Answer/Customer Request import was introduced.
+**Current blockers:** `.planning/codebase/CONCERNS.md` records these remaining Layer-0 import edges: Answer `answer-tool-use-agent.ts` / `keyless-data-ask.ts` / `answer-schema.ts` → `capability-supply`; Answer `evidence-assembler.ts` → `registry/registry.functions`; and Customer Request `interpret-compile/discover.ts` → `capability-supply`. The commit lineage above proves completed moves/splits only; it does not satisfy the import-removal half.
+
+**Focused validation and reviews:** the supplied focused records report Answer-edge `4 files / 29 tests PASS` with Node 22 typecheck/lint/build PASS; run-viewer `2 files / 8 tests PASS` with the same checks; and inquiry-proof `2 files / 13 tests PASS` with the same checks. Final independent correctness and boundary/security reviews passed for service auth, consumer adapter, dead candidate removal, Answer edge, run viewer, inquiry proof, and projection/registry extraction. The interim invoke review BLOCK was solely because a newly added contracts file was absent from an indexed patch; after commit, the final refactor validator passed and confirmed the file/import cutover. No current review finding remains.
+
+**Phase 2 source-gate evidence:** exact Node 22 command `env PATH=/Users/joelchan/.nvm/versions/node/v22.22.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin npm run test:release:source:after-codegen` passed with unit `505 files / 4307 tests`, integration `86 files / 722 tests`, types `1 / 4`, imports `15 / 60`, TypeScript standards `1 / 1`, SEO `6 / 35`, UI contract `1 / 1`, eval `13 cases / 15 turns` (`failedCases=0`, `failedScoreCases=0`, minimum score `9.5`, average `9.87`, p95 turn timing `1258 ms`), kernel-retirement verified, product-frontier OK, and client/SSR/Nitro build succeeded. Separate Node 22 conformance passed `24 files / 396 tests` (`8.11s`); `npm run check:convex-codegen` passed all generation/bundling/upload/binding/TypeScript stages. Initial and final porcelain, untracked files, and stashes were empty; final HEAD remained `7fba18f317d8504d80974b5749ebd27403b60f77`.
+
+**Explicit exclusions:** no hosted, provider, network, live-money, push, or release proof was performed or claimed; no runtime authority was moved; and no source/Convex→tools import was added. Production `gate:release` remains blocked solely at deployment-manifest environment prerequisites; this does not invalidate the green source, conformance, or codegen evidence above.
+
+## P2-d — committed
+
+Product commit `abce7e16b142263446adb27e076a2f0c10b88152`; parent `2f65de9bf03a0477f9e720bc9c7935f32cd570f9`; message `refactor: separate invocation recovery contracts` (2026-08-17 20:03 +0800). `git show` reports 14 paths, +104/-71, including new `src/modules/capability-execution/operation-recovery-contracts.ts`.
+
+`src/modules/capability-execution/operation-invoke-contracts.ts` remains the sole owner of the five public invoke result kinds: `completed | pending | needs_authority | reconciliation_required | refused`. The new `operation-recovery-contracts.ts` owns the ten detailed status/recovery diagnostics: `gathering_information | awaiting_authority | authorized | leased | in_progress | retryable | reconciliation_required | terminal | cancelled | invalidated`, plus status/recovery result unions. Existing strict envelopes and principal/correlation/reconciliation/cancellation behavior remain wired through the same action/functions, route, CLI, manifest, and owner-page consumers; no compatibility re-export was added.
+
+Docs and tests make that ownership explicit: `.planning/codebase/ARCHITECTURE.md`, generated `src/modules/discovery/internal/agent-skill.ts`, and `tools/ae/README.md` state that only `result.kind` is an operation outcome, while `found.state` is a recovery diagnostic and `terminal` is not an invoke result. `tests/seo/agent-skill.test.ts` pins both vocabularies. `tests/unit/server/operation-recovery-api.test.ts` aligns its admitted principal subject (`user_one`) and preserves authenticated status/cancel/reconcile coverage.
+
+Focused P2-d validation: 10 files / 91 tests passed; `git diff --check` passed; all seven moved declarations occurred exactly once in `operation-recovery-contracts.ts` and no stale moved imports remained; typecheck, lint, and build passed (build warnings only). Independent correctness review passed at 0.98; independent boundary/security review passed at 0.98; no findings across all 14 paths.
+**Dependency-order correction:** P2-d landed out of ledger dependency order and does not advance Phase 2 until P2-c closes.
+
+## Phase 2 source gate — green; card acceptance pending
+Green source/conformance/codegen evidence does not override the open P2-c acceptance.
+
+Current HEAD is `7fba18f317d8504d80974b5749ebd27403b60f77` on `main`; final porcelain, untracked files, and stashes were empty. Under Node `v22.22.0` / npm `10.9.4`:
+
+- `npm run test:release:source:after-codegen`: exit 0. Lint, typecheck, kernel-retirement, product-frontier, unit (`505 files / 4307 tests`), integration (`86 files / 722 tests`), types (`1 / 4`), imports (`15 / 60`), ts-standards (`1 / 1`), SEO (`6 / 35`), UI contract (`1 / 1`), eval (`13 cases / 15 turns; failedCases=0; failedScoreCases=0; minScore=9.5/9; avgScore=9.87; p95=1258ms`), and client/SSR/Nitro build passed.
+- `npm run test:conformance`: exit 0; 24 files / 396 tests passed (8.11s).
+- `npm run check:convex-codegen`: exit 0 (5.40s). Stages: Finding component definitions; Generating server code; Bundling component definitions; Bundling component schemas and implementations; Downloading current deployment state; Uploading functions to Convex; Generating TypeScript bindings; Running TypeScript.
+- `npm run gate:release` remains blocked at its first production `verify:deployment-manifest` step (exit 1), fingerprint `sha256:096333e60ef23f0d459cade659a9253a22ce0b3019ad5aaf30cd963e98a263d3`; runtime Node 22 is compatible. The retained blocker is malformed/missing operator-owned source-write authority/family keys, canonical origin, Clerk, Convex/source, OpenRouter, Stripe, and x402 custody configuration. No bypass was used.
+
+Attributable post-P2-d gate-fix commits/messages:
+
+- `5781963af350761b55ebe86b4a39eb2c70d2e3e0` — `test: update compare operation fixture` (adds canonical `callVia` and `paymentLane` to the compare fixture).
+- `b2a8f2866eaf7e9e3dcc60a84923ecec3c7cf973` — `docs: restore prompt map update rule` (restores the architecture-map link/update rule).
+- `891447ec65e2de6ef0dccf2f497396f80ceefe65` — `test: use admitted answer API key subject` (changes the rate-limit fixture subject to `user_answer`).
+- `1845d4453329c2e57a9dfd6ad0e618d9125def00` — `refactor: type supply source mutations` (replaces broad source-mutation result types/casts with exact `FunctionReference`/`FunctionReturnType` typing).
+- `68c51f702a44e997be76eed34b9559f0584b7b68` — `refactor: narrow money ledger state` (makes optional-state narrowing explicit and removes the money-ledger non-null assertions).
+
+Intermediate gate attribution was direct: the target revision's after-codegen segment had two unit failures (compare fixture and prompt-map link); after those fixes, the answer rate-limit integration fixture returned 403 until the admitted subject fix; after that, ts-standards reached the supply typing and money-ledger state fixes. A later run stopped on one integration timeout, while the clean current-HEAD rerun passed all 86 files / 722 tests.
+
+No bypass was used; no hosted, live-money, push, or release proof is claimed. Production `gate:release` remains blocked at the deployment manifest above.
