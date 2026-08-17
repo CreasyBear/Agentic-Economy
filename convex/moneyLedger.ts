@@ -1720,23 +1720,25 @@ async function readQualifiedUsePayoutAmounts(
     receipt.usageRef.length === 0
   )
     return qualifiedUsePayoutFailure()
+  const transactionRef = receipt.transactionRef
+  const usageRef = receipt.usageRef
   const [transaction, usage, entries] = await Promise.all([
     ctx.db
       .query('moneyTransactions')
       .withIndex('by_transactionRef', (query) =>
-        query.eq('transactionRef', receipt.transactionRef!),
+        query.eq('transactionRef', transactionRef),
       )
       .unique(),
     ctx.db
       .query('moneyUsageEvents')
       .withIndex('by_usageRef', (query) =>
-        query.eq('usageRef', receipt.usageRef!),
+        query.eq('usageRef', usageRef),
       )
       .unique(),
     ctx.db
       .query('moneyLedgerEntries')
       .withIndex('by_transactionRef', (query) =>
-        query.eq('transactionRef', receipt.transactionRef!),
+        query.eq('transactionRef', transactionRef),
       )
       .take(10),
   ])
@@ -2332,6 +2334,8 @@ export async function recordQualifiedUsePayoutAllocation(
 > {
   if (receipt.transactionRef === undefined || receipt.usageRef === undefined)
     return qualifiedUsePayoutFailure()
+  const transactionRef = receipt.transactionRef
+  const usageRef = receipt.usageRef
   const persistedReceipt = await ctx.db
     .query('qualifiedUseReceipts')
     .withIndex('by_qualifiedUseRef', (query) =>
@@ -2361,7 +2365,7 @@ export async function recordQualifiedUsePayoutAllocation(
       ctx.db
         .query('moneyPayoutAllocations')
         .withIndex('by_transactionRef', (query) =>
-          query.eq('transactionRef', receipt.transactionRef!),
+          query.eq('transactionRef', transactionRef),
         )
         .unique(),
     ])
@@ -2475,8 +2479,8 @@ export async function recordQualifiedUsePayoutAllocation(
     allocationRef,
     payoutRef: period.payoutRef,
     qualifiedUseRef: receipt.qualifiedUseRef,
-    transactionRef: receipt.transactionRef!,
-    usageRef: receipt.usageRef!,
+    transactionRef,
+    usageRef,
     businessId: amounts.businessId,
     currency: amounts.currency,
     exponent: amounts.exponent,
@@ -3821,6 +3825,9 @@ export const authorizeInvocationCharge = internalMutation({
       operator === undefined ||
       provider === undefined ||
       rakeAccount === undefined ||
+      operatorPrepared === undefined ||
+      providerPrepared === undefined ||
+      rakePrepared === undefined ||
       operatorDomain === undefined ||
       providerDomain === undefined ||
       rakeDomain === undefined
@@ -4184,10 +4191,10 @@ export const authorizeInvocationCharge = internalMutation({
       }
       const appliedOperator = await applyPreparedCanonicalMoneyAccount(
         ctx,
-        operatorPrepared!,
+        operatorPrepared,
       )
-      await applyPreparedCanonicalMoneyAccount(ctx, providerPrepared!)
-      await applyPreparedCanonicalMoneyAccount(ctx, rakePrepared!)
+      await applyPreparedCanonicalMoneyAccount(ctx, providerPrepared)
+      await applyPreparedCanonicalMoneyAccount(ctx, rakePrepared)
       await applyPreparedCredentialBudgetReservation(
         ctx,
         budgetReservation,
@@ -4387,15 +4394,15 @@ export const authorizeInvocationCharge = internalMutation({
     })
     const appliedOperator = await applyPreparedCanonicalMoneyAccount(
       ctx,
-      operatorPrepared!,
+      operatorPrepared,
     )
     const appliedProvider = await applyPreparedCanonicalMoneyAccount(
       ctx,
-      providerPrepared!,
+      providerPrepared,
     )
     const appliedRake = await applyPreparedCanonicalMoneyAccount(
       ctx,
-      rakePrepared!,
+      rakePrepared,
     )
     await applyPreparedCredentialBudgetReservation(
       ctx,
@@ -8573,6 +8580,7 @@ async function appendRefundBody(
       code: 'charge_reconciliation_required' as const,
       retryable: false,
     }
+  const credentialId = original.credentialId
   const [prior, originalEntries, usageRows] = await Promise.all([
     ctx.db
       .query('moneyTransactions')
@@ -8586,7 +8594,7 @@ async function appendRefundBody(
         q.eq('transactionRef', original.transactionRef),
       )
       .take(5),
-    original.credentialId === undefined
+    credentialId === undefined
       ? Promise.resolve([] as Doc<'moneyUsageEvents'>[])
       : ctx.db
           .query('moneyUsageEvents')
@@ -8595,7 +8603,7 @@ async function appendRefundBody(
             (q) =>
               q
                 .eq('principalId', original.principalId)
-                .eq('credentialId', original.credentialId!)
+                .eq('credentialId', credentialId)
                 .eq('currency', original.currency)
                 .eq('observedAt', original.createdAt),
           )
@@ -9097,6 +9105,8 @@ export const reverseDisputedQualifiedUse = internalMutation({
       .unique()
     if (receipt === null || receipt.environment !== 'production' || receipt.usageRef === undefined || receipt.transactionRef === undefined)
       return { kind: 'refused' as const, code: 'charge_reconciliation_required' as const, retryable: false as const }
+    const usageRef = receipt.usageRef
+    const transactionRef = receipt.transactionRef
     const receiptIdentity = {
       invocationRef: receipt.invocationRef,
       attemptRef: receipt.attemptRef,
@@ -9118,8 +9128,8 @@ export const reverseDisputedQualifiedUse = internalMutation({
     if (qualifiedUseRef(receiptIdentity) !== receipt.qualifiedUseRef || qualifiedUseMaterialDigest(receiptMaterial) !== receipt.materialDigest)
       return { kind: 'refused' as const, code: 'billing_identity_mismatch' as const, retryable: false as const }
     const [usage, original] = await Promise.all([
-      ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', receipt.usageRef!)).unique(),
-      ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', receipt.transactionRef!)).unique(),
+      ctx.db.query('moneyUsageEvents').withIndex('by_usageRef', (q) => q.eq('usageRef', usageRef)).unique(),
+      ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', transactionRef)).unique(),
     ])
     if (
       usage === null ||
