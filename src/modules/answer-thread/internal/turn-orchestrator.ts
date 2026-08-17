@@ -195,6 +195,17 @@ type StreamAnswerTurnRuntimeState = {
   persistResult?: PersistAnswerTurnResult | undefined
   finalizationResult?: AnswerHarnessFinalizationResult | undefined
 }
+function deriveFollowUpIntent(
+  route: AnswerRequestInterpretation['route'] | undefined,
+  query: string,
+  priorTurnCount: number,
+): FollowUpIntent {
+  return route === 'boundary'
+    ? 'explain_boundary'
+    : route === 'business'
+      ? classifyFollowUpIntent(query, priorTurnCount)
+      : 'refine_search'
+}
 
 export type StreamAnswerTurnInput = {
   sessionId: string
@@ -547,7 +558,14 @@ export async function streamAnswerTurn(
       ...(resumePriorOperationInput === undefined
         ? {}
         : { priorOperationInput: resumePriorOperationInput }),
-      intent: resumeCheckpoint?.intent ?? 'refine_search',
+      intent:
+        resumeCheckpoint?.intent
+        ?? deriveFollowUpIntent(
+          resumeCheckpoint?.interpretation?.route,
+          resumeCheckpoint?.query ?? query,
+          resumeCheckpoint?.priorTurnCount ?? 0,
+        ),
+
       ...(resumeCheckpoint?.interpretation === undefined
         ? {}
         : { interpretation: resumeCheckpoint.interpretation }),
@@ -733,13 +751,12 @@ function buildStreamAnswerTurnPhases(input: {
       if (state.resumeCheckpoint !== undefined) {
         return state
       }
-      const interpretedRoute = state.interpretation?.route
-      const intent =
-        interpretedRoute === 'boundary'
-          ? ('explain_boundary' as const)
-          : interpretedRoute === 'business'
-            ? classifyFollowUpIntent(state.query, state.priorTurnCount)
-            : ('refine_search' as const)
+      const intent = deriveFollowUpIntent(
+        state.interpretation?.route,
+        state.query,
+        state.priorTurnCount,
+      )
+
       input.stopContextTiming({
         priorTurns: state.priorTurns.length,
         accessTurnCount: state.priorTurnCount,
@@ -1566,25 +1583,6 @@ function startAnswerTurnLeaseHeartbeat(input: {
 }
 
 
-function checkpointRouteFor(
-  route: EffectiveAnswerRoute | undefined,
-): AnswerTurnCheckpoint['route'] {
-  switch (route?.kind) {
-    case 'frozen_filter':
-    case 'frozen_compare':
-    case 'inquiry_handoff':
-    case 'boundary_explain':
-    case 'unsupported':
-    case 'tool_search':
-      return route.kind
-    case 'rationale':
-      return 'rationale'
-    case 'safety_refusal':
-      return 'safety_refusal'
-    default:
-      return undefined
-  }
-}
 
 function runtimeTurnPathContext(
   input: {
@@ -1645,7 +1643,6 @@ function runtimeTurnPathContext(
         partial.operationSelection,
       )
 
-      const checkpointRoute = checkpointRouteFor(state.route)
       const checkpoint: AnswerTurnCheckpoint = {
         schemaVersion: 1,
         reservationKey: state.reservationKey,
@@ -1658,8 +1655,6 @@ function runtimeTurnPathContext(
         ...(parentCheckpointDigest === undefined
           ? {}
           : { parentCheckpointDigest }),
-        ...(checkpointRoute === undefined ? {} : { route: checkpointRoute }),
-        intent: state.intent,
         ...(state.interpretation === undefined
           ? {}
           : {

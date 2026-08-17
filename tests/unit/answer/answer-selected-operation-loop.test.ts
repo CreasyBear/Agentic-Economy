@@ -738,6 +738,20 @@ describe('selected keyless operation answer loop', () => {
         operationRef: selectedDescriptor.operationRef,
         result: { kind: 'ok', output: { value: 'canonical-result' } },
       })
+      expect(checkpoints[0]?.toolCalls).toHaveLength(2)
+      expect(checkpoints[0]?.toolCalls).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          toolCallId: 'call-selected-primary',
+          toolId: 'operation.execute',
+          status: 'complete',
+        }),
+        expect.objectContaining({
+          toolCallId: 'call-selected-extra',
+          toolId: 'operation.execute',
+          status: 'refused',
+          executed: false,
+        }),
+      ]))
       expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
         selectedToolName(),
       ])

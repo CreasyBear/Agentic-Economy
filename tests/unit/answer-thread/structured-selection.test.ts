@@ -723,7 +723,7 @@ describe('answer turn structured selection gate', () => {
         modelRequests: [],
         replayMessagesJson: '[]',
       })
-      await expect(readAnswerTurnCheckpoint({
+      const readback = await readAnswerTurnCheckpoint({
         reservationKey: admission.reservationKey,
         requestDigest,
         sessionId: SESSION_ID,
@@ -731,12 +731,18 @@ describe('answer turn structured selection gate', () => {
         turnId: admission.turnId,
         turnSeq: admission.turnSeq,
         generation: admission.generation,
-      })).resolves.toMatchObject({
+      })
+      expect(readback).toMatchObject({
         kind: 'checkpoint',
         checkpoint: {
           continuationSource: checkpoint.continuationSource,
         },
       })
+      if (readback.kind !== 'checkpoint') {
+        throw new Error(`unexpected readback: ${readback.kind}`)
+      }
+      expect(readback.checkpoint).not.toHaveProperty('route')
+      expect(readback.checkpoint).not.toHaveProperty('intent')
     } finally {
       restorePort()
     }
