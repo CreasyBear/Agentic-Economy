@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { FunctionReference, FunctionReturnType } from 'convex/server'
 
 import {
   callPublicSourceMutation,
@@ -15,9 +16,11 @@ import {
   ownerPublicationWithCatalogOrigin,
   type OwnerProviderEarningsReadback,
   type OwnerSourceDraftReadback,
+  type OwnerSourceDraftSaveResult,
+  type OwnerSupplyCommandResult,
   type OwnerSupplyFunnelReadback,
 } from './supply-funnel.functions'
-import { preparePublicationDraft, publicationMaterialContainsCredential } from './internal/publication'
+import { preparePublicationDraft, publicationMaterialContainsCredential, type PublishPreparedCapabilityCommandResult } from './internal/publication'
 import { dereferenceOpenApiSchema } from './internal/schema-deref'
 
 const publicationLifecycleSchema = z.strictObject({
@@ -115,11 +118,15 @@ export type SupplyManagementService = Readonly<{
 
 const supplyReadMutation = sourceMutation<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
 const sourceDraftReadMutation = sourceMutation<Record<string, unknown>, OwnerSourceDraftReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSourceDraft')
-const saveDraftMutation = sourceMutation<Record<string, unknown>, unknown>('capabilitySupplyOwnerFunnel:saveOwnerSourceDraft')
-const recordPreflightMutation = sourceMutation<Record<string, unknown>, unknown>('capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight')
-const publishReservationMutation = sourceMutation<Record<string, unknown>, unknown>('capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication')
-const publishMutation = sourceMutation<Record<string, unknown>, unknown>('capabilitySupply:publishPreparedCapability')
-const withdrawMutation = sourceMutation<Record<string, unknown>, unknown>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
+const saveDraftMutation = sourceMutation<Record<string, unknown>, OwnerSourceDraftSaveResult>('capabilitySupplyOwnerFunnel:saveOwnerSourceDraft')
+const recordPreflightMutation = sourceMutation<Record<string, unknown>, boolean>('capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight')
+type OwnerPublicationReservationResult =
+  | { kind: 'reserved' }
+  | { kind: 'replayed' }
+  | { kind: 'refused'; reason: string }
+const publishReservationMutation = sourceMutation<Record<string, unknown>, OwnerPublicationReservationResult>('capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication')
+const publishMutation = sourceMutation<Record<string, unknown>, PublishPreparedCapabilityCommandResult>('capabilitySupply:publishPreparedCapability')
+const withdrawMutation = sourceMutation<Record<string, unknown>, OwnerSupplyCommandResult>('capabilitySupplyOwnerFunnel:withdrawOwnerCapability')
 const earningsReadMutation = sourceMutation<Record<string, unknown>, OwnerProviderEarningsReadback>('moneyLedger:readAgentProviderEarnings')
 
 function commandKey(action: string, principal: AgentAccessPrincipal, idempotencyKey: string): string {
@@ -130,13 +137,18 @@ function refused(reason: string): { kind: 'refused'; reason: string } {
 }
 
 export function createSupplyManagementService(request: Request, bodyText: string): SupplyManagementService {
-  const mutate = async (mutation: unknown, command: Record<string, unknown>, operationKey: string, correlationId: string): Promise<unknown> => {
+  const mutate = async <Mutation extends FunctionReference<'mutation', 'public', Record<string, unknown>>>(
+    mutation: Mutation,
+    command: Record<string, unknown>,
+    operationKey: string,
+    correlationId: string,
+  ): Promise<FunctionReturnType<Mutation>> => {
     const sourceWrite = await sourceWriteAdmissionFromRequest({ request, command, body: bodyText, scope: 'catalog_publish', operationKey, correlationId })
-    return await callPublicSourceMutation(mutation as Parameters<typeof callPublicSourceMutation>[0], {
+    return await callPublicSourceMutation(mutation, {
       ...command,
       sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
       sourceWrite,
-    } as never)
+    })
   }
   const publish = async ({ input, principal, correlationId: _transportCorrelationId }: { input: SupplyPublishInput; principal: AgentAccessPrincipal; correlationId: string }): Promise<SupplyPublishResult> => {
     try {
@@ -154,7 +166,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       agentPrincipal: principal,
       operationKey: `${baseKey}:read`,
       correlationId: durableCorrelationId,
-    }, `${baseKey}:read`, durableCorrelationId) as OwnerSupplyFunnelReadback
+    }, `${baseKey}:read`, durableCorrelationId)
     if (readback.kind !== 'available') return refused(readback.kind === 'error' ? readback.code : 'authorization_denied')
     const offering = readback.offerings.find((candidate) => candidate.offeringRef === input.offeringRef && candidate.revision === input.offeringRevision)
     if (offering === undefined || offering.sourceHash !== input.offeringSourceHash) return refused('catalog_offering_origin_changed')
@@ -174,7 +186,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       reasonCode: 'supply.publish',
       evidenceRefs: [...input.evidenceRefs],
       agentPrincipal: principal,
-    }, baseKey, durableCorrelationId) as { kind?: string; reason?: string }
+    }, baseKey, durableCorrelationId)
     if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') return refused(reservation.reason ?? 'operation_key_conflict')
     const sourceJson = JSON.stringify({ ...sourced, sourceRevision: imported.sourceRevision, evidenceRefs: [...input.evidenceRefs] })
     const draft = await mutate(sourceDraftReadMutation, {
@@ -183,13 +195,13 @@ export function createSupplyManagementService(request: Request, bodyText: string
       agentPrincipal: principal,
       operationKey: `${baseKey}:draft-read`,
       correlationId: durableCorrelationId,
-    }, `${baseKey}:draft-read`, durableCorrelationId) as OwnerSourceDraftReadback
+    }, `${baseKey}:draft-read`, durableCorrelationId)
     const expectedRevision = draft.kind === 'available' ? draft.revision : 0
     const draftResult = await mutate(saveDraftMutation, {
       businessId: input.businessId, offeringRef: input.offeringRef, offeringRevision: input.offeringRevision, expectedRevision,
       operationKey: `${baseKey}:draft`, correlationId: durableCorrelationId, sourceJson, agentPrincipal: principal,
-    }, `${baseKey}:draft`, durableCorrelationId) as { kind?: string; revision?: number; sourceDigest?: string; reason?: string }
-    if (draftResult.kind !== 'saved' && draftResult.kind !== 'replayed') return refused(draftResult.reason ?? 'source_draft_stale')
+    }, `${baseKey}:draft`, durableCorrelationId)
+    if (draftResult.kind !== 'saved' && draftResult.kind !== 'replayed') return refused(draftResult.kind === 'refused' ? draftResult.reason : 'source_draft_stale')
     const sourceDraftRevision = draftResult.revision
     if (typeof sourceDraftRevision !== 'number' || !Number.isFinite(sourceDraftRevision) || sourceDraftRevision <= 0) return refused('source_draft_stale')
     const sourceDigest = draftResult.sourceDigest
@@ -205,7 +217,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       businessId: input.businessId, offeringRef: input.offeringRef, revision: input.offeringRevision, sourceHash: input.offeringSourceHash,
       sourceDraftRevision, sourceDigest, runtimeEnvironment: 'production', prepared: prepared.prepared, operationKey: baseKey,
       correlationId: durableCorrelationId, reasonCode: 'supply.publish', evidenceRefs: [...input.evidenceRefs], agentPrincipal: principal,
-    }, baseKey, durableCorrelationId) as Record<string, unknown>
+    }, baseKey, durableCorrelationId)
     if (published.kind === 'refused') return refused(typeof published.reason === 'string' ? published.reason : 'source_unavailable')
     if ((published.kind !== 'published' && published.kind !== 'replayed') || typeof published.publicationRef !== 'string' || typeof published.operationRef !== 'string' || typeof published.publicationRevision !== 'number' || !isRecordLifecycle(published.lifecycle)) return refused('source_unavailable')
     return { kind: published.kind, publicationRef: published.publicationRef, publicationRevision: published.publicationRevision, operationRef: published.operationRef, lifecycle: published.lifecycle }
@@ -217,7 +229,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       businessId: input.businessId, offeringRef: input.offeringRef, offeringRevision: input.offeringRevision, offeringSourceHash: input.offeringSourceHash,
       publicationRef: input.publicationRef, publicationRevision: input.publicationRevision, operationKey: baseKey, correlationId: durableCorrelationId,
       reasonCode: 'supply.withdraw', evidenceRefs: [], agentPrincipal: principal,
-    }, baseKey, durableCorrelationId) as Record<string, unknown>
+    }, baseKey, durableCorrelationId)
     if (result.kind === 'refused') return refused(typeof result.reason === 'string' ? result.reason : 'source_unavailable')
     if (result.kind !== 'withdrawn' || typeof result.publicationRef !== 'string' || typeof result.revision !== 'number' || !isRecordLifecycle(result.lifecycle)) return refused('source_unavailable')
     return { kind: 'withdrawn', publicationRef: result.publicationRef, revision: result.revision, lifecycle: result.lifecycle }
@@ -235,7 +247,7 @@ export function createSupplyManagementService(request: Request, bodyText: string
       agentPrincipal: principal,
       operationKey,
       correlationId,
-    }, operationKey, correlationId) as OwnerProviderEarningsReadback
+    }, operationKey, correlationId)
     if (result.kind === 'not_found') return { kind: 'not_found' }
     if (result.kind === 'error') return { kind: 'error', code: result.code === 'unauthenticated' ? 'unauthenticated' : 'source_unavailable' }
     const account = result.accounts.find((candidate) => candidate.currency === input.currency)
