@@ -9,7 +9,6 @@ import {
   type ActionToolContract,
   type ActionToolExecuteArgs,
 } from '@/modules/actions/tool-contract'
-import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/answer-thread.schema'
 import type {
   HarnessApprovalMode,
 } from './approval-policy'
@@ -130,7 +129,7 @@ export function actionToHarnessToolContract(
   instrumentation?: HarnessToolBoundaryInstrumentation,
 ): HarnessToolContract<unknown, unknown> {
   const actionContract = actionToToolContract(action)
-  const exposure = exposureForAction(actionContract)
+  const exposure = exposureForAction(action)
   const policy = policyForAction(actionContract, exposure)
 
   const execute: HarnessToolContract<unknown, unknown>['execute'] = async ({ input, context }) => {
@@ -220,19 +219,14 @@ export function buildHarnessToolContracts(
   return actions.map((action) => actionToHarnessToolContract(action))
 }
 
-export function filterAnswerModelToolContracts(
-  contracts: readonly HarnessToolContract[],
-): readonly HarnessToolContract[] {
-  return sortContractsById(
-    contracts.filter((contract) => contract.exposure.answerModel && contract.policy.tier === 'read'),
-    ANSWER_READ_TOOL_IDS,
-  )
-}
 
 function exposureForAction(
-  action: Pick<ActionToolContract, 'id' | 'readOnly' | 'surfaces'>,
+  action: Pick<AnyAction, 'id' | 'readOnly' | 'surfaces' | 'invocationContract'>,
 ): HarnessToolExposure {
-  const answerModel = action.readOnly && isAnswerModelToolId(action.id)
+  const answerModel =
+    action.readOnly &&
+    action.surfaces.includes('answerThread') &&
+    action.invocationContract.authorityRequirement === 'none'
   const publicProjection = action.readOnly
     ? 'sanitized-counts'
     : action.id === 'inquiry.submit'
@@ -280,21 +274,6 @@ function policyForAction(
   }
 }
 
-function isAnswerModelToolId(id: string): boolean {
-  return (ANSWER_READ_TOOL_IDS as readonly string[]).includes(id)
-}
-
-function sortContractsById(
-  contracts: readonly HarnessToolContract[],
-  ids: readonly string[],
-): readonly HarnessToolContract[] {
-  const order = new Map(ids.map((id, index) => [id, index]))
-  return [...contracts].sort((left, right) => {
-    const leftIndex = order.get(left.id) ?? Number.MAX_SAFE_INTEGER
-    const rightIndex = order.get(right.id) ?? Number.MAX_SAFE_INTEGER
-    return leftIndex - rightIndex || left.id.localeCompare(right.id)
-  })
-}
 
 function summarizeActionOutput(output: unknown): unknown {
   if (isRecord(output) && typeof output.kind === 'string') {

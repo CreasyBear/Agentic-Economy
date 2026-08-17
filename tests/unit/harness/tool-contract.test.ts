@@ -6,28 +6,15 @@ import {
   defineAction,
   describeActionToolExecutionValidation,
   findAction,
-  listActions,
 } from '@/modules/actions'
-import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
   actionToHarnessTool,
   actionToHarnessToolContract,
-  buildHarnessToolContracts,
-  filterAnswerModelToolContracts,
 } from '@/modules/harness/public'
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
 describe('harness tool contract', () => {
-  it('filters answer-model contracts to the complete read toolset', () => {
-    const contracts = buildHarnessToolContracts(listActions())
-    const answerContracts = filterAnswerModelToolContracts(contracts)
-
-    expect(answerContracts.map((contract) => contract.id)).toEqual(ANSWER_READ_TOOL_IDS)
-    expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
-    expect(answerContracts.every((contract) => contract.exposure.answerModel)).toBe(true)
-    expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)
-  })
 
   it('preserves action schema diagnostics through the harness adapter', () => {
     const action = defineAction({
@@ -83,6 +70,17 @@ describe('harness tool contract', () => {
     expect(tool.providerViolations).toEqual(contract.schemas.providerViolations)
     expect(tool.strictInputSchemaViolation).toBe(validation.strictInputSchemaViolation)
     expect(tool.strictOutputSchemaViolation).toBe(validation.strictOutputSchemaViolation)
+  })
+
+  it('does not expose principal-authorized study reads to the answer model', () => {
+    const action = findAction('study.inspect')
+    expect(action).toBeDefined()
+    expect(action!.readOnly).toBe(true)
+    expect(action!.surfaces).toContain('answerThread')
+    expect(action!.invocationContract.authorityRequirement).toBe('principal')
+
+    const contract = actionToHarnessToolContract(action!)
+    expect(contract.exposure.answerModel).toBe(false)
   })
 
   it('projects action identity into harness policy and exposure', () => {

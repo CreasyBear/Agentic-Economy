@@ -20,6 +20,7 @@ export {
 } from './internal/tool-runner'
 
 export {
+  filterAnswerModelToolContracts,
   findAnswerReadToolAction,
   isAnswerReadToolId,
   isAnswerOperationReadToolId,

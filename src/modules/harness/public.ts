@@ -132,7 +132,6 @@ export {
   actionToHarnessToolContract,
   buildHarnessToolContracts,
   buildHarnessToolEvalFixture,
-  filterAnswerModelToolContracts,
   harnessToolContractToDefinition,
   type HarnessApprovalDeclaration,
   type HarnessExecuteArgs,
