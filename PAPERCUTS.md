@@ -1447,3 +1447,5 @@ workstreams, duplicate observations, and explicit remediation status.
 200. gpt-5.6: While spawning a research subagent with full-history inheritance, the orchestration API rejected an explicit default agent_type even though the requested type matched the parent. The schema permits the field but the runtime requires it omitted for full-history forks.
 
 201. gpt-5.6: A second gsd-ai-researcher dispatch failed because full-history forks cannot specify a specialist role. The orchestration interface makes role selection and context inheritance appear independently selectable; it should reject this combination earlier or document that specialist agents require fork_turns none/limited.
+
+202. gpt-5.6: Every login-shell command emits duplicate missing /Users/joelchan/.cargo/env warnings from .zshenv, adding noise to otherwise successful vault and verification commands; guard the source with a file-exists check.
