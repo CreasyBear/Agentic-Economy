@@ -1,266 +1,341 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-08-15
+**Analysis Date:** 2026-08-17
 
 ## Test Framework
 
 **Runner:**
-- Vitest 4.1.9 for unit, integration, import-boundary, type, SEO, UI-contract, eval, and Convex tests; version and scripts are declared in `package.json`.
-- Playwright 1.61.1 for browser E2E, accessibility, paid-operation, and deployed production smoke tests; configuration is in `playwright.config.ts` and specialized `playwright.*.config.ts` files.
-- `convex-test` 0.0.54 with Vitest for in-memory Convex function execution; shared module loading and component registration live in `tests/helpers/convex-fixtures.ts`.
+- Vitest 4.1.9
 - Config: `vitest.config.ts`
-- Browser config: `playwright.config.ts`
+- Environment default: `node` (override per-file with `@vitest-environment jsdom` pragma)
+- Globals: `false` — explicit imports from `vitest` required
+- Setup files: `tests/setup/web-storage.ts`, `tests/setup/no-search-gap-writes.ts`, `tests/setup/jsdom-platform.ts`, `tests/setup/http-rate-limit.ts`
+- Include patterns: `tests/**/*.test.ts`, `tests/**/*.test.tsx`, `convex/**/*.test.ts`
+- Path alias `@/` → `src/` mirrored in vitest config
 
 **Assertion Library:**
-- Vitest's built-in `expect` for TypeScript tests, imported explicitly because `globals: false` in `vitest.config.ts`.
-- Playwright's web-first `expect` for browser tests, as in `tests/e2e/landing-answer.spec.ts`.
-- Testing Library queries and events for React components via `@testing-library/react`, as in `tests/unit/chat/ae-thread-transcript.test.tsx`.
+- Vitest built-in `expect`
+- `expectTypeOf` from `vitest` for compile-time contract tests (`tests/types/domain-contracts.test.ts`)
+- `@testing-library/react` for component tests (`render`, `screen`, `cleanup`)
 
 **Run Commands:**
 ```bash
-npm test                         # Run every Vitest test selected by vitest.config.ts
-npm run test:unit                # Run tests/unit
-npm run test:integration         # Run tests/integration and convex tests serially
-npm run test:e2e                 # Run Playwright tests/e2e
-npm run test:e2e:a11y            # Run Playwright accessibility scenarios
-npm run test:types               # Run executable type-contract tests
-npm run test:imports             # Run architecture/import guardrails in clean-tree mode
-npm run test:ts-standards        # Run TypeScript source-standard scans
-npm run test:seo                 # Run tests/seo
-npm run test:ui-contract         # Run UI contract scans
-npm run test:eval                # Run answer coverage, deterministic reports, Promptfoo, and eval tests
-npm run test:all                 # Typecheck, codegen check, suites, and production build
-npm run test:release:source      # Full source release gate with evidence artifacts
+npm test                                    # All vitest tests (via run-with-cleanup wrapper)
+npm run test:unit                           # tests/unit only
+npm run test:integration                    # tests/integration + convex (no file parallelism)
+npm run test:types                          # Compile-time type contract tests
+npm run test:imports                        # Boundary/import guardrail scans
+npm run test:ts-standards                   # TypeScript standards scan (any, !, v.any, etc.)
+npm run test:seo                            # SEO/canonical/discovery readback tests
+npm run test:ui-contract                    # UI token/semantic contract scan
+npm run test:eval                           # Eval coverage + promptfoo + tests/eval
+npm run test:e2e                            # Playwright E2E (tests/e2e)
+npm run test:conformance                    # Named conformance subset (release gate)
+npm run test:release:source                 # Full release source gate (lint, typecheck, all above, build)
+npm run test:release:hosted                 # Hosted readback + production smokes
+npm run smoke:customer-request:development  # Development journey smoke
+npm run smoke:gateway:production            # Operation gateway production smoke
+npm run test:quality:gate                   # Structural eval corpus gate (CI-safe)
+npm run test:quality:gate:live              # Structural + live engine harness
 ```
-- The commands and their exact composition are defined in `package.json`; most use `tools/dev/run-with-cleanup.mjs` to prevent leaked child processes.
-- Vitest watch mode is intentionally disabled by `watch: false` in `vitest.config.ts`; invoke `npx vitest` explicitly for an interactive local session if needed.
-- There is no conventional line/branch coverage command in `package.json`; `npm run test:eval:coverage` audits required semantic answer-eval cases through `eval/answer/scripts/audit-coverage.ts`.
+
+All test commands wrap execution in `node tools/dev/run-with-cleanup.mjs` which clears transient caches and kills orphaned browser processes after Playwright runs.
 
 ## Test File Organization
 
 **Location:**
-- Keep most tests separate from production code under `tests/`, grouped by intent: `tests/unit/`, `tests/integration/`, `tests/e2e/`, `tests/deploy-smoke/`, `tests/imports/`, `tests/types/`, `tests/seo/`, `tests/ui-contract/`, `tests/eval/`, `tests/helpers/`, and `tests/setup/`.
-- Keep direct Convex tests next to Convex functions when they use `import.meta.glob('./**/*.ts')`; examples include `convex/externalRuns.test.ts` and `convex/studies.test.ts`.
-- Keep reusable deterministic builders and adapters in `tests/helpers/`, including `tests/helpers/convex-fixtures.ts`, `tests/helpers/discovery-fixture-routes.ts`, and `tests/helpers/openrouter-contract-server.ts`.
-- Keep global isolation shims in `tests/setup/`; `vitest.config.ts` installs web storage, no-search-gap writes, JSDOM platform behavior, and HTTP rate-limit setup for every Vitest file.
-- Keep hostile or intentionally invalid source samples under `tests/fixtures/`; import scanners switch between clean runtime targets and fixture targets via `tests/imports/scan-targets.ts`.
+- Separate `tests/` tree — tests are NOT co-located with source
+- `tests/unit/` — domain logic, components, HTTP handlers (~500+ files)
+- `tests/integration/` — cross-module flows, route handlers, Convex-backed paths
+- `convex/*.test.ts` — Convex function tests alongside backend code (11 files)
+- `tests/imports/` — static boundary/architecture guardrails
+- `tests/types/` — compile-time type contract tests
+- `tests/seo/` — canonical URL, sitemap, robots, llms.txt readbacks
+- `tests/ui-contract/` — semantic visual token enforcement
+- `tests/eval/` — product-foundry and eval assertion tests
+- `tests/e2e/` — Playwright browser tests
+- `tests/deploy-smoke/` — deploy-target smokes (run via dedicated Playwright configs)
+- `tests/helpers/` — shared test ports, fixtures, route handlers
+- `tests/fixtures/` — bad-import/bad-ts fixture files for scan tests
 
 **Naming:**
-- Use `<behavior>.test.ts` or `<behavior>.test.tsx` for Vitest files, such as `tests/unit/answer/operation-result-presentation.test.ts` and `tests/integration/money-external-spend.test.ts`.
-- Use `<flow>.spec.ts` for Playwright, such as `tests/e2e/landing-answer.spec.ts` and `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`.
-- Name integration tests after the cross-module or persistence contract, not an implementation file: `tests/integration/answer-thread-source-write.test.ts` and `tests/integration/supplier-money-readback.test.ts`.
-- Name guardrail tests after the prohibited dependency or source rule: `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and `tests/imports/ts-standards.test.ts`.
+- `module-feature.test.ts` for unit tests (`operation-invoke.test.ts`, `route-boundary.test.ts`)
+- `feature-name.test.tsx` for React component tests (`rider-services.test.tsx`)
+- `*.spec.ts` for Playwright E2E (`landing-answer.spec.ts`, `thread-first.spec.ts`)
+- Convex tests: `convex/agentAccessPolicy.test.ts` (camelCase matching convex file)
+- Import boundary tests: descriptive guard names (`capability-contract-boundaries.test.ts`, `ts-standards.test.ts`)
 
 **Structure:**
-```text
-tests/
-├── unit/<domain>/<behavior>.test.ts[x]     # Pure logic, adapters, routes, React
-├── integration/<cross-boundary>.test.ts    # Convex persistence and module flows
-├── e2e/<journey>.spec.ts                   # Local browser journeys
-│   └── a11y/<surface>.spec.ts              # Keyboard, focus, reflow contracts
-├── deploy-smoke/<production-flow>.spec.ts  # Opt-in hosted verification
-├── imports/<boundary>.test.ts              # Executable architecture rules
-├── types/<contract>.test.ts                # Compile-time/API shape contracts
-├── seo/<surface>.test.ts                    # Discovery and public metadata
-├── ui-contract/<contract>.test.ts           # Source-level UI invariants
-├── eval/<quality-contract>.test.ts          # Semantic/evaluation gates
-├── helpers/<fixture-or-adapter>.ts          # Shared deterministic test support
-├── setup/<global-isolation>.ts              # Vitest setup files
-└── fixtures/<invalid-or-frozen-input>/      # Scanner and parser fixture data
-
-convex/
-└── <feature>.test.ts                        # Co-located convex-test suites
 ```
-- The active Vitest include globs are `tests/**/*.test.ts`, `tests/**/*.test.tsx`, and `convex/**/*.test.ts` in `vitest.config.ts`; Playwright owns `.spec.ts` files independently.
+tests/
+  unit/           # Per-module unit tests mirroring src/modules layout
+  integration/    # Cross-boundary integration tests
+  imports/        # Static scan guardrails
+  types/          # Type-level contract tests
+  seo/            # Discovery/SEO readbacks
+  ui-contract/    # UI semantic token scan
+  eval/           # Eval/product-foundry assertions
+  e2e/            # Playwright browser tests
+  deploy-smoke/   # Production/deploy smokes
+  helpers/        # Test ports, fixture builders
+  fixtures/       # Bad-code fixtures for scan tests
+  setup/          # Vitest global setup files
+convex/
+  *.test.ts       # Convex function tests (convex-test)
+tools/release/    # Production smoke scripts (tsx, not vitest)
+eval/             # Promptfoo configs, quality gate, braintrust evals
+```
 
 ## Test Structure
 
 **Suite Organization:**
 ```typescript
-// Pattern from tests/integration/money-external-spend.test.ts
-const reserve = anyApi.moneyLedger?.reserveExternalInvocationSpend
-if (reserve === undefined) throw new Error('external spend mutations missing')
+import { describe, expect, it, vi } from 'vitest'
 
-async function seeded() {
-  const backend = convexTest(schema, modules)
-  await backend.run(async (ctx) => {
-    // Insert the smallest authoritative starting state.
-  })
-  return backend
-}
+import { createOperationInvokeApplication } from '@/modules/capability-execution/operation-invoke'
 
-describe('provider-direct external spend reservations', () => {
-  it('rejects identity conflicts and consumes budget once', async () => {
-    const backend = await seeded()
-    const first = await backend.mutation(reserve, baseIdentity)
-    expect(first).toMatchObject({ kind: 'accepted', status: 'reserved' })
+describe('operation invoke preflight', () => {
+  it('refuses when grant environment mismatches operation runtime', async () => {
+    const result = await createOperationInvokeApplication({ ... })
+
+    expect(result).toEqual({
+      kind: 'refused',
+      code: 'environment_mismatch',
+    })
   })
 })
 ```
-- Group by externally meaningful behavior using `describe`, then write `it` names as complete behavioral claims. Representative suites are `tests/unit/answer/operation-result-presentation.test.ts` and `convex/externalRuns.test.ts`.
-- Fail fixture construction immediately at module scope when a required API or seed object is absent. This keeps later assertions focused; examples are the operation-ref guard in `tests/unit/answer/operation-result-presentation.test.ts` and API guards in `tests/integration/money-external-spend.test.ts`.
-- Keep test-specific builders below or above the suite depending on reuse, and type-check them with `satisfies`, `as const`, or domain types. `tests/unit/chat/ae-thread-transcript.test.tsx` defines `provider`, projection builders, and operation candidates.
-- Prefer one logical behavior per `it`, but combine sequential assertions when the contract is a state machine or idempotency lifecycle. `tests/integration/money-external-spend.test.ts` intentionally verifies reserve, conflict, finalize, reverse, and budget state in one lifecycle.
 
 **Patterns:**
-- Setup pattern: create fresh state per test. Use `convexTest(schema, modules)` for an isolated in-memory backend and seed only the rows required by the scenario, as in `tests/integration/money-external-spend.test.ts`.
-- Setup pattern: for React components requiring routing, create a memory router wrapper rather than mocking link behavior. `tests/unit/chat/ae-thread-transcript.test.tsx` wraps renders in `RouterContextProvider`.
-- Teardown pattern: restore every modified global, mock, timer, DOM tree, and environment variable in `afterEach`. Examples are `cleanup()` and `vi.unstubAllGlobals()` in `tests/unit/chat/ae-thread-transcript.test.tsx` and environment cleanup in `convex/externalRuns.test.ts`.
-- Assertion pattern: use `toEqual` for exact stable contracts, `toMatchObject` for intentionally partial public/result contracts, and negative serialization checks for redaction. `tests/unit/answer/operation-result-presentation.test.ts` uses all three.
-- Assertion pattern: test both authorization success and negative identities. `convex/externalRuns.test.ts` covers anonymous, non-admin, revoked, suspended, and active-admin readbacks.
-- Assertion pattern: verify durable state directly through `backend.run` after exercising a public function. `tests/integration/money-external-spend.test.ts` queries ledger and payment-attempt rows after mutations.
-- Assertion pattern: use role/name queries for user-facing UI behavior. `tests/unit/chat/ae-thread-transcript.test.tsx` and `tests/e2e/landing-answer.spec.ts` avoid implementation selectors for primary interactions.
+- `describe` for module/feature grouping; nested `describe` for sub-features when needed
+- `it` for single behavioral assertion; multiple `expect` calls OK when testing one scenario
+- Factory functions defined in test file or imported from helpers (`fixture()`, `runtime()`, `grantInput()`)
+- `beforeEach`/`afterEach` for env stubbing and cleanup; `afterEach` restores mocks (`vi.unstubAllEnvs()`, `vi.restoreAllMocks()`)
+- Convex tests use `afterEach` to restore `process.env` mutations
+- Component tests: `afterEach(() => { cleanup(); vi.unstubAllGlobals() })`
+- No `beforeAll` pattern dominant; per-test isolation preferred
+- Arrange/act/assert implicit; not commented unless complex setup
 
 ## Mocking
 
-**Framework:** Vitest mocks/spies/stubs for module and process boundaries; in-memory Convex and explicit adapters for database behavior; Playwright route/server fixtures for browser boundaries.
+**Framework:**
+- Vitest `vi` namespace (`vi.mock`, `vi.fn`, `vi.stubEnv`, `vi.unstubAllEnvs`, `vi.mocked`)
+- `convex-test` for in-memory Convex backend (`convexTest(schema, modules)`)
+- Test ports replace Convex/runtime boundaries (`installAnswerThreadTestPort` in `tests/helpers/answer-thread-test-port.ts`)
 
 **Patterns:**
 ```typescript
-// Pattern from tests/unit/chat/ae-thread-transcript.test.tsx
+// Environment stubbing (integration tests)
+beforeEach(() => {
+  vi.stubEnv('AE_CANONICAL_BASE_URL', 'https://ae.example')
+})
 afterEach(() => {
-  cleanup()
-  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
-it('previews the exact payload before copying it', async () => {
-  const writeText = vi.fn().mockResolvedValue(undefined)
-  vi.stubGlobal('navigator', { clipboard: { writeText } })
-  // Render, interact through accessible controls, then assert the boundary call.
-  await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-})
+// Convex in-memory backend
+import { convexTest } from 'convex-test'
+const modules = import.meta.glob('./**/*.ts')
+const backend = convexTest(schema, modules)
+await expect(backend.mutation(registerGrantForServer, { grant, serviceAuth }))
+  .resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+
+// Runtime port injection (no vi.mock — inject test doubles via port interface)
+function runtime(overrides: RuntimeOverrides = {}): OperationInvokeRuntime {
+  return { ...base, ...overrideValues }
+}
+
+// Scan fixture mode toggle
+const violations = scanRouteBoundaries(
+  isFixtureMode() ? fixtureTargets('tests/fixtures/bad-imports/route-boundary.fixture') : routeTargets()
+)
 ```
-- Use `vi.mock` at module scope for framework/server modules whose imports must be replaced before the subject loads. `tests/unit/work-tree/human-root.functions.test.ts` mocks TanStack server functions, Clerk auth, and source adapters.
-- Use `vi.hoisted` when mock state must exist before hoisted `vi.mock` factories; `tests/unit/ui/demand-console.test.tsx` uses this for Stripe state.
-- Use `vi.stubGlobal` for browser/network capabilities such as `fetch`, `navigator.clipboard`, and storage; always pair it with `vi.unstubAllGlobals()` as in `tests/unit/chat/ae-thread-transcript.test.tsx`.
-- Use `vi.spyOn(Date, 'now')` or injected clocks for deterministic time. Restore spies in teardown; examples appear in `tests/unit/convex/observability-runtime.test.ts`.
-- Use `vi.useFakeTimers` only for logic whose contract is time progression; prefer explicit timestamps or injected clocks in domain fixtures such as `tests/integration/money-external-spend.test.ts`.
-- For AI/provider SDKs, mock the transport or SDK boundary, not downstream domain logic. `tests/unit/customer-request/openrouter-transport.test.ts` mocks `ai` and `fetch`; `tests/helpers/openrouter-contract-server.ts` supports higher-level contract tests.
 
 **What to Mock:**
-- Mock nondeterministic or external boundaries: HTTP `fetch`, AI model SDK calls, payment SDKs, clipboard/browser APIs, authentication adapters, and server-framework function wrappers. Examples are `tests/unit/customer-request/openrouter-transport.test.ts`, `tests/unit/ui/demand-console.test.tsx`, and `tests/unit/work-tree/human-root.functions.test.ts`.
-- Inject explicit ports/options when production code exposes them. `handleAnswerTurnRequest` accepts admission, stream, authentication, and operation service overrides in `src/routes/api.answer.turn.ts`; route tests should use those seams.
-- Replace real Convex with `convex-test` for function and persistence tests. Register component test implementations through `tests/helpers/convex-fixtures.ts`.
-- Use local fixture adapters for discovery and browser flows instead of production services. `tests/helpers/discovery-fixture-routes.ts` and `tests/helpers/inquiry-local-e2e-adapter.ts` provide these boundaries.
+- External environment (`process.env` via `vi.stubEnv`)
+- Convex persistence layer via `convex-test` in-memory backend
+- Runtime ports and adapters injected as test doubles (`OperationInvokeRuntime`, answer-thread test port)
+- HTTP rate limits and web storage via global setup files (`tests/setup/`)
+- Time only when deterministic behavior requires it
 
 **What NOT to Mock:**
-- Do not mock pure domain projectors, parsers, reducers, digests, or state transitions when they are the subject of the test. `tests/unit/answer/operation-result-presentation.test.ts` executes real artifact and sanitization logic.
-- Do not mock Convex database semantics in integration tests; use `convex-test` and assert actual indexes, writes, auth identities, scheduled work, and readbacks as in `convex/externalRuns.test.ts`.
-- Do not mock React child components when testing an end-user surface unless the test specifically isolates route orchestration. `tests/unit/chat/ae-thread-transcript.test.tsx` renders real transcript and answer components with only platform boundaries stubbed.
-- Do not contact real deployments from default tests. `tests/setup/no-search-gap-writes.ts` globally disables search-gap writes, and hosted/provider tests are separate explicit commands in `package.json`.
-- Do not use live time or network for Convex tests; the project Convex testing rules are recorded in `.agents/skills/convex-test/SKILL.md` and `convex/_generated/ai/guidelines.md`.
+- Pure domain logic and validators — test directly
+- Const tuple unions and Zod schemas — test parse success/failure
+- Internal business logic within the module under test
+- Import/boundary scans run against real `src/` and `convex/` trees (clean mode) or fixture trees (`AE_SCAN_MODE=fixtures`)
 
 ## Fixtures and Factories
 
 **Test Data:**
 ```typescript
-// Pattern from tests/helpers/convex-fixtures.ts
-export function convexTestWithWorkers(options = {}) {
-  const backend = convexTest(schema, convexModules)
-  registerWorkpool(backend)
-  registerRateLimiter(backend)
-  return backend
+// Factory in test file
+function grantInput(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccessGrantInput {
+  return {
+    grantRef: 'grant:server-wrapper',
+    principalId: 'clerk_api_key:key_server_wrapper',
+    environment: 'sandbox',
+    ...overrides,
+  }
 }
 
-export async function publishedBusinessOwner(backend, slug, options = {}) {
-  // Seed authoritative owner/business rows.
-  return { businessId, owner: backend.withIdentity(identity) }
+// Shared fixture builders in tests/helpers/
+import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
+
+// Test port store pattern (in-memory Maps replacing Convex)
+export function createAnswerThreadTestStore(): AnswerThreadTestStore {
+  return { threads: new Map(), turns: new Map(), reservations: new Map(), ... }
 }
 ```
-- Build fixtures as typed functions that return only identities and handles a test needs. `ownerAdmin` and `publishedBusinessOwner` in `tests/helpers/convex-fixtures.ts` are the preferred Convex factory style.
-- Use deterministic IDs, timestamps, URLs under `.example`/`.test`, and explicit evidence references. `tests/integration/money-external-spend.test.ts` uses fixed identities and observed times.
-- Use partial override builders for large read models. The `provider(overrides)` helper in `tests/unit/chat/ae-thread-transcript.test.tsx` supplies a valid default and lets each test state only the relevant difference.
-- Validate fixture assumptions immediately with guards. `tests/e2e/landing-answer.spec.ts` refuses to run without the named `plumbing-demo` fixture.
-- Keep curated local browser data in `tests/helpers/local-e2e-business-fixtures.ts` and source-state builders in `tests/helpers/discovery-fixture-source-state.ts`; do not duplicate production records inline across E2E suites.
-- Keep invalid source samples under `tests/fixtures/` and execute scanners in fixture mode via `AE_SCAN_MODE=fixtures`, as wired by `package.json`.
 
 **Location:**
-- Shared cross-suite helpers: `tests/helpers/`.
-- Global test-environment setup: `tests/setup/`.
-- Invalid/static source samples: `tests/fixtures/`.
-- Suite-local builders: in the owning `.test.ts[x]`, as in `tests/unit/chat/ae-thread-transcript.test.tsx`.
-- Convex module discovery and component registration: `tests/helpers/convex-fixtures.ts`.
-- Answer evaluation cases and coverage requirements: `eval/answer/lib/cases.ts` and `eval/answer/lib/coverage.ts`.
+- Per-test factories: defined at top of test file near `describe` block
+- Shared helpers: `tests/helpers/` (`answer-thread-test-port.ts`, `discovery-fixture-routes.ts`, `discovery-fixture-source-state.ts`)
+- Fixture data files: `tests/fixtures/` (bad-code samples for scan tests)
+- Dev evidence fixtures: `tools/dev/fixtures/` (development published operation evidence, capability supply)
+- Eval corpus: `eval/quality/cases/`, `eval/product-foundry/portfolio.ts`
 
 ## Coverage
 
-**Requirements:** No statement, branch, function, or line percentage threshold is configured in `vitest.config.ts` or `package.json`. Release confidence is enforced through suite breadth, executable architecture guards, semantic answer-eval coverage, source conformance, typechecking, linting, codegen verification, and production build checks.
+**Requirements:**
+- No enforced line-coverage percentage in CI
+- Release gate (`npm run test:release:source`) is the enforcement mechanism — all focused suites must pass
+- Engineering standards: run narrowest check for changed transition, expand only over boundaries crossed (`.planning/ENGINEERING-STANDARDS.md`)
+- Tests assert behavior, effects, authority, refusal, uncertainty, evidence, and recovery — not marketing prose
 
-- `eval/answer/lib/coverage.ts` requires tagged cases for declared answer and harness behaviors and rejects missing assertions.
-- `tests/eval/answer-pipeline.test.ts` verifies that required answer-eval coverage remains present.
-- `eval/answer/lib/scoring.ts` applies answer quality score thresholds; `npm run test:eval:report` emits `output/eval/answer-suite-report.json`.
-- `tests/imports/`, `tests/types/`, `tests/seo/`, and `tests/ui-contract/` cover source-level contracts that ordinary runtime coverage would not detect.
-- `.github/workflows/kernel-release-gate.yml` runs conformance, lint, typecheck, kernel retirement, unit, integration, type, import, TS-standard, SEO, UI-contract, eval-report, and build checks before hosted proof.
-- `.github/workflows/react-doctor.yml` reports React correctness, security, accessibility, performance, bundle, and architecture diagnostics but is advisory (`blocking: none`).
+**Configuration:**
+- No `coverage` block in `vitest.config.ts`; coverage not part of default test runs
+- JSON reporters for release subsets: `--reporter=json --outputFile.json=output/release/unit-vitest.json`
 
 **View Coverage:**
-```bash
-npm run test:eval:coverage       # Audit semantic answer/harness case coverage
-npm run test:eval:report         # Generate deterministic answer-suite report
-npm run test:release:source      # Produce complete source-gate evidence artifacts
-```
-- Release Vitest JSON evidence is written to `output/release/unit-vitest.json` and `output/release/integration-vitest.json` by scripts in `package.json`; `.github/workflows/kernel-release-gate.yml` uploads these artifacts.
+- Not configured as a standard workflow; use vitest `--coverage` ad hoc if needed
 
 ## Test Types
 
-**Unit Tests:**
-- Cover pure domain logic, state machines, parsers, validation, route adapters, error redaction, React components, and client/server seams under `tests/unit/`.
-- Prefer real collaborators for pure logic and inject only external boundaries. `tests/unit/answer/operation-result-presentation.test.ts` exercises real schemas, digests, artifact construction, sanitization, and presentation.
-- React tests use per-file `@vitest-environment jsdom`, Testing Library cleanup, accessible queries, and explicit memory-router wrappers; see `tests/unit/chat/ae-thread-transcript.test.tsx`.
-- Unit tests also encode security and refusal behavior, including hostile/private output and malformed input; redaction assertions in `tests/unit/answer/operation-result-presentation.test.ts` verify secrets never survive serialization.
+**Unit Tests** (`tests/unit/`):
+- Scope: single module function, validator, projection, or component in isolation
+- Mocking: inject port interfaces or stub env; avoid mocking pure logic
+- Examples: `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/answer/merge-answer-artifact.test.ts`
+- React component tests use `@vitest-environment jsdom` and `@testing-library/react`
+- Speed: fast; no network or real Convex
 
-**Integration Tests:**
-- Cover cross-module behavior and durable Convex state in `tests/integration/`, plus co-located `convex/**/*.test.ts`.
-- Use `convex-test` with the real `convex/schema.ts` and module map from `tests/helpers/convex-fixtures.ts`; do not require a deployed backend.
-- Exercise authorization with `backend.withIdentity`, data setup with `backend.run`, public functions with `query`/`mutation`/`action`, and durable readback through indexed queries. `convex/externalRuns.test.ts` is the canonical auth/readback example.
-- Run integration and Convex suites without file parallelism through `npm run test:integration` because they modify process environment and exercise shared runtime behavior, as configured in `package.json`.
-- Register `@convex-dev/workpool` and `@convex-dev/rate-limiter` test components through `convexTestWithWorkers` in `tests/helpers/convex-fixtures.ts` when component behavior is part of the contract.
+**Integration Tests** (`tests/integration/`, `convex/*.test.ts`):
+- Scope: cross-module flows, HTTP route handlers, Convex mutations with in-memory backend
+- Run with `--no-file-parallelism --test-timeout=15000` for integration suite
+- Examples: `tests/integration/discovery-routes.test.ts`, `tests/integration/answer-thread-source-write.test.ts`, `convex/agentAccessPolicy.test.ts`
+- Mocking: real internal modules; mock only external boundaries (env, service auth tokens)
 
-**E2E Tests:**
-- Playwright is used for local end-to-end journeys under `tests/e2e/`, configured by `playwright.config.ts`.
-- Run two Chromium viewports by default: compact 375×812 and wide 1440×1100. `playwright.config.ts` starts a clean local Vite server on port 3020 unless `PLAYWRIGHT_BASE_URL` is supplied.
-- Use accessible locator contracts (`getByRole`, `getByLabel`, `getByText`) and web-first assertions. `tests/e2e/landing-answer.spec.ts` verifies query submission, thread navigation, cited provider output, recovery, and public-language exclusions.
-- Accessibility scenarios under `tests/e2e/a11y/` verify keyboard paths, skip links, focus indicators, and responsive behavior; `tests/e2e/a11y/engine-product-a11y.spec.ts` is representative.
-- Hosted and paid smoke tests are isolated behind explicit scripts and specialized configs under `tests/deploy-smoke/`; they are not part of the default `npm test`.
-- CI retries Playwright tests twice, forbids `.only`, captures traces on first retry, and takes screenshots only on failure, as configured in `playwright.config.ts`.
+**Boundary/Import Tests** (`tests/imports/`):
+- Static scans via `src/lib/ui/contract-scans.ts` — not traditional unit tests
+- Enforce route boundaries, private import rules, TS standards, kernel retirement manifests
+- Two modes: `AE_SCAN_MODE=clean` (scan production trees) and `AE_SCAN_MODE=fixtures` (scan bad fixture files)
+- Run: `npm run test:imports`, `npm run test:ts-standards`
+
+**Type Contract Tests** (`tests/types/`):
+- Compile-time + runtime validator equality using `expectTypeOf` and `@ts-expect-error`
+- Prove invalid status strings fail to compile and runtime parse
+- Example: `tests/types/domain-contracts.test.ts`
+
+**SEO/Discovery Tests** (`tests/seo/`):
+- Canonical URL resolution, sitemap, robots.txt, llms.txt, UCP manifest readbacks
+- Example: `tests/seo/canonical-base-url.test.ts`
+
+**UI Contract Tests** (`tests/ui-contract/`):
+- Scan `src/components/ae` and `src/routes` for semantic visual token compliance
+- Example: `tests/ui-contract/ui-contract.test.ts`
+
+**Eval Tests** (`tests/eval/`, `eval/`):
+- Product-foundry portfolio assertions, action-bundle evals
+- Promptfoo config: `eval/answer/promptfooconfig.yaml`
+- Quality gate: `eval/quality/gate.ts` (structural L0 + optional live L1)
+- Braintrust: `eval/braintrust/answer.eval.ts`
+- Run: `npm run test:eval`, `npm run test:quality:gate`
+
+**E2E Tests** (Playwright):
+- Framework: `@playwright/test` 1.61.1
+- Configs: `playwright.config.ts` (default `tests/e2e`), `playwright.deploy-smoke.config.ts`, `playwright.paid-operation.config.ts`
+- Projects: `compact-chromium` (375×812), `wide-chromium` (1440×1100)
+- Auto-starts dev server on port 3020 unless `PLAYWRIGHT_BASE_URL` set
+- Examples: `tests/e2e/landing-answer.spec.ts`, `tests/e2e/thread-first.spec.ts`, `tests/e2e/a11y/`
+- A11y: `tests/e2e/a11y/engine-product-a11y.spec.ts`
+
+**Release Smokes** (not vitest):
+- Development smokes: `tools/dev/customer-request-development-smoke.ts`, `tools/dev/work-tree-development-smoke.ts`
+- Production smokes: `tools/release/customer-request-production-smoke.ts`, `tools/release/operation-gateway-production-smoke.ts`
+- Deploy smokes: `tests/deploy-smoke/customer-request-human-lifecycle-smoke.spec.ts`
+- Credential verification: `tools/release/verify-customer-request-release-credential.ts`
+
+**Conformance Suite** (`npm run test:conformance`):
+- Named list of ~25 critical path tests spanning action-invocation, capability-supply, customer-request, answer-thread, deployment, server diagnostics
+- Subset gate within `test:release:source`
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
-// UI pattern from tests/unit/chat/ae-thread-transcript.test.tsx
-fireEvent.click(screen.getByRole('button', { name: 'Copy summary' }))
-await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-
-// Convex pattern from tests/integration/money-external-spend.test.ts
-await expect(backend.mutation(reserve, baseIdentity))
-  .resolves.toMatchObject({ status: 'reserved' })
+it('requires the server token and exact grant principal binding', async () => {
+  const backend = convexTest(schema, modules)
+  await expect(backend.mutation(registerGrantForServer, { grant, serviceAuth }))
+    .resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+})
 ```
-- Await every mutation, query, action, navigation, and user-visible state transition. Avoid unobserved promises in tests.
-- Use Testing Library `waitFor`/`findByRole` for React updates, Playwright's auto-waiting `expect` for browser state, and `vi.waitFor` for non-DOM polling; examples occur in `tests/unit/chat/ae-thread-transcript.test.tsx`, `tests/e2e/landing-answer.spec.ts`, and `tests/unit/harness/run-loop.test.ts`.
-- Use Playwright `expect(...).toPass` only around genuinely retryable UI setup, as `submitLandingQuery` does in `tests/e2e/landing-answer.spec.ts`.
-- Keep timeout increases local and justified. Release integration uses a 15-second test timeout in `package.json`, while Playwright defaults are centralized in `playwright.config.ts`.
 
 **Error Testing:**
 ```typescript
-// Typed refusal pattern from tests/integration/money-external-spend.test.ts
-const conflict = await backend.mutation(reserve, changedIdentity)
-expect(conflict).toEqual({
-  kind: 'refused',
-  code: 'external_spend_identity_conflict',
-  retryable: false,
+// Sync throw (programmer fault paths)
+it('throws when adapter not reached', () => {
+  expect(() => parse(null)).toThrow('Cannot parse null')
 })
 
-// Redaction pattern from tests/unit/answer/operation-result-presentation.test.ts
-expect(JSON.stringify(sanitized)).not.toContain('TOPSECRET')
-expect(projected.output).toBeUndefined()
+// Discriminated refusal (domain failures — preferred)
+expect(result).toEqual({ kind: 'refused', code: 'environment_mismatch' })
+
+// Scan violations empty in clean mode
+expect(violations).toEqual([])
+
+// Type-level rejection
+// @ts-expect-error broad live state is not a valid public status
+const invalidPublicStatus: PublicStatus = 'live'
 ```
-- Prefer asserting typed refusal/error variants over `toThrow` when failure is an expected domain outcome. Integration suites in `tests/integration/` consistently assert `kind`, stable `code`/`reason`, and `retryable`.
-- Use `toThrow` or fixture guards for invariant violations and malformed internal state. Stable error strings make failures searchable, as in `tests/unit/answer/operation-result-presentation.test.ts`.
-- Test malformed input, over-size input, unavailable dependencies, replay/idempotency conflicts, authorization denial, and recovery paths—not only success. `src/routes/api.answer.turn.ts` has corresponding route tests under `tests/integration/answer-turn-*.test.ts`.
-- For public boundaries, assert both response shape and absence of private data. `tests/unit/answer/operation-result-presentation.test.ts` checks withheld output and secret-free serialization; `convex/externalRuns.test.ts` checks resource-existence hiding.
-- For UI failures, assert the accessible role and recovery action, not implementation state. `tests/unit/chat/ae-thread-transcript.test.tsx` checks `role="alert"`, error copy, and a `New chat` recovery link.
+
+**Component Testing:**
+```typescript
+/**
+ * @vitest-environment jsdom
+ */
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+it('uses plain-language copy', () => {
+  render(<AeServiceRow service={serviceWithNoQuotePath} />)
+  expect(screen.getByText('Dental check-up · Adelaide, SA')).toBeTruthy()
+})
+```
+
+**Snapshot Testing:**
+- Not used; prefer explicit `toEqual`/`toMatchObject` assertions
+- JSON leakage checks use regex negative matches (`expect(JSON.stringify(body)).not.toMatch(/ownerId|clerk|admin/)`)
+
+**Convex Test Pattern:**
+```typescript
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test'
+import { makeFunctionReference } from 'convex/server'
+import schema from './schema'
+
+const modules = import.meta.glob('./**/*.ts')
+const fn = makeFunctionReference<'mutation', Args, Result>('module:functionName')
+
+const backend = convexTest(schema, modules)
+await backend.mutation(fn, args)
+```
 
 ---
 
-*Testing analysis: 2026-08-15*
+*Testing analysis: 2026-08-17*
+*Update when test patterns change*

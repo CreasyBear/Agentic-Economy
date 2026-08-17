@@ -1,233 +1,341 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-15
+**Analysis Date:** 2026-08-17
 
 ## Tech Debt
 
-**Concentrated authority modules:**
-- Issue: [Verified code fact] Several load-bearing modules remain far beyond a reviewable size: `convex/moneyLedger.ts` is 7,805 lines, `convex/capabilityOperationInvocationWorker.ts` is 3,085, `src/modules/answer/internal/answer-tool-use-agent.ts` is 3,044, `src/modules/answer-thread/internal/turn-orchestrator.ts` is 2,775, `src/modules/capability-supply/operation-projection.ts` is 2,565, and `src/modules/capability-supply/route-transport-runtime.ts` is 2,475.
-- Files: `convex/moneyLedger.ts`, `convex/capabilityOperationInvocationWorker.ts`, `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/capability-supply/operation-projection.ts`, `src/modules/capability-supply/route-transport-runtime.ts`
-- Impact: Money conservation, payment release, Answer routing, tool execution, transport, and public projection changes have a large regression radius and are difficult to review independently.
-- Fix approach: Extract cohesive pure policy/projection helpers behind the existing public and Convex function contracts. Keep transaction ownership and external-effect ordering in the current authority modules; do not introduce parallel ledgers, routers, or executors.
+**Oversized monolith modules:**
+- Issue: Core market, money, and Answer paths live in single files far above maintainability thresholds (10k+ and 2.5k+ lines).
+- Files: `convex/moneyLedger.ts` (~10,780 lines), `convex/capabilityOperationInvocationWorker.ts` (~2,990), `src/modules/answer/internal/answer-tool-use-agent.ts` (~3,007), `src/modules/capability-supply/route-transport-runtime.ts` (~2,507), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~2,325)
+- Why: Incremental feature accretion on the exact-money and invoke spines without a split card landing yet.
+- Impact: Small contract changes require wide diffs, merge conflicts, and hard-to-review money/invoke regressions; P2-c is explicitly carded to split invoke/projection modules.
+- Fix approach: Execute `P2-c` / `P2-d` from `.planning/reset/CARD-LEDGER.md` — extract wire contracts, admission, transport, and evidence hooks into focused modules with boundary tests before touching behavior.
 
-**Very broad uncommitted remediation wave:**
-- Issue: [Verified diagnostic] The current safe diff spans 257 tracked files with 16,311 insertions and 7,498 deletions, before counting untracked files. It simultaneously changes Answer, money, x402, discovery, MCP, CLI, owner supply, UI, tests, workflows, and planning authority.
-- Files: `convex/capabilityOperationInvocationWorker.ts`, `convex/moneyLedger.ts`, `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/lib/server/mcp-api.ts`, `src/components/ae/supply/AeSupplyPublisherHome.tsx`, `.planning/STATE.md`
-- Impact: A single review or release cannot easily attribute failures, prove revision-bound behavior, or distinguish one remediation from concurrent contract drift.
-- Fix approach: Preserve the current working tree, then split review and verification by invariant: Answer, external spend/x402, supplier settlement, machine projections, and owner UI. Require one combined post-integration gate after scoped proofs.
+**Layer-0 imports in demand surfaces:**
+- Issue: Answer and Customer Request still import capability-supply and registry internals directly instead of going through action ports.
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/internal/keyless-data-ask.ts`, `src/modules/answer/answer-schema.ts`, `src/modules/answer/internal/evidence-assembler.ts`, `src/modules/customer-request/application/interpret-compile/discover.ts`
+- Why: Answer was built as a proving ground co-located with the kernel; reset Phase 2 decoupling is only partially landed (`P2-a`, `P2-b` committed; `P2-c` pending).
+- Impact: Quarantine or refactor of Customer Request / WorkTree risks breaking Answer silently; import-boundary tests may fail on adjacent edits.
+- Fix approach: Land `P2-c` (remove Layer-0 imports; split oversized invoke/projection modules) before Phase 3 conformance ports.
 
-**Status authority lags the current working tree:**
-- Issue: [Verified code fact] Current status documents remain dated 2026-08-12 and describe seven focused-verified workstreams, while the working tree includes later Answer, x402 external-spend, MCP, CLI, and supplier-connection changes plus 2026-08-13/14 audit reports.
-- Files: `.planning/STATE.md`, `.planning/PROJECT.md`, `.planning/ROADMAP.md`, `goblin-campaign-report-2026-08-13.md`, `goblin-campaign-report-2026-08-14.md`
-- Impact: Maintainers can select stale priorities or treat pre-change test claims as evidence for the current tree.
-- Fix approach: After current verification, refresh the single current-status authority with exact revision, commands, counts, evidence class, and remaining blockers. Keep dated reports historical.
+**Action inventory vs end-state guardrail:**
+- Issue: The product-frontier manifest pins 46 required actions; the operating model targets ≤14 active actions after quarantine.
+- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`
+- Why: Customer Request (13 actions), WorkTree (8), Study (2), inquiry, storefront, and legacy registry actions remain registered while quarantine is deferred to Phase 5.
+- Impact: Every new action requires manifest surgery; agents discover quarantined surfaces as first-class; reduction work is blocked until Phase 3 ports prove parity.
+- Fix approach: Complete Phase 3 atomic-invoke ports, then Phase 5 quarantine cards — do not add net-new actions without a manifest update and a retirement plan.
 
-**Generic CLI action execution remains a parallel dispatch seam:**
-- Issue: [Verified code fact] `advanced action` now enforces `action.surfaces.includes('cli')`, but it still invokes `action.run` directly. It does not apply `resolveHarnessApprovalPolicy` or credential admission; protected current actions fail later because their run context lacks a principal/service.
-- Files: `tools/ae/commands/actions.ts`, `src/modules/harness/approval-policy.ts`, `src/modules/common/action.ts`, `src/modules/capability-execution/operation-recovery.actions.ts`
-- Impact: Current protected actions fail closed, but future CLI-declared actions can accidentally depend on ad hoc checks rather than the registered approval/credential policy.
-- Fix approach: Route generic execution through one incumbent admission seam or restrict it to read-only, no-credential actions. Keep dedicated invoke/status/cancel/recover commands for protected operations.
+**Dual paid HTTP invoke paths:**
+- Issue: `/api/v1/operations/call` and `/api/v1/operations/execute` both delegate to `handleOperationInvokePost` but route literals are hardcoded in TanStack route files rather than read from `OPERATION_INVOKE_ROUTE_CONTRACT`.
+- Files: `src/routes/api.v1.operations.call.ts`, `src/routes/api.v1.operations.execute.ts`, `src/modules/capability-execution/operation-invoke-entry.ts`, `tests/unit/routes/operation-invoke-route-binding.test.ts`
+- Why: P1-e-2 dual-served `/execute` for compatibility while `/call` became canonical; route registration constraints prevented spreading contract fields into public descriptors.
+- Impact: Silent drift if the contract path changes but route files are not updated; agent docs and CLI may disagree on the canonical door.
+- Fix approach: Keep the binding test importing both route modules; when deprecating `/execute`, use Phase 5 cards for `Deprecation`/`Sunset` headers — do not re-expose `legacyPath` in public UCP/handshake projections (regression caught in P1-e-2 review).
+
+**Release gate ordering hides cheap failures:**
+- Issue: `test:ts-standards` and parts of `test:imports` run after the full unit suite in `test:release:source:after-codegen`.
+- Files: `package.json` (`test:release:source:after-codegen`), `.planning/reset/RECEIPTS.md` (P0-d), `PAPERCUTS.md` (entries 181–182)
+- Why: Historical composite gate layout; an unrelated unit failure masked three TS-standard violations for the length of settlement work.
+- Impact: Violations accumulate undetected until an earlier suite goes green; wastes differential investigation time.
+- Fix approach: Reorder gate scripts so static import/TS-standard scans run before `test:release:unit`, or add a fast preflight target invoked first.
+
+**Custom Answer run loop vs `@convex-dev/agent`:**
+- Issue: Answer retains a custom AI SDK tool loop; `@convex-dev/agent` remains blocked on AI SDK v7 peer alignment.
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/harness/`, `.planning/STATE.md` (2026-08-02 gold-standard wave), `P2-a` receipt in `.planning/reset/RECEIPTS.md`
+- Why: `@convex-dev/agent` 0.6.4 peers `ai ^6.0.35`; v7 support is draft-only; P2-a explicitly kept the custom loop without a parity validator.
+- Impact: Higher maintenance burden on tool accounting, checkpoints, and eval parity; risk of SDK drift on upgrade.
+- Fix approach: Do not remove the custom loop until a SDK↔Harness parity validator exists (P2-a decision); track `@convex-dev/agent` v7 readiness separately.
+
+**In-flight operation-invoke contract consolidation:**
+- Issue: Working tree carries a large uncommitted refactor across invoke contracts, projection wire types, registry search documents, and CLI/smoke adapters (~32 paths, net −2,900 lines in current diff stat).
+- Files: `src/modules/capability-execution/operation-invoke-contracts.ts`, `src/modules/capability-execution/operation-invoke.ts`, `src/modules/capability-supply/operation-projection.ts`, `src/modules/registry/internal/projection-contracts.ts`, `convex/capabilityOperationInvocations.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`
+- Why: Active Phase 1/2 hardening to centralize refusal/status unions and wire contracts.
+- Impact: Concurrent edits on invoke/money/registry paths will conflict; orchestrator cards must treat this as occupied territory until committed and validated serially.
+- Fix approach: Finish executor → validator → reviewer pipeline on one card; run full `test:release:source:after-codegen` serially (rule 7a — no concurrent validators).
+
+**Dead action registration for storefront import:**
+- Issue: `storefrontImportDraftAction` is imported in `src/modules/actions/index.ts` but omitted from the `actions` array; it is reachable only via a dedicated HTTP route and server function.
+- Files: `src/modules/actions/index.ts`, `src/modules/storefront/storefront.actions.ts`, `src/routes/api.storefront.import-draft.ts`, `src/modules/storefront/storefront.functions.ts`
+- Why: Partial surfacing during storefront work; noted in `.planning/reset/RECEIPTS.md` Phase 1 reconnaissance.
+- Impact: MCP/CLI/agent discovery omits import-draft; two authority paths (HTTP vs action plane) diverge.
+- Fix approach: Either register under a standard action with scope admission or delete the dead import and document HTTP-only access — do not leave both ambiguous.
+
+**Package lockfile drift card still open:**
+- Issue: `HK-lockfile-drift` remains `pending` in `.planning/reset/CARD-LEDGER.md` after `npm ci` EUSAGE on `main` was recorded; papercut 190 documents ~25 missing lock entries.
+- Files: `package.json`, `package-lock.json`, `.planning/reset/RECEIPTS.md`, `PAPERCUTS.md`
+- Why: Caret-range manifest changes landed without a resync commit.
+- Impact: CI, fresh clones, and worktrees fail at install until manual `npm install`; undermines reproducible validator runs.
+- Fix approach: Run `npm install` on Node 22, commit lockfile-only via `HK-lockfile-drift` card, enforce lockfile-only CI install.
 
 ## Known Bugs
 
-**Submitted follow-up text remains in the composer:**
-- Symptoms: [Verified code fact; runtime-reproduced 2026-08-14] A successful follow-up leaves the submitted text in the enabled composer, making accidental resend or concatenation likely.
-- Files: `src/components/ae/chat/AeAnswerPromptInput.tsx`, `goblin-campaign-report-2026-08-14.md`
-- Trigger: Submit any accepted non-empty follow-up; `submitQuery` calls `onSubmit` but never clears local `value`.
-- Workaround: Manually select and delete the prior query before typing the next follow-up.
+**Answer turn persistence fails after successful selection:**
+- Symptoms: Explicit operation selection resolves then the turn returns HTTP 500 with `answer_turn_persist_failed`; fencing/persistence fails closed.
+- Trigger: Collaborative goblin flows with exact candidate selection (e.g., cat lookup, CoinGecko threads).
+- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/routes/api.answer.turn.ts`, `PAPERCUTS.md` (entry 174)
+- Workaround: None reliable in local smokes; retry may hit the same fence.
+- Root cause: Under investigation; likely checkpoint/evidence size or turn-state fencing after selection.
+- Blocked by: Reproducible local Convex + model fixture.
 
-**Operation detail uses incorrect Provider/Publisher labels:**
-- Symptoms: [Verified code fact] The registered business is labelled “Supplier,” and the provenance mode enum is labelled “Publisher,” contrary to the repository’s canonical domain language.
-- Files: `src/routes/operations.$operationRef.tsx`, `UBIQUITOUS_LANGUAGE.md`, `.planning/PROJECT.md`
-- Trigger: Open any Operation detail page and inspect the identity and provenance facts.
-- Workaround: Interpret “Supplier” as the registered Provider business and “Publisher” as publication authority/source mode.
+**Search-only Answer requests surface provider-failure copy:**
+- Symptoms: Operation effects are correctly blocked and frozen candidates return, but completion prose claims the live lookup failed and exposes `route_tool_forbidden` semantics.
+- Trigger: User instructs search-only / do-not-execute; model obeys effect guard but synthesis path uses failure recovery copy.
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/answer-synthesizer.ts`, `PAPERCUTS.md` (entry 177)
+- Workaround: User ignores misleading prose; frozen evidence is still correct.
+- Root cause: Completion template does not distinguish intentional candidate-selection completion from provider failure.
 
-**Builder CLI examples can call a different deployment:**
-- Symptoms: [Verified code fact] `/for-agents` receives the request-derived canonical base URL, but its CLI examples omit `--base-url`; the CLI defaults to `https://agentic-economy-phi.vercel.app`.
-- Files: `src/routes/for-agents.tsx`, `tools/ae/lib/args.ts`, `src/modules/discovery/internal/agent-skill.ts`, `src/modules/discovery/internal/page-markdown.ts`
-- Trigger: Follow a bare CLI command from a local, preview, or alternate hosted `/for-agents` page without setting `AE_CLI_BASE_URL`.
-- Workaround: Set `AE_CLI_BASE_URL`/`AE_CANONICAL_BASE_URL` or pass `--base-url` explicitly.
+**Persisted harness under-counts model requests:**
+- Symptoms: Eval/harness summary and private telemetry report zero model requests while OpenRouter and agent results show two requests on selected-operation loops.
+- Trigger: Selected-operation eval cases with two-step tool loops.
+- Files: `tests/eval/answer-pipeline.test.ts`, `src/modules/answer-thread/internal/answer-run-summary.ts`, `PAPERCUTS.md` (entries 26, 174–175)
+- Workaround: Unit contract in `tests/unit/answer/answer-selected-operation-loop.test.ts` proves accounting at one layer; persisted harness still wrong.
+- Root cause: Harness collector not wired to the selected-operation two-step path.
 
-**Unknown CLI command reflection is unbounded:**
-- Symptoms: [Verified code fact] Unknown root command tokens are interpolated directly into human and JSON error output outside the shared failure sanitizer.
-- Files: `tools/ae/cli.ts`, `tools/ae/lib/output.ts`
-- Trigger: Pass a very long, control-character-bearing, or sensitive token as the first CLI argument.
-- Workaround: Avoid placing sensitive material in command position; malformed JSON and base-URL paths have separate redaction.
+**Worktree Convex component resolution breaks `projectSpine` tests:**
+- Symptoms: `convex/projectSpine.test.ts` fails 3/4 in git worktrees with identical file content; passes on main full integration gate.
+- Trigger: Worktree symlinks `node_modules` from main checkout (documented orchestrator bootstrap).
+- Files: `convex/projectSpine.test.ts`, `.planning/reset/RECEIPTS.md` (`projectSpine` section), `PAPERCUTS.md` (entry 189)
+- Workaround: Validate component-dependent tests only on main checkout, not worktree symlink layout.
+- Root cause: Workflow/workpool component resolves against wrong root through symlinked `node_modules`.
+
+**Local Answer turn 500 when Convex bundling fails:**
+- Symptoms: Vite serves but `POST /api/answer/turn` returns 500; Convex codegen cannot bundle Node-only imports into default runtime.
+- Trigger: Local stack without Convex backend; imports such as `network-guard`, Clerk keyless storage, `undici`.
+- Files: `src/routes/api.answer.turn.ts`, `PAPERCUTS.md` (entries 30, 133–141)
+- Workaround: Run full local Convex dev deployment before Answer smokes.
+- Root cause: Default Convex runtime bundling constraints vs Node-only seams.
+
+**Curated seed non-idempotent on restart:**
+- Symptoms: `dev:local` reseed fails with `curated_provider_connection_refused:connection:exa:invalid_transition` against existing local state.
+- Trigger: Routine local restart after prior seed.
+- Files: `tools/dev/` seed entrypoints, `convex/curatedProviders.ts`, `PAPERCUTS.md` (entries 170, 57–58 in cleanup receipt)
+- Workaround: Manual local DB reset/reseed.
+- Root cause: Provider connection lifecycle assumes clean state; transition graph refuses re-application.
 
 ## Security Considerations
 
-**Imported web claims render unvalidated links:**
-- Risk: [Verified code fact] Model-produced `websiteUrl` and `sourceUrl` values are arbitrary strings and are rendered directly as `target="_blank"` anchors. A `javascript:`, `data:`, credential-bearing, control-character, or bidi-tainted URL can become clickable.
-- Files: `src/modules/answer/answer-schema.ts`, `src/modules/storefront/internal/business-enrichment.ts`, `src/components/ae/services/AeImportedClaims.tsx`, `src/modules/answer/internal/operation-result-presentation.ts`
-- Current mitigation: `sourceUrl` must exactly match a model-gateway citation and links use `rel="noreferrer"`; Operation-result links separately enforce safe HTTPS URLs.
-- Recommendations: Reuse one server-side safe-HTTPS parser before persisting/projecting imported claims and omit invalid links. Add malicious-scheme, credentials, control-character, and bidi tests.
+**Operation gateway routes lack HTTP-edge rate limits:**
+- Risk: Unauthenticated or bearer-authenticated invoke/status/cancel/reconcile endpoints can be hammered at the edge; only Convex-side reservation limits apply.
+- Files: `src/routes/api.v1.operations.call.ts`, `src/routes/api.v1.operations.execute.ts`, `src/routes/operations.invocations.$invocationRef.tsx`, `convex/capabilityOperationInvocations.ts` (lines ~470–483), `.planning/reset/RECEIPTS.md` (P1-d reconnaissance)
+- Current mitigation: Grant/budget/concurrency limits inside Convex at reservation time; OAuth and public-read routes use `withHttpRateLimit` (`src/lib/server/rate-limit.ts`).
+- Recommendations: Add HTTP-edge admission for invoke and lifecycle routes aligned with existing limiter names, or document explicit reliance on Convex-only limits and monitor abuse; any new gateway route must not bypass reservation limits.
 
-**Production dependency audit has six high-severity findings:**
-- Risk: [Verified diagnostic] `npm audit --omit=dev --audit-level=high` reports high-severity advisories in direct `undici@7.28.0` and transitive `ip-address@10.2.0`, `fast-uri@3.1.2`, `js-yaml@4.3.0`, `postcss@8.5.15`, and `nanoid@3.3.15`. The `ip-address` advisories explicitly concern SSRF/trust-boundary bypass.
-- Files: `package.json`, `package-lock.json`, `convex/capabilityOperationInvocationWorker.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-execution/operation-execute.server.ts`, `src/modules/storefront/server.ts`
-- Current mitigation: AE has its own literal/DNS/redirect network guard and guarded Undici dispatchers; no exploit was demonstrated. Current lockfile versions remain advisory-affected.
-- Recommendations: Upgrade through package owners, rerun network-guard and MCP/transport conformance tests, and verify lockfile resolution. Prioritize direct Undici and MCP’s `ip-address`/`fast-uri` chain.
+**Local E2E authentication bypass surface:**
+- Risk: `isLocalE2EAuthBypassEnabled()` strips Clerk middleware in local E2E; unauthenticated callers can reach server functions that authenticate to Convex with admin credentials.
+- Files: `src/start.ts`, `src/lib/server/local-e2e-bypass.ts`, `src/lib/server/operation-approval-source.ts`, `tests/imports/faux-runtime-surfaces.test.ts`, `.planning/reset/RECEIPTS.md` (`HK-faux-runtime`)
+- Current mitigation: Bypass relocated out of `capability-execution` deployable graph to `operation-approval-source.ts`; guards refuse in production; tests pin behavior.
+- Recommendations: Never reintroduce bypass calls inside `src/modules/capability-execution/**`; keep faux-runtime guard wired into release imports when policy allows; treat local E2E endpoints as privileged test-only surfaces.
 
-**Generic action metadata is not itself enforcement:**
-- Risk: [Production-readiness gap] Surface checking is present, but the generic CLI runner does not enforce registered credential admission or Harness approval before direct dispatch.
-- Files: `tools/ae/commands/actions.ts`, `src/modules/common/action.ts`, `src/modules/harness/approval-policy.ts`, `src/modules/capability-execution/operation-invoke.actions.ts`
-- Current mitigation: `operation.invoke` is explicitly rejected by the generic runner, and current credentialed recovery actions reject missing principal/service context.
-- Recommendations: Make one admission function authoritative for generic dispatch and regression-test a synthetic CLI-declared credentialed/write action.
+**Environment diagnostics can leak secret values:**
+- Risk: Grepping `.env.local` for variable names prints matching values; papercut 27 records unrelated secrets exposed during x402 prerequisite checks.
+- Files: `PAPERCUTS.md`, developer scripts under `tools/dev/`
+- Current mitigation: `.env` files gitignored; agents instructed not to read secrets.
+- Recommendations: Add a names-only env inventory command; ban value-printing greps in runbooks.
 
-**Live money remains correctly disabled:**
-- Risk: [Production-readiness gap, not a demonstrated loss] Automatic daily supplier settlement, operator/legal policy, production manifest values, and hosted payment proof are incomplete.
-- Files: `convex/moneyLedger.ts`, `src/modules/money/internal/convex-schema.ts`, `convex/crons.ts`, `src/lib/deployment/manifest.ts`, `.planning/adr/ADR-034-supplier-usage-qualified-use-and-payout-spine.md`
-- Current mitigation: Deployment validation and the shared live-money gate fail closed; no live paid proof was attempted.
-- Recommendations: Do not weaken the gate. Implement exact pre-release reservation, automatic settlement scheduling, sub-minor carry, recovery, and policy admission before any live-money certification.
+**Loosely typed refusal codes (historical regression class):**
+- Risk: New invoke refusal codes can compile and persist while absent from parsed unions, causing surfaces to return `operation_invoke_result_invalid` instead of the domain reason.
+- Files: `src/modules/capability-execution/operation-invoke-contracts.ts`, `convex/capabilityOperationInvocations.ts`, `.planning/reset/RECEIPTS.md` (P1-e-1 review)
+- Current mitigation: `operationInvokeRefusalCodeValues` union in `operation-invoke-contracts.ts` includes `payment_lane_not_brokered`; review caught prior drift.
+- Recommendations: Any new refusal code must update contract unions, Convex validators, CLI/MCP parsers, and tests in the same card; use exhaustive switch/`never` checks per repo rules.
+
+**Live money fail-closed gate:**
+- Risk: Premature enablement of Stripe checkout, webhooks, or supplier payout I/O before counsel signoffs and ADR-034 implementation.
+- Files: `src/modules/money/internal/live-money-gate.ts`, `tests/unit/money/stripe-adapter.test.ts`, `.planning/wayfinder/tickets/T52-compliance-and-first-dollar-gate.md`
+- Current mitigation: `evaluateLiveMoneyGate()` refuses when counsel decisions incomplete; Stripe adapter tests assert refusal before provider I/O.
+- Recommendations: Do not weaken gate for demos; complete PRA-003 / P1-d3 before any hosted money proof.
 
 ## Performance Bottlenecks
 
-**Registry search materializes every matching search page:**
-- Problem: [Verified code fact] `readMatchingSearchDocuments` paginates until `page.isDone`, filters each page in memory, then downstream code slices the complete result set.
-- Files: `convex/registry.ts`
-- Cause: Search pagination is consumed internally before public pagination is applied.
-- Improvement path: Bound rows/bytes read per request, stop after enough qualified results plus a continuation cursor, and propagate native split/continuation metadata.
+**In-memory registry search over full catalog:**
+- Problem: Business/offering search builds and filters full catalog arrays in process memory before pagination.
+- Files: `src/modules/registry/internal/search.ts`, `src/modules/registry/internal/search-documents.ts`
+- Measurement: No p95 metrics in repo; papercut 40 notes prior `hasMore: false` misreport and stop-word empty-result behavior at market scale (partially addressed in `search-documents.ts` trade-vocabulary work).
+- Cause: Source-local registry projection reads entire catalog into memory for token matching.
+- Improvement path: Add bounded document indexes or Convex-side search with honest pagination metadata; load tests with ≥20 curated operations and larger seed catalogs.
 
-**MCP tools/list embeds every output schema:**
-- Problem: [Verified code fact] The MCP adapter post-processes all listed tools to attach full JSON output schemas, and tests require every schema. There is no payload/context byte budget.
-- Files: `src/lib/server/mcp-api.ts`, `tests/unit/server/mcp-api.test.ts`, `src/modules/registry/operation-action-contracts.ts`
-- Cause: Canonical output-contract parity is implemented by eagerly serializing complete schemas into inventory.
-- Improvement path: Measure raw wire bytes in a gate. If clients need compact discovery, keep strict input and call-time output validation while moving exact output-contract reads to Operation detail or another protocol-supported bounded projection.
+**Full release unit suite under parallel load:**
+- Problem: Individual tests (e.g., `tests/unit/market-terminal/cli-errors.test.ts`) timeout at 30s during full parallel `tests/unit` runs but pass in isolation.
+- Files: `package.json` (`test:release:unit`), `PAPERCUTS.md` (entries 185, 371–408 in RECEIPTS)
+- Measurement: Documented false RED from concurrent validators and CPU starvation; serial re-measurement cleared ~35 timeouts.
+- Cause: CLI subprocess tests with tight budgets competing for CPU; concurrent full-suite validators forbidden by rule 7a but still an operational footgun.
+- Improvement path: Per-file `testTimeout` for CLI spawn tests; never run two full-suite validators concurrently; queue validators on one machine.
 
-**Large cross-domain modules increase validation cost:**
-- Problem: [Verified code fact] A small change in money, Answer, or transport frequently recompiles and retests multi-thousand-line modules and large integration suites.
-- Files: `convex/moneyLedger.ts`, `convex/capabilityOperationInvocationWorker.ts`, `src/modules/answer/internal/answer-tool-use-agent.ts`, `tests/integration/customer-request-v2-multi-capability-route.test.ts`
-- Cause: Multiple policy, persistence, orchestration, projection, and adapter responsibilities share single modules.
-- Improvement path: Extract pure, independently testable policy functions without splitting transaction/effect authority.
+**Monolithic money ledger hot path:**
+- Problem: Authorization, settlement, payout reservation, and reversal logic share one Convex module with 10k+ lines.
+- Files: `convex/moneyLedger.ts`, `tests/unit/convex/money-ledger-reconciliation.test.ts` (~3,641 lines)
+- Measurement: Focused money test suites run hundreds of cases; full ledger mutation graph is hard to profile in isolation.
+- Cause: Exact-money spine consolidated into one file for atomicity evidence.
+- Improvement path: Extract read models and pure decision functions with unchanged mutation entrypoints; keep reconciliation tests as gate.
 
 ## Fragile Areas
 
-**Provider-direct x402 finalization is new and cross-cuts four authorities:**
-- Files: `convex/capabilityOperationInvocationWorker.ts`, `convex/moneyLedger.ts`, `src/modules/money/internal/external-spend.ts`, `src/modules/capability-supply/internal/x402-settlement-verifier.ts`
-- Why fragile: [Verified code fact] Reservation, budget, payment attempt, RPC receipt, ERC-20 log verification, output validity, and reconciliation must agree. The current verifier hard-codes 12 confirmations for every `eip155:` network.
-- Safe modification: Preserve immutable invocation/attempt/effect identity, mark possibly submitted before release, never blind-retry unknown effects, and make network finality an admitted server policy rather than caller input.
-- Test coverage: Focused external-spend/verifier tests pass, but no hosted RPC, reorg, multi-network finality, or paid provider proof exists.
+**Capability operation invocation worker:**
+- Why fragile: Orchestrates payment lane admission, canonical claim, provider transport, money authorization, qualified-use receipt hook, recovery, and refusal persistence in one worker.
+- Common failures: Refusal code drift, x402 lane policy regressions, idempotency conflicts, `payment_lane_not_brokered` vs conformance proof tension.
+- Safe modification: Run `tests/unit/convex/capability-operation-worker.test.ts`, `tests/unit/capability-execution/operation-invoke*.test.ts`, and money ledger reconciliation tests; never skip union updates.
+- Test coverage: Strong unit coverage; hosted provider proof still absent.
+- Files: `convex/capabilityOperationInvocationWorker.ts`, `convex/capabilityOperationInvocations.ts`
 
-**Answer routing combines model interpretation with deterministic overrides:**
-- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/answer-thread/internal/answer-response-planner.ts`, `src/modules/answer/internal/answer-query-safety.ts`
-- Why fragile: A model-selected Operation route previously bypassed local-service retrieval. Current source adds `shouldOverrideOperationRouteForBusiness`, but routing still depends on signal dictionaries, continuation state, frozen Operation state, and staged agent paths.
-- Safe modification: Keep one route authority, require positive Operation evidence before suppressing deterministic business signals, and preserve frozen-operation continuation only for same-contract refinements.
-- Test coverage: Source and focused intent tests exist; the exact post-fix plumber/browser path has no current hosted evidence.
+**Answer tool-use agent:**
+- Why fragile: 3k-line custom loop coupling registry reads, dynamic `capability.{operationRef}` tools, invoke/execute, budget gates, and evidence assembly.
+- Common failures: Tool withholding after execution, wrong completion copy, model request accounting drift, frozen evidence not recalled on follow-ups.
+- Safe modification: Run `tests/unit/answer/answer-selected-operation-loop.test.ts`, eval cases in `eval/answer/lib/cases.ts`, and answer-thread boundary tests before behavior changes.
+- Test coverage: Deep unit tests; persisted harness accounting gap remains.
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/answer-schema.ts`
 
-**Owner connection lifecycle spans UI, server functions, Convex, and cleanup work:**
-- Files: `src/components/ae/supply/AeSupplyPublisherHome.tsx`, `src/modules/capability-supply/supply-funnel.functions.ts`, `convex/capabilityProviderConnections.ts`, `convex/capabilityProviderConnectionCleanup.ts`
-- Why fragile: Connect/reconnect/revoke/retry operations must preserve owner identity, authority generation/digest, cleanup attempt, Workpool identity, and stale-session fencing.
-- Safe modification: Reuse current mutations and expected-generation/digest inputs; never accept raw provider secrets in the browser.
-- Test coverage: UI presence and domain lifecycle tests exist, but no authenticated browser E2E proves connect → select → revoke → cleanup readback.
+**Route transport runtime:**
+- Why fragile: Executes HTTP/x402/provider connections with schema validation, network guard, timeout/abort composition, and response normalization.
+- Common failures: `@cfworker/json-schema` mutation on immutable schemas (fixed by cloning — papercut 35), x402 exponent rescale refusals post-publish (papercut 36), keyless fixture/output mismatch (papercut 37).
+- Safe modification: Run `tests/unit/capability-supply/route-transport-runtime.test.ts` and integration publication tests; clone schemas before validation.
+- Test coverage: Large dedicated unit file (~2,641 lines); live provider paths env-blocked.
+- Files: `src/modules/capability-supply/route-transport-runtime.ts`, `src/modules/capability-supply/internal/publication-importers.ts`
 
-**Local Convex verification depends on runtime and backend startup identity:**
-- Files: `package.json`, `tools/dev/local-dev.mjs`, `convex/capabilityOperationInvocationWorker.ts`
-- Why fragile: [Verified diagnostic] Typecheck and lint pass under the workstation’s Node 25, but Convex codegen fails because the active local backend is not configured with supported Node 20/22/24 actions. The repository declares Node 22.
-- Safe modification: Start both supervisor and Convex backend with the pinned Node 22 path, report resolved child runtimes, and reap child processes on exit.
-- Test coverage: `tests/unit/dev/local-dev.test.ts` covers launcher logic; current end-to-end codegen did not pass in this environment.
+**Product-frontier manifest exact inventory:**
+- Why fragile: Adding/removing/renaming any action breaks `tests/imports/product-frontier-manifest.test.ts` and downstream SEO/agent contracts.
+- Common failures: Unregistered supply actions; accidental reintroduction of quarantined actions during refactors.
+- Safe modification: Update `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` and run `npm run check:product-frontier` in the same commit.
+- Test coverage: Enforced by import test; no runtime drift detection beyond manifest verifier.
+- Files: `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
+
+**Pre-commit Convex codegen hook:**
+- Why fragile: Hook rewrites `convex/_generated/*` after staging, leaving codegen one commit behind schema edits if not re-staged.
+- Common failures: Typecheck passes locally but CI fails; staged schema ≠ generated types.
+- Safe modification: Include codegen output in the same commit as schema edits; never `--no-verify` without founder authorization (operating model rule 4).
+- Test coverage: `npm run check:convex-codegen` in release gate.
+- Files: `.husky/pre-commit` (if present), `convex/_generated/`, `PAPERCUTS.md` (entry 183)
 
 ## Scaling Limits
 
-**Curated publication retirement silently stops at fixed caps:**
-- Current capacity: [Verified code fact] Seed cleanup examines only the first 100 current public publications; collision retirement examines only the first 1,000.
-- Limit: Stale curated publications beyond those windows are not considered, and filtering occurs after the indexed read.
-- Scaling path: Query by publisher/source identity with a matching index and process deterministic continuation batches.
-- Files: `convex/curatedProviders.ts`
+**Curated catalog and registry search:**
+- Current capacity: ~20 real operations across 19 provider slugs in curated seed; registry search paginates in memory.
+- Limit: Latency and memory grow linearly with catalog rows; search token stop-word stripping can yield empty results for common phrases.
+- Symptoms at limit: Slow search responses, incorrect `hasMore`, zero-result searches for phrases like "discover providers" (papercut 40).
+- Scaling path: Indexed search documents (`src/modules/registry/internal/search-documents.ts`), Convex-backed pagination, load tests with larger catalogs.
 
-**Answer threads are capped at 25 turns and four Operation candidates:**
-- Current capacity: 25 durable turns per thread and four frozen Operation candidates per turn.
-- Limit: Turn 26 is refused with `thread_turn_limit`; lower-ranked candidates are omitted before model selection and replay.
-- Scaling path: Keep explicit product limits, expose the limit in UI/API, and add deliberate thread rollover or bounded archival/summarization rather than enlarging Convex documents.
-- Files: `convex/answerThreads.ts`, `src/modules/answer/answer-schema.ts`, `src/modules/answer/internal/keyless-data-ask.ts`
+**Action and module guardrails (reset targets):**
+- Current capacity: 46 pinned actions; 698 module TypeScript files under `src/modules/`; 117 Convex TS files (excluding generated).
+- Limit: Operating model targets ≤14 active actions, ≤60k active module LOC, ≤60 live tables (quarantined reported separately).
+- Symptoms at limit: Manifest churn blocks every feature; LOC/table audits fail Phase 6 cards.
+- Scaling path: Phase 5 quarantine of `customerRequest.*`, `workTree.*`, `study.*`; retire legacy registry list/detail actions after port proof.
 
-**Registry search has no market-scale read ceiling:**
-- Current capacity: Pages of 250 search documents are read repeatedly until exhaustion.
-- Limit: Latency and Convex row/byte limits grow with the total matching corpus, not requested page size.
-- Scaling path: Return bounded qualified pages with cursors and `maximumRowsRead`/`maximumBytesRead`, then continue client-side.
-- Files: `convex/registry.ts`
+**Concurrent validator / CI parallelism:**
+- Current capacity: Full unit suite ~4,000+ tests; integration ~580 tests with 15s timeout and `no-file-parallelism`.
+- Limit: Two full-suite validators on one machine manufacture timeout failures indistinguishable from real regressions.
+- Symptoms at limit: Bare `Test timed out` across unrelated files (documented P1-a-core / P1-e-2 incident).
+- Scaling path: Serialize validators (rule 7a); shard suites in CI with isolated runners, not shared CPU on one host.
+
+**Answer turn checkpoint storage:**
+- Current capacity: 256 KiB per checkpoint, 16 steps (`IA-DATA-FLOW.md` cites `MAX_ANSWER_TURN_CHECKPOINT_BYTES`, `ANSWER_TURN_CHECKPOINT_MAX_STEP`).
+- Limit: Multi-tool turns with large frozen evidence approach checkpoint caps.
+- Symptoms at limit: `answer_turn_persist_failed` and turn fencing failures.
+- Scaling path: Trim persisted evidence projections; enforce assembler bounds in `src/modules/answer/internal/evidence-assembler.ts`.
 
 ## Dependencies at Risk
 
-**Undici 7.28.0:**
-- Risk: A direct runtime dependency has current high-severity advisories involving response desynchronization, cache-related cross-user disclosure/crash, CRLF injection, and cookie attribute injection.
-- Files: `package.json`, `package-lock.json`, `convex/capabilityOperationInvocationWorker.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-execution/operation-execute.server.ts`
-- Impact: Provider transport, readiness, and server fetch paths are in the affected dependency graph; exact exploitability is not established.
-- Migration plan: Upgrade to a patched compatible release, then rerun SSRF, redirect, response-boundary, x402, and conformance suites.
+**Deprecated `@react-email/*` packages:**
+- Risk: Multiple `@react-email` subpackages marked deprecated on install (`npm ci` warnings).
+- Impact: Email notification paths may break on future npm installs or React upgrades.
+- Migration plan: Audit notification-outbox owner (memo parked in cleanup batch 5); migrate to supported React Email release or alternative transactional email templates.
+- Files: `package.json`, notification modules under `src/modules/`
 
-**MCP transitive URL/network parsers:**
-- Risk: `@modelcontextprotocol/sdk@1.30.0` resolves advisory-affected `ip-address@10.2.0`, `fast-uri@3.1.2`, `hono@4.12.27`, and `@hono/node-server@1.19.14`.
-- Files: `package.json`, `package-lock.json`, `src/lib/server/mcp-api.ts`
-- Impact: MCP and rate-limit/parser internals inherit high/moderate advisory exposure, including SSRF classification and host confusion concerns.
-- Migration plan: Upgrade the SDK/transitives together, verify protocol compatibility, and retain AE’s independent network guard.
+**`@convex-dev/agent` blocked on AI SDK v7:**
+- Risk: Cannot adopt Convex agent component for durable chat without peer downgrade or draft PRs.
+- Impact: Custom harness/run loop remains mandatory maintenance.
+- Migration plan: Track Convex agent releases for AI SDK v7; build parity validator before loop removal (P2-a decision).
+- Files: `.planning/STATE.md`, `convex/_generated/ai/guidelines.md`
 
-**Nightly and pre-1.0 infrastructure packages:**
-- Risk: Nitro is aliased to a dated nightly build; `@tanstack/ai`, Convex workflow/workpool/aggregate packages, and `convex-test` are pre-1.0.
-- Files: `package.json`, `package-lock.json`, `vite.config.ts`
-- Impact: API and behavior churn can invalidate build adapters, generated contracts, or durable workflow assumptions.
-- Migration plan: Pin exact known-good versions for release branches, review changelogs before upgrades, and require build plus recovery/conformance gates.
+**Cross-runtime Zod composition (`@x402/core`):**
+- Risk: `@x402/core` schemas use a different Zod runtime; empty CAIP-2 references accepted by dependency schema.
+- Impact: x402 metadata validation fails closed or accepts invalid network refs if guards omitted.
+- Migration plan: Keep minimal non-empty namespace/reference guards (papercut 16); refuse x402 as live lane in production (`src/modules/capability-supply/internal/x402-invocation-policy.ts`).
+- Files: `src/modules/capability-supply/internal/x402-invocation-policy.ts`, x402 settlement verification tests
+
+**Node engine vs local toolchains:**
+- Risk: `package.json` requires Node 22.x; papercut 171 notes default shell Node 25 until `nvm use 22`.
+- Impact: EBADENGINE warnings; subtle test/runtime differences.
+- Migration plan: Enforce Node 22 in CI and documented dev setup; `.nvmrc` / Volta pin if not already present.
 
 ## Missing Critical Features
 
-**Automatic supplier settlement implementation:**
-- Problem: [Verified production-readiness gap] ADR-034 selects automatic daily full-balance settlement, but the schema still models monthly payout rows/manual transfer states, no settlement cron is registered, and current status marks PRA-003 open.
-- Blocks: Honest production supplier transfer, sub-minor carry, exact liquidity serialization, recovery, and end-to-end Qualified Use payout claims.
-- Files: `convex/moneyLedger.ts`, `src/modules/money/internal/convex-schema.ts`, `convex/crons.ts`, `.planning/STATE.md`, `.planning/adr/ADR-034-supplier-usage-qualified-use-and-payout-spine.md`
+**Daily supplier settlement cron (P1-d3 / PRA-003):**
+- Problem: ADR-034 automatic daily full-balance settlement decided; reservation before provider I/O landed in P1-d2; idempotent daily cron not implemented.
+- Current workaround: Payout commands remain source-closed; live money gate refuses provider transfer I/O.
+- Blocks: Hosted value-exchange certification, supplier earnings payout proof, SG-024 exit gate.
+- Implementation complexity: Medium — cron + idempotent command identities + production policy values.
+- Files: `src/modules/money/internal/payout-policy.ts`, `convex/moneyLedger.ts`, `.planning/reset/CARD-LEDGER.md` (`P1-d3` status: recon)
 
-**Revision-bound hosted certification:**
-- Problem: [Verified production-readiness gap] Source/local evidence exists, but production manifest validation and exact hosted discover → invoke → validate → settle → recover → revoke/readback proof remain absent.
-- Blocks: Production capability, independent provider fulfilment, paid value exchange, and release certification.
-- Files: `.github/workflows/kernel-release-gate.yml`, `tools/release/operation-gateway-production-smoke.ts`, `src/lib/deployment/manifest.ts`, `.planning/PROJECT.md`, `.planning/STATE.md`
+**Hosted gateway certification (SG-024 / ADR-035):**
+- Problem: No strict hosted receipt with real Clerk key invoking two real operations from distinct suppliers with approval, budget, credentials, recovery, usage readback, and revoke→refused replay.
+- Current workaround: Source gate green via `test:release:source:after-codegen`; outer `test:release:source` fails at `verify:deployment-manifest` for missing production config (intended).
+- Blocks: Production manifest validation, operator/legal policy values, hosted MCP/HTTP discovery proof (#204).
+- Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
+- Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Authenticated owner connection lifecycle E2E:**
-- Problem: [Verified production-readiness gap] Current source exposes connection controls, but no browser proof covers a real owner creating, selecting, refreshing, revoking, and recovering a provider connection.
-- Blocks: Claiming that suppliers can independently maintain keyed/x402 authority through the product.
-- Files: `src/components/ae/supply/AeSupplyPublisherHome.tsx`, `src/modules/capability-supply/supply-funnel.functions.ts`, `convex/capabilityProviderConnections.ts`, `tests/unit/ui/supply-funnel.test.tsx`
+**Phase 3 Customer Request conformance ports:**
+- Problem: Customer Request spine still uses its own orchestration; reset requires ports to atomic `operation.invoke` / `/api/v1/operations/call` before quarantine.
+- Current workaround: Customer Request remains in product-frontier manifest and active modules.
+- Blocks: Phase 5 quarantine of 13 `customerRequest.*` actions; action inventory reduction.
+- Implementation complexity: High — one card per conformance path with no assertion weakening.
+- Files: `src/modules/customer-request/`, `.planning/reset/CARD-LEDGER.md` Phase 3
+
+**Phase 4 chat orchestration replacement:**
+- Problem: Answer still uses dynamic tool naming and router-era checkpoints; target is one bounded AI SDK tool loop with eval-specified behavior.
+- Current workaround: Eval suite partially specifies tool use; router tags remain in thread types.
+- Blocks: Parity assertion "chat has no tool MCP lacks" (P4-e).
+- Implementation complexity: High — rewrite `eval/answer/lib/cases.ts` first, then drain checkpoints.
+- Files: `eval/answer/lib/cases.ts`, `src/modules/answer-thread/internal/turns/types.ts`, `.planning/reset/CARD-LEDGER.md` Phase 4
+
+**Legal / counsel signoffs for live money (T52):**
+- Problem: Live money gate requires complete counsel decision set; T52 explicitly **LIVE MONEY: REFUSED** until compliance gate accepts.
+- Current workaround: Fail-closed gate in `live-money-gate.ts`.
+- Blocks: Real top-up, charge, payout block; first-dollar hosted proof.
+- Files: `.planning/wayfinder/tickets/T52-compliance-and-first-dollar-gate.md`, `src/modules/money/internal/live-money-gate.ts`
 
 ## Test Coverage Gaps
 
-**Composer accepted-submit lifecycle:**
-- What's not tested: Clearing text after accepted submit while preserving it on validation or transport failure.
-- Files: `src/components/ae/chat/AeAnswerPromptInput.tsx`, `tests/unit/chat/ae-chat-composer-copy.test.ts`
-- Risk: Stale intent can be resent without any failing test.
+**Hosted and E2E proof:**
+- What's not tested: Full browser E2E, hosted readback, frozen evidence packet, Tier C hosted Answer.
+- Files: `tests/e2e/`, `.planning/evidence/product-frontier-baseline/CLEANUP-RECEIPT.md`, `.planning/STATE.md` (P5-EVIDENCE unmet)
+- Risk: UI/regression and deployment-only failures ship despite green source gate.
 - Priority: High
+- Difficulty to test: Requires local Convex, signing keys, deployment manifest, and consent-gated hosted runs.
 
-**Imported claim link safety:**
-- What's not tested: Rejection/omission of `javascript:`, `data:`, credential-bearing, control-character, and bidi-tainted `websiteUrl`/`sourceUrl`.
-- Files: `src/modules/storefront/internal/business-enrichment.ts`, `src/components/ae/services/AeImportedClaims.tsx`, `tests/unit/answer/generative-layout.test.ts`
-- Risk: A model/citation-derived unsafe URL becomes a clickable product link.
+**P1-d3 settlement automation:**
+- What's not tested: Idempotent daily cron, production policy-driven payout execution end-to-end.
+- Files: `tests/unit/money/`, `tests/unit/convex/payout-ledger.test.ts` (covers reservation/reversal, not cron)
+- Risk: Payout double-spend or stuck held balances in production.
 - Priority: High
+- Difficulty to test: Needs cron scheduler simulation and Stripe test fixtures with live-money gate toggled in controlled env.
 
-**Full current Convex gate under Node 22:**
-- What's not tested: Code generation/deployment of the current tree against a backend started with the repository’s supported Node runtime.
-- Files: `package.json`, `tools/dev/local-dev.mjs`, `convex/capabilityOperationInvocationWorker.ts`
-- Risk: Typecheck/lint can be green while deployable Convex functions remain unverified.
+**Operation gateway production smoke:**
+- What's not tested: Full `tools/release/operation-gateway-production-smoke.ts` against configured hosted deployment (5,182-line script; env-blocked).
+- Files: `tools/release/operation-gateway-production-smoke.ts`, `tests/unit/release/operation-gateway-production-smoke.test.ts`
+- Risk: Gateway regressions undetected until manual smoke.
 - Priority: High
+- Difficulty to test: Production manifest, Clerk keys, Convex deployment URL, real supplier operations.
 
-**MCP inventory payload budget:**
-- What's not tested: Maximum raw `tools/list` bytes or model-context impact after attaching full output schemas.
-- Files: `src/lib/server/mcp-api.ts`, `tests/unit/server/mcp-api.test.ts`
-- Risk: Contract-correct inventory becomes expensive or rejected by clients as the action set/schema grows.
+**Faux-runtime import guard in release gate:**
+- What's not tested: `tests/imports/faux-runtime-surfaces.test.ts` is not wired into `test:release:source:after-codegen` (guardrail passes after HK-faux-runtime merge, but policy decision remains whether to promote it).
+- Files: `tests/imports/faux-runtime-surfaces.test.ts`, `package.json`
+- Risk: Local-E2E bypass reintroduced into deployable module graphs without detection.
 - Priority: Medium
+- Difficulty to test: Already exists — needs gate promotion decision.
 
-**Generic CLI action admission:**
-- What's not tested: A CLI-declared credentialed/write action must pass the same approval and credential policy as dedicated adapters.
-- Files: `tools/ae/commands/actions.ts`, `tests/unit/market-terminal/cli-errors.test.ts`, `src/modules/harness/approval-policy.ts`
-- Risk: A future action becomes directly reachable with weaker admission.
+**Customer Request / WorkTree integration under quarantine plan:**
+- What's not tested: Post-quarantine absence of write paths; port equivalence between legacy Customer Request routes and atomic invoke.
+- Files: `tests/integration/customer-request-v2-*.test.ts`, `tests/imports/customer-request-source-completeness.test.ts`
+- Risk: Quarantine cards freeze wrong surfaces or break proving ground silently.
 - Priority: Medium
+- Difficulty to test: Phase 3 port cards must add equivalence tests before Phase 5 freeze.
 
-**Hosted money and provider recovery:**
-- What's not tested: Real RPC receipt finality/reorg handling, exact provider settlement, automatic Stripe transfer, unknown-outcome recovery, and hosted revoke/refusal replay.
-- Files: `src/modules/capability-supply/internal/x402-settlement-verifier.ts`, `convex/capabilityOperationInvocationWorker.ts`, `convex/moneyLedger.ts`, `tools/release/operation-gateway-production-smoke.ts`
-- Risk: Local fixtures pass while production payment or recovery semantics diverge.
-- Priority: High
-
-**Current verification summary:**
-- What's not tested: The complete release gate for this 257-file working tree.
-- Files: `package.json`, `.github/workflows/kernel-release-gate.yml`, `.planning/STATE.md`
-- Risk: Focused success is overgeneralized to the full current tree.
-- Priority: High
-- Evidence: On 2026-08-15, TypeScript and lint passed; six focused files passed 72 tests; `git diff --check` reported trailing-whitespace/EOF issues; Convex codegen failed at the local Node-action runtime prerequisite; production dependency audit reported ten vulnerabilities.
+**Development-host parity and x402 conformance:**
+- What's not tested: Full official development evidence packets when checkout is dirty or local Convex unavailable (`evidence_checkout_dirty`, `convex_dev_server_unavailable`).
+- Files: `tests/unit/action-invocation/development-host-parity.test.ts`, `tests/imports/development-evidence-boundary.test.ts`
+- Risk: Conformance proof false negatives block releases; false positives if env guards skipped.
+- Priority: Medium
+- Difficulty to test: Requires clean tree discipline and local Convex lifecycle documented in dev scripts.
 
 ---
 
-*Concerns audit: 2026-08-15*
+*Concerns audit: 2026-08-17*
+*Update as issues are fixed or new ones discovered*
