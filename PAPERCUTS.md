@@ -1443,3 +1443,5 @@ workstreams, duplicate observations, and explicit remediation status.
 198. gpt-5.6: While filing an Obsidian note, qmd returned a normalized resource path whose spaces/hyphens did not match the actual vault filename, causing the first direct read to fail. Search results should expose the exact filesystem path or clearly label normalized URIs.
 
 199. gpt-5.6: While verifying an Obsidian qmd query, piping qmd output through head caused qmd to crash with an unhandled EPIPE after the consumer closed. The CLI should handle a closed stdout pipe without emitting a Node stack trace.
+
+200. gpt-5.6: While spawning a research subagent with full-history inheritance, the orchestration API rejected an explicit default agent_type even though the requested type matched the parent. The schema permits the field but the runtime requires it omitted for full-history forks.
