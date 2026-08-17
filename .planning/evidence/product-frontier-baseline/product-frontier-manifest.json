@@ -195,7 +195,8 @@
     "tests/unit/server/start-observability.test.ts"
   ],
   "evalCoverageTags": [
-    "direct-retrieval-fast-path",
+    "model-chosen-tool-loop",
+    "bounded-tool-loop",
     "visible-typo-recovery",
     "empty-state",
     "near-me-location-guard",

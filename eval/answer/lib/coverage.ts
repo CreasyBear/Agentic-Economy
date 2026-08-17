@@ -484,15 +484,6 @@ function auditExpectedShape(
       caseId: testCase.id,
     })
   }
-  if (parentCase.covers.includes('direct-retrieval-fast-path')) {
-    if (!(expected.excludeTimingNames ?? []).includes('model.agent_total')) {
-      issues.push({
-        code: 'direct_retrieval_without_model_exclusion',
-        message: 'Direct retrieval cases must assert that model planning did not run.',
-        caseId: testCase.id,
-      })
-    }
-  }
   if (parentCase.covers.includes('persisted-tool-evidence') && expected.toolQueries === undefined) {
     issues.push({
       code: 'evidence_case_without_tool_query_assertion',

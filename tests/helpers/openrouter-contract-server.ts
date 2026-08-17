@@ -228,6 +228,30 @@ export function openRouterToolThenProseResponses(input: {
   prose: OpenRouterProsePlan
 }): OpenRouterContractResponseSource {
   const toolCalls = input.toolCalls ?? []
+  let nextToolCallIndex = 0
+  const emitNextActiveToolCall = (
+    activeNames: ReadonlySet<string>,
+  ): unknown | undefined => {
+    const nextToolCall = toolCalls[nextToolCallIndex]
+    if (nextToolCall === undefined) return undefined
+    const providerSafeName = openRouterToolName(nextToolCall.toolId)
+    if (!activeNames.has(providerSafeName)) {
+      throw new Error(
+        `unexpected_unstructured_tool_request: expected ${providerSafeName}`,
+      )
+    }
+    nextToolCallIndex += 1
+    return openRouterToolResponse([nextToolCall])
+  }
+  const advanceCursorPast = (
+    toolCall: OpenRouterToolCallPlan | undefined,
+  ): void => {
+    if (toolCall === undefined) return
+    const planIndex = toolCalls.indexOf(toolCall)
+    if (planIndex >= 0) {
+      nextToolCallIndex = Math.max(nextToolCallIndex, planIndex + 1)
+    }
+  }
   return (request) => {
     // The safety preflight uses Output.choice, while answer prose uses Output.object.
     // Keep the fixture's ordinary response path unchanged after answering the choice.
@@ -263,15 +287,12 @@ export function openRouterToolThenProseResponses(input: {
       const hasToolResults = request.messages.some(
         (message) => message.role === 'tool',
       )
-      const planned = toolCalls.filter((call) =>
-        activeNames.has(openRouterToolName(call.toolId)),
-      )
       if (input.emitAllToolCallsTogether === true) {
+        nextToolCallIndex = toolCalls.length
         return openRouterToolResponse(toolCalls)
       }
-      if (planned.length > 0) {
-        return openRouterToolResponse([planned[0]!])
-      }
+      const nextResponse = emitNextActiveToolCall(activeNames)
+      if (nextResponse !== undefined) return nextResponse
       if (!hasToolResults) {
         throw new Error('unexpected_unstructured_tool_request')
       }
@@ -289,12 +310,15 @@ export function openRouterToolThenProseResponses(input: {
         call.toolId === 'registry.detail',
       )
       const businessRead = businessReads[completedReads]
-      return businessRead === undefined
-        ? openRouterProseResponse({
-            kind: 'answer',
-            prose: input.prose,
-          } as unknown as OpenRouterProsePlan)
-        : openRouterToolResponse([businessRead])
+      if (businessRead === undefined) {
+        advanceCursorPast(businessReads[businessReads.length - 1])
+        return openRouterProseResponse({
+          kind: 'answer',
+          prose: input.prose,
+        } as unknown as OpenRouterProsePlan)
+      }
+      advanceCursorPast(businessRead)
+      return openRouterToolResponse([businessRead])
     }
     if (
       input.stageOperationReads === true &&
@@ -308,18 +332,19 @@ export function openRouterToolThenProseResponses(input: {
         call.toolId.startsWith('registry.operations.'),
       )
       const nextRead = readCalls[completedReads]
-      return nextRead === undefined
-        ? openRouterNavigationCallResponse(input.navigationOperationRef)
-        : openRouterToolResponse([nextRead])
+      if (nextRead === undefined) {
+        advanceCursorPast(readCalls[readCalls.length - 1])
+        return openRouterNavigationCallResponse(input.navigationOperationRef)
+      }
+      advanceCursorPast(nextRead)
+      return openRouterToolResponse([nextRead])
     }
     if ((request.tools?.length ?? 0) > 0 && toolCalls.length > 0) {
       const activeNames = new Set(
         request.tools?.map((tool) => tool.function.name) ?? [],
       )
-      const planned = toolCalls.find((call) =>
-        activeNames.has(openRouterToolName(call.toolId)),
-      )
-      if (planned !== undefined) return openRouterToolResponse([planned])
+      const nextResponse = emitNextActiveToolCall(activeNames)
+      if (nextResponse !== undefined) return nextResponse
     }
     return request.response_format?.json_schema?.name === 'answer_navigation'
       ? openRouterProseResponse({ kind: 'answer', prose: input.prose } as never)
