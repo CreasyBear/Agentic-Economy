@@ -628,3 +628,47 @@ Observed validation and reviews:
 - A red-capable forged-input assertion covers the extra runtime `accountRef` case and fails if caller input can influence the derived owner ref.
 
 Explicit exclusions from the contract: no Convex edit, hosted run, provider call, live money, push, or release gate.
+
+## P1-a-proj — committed (already satisfied)
+
+Current source revision: `569be0ea44fb71caca0d31adae18881044fea018`.
+
+The projection already carries both fields end to end; no product edit was made because
+duplicating this existing projection would be wrong.
+
+- **Derivation:** `src/modules/capability-supply/operation-projection.ts` types
+  `PublicOperationDescriptor.callVia` from
+  `OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path` and types `paymentLane` as
+  `"brokered"`. The canonical contract in
+  `src/modules/capability-execution/operation-invoke-entry.ts` sets that path to
+  `/api/v1/operations/call`. The production projection derives
+  `paymentLane` through
+  `paymentLaneAdmission({ rail: 'ae_internal', environment: 'production' })`,
+  and startup fails unless the result is admitted with lane `brokered`.
+  `projectCapabilityOperation` assigns both values; callers and storage cannot select
+  alternate values.
+- **Validation:** `src/modules/capability-supply/operation-schemas.ts` uses strict
+  Zod descriptor schemas with
+  `callVia: z.literal(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path)` and
+  `paymentLane: z.literal('brokered')`. The descriptor is nested in the detail, search,
+  and compare output schemas. `convex/capabilitySupplyOperations.ts` independently
+  requires the same literals with Convex validators. `serializeOperationDescriptor` and
+  `deserializeOperationDescriptor` preserve both fields across the wire round trip.
+- **HTTP fail-closed boundary:** the search, detail, and compare HTTP routes
+  safe-parse action output and return `operation_read_result_invalid` with HTTP 503 when
+  the published projection is invalid.
+- **Refusal:** `src/modules/capability-supply/internal/x402-invocation-policy.ts`
+  refuses `provider_direct_x402` in production with
+  `payment_lane_not_brokered`. The operation worker applies that admission before the
+  canonical claim, provider transport, or money path, and records the refusal through
+  `refuseBeforeClaim`.
+
+Observed evidence and reviews:
+
+- Node 22 focused suite: 7 files / 54 tests PASS.
+- Prior current-HEAD lineage: typecheck, lint, and build PASS.
+- Independent correctness review: `0.99 PASS_ALREADY_SATISFIED`.
+- Independent security review: `PASS_ALREADY_SATISFIED`.
+
+Explicit exclusions: no product source change, test change, new action, new route,
+provider call, network call, live-money operation, hosted run, push, or release proof.
