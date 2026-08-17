@@ -919,3 +919,28 @@ After model-planned registry operation search/detail, the current router request
 The eval case contract contains no `navigationOperationRef` / `stageOperationReads` / `stageBusinessRecovery` / `direct-retrieval-fast-path` metadata.
 P4-b is a committed red target, not a green eval claim; P4-c/P4-d must make it green.
 No runtime/product behavior changed.
+
+## Phase 4 checkpoint migration, bounded tool loop, parity, and review — accepted
+
+**Phase 4 is complete.** The accepted clean product head is `7bd556772bc79b6d641fcb133564ac03e858eaf4`, whose parent is `d22a17ca04070cd512047b3126258e90dd9a0225`; its message is `refactor(answer): enforce one bounded market tool loop`, with the exact 33 paths in the product commit.
+
+**Accepted commit chain, in order:**
+
+1. `a462c82e965d36ed6616da4d45c4ab304e264239` — `refactor: widen answer checkpoint metadata`
+2. `4c7a8d4060b9b9eb9e5f05f59c90a0fc1883ec0d` — `refactor: route safe answer turns through agent`
+3. `c9430d1c323a3b626123083d987fd72a85657b53` — `refactor: consolidate Answer into one model tool loop`
+4. `b287ec796b10cfaaf7be445838d4793b4a597b06` — `fix(answer): correct one-loop result projections`
+5. `42eddcd85c50a256f8fb325104f4191e2f6e87ed` — `test(answer): align evals with one-loop agent`
+6. `4b1451b251b3e817de0a246c3a60d717d5837461` — `refactor(answer): drain router-tagged checkpoints`
+7. `d22a17ca04070cd512047b3126258e90dd9a0225` — `test: enforce operation market surface parity`
+8. `7bd556772bc79b6d641fcb133564ac03e858eaf4` — `refactor(answer): enforce one bounded market tool loop`
+
+**Behavioral boundary accepted:** P4-c drained in-flight router-named checkpoints, migrated thread tool IDs and optional intent, and retained thread storage. P4-d replaced the named router files with one bounded AI SDK tool loop. P4-e established MCP/CLI/chat parity: no chat-only Market Operation remains; Answer effect-dispatch IDs derive from the canonical operation market action tuple/descriptor; and CLI invoke descriptor/runner parity is pinned. P4-f deleted the named deterministic router modules/tests. The global legacy action registry intentionally remains Phase 5 scope, and Customer Request/runtime quarantine was not performed.
+
+**Final Node 22 gates:** typecheck PASS; unit PASS — 502 files / 4,300 tests; integration PASS — 86 / 725; lint PASS; imports PASS — 15 / 67; eval PASS — 13 cases / 15 turns, 0 failed cases or scores, minimum 9.25 / 9, average 9.77, p95 approximately 1,027 ms; focused final review set PASS — 4 files / 59 tests; diff-check PASS.
+
+**Independent reviews:** correctness review final PASS at `0.99` after three blockers were closed. Security/integrity review final PASS after location-projected model content, final `allowedSlug` intersection, and the normalized rejected-name gate.
+
+**Shared-contract exclusions:** this receipt makes no claim of hosted, provider, network, live-money, push, or production-release proof.
+
+The next gate is founder review before Phase 5.
