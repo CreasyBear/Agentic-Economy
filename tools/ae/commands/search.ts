@@ -23,7 +23,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
       code: 'search-usage',
     })
   }
-  if (!operationSearchInputSchema.safeParse({ query }).success) {
+  if (!searchCommandDescriptor.inputSchema.safeParse({ query }).success) {
     throw new CliFailure('Search query must be 200 characters or fewer.', {
       kind: 'INVALID_ARGUMENT',
       code: 'search-query-too-long',
@@ -36,7 +36,7 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
     ...(options.filters === undefined ? {} : { filters: parseSearchFilters(options.filters) }),
   }
-  const parsedInput = operationSearchInputSchema.safeParse(input)
+  const parsedInput = searchCommandDescriptor.inputSchema.safeParse(input)
   if (!parsedInput.success) {
     throw new CliFailure('Search options are invalid.', {
       kind: 'INVALID_ARGUMENT',
@@ -44,12 +44,12 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     })
   }
 
-  const path = OPERATION_MARKET_SEARCH_PATH
+  const path = searchCommandDescriptor.path
   const outcome = await callJson(options.baseUrl, path, {
     method: 'POST',
     body: JSON.stringify(parsedInput.data),
   })
-  const parsedResult = operationSearchOutputSchema.safeParse(requireOk(outcome, path))
+  const parsedResult = searchCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
     throw new CliFailure('The market returned an invalid operation search result.', {
       kind: 'UNAVAILABLE',
@@ -116,3 +116,12 @@ function parseSearchFilters(value: string | Record<string, unknown>): unknown {
     })
   }
 }
+
+export const searchCommandDescriptor = {
+  command: 'search',
+  actionId: 'registry.operations.search',
+  path: OPERATION_MARKET_SEARCH_PATH,
+  inputSchema: operationSearchInputSchema,
+  outputSchema: operationSearchOutputSchema,
+  run: runSearchCommand,
+} as const

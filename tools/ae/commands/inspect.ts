@@ -1,5 +1,5 @@
 import {
-  isPublicOperationRef,
+  operationDetailInputSchema,
   operationDetailOutputSchema,
 } from '@/modules/capability-supply/public'
 
@@ -24,19 +24,20 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
       code: 'inspect-usage',
     })
   }
-  if (!isPublicOperationRef(operationRef)) {
+  const parsedInput = inspectCommandDescriptor.inputSchema.safeParse({ operationRef })
+  if (!parsedInput.success) {
     throw new CliFailure('Operation reference must match operation:v1:<64 lowercase hex characters>.', {
       kind: 'INVALID_ARGUMENT',
       code: 'operation-ref-invalid',
     })
   }
 
-  const path = OPERATION_MARKET_DETAIL_PATH
+  const path = inspectCommandDescriptor.path
   const outcome = await callJson(options.baseUrl, path, {
     method: 'POST',
-    body: JSON.stringify({ operationRef }),
+    body: JSON.stringify(parsedInput.data),
   })
-  const parsedResult = operationDetailOutputSchema.safeParse(requireOk(outcome, path))
+  const parsedResult = inspectCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
     throw new CliFailure('The market returned an invalid operation detail result.', {
       kind: 'UNAVAILABLE',
@@ -76,3 +77,12 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
     line(`  example input: ${JSON.stringify(operation.contract.inputExamples[0].input)}`)
   }
 }
+
+export const inspectCommandDescriptor = {
+  command: 'inspect',
+  actionId: 'registry.operations.detail',
+  path: OPERATION_MARKET_DETAIL_PATH,
+  inputSchema: operationDetailInputSchema,
+  outputSchema: operationDetailOutputSchema,
+  run: runInspectCommand,
+} as const

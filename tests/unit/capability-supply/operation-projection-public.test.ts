@@ -178,7 +178,7 @@ describe('public operation read contract', () => {
       method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
       actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       authentication: 'required',
-      surfaces: ['answerThread'],
+      surfaces: ['answerThread', 'http', 'cli', 'mcp'],
     })
     expect(operation.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
 

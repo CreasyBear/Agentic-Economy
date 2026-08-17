@@ -620,7 +620,7 @@ const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
   actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   authentication: "required",
-  surfaces: ["answerThread"],
+  surfaces: ["answerThread", "http", "cli", "mcp"],
 };
 type OperationAccessMode = "anonymous_execute" | "authenticated_invoke" | "inspect_only";
 

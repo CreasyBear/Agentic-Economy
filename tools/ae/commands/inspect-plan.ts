@@ -18,7 +18,7 @@ export async function runInspectPlanCommand(args: readonly string[], options: Cl
     })
   }
 
-  const parsedInput = operationInspectPlanInputSchema.safeParse({
+  const parsedInput = inspectPlanCommandDescriptor.inputSchema.safeParse({
     operationRefs: args.map((arg) => arg.trim()),
   })
   if (!parsedInput.success) {
@@ -28,12 +28,12 @@ export async function runInspectPlanCommand(args: readonly string[], options: Cl
     })
   }
 
-  const path = OPERATION_MARKET_INSPECT_PLAN_PATH
+  const path = inspectPlanCommandDescriptor.path
   const outcome = await callJson(options.baseUrl, path, {
     method: 'POST',
     body: JSON.stringify(parsedInput.data),
   })
-  const parsedResult = operationInspectPlanOutputSchema.safeParse(requireOk(outcome, path))
+  const parsedResult = inspectPlanCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
     throw new CliFailure('The market returned an invalid operation inspection plan result.', {
       kind: 'UNAVAILABLE',
@@ -72,3 +72,12 @@ export async function runInspectPlanCommand(args: readonly string[], options: Cl
   line(`  expires: ${new Date(result.summary.expiry).toISOString()}`)
   line('  This is a read-only aggregate preview, not an execution handoff.')
 }
+
+export const inspectPlanCommandDescriptor = {
+  command: 'inspect-plan',
+  actionId: 'registry.operations.inspectPlan',
+  path: OPERATION_MARKET_INSPECT_PLAN_PATH,
+  inputSchema: operationInspectPlanInputSchema,
+  outputSchema: operationInspectPlanOutputSchema,
+  run: runInspectPlanCommand,
+} as const

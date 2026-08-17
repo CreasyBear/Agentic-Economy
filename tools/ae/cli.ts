@@ -304,44 +304,38 @@ async function main(): Promise<number> {
     askCommands,
     businessCommands,
     cancelCommands,
-    compareCommands,
+    marketOperationCommands,
     connectCommands,
     discoverCommands,
     doctorCommands,
     enrichCommands,
     evalCommands,
     importCommands,
-    inspectCommands,
-    inspectPlanCommands,
     invokeCommands,
     journeyCommands,
     manifestCommands,
     policyCommands,
     recoverCommands,
     requestCommands,
-    searchCommands,
     statusCommands,
   ] = await Promise.all([
     import('./commands/actions'),
     import('./commands/ask'),
     import('./commands/business'),
     import('./commands/cancel'),
-    import('./commands/compare'),
+    import('./commands/market-operations'),
     import('./commands/connect'),
     import('./commands/discover'),
     import('./commands/doctor'),
     import('./commands/enrich'),
     import('./commands/eval'),
     import('./commands/import'),
-    import('./commands/inspect'),
-    import('./commands/inspect-plan'),
     import('./commands/invoke'),
     import('./commands/journey'),
     import('./commands/manifest'),
     import('./commands/policy'),
     import('./commands/recover'),
     import('./commands/request'),
-    import('./commands/search'),
     import('./commands/status'),
   ])
   const demandCommands: Record<string, CommandRunner> = {
@@ -361,6 +355,9 @@ async function main(): Promise<number> {
     eval: evalCommands.runEvalCommand,
     policy: policyCommands.runPolicyCommand,
   }
+  const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
+    marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
+  )
   const groupCommand = (namespace: 'demand' | 'advanced', group: Record<string, CommandRunner>): CommandRunner => (
     async (args, options) => {
       const [subcommand, ...subArgs] = args
@@ -376,10 +373,7 @@ async function main(): Promise<number> {
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
-    search: searchCommands.runSearchCommand,
-    inspect: inspectCommands.runInspectCommand,
-    compare: compareCommands.runCompareCommand,
-    'inspect-plan': inspectPlanCommands.runInspectPlanCommand,
+    ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
     invoke: invokeCommands.runInvokeCommand,
     status: statusCommands.runStatusCommand,

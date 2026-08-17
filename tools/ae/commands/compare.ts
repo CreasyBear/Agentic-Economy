@@ -34,7 +34,7 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
     })
   }
 
-  const parsedInput = operationCompareInputSchema.safeParse({
+  const parsedInput = compareCommandDescriptor.inputSchema.safeParse({
     operationRefs: args.map((arg) => arg.trim()),
   })
   if (!parsedInput.success) {
@@ -44,12 +44,12 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
     })
   }
 
-  const path = OPERATION_MARKET_COMPARE_PATH
+  const path = compareCommandDescriptor.path
   const outcome = await callJson(options.baseUrl, path, {
     method: 'POST',
     body: JSON.stringify(parsedInput.data),
   })
-  const parsedResult = operationCompareOutputSchema.safeParse(requireOk(outcome, path))
+  const parsedResult = compareCommandDescriptor.outputSchema.safeParse(requireOk(outcome, path))
   if (!parsedResult.success) {
     throw new CliFailure('The market returned an invalid operation comparison result.', {
       kind: 'UNAVAILABLE',
@@ -133,3 +133,12 @@ function formatComparisonValue(field: string, value: unknown): string {
   if (typeof value === 'string') return value
   return JSON.stringify(value)
 }
+
+export const compareCommandDescriptor = {
+  command: 'compare',
+  actionId: 'registry.operations.compare',
+  path: OPERATION_MARKET_COMPARE_PATH,
+  inputSchema: operationCompareInputSchema,
+  outputSchema: operationCompareOutputSchema,
+  run: runCompareCommand,
+} as const

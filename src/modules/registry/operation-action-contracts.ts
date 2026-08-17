@@ -21,6 +21,7 @@ const operationMarketActionSurfaces = [
   'http',
   'agentJson',
   'answerThread',
+  'cli',
   'mcp',
 ] as const satisfies readonly ActionSurface[]
 
