@@ -194,8 +194,8 @@ export type AnswerTurnCheckpoint = {
   turnSeq: number
   stepOrdinal: number
   parentCheckpointDigest?: string
-  route: AnswerTurnCheckpointRoute
-  intent: FollowUpIntent
+  route?: AnswerTurnCheckpointRoute
+  intent?: FollowUpIntent
   interpretation?: AnswerRequestInterpretation
   requestedIntents?: AnswerRequestInterpretation['requestedIntents']
   continuationSource?: AnswerContinuationSource

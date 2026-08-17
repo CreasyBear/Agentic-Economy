@@ -73,6 +73,22 @@ describe('answer turn checkpoint durability contract', () => {
     })
     expect(store.reservations.get(admission.reservationKey)?.state).toBe('reserved')
   })
+
+  it('persists and reads a checkpoint without legacy route or intent tags', async () => {
+    const { admission } = await reservedFixture('checkpoint-tagless')
+    const operation = operationMaterial()
+    const checkpoint = checkpointFor(admission, operation)
+    delete checkpoint.route
+    delete checkpoint.intent
+
+    await expect(persistAnswerTurnCheckpoint({
+      ...checkpointArgs(admission),
+      checkpoint,
+    })).resolves.toMatchObject({ kind: 'persisted' })
+    await expect(readAnswerTurnCheckpoint({
+      ...checkpointArgs(admission),
+    })).resolves.toEqual({ kind: 'checkpoint', checkpoint })
+  })
   it('leaves a reserved retry recoverable when no checkpoint exists', async () => {
     const { store, admission } = await reservedFixture('checkpoint-absent')
     const reservation = store.reservations.get(admission.reservationKey)
@@ -151,6 +167,31 @@ describe('answer turn checkpoint durability contract', () => {
     await expect(persistAnswerTurnCheckpoint({
       ...checkpointArgs(malformed.admission),
       checkpoint: malformedCheckpoint,
+    })).resolves.toMatchObject({ kind: 'conflict', reason: 'checkpoint_invalid' })
+    const invalidTags = await reservedFixture('checkpoint-invalid-tags')
+    await expect(persistAnswerTurnCheckpoint({
+      ...checkpointArgs(invalidTags.admission),
+      checkpoint: checkpointFor(invalidTags.admission, {
+        route: 'invalid-route' as never,
+      }),
+    })).resolves.toMatchObject({ kind: 'conflict', reason: 'checkpoint_invalid' })
+    await expect(persistAnswerTurnCheckpoint({
+      ...checkpointArgs(invalidTags.admission),
+      checkpoint: checkpointFor(invalidTags.admission, {
+        route: undefined as never,
+      }),
+    })).resolves.toMatchObject({ kind: 'conflict', reason: 'checkpoint_invalid' })
+    await expect(persistAnswerTurnCheckpoint({
+      ...checkpointArgs(invalidTags.admission),
+      checkpoint: checkpointFor(invalidTags.admission, {
+        intent: undefined as never,
+      }),
+    })).resolves.toMatchObject({ kind: 'conflict', reason: 'checkpoint_invalid' })
+    await expect(persistAnswerTurnCheckpoint({
+      ...checkpointArgs(invalidTags.admission),
+      checkpoint: checkpointFor(invalidTags.admission, {
+        intent: 'invalid-intent' as never,
+      }),
     })).resolves.toMatchObject({ kind: 'conflict', reason: 'checkpoint_invalid' })
 
     const mismatched = await reservedFixture('checkpoint-mismatch')

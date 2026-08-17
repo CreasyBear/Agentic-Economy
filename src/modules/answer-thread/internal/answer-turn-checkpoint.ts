@@ -17,12 +17,14 @@ import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 import {
   AnswerToolIdValues,
   AnswerTurnCheckpointRouteValues,
+  FollowUpIntentValues,
 } from '../answer-thread.values'
 import {
   AnswerContinuationSourceSchema,
   AnswerPendingDecisionSchema,
   type AnswerTurnCheckpoint,
   type AnswerTurnCheckpointRoute,
+  type FollowUpIntent,
 } from '../answer-thread.schema'
 export const ANSWER_TURN_CHECKPOINT_SCHEMA_VERSION = 1 as const
 export const MAX_ANSWER_TURN_CHECKPOINT_BYTES = 256 * 1024
@@ -100,7 +102,8 @@ function isAnswerTurnCheckpointShape(value: unknown): value is AnswerTurnCheckpo
     || value.stepOrdinal < 1
     || (value.parentCheckpointDigest !== undefined
       && (typeof value.parentCheckpointDigest !== 'string' || value.parentCheckpointDigest.length === 0))
-    || !isAnswerTurnCheckpointRoute(value.route)
+    || (Object.hasOwn(value, 'route') && !isAnswerTurnCheckpointRoute(value.route))
+    || (Object.hasOwn(value, 'intent') && !isFollowUpIntent(value.intent))
     || typeof value.query !== 'string'
     || !isStringArray(value.priorAllowedSlugs)
     || !isRecordArray(value.toolCalls)
@@ -277,6 +280,11 @@ function isBoundedJson(value: string): boolean {
 function isAnswerTurnCheckpointRoute(value: unknown): value is AnswerTurnCheckpointRoute {
   return typeof value === 'string'
     && AnswerTurnCheckpointRouteValues.some((route) => route === value)
+}
+
+function isFollowUpIntent(value: unknown): value is FollowUpIntent {
+  return typeof value === 'string'
+    && FollowUpIntentValues.some((intent) => intent === value)
 }
 
 function isAnswerToolId(value: unknown): value is AnswerTurnCheckpoint['selectedToolId'] & string {

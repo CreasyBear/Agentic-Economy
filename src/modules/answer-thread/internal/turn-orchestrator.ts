@@ -1811,7 +1811,7 @@ function checkpointRouteFor(
     case 'safety_refusal':
       return 'safety_refusal'
     default:
-      return 'tool_search'
+      return undefined
   }
 }
 
@@ -1874,6 +1874,7 @@ function runtimeTurnPathContext(
         partial.operationSelection,
       )
 
+      const checkpointRoute = checkpointRouteFor(state.route)
       const checkpoint: AnswerTurnCheckpoint = {
         schemaVersion: 1,
         reservationKey: state.reservationKey,
@@ -1886,7 +1887,7 @@ function runtimeTurnPathContext(
         ...(parentCheckpointDigest === undefined
           ? {}
           : { parentCheckpointDigest }),
-        route: checkpointRouteFor(state.route),
+        ...(checkpointRoute === undefined ? {} : { route: checkpointRoute }),
         intent: state.intent,
         ...(state.interpretation === undefined
           ? {}
