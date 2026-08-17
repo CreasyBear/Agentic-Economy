@@ -83,6 +83,7 @@ export {
 } from './interpret-compile'
 
 export {
+  toConsumerSupplyOption,
   projectConsumerPlan,
   projectCustomerRequestDecisionRecords,
   type ConsumerDecisionRecord,

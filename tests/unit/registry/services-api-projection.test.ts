@@ -6,7 +6,8 @@ import type {
   PublicBusinessCatalogApiV2Page,
   ServiceOperationMap,
 } from '@/modules/registry/public'
-import { projectPublicServicesPage, toConsumerSupplyOption } from '@/modules/registry/public'
+import { projectPublicServicesPage } from '@/modules/registry/public'
+import { toConsumerSupplyOption } from '@/modules/customer-request/application/public'
 
 describe('agentic.market Service mapping', () => {
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {

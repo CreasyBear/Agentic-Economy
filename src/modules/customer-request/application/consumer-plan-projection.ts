@@ -1,4 +1,5 @@
 import type { OfferingPrice } from '@/modules/catalog/public'
+import type { ServiceDto, ServicePriceSummaryDto } from '@/modules/registry/public'
 
 import type { CustomerRequestView } from '../customer-projection'
 import type { PreviewCustomerRequestResult, PreviewCustomerRequestStep } from './interpret-compile/preview'
@@ -101,6 +102,52 @@ export type ConsumerSupplyOption = Readonly<{
     source: 'business_published'
   }>
 }>
+
+export function toConsumerSupplyOption(service: ServiceDto): ConsumerSupplyOption {
+  const location = service.ae.businessContext.kind === 'local_human'
+    ? [service.ae.businessContext.suburb, service.ae.businessContext.stateTerritory]
+      .filter((part): part is string => part.length > 0)
+      .join(', ')
+    : ''
+  const firstOffer = service.ae.offerings[0]
+  const firstPricedOffering = service.ae.offerings.find((offering) => offering.price !== undefined)
+  const nextAction = { kind: 'inspect' as const, label: 'See business details', href: `/${service.id}` }
+  const priceSummary = catalogPriceSummaryText(service.priceSummary)
+  const price = firstPricedOffering?.price === undefined
+    ? {
+        kind: 'not_published' as const,
+        ...(priceSummary === undefined ? {} : { summary: priceSummary }),
+      }
+    : {
+        kind: 'published' as const,
+        published: firstPricedOffering.price,
+        ...(priceSummary === undefined ? {} : { summary: priceSummary }),
+      }
+  const availability = firstOffer?.availabilitySummary === undefined
+    ? { kind: 'needs_confirmation' as const }
+    : { kind: 'published' as const, summary: firstOffer.availabilitySummary }
+  return {
+    optionRef: service.id,
+    business: {
+      slug: service.id,
+      name: service.name,
+      ...(location.length === 0 ? {} : { location }),
+    },
+    offering: { name: service.name, summary: firstOffer?.summary ?? service.category },
+    price,
+    availability,
+    nextAction,
+    evidence: {
+      observedAt: service.ae.observedAt,
+      source: service.ae.source,
+    },
+  }
+}
+
+function catalogPriceSummaryText(summary: ServicePriceSummaryDto | undefined): string | undefined {
+  if (summary === undefined) return undefined
+  return `${summary.minAmount} - ${summary.maxAmount} ${summary.currency}`
+}
 
 export type ConsumerPlanResult = Readonly<
   | ConsumerPlan
