@@ -1429,3 +1429,7 @@ workstreams, duplicate observations, and explicit remediation status.
 191. gpt-5.6: While running research commands, every login shell emitted a missing ~/.cargo/env warning from ~/.zshenv; the stale source line adds noise to every tool result and should be guarded with a file-exists check.
 
 192. gpt-5.6: While applying the Aecon vault update, an exact-context patch missed because the actively edited Hermes Brand System had changed between read and write; use narrower section anchors or re-read immediately before patching shared vault files.
+
+193. gpt-5.6: Running repo research commands emits /Users/joelchan/.zshenv: no such file or directory for /Users/joelchan/.cargo/env on every shell invocation; the stale source line should be guarded or removed.
+
+194. gpt-5.6: qmd result URIs normalize spaces to hyphens and are not literal filesystem paths; attempting to open the displayed URI failed until the real filename was found with find.
