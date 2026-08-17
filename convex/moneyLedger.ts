@@ -5666,6 +5666,7 @@ const payoutTransferStateValue = v.union(
   v.literal('outcome_unknown'),
 )
 const payoutTransferValue = v.object({
+  payoutRef: identifier,
   payoutCommandId: identifier,
   state: payoutTransferStateValue,
   idempotencyKey: identifier,
@@ -6283,7 +6284,78 @@ export const readOwnerPayoutTransfer = query({
       payout.idempotencyKey !== args.idempotencyKey
     )
       return refusedTopup('payout_not_ready', false)
-    const transfer = payoutTransferView(payout)
+    const hasFrozenIdentity =
+      payout.payoutCommandId !== undefined ||
+      payout.inputDigest !== undefined ||
+      payout.destinationAccountId !== undefined ||
+      payout.transferRequestDigest !== undefined
+    if (!hasFrozenIdentity)
+      return refusedTopup('payout_not_ready', false)
+    if (
+      payout.payoutCommandId === undefined ||
+      payout.payoutCommandId.length === 0 ||
+      payout.inputDigest === undefined ||
+      payout.inputDigest.length === 0 ||
+      payout.destinationAccountId === undefined ||
+      payout.destinationAccountId.length === 0 ||
+      payout.transferRequestDigest === undefined ||
+      payout.transferRequestDigest.length === 0 ||
+      payout.providerAccountRef === undefined ||
+      payout.providerAccountRef.length === 0 ||
+      payout.idempotencyKey.length === 0
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const journal = await readPayoutReservationJournal(ctx, {
+      payoutRef: payout.payoutRef,
+      payoutCommandId: payout.payoutCommandId,
+      inputDigest: payout.inputDigest,
+      requestDigest: payout.transferRequestDigest,
+      idempotencyKey: payout.idempotencyKey,
+      providerAccountRef: payout.providerAccountRef,
+      businessId: payout.businessId,
+    })
+    if (journal.kind !== 'found')
+      return refusedTopup('payout_reconciliation_required', false)
+    const providerAccount = await ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q.eq('businessId', args.businessId).eq('currency', args.currency),
+      )
+      .unique()
+    const provider =
+      providerAccount === null ? undefined : accountFromRow(providerAccount)
+    if (
+      providerAccount === null ||
+      provider === undefined ||
+      providerAccount.accountKind !== 'provider_earnings' ||
+      providerAccount.accountRef !== payout.providerAccountRef ||
+      providerAccount.businessId !== args.businessId ||
+      providerAccount.currency !== args.currency
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const reservation = journal.transaction
+    const reservationAmount =
+      reservation.amountUnits === undefined
+        ? undefined
+        : amountFromParts(
+            reservation.currency,
+            reservation.amountUnits,
+            reservation.exponent,
+          )
+    if (
+      reservationAmount === undefined ||
+      !(await payoutTerminalReplayIsConsistent({
+        ctx,
+        businessId: args.businessId,
+        currency: args.currency,
+        amount: reservationAmount,
+        payout,
+        provider,
+        journal,
+      }))
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const transfer = payoutTransferView(payout, reservationAmount)
     return transfer === undefined
       ? refusedTopup('payout_reconciliation_required', false)
       : { kind: 'accepted' as const, transfer }
@@ -6455,7 +6527,8 @@ type PayoutTransferRowInput = Readonly<{
   stripeTransferId?: string
   evidenceDigest?: string
   reversalEvidenceDigest?: string
-  observedAt?: number
+  transferObservedAt?: number
+  updatedAt?: number
   providerRecoveryDeadlineAt?: number
   failureCode?: string
   providerHeldBefore?: ExactAmount
@@ -6464,12 +6537,17 @@ type PayoutTransferRowInput = Readonly<{
   providerPaidAfter?: ExactAmount
 }>
 
-function payoutTransferView(row: Doc<'moneyPayouts'>) {
-  const amount = amountFromParts(
-    row.currency,
-    row.providerNetUnits,
-    row.exponent,
-  )
+function payoutTransferView(
+  row: Doc<'moneyPayouts'>,
+  amountOverride?: ExactAmount,
+) {
+  const amount =
+    amountOverride ??
+    amountFromParts(
+      row.currency,
+      row.providerNetUnits,
+      row.exponent,
+    )
   const providerHeldBefore =
     row.providerHeldBeforeUnits === undefined
       ? undefined
@@ -6566,9 +6644,9 @@ function payoutTransferRow(
     ...(input.reversalEvidenceDigest === undefined
       ? {}
       : { transferReversalEvidenceDigest: input.reversalEvidenceDigest }),
-    ...(input.observedAt === undefined
+    ...(input.transferObservedAt === undefined
       ? {}
-      : { transferObservedAt: input.observedAt }),
+      : { transferObservedAt: input.transferObservedAt }),
     ...((input.providerRecoveryDeadlineAt ?? row.providerRecoveryDeadlineAt) ===
     undefined
       ? {}
@@ -6578,25 +6656,505 @@ function payoutTransferRow(
         }),
     transferStatus: input.transferStatus,
     ...(input.providerHeldBefore === undefined
-      ? {}
+      ? row.providerHeldBeforeUnits === undefined
+        ? {}
+        : { providerHeldBeforeUnits: row.providerHeldBeforeUnits }
       : { providerHeldBeforeUnits: input.providerHeldBefore.units }),
     ...(input.providerHeldAfter === undefined
-      ? {}
+      ? row.providerHeldAfterUnits === undefined
+        ? {}
+        : { providerHeldAfterUnits: row.providerHeldAfterUnits }
       : { providerHeldAfterUnits: input.providerHeldAfter.units }),
     ...(input.providerPaidBefore === undefined
-      ? {}
+      ? row.providerPaidBeforeUnits === undefined
+        ? {}
+        : { providerPaidBeforeUnits: row.providerPaidBeforeUnits }
       : { providerPaidBeforeUnits: input.providerPaidBefore.units }),
     ...(input.providerPaidAfter === undefined
-      ? {}
+      ? row.providerPaidAfterUnits === undefined
+        ? {}
+        : { providerPaidAfterUnits: row.providerPaidAfterUnits }
       : { providerPaidAfterUnits: input.providerPaidAfter.units }),
     idempotencyKey: input.idempotencyKey,
     ...(input.failureCode === undefined
       ? {}
       : { failureCode: input.failureCode }),
     createdAt: row.createdAt,
-    updatedAt: input.observedAt ?? row.updatedAt,
+    updatedAt: input.updatedAt ?? row.updatedAt,
   }
 }
+type PayoutReservationIdentity = Readonly<{
+  transactionRef: string
+  sourceDigest: string
+  evidenceRefs: readonly string[]
+}>
+
+function payoutReservationIdentity(input: Readonly<{
+  payoutRef: string
+  payoutCommandId: string
+  inputDigest: string
+  requestDigest: string
+  idempotencyKey: string
+}>): PayoutReservationIdentity {
+  return {
+    transactionRef: canonicalDigest({
+      format: 'money-payout-reservation-transaction:v1',
+      payoutRef: input.payoutRef,
+      payoutCommandId: input.payoutCommandId,
+      inputDigest: input.inputDigest,
+      idempotencyKey: input.idempotencyKey,
+    }),
+    sourceDigest: canonicalDigest({
+      format: 'money-payout-reservation-source:v1',
+      payoutRef: input.payoutRef,
+      payoutCommandId: input.payoutCommandId,
+      inputDigest: input.inputDigest,
+      requestDigest: input.requestDigest,
+      idempotencyKey: input.idempotencyKey,
+    }),
+    evidenceRefs: [
+      `payout:${input.payoutRef}`,
+      `payout-command:${input.payoutCommandId}`,
+      `payout-input:${input.inputDigest}`,
+      `payout-request:${input.requestDigest}`,
+    ],
+  }
+}
+
+function payoutEvidenceSourceDigest(evidenceDigest: string): string {
+  return canonicalDigest({
+    format: 'money-payout-evidence:v1',
+    evidence: evidenceDigest,
+  })
+}
+
+
+type PayoutReservationJournal =
+  | Readonly<{ kind: 'missing' }>
+  | Readonly<{ kind: 'conflict' }>
+  | Readonly<{
+      kind: 'found'
+      identity: PayoutReservationIdentity
+      transaction: Doc<'moneyTransactions'>
+      debit: MoneyLedgerEntryRow
+    }>
+
+async function readPayoutReservationJournal(
+  ctx: Pick<QueryCtx, 'db'>,
+  input: Readonly<{
+    payoutRef: string
+    payoutCommandId: string
+    inputDigest: string
+    requestDigest: string
+    idempotencyKey: string
+    amount?: ExactAmount
+    providerAccountRef: string
+    businessId: string
+  }>,
+): Promise<PayoutReservationJournal> {
+  const identity = payoutReservationIdentity(input)
+  const [byRefRows, byIdempotencyRows] = await Promise.all([
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_transactionRef', (q) =>
+        q.eq('transactionRef', identity.transactionRef),
+      )
+      .take(2),
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_idempotencyKey', (q) =>
+        q.eq('idempotencyKey', input.idempotencyKey),
+      )
+      .take(2),
+  ])
+  const byRef = byRefRows[0]
+  const byIdempotency = byIdempotencyRows[0]
+  if (byRefRows.length > 1 || byIdempotencyRows.length > 1)
+    return { kind: 'conflict' }
+  if (
+    (byRef !== undefined && byRef.transactionRef !== identity.transactionRef) ||
+    (byIdempotency !== undefined &&
+      byIdempotency.transactionRef !== identity.transactionRef)
+  )
+    return { kind: 'conflict' }
+  if (byRef === undefined) return { kind: 'missing' }
+  const debitRows = await ctx.db
+    .query('moneyLedgerEntries')
+    .withIndex('by_transactionRef', (q) =>
+      q.eq('transactionRef', identity.transactionRef),
+    )
+    .take(2)
+  const debit = debitRows[0]
+  const reservationAmount =
+    byRef === undefined || byRef.amountUnits === undefined
+      ? undefined
+      : amountFromParts(byRef.currency, byRef.amountUnits, byRef.exponent)
+  if (
+    debitRows.length !== 1 ||
+    debit === undefined ||
+    byRef.kind !== 'payout_accrual' ||
+    byRef.idempotencyKey !== input.idempotencyKey ||
+    byRef.inputDigest !== input.inputDigest ||
+    byRef.principalId !== `business:${input.businessId}` ||
+    byRef.accountId !== undefined ||
+    byRef.currency !== (input.amount?.currency ?? byRef.currency) ||
+    byRef.exponent !== (input.amount?.exponent ?? byRef.exponent) ||
+    byRef.amountUnits === undefined ||
+    reservationAmount === undefined ||
+    byRef.externalRef !== input.payoutRef ||
+    byRef.reversalOf !== undefined ||
+    debit.entryRef !== `${identity.transactionRef}:payout-reservation` ||
+    debit.accountRef !== input.providerAccountRef ||
+    debit.entryType !== 'payout_accrual' ||
+    debit.direction !== 'debit' ||
+    debit.amountUnits !== byRef.amountUnits ||
+    debit.currency !== byRef.currency ||
+    debit.exponent !== byRef.exponent ||
+    debit.transactionRef !== identity.transactionRef ||
+    debit.idempotencyKey !== input.idempotencyKey ||
+    debit.businessId !== input.businessId ||
+    debit.sourceDigest !== identity.sourceDigest ||
+    !sameEvidenceRefs(debit.evidenceRefs, identity.evidenceRefs) ||
+    (input.amount !== undefined &&
+      (byRef.amountUnits !== input.amount.units ||
+        debit.amountUnits !== input.amount.units ||
+        byRef.currency !== input.amount.currency ||
+        byRef.exponent !== input.amount.exponent ||
+        debit.currency !== input.amount.currency ||
+        debit.exponent !== input.amount.exponent))
+  )
+    return { kind: 'conflict' }
+  return { kind: 'found', identity, transaction: byRef, debit }
+}
+
+function payoutSnapshotAmounts(
+  payout: Doc<'moneyPayouts'>,
+): Readonly<{
+  providerHeldBefore: ExactAmount
+  providerHeldAfter: ExactAmount
+  providerPaidBefore: ExactAmount
+}> | undefined {
+  if (
+    payout.providerHeldBeforeUnits === undefined ||
+    payout.providerHeldAfterUnits === undefined ||
+    payout.providerPaidBeforeUnits === undefined
+  )
+    return undefined
+  const providerHeldBefore = amountFromParts(
+    payout.currency,
+    payout.providerHeldBeforeUnits,
+    payout.exponent,
+  )
+  const providerHeldAfter = amountFromParts(
+    payout.currency,
+    payout.providerHeldAfterUnits,
+    payout.exponent,
+  )
+  const providerPaidBefore = amountFromParts(
+    payout.currency,
+    payout.providerPaidBeforeUnits,
+    payout.exponent,
+  )
+  return providerHeldBefore === undefined ||
+    providerHeldAfter === undefined ||
+    providerPaidBefore === undefined
+    ? undefined
+    : { providerHeldBefore, providerHeldAfter, providerPaidBefore }
+}
+
+function payoutReservationRowIdentityMatches(
+  payout: Doc<'moneyPayouts'>,
+  input: Readonly<{
+    businessId: string
+    payoutRef: string
+    amount: ExactAmount
+    providerAccountRef: string
+    destinationAccountId: string
+    payoutCommandId: string
+    inputDigest: string
+    requestDigest: string
+    idempotencyKey: string
+  }>,
+): boolean {
+  return (
+    payout.payoutRef === input.payoutRef &&
+    payout.businessId === input.businessId &&
+    payout.currency === input.amount.currency &&
+    payout.exponent === input.amount.exponent &&
+    payout.providerAccountRef === input.providerAccountRef &&
+    payout.destinationAccountId === input.destinationAccountId &&
+    payout.payoutCommandId === input.payoutCommandId &&
+    payout.inputDigest === input.inputDigest &&
+    payout.transferRequestDigest === input.requestDigest &&
+    payout.idempotencyKey === input.idempotencyKey
+  )
+}
+
+function payoutReservationCurrentAmountMatches(
+  payout: Doc<'moneyPayouts'>,
+  amount: ExactAmount,
+): boolean {
+  const providerNet = amountFromParts(
+    payout.currency,
+    payout.providerNetUnits,
+    payout.exponent,
+  )
+  return (
+    providerNet !== undefined &&
+    compareExactAmounts(providerNet, amount) === 0
+  )
+}
+function payoutAttemptMaterialIsFrozen(
+  payout: Doc<'moneyPayouts'>,
+): boolean {
+  return (
+    payout.payoutCommandId !== undefined ||
+    payout.inputDigest !== undefined ||
+    payout.destinationAccountId !== undefined ||
+    payout.transferRequestDigest !== undefined ||
+    payout.transferStatus !== undefined ||
+    payout.transferEvidenceDigest !== undefined ||
+    payout.transferReversalEvidenceDigest !== undefined ||
+    payout.stripeTransferId !== undefined ||
+    payout.transferObservedAt !== undefined ||
+    payout.providerRecoveryDeadlineAt !== undefined ||
+    payout.providerHeldBeforeUnits !== undefined ||
+    payout.providerHeldAfterUnits !== undefined ||
+    payout.providerPaidBeforeUnits !== undefined ||
+    payout.providerPaidAfterUnits !== undefined ||
+    payout.failureCode !== undefined
+  )
+}
+
+
+function payoutAccountAfterReservationMatches(
+  provider: MoneyAccount,
+  transaction: Doc<'moneyTransactions'>,
+  snapshots: Readonly<{
+    providerHeldBefore: ExactAmount
+    providerHeldAfter: ExactAmount
+  }>,
+  reservationAmount: ExactAmount,
+): boolean {
+  const reconstructedBefore = addExactAmounts(
+    snapshots.providerHeldAfter,
+    reservationAmount,
+  )
+  const balanceComparison = compareExactAmounts(
+    provider.balance,
+    snapshots.providerHeldAfter,
+  )
+  return (
+    reconstructedBefore !== undefined &&
+    compareExactAmounts(reconstructedBefore, snapshots.providerHeldBefore) === 0 &&
+    transaction.expectedAccountVersion + 1 <= provider.version &&
+    balanceComparison !== undefined &&
+    balanceComparison !== -1 &&
+    provider.recoveryDue.units === '0'
+  )
+}
+type PayoutTerminalReplayInput = Readonly<{
+  ctx: Pick<QueryCtx, 'db'>
+  businessId: string
+  currency: string
+  amount: ExactAmount
+  payout: Doc<'moneyPayouts'>
+  provider: MoneyAccount
+  journal: Extract<PayoutReservationJournal, { kind: 'found' }>
+}>
+
+async function payoutTerminalReplayIsConsistent(
+  input: PayoutTerminalReplayInput,
+): Promise<boolean> {
+  const { ctx, businessId, currency, amount, payout, provider, journal } = input
+  const snapshots = payoutSnapshotAmounts(payout)
+  const transaction = journal.transaction
+  if (
+    snapshots === undefined ||
+    payout.businessId !== businessId ||
+    payout.currency !== currency ||
+    payout.exponent !== amount.exponent ||
+    payout.providerAccountRef !== provider.accountRef ||
+    transaction.currency !== amount.currency ||
+    transaction.exponent !== amount.exponent ||
+    transaction.amountUnits !== amount.units
+  )
+    return false
+  if (transaction.state === 'pending' || transaction.state === 'outcome_unknown') {
+    const [pendingRows, unknownRows] = await Promise.all([
+      ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_state', (q) =>
+          q.eq('businessId', businessId).eq('currency', currency).eq('state', 'transfer_pending'),
+        )
+        .take(2),
+      ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_state', (q) =>
+          q.eq('businessId', businessId).eq('currency', currency).eq('state', 'outcome_unknown'),
+        )
+        .take(2),
+    ])
+    if (
+      pendingRows.some((row) => row._id !== payout._id) ||
+      unknownRows.some((row) => row._id !== payout._id)
+    )
+      return false
+    const expectedState =
+      transaction.state === 'pending' ? 'transfer_pending' : 'outcome_unknown'
+    return (
+      payoutReservationCurrentAmountMatches(payout, amount) &&
+      payout.state === expectedState &&
+      payoutAccountAfterReservationMatches(
+        provider,
+        transaction,
+        snapshots,
+        amount,
+      ) &&
+      (transaction.state !== 'pending' ||
+        payoutTransferView(payout)?.transferStatus === 'pending') &&
+      (transaction.state !== 'outcome_unknown' ||
+        payoutTransferView(payout)?.transferStatus === 'outcome_unknown')
+    )
+  }
+  if (transaction.state === 'applied') {
+    const expectedProviderHeldBefore = addExactAmounts(
+      snapshots.providerHeldAfter,
+      amount,
+    )
+    const linkedReversals = await ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_reversalOf', (q) =>
+        q.eq('reversalOf', transaction.transactionRef),
+      )
+      .take(2)
+    const providerPaidAfter =
+      payout.providerPaidAfterUnits === undefined
+        ? undefined
+        : amountFromParts(
+            payout.currency,
+            payout.providerPaidAfterUnits,
+            payout.exponent,
+          )
+    const expectedProviderPaidAfter = addExactAmounts(
+      snapshots.providerPaidBefore,
+      amount,
+    )
+    return (
+      payout.state === 'paid' &&
+      payoutTransferView(payout)?.transferStatus === 'succeeded' &&
+      payout.stripeTransferId !== undefined &&
+      payout.stripeTransferId.length > 0 &&
+      payout.transferEvidenceDigest !== undefined &&
+      payout.transferEvidenceDigest.length > 0 &&
+      payout.transferReversalEvidenceDigest === undefined &&
+      linkedReversals.length === 0 &&
+      expectedProviderHeldBefore !== undefined &&
+      compareExactAmounts(
+        expectedProviderHeldBefore,
+        snapshots.providerHeldBefore,
+      ) === 0 &&
+      providerPaidAfter !== undefined &&
+      expectedProviderPaidAfter !== undefined &&
+      compareExactAmounts(providerPaidAfter, expectedProviderPaidAfter) === 0 &&
+      provider.version >= transaction.expectedAccountVersion + 1
+    )
+  }
+  if (transaction.state !== 'reversed') return false
+  const reversals = await ctx.db
+    .query('moneyTransactions')
+    .withIndex('by_reversalOf', (q) =>
+      q.eq('reversalOf', transaction.transactionRef),
+    )
+    .take(2)
+  const reversal = reversals[0]
+  const reversalRef =
+    reversal === undefined
+      ? undefined
+      : canonicalDigest({
+          format: 'money-payout-reversal-transaction:v1',
+          reservationTransactionRef: transaction.transactionRef,
+        })
+  const reversalRows =
+    reversalRef === undefined
+      ? []
+      : await ctx.db
+          .query('moneyLedgerEntries')
+          .withIndex('by_transactionRef', (q) =>
+            q.eq('transactionRef', reversalRef),
+          )
+          .take(2)
+  const reversalEntry = reversalRows[0]
+  const reservationRestored = addExactAmounts(
+    snapshots.providerHeldAfter,
+    amount,
+  )
+  const expectedEvidenceDigest =
+    payout.state === 'reversed'
+      ? payout.transferReversalEvidenceDigest
+      : payout.transferEvidenceDigest
+  const stateEvidenceIsValid =
+    payout.state === 'reversed'
+      ? payout.transferStatus === 'reversed' &&
+        payout.stripeTransferId !== undefined &&
+        payout.stripeTransferId.length > 0 &&
+        payout.transferEvidenceDigest !== undefined &&
+        payout.transferEvidenceDigest.length > 0 &&
+        payout.transferReversalEvidenceDigest !== undefined &&
+        payout.transferReversalEvidenceDigest.length > 0 &&
+        payout.transferReversalEvidenceDigest !== payout.transferEvidenceDigest
+      : (payout.state === 'held_threshold' ||
+          payout.state === 'held_kyc') &&
+        payout.transferStatus === 'failed' &&
+        payout.transferEvidenceDigest !== undefined &&
+        payout.transferEvidenceDigest.length > 0 &&
+        payout.transferReversalEvidenceDigest === undefined
+  return !(
+    reversals.length !== 1 ||
+    reversal === undefined ||
+    reversalRef === undefined ||
+    reversalRows.length !== 1 ||
+    reversalEntry === undefined ||
+    reversal.state !== 'reversed' ||
+    reversal.inputDigest !== payout.inputDigest ||
+    reversal.principalId !== `business:${businessId}` ||
+    reversal.currency !== amount.currency ||
+    reversal.exponent !== amount.exponent ||
+    reversal.amountUnits !== amount.units ||
+    reversal.reversalOf !== transaction.transactionRef ||
+    reversal.transactionRef !== reversalRef ||
+    reversal.externalRef !== payout.payoutRef ||
+    reversal.kind !== 'payout_accrual' ||
+    reversal.expectedAccountVersion < transaction.expectedAccountVersion + 1 ||
+    reversal.idempotencyKey !==
+      canonicalDigest({
+        format: 'money-payout-reversal-idempotency:v1',
+        reservationTransactionRef: transaction.transactionRef,
+      }) ||
+    reversalEntry.entryRef !== `${reversalRef}:payout-reversal` ||
+    reversalEntry.accountRef !== provider.accountRef ||
+    reversalEntry.entryType !== 'payout_accrual' ||
+    reversalEntry.direction !== 'credit' ||
+    reversalEntry.amountUnits !== amount.units ||
+    reversalEntry.currency !== amount.currency ||
+    reversalEntry.exponent !== amount.exponent ||
+    reversalEntry.transactionRef !== reversalRef ||
+    reversalEntry.idempotencyKey !== reversal.idempotencyKey ||
+    reversalEntry.businessId !== businessId ||
+    reversalEntry.reversalOf !== transaction.transactionRef ||
+    !stateEvidenceIsValid ||
+    expectedEvidenceDigest === undefined ||
+    reversalEntry.sourceDigest !==
+      payoutEvidenceSourceDigest(expectedEvidenceDigest) ||
+    reversalEntry.evidenceRefs.length !== 1 ||
+    reversalEntry.evidenceRefs[0] !== expectedEvidenceDigest ||
+    reservationRestored === undefined ||
+    compareExactAmounts(reservationRestored, snapshots.providerHeldBefore) !== 0 ||
+    provider.version < reversal.expectedAccountVersion + 1
+  )
+}
+
+
 
 const payoutBeginArgs = {
   authority: v.object({ principalId: identifier }),
@@ -6642,73 +7200,120 @@ export const beginPayoutTransfer = mutation({
         args.observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS
     )
       return refusedTopup('payout_not_ready', false)
-    const [providerAccount, payoutAccount, payout, priorByIdempotency] =
-      await Promise.all([
-        ctx.db
-          .query('moneyAccounts')
-          .withIndex('by_businessId_and_currency', (q) =>
-            q
-              .eq('businessId', args.businessId)
-              .eq('currency', requested.currency),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyPayoutAccounts')
-          .withIndex('by_businessId_and_currency', (q) =>
-            q
-              .eq('businessId', args.businessId)
-              .eq('currency', requested.currency),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyPayouts')
-          .withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef))
-          .unique(),
-        ctx.db
-          .query('moneyTransactions')
-          .withIndex('by_idempotencyKey', (q) =>
-            q.eq('idempotencyKey', args.idempotencyKey),
-          )
-          .unique(),
-      ])
+    const [providerAccount, payout] = await Promise.all([
+      ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_businessId_and_currency', (q) =>
+          q
+            .eq('businessId', args.businessId)
+            .eq('currency', requested.currency),
+        )
+        .unique(),
+      ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef))
+        .unique(),
+    ])
     if (
       payout === null ||
       payout.businessId !== args.businessId ||
       payout.currency !== requested.currency ||
-      payoutAccount === null ||
       providerAccount === null ||
       providerAccount.accountKind !== 'provider_earnings' ||
       providerAccount.accountRef !== args.providerAccountRef ||
       providerAccount.businessId !== args.businessId ||
       providerAccount.currency !== requested.currency ||
       payout.providerAccountRef !== args.providerAccountRef
-    )
+    ) {
       return refusedTopup('payout_not_ready', false)
+    }
     const current = payoutFromRow(payout)
     const provider = accountFromRow(providerAccount)
-    if (
-      current === undefined ||
-      provider === undefined ||
-      payoutAccount.stripeAccountId !== args.destinationAccountId ||
-      payoutAccount.state !== 'ready' ||
-      !payoutAccount.detailsSubmitted ||
-      !payoutAccount.recipientCapabilityActive
-    )
+    if (current === undefined || provider === undefined) {
       return refusedTopup('payout_not_ready', false)
+    }
     const amount = amountAtScale(
       requested,
       requested.currency,
       providerAccount.exponent,
     )
-    const providerNet = amountAtScale(
-      current.providerNet,
-      current.providerNet.currency,
-      providerAccount.exponent,
-    )
+    if (amount === undefined)
+      return refusedTopup('payout_not_ready', false)
+    const journal = await readPayoutReservationJournal(ctx, {
+      payoutRef: args.payoutRef,
+      payoutCommandId: args.commandId,
+      inputDigest: args.inputDigest,
+      requestDigest: args.requestDigest,
+      idempotencyKey: args.idempotencyKey,
+      amount,
+      providerAccountRef: args.providerAccountRef,
+      businessId: args.businessId,
+    })
+    if (journal.kind === 'conflict')
+      return refusedTopup('ledger_idempotency_conflict', false)
+    if (journal.kind === 'found') {
+      const snapshots = payoutSnapshotAmounts(payout)
+      const rowMatches = payoutReservationRowIdentityMatches(payout, {
+        businessId: args.businessId,
+        payoutRef: args.payoutRef,
+        amount,
+        providerAccountRef: args.providerAccountRef,
+        destinationAccountId: args.destinationAccountId,
+        payoutCommandId: args.commandId,
+        inputDigest: args.inputDigest,
+        requestDigest: args.requestDigest,
+        idempotencyKey: args.idempotencyKey,
+      })
+      if (snapshots === undefined || !rowMatches)
+        return refusedTopup('ledger_idempotency_conflict', false)
+      if (
+        journal.transaction.currency !== amount.currency ||
+        journal.transaction.exponent !== amount.exponent ||
+        journal.transaction.amountUnits !== amount.units
+      )
+        return refusedTopup('ledger_idempotency_conflict', false)
+      if (
+        !(await payoutTerminalReplayIsConsistent({
+          ctx,
+          businessId: args.businessId,
+          currency: requested.currency,
+          amount,
+          payout,
+          provider,
+          journal,
+        }))
+      )
+        return refusedTopup('payout_reconciliation_required', false)
+      const transfer = payoutTransferView(payout, amount)
+      return transfer === undefined
+        ? refusedTopup('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, transfer }
+    }
+    const externalTransactions = await ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_externalRef', (q) => q.eq('externalRef', args.payoutRef))
+      .take(2)
     if (
-      amount === undefined ||
-      providerNet === undefined ||
-      compareExactAmounts(amount, providerNet) !== 0
+      payoutAttemptMaterialIsFrozen(payout) ||
+      externalTransactions.length > 0
+    )
+      return refusedTopup('payout_not_ready', false)
+    if (!payoutReservationCurrentAmountMatches(payout, amount))
+      return refusedTopup('payout_not_ready', false)
+    const payoutAccount = await ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q
+          .eq('businessId', args.businessId)
+          .eq('currency', requested.currency),
+      )
+      .unique()
+    if (
+      payoutAccount === null ||
+      payoutAccount.stripeAccountId !== args.destinationAccountId ||
+      payoutAccount.state !== 'ready' ||
+      !payoutAccount.detailsSubmitted ||
+      !payoutAccount.recipientCapabilityActive
     )
       return refusedTopup('payout_not_ready', false)
     const period = dailyPayoutIdentityFromRow(payout)
@@ -6754,45 +7359,31 @@ export const beginPayoutTransfer = mutation({
       compareExactAmounts(payoutProviderNet, composition.providerNet) !== 0
     )
       return refusedTopup('payout_not_ready', false)
-    if (priorByIdempotency !== null) {
-      const priorEntry = await ctx.db
-        .query('moneyLedgerEntries')
-        .withIndex('by_transactionRef', (q) =>
-          q.eq('transactionRef', priorByIdempotency.transactionRef),
+    const [pendingRows, unknownRows] = await Promise.all([
+      ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_state', (q) =>
+          q
+            .eq('businessId', args.businessId)
+            .eq('currency', requested.currency)
+            .eq('state', 'transfer_pending'),
         )
-        .unique()
-      const priorAmount =
-        priorEntry === null ? undefined : entryAmount(priorEntry)
-      if (
-        priorByIdempotency.kind !== 'payout_accrual' ||
-        priorByIdempotency.inputDigest !== args.inputDigest ||
-        priorByIdempotency.externalRef !== args.payoutRef ||
-        priorEntry === null ||
-        priorEntry.accountRef !== providerAccount.accountRef ||
-        priorAmount === undefined ||
-        compareExactAmounts(priorAmount, amount) !== 0
-      )
-        return refusedTopup('ledger_idempotency_conflict', false)
-      const transfer = payoutTransferView(payout)
-      return transfer === undefined
-        ? refusedTopup('payout_reconciliation_required', false)
-        : { kind: 'accepted' as const, transfer }
-    }
-    const sameIdentity =
-      payout.payoutCommandId === args.commandId &&
-      payout.inputDigest === args.inputDigest &&
-      payout.transferRequestDigest === args.requestDigest &&
-      payout.idempotencyKey === args.idempotencyKey &&
-      payout.destinationAccountId === args.destinationAccountId
+        .take(2),
+      ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_state', (q) =>
+          q
+            .eq('businessId', args.businessId)
+            .eq('currency', requested.currency)
+            .eq('state', 'outcome_unknown'),
+        )
+        .take(2),
+    ])
     if (
-      (payout.state === 'transfer_pending' || payout.state === 'paid') &&
-      sameIdentity
-    ) {
-      const transfer = payoutTransferView(payout)
-      return transfer === undefined
-        ? refusedTopup('payout_reconciliation_required', false)
-        : { kind: 'accepted' as const, transfer }
-    }
+      pendingRows.some((row) => row._id !== payout._id) ||
+      unknownRows.some((row) => row._id !== payout._id)
+    )
+      return refusedTopup('payout_reconciliation_required', false)
     if (payout.state === 'outcome_unknown')
       return refusedTopup('payout_reconciliation_required', false)
     if (provider.recoveryDue.units !== '0')
@@ -6801,7 +7392,7 @@ export const beginPayoutTransfer = mutation({
       return refusedTopup('payout_below_threshold', false)
     if (
       payout.payoutCommandId !== undefined &&
-      payout.state === 'transfer_pending'
+      (payout.state === 'transfer_pending' || payout.state === 'paid')
     )
       return refusedTopup('ledger_idempotency_conflict', false)
     const policy = transitionPayout({
@@ -6820,6 +7411,72 @@ export const beginPayoutTransfer = mutation({
       },
     })
     if (policy.kind === 'refused') return policy
+    const providerAfter = applyProviderAccountDebit(
+      provider,
+      amount,
+      args.observedAt,
+    )
+    if (
+      providerAfter === undefined ||
+      compareExactAmounts(providerAfter.balance, provider.balance) !== -1 ||
+      providerAfter.recoveryDue.units !== '0'
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const providerPaidBefore = await readLatestCompletedPayoutPaidAfter(
+      ctx,
+      args.businessId,
+      amount,
+      payout._id,
+    )
+    if (providerPaidBefore === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const zeroPaid = zeroAmount(amount.currency, amount.exponent)
+    const paidBefore = providerPaidBefore ?? zeroPaid
+    if (paidBefore === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const identity = payoutReservationIdentity({
+      payoutRef: args.payoutRef,
+      payoutCommandId: args.commandId,
+      inputDigest: args.inputDigest,
+      requestDigest: args.requestDigest,
+      idempotencyKey: args.idempotencyKey,
+    })
+    await ctx.db.insert('moneyTransactions', {
+      transactionRef: identity.transactionRef,
+      kind: 'payout_accrual',
+      idempotencyKey: args.idempotencyKey,
+      inputDigest: args.inputDigest,
+      principalId: `business:${args.businessId}`,
+      currency: amount.currency,
+      amountUnits: amount.units,
+      exponent: amount.exponent,
+      state: 'pending',
+      expectedAccountVersion: provider.version,
+      externalRef: args.payoutRef,
+      createdAt: args.observedAt,
+      updatedAt: args.observedAt,
+    })
+    await ctx.db.insert('moneyLedgerEntries', {
+      entryRef: `${identity.transactionRef}:payout-reservation`,
+      accountRef: provider.accountRef,
+      entryType: 'payout_accrual',
+      direction: 'debit',
+      amountUnits: amount.units,
+      currency: amount.currency,
+      exponent: amount.exponent,
+      transactionRef: identity.transactionRef,
+      idempotencyKey: args.idempotencyKey,
+      businessId: args.businessId,
+      sourceDigest: identity.sourceDigest,
+      evidenceRefs: [...identity.evidenceRefs],
+      createdAt: args.observedAt,
+    })
+    await ctx.db.patch('moneyAccounts', providerAccount._id, {
+      balanceUnits: providerAfter.balance.units,
+      recoveryDueUnits: providerAfter.recoveryDue.units,
+      version: providerAfter.version,
+      updatedAt: providerAfter.updatedAt,
+    })
     await ctx.db.replace(
       'moneyPayouts',
       payout._id,
@@ -6833,7 +7490,11 @@ export const beginPayoutTransfer = mutation({
         state: policy.value.state,
         transferStatus: 'pending',
         providerRecoveryDeadlineAt: args.providerRecoveryDeadlineAt,
-        observedAt: args.observedAt,
+        transferObservedAt: args.observedAt,
+        updatedAt: args.observedAt,
+        providerHeldBefore: provider.balance,
+        providerHeldAfter: providerAfter.balance,
+        providerPaidBefore: paidBefore,
       }),
     )
     const updated = await ctx.db.get(payout._id)
@@ -6862,13 +7523,24 @@ export const markPayoutTransferOutcomeUnknown = mutation({
       ))
     )
       return refusedTopup('billing_identity_missing', false)
-    const [payoutAccount, payout] = await Promise.all([
+    const requested = readAmount(args.amount)
+    if (requested === undefined || requested.units === '0')
+      return refusedTopup('payout_reconciliation_required', false)
+    const [providerAccount, payoutAccount, payout] = await Promise.all([
+      ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_businessId_and_currency', (q) =>
+          q
+            .eq('businessId', args.businessId)
+            .eq('currency', requested.currency),
+        )
+        .unique(),
       ctx.db
         .query('moneyPayoutAccounts')
         .withIndex('by_businessId_and_currency', (q) =>
           q
             .eq('businessId', args.businessId)
-            .eq('currency', args.amount.currency),
+            .eq('currency', requested.currency),
         )
         .unique(),
       ctx.db
@@ -6876,21 +7548,86 @@ export const markPayoutTransferOutcomeUnknown = mutation({
         .withIndex('by_payoutRef', (q) => q.eq('payoutRef', args.payoutRef))
         .unique(),
     ])
-    const current = payout === null ? undefined : payoutFromRow(payout)
     if (
-      payout === null ||
+      providerAccount === null ||
       payoutAccount === null ||
-      current === undefined ||
+      payout === null ||
+      providerAccount.accountKind !== 'provider_earnings' ||
+      providerAccount.accountRef !== args.providerAccountRef ||
+      providerAccount.businessId !== args.businessId ||
+      providerAccount.currency !== requested.currency ||
       payout.businessId !== args.businessId ||
-      payout.currency !== args.amount.currency ||
+      payout.currency !== requested.currency ||
       payout.providerAccountRef !== args.providerAccountRef ||
       payout.destinationAccountId !== args.destinationAccountId ||
-      payout.payoutCommandId !== args.commandId ||
-      payout.inputDigest !== args.inputDigest ||
-      payout.transferRequestDigest !== args.requestDigest ||
-      payout.idempotencyKey !== args.idempotencyKey ||
       payout.providerRecoveryDeadlineAt !== args.providerRecoveryDeadlineAt ||
       payout.stripeTransferId !== undefined
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const current = payoutFromRow(payout)
+    const provider = accountFromRow(providerAccount)
+    const amount = amountAtScale(
+      requested,
+      requested.currency,
+      providerAccount.exponent,
+    )
+    if (current === undefined || provider === undefined || amount === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const journal = await readPayoutReservationJournal(ctx, {
+      payoutRef: args.payoutRef,
+      payoutCommandId: args.commandId,
+      inputDigest: args.inputDigest,
+      requestDigest: args.requestDigest,
+      idempotencyKey: args.idempotencyKey,
+      amount,
+      providerAccountRef: args.providerAccountRef,
+      businessId: args.businessId,
+    })
+    if (journal.kind === 'conflict' || journal.kind === 'missing')
+      return refusedTopup('payout_reconciliation_required', false)
+    const snapshots = payoutSnapshotAmounts(payout)
+    if (
+      snapshots === undefined ||
+      !payoutReservationRowIdentityMatches(payout, {
+        businessId: args.businessId,
+        payoutRef: args.payoutRef,
+        amount,
+        providerAccountRef: args.providerAccountRef,
+        destinationAccountId: args.destinationAccountId,
+        payoutCommandId: args.commandId,
+        inputDigest: args.inputDigest,
+        requestDigest: args.requestDigest,
+        idempotencyKey: args.idempotencyKey,
+      })
+    )
+      return refusedTopup('ledger_idempotency_conflict', false)
+    if (!payoutReservationCurrentAmountMatches(payout, amount))
+      return refusedTopup('payout_reconciliation_required', false)
+    if (journal.transaction.state === 'outcome_unknown') {
+      if (
+        payout.state !== 'outcome_unknown' ||
+        !payoutAccountAfterReservationMatches(
+          provider,
+          journal.transaction,
+          snapshots,
+          amount,
+        )
+      )
+        return refusedTopup('payout_reconciliation_required', false)
+      const transfer = payoutTransferView(payout)
+      return transfer === undefined
+        ? refusedTopup('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, transfer }
+    }
+    if (
+      journal.transaction.state !== 'pending' ||
+      payout.state !== 'transfer_pending' ||
+      !payoutAccountAfterReservationMatches(
+        provider,
+        journal.transaction,
+        snapshots,
+        amount,
+      )
     )
       return refusedTopup('payout_reconciliation_required', false)
     const policy = transitionPayout({
@@ -6908,6 +7645,10 @@ export const markPayoutTransferOutcomeUnknown = mutation({
       },
     })
     if (policy.kind === 'refused') return policy
+    await ctx.db.patch('moneyTransactions', journal.transaction._id, {
+      state: 'outcome_unknown',
+      updatedAt: args.observedAt,
+    })
     await ctx.db.replace(
       'moneyPayouts',
       payout._id,
@@ -6922,7 +7663,8 @@ export const markPayoutTransferOutcomeUnknown = mutation({
         transferStatus: 'outcome_unknown',
         providerRecoveryDeadlineAt: args.providerRecoveryDeadlineAt,
         failureCode: args.failureCode,
-        observedAt: args.observedAt,
+        transferObservedAt: args.observedAt,
+        updatedAt: args.observedAt,
       }),
     )
     const updated = await ctx.db.get(payout._id)
@@ -6943,7 +7685,6 @@ type PayoutCompletionInput = Readonly<{
   commandId: string
   inputDigest: string
   idempotencyKey: string
-  transactionRef: string
   evidence: Infer<typeof payoutTransferEvidenceArg>
   sourceDigest: string
   evidenceRefs: string[]
@@ -6956,7 +7697,7 @@ async function readLatestCompletedPayoutPaidAfter(
   ctx: Pick<MutationCtx, 'db'>,
   businessId: string,
   expectedAmount: ExactAmount,
-  currentPayoutId: string,
+  currentPayoutId?: string,
 ): Promise<ExactAmount | null | undefined> {
   const [paidRows, reversedRows] = await Promise.all([
     ctx.db
@@ -6985,7 +7726,9 @@ async function readLatestCompletedPayoutPaidAfter(
       .take(PAYOUT_SNAPSHOT_READ_LIMIT),
   ])
   const candidates = [paidRows, reversedRows].flatMap((rows) => {
-    const eligible = rows.filter((row) => row._id !== currentPayoutId)
+    const eligible = rows.filter(
+      (row) => currentPayoutId === undefined || row._id !== currentPayoutId,
+    )
     if (
       eligible.length > 1 &&
       eligible[0]?.updatedAt === eligible[1]?.updatedAt
@@ -7023,6 +7766,282 @@ async function readLatestCompletedPayoutPaidAfter(
   return payout.providerPaidAfter
 }
 
+async function reversePayoutReservation(
+  ctx: MutationCtx,
+  args: PayoutCompletionInput,
+  payout: Doc<'moneyPayouts'>,
+  providerAccount: Doc<'moneyAccounts'>,
+  provider: MoneyAccount,
+  journal: Extract<PayoutReservationJournal, { kind: 'found' }>,
+  policyValue: MoneyPayout,
+  transferId: string | undefined,
+  mode: 'pre_release' | 'post_success',
+): Promise<Infer<typeof payoutTransferResultValue>> {
+  const snapshots = payoutSnapshotAmounts(payout)
+  const reversalAmount =
+    snapshots === undefined || journal.transaction.amountUnits === undefined
+      ? undefined
+      : amountFromParts(
+          snapshots.providerHeldBefore.currency,
+          journal.transaction.amountUnits,
+          snapshots.providerHeldBefore.exponent,
+        )
+  if (snapshots === undefined || reversalAmount === undefined || reversalAmount.units === '0')
+    return refusedTopup('payout_reconciliation_required', false)
+  const reversalTransactionRef = canonicalDigest({
+    format: 'money-payout-reversal-transaction:v1',
+    reservationTransactionRef: journal.transaction.transactionRef,
+  })
+  const reversalIdempotencyKey = canonicalDigest({
+    format: 'money-payout-reversal-idempotency:v1',
+    reservationTransactionRef: journal.transaction.transactionRef,
+  })
+  const priorReversals = await ctx.db
+    .query('moneyTransactions')
+    .withIndex('by_reversalOf', (q) =>
+      q.eq('reversalOf', journal.transaction.transactionRef),
+    )
+    .take(2)
+  if (priorReversals.length > 1)
+    return refusedTopup('ledger_idempotency_conflict', false)
+  const existingReversal = priorReversals[0]
+  if (existingReversal !== undefined) {
+    const reversalRows = await ctx.db
+      .query('moneyLedgerEntries')
+      .withIndex('by_transactionRef', (q) =>
+        q.eq('transactionRef', existingReversal.transactionRef),
+      )
+      .take(2)
+    const reversalEntry = reversalRows[0]
+    const expectedState = mode === 'post_success' ? 'reversed' : policyValue.state
+    const reservationRestored =
+      addExactAmounts(snapshots.providerHeldAfter, reversalAmount)
+    if (
+      reversalRows.length !== 1 ||
+      reversalEntry === undefined ||
+      journal.transaction.state !== 'reversed' ||
+      existingReversal.transactionRef !== reversalTransactionRef ||
+      existingReversal.kind !== 'payout_accrual' ||
+      existingReversal.state !== 'reversed' ||
+      existingReversal.idempotencyKey !== reversalIdempotencyKey ||
+      existingReversal.inputDigest !== args.inputDigest ||
+      existingReversal.principalId !== `business:${args.businessId}` ||
+      existingReversal.currency !== snapshots.providerHeldBefore.currency ||
+      existingReversal.exponent !== reversalAmount.exponent ||
+      existingReversal.amountUnits !== reversalAmount.units ||
+      existingReversal.externalRef !== args.payoutRef ||
+      existingReversal.reversalOf !== journal.transaction.transactionRef ||
+      existingReversal.expectedAccountVersion <
+        journal.transaction.expectedAccountVersion + 1 ||
+      reversalEntry.accountRef !== providerAccount.accountRef ||
+      reversalEntry.entryRef !== `${reversalTransactionRef}:payout-reversal` ||
+      reversalEntry.entryType !== 'payout_accrual' ||
+      reversalEntry.direction !== 'credit' ||
+      reversalEntry.amountUnits !== journal.transaction.amountUnits ||
+      reversalEntry.currency !== snapshots.providerHeldBefore.currency ||
+      reversalEntry.exponent !== snapshots.providerHeldBefore.exponent ||
+      reversalEntry.transactionRef !== reversalTransactionRef ||
+      reversalEntry.idempotencyKey !== reversalIdempotencyKey ||
+      reversalEntry.businessId !== args.businessId ||
+      reversalEntry.reversalOf !== journal.transaction.transactionRef ||
+      reversalEntry.sourceDigest !== args.sourceDigest ||
+      !sameEvidenceRefs(reversalEntry.evidenceRefs, args.evidenceRefs) ||
+      reservationRestored === undefined ||
+      compareExactAmounts(
+        reservationRestored,
+        snapshots.providerHeldBefore,
+      ) !== 0 ||
+      payout.state !== expectedState ||
+      (mode === 'post_success'
+        ? payout.transferStatus !== 'reversed' ||
+          payout.transferReversalEvidenceDigest !== args.evidence.evidenceDigest ||
+          payout.stripeTransferId !== transferId
+        : payout.transferStatus !== 'failed' ||
+          payout.transferEvidenceDigest !== args.evidence.evidenceDigest ||
+          (transferId !== undefined && payout.stripeTransferId !== transferId)) ||
+      provider.version < existingReversal.expectedAccountVersion + 1
+    ) {
+      return refusedTopup('ledger_idempotency_conflict', false)
+    }
+    const transfer = payoutTransferView(payout, reversalAmount)
+    return transfer === undefined
+      ? refusedTopup('payout_reconciliation_required', false)
+      : { kind: 'accepted' as const, transfer }
+  }
+  const providerPaidAfter =
+    payout.providerPaidAfterUnits === undefined
+      ? undefined
+      : amountFromParts(
+          payout.currency,
+          payout.providerPaidAfterUnits,
+          payout.exponent,
+        )
+  const expectedProviderPaidAfter = addExactAmounts(
+    snapshots.providerPaidBefore,
+    reversalAmount,
+  )
+  const currentProviderPaidAfter =
+    mode === 'post_success'
+      ? await readLatestCompletedPayoutPaidAfter(
+          ctx,
+          args.businessId,
+          reversalAmount,
+        )
+      : undefined
+  const paidBeforeReversal =
+    currentProviderPaidAfter === null
+      ? zeroAmount(reversalAmount.currency, reversalAmount.exponent)
+      : currentProviderPaidAfter
+  const providerPaidAfterReversal =
+    mode === 'post_success' && paidBeforeReversal !== undefined
+      ? subtractExactAmounts(paidBeforeReversal, reversalAmount)
+      : undefined
+  if (
+    mode === 'post_success'
+      ? journal.transaction.state !== 'applied' ||
+        payout.state !== 'paid' ||
+        payout.transferStatus !== 'succeeded' ||
+        payout.transferEvidenceDigest === undefined ||
+        providerPaidAfter === undefined ||
+        expectedProviderPaidAfter === undefined ||
+        compareExactAmounts(providerPaidAfter, expectedProviderPaidAfter) !== 0 ||
+        providerPaidAfterReversal === undefined ||
+        provider.version < journal.transaction.expectedAccountVersion + 1
+      : (journal.transaction.state !== 'pending' &&
+          journal.transaction.state !== 'outcome_unknown') ||
+        (payout.state !== 'transfer_pending' &&
+          payout.state !== 'outcome_unknown') ||
+        !payoutAccountAfterReservationMatches(
+          provider,
+          journal.transaction,
+          snapshots,
+          reversalAmount,
+        ) ||
+        provider.recoveryDue.units !== '0'
+  )
+    return refusedTopup('payout_reconciliation_required', false)
+  const restoredProvider = applyProviderAccountCredit(
+    provider,
+    reversalAmount,
+    args.observedAt,
+  )
+  const expectedRestoredBalance =
+    restoredProvider === undefined
+      ? undefined
+      : addExactAmounts(provider.balance, restoredProvider.heldCredit)
+  const expectedRecoveryDue =
+    restoredProvider === undefined
+      ? undefined
+      : subtractExactAmounts(
+          provider.recoveryDue,
+          restoredProvider.recoveryPayment,
+        )
+  const creditedAmount =
+    restoredProvider === undefined
+      ? undefined
+      : addExactAmounts(
+          restoredProvider.heldCredit,
+          restoredProvider.recoveryPayment,
+        )
+  if (
+    restoredProvider === undefined ||
+    expectedRestoredBalance === undefined ||
+    expectedRecoveryDue === undefined ||
+    creditedAmount === undefined ||
+    compareExactAmounts(creditedAmount, reversalAmount) !== 0 ||
+    compareExactAmounts(
+      restoredProvider.account.balance,
+      expectedRestoredBalance,
+    ) !== 0 ||
+    compareExactAmounts(
+      restoredProvider.account.recoveryDue,
+      expectedRecoveryDue,
+    ) !== 0 ||
+    restoredProvider.account.version !== provider.version + 1
+  )
+    return refusedTopup('payout_reconciliation_required', false)
+  await ctx.db.insert('moneyLedgerEntries', {
+    entryRef: `${reversalTransactionRef}:payout-reversal`,
+    accountRef: providerAccount.accountRef,
+    entryType: 'payout_accrual',
+    direction: 'credit',
+    amountUnits: reversalAmount.units,
+    currency: reversalAmount.currency,
+    exponent: reversalAmount.exponent,
+    transactionRef: reversalTransactionRef,
+    idempotencyKey: reversalIdempotencyKey,
+    businessId: args.businessId,
+    sourceDigest: args.sourceDigest,
+    evidenceRefs: [...args.evidenceRefs],
+    reversalOf: journal.transaction.transactionRef,
+    createdAt: args.evidence.observedAt,
+  })
+  await ctx.db.patch('moneyAccounts', providerAccount._id, {
+    balanceUnits: restoredProvider.account.balance.units,
+    recoveryDueUnits: restoredProvider.account.recoveryDue.units,
+    version: restoredProvider.account.version,
+    updatedAt: restoredProvider.account.updatedAt,
+  })
+  await ctx.db.insert('moneyTransactions', {
+    transactionRef: reversalTransactionRef,
+    kind: 'payout_accrual',
+    idempotencyKey: reversalIdempotencyKey,
+    inputDigest: args.inputDigest,
+    principalId: `business:${args.businessId}`,
+    currency: reversalAmount.currency,
+    amountUnits: reversalAmount.units,
+    exponent: reversalAmount.exponent,
+    state: 'reversed',
+    expectedAccountVersion: provider.version,
+    externalRef: args.payoutRef,
+    reversalOf: journal.transaction.transactionRef,
+    createdAt: args.evidence.observedAt,
+    updatedAt: args.observedAt,
+  })
+  await ctx.db.patch('moneyTransactions', journal.transaction._id, {
+    state: 'reversed',
+    updatedAt: args.observedAt,
+  })
+  await ctx.db.replace(
+    'moneyPayouts',
+    payout._id,
+    payoutTransferRow(payout, {
+      providerAccountRef: args.providerAccountRef,
+      destinationAccountId: args.destinationAccountId,
+      commandId: args.commandId,
+      inputDigest: args.inputDigest,
+      requestDigest: args.evidence.requestDigest,
+      idempotencyKey: args.idempotencyKey,
+      state: policyValue.state,
+      transferStatus: mode === 'post_success' ? 'reversed' : 'failed',
+      ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
+      ...(mode === 'post_success'
+        ? {
+            ...(payout.transferEvidenceDigest === undefined
+              ? {}
+              : { evidenceDigest: payout.transferEvidenceDigest }),
+            reversalEvidenceDigest: args.evidence.evidenceDigest,
+            providerHeldBefore: snapshots.providerHeldBefore,
+            providerHeldAfter: snapshots.providerHeldAfter,
+            providerPaidBefore: snapshots.providerPaidBefore,
+            ...(providerPaidAfterReversal === undefined
+              ? {}
+              : { providerPaidAfter: providerPaidAfterReversal }),
+          }
+        : {
+            evidenceDigest: args.evidence.evidenceDigest,
+            failureCode: args.failureCode ?? 'provider_transfer_failed',
+          }),
+      transferObservedAt: args.evidence.observedAt,
+      updatedAt: args.observedAt,
+    }),
+  )
+  const updated = await ctx.db.get(payout._id)
+  const transfer = updated === null ? undefined : payoutTransferView(updated)
+  return transfer === undefined
+    ? refusedTopup('payout_reconciliation_required', false)
+    : { kind: 'accepted' as const, transfer }
+}
 
 async function completePayoutBody(
   ctx: MutationCtx,
@@ -7039,23 +8058,21 @@ async function completePayoutBody(
     return refusedTopup('billing_identity_missing', false)
   const gate = evaluateLiveMoneyGate()
   if (gate.kind === 'refused') return gate
-  if (args.evidenceRefs.length === 0 || args.sourceDigest.length === 0)
+  if (args.evidenceRefs.length !== 1 || args.sourceDigest.length === 0)
     return refusedTopup('payout_reconciliation_required', false)
   const transferId =
     'transferId' in args.evidence ? args.evidence.transferId : undefined
   if ('resolution' in args.evidence && !reconciliation)
     return refusedTopup('payout_reconciliation_required', false)
-  const [providerAccount, payoutAccount, payout] = await Promise.all([
+  if (
+    args.sourceDigest !==
+      payoutEvidenceSourceDigest(args.evidence.evidenceDigest) ||
+    args.evidenceRefs[0] !== args.evidence.evidenceDigest
+  )
+    return refusedTopup('ledger_idempotency_conflict', false)
+  const [providerAccount, payout] = await Promise.all([
     ctx.db
       .query('moneyAccounts')
-      .withIndex('by_businessId_and_currency', (q) =>
-        q
-          .eq('businessId', args.businessId)
-          .eq('currency', args.amount.currency),
-      )
-      .unique(),
-    ctx.db
-      .query('moneyPayoutAccounts')
       .withIndex('by_businessId_and_currency', (q) =>
         q
           .eq('businessId', args.businessId)
@@ -7069,13 +8086,14 @@ async function completePayoutBody(
   ])
   if (
     providerAccount === null ||
-    payoutAccount === null ||
     payout === null ||
     payout.businessId !== args.businessId ||
     payout.currency !== args.amount.currency ||
     providerAccount.accountKind !== 'provider_earnings' ||
     providerAccount.accountRef !== args.providerAccountRef ||
-    payoutAccount.stripeAccountId !== args.destinationAccountId
+    providerAccount.businessId !== args.businessId ||
+    providerAccount.currency !== args.amount.currency ||
+    payout.providerAccountRef !== args.providerAccountRef
   )
     return refusedTopup('payout_reconciliation_required', false)
   const current = payoutFromRow(payout)
@@ -7103,7 +8121,6 @@ async function completePayoutBody(
     expectedAmount === undefined ||
     evidenceAmount === undefined ||
     compareExactAmounts(expectedAmount, evidenceAmount) !== 0 ||
-    compareExactAmounts(current.providerNet, expectedAmount) !== 0 ||
     args.evidence.destinationAccountId !== args.destinationAccountId
   )
     return refusedTopup('payout_reconciliation_required', false)
@@ -7114,6 +8131,8 @@ async function completePayoutBody(
   )
     return refusedTopup('ledger_idempotency_conflict', false)
   if (
+    args.evidence.status !== 'pending' &&
+    args.evidence.status !== 'outcome_unknown' &&
     args.evidence.status !== 'reversed' &&
     payout.transferEvidenceDigest !== undefined &&
     payout.transferEvidenceDigest !== args.evidence.evidenceDigest
@@ -7125,327 +8144,215 @@ async function completePayoutBody(
     payout.transferReversalEvidenceDigest !== args.evidence.evidenceDigest
   )
     return refusedTopup('ledger_idempotency_conflict', false)
-  const accountState = {
-    state: payoutAccount.state,
-    detailsSubmitted: payoutAccount.detailsSubmitted,
-    recipientCapabilityActive: payoutAccount.recipientCapabilityActive,
+  const journal = await readPayoutReservationJournal(ctx, {
+    payoutRef: args.payoutRef,
+    payoutCommandId: args.commandId,
+    inputDigest: args.inputDigest,
+    requestDigest: args.evidence.requestDigest,
+    idempotencyKey: args.idempotencyKey,
+    amount: expectedAmount,
+    providerAccountRef: args.providerAccountRef,
+    businessId: args.businessId,
+  })
+  if (journal.kind === 'conflict')
+    return refusedTopup('ledger_idempotency_conflict', false)
+  if (journal.kind === 'missing')
+    return refusedTopup('payout_reconciliation_required', false)
+  const snapshots = payoutSnapshotAmounts(payout)
+  if (
+    snapshots === undefined ||
+    !payoutReservationRowIdentityMatches(payout, {
+      businessId: args.businessId,
+      payoutRef: args.payoutRef,
+      amount: expectedAmount,
+      providerAccountRef: args.providerAccountRef,
+      destinationAccountId: args.destinationAccountId,
+      payoutCommandId: args.commandId,
+      inputDigest: args.inputDigest,
+      requestDigest: args.evidence.requestDigest,
+      idempotencyKey: args.idempotencyKey,
+    })
+  )
+    return refusedTopup('ledger_idempotency_conflict', false)
+  if (
+    (journal.transaction.state === 'pending' ||
+      journal.transaction.state === 'outcome_unknown') &&
+    !payoutReservationCurrentAmountMatches(payout, expectedAmount)
+  )
+    return refusedTopup('payout_reconciliation_required', false)
+  let payoutAccount: Doc<'moneyPayoutAccounts'> | null = null
+  if (
+    journal.transaction.state !== 'applied' &&
+    journal.transaction.state !== 'reversed'
+  ) {
+    payoutAccount = await ctx.db
+      .query('moneyPayoutAccounts')
+      .withIndex('by_businessId_and_currency', (q) =>
+        q
+          .eq('businessId', args.businessId)
+          .eq('currency', args.amount.currency),
+      )
+      .unique()
   }
-  const failedReplay =
-    args.evidence.status === 'failed' &&
-    payout.transferStatus === 'failed' &&
-    payout.transferEvidenceDigest === args.evidence.evidenceDigest &&
-    (payout.state === 'held_kyc' ||
-      payout.state === 'held_threshold' ||
-      payout.state === 'failed')
-  if (failedReplay) {
-    const transfer = payoutTransferView(payout)
-    return transfer === undefined
-      ? refusedTopup('payout_reconciliation_required', false)
-      : { kind: 'accepted' as const, transfer }
-  }
+  if (
+    journal.transaction.state !== 'applied' &&
+    journal.transaction.state !== 'reversed' &&
+    (payoutAccount === null ||
+      payoutAccount.stripeAccountId !== args.destinationAccountId)
+  )
+    return refusedTopup('payout_reconciliation_required', false)
+  if (
+    journal.transaction.state === 'reversed' &&
+    args.evidence.status !== 'failed' &&
+    args.evidence.status !== 'reversed'
+  )
+    return refusedTopup('payout_reconciliation_required', false)
+  const accountState =
+    payoutAccount === null
+      ? {
+          state: 'not_started' as const,
+          detailsSubmitted: false,
+          recipientCapabilityActive: false,
+        }
+      : {
+          state: payoutAccount.state,
+          detailsSubmitted: payoutAccount.detailsSubmitted,
+          recipientCapabilityActive: payoutAccount.recipientCapabilityActive,
+        }
   if (reconciliation) {
     if (
-      (payout.state !== 'outcome_unknown' &&
-        payout.state !== 'transfer_pending') ||
-      args.evidence.status !== 'failed'
+      args.evidence.status !== 'failed' ||
+      (payout.state !== 'transfer_pending' &&
+        payout.state !== 'outcome_unknown' &&
+        payout.state !== 'held_threshold' &&
+        payout.state !== 'held_kyc')
     )
       return refusedTopup('payout_reconciliation_required', false)
-    const policy = transitionPayout({
-      current,
-      now: args.observedAt,
-      action: {
-        kind: 'reconcile',
-        payoutCommandId: args.commandId,
-        idempotencyKey: args.idempotencyKey,
-        outcome: 'not_released',
-        ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
-        evidenceDigest: args.evidence.evidenceDigest,
-      },
-      account: accountState,
-    })
+    const policy =
+      payout.state === 'held_threshold' ||
+      payout.state === 'held_kyc'
+        ? { kind: 'accepted' as const, value: current }
+        : transitionPayout({
+            current,
+            now: args.observedAt,
+            action: {
+              kind: 'reconcile',
+              payoutCommandId: args.commandId,
+              idempotencyKey: args.idempotencyKey,
+              outcome: 'not_released',
+              ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
+              evidenceDigest: args.evidence.evidenceDigest,
+            },
+            account: accountState,
+          })
     if (policy.kind === 'refused') return policy
-    await ctx.db.replace(
-      'moneyPayouts',
-      payout._id,
-      payoutTransferRow(payout, {
-        providerAccountRef: args.providerAccountRef,
-        destinationAccountId: args.destinationAccountId,
-        commandId: args.commandId,
-        inputDigest: args.inputDigest,
-        requestDigest: args.evidence.requestDigest,
-        idempotencyKey: args.idempotencyKey,
-        state: policy.value.state,
-        transferStatus: 'failed',
-        ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.observedAt,
-        failureCode: args.failureCode ?? 'not_released',
-      }),
-    )
-    const updated = await ctx.db.get(payout._id)
-    const transfer = updated === null ? undefined : payoutTransferView(updated)
-    return transfer === undefined
-      ? refusedTopup('payout_reconciliation_required', false)
-      : { kind: 'accepted' as const, transfer }
-  }
-  if (transferId === undefined)
-    return refusedTopup('payout_reconciliation_required', false)
-  if (args.evidence.status === 'reversed') {
-    const policy = transitionPayout({
-      current,
-      now: args.observedAt,
-      action: {
-        kind: 'transfer_reversed',
-        payoutCommandId: args.commandId,
-        idempotencyKey: args.idempotencyKey,
-        stripeTransferId: transferId,
-        requestDigest: args.evidence.requestDigest,
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.evidence.observedAt,
-      },
-      account: accountState,
-    })
-    if (policy.kind === 'refused') return policy
-    const prior = await ctx.db
-      .query('moneyTransactions')
-      .withIndex('by_idempotencyKey', (q) =>
-        q.eq('idempotencyKey', args.idempotencyKey),
-      )
-      .unique()
-    if (
-      prior === null ||
-      prior.kind !== 'payout_accrual' ||
-      prior.externalRef !== args.payoutRef ||
-      prior.inputDigest !== args.inputDigest ||
-      prior.principalId !== `business:${args.businessId}` ||
-      (prior.state !== 'applied' && prior.state !== 'reversed')
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    const originalEntry = await ctx.db
-      .query('moneyLedgerEntries')
-      .withIndex('by_transactionRef', (q) =>
-        q.eq('transactionRef', prior.transactionRef),
-      )
-      .unique()
-    const originalAmount =
-      originalEntry === null ? undefined : entryAmount(originalEntry)
-    if (
-      originalEntry === null ||
-      originalEntry.accountRef !== providerAccount.accountRef ||
-      originalEntry.entryType !== 'payout_accrual' ||
-      originalEntry.direction !== 'debit' ||
-      originalAmount === undefined ||
-      compareExactAmounts(originalAmount, expectedAmount) !== 0
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    const reversalTransactionRef = canonicalDigest({
-      format: 'money-payout-reversal-transaction:v1',
-      originalTransactionRef: prior.transactionRef,
+    return await reversePayoutReservation(
+      ctx,
+      args,
+      payout,
+      providerAccount,
+      provider,
+      journal,
+      policy.value,
       transferId,
-      evidenceDigest: args.evidence.evidenceDigest,
-    })
-    const reversalIdempotencyKey = canonicalDigest({
-      format: 'money-payout-reversal-idempotency:v1',
-      originalIdempotencyKey: args.idempotencyKey,
-      reversalTransactionRef,
-    })
-    const priorReversals = await ctx.db
-      .query('moneyTransactions')
-      .withIndex('by_reversalOf', (q) =>
-        q.eq('reversalOf', prior.transactionRef),
+      'pre_release',
+    )
+  }
+  if (args.evidence.status === 'reversed') {
+    if (transferId === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const policy =
+      payout.state === 'reversed'
+        ? { kind: 'accepted' as const, value: current }
+        : transitionPayout({
+            current,
+            now: args.observedAt,
+            action: {
+              kind: 'transfer_reversed',
+              payoutCommandId: args.commandId,
+              idempotencyKey: args.idempotencyKey,
+              stripeTransferId: transferId,
+              requestDigest: args.evidence.requestDigest,
+              evidenceDigest: args.evidence.evidenceDigest,
+              observedAt: args.evidence.observedAt,
+            },
+            account: accountState,
+          })
+    if (policy.kind === 'refused') return policy
+    return await reversePayoutReservation(
+      ctx,
+      args,
+      payout,
+      providerAccount,
+      provider,
+      journal,
+      policy.value,
+      transferId,
+      'post_success',
+    )
+  }
+  if (args.evidence.status === 'failed') {
+    if (
+      payout.state !== 'transfer_pending' &&
+      payout.state !== 'outcome_unknown' &&
+      payout.state !== 'held_threshold' &&
+      payout.state !== 'held_kyc'
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    const policy =
+      payout.state === 'held_threshold' ||
+      payout.state === 'held_kyc'
+        ? { kind: 'accepted' as const, value: current }
+        : transitionPayout({
+            current,
+            now: args.observedAt,
+            action: {
+              kind: 'transfer_failed',
+              payoutCommandId: args.commandId,
+              idempotencyKey: args.idempotencyKey,
+              failureCode: args.failureCode ?? 'provider_transfer_failed',
+              ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
+              requestDigest: args.evidence.requestDigest,
+              evidenceDigest: args.evidence.evidenceDigest,
+              observedAt: args.evidence.observedAt,
+            },
+            account: accountState,
+          })
+    if (policy.kind === 'refused') return policy
+    return await reversePayoutReservation(
+      ctx,
+      args,
+      payout,
+      providerAccount,
+      provider,
+      journal,
+      policy.value,
+      transferId,
+      'pre_release',
+    )
+  }
+  if (args.evidence.status === 'pending') {
+    if (
+      transferId === undefined ||
+      journal.transaction.state !== 'pending' ||
+      payout.state !== 'transfer_pending' ||
+      !payoutAccountAfterReservationMatches(
+        provider,
+        journal.transaction,
+        snapshots,
+        expectedAmount,
       )
-      .take(2)
-    if (priorReversals.length > 1)
-      return refusedTopup('ledger_idempotency_conflict', false)
-    const existingReversal = priorReversals[0]
-    if (existingReversal !== undefined) {
-      const reversalEntry = await ctx.db
-        .query('moneyLedgerEntries')
-        .withIndex('by_transactionRef', (q) =>
-          q.eq('transactionRef', existingReversal.transactionRef),
-        )
-        .unique()
-      const evidenceRefsMatch =
-        reversalEntry !== null &&
-        reversalEntry.evidenceRefs.length === args.evidenceRefs.length &&
-        reversalEntry.evidenceRefs.every(
-          (ref, index) => ref === args.evidenceRefs[index],
-        )
-      if (
-        payout.state !== 'reversed' ||
-        prior.state !== 'reversed' ||
-        existingReversal.transactionRef !== reversalTransactionRef ||
-        existingReversal.kind !== 'payout_accrual' ||
-        existingReversal.state !== 'reversed' ||
-        existingReversal.idempotencyKey !== reversalIdempotencyKey ||
-        existingReversal.inputDigest !== args.inputDigest ||
-        existingReversal.externalRef !== args.payoutRef ||
-        existingReversal.reversalOf !== prior.transactionRef ||
-        existingReversal.currency !== expectedAmount.currency ||
-        existingReversal.amountUnits !== expectedAmount.units ||
-        existingReversal.exponent !== expectedAmount.exponent ||
-        reversalEntry === null ||
-        reversalEntry.accountRef !== providerAccount.accountRef ||
-        reversalEntry.entryType !== 'payout_accrual' ||
-        reversalEntry.direction !== 'credit' ||
-        reversalEntry.transactionRef !== reversalTransactionRef ||
-        reversalEntry.idempotencyKey !== reversalIdempotencyKey ||
-        reversalEntry.amountUnits !== expectedAmount.units ||
-        reversalEntry.currency !== expectedAmount.currency ||
-        reversalEntry.exponent !== expectedAmount.exponent ||
-        reversalEntry.reversalOf !== prior.transactionRef ||
-        reversalEntry.sourceDigest !== args.sourceDigest ||
-        !evidenceRefsMatch
-      )
-        return refusedTopup('ledger_idempotency_conflict', false)
+    )
+      return refusedTopup('payout_reconciliation_required', false)
+    if (
+      payout.stripeTransferId === transferId &&
+      payout.transferStatus === 'pending'
+    ) {
       const transfer = payoutTransferView(payout)
       return transfer === undefined
         ? refusedTopup('payout_reconciliation_required', false)
         : { kind: 'accepted' as const, transfer }
     }
-    if (payout.state !== 'paid' || prior.state !== 'applied')
-      return refusedTopup('payout_reconciliation_required', false)
-    const providerHeldBefore =
-      payout.providerHeldBeforeUnits === undefined
-        ? undefined
-        : amountFromParts(
-            payout.currency,
-            payout.providerHeldBeforeUnits,
-            payout.exponent,
-          )
-    const providerHeldAfter =
-      payout.providerHeldAfterUnits === undefined
-        ? undefined
-        : amountFromParts(
-            payout.currency,
-            payout.providerHeldAfterUnits,
-            payout.exponent,
-          )
-    const providerPaidBefore =
-      payout.providerPaidBeforeUnits === undefined
-        ? undefined
-        : amountFromParts(
-            payout.currency,
-            payout.providerPaidBeforeUnits,
-            payout.exponent,
-          )
-    const providerPaidAfter =
-      payout.providerPaidAfterUnits === undefined
-        ? undefined
-        : amountFromParts(
-            payout.currency,
-            payout.providerPaidAfterUnits,
-            payout.exponent,
-          )
-    if (
-      providerHeldBefore === undefined ||
-      providerHeldAfter === undefined ||
-      providerPaidBefore === undefined ||
-      providerPaidAfter === undefined
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    if (compareExactAmounts(provider.balance, providerHeldAfter) !== 0)
-      return refusedTopup('payout_reconciliation_required', false)
-    const restoredProvider = applyProviderAccountCredit(provider, expectedAmount, args.observedAt)
-    const restoredPaid = subtractExactAmounts(providerPaidAfter, expectedAmount)
-    if (
-      restoredProvider === undefined ||
-      restoredPaid === undefined ||
-      compareExactAmounts(restoredPaid, providerPaidBefore) !== 0
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    await ctx.db.insert('moneyLedgerEntries', {
-      entryRef: `${reversalTransactionRef}:payout-reversal`,
-      accountRef: providerAccount.accountRef,
-      entryType: 'payout_accrual',
-      direction: 'credit',
-      amountUnits: expectedAmount.units,
-      currency: expectedAmount.currency,
-      exponent: expectedAmount.exponent,
-      transactionRef: reversalTransactionRef,
-      idempotencyKey: reversalIdempotencyKey,
-      businessId: args.businessId,
-      sourceDigest: args.sourceDigest,
-      evidenceRefs: [...args.evidenceRefs],
-      reversalOf: prior.transactionRef,
-      createdAt: args.evidence.observedAt,
-    })
-    await ctx.db.patch('moneyAccounts', providerAccount._id, {
-      balanceUnits: restoredProvider.account.balance.units,
-      recoveryDueUnits: restoredProvider.account.recoveryDue.units,
-      version: restoredProvider.account.version,
-      updatedAt: restoredProvider.account.updatedAt,
-    })
-    await ctx.db.insert('moneyTransactions', {
-      transactionRef: reversalTransactionRef,
-      kind: 'payout_accrual',
-      idempotencyKey: reversalIdempotencyKey,
-      inputDigest: args.inputDigest,
-      principalId: `business:${args.businessId}`,
-      currency: expectedAmount.currency,
-      amountUnits: expectedAmount.units,
-      exponent: expectedAmount.exponent,
-      state: 'reversed',
-      expectedAccountVersion: providerAccount.version,
-      externalRef: args.payoutRef,
-      reversalOf: prior.transactionRef,
-      createdAt: args.evidence.observedAt,
-      updatedAt: args.observedAt,
-    })
-    await ctx.db.patch('moneyTransactions', prior._id, {
-      state: 'reversed',
-      updatedAt: args.observedAt,
-    })
-    await ctx.db.replace(
-      'moneyPayouts',
-      payout._id,
-      payoutTransferRow(payout, {
-        providerAccountRef: args.providerAccountRef,
-        destinationAccountId: args.destinationAccountId,
-        commandId: args.commandId,
-        inputDigest: args.inputDigest,
-        requestDigest: args.evidence.requestDigest,
-        idempotencyKey: args.idempotencyKey,
-        state: policy.value.state,
-        transferStatus: 'reversed',
-        stripeTransferId: transferId,
-        ...(payout.transferEvidenceDigest === undefined
-          ? {}
-          : { evidenceDigest: payout.transferEvidenceDigest }),
-        reversalEvidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.evidence.observedAt,
-        providerHeldBefore: provider.balance,
-        providerHeldAfter: restoredProvider.account.balance,
-        providerPaidBefore: providerPaidAfter,
-        providerPaidAfter: restoredPaid,
-      }),
-    )
-    const updated = await ctx.db.get(payout._id)
-    const transfer = updated === null ? undefined : payoutTransferView(updated)
-    return transfer === undefined
-      ? refusedTopup('payout_reconciliation_required', false)
-      : { kind: 'accepted' as const, transfer }
-  }
-  if (payout.state === 'paid') {
-    if (
-      args.evidence.status !== 'succeeded' ||
-      payout.transferStatus !== 'succeeded' ||
-      payout.transferEvidenceDigest !== args.evidence.evidenceDigest
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    const transfer = payoutTransferView(payout)
-    return transfer === undefined
-      ? refusedTopup('payout_reconciliation_required', false)
-      : { kind: 'accepted' as const, transfer }
-  }
-  if (args.evidence.status === 'pending') {
-    if (
-      payout.state !== 'transfer_pending' &&
-      payout.state !== 'outcome_unknown'
-    )
-      return refusedTopup('payout_reconciliation_required', false)
-    if (payout.state === 'outcome_unknown')
-      return refusedTopup('payout_reconciliation_required', false)
     await ctx.db.replace(
       'moneyPayouts',
       payout._id,
@@ -7459,16 +8366,32 @@ async function completePayoutBody(
         state: 'transfer_pending',
         transferStatus: 'pending',
         stripeTransferId: transferId,
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.observedAt,
+        transferObservedAt: args.evidence.observedAt,
+        updatedAt: args.observedAt,
       }),
     )
   } else if (args.evidence.status === 'outcome_unknown') {
     if (
-      payout.state !== 'transfer_pending' &&
-      payout.state !== 'outcome_unknown'
+      (payout.state !== 'transfer_pending' &&
+        payout.state !== 'outcome_unknown') ||
+      (journal.transaction.state !== 'pending' &&
+        journal.transaction.state !== 'outcome_unknown') ||
+      !payoutAccountAfterReservationMatches(
+        provider,
+        journal.transaction,
+        snapshots,
+        expectedAmount,
+      )
     )
       return refusedTopup('payout_reconciliation_required', false)
+    if (journal.transaction.state === 'outcome_unknown') {
+      if (payout.state !== 'outcome_unknown')
+        return refusedTopup('payout_reconciliation_required', false)
+      const transfer = payoutTransferView(payout)
+      return transfer === undefined
+        ? refusedTopup('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, transfer }
+    }
     const policy = transitionPayout({
       current,
       now: args.observedAt,
@@ -7476,11 +8399,15 @@ async function completePayoutBody(
         kind: 'transfer_unknown',
         payoutCommandId: args.commandId,
         idempotencyKey: args.idempotencyKey,
-        stripeTransferId: transferId,
+        ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
       },
       account: accountState,
     })
     if (policy.kind === 'refused') return policy
+    await ctx.db.patch('moneyTransactions', journal.transaction._id, {
+      state: 'outcome_unknown',
+      updatedAt: args.observedAt,
+    })
     await ctx.db.replace(
       'moneyPayouts',
       payout._id,
@@ -7493,50 +8420,55 @@ async function completePayoutBody(
         idempotencyKey: args.idempotencyKey,
         state: policy.value.state,
         transferStatus: 'outcome_unknown',
-        stripeTransferId: transferId,
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.observedAt,
-      }),
-    )
-  } else if (args.evidence.status === 'failed') {
-    const policy = transitionPayout({
-      current,
-      now: args.observedAt,
-      action: {
-        kind: 'transfer_failed',
-        payoutCommandId: args.commandId,
-        idempotencyKey: args.idempotencyKey,
-        failureCode: args.failureCode ?? 'provider_transfer_failed',
-        stripeTransferId: transferId,
-        requestDigest: args.evidence.requestDigest,
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.evidence.observedAt,
-      },
-      account: accountState,
-    })
-    if (policy.kind === 'refused') return policy
-    await ctx.db.replace(
-      'moneyPayouts',
-      payout._id,
-      payoutTransferRow(payout, {
-        providerAccountRef: args.providerAccountRef,
-        destinationAccountId: args.destinationAccountId,
-        commandId: args.commandId,
-        inputDigest: args.inputDigest,
-        requestDigest: args.evidence.requestDigest,
-        idempotencyKey: args.idempotencyKey,
-        state: policy.value.state,
-        transferStatus: 'failed',
-        stripeTransferId: transferId,
-        evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.observedAt,
-        failureCode: args.failureCode ?? 'provider_transfer_failed',
+        ...(transferId === undefined ? {} : { stripeTransferId: transferId }),
+        transferObservedAt: args.evidence.observedAt,
+        updatedAt: args.observedAt,
       }),
     )
   } else {
+    if (transferId === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const providerPaidAfter =
+      payout.providerPaidAfterUnits === undefined
+        ? addExactAmounts(snapshots.providerPaidBefore, expectedAmount)
+        : amountFromParts(
+            payout.currency,
+            payout.providerPaidAfterUnits,
+            payout.exponent,
+          )
+    if (providerPaidAfter === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    if (payout.state === 'paid') {
+      const expectedPaidAfter = addExactAmounts(
+        snapshots.providerPaidBefore,
+        expectedAmount,
+      )
+      if (
+        journal.transaction.state !== 'applied' ||
+        payout.transferStatus !== 'succeeded' ||
+        payout.stripeTransferId !== transferId ||
+        payout.transferEvidenceDigest !== args.evidence.evidenceDigest ||
+        expectedPaidAfter === undefined ||
+        compareExactAmounts(providerPaidAfter, expectedPaidAfter) !== 0 ||
+        provider.version < journal.transaction.expectedAccountVersion + 1
+      )
+        return refusedTopup('payout_reconciliation_required', false)
+      const transfer = payoutTransferView(payout, expectedAmount)
+      return transfer === undefined
+        ? refusedTopup('payout_reconciliation_required', false)
+        : { kind: 'accepted' as const, transfer }
+    }
     if (
-      payout.state !== 'transfer_pending' &&
-      payout.state !== 'outcome_unknown'
+      (payout.state !== 'transfer_pending' &&
+        payout.state !== 'outcome_unknown') ||
+      (journal.transaction.state !== 'pending' &&
+        journal.transaction.state !== 'outcome_unknown') ||
+      !payoutAccountAfterReservationMatches(
+        provider,
+        journal.transaction,
+        snapshots,
+        expectedAmount,
+      )
     )
       return refusedTopup('payout_reconciliation_required', false)
     const policy = transitionPayout({
@@ -7554,177 +8486,29 @@ async function completePayoutBody(
       account: accountState,
     })
     if (policy.kind === 'refused') return policy
-    const [priorByIdempotency, priorByPayout, priorByTransactionRef] =
-      await Promise.all([
-        ctx.db
-          .query('moneyTransactions')
-          .withIndex('by_idempotencyKey', (q) =>
-            q.eq('idempotencyKey', args.idempotencyKey),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyTransactions')
-          .withIndex('by_externalRef', (q) =>
-            q.eq('externalRef', args.payoutRef),
-          )
-          .take(2),
-        ctx.db
-          .query('moneyTransactions')
-          .withIndex('by_transactionRef', (q) =>
-            q.eq('transactionRef', args.transactionRef),
-          )
-          .unique(),
-      ])
-    const prior =
-      priorByIdempotency ??
-      priorByPayout.find((row) => row.kind === 'payout_accrual')
-    let payoutSnapshots:
-      | Readonly<{
-          providerHeldBefore: ExactAmount
-          providerHeldAfter: ExactAmount
-          providerPaidBefore: ExactAmount
-          providerPaidAfter: ExactAmount
-        }>
-      | undefined
-    if (prior !== null && prior !== undefined) {
-      const priorEntry = await ctx.db
-        .query('moneyLedgerEntries')
-        .withIndex('by_transactionRef', (q) =>
-          q.eq('transactionRef', prior.transactionRef),
-        )
-        .unique()
-      const priorAmount =
-        priorEntry === null ? undefined : entryAmount(priorEntry)
-      if (
-        prior.state !== 'applied' ||
-        prior.kind !== 'payout_accrual' ||
-        prior.inputDigest !== args.inputDigest ||
-        prior.externalRef !== args.payoutRef ||
-        priorEntry === null ||
-        priorEntry.accountRef !== providerAccount.accountRef ||
-        priorAmount === undefined ||
-        compareExactAmounts(priorAmount, expectedAmount) !== 0
-      )
-        return refusedTopup('payout_reconciliation_required', false)
-      const providerHeldBefore =
-        payout.providerHeldBeforeUnits === undefined
-          ? undefined
-          : amountFromParts(
-              payout.currency,
-              payout.providerHeldBeforeUnits,
-              payout.exponent,
-            )
-      const providerHeldAfter =
-        payout.providerHeldAfterUnits === undefined
-          ? undefined
-          : amountFromParts(
-              payout.currency,
-              payout.providerHeldAfterUnits,
-              payout.exponent,
-            )
-      const providerPaidBefore =
-        payout.providerPaidBeforeUnits === undefined
-          ? undefined
-          : amountFromParts(
-              payout.currency,
-              payout.providerPaidBeforeUnits,
-              payout.exponent,
-            )
-      const providerPaidAfter =
-        payout.providerPaidAfterUnits === undefined
-          ? undefined
-          : amountFromParts(
-              payout.currency,
-              payout.providerPaidAfterUnits,
-              payout.exponent,
-            )
-      if (
-        providerHeldBefore === undefined ||
-        providerHeldAfter === undefined ||
-        providerPaidBefore === undefined ||
-        providerPaidAfter === undefined
-      )
-        return refusedTopup('payout_reconciliation_required', false)
-      payoutSnapshots = {
-        providerHeldBefore,
-        providerHeldAfter,
-        providerPaidBefore,
-        providerPaidAfter,
-      }
-    } else {
-      const balanceComparison = compareExactAmounts(
-        provider.balance,
-        expectedAmount,
-      )
-      if (balanceComparison === undefined || balanceComparison === -1)
-        return refusedTopup('payout_reconciliation_required', false)
-      const nextBalance = subtractExactAmounts(provider.balance, expectedAmount)
-      const zeroPaid = amountFromParts(
-        expectedAmount.currency,
-        '0',
-        expectedAmount.exponent,
-      )
-      if (nextBalance === undefined || zeroPaid === undefined)
-        return refusedTopup('payout_reconciliation_required', false)
-      const priorPaid = await readLatestCompletedPayoutPaidAfter(
-        ctx,
-        args.businessId,
-        expectedAmount,
-        payout._id,
-      )
-      if (priorPaid === undefined)
-        return refusedTopup('payout_reconciliation_required', false)
-      const providerPaidBefore = priorPaid ?? zeroPaid
-      const providerPaidAfter = addExactAmounts(
-        providerPaidBefore,
-        expectedAmount,
-      )
-      if (providerPaidAfter === undefined)
-        return refusedTopup('payout_reconciliation_required', false)
-      payoutSnapshots = {
-        providerHeldBefore: provider.balance,
-        providerHeldAfter: nextBalance,
-        providerPaidBefore,
-        providerPaidAfter,
-      }
-      await ctx.db.insert('moneyLedgerEntries', {
-        entryRef: `${args.transactionRef}:payout`,
-        accountRef: providerAccount.accountRef,
-        entryType: 'payout_accrual',
-        direction: 'debit',
-        amountUnits: expectedAmount.units,
-        currency: expectedAmount.currency,
-        exponent: expectedAmount.exponent,
-        transactionRef: args.transactionRef,
-        idempotencyKey: args.idempotencyKey,
-        businessId: args.businessId,
-        sourceDigest: args.sourceDigest,
-        evidenceRefs: args.evidenceRefs,
-        createdAt: args.evidence.observedAt,
-      })
-      await ctx.db.patch('moneyAccounts', providerAccount._id, {
-        balanceUnits: nextBalance.units,
-        version: providerAccount.version + 1,
-        updatedAt: args.observedAt,
-      })
-      await ctx.db.insert('moneyTransactions', {
-        transactionRef: args.transactionRef,
-        kind: 'payout_accrual',
-        idempotencyKey: args.idempotencyKey,
-        inputDigest: args.inputDigest,
-        principalId: `business:${args.businessId}`,
-        currency: expectedAmount.currency,
-        amountUnits: expectedAmount.units,
-        exponent: expectedAmount.exponent,
-        state: 'applied',
-        expectedAccountVersion: providerAccount.version,
-        externalRef: args.payoutRef,
-        createdAt: args.evidence.observedAt,
-        updatedAt: args.observedAt,
-      })
-    }
-    if (payoutSnapshots === undefined)
+    const latestProviderPaidAfter = await readLatestCompletedPayoutPaidAfter(
+      ctx,
+      args.businessId,
+      expectedAmount,
+      payout._id,
+    )
+    if (latestProviderPaidAfter === undefined)
       return refusedTopup('payout_reconciliation_required', false)
+    const currentPaidBefore =
+      latestProviderPaidAfter ??
+      zeroAmount(expectedAmount.currency, expectedAmount.exponent)
+    if (currentPaidBefore === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    const derivedPaidAfter = addExactAmounts(
+      currentPaidBefore,
+      expectedAmount,
+    )
+    if (derivedPaidAfter === undefined)
+      return refusedTopup('payout_reconciliation_required', false)
+    await ctx.db.patch('moneyTransactions', journal.transaction._id, {
+      state: 'applied',
+      updatedAt: args.observedAt,
+    })
     await ctx.db.replace(
       'moneyPayouts',
       payout._id,
@@ -7739,8 +8523,12 @@ async function completePayoutBody(
         transferStatus: 'succeeded',
         stripeTransferId: transferId,
         evidenceDigest: args.evidence.evidenceDigest,
-        observedAt: args.evidence.observedAt,
-        ...payoutSnapshots,
+        transferObservedAt: args.evidence.observedAt,
+        updatedAt: args.observedAt,
+        providerHeldBefore: snapshots.providerHeldBefore,
+        providerHeldAfter: snapshots.providerHeldAfter,
+        providerPaidBefore: currentPaidBefore,
+        providerPaidAfter: derivedPaidAfter,
       }),
     )
   }
@@ -7761,7 +8549,6 @@ const payoutCompleteArgs = {
   commandId: identifier,
   inputDigest: identifier,
   idempotencyKey: identifier,
-  transactionRef: identifier,
   evidence: payoutTransferEvidenceArg,
   sourceDigest: identifier,
   evidenceRefs: v.array(identifier),
@@ -8096,6 +8883,36 @@ async function appendRefundBody(
       currency: original.currency,
     }
   }
+  const [pendingPayouts, unknownPayouts] = await Promise.all([
+    ctx.db
+      .query('moneyPayouts')
+      .withIndex('by_businessId_and_currency_and_state', (q) =>
+        q
+          .eq('businessId', journal.businessId)
+          .eq('currency', original.currency)
+          .eq('state', 'transfer_pending'),
+      )
+      .take(2),
+    ctx.db
+      .query('moneyPayouts')
+      .withIndex('by_businessId_and_currency_and_state', (q) =>
+        q
+          .eq('businessId', journal.businessId)
+          .eq('currency', original.currency)
+          .eq('state', 'outcome_unknown'),
+      )
+      .take(2),
+  ])
+  if (
+    [...pendingPayouts, ...unknownPayouts].some(
+      (payout) => payout.providerAccountRef === provider.accountRef,
+    )
+  )
+    return {
+      kind: 'refused' as const,
+      code: 'charge_reconciliation_required' as const,
+      retryable: false,
+    }
   if (original.state !== 'applied' && original.state !== 'outcome_unknown')
     return {
       kind: 'refused' as const,
@@ -9214,7 +10031,21 @@ async function readProviderEarningsForAccount(
   const zero = zeroAmount(account.currency, account.exponent)
   if (zero === undefined)
     return { kind: 'refused' as const, code: 'payout_not_ready' as const }
-  const transactions = await readTransactionRefs(ctx, rows)
+  const transactionRefs = await readTransactionRefs(ctx, rows)
+  const businessTransactions = await ctx.db
+    .query('moneyTransactions')
+    .withIndex('by_principalId_and_createdAt', (query) =>
+      query.eq('principalId', `business:${businessId}`),
+    )
+    .take(101)
+  if (businessTransactions.length > 100)
+    return {
+      kind: 'refused' as const,
+      code: 'payout_reconciliation_required' as const,
+    }
+  const transactions = new Map(transactionRefs)
+  for (const transaction of businessTransactions)
+    transactions.set(transaction.transactionRef, transaction)
   const providerCredits = sumEntries(
     rows,
     zero,
@@ -9236,26 +10067,250 @@ async function readProviderEarningsForAccount(
       entry.direction === 'credit' &&
       isSettledCharge(transactions, entry.transactionRef),
   )
-  const payoutDebits = sumEntries(
-    rows,
-    zero,
+  const payoutOriginalTransactions = [...transactions.values()].filter(
+    (transaction) =>
+      transaction.kind === 'payout_accrual' &&
+      transaction.principalId === `business:${businessId}` &&
+      transaction.currency === currency &&
+      transaction.exponent === account.exponent &&
+      transaction.reversalOf === undefined &&
+      (transaction.state === 'applied' || transaction.state === 'reversed'),
+  )
+  const linkedReversalRows = await Promise.all(
+    payoutOriginalTransactions.map(
+      async (transaction) =>
+        await ctx.db
+          .query('moneyTransactions')
+          .withIndex('by_reversalOf', (query) =>
+            query.eq('reversalOf', transaction.transactionRef),
+          )
+          .take(2),
+    ),
+  )
+  const linkedReversals = new Map(
+    payoutOriginalTransactions.map((transaction, index) => [
+      transaction.transactionRef,
+      linkedReversalRows[index] ?? [],
+    ]),
+  )
+  const payoutOriginalRefs = new Set(
+    payoutOriginalTransactions.map((transaction) => transaction.transactionRef),
+  )
+  const payoutDebitRows = rows.filter(
     (entry) =>
-      entry.currency === currency &&
       entry.accountRef === account.accountRef &&
+      entry.businessId === businessId &&
       entry.entryType === 'payout_accrual' &&
       entry.direction === 'debit' &&
-      transactions.get(entry.transactionRef)?.kind === 'payout_accrual',
+      entry.currency === currency,
   )
-  const payoutReversals = sumEntries(
-    rows,
-    zero,
+  let invalidPayoutComposition = false
+  for (const entry of payoutDebitRows) {
+    const transaction = transactions.get(entry.transactionRef)
+    const providerCredits = rows.filter(
+      (candidate) =>
+        candidate.transactionRef === entry.transactionRef &&
+        candidate.accountRef === account.accountRef &&
+        candidate.entryType === 'payout_accrual' &&
+        candidate.direction === 'credit' &&
+        candidate.businessId === businessId &&
+        candidate.currency === currency &&
+        candidate.exponent === account.exponent,
+    )
+    const providerCredit = providerCredits[0]
+    const recoveryAmount = entryAmount(entry)
+    const providerAmount =
+      providerCredit === undefined ? undefined : entryAmount(providerCredit)
+    const isCanonicalRecoveryDebit =
+      transaction?.kind === 'charge' &&
+      providerCredit !== undefined &&
+      providerAmount !== undefined &&
+      recoveryAmount !== undefined &&
+      entry.entryRef === `${transaction.transactionRef}:provider-recovery` &&
+      transaction.transactionRef === entry.transactionRef &&
+      transaction.idempotencyKey === entry.idempotencyKey &&
+      transaction.currency === currency &&
+      transaction.exponent === account.exponent &&
+      providerCredit.entryRef === `${transaction.transactionRef}:provider` &&
+      providerCredit.transactionRef === transaction.transactionRef &&
+      providerCredit.idempotencyKey === transaction.idempotencyKey &&
+      providerCredit.createdAt === transaction.createdAt &&
+      entry.businessId === providerCredit.businessId &&
+      entry.invocationRef !== undefined &&
+      entry.invocationRef.length > 0 &&
+      entry.invocationRef === providerCredit.invocationRef &&
+      entry.attemptRef !== undefined &&
+      entry.attemptRef.length > 0 &&
+      entry.attemptRef === providerCredit.attemptRef &&
+      entry.exponent === account.exponent &&
+      entry.principalId === undefined &&
+      entry.reversalOf === undefined &&
+      entry.sourceDigest === providerCredit.sourceDigest &&
+      sameEvidenceRefs(entry.evidenceRefs, providerCredit.evidenceRefs) &&
+      providerCredits.length === 1 &&
+      compareExactAmounts(recoveryAmount, providerAmount) !== 1
+    if (isCanonicalRecoveryDebit) continue
+    if (
+      transaction === undefined ||
+      transaction.kind !== 'payout_accrual' ||
+      transaction.transactionRef !== entry.transactionRef ||
+      transaction.idempotencyKey !== entry.idempotencyKey ||
+      transaction.principalId !== `business:${businessId}` ||
+      transaction.currency !== currency ||
+      transaction.exponent !== account.exponent ||
+      transaction.amountUnits === undefined ||
+      transaction.amountUnits !== entry.amountUnits ||
+      transaction.reversalOf !== undefined ||
+      entry.reversalOf !== undefined ||
+      ((transaction.state === 'applied' ||
+        transaction.state === 'reversed') &&
+        !payoutOriginalRefs.has(transaction.transactionRef))
+    ) {
+      invalidPayoutComposition = true
+    }
+  }
+  const payoutOriginalAmounts: ExactAmount[] = []
+  const payoutReversalAmounts: ExactAmount[] = []
+  for (const original of payoutOriginalTransactions) {
+    const originalRows = rows.filter(
+      (entry) =>
+        entry.transactionRef === original.transactionRef &&
+        entry.entryType === 'payout_accrual',
+    )
+    const debitRows = originalRows.filter(
+      (entry) =>
+        entry.accountRef === account.accountRef &&
+        entry.businessId === businessId &&
+        entry.direction === 'debit' &&
+        entry.reversalOf === undefined &&
+        entry.idempotencyKey === original.idempotencyKey &&
+        entry.currency === currency &&
+        entry.exponent === account.exponent &&
+        entry.amountUnits === original.amountUnits,
+    )
+    const originalEntry = debitRows[0]
+    const originalAmount =
+      originalEntry === undefined ? undefined : entryAmount(originalEntry)
+    if (
+      originalRows.length !== 1 ||
+      debitRows.length !== 1 ||
+      originalAmount === undefined
+    ) {
+      invalidPayoutComposition = true
+      continue
+    }
+    payoutOriginalAmounts.push(originalAmount)
+    const linkedReversalsForOriginal =
+      linkedReversals.get(original.transactionRef) ?? []
+    if (original.state === 'applied') {
+      if (
+        linkedReversalsForOriginal.length !== 0 ||
+        rows.some((entry) => entry.reversalOf === original.transactionRef)
+      )
+        invalidPayoutComposition = true
+      continue
+    }
+    const reversal = linkedReversalsForOriginal[0]
+    const expectedReversalRef = canonicalDigest({
+      format: 'money-payout-reversal-transaction:v1',
+      reservationTransactionRef: original.transactionRef,
+    })
+    const expectedReversalIdempotencyKey = canonicalDigest({
+      format: 'money-payout-reversal-idempotency:v1',
+      reservationTransactionRef: original.transactionRef,
+    })
+    const reversalRows =
+      reversal === undefined
+        ? []
+        : rows.filter(
+            (entry) =>
+              entry.transactionRef === reversal.transactionRef &&
+              entry.entryType === 'payout_accrual',
+          )
+    const reversalEntry = reversalRows[0]
+    const reversalAmount =
+      reversalEntry === undefined ? undefined : entryAmount(reversalEntry)
+    if (
+      linkedReversalsForOriginal.length !== 1 ||
+      reversal === undefined ||
+      reversal.transactionRef !== expectedReversalRef ||
+      reversal.idempotencyKey !== expectedReversalIdempotencyKey ||
+      reversal.kind !== 'payout_accrual' ||
+      reversal.state !== 'reversed' ||
+      reversal.reversalOf !== original.transactionRef ||
+      reversal.principalId !== `business:${businessId}` ||
+      reversal.currency !== currency ||
+      reversal.exponent !== account.exponent ||
+      reversal.amountUnits === undefined ||
+      reversal.amountUnits !== original.amountUnits ||
+      reversalRows.length !== 1 ||
+      reversalEntry === undefined ||
+      reversalEntry.accountRef !== account.accountRef ||
+      reversalEntry.businessId !== businessId ||
+      reversalEntry.direction !== 'credit' ||
+      reversalEntry.reversalOf !== original.transactionRef ||
+      reversalEntry.idempotencyKey !== reversal.idempotencyKey ||
+      reversalEntry.currency !== currency ||
+      reversalEntry.exponent !== account.exponent ||
+      reversalEntry.amountUnits !== original.amountUnits ||
+      reversalAmount === undefined ||
+      compareExactAmounts(reversalAmount, originalAmount) !== 0
+    ) {
+      invalidPayoutComposition = true
+      continue
+    }
+    payoutReversalAmounts.push(reversalAmount)
+  }
+  const payoutReversalEntries = rows.filter(
     (entry) =>
-      entry.currency === currency &&
       entry.accountRef === account.accountRef &&
+      entry.businessId === businessId &&
       entry.entryType === 'payout_accrual' &&
       entry.direction === 'credit' &&
       entry.reversalOf !== undefined &&
-      transactions.get(entry.transactionRef)?.kind === 'payout_accrual',
+      entry.currency === currency,
+  )
+  invalidPayoutComposition ||= payoutReversalEntries.some((entry) => {
+    const reversal = transactions.get(entry.transactionRef)
+    const original =
+      entry.reversalOf === undefined
+        ? undefined
+        : transactions.get(entry.reversalOf)
+    return (
+      reversal === undefined ||
+      original === undefined ||
+      !payoutOriginalRefs.has(original.transactionRef) ||
+      original.kind !== 'payout_accrual' ||
+      original.principalId !== `business:${businessId}` ||
+      original.reversalOf !== undefined ||
+      original.state !== 'reversed' ||
+      original.currency !== currency ||
+      original.exponent !== account.exponent ||
+      original.amountUnits === undefined ||
+      reversal.transactionRef !==
+        canonicalDigest({
+          format: 'money-payout-reversal-transaction:v1',
+          reservationTransactionRef: original.transactionRef,
+        }) ||
+      reversal.kind !== 'payout_accrual' ||
+      reversal.state !== 'reversed' ||
+      reversal.reversalOf !== original.transactionRef ||
+      reversal.principalId !== `business:${businessId}` ||
+      reversal.currency !== currency ||
+      reversal.exponent !== account.exponent ||
+      reversal.amountUnits === undefined ||
+      reversal.amountUnits !== original.amountUnits ||
+      entry.amountUnits !== original.amountUnits ||
+      entry.exponent !== account.exponent
+    )
+  })
+  const payoutDebits = payoutOriginalAmounts.reduce<ExactAmount | undefined>(
+    (sum, value) => (sum === undefined ? undefined : addExactAmounts(sum, value)),
+    zero,
+  )
+  const payoutReversals = payoutReversalAmounts.reduce<ExactAmount | undefined>(
+    (sum, value) => (sum === undefined ? undefined : addExactAmounts(sum, value)),
+    zero,
   )
   const paidOut =
     payoutDebits === undefined || payoutReversals === undefined
@@ -9296,6 +10351,7 @@ async function readProviderEarningsForAccount(
       ? undefined
       : addExactAmounts(providerNet, rake)
   if (
+    invalidPayoutComposition ||
     grossAccrual === undefined ||
     rake === undefined ||
     providerNet === undefined ||
@@ -9356,15 +10412,43 @@ async function readPayoutStatusForRows(
     providerAccount.currency !== currency
   )
     return { kind: 'refused' as const, code: 'payout_not_ready' as const }
-  const current = (
-    await ctx.db
+  const [pendingRows, unknownRows] = await Promise.all([
+    ctx.db
       .query('moneyPayouts')
-      .withIndex('by_businessId_and_currency_and_cadence_and_updatedAt', (q) =>
-        q.eq('businessId', businessId).eq('currency', currency).eq('cadence', 'daily'),
+      .withIndex('by_businessId_and_currency_and_state', (q) =>
+        q
+          .eq('businessId', businessId)
+          .eq('currency', currency)
+          .eq('state', 'transfer_pending'),
       )
-      .order('desc')
-      .take(1)
-  )[0]
+      .take(2),
+    ctx.db
+      .query('moneyPayouts')
+      .withIndex('by_businessId_and_currency_and_state', (q) =>
+        q
+          .eq('businessId', businessId)
+          .eq('currency', currency)
+          .eq('state', 'outcome_unknown'),
+      )
+      .take(2),
+  ])
+  const activeRows = [...pendingRows, ...unknownRows]
+  if (activeRows.length > 1)
+    return {
+      kind: 'refused' as const,
+      code: 'payout_reconciliation_required' as const,
+    }
+  const current =
+    activeRows[0] ??
+    (
+      await ctx.db
+        .query('moneyPayouts')
+        .withIndex('by_businessId_and_currency_and_cadence_and_updatedAt', (q) =>
+          q.eq('businessId', businessId).eq('currency', currency).eq('cadence', 'daily'),
+        )
+        .order('desc')
+        .take(1)
+    )[0]
   const zero = zeroAmount(provider.balance.currency, provider.balance.exponent)
   if (zero === undefined)
     return { kind: 'refused' as const, code: 'payout_not_ready' as const }

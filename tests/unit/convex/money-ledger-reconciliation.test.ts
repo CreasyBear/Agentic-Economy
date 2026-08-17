@@ -2289,6 +2289,66 @@ describe('exact invocation money reconciliation', () => {
   })
 
 
+  it.each(['transfer_pending' as const, 'outcome_unknown' as const])(
+    'refuses a refund from another period while the shared provider payout is $state',
+    async (state) => {
+    const db = new MemoryDb()
+    seedDisputeFixture(db, 'key-a', 'key-a')
+    db.seed('moneyPayouts', {
+      _id: 'payout:other-period-unresolved',
+      payoutRef: 'payout:other-period-unresolved',
+      businessId: 'business:money',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrualUnits: '200',
+      rakeUnits: '2',
+      providerNetUnits: '198',
+      minimumPayoutUnits: '0',
+      state,
+      periodStart: '1970-02-01',
+      periodEnd: '1970-02-28',
+      providerAccountRef: accountRefForProvider('business:money', 'USD'),
+      idempotencyKey: 'payout:other-period-unresolved',
+      createdAt: now,
+      updatedAt: now,
+    })
+    const before = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+      budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+    }
+    const qualifiedUse = qualifiedUseRef({
+      invocationRef,
+      attemptRef,
+      effectGeneration: 1,
+    })
+    await expect(
+      disputeHandler(
+        { db },
+        {
+          qualifiedUseRef: qualifiedUse,
+          disputeRef: 'dispute:other-period-unresolved',
+          sourceDigest: 'sha256:dispute-other-period',
+          evidenceRefs: ['evidence:dispute-other-period'],
+          observedAt: now,
+        },
+      ),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'charge_reconciliation_required',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      entries: db.rows('moneyLedgerEntries'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual(before)
+  })
+
   it('accepts disputed use when pooled owner credentials match', async () => {
     const db = new MemoryDb()
     seedDisputeFixture(db, 'key-a', 'key-a')

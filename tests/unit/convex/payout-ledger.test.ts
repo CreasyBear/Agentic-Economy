@@ -22,6 +22,9 @@ import {
   beginPayoutTransfer,
   completePayoutTransfer,
   finalizeConnectAccount,
+  readOwnerPayoutTransfer,
+  readOwnerProviderEarnings,
+  readPayoutStatus,
   reserveConnectAccount,
   reconcilePayoutTransfer,
   markPayoutTransferOutcomeUnknown,
@@ -38,6 +41,7 @@ type Query = {
   ) => Query
   order: (direction: 'asc' | 'desc') => Query
   unique: () => Promise<Row | null>
+  first: () => Promise<Row | null>
   collect: () => Promise<Row[]>
   take: (limit: number) => Promise<Row[]>
 }
@@ -102,6 +106,7 @@ class MemoryDb {
           throw new Error('unbounded_ledger_read')
         return rows
       },
+      first: async () => matches()[0] ?? null,
       take: async (limit) => matches().slice(0, limit),
     }
     return query
@@ -155,13 +160,20 @@ type Handler = (
   ctx: {
     db: MemoryDb
     auth: {
-      getUserIdentity: () => Promise<{ tokenIdentifier: string } | null>
+      getUserIdentity: () => Promise<{ tokenIdentifier: string; subject?: string } | null>
     }
   },
   args: Record<string, unknown>,
 ) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
 const begin = (beginPayoutTransfer as unknown as HandlerExport)._handler
+const readOwnerTransfer = (
+  readOwnerPayoutTransfer as unknown as HandlerExport
+)._handler
+const readStatus = (readPayoutStatus as unknown as HandlerExport)._handler
+const readOwnerEarnings = (
+  readOwnerProviderEarnings as unknown as HandlerExport
+)._handler
 const complete = (completePayoutTransfer as unknown as HandlerExport)._handler
 const reconcile = (reconcilePayoutTransfer as unknown as HandlerExport)._handler
 const markUnknown = (
@@ -181,6 +193,12 @@ const sourceArgs = {
 const amount = { currency: 'USD', units: '5000', exponent: 2 }
 const identity = {
   getUserIdentity: async () => ({ tokenIdentifier: 'principal:test' }),
+}
+const ownerIdentity = {
+  getUserIdentity: async () => ({
+    tokenIdentifier: 'owner-token',
+    subject: 'owner:test',
+  }),
 }
 const dailyPayoutPeriodStart = '2026-07-01T00:00:00.000Z'
 const dailyPayoutPeriodEnd = '2026-07-02T00:00:00.000Z'
@@ -202,23 +220,6 @@ const dailyPayoutAllocationRef = canonicalDigest({
   qualifiedUseRef: dailyPayoutQualifiedUseRef,
   materialDigest: dailyPayoutMaterialDigest,
 } as const)
-const secondDailyPayoutPeriodStart = '2026-08-01T00:00:00.000Z'
-const secondDailyPayoutPeriodEnd = '2026-08-02T00:00:00.000Z'
-const secondPayoutTransferObservedAt = Date.parse(secondDailyPayoutPeriodEnd) + 1
-const secondDailyPayoutRef = canonicalDigest({
-  format: 'money-daily-payout:v1',
-  businessId: 'business-1',
-  currency: 'USD',
-  periodStart: secondDailyPayoutPeriodStart,
-  periodEnd: secondDailyPayoutPeriodEnd,
-} as const)
-const secondDailyPayoutQualifiedUseRef = 'qualified-use:payout-2'
-const secondDailyPayoutMaterialDigest = 'sha256:payout-material-2'
-const secondDailyPayoutAllocationRef = canonicalDigest({
-  format: 'money-qualified-use-allocation:v1',
-  qualifiedUseRef: secondDailyPayoutQualifiedUseRef,
-  materialDigest: secondDailyPayoutMaterialDigest,
-} as const)
 
 function seedPayout(
   db: MemoryDb,
@@ -229,7 +230,7 @@ function seedPayout(
 ): void {
   db.seed('moneyAccounts', {
     _id: 'moneyAccounts:1',
-    accountRef: 'provider:business-1:USD',
+    accountRef: 'business:business-1:USD',
     accountKind: 'provider_earnings',
     businessId: 'business-1',
     currency: 'USD',
@@ -269,7 +270,7 @@ function seedPayout(
     state,
     periodStart: dailyPayoutPeriodStart,
     periodEnd: dailyPayoutPeriodEnd,
-    providerAccountRef: 'provider:business-1:USD',
+    providerAccountRef: 'business:business-1:USD',
     idempotencyKey: 'payout-old',
     createdAt: 1,
     updatedAt: 1,
@@ -293,13 +294,90 @@ function seedPayout(
     createdAt: 1,
   })
 }
+function seedAdditionalDailyPayout(
+  db: MemoryDb,
+  suffix: string,
+  periodStart: string,
+  periodEnd: string,
+): string {
+  const payoutRef = canonicalDigest({
+    format: 'money-daily-payout:v1',
+    businessId: 'business-1',
+    currency: 'USD',
+    periodStart,
+    periodEnd,
+  } as const)
+  const qualifiedUseRef = `qualified-use:${suffix}`
+  const materialDigest = `sha256:payout-material:${suffix}`
+  const allocationRef = canonicalDigest({
+    format: 'money-qualified-use-allocation:v1',
+    qualifiedUseRef,
+    materialDigest,
+  } as const)
+  db.seed('moneyPayouts', {
+    _id: `moneyPayouts:${suffix}`,
+    payoutRef,
+    businessId: 'business-1',
+    currency: 'USD',
+    exponent: 2,
+    grossAccrualUnits: '5500',
+    rakeUnits: '500',
+    providerNetUnits: '5000',
+    minimumPayoutUnits: '0',
+    cadence: 'daily',
+    state: 'held_threshold',
+    periodStart,
+    periodEnd,
+    providerAccountRef: 'business:business-1:USD',
+    idempotencyKey: payoutRef,
+    createdAt: Date.parse(periodStart),
+    updatedAt: Date.parse(periodStart),
+  })
+  db.seed('moneyPayoutAllocations', {
+    _id: `moneyPayoutAllocations:${suffix}`,
+    allocationRef,
+    payoutRef,
+    qualifiedUseRef,
+    materialDigest,
+    transactionRef: `transaction:payout-${suffix}`,
+    usageRef: `usage:payout-${suffix}`,
+    businessId: 'business-1',
+    currency: 'USD',
+    exponent: 2,
+    grossAccrualUnits: '5500',
+    rakeUnits: '500',
+    providerNetUnits: '5000',
+    qualifiedAt: Date.parse(periodStart) + 1,
+    sourceDigest: `sha256:payout-source:${suffix}`,
+    createdAt: Date.parse(periodStart) + 1,
+  })
+  return payoutRef
+}
+function creditProvider(
+  db: MemoryDb,
+  units: string,
+  observedAt: number,
+): void {
+  const provider = db.rows('moneyAccounts')[0]
+  if (
+    provider === undefined ||
+    typeof provider.balanceUnits !== 'string' ||
+    typeof provider.version !== 'number'
+  )
+    throw new Error('provider_fixture_missing')
+  provider.balanceUnits = (
+    BigInt(provider.balanceUnits) + BigInt(units)
+  ).toString()
+  provider.version += 1
+  provider.updatedAt = observedAt
+}
 
 function commandArgs(): Record<string, unknown> {
   return {
     authority: { principalId: 'principal:test' },
     businessId: 'business-1',
     amount,
-    providerAccountRef: 'provider:business-1:USD',
+    providerAccountRef: 'business:business-1:USD',
     destinationAccountId: 'acct_1',
     payoutRef: dailyPayoutRef,
     commandId: 'command-1',
@@ -327,105 +405,217 @@ function evidence(
     observedAt: normalProviderEvidenceObservedAt,
   }
 }
+function completionArgs(
+  args: Record<string, unknown>,
+  payoutEvidence: Record<string, unknown>,
+): Record<string, unknown> {
+  const evidenceDigest = payoutEvidence.evidenceDigest
+  if (typeof evidenceDigest !== 'string')
+    throw new Error('evidence_digest_missing')
+  return {
+    ...args,
+    sourceDigest: canonicalDigest({
+      format: 'money-payout-evidence:v1',
+      evidence: evidenceDigest,
+    }),
+    evidenceRefs: [evidenceDigest],
+    evidence: payoutEvidence,
+  }
+}
 
 describe('Convex payout persistence', () => {
-  it('begins without debiting, debits once on verified success, and replays exactly', async () => {
+  it('atomically reserves provider earnings before transfer effect and replays exactly', async () => {
     const db = new MemoryDb()
     seedPayout(db)
-    const before = db.rows('moneyAccounts')[0]?.balanceUnits
     const args = commandArgs()
+    const reservationRef = canonicalDigest({
+      format: 'money-payout-reservation-transaction:v1',
+      payoutRef: args.payoutRef,
+      payoutCommandId: args.commandId,
+      inputDigest: args.inputDigest,
+      idempotencyKey: args.idempotencyKey,
+    })
+    await expect(begin({ db, auth: identity }, args)).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'transfer_pending',
+        providerHeldBefore: amount,
+        providerHeldAfter: { currency: 'USD', units: '0', exponent: 2 },
+        providerPaidBefore: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('0')
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyTransactions')[0]).toMatchObject({
+      transactionRef: reservationRef,
+      kind: 'payout_accrual',
+      state: 'pending',
+      amountUnits: '5000',
+      expectedAccountVersion: 1,
+    })
+    expect(db.rows('moneyLedgerEntries')[0]).toMatchObject({
+      entryRef: `${reservationRef}:payout-reservation`,
+      direction: 'debit',
+      amountUnits: '5000',
+    })
+    expect(db.rows('moneyLedgerEntries')[0]).not.toHaveProperty('payoutRef')
+    const replay = await begin({ db, auth: identity }, args)
+    expect(replay).toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'transfer_pending' },
+    })
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+  })
+  it('replays a reservation despite malformed correction while new admission remains strict', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    db.seed('moneyLedgerEntries', {
+      _id: 'moneyLedgerEntries:malformed-correction',
+      entryRef: 'malformed-correction',
+      accountRef: 'business:business-1:USD',
+      entryType: 'refund',
+      direction: 'debit',
+      amountUnits: '5000',
+      currency: 'USD',
+      exponent: 2,
+      transactionRef: 'malformed-correction',
+      idempotencyKey: 'malformed-correction',
+      businessId: 'business-1',
+      payoutRef: dailyPayoutRef,
+      allocationRef: 'allocation:missing',
+      allocationCorrectionUnits: '5000',
+      reversalOf: 'transaction:missing',
+      sourceDigest: 'sha256:malformed-correction',
+      evidenceRefs: ['sha256:malformed-correction'],
+      createdAt: normalTransferObservedAt,
+    })
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
     await expect(begin({ db, auth: identity }, args)).resolves.toMatchObject({
       kind: 'accepted',
       transfer: { state: 'transfer_pending' },
     })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe(before)
-    const completeArgs = {
-      ...args,
-      transactionRef: 'transaction-1',
-      sourceDigest: 'sha256:source-1',
-      evidenceRefs: ['stripe:transfer:tr_1'],
-      evidence: evidence('succeeded'),
-    }
+    expect(db.rows('moneyAccounts')).toEqual(beforeReplay.accounts)
+    expect(db.rows('moneyPayouts')).toEqual(beforeReplay.payouts)
+    expect(db.rows('moneyTransactions')).toEqual(beforeReplay.transactions)
+    expect(db.rows('moneyLedgerEntries')).toEqual(beforeReplay.entries)
     await expect(
-      complete({ db, auth: identity }, completeArgs),
+      begin(
+        { db, auth: identity },
+        {
+          ...args,
+          commandId: 'command-2',
+          inputDigest: 'sha256:input-2',
+          requestDigest: 'sha256:request-2',
+          idempotencyKey: 'payout-idempotency-2',
+        },
+      ),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'payout_not_ready' })
+  })
+
+
+  it('replays paid terminal reservation after same-period composition drift without writes', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
+    const successArgs = completionArgs(args, evidence('succeeded'))
+    await expect(
+      complete({ db, auth: identity }, successArgs),
     ).resolves.toMatchObject({
       kind: 'accepted',
       transfer: { state: 'paid', transferStatus: 'succeeded' },
     })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('0')
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1250')
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyTransactions')[0]?.state).toBe('applied')
     expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    creditProvider(db, '500', normalTransferObservedAt + 2)
     await expect(
-      complete({ db, auth: identity }, completeArgs),
+      complete({ db, auth: identity }, successArgs),
     ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'paid' } })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('0')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
-  })
-  it('refuses a transfer before the daily period closes without changing payout state or ledger', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-    const observedAt = Date.parse(dailyPayoutPeriodEnd) - 1
-    const args = {
-      ...commandArgs(),
-      observedAt,
-      providerRecoveryDeadlineAt:
-        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1750')
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '250'
+    provider.recoveryDueUnits = '125'
+    provider.version = 3
+    provider.updatedAt = normalTransferObservedAt + 3
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    allocation.providerNetUnits = '6000'
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
     }
-    const beforePayouts = structuredClone(db.rows('moneyPayouts'))
-    const beforeLedgerEntries = structuredClone(db.rows('moneyLedgerEntries'))
     await expect(begin({ db, auth: identity }, args)).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'payout_not_ready',
+      kind: 'accepted',
+      transfer: { state: 'paid' },
     })
-    expect(db.rows('moneyPayouts')).toEqual(beforePayouts)
-    expect(db.rows('moneyLedgerEntries')).toEqual(beforeLedgerEntries)
+    await expect(
+      complete({ db, auth: identity }, successArgs),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'paid' } })
+    expect(db.rows('moneyAccounts')).toEqual(beforeReplay.accounts)
+    expect(db.rows('moneyPayouts')).toEqual(beforeReplay.payouts)
+    expect(db.rows('moneyTransactions')).toEqual(beforeReplay.transactions)
+    expect(db.rows('moneyLedgerEntries')).toEqual(beforeReplay.entries)
+    await expect(
+      begin(
+        { db, auth: identity },
+        {
+          ...args,
+          commandId: 'command-2',
+          inputDigest: 'sha256:input-2',
+          requestDigest: 'sha256:request-2',
+          idempotencyKey: 'payout-idempotency-2',
+        },
+      ),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'payout_not_ready' })
   })
-  it.each([
-    {
-      name: 'undefined cadence',
-      mutate: (db: MemoryDb) => {
-        const payout = db.rows('moneyPayouts')[0]
-        if (payout === undefined) throw new Error('payout_fixture_missing')
-        delete payout.cadence
-      },
-    },
-    {
-      name: 'noncanonical daily identity',
-      mutate: (db: MemoryDb) => {
-        const payout = db.rows('moneyPayouts')[0]
-        if (payout === undefined) throw new Error('payout_fixture_missing')
-        payout.periodStart = '2026-07-01'
-      },
-    },
-    {
-      name: 'missing allocation composition',
-      mutate: (db: MemoryDb) => {
-        const allocation = db.rows('moneyPayoutAllocations')[0]
-        if (allocation === undefined)
-          throw new Error('allocation_fixture_missing')
-        allocation.payoutRef = 'payout-missing'
-      },
-    },
-    {
-      name: 'drifted allocation composition',
-      mutate: (db: MemoryDb) => {
-        const allocation = db.rows('moneyPayoutAllocations')[0]
-        if (allocation === undefined)
-          throw new Error('allocation_fixture_missing')
-        allocation.providerNetUnits = '4999'
-      },
-    },
-  ])('refuses begin for $name before any transfer transition', async ({ mutate }) => {
+
+  it('preserves closed-period and bounded daily composition admission', async () => {
     const db = new MemoryDb()
     seedPayout(db)
-    mutate(db)
-    const before = structuredClone(db.rows('moneyPayouts'))
-    await expect(begin({ db, auth: identity }, commandArgs())).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'payout_not_ready',
-    })
-    expect(db.rows('moneyPayouts')).toEqual(before)
+    const beforePayouts = structuredClone(db.rows('moneyPayouts'))
+    const beforeAccounts = structuredClone(db.rows('moneyAccounts'))
+    await expect(
+      begin(
+        { db, auth: identity },
+        {
+          ...commandArgs(),
+          observedAt: Date.parse(dailyPayoutPeriodEnd) - 1,
+          providerRecoveryDeadlineAt:
+            Date.parse(dailyPayoutPeriodEnd) - 1 +
+            STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+        },
+      ),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'payout_not_ready' })
+    expect(db.rows('moneyPayouts')).toEqual(beforePayouts)
+    expect(db.rows('moneyAccounts')).toEqual(beforeAccounts)
+    const malformed = new MemoryDb()
+    seedPayout(malformed)
+    const allocation = malformed.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    allocation.providerNetUnits = '4999'
+    await expect(
+      begin({ db: malformed, auth: identity }, commandArgs()),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'payout_not_ready' })
+    expect(malformed.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
+    expect(malformed.rows('moneyTransactions')).toHaveLength(0)
   })
-  it('uses the latest payout snapshot when ledger history exceeds the bounded read', async () => {
+
+  it('uses the latest completed payout snapshot after bounded history reads', async () => {
     const db = new MemoryDb(1_000)
     seedPayout(db)
     db.seed('moneyPayouts', {
@@ -459,7 +649,7 @@ describe('Convex payout persistence', () => {
       db.seed('moneyLedgerEntries', {
         _id: `moneyLedgerEntries:history-${index}`,
         entryRef: `history-${index}`,
-        accountRef: 'provider:business-1:USD',
+        accountRef: 'business:business-1:USD',
         entryType: 'charge',
         direction: 'debit',
         amountUnits: '1',
@@ -475,16 +665,7 @@ describe('Convex payout persistence', () => {
     const args = commandArgs()
     await begin({ db, auth: identity }, args)
     await expect(
-      complete(
-        { db, auth: identity },
-        {
-          ...args,
-          transactionRef: 'transaction-snapshot',
-          sourceDigest: 'sha256:source-snapshot',
-          evidenceRefs: ['stripe:transfer:tr_1'],
-          evidence: evidence('succeeded'),
-        },
-      ),
+      complete({ db, auth: identity }, completionArgs(args, evidence('succeeded'))),
     ).resolves.toMatchObject({
       kind: 'accepted',
       transfer: {
@@ -497,209 +678,918 @@ describe('Convex payout persistence', () => {
     expect(db.rows('moneyLedgerEntries')).toHaveLength(1_002)
   })
 
-  it('fails closed when the latest payout snapshot has a mismatched exponent', async () => {
+  it.each([
+    {
+      name: 'source digest',
+      mutate: (args: Record<string, unknown>) => {
+        args.sourceDigest = 'sha256:wrong-source'
+      },
+    },
+    {
+      name: 'provider account',
+      mutate: (args: Record<string, unknown>) => {
+        args.providerAccountRef = 'provider:other:USD'
+      },
+    },
+    {
+      name: 'business',
+      mutate: (args: Record<string, unknown>) => {
+        args.businessId = 'business-other'
+      },
+    },
+    {
+      name: 'currency',
+      mutate: (args: Record<string, unknown>) => {
+        args.amount = { currency: 'EUR', units: '5000', exponent: 2 }
+      },
+    },
+    {
+      name: 'amount',
+      mutate: (args: Record<string, unknown>) => {
+        args.amount = { currency: 'USD', units: '4000', exponent: 2 }
+      },
+    },
+    {
+      name: 'destination account',
+      mutate: (args: Record<string, unknown>) => {
+        args.destinationAccountId = 'acct_other'
+      },
+    },
+  ])('rejects $name substitution without partial writes', async ({ mutate }) => {
     const db = new MemoryDb()
     seedPayout(db)
-    db.seed('moneyPayouts', {
-      _id: 'moneyPayouts:prior',
-      payoutRef: 'payout-prior',
-      businessId: 'business-1',
-      currency: 'USD',
-      exponent: 3,
-      grossAccrualUnits: '77000',
-      rakeUnits: '7000',
-      providerNetUnits: '70000',
-      minimumPayoutUnits: '10000',
-      state: 'paid',
-      periodStart: '2026-06-01',
-      periodEnd: '2026-06-30',
-      payoutCommandId: 'command-prior',
-      inputDigest: 'sha256:input-prior',
-      transferRequestDigest: 'sha256:request-prior',
-      transferEvidenceDigest: 'sha256:evidence-prior',
-      transferStatus: 'succeeded',
-      stripeTransferId: 'tr_prior',
-      providerHeldBeforeUnits: '120000',
-      providerHeldAfterUnits: '50000',
-      providerPaidBeforeUnits: '0',
-      providerPaidAfterUnits: '70000',
-      idempotencyKey: 'payout-prior-idempotency',
-      createdAt: 1,
-      updatedAt: 2,
-    })
     const args = commandArgs()
     await begin({ db, auth: identity }, args)
+    const attempted = completionArgs(args, evidence('succeeded'))
+    mutate(attempted)
+    const beforeAccounts = structuredClone(db.rows('moneyAccounts'))
+    const beforeTransactions = structuredClone(db.rows('moneyTransactions'))
+    const beforeEntries = structuredClone(db.rows('moneyLedgerEntries'))
+    await expect(
+      complete({ db, auth: identity }, attempted),
+    ).resolves.toMatchObject({ kind: 'refused' })
+    expect(db.rows('moneyAccounts')).toEqual(beforeAccounts)
+    expect(db.rows('moneyTransactions')).toEqual(beforeTransactions)
+    expect(db.rows('moneyLedgerEntries')).toEqual(beforeEntries)
+  })
+
+  it('rejects a regressed provider account generation without partial writes', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.version = 1
+    const before = structuredClone(db.rows('moneyPayouts'))
     await expect(
       complete(
         { db, auth: identity },
-        {
-          ...args,
-          transactionRef: 'transaction-mismatched-snapshot',
-          sourceDigest: 'sha256:source-mismatched-snapshot',
-          evidenceRefs: ['stripe:transfer:tr_1'],
-          evidence: evidence('succeeded'),
-        },
+        completionArgs(args, evidence('succeeded')),
       ),
     ).resolves.toMatchObject({
       kind: 'refused',
       code: 'payout_reconciliation_required',
     })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toEqual(before)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
   })
 
-  it('reverses a paid transfer once, restores payable balance, and rejects conflicting evidence', async () => {
+  it('resolves an outcome-unknown reservation after a provider credit', async () => {
     const db = new MemoryDb()
     seedPayout(db)
     const args = commandArgs()
     await begin({ db, auth: identity }, args)
-    const successArgs = {
-      ...args,
-      transactionRef: 'transaction-1',
-      sourceDigest: 'sha256:source-1',
-      evidenceRefs: ['stripe:transfer:tr_1'],
-      evidence: evidence('succeeded'),
-    }
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
     await expect(
-      complete({ db, auth: identity }, successArgs),
-    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'paid' } })
-    const reversalArgs = {
-      ...successArgs,
-      transactionRef: 'transaction-reversal-1',
-      sourceDigest: 'sha256:source-reversal-1',
-      evidenceRefs: ['stripe:transfer-reversed:tr_1'],
-      evidence: evidence('reversed', 'sha256:evidence-reversal-1'),
-    }
-    await expect(
-      complete({ db, auth: identity }, reversalArgs),
+      markUnknown(
+        { db, auth: identity },
+        { ...args, failureCode: 'payout_outcome_unknown' },
+      ),
     ).resolves.toMatchObject({
       kind: 'accepted',
-      transfer: {
-        state: 'reversed',
-        transferStatus: 'reversed',
-        evidenceDigest: 'sha256:evidence-reversal-1',
-        reversalEvidenceDigest: 'sha256:evidence-reversal-1',
-      },
+      transfer: { state: 'outcome_unknown' },
     })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
-    expect(db.rows('moneyLedgerEntries')[1]).toMatchObject({
-      direction: 'credit',
-      entryType: 'payout_accrual',
-      reversalOf: 'transaction-1',
-    })
-    expect(db.rows('moneyTransactions')).toHaveLength(2)
-    expect(db.rows('moneyTransactions')[0]).toMatchObject({
-      transactionRef: 'transaction-1',
-      state: 'reversed',
-    })
-    await expect(
-      complete({ db, auth: identity }, reversalArgs),
-    ).resolves.toMatchObject({
-      kind: 'accepted',
-      transfer: { state: 'reversed' },
-    })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1250')
+    expect(db.rows('moneyTransactions')[0]?.state).toBe('outcome_unknown')
     await expect(
       complete(
         { db, auth: identity },
-        {
-          ...reversalArgs,
-          evidence: evidence('reversed', 'sha256:evidence-conflict'),
-        },
+        completionArgs(args, evidence('succeeded')),
       ),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'ledger_idempotency_conflict',
-    })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'paid' } })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1250')
+    expect(db.rows('moneyTransactions')[0]?.state).toBe('applied')
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
   })
-  it('conserves net provider-paid snapshots after a reversal before the next payout', async () => {
+
+  it('restores a failed reservation onto current provider balance and replays after credit', async () => {
     const db = new MemoryDb()
     seedPayout(db)
     const args = commandArgs()
     await begin({ db, auth: identity }, args)
-    const first = {
-      ...args,
-      transactionRef: 'transaction-1',
-      sourceDigest: 'sha256:source-1',
-      evidenceRefs: ['stripe:transfer:tr_1'],
-      evidence: evidence('succeeded'),
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
+    const failed = completionArgs(args, evidence('failed'))
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'held_threshold', transferStatus: 'failed' },
+    })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('6250')
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyTransactions')[0]?.state).toBe('reversed')
+    expect(db.rows('moneyTransactions')[1]?.expectedAccountVersion).toBe(3)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    const afterFailure = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
     }
-    await complete({ db, auth: identity }, first)
-    await complete(
-      { db, auth: identity },
-      {
-        ...first,
-        transactionRef: 'transaction-reversal-1',
-        sourceDigest: 'sha256:source-reversal-1',
-        evidenceRefs: ['stripe:transfer-reversed:tr_1'],
-        evidence: evidence('reversed', 'sha256:evidence-reversal-1'),
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'held_threshold',
+        transferStatus: 'failed',
+        amount,
+        evidenceDigest: 'sha256:evidence-1',
       },
-    )
-    db.seed('moneyPayouts', {
-      _id: 'moneyPayouts:2',
-      payoutRef: secondDailyPayoutRef,
-      businessId: 'business-1',
-      currency: 'USD',
-      exponent: 2,
-      grossAccrualUnits: '5500',
-      rakeUnits: '500',
-      providerNetUnits: '5000',
-      minimumPayoutUnits: '1000',
-      cadence: 'daily',
-      state: 'held_threshold',
-      periodStart: secondDailyPayoutPeriodStart,
-      periodEnd: secondDailyPayoutPeriodEnd,
-      providerAccountRef: 'provider:business-1:USD',
-      idempotencyKey: 'payout-old-2',
-      createdAt: 2,
-      updatedAt: 2,
     })
-    db.seed('moneyPayoutAllocations', {
-      _id: 'moneyPayoutAllocations:2',
-      allocationRef: secondDailyPayoutAllocationRef,
-      payoutRef: secondDailyPayoutRef,
-      qualifiedUseRef: secondDailyPayoutQualifiedUseRef,
-      transactionRef: 'transaction:payout-2',
-      usageRef: 'usage:payout-2',
-      businessId: 'business-1',
-      currency: 'USD',
-      exponent: 2,
-      grossAccrualUnits: '5500',
-      rakeUnits: '500',
-      providerNetUnits: '5000',
-      qualifiedAt: Date.parse(secondDailyPayoutPeriodStart) + 1,
-      sourceDigest: 'sha256:payout-source-2',
-      materialDigest: secondDailyPayoutMaterialDigest,
-      createdAt: 2,
-    })
-    const second = {
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(afterFailure)
+    const differentArgs = {
       ...args,
-      payoutRef: secondDailyPayoutRef,
       commandId: 'command-2',
       inputDigest: 'sha256:input-2',
       requestDigest: 'sha256:request-2',
       idempotencyKey: 'payout-idempotency-2',
-      transactionRef: 'transaction-2',
-      sourceDigest: 'sha256:source-2',
-      evidenceRefs: ['stripe:transfer:tr_2'],
-      evidence: {
-        ...evidence('succeeded', 'sha256:evidence-2'),
-        requestDigest: 'sha256:request-2',
-        transferId: 'tr_2',
-      },
-      providerRecoveryDeadlineAt:
-        secondPayoutTransferObservedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
-      observedAt: secondPayoutTransferObservedAt,
     }
-    await expect(begin({ db, auth: identity }, second)).resolves.toMatchObject({
+    const beforeDifferent = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      begin({ db, auth: identity }, differentArgs),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeDifferent)
+    const changedCompletion = completionArgs(differentArgs, {
+      ...evidence('failed', 'sha256:evidence-2'),
+      requestDigest: 'sha256:request-2',
+    })
+    await expect(
+      complete({ db, auth: identity }, changedCompletion),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'ledger_idempotency_conflict',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeDifferent)
+
+
+    creditProvider(db, '500', normalTransferObservedAt + 2)
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'held_threshold' } })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('6750')
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '4000'
+    provider.recoveryDueUnits = '200'
+    provider.version = 6
+    provider.updatedAt = normalTransferObservedAt + 3
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'held_threshold' } })
+    expect(db.rows('moneyAccounts')).toEqual(beforeReplay.accounts)
+    expect(db.rows('moneyPayouts')).toEqual(beforeReplay.payouts)
+    expect(db.rows('moneyTransactions')).toEqual(beforeReplay.transactions)
+    expect(db.rows('moneyLedgerEntries')).toEqual(beforeReplay.entries)
+  })
+  it('replays failed reservation after canonical same-period provider correction', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
+    const failed = completionArgs(args, evidence('failed'))
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'held_threshold', transferStatus: 'failed' },
+    })
+    const payout = db.rows('moneyPayouts')[0]
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (payout === undefined || allocation === undefined)
+      throw new Error('payout_correction_fixture_missing')
+    payout.grossAccrualUnits = '0'
+    payout.rakeUnits = '0'
+    payout.providerNetUnits = '0'
+    allocation.grossAccrualUnits = '0'
+    allocation.rakeUnits = '0'
+    allocation.providerNetUnits = '0'
+    db.seed('moneyLedgerEntries', {
+      _id: 'moneyLedgerEntries:provider-refund-correction',
+      entryRef: 'provider-refund-correction',
+      accountRef: 'business:business-1:USD',
+      entryType: 'refund',
+      direction: 'debit',
+      amountUnits: '5000',
+      currency: 'USD',
+      exponent: 2,
+      transactionRef: 'provider-refund-correction',
+      idempotencyKey: 'provider-refund-correction',
+      businessId: 'business-1',
+      payoutRef: dailyPayoutRef,
+      allocationRef: dailyPayoutAllocationRef,
+      allocationCorrectionUnits: '5000',
+      reversalOf: 'transaction:payout-1',
+      sourceDigest: 'sha256:provider-refund-correction',
+      evidenceRefs: ['sha256:provider-refund-correction'],
+      createdAt: normalTransferObservedAt + 2,
+    })
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      begin({ db, auth: identity }, args),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'held_threshold', amount },
+    })
+    await expect(
+      complete({ db, auth: identity }, failed),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'held_threshold', amount },
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      allocations: db.rows('moneyPayoutAllocations'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeReplay)
+    await expect(
+      begin(
+        { db, auth: identity },
+        {
+          ...args,
+          commandId: 'command-2',
+          inputDigest: 'sha256:input-2',
+          idempotencyKey: 'payout-idempotency-2',
+        },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payout_not_ready',
+    })
+  })
+
+  it('restores an unknown not-released reservation onto current balance', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
+    await markUnknown(
+      { db, auth: identity },
+      { ...args, failureCode: 'payout_outcome_unknown' },
+    )
+    const notReleased = {
+      provider: 'stripe' as const,
+      resolution: 'not_released' as const,
+      destinationAccountId: 'acct_1',
+      amount,
+      status: 'failed' as const,
+      requestDigest: 'sha256:request-1',
+      evidenceDigest: 'sha256:group-empty',
+      observedAt: normalProviderEvidenceObservedAt,
+    }
+    const reconciliation = {
+      ...completionArgs(args, notReleased),
+      outcome: 'not_released' as const,
+    }
+    await expect(
+      reconcile({ db, auth: identity }, reconciliation),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'held_threshold' } })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('6250')
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    const afterReconciliation = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      reconcile({ db, auth: identity }, reconciliation),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'held_threshold',
+        transferStatus: 'failed',
+        amount,
+        evidenceDigest: 'sha256:group-empty',
+      },
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(afterReconciliation)
+    const differentArgs = {
+      ...args,
+      commandId: 'command-2',
+      inputDigest: 'sha256:input-2',
+      requestDigest: 'sha256:request-2',
+      idempotencyKey: 'payout-idempotency-2',
+    }
+    const beforeDifferent = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      begin({ db, auth: identity }, differentArgs),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeDifferent)
+    const changedReconciliation = {
+      ...completionArgs(differentArgs, {
+        ...notReleased,
+        requestDigest: 'sha256:request-2',
+        evidenceDigest: 'sha256:group-empty-2',
+      }),
+      outcome: 'not_released' as const,
+    }
+    await expect(
+      reconcile({ db, auth: identity }, changedReconciliation),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'ledger_idempotency_conflict',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeDifferent)
+    creditProvider(db, '500', normalTransferObservedAt + 2)
+    const payout = db.rows('moneyPayouts')[0]
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (payout === undefined || allocation === undefined)
+      throw new Error('payout_correction_fixture_missing')
+    payout.grossAccrualUnits = '0'
+    payout.rakeUnits = '0'
+    payout.providerNetUnits = '0'
+    allocation.grossAccrualUnits = '0'
+    allocation.rakeUnits = '0'
+    allocation.providerNetUnits = '0'
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      allocations: structuredClone(db.rows('moneyPayoutAllocations')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      reconcile({ db, auth: identity }, reconciliation),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'held_threshold' } })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('6750')
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      allocations: db.rows('moneyPayoutAllocations'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeReplay)
+  })
+  it('fences orphaned payout rows and journals without admitting a second command', async () => {
+    const differentArgs = {
+      ...commandArgs(),
+      commandId: 'command-2',
+      inputDigest: 'sha256:input-2',
+      requestDigest: 'sha256:request-2',
+      idempotencyKey: 'payout-idempotency-2',
+    }
+    const rowWithoutAttemptMaterial = new MemoryDb()
+    seedPayout(rowWithoutAttemptMaterial)
+    await begin(
+      { db: rowWithoutAttemptMaterial, auth: identity },
+      commandArgs(),
+    )
+    const attemptedPayout = rowWithoutAttemptMaterial.rows('moneyPayouts')[0]
+    if (attemptedPayout === undefined)
+      throw new Error('attempted_payout_fixture_missing')
+    await rowWithoutAttemptMaterial.patch(attemptedPayout._id, {
+      payoutCommandId: undefined,
+      inputDigest: undefined,
+      destinationAccountId: undefined,
+      transferRequestDigest: undefined,
+      transferStatus: undefined,
+      providerRecoveryDeadlineAt: undefined,
+      providerHeldBeforeUnits: undefined,
+      providerHeldAfterUnits: undefined,
+      providerPaidBeforeUnits: undefined,
+      providerPaidAfterUnits: undefined,
+      stripeTransferId: undefined,
+      transferEvidenceDigest: undefined,
+      transferReversalEvidenceDigest: undefined,
+      transferObservedAt: undefined,
+      failureCode: undefined,
+    })
+    const beforeMissingRowMaterial = {
+      accounts: structuredClone(rowWithoutAttemptMaterial.rows('moneyAccounts')),
+      payouts: structuredClone(rowWithoutAttemptMaterial.rows('moneyPayouts')),
+      transactions: structuredClone(
+        rowWithoutAttemptMaterial.rows('moneyTransactions'),
+      ),
+      entries: structuredClone(
+        rowWithoutAttemptMaterial.rows('moneyLedgerEntries'),
+      ),
+    }
+    await expect(
+      begin(
+        { db: rowWithoutAttemptMaterial, auth: identity },
+        differentArgs,
+      ),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect({
+      accounts: rowWithoutAttemptMaterial.rows('moneyAccounts'),
+      payouts: rowWithoutAttemptMaterial.rows('moneyPayouts'),
+      transactions: rowWithoutAttemptMaterial.rows('moneyTransactions'),
+      entries: rowWithoutAttemptMaterial.rows('moneyLedgerEntries'),
+    }).toEqual(beforeMissingRowMaterial)
+
+    const missingJournal = new MemoryDb()
+    seedPayout(missingJournal)
+    const orphanedPayout = missingJournal.rows('moneyPayouts')[0]
+    if (orphanedPayout === undefined)
+      throw new Error('orphaned_payout_fixture_missing')
+    await missingJournal.patch(orphanedPayout._id, {
+      payoutCommandId: 'command-prior',
+      inputDigest: 'sha256:input-prior',
+      destinationAccountId: 'acct_1',
+      transferRequestDigest: 'sha256:request-prior',
+      transferStatus: 'failed',
+    })
+    const beforeMissingJournal = {
+      accounts: structuredClone(missingJournal.rows('moneyAccounts')),
+      payouts: structuredClone(missingJournal.rows('moneyPayouts')),
+      transactions: structuredClone(missingJournal.rows('moneyTransactions')),
+      entries: structuredClone(missingJournal.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      begin({ db: missingJournal, auth: identity }, differentArgs),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'payout_not_ready',
+      retryable: false,
+    })
+    expect({
+      accounts: missingJournal.rows('moneyAccounts'),
+      payouts: missingJournal.rows('moneyPayouts'),
+      transactions: missingJournal.rows('moneyTransactions'),
+      entries: missingJournal.rows('moneyLedgerEntries'),
+    }).toEqual(beforeMissingJournal)
+  })
+  it('derives bounded cumulative paid snapshots across older and latest reversals', async () => {
+    const argsForPayout = (
+      payoutRef: string,
+      commandId: string,
+      inputDigest: string,
+      idempotencyKey: string,
+      observedAt: number,
+    ): Record<string, unknown> => ({
+      ...commandArgs(),
+      payoutRef,
+      commandId,
+      inputDigest,
+      idempotencyKey,
+      observedAt,
+      providerRecoveryDeadlineAt:
+        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+    })
+    const argsA = commandArgs()
+    const periodB = {
+      start: '2026-07-02T00:00:00.000Z',
+      end: '2026-07-03T00:00:00.000Z',
+    }
+    const periodC = {
+      start: '2026-07-03T00:00:00.000Z',
+      end: '2026-07-04T00:00:00.000Z',
+    }
+    const secondObservedAt = Date.parse(periodB.end) + 2
+    const thirdObservedAt = Date.parse(periodC.end) + 1
+    const db = new MemoryDb()
+    seedPayout(db)
+    const payoutB = seedAdditionalDailyPayout(
+      db,
+      'b',
+      periodB.start,
+      periodB.end,
+    )
+    const payoutC = seedAdditionalDailyPayout(
+      db,
+      'c',
+      periodC.start,
+      periodC.end,
+    )
+    await expect(
+      begin({ db, auth: identity }, argsA),
+    ).resolves.toMatchObject({
       kind: 'accepted',
       transfer: { state: 'transfer_pending' },
     })
     await expect(
-      complete({ db, auth: identity }, second),
+      complete(
+        { db, auth: identity },
+        completionArgs(argsA, evidence('succeeded')),
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'paid', providerPaidAfter: amount },
+    })
+    creditProvider(db, '5000', normalTransferObservedAt + 2)
+    const argsB = {
+      ...argsForPayout(
+        payoutB,
+        'command-2',
+        'sha256:input-2',
+        'payout-idempotency-2',
+        secondObservedAt,
+      ),
+      requestDigest: 'sha256:request-2',
+    }
+    const evidenceB = {
+      ...evidence('succeeded', 'sha256:evidence-b'),
+      transferId: 'tr_2',
+      requestDigest: 'sha256:request-2',
+      observedAt: secondObservedAt + 1,
+    }
+    await expect(
+      begin({ db, auth: identity }, argsB),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'transfer_pending',
+        providerPaidBefore: amount,
+      },
+    })
+    await expect(
+      complete(
+        { db, auth: identity },
+        completionArgs(argsB, evidenceB),
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'paid',
+        providerPaidAfter: { currency: 'USD', units: '10000', exponent: 2 },
+      },
+    })
+    const reversalProcessedAt = secondObservedAt + 3
+    const reverseA = completionArgs(
+      { ...argsA, observedAt: reversalProcessedAt },
+      {
+        ...evidence('reversed', 'sha256:evidence-reversal-a'),
+        observedAt: secondObservedAt,
+      },
+    )
+    await expect(
+      complete({ db, auth: identity }, reverseA),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'reversed', providerPaidAfter: amount },
+    })
+    const payoutARow = db.rows('moneyPayouts').find(
+      (row) => row.payoutRef === dailyPayoutRef,
+    )
+    if (payoutARow === undefined) throw new Error('payout_a_missing')
+    expect(payoutARow.providerPaidAfterUnits).toBe('5000')
+    expect(payoutARow.transferObservedAt).toBe(secondObservedAt)
+    expect(payoutARow.updatedAt).toBe(reversalProcessedAt)
+    const beginC = await begin(
+      { db, auth: identity },
+      argsForPayout(
+        payoutC,
+        'command-3',
+        'sha256:input-3',
+        'payout-idempotency-3',
+        thirdObservedAt,
+      ),
+    )
+    expect(beginC).toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        providerPaidBefore: { currency: 'USD', units: '5000', exponent: 2 },
+      },
+    })
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    }
+    await expect(
+      complete({ db, auth: identity }, reverseA),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'reversed' } })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeReplay)
+
+    const latestDb = new MemoryDb()
+    seedPayout(latestDb)
+    const latestB = seedAdditionalDailyPayout(
+      latestDb,
+      'latest-b',
+      periodB.start,
+      periodB.end,
+    )
+    await begin({ db: latestDb, auth: identity }, argsA)
+    await complete(
+      { db: latestDb, auth: identity },
+      completionArgs(argsA, evidence('succeeded')),
+    )
+    creditProvider(latestDb, '5000', normalTransferObservedAt + 2)
+    const latestArgsB = {
+      ...argsForPayout(
+        latestB,
+        'command-2',
+        'sha256:input-2',
+        'payout-idempotency-2',
+        secondObservedAt,
+      ),
+      requestDigest: 'sha256:request-2',
+    }
+    await begin({ db: latestDb, auth: identity }, latestArgsB)
+    await complete(
+      { db: latestDb, auth: identity },
+      completionArgs(latestArgsB, evidenceB),
+    )
+    const reverseLatestB = completionArgs(
+      { ...latestArgsB, observedAt: secondObservedAt + 3 },
+      {
+        ...evidence('reversed', 'sha256:evidence-reversal-latest'),
+        transferId: 'tr_2',
+        requestDigest: 'sha256:request-2',
+        observedAt: secondObservedAt + 3,
+      },
+    )
+    await expect(
+      complete({ db: latestDb, auth: identity }, reverseLatestB),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'reversed',
+        providerPaidAfter: { currency: 'USD', units: '5000', exponent: 2 },
+      },
+    })
+    const latestRow = latestDb.rows('moneyPayouts').find(
+      (row) => row.payoutRef === latestB,
+    )
+    if (latestRow === undefined) throw new Error('latest_payout_missing')
+    expect(latestRow.providerPaidAfterUnits).toBe('5000')
+  })
+
+  it('refreshes a new success snapshot after a delayed reversal', async () => {
+    const argsForPayout = (
+      payoutRef: string,
+      commandId: string,
+      inputDigest: string,
+      idempotencyKey: string,
+      observedAt: number,
+    ): Record<string, unknown> => ({
+      ...commandArgs(),
+      payoutRef,
+      commandId,
+      inputDigest,
+      idempotencyKey,
+      observedAt,
+      providerRecoveryDeadlineAt:
+        observedAt + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+    })
+    const argsA = commandArgs()
+    const periodB = {
+      start: '2026-07-02T00:00:00.000Z',
+      end: '2026-07-03T00:00:00.000Z',
+    }
+    const periodC = {
+      start: '2026-07-03T00:00:00.000Z',
+      end: '2026-07-04T00:00:00.000Z',
+    }
+    const secondObservedAt = Date.parse(periodB.end) + 2
+    const thirdObservedAt = Date.parse(periodC.end) + 1
+    const reversalProcessedAt = secondObservedAt + 3
+    const successProcessedAt = reversalProcessedAt + 1
+    const db = new MemoryDb()
+    db.seed('owners', {
+      _id: 'owners:status',
+      clerkUserId: 'owner:test',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    db.seed('businesses', {
+      _id: 'business-1',
+      ownerId: 'owners:status',
+      updatedAt: 1,
+    })
+    seedPayout(db)
+    const payoutB = seedAdditionalDailyPayout(
+      db,
+      'delayed-b',
+      periodB.start,
+      periodB.end,
+    )
+    const payoutC = seedAdditionalDailyPayout(
+      db,
+      'delayed-c',
+      periodC.start,
+      periodC.end,
+    )
+    await begin({ db, auth: identity }, argsA)
+    await expect(
+      complete(
+        { db, auth: identity },
+        completionArgs(argsA, evidence('succeeded')),
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'paid', providerPaidAfter: amount },
+    })
+    creditProvider(db, '5000', normalTransferObservedAt + 2)
+    const argsB: Record<string, unknown> = {
+      ...argsForPayout(
+        payoutB,
+        'command-delayed-b',
+        'sha256:input-delayed-b',
+        'payout-idempotency-delayed-b',
+        secondObservedAt,
+      ),
+      requestDigest: 'sha256:request-delayed-b',
+    }
+    await expect(
+      begin({ db, auth: identity }, argsB),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'transfer_pending',
+        providerPaidBefore: amount,
+      },
+    })
+    const reverseA = completionArgs(
+      { ...argsA, observedAt: reversalProcessedAt },
+      {
+        ...evidence('reversed', 'sha256:evidence-delayed-reversal-a'),
+        observedAt: secondObservedAt,
+      },
+    )
+    await expect(
+      complete({ db, auth: identity }, reverseA),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'reversed',
+        providerPaidAfter: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    })
+    const reversedARow = db.rows('moneyPayouts').find(
+      (row) => row.payoutRef === dailyPayoutRef,
+    )
+    if (reversedARow === undefined) throw new Error('delayed_payout_a_missing')
+    expect(reversedARow.transferObservedAt).toBe(secondObservedAt)
+    expect(reversedARow.updatedAt).toBe(reversalProcessedAt)
+    const pendingStatus = await readStatus(
+      { db, auth: identity },
+      { businessId: 'business-1', currency: 'USD' },
+    )
+    expect(pendingStatus).toMatchObject({
+      kind: 'ok',
+      payoutState: 'transfer_pending',
+      payoutRef: payoutB,
+      transferStatus: 'pending',
+      destinationAccountId: 'acct_1',
+      requestDigest: 'sha256:request-delayed-b',
+      providerRecoveryDeadlineAt: argsB.providerRecoveryDeadlineAt,
+    })
+    const pendingOwnerEarnings = await readOwnerEarnings(
+      { db, auth: ownerIdentity },
+      {},
+    )
+    expect(pendingOwnerEarnings).toMatchObject({
+      kind: 'available',
+      businessId: 'business-1',
+      accounts: [
+        {
+          currency: 'USD',
+          payout: {
+            payoutState: 'transfer_pending',
+            payoutRef: payoutB,
+            transferStatus: 'pending',
+            destinationAccountId: 'acct_1',
+            requestDigest: 'sha256:request-delayed-b',
+            providerRecoveryDeadlineAt: argsB.providerRecoveryDeadlineAt,
+          },
+        },
+      ],
+    })
+    await expect(
+      markUnknown(
+        { db, auth: identity },
+        {
+          ...argsB,
+          observedAt: reversalProcessedAt,
+          failureCode: 'payout_delayed_reversal',
+        },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'outcome_unknown' },
+    })
+    const unknownStatus = await readStatus(
+      { db, auth: identity },
+      { businessId: 'business-1', currency: 'USD' },
+    )
+    expect(unknownStatus).toMatchObject({
+      kind: 'ok',
+      payoutState: 'outcome_unknown',
+      payoutRef: payoutB,
+      transferStatus: 'outcome_unknown',
+      destinationAccountId: 'acct_1',
+      requestDigest: 'sha256:request-delayed-b',
+      providerRecoveryDeadlineAt: argsB.providerRecoveryDeadlineAt,
+    })
+    const evidenceB = {
+      ...evidence('succeeded', 'sha256:evidence-delayed-success-b'),
+      transferId: 'tr_delayed_b',
+      requestDigest: 'sha256:request-delayed-b',
+      observedAt: secondObservedAt + 1,
+    }
+    const completedBArgs = {
+      ...argsB,
+      observedAt: successProcessedAt,
+    }
+    await expect(
+      complete(
+        { db, auth: identity },
+        completionArgs(completedBArgs, evidenceB),
+      ),
     ).resolves.toMatchObject({
       kind: 'accepted',
       transfer: {
@@ -708,175 +1598,67 @@ describe('Convex payout persistence', () => {
         providerPaidAfter: { currency: 'USD', units: '5000', exponent: 2 },
       },
     })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(3)
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('0')
-  })
-
-  it('returns failed transfers to held with no debit and rejects changed evidence', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-    const args = commandArgs()
-    await begin({ db, auth: identity }, args)
-    const completeArgs = {
-      ...args,
-      transactionRef: 'transaction-1',
-      sourceDigest: 'sha256:source-1',
-      evidenceRefs: ['stripe:transfer:tr_1'],
-      evidence: evidence('failed'),
-    }
-    await expect(
-      complete({ db, auth: identity }, completeArgs),
-    ).resolves.toMatchObject({
-      kind: 'accepted',
-      transfer: { state: 'held_threshold', transferStatus: 'failed' },
-    })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
-    await expect(
-      complete(
-        { db, auth: identity },
-        { ...completeArgs, evidence: evidence('failed', 'sha256:other') },
-      ),
-    ).resolves.toMatchObject({
-      kind: 'refused',
-      code: 'ledger_idempotency_conflict',
-    })
-  })
-  it('preserves daily cadence when failed completion replaces the payout row', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-    const args = commandArgs()
-    await begin({ db, auth: identity }, args)
-    await expect(
-      complete(
-        { db, auth: identity },
-        {
-          ...args,
-          transactionRef: 'transaction-cadence-failed',
-          sourceDigest: 'sha256:source-cadence-failed',
-          evidenceRefs: ['stripe:transfer:tr_1'],
-          evidence: evidence('failed'),
-        },
-      ),
-    ).resolves.toMatchObject({
-      kind: 'accepted',
-      transfer: { state: 'held_threshold', transferStatus: 'failed' },
-    })
-    expect(db.rows('moneyPayouts')[0]).toMatchObject({ cadence: 'daily' })
-  })
-
-  it('reconciles unknown not-released evidence back to held without a debit', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-    const args = commandArgs()
-    await begin({ db, auth: identity }, args)
-    await complete(
-      { db, auth: identity },
-      {
-        ...args,
-        transactionRef: 'transaction-1',
-        sourceDigest: 'sha256:source-1',
-        evidenceRefs: ['stripe:transfer:tr_1'],
-        evidence: evidence('outcome_unknown'),
-      },
+    const paidBRow = db.rows('moneyPayouts').find(
+      (row) => row.payoutRef === payoutB,
     )
-    expect(db.rows('moneyPayouts')[0]?.state).toBe('outcome_unknown')
-    await expect(
-      reconcile(
-        { db, auth: identity },
-        {
-          ...args,
-          transactionRef: 'transaction-1',
-          sourceDigest: 'sha256:source-1',
-          evidenceRefs: ['stripe:transfer:tr_1'],
-          evidence: evidence('failed'),
-          outcome: 'not_released',
-        },
+    if (paidBRow === undefined) throw new Error('delayed_payout_b_missing')
+    expect(paidBRow.providerPaidBeforeUnits).toBe('0')
+    expect(paidBRow.providerPaidAfterUnits).toBe('5000')
+    expect(paidBRow.transferObservedAt).toBe(secondObservedAt + 1)
+    expect(paidBRow.updatedAt).toBe(successProcessedAt)
+    const beginC = await begin(
+      { db, auth: identity },
+      argsForPayout(
+        payoutC,
+        'command-delayed-c',
+        'sha256:input-delayed-c',
+        'payout-idempotency-delayed-c',
+        thirdObservedAt,
       ),
-    ).resolves.toMatchObject({
+    )
+    expect(beginC).toMatchObject({
       kind: 'accepted',
-      transfer: { state: 'held_threshold' },
-    })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
-  })
-  it('reconciles server-authenticated zero-match evidence without a transfer ID and replays', async () => {
-    const db = new MemoryDb()
-    seedPayout(db)
-    const args = commandArgs()
-    await begin({ db, auth: identity }, args)
-    const completeArgs = {
-      ...args,
-      transactionRef: 'transaction-empty-1',
-      sourceDigest: 'sha256:source-empty-1',
-      evidenceRefs: ['sha256:group-empty'],
-      evidence: {
-        provider: 'stripe' as const,
-        resolution: 'not_released' as const,
-        destinationAccountId: 'acct_1',
-        amount,
-        status: 'failed' as const,
-        requestDigest: 'sha256:request-1',
-        evidenceDigest: 'sha256:group-empty',
-        observedAt: normalProviderEvidenceObservedAt,
+      transfer: {
+        providerPaidBefore: { currency: 'USD', units: '5000', exponent: 2 },
       },
-      outcome: 'not_released' as const,
+    })
+    const beforeReplay = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
     }
     await expect(
-      reconcile({ db, auth: identity }, completeArgs),
+      complete({ db, auth: identity }, reverseA),
     ).resolves.toMatchObject({
       kind: 'accepted',
-      transfer: {
-        state: 'held_threshold',
-        transferStatus: 'failed',
-      },
+      transfer: { state: 'reversed' },
     })
-    expect(db.rows('moneyPayouts')[0]).not.toHaveProperty('stripeTransferId')
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
-    await expect(
-      reconcile({ db, auth: identity }, completeArgs),
-    ).resolves.toMatchObject({
-      kind: 'accepted',
-      transfer: { state: 'held_threshold' },
-    })
-    expect(db.rows('moneyPayouts')[0]).not.toHaveProperty('stripeTransferId')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      payouts: db.rows('moneyPayouts'),
+      transactions: db.rows('moneyTransactions'),
+      entries: db.rows('moneyLedgerEntries'),
+    }).toEqual(beforeReplay)
   })
-
-  it('persists an ambiguous transfer without inventing a Stripe ID and blocks a new command', async () => {
+  it('refuses multiple active payout status candidates', async () => {
     const db = new MemoryDb()
-    seedPayout(db)
-    const args = commandArgs()
-    await begin({ db, auth: identity }, args)
+    seedPayout(db, 'transfer_pending')
+    const secondRef = seedAdditionalDailyPayout(
+      db,
+      'status-conflict',
+      '2026-07-02T00:00:00.000Z',
+      '2026-07-03T00:00:00.000Z',
+    )
+    const second = db.rows('moneyPayouts').find(
+      (row) => row.payoutRef === secondRef,
+    )
+    if (second === undefined) throw new Error('status_conflict_payout_missing')
+    second.state = 'outcome_unknown'
     await expect(
-      markUnknown(
+      readStatus(
         { db, auth: identity },
-        {
-          ...args,
-          failureCode: 'payout_outcome_unknown',
-          observedAt: normalProviderEvidenceObservedAt,
-        },
-      ),
-    ).resolves.toMatchObject({
-      kind: 'accepted',
-      transfer: {
-        state: 'outcome_unknown',
-        transferStatus: 'outcome_unknown',
-        providerRecoveryDeadlineAt: normalProviderRecoveryDeadlineAt,
-      },
-    })
-    expect(db.rows('moneyPayouts')[0]).not.toHaveProperty('stripeTransferId')
-    await expect(
-      begin(
-        { db, auth: identity },
-        {
-          ...args,
-          commandId: 'command-2',
-          inputDigest: 'sha256:input-2',
-          requestDigest: 'sha256:request-2',
-          idempotencyKey: 'payout-idempotency-2',
-        },
+        { businessId: 'business-1', currency: 'USD' },
       ),
     ).resolves.toMatchObject({
       kind: 'refused',
@@ -884,6 +1666,157 @@ describe('Convex payout persistence', () => {
     })
   })
 
+  it('reverses a successful payout onto current balance and replays after credit', async () => {
+    const db = new MemoryDb()
+    db.seed('owners', {
+      _id: 'owners:paid-readback',
+      clerkUserId: 'owner:test',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    db.seed('businesses', {
+      _id: 'business-1',
+      ownerId: 'owners:paid-readback',
+      updatedAt: 1,
+    })
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    await complete(
+      { db, auth: identity },
+      completionArgs(args, evidence('succeeded')),
+    )
+    await expect(
+      readOwnerTransfer(
+        { db, auth: ownerIdentity },
+        {
+          businessId: 'business-1',
+          currency: 'USD',
+          payoutRef: dailyPayoutRef,
+          idempotencyKey: 'payout-idempotency-1',
+        },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'paid',
+        transferStatus: 'succeeded',
+        amount,
+      },
+    })
+    creditProvider(db, '1250', normalTransferObservedAt + 1)
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '250'
+    provider.recoveryDueUnits = '700'
+    provider.version = 4
+    provider.updatedAt = normalTransferObservedAt + 2
+    const payoutAccount = db.rows('moneyPayoutAccounts')[0]
+    if (payoutAccount === undefined) throw new Error('payout_account_fixture_missing')
+    payoutAccount.stripeAccountId = 'acct_changed'
+    payoutAccount.state = 'restricted'
+    payoutAccount.detailsSubmitted = false
+    payoutAccount.recipientCapabilityActive = false
+    const reversal = completionArgs(
+      args,
+      evidence('reversed', 'sha256:evidence-reversal-1'),
+    )
+    await expect(
+      complete({ db, auth: identity }, reversal),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: { state: 'reversed', transferStatus: 'reversed' },
+    })
+    await expect(
+      readOwnerTransfer(
+        { db, auth: ownerIdentity },
+        {
+          businessId: 'business-1',
+          currency: 'USD',
+          payoutRef: dailyPayoutRef,
+          idempotencyKey: 'payout-idempotency-1',
+        },
+      ),
+    ).resolves.toMatchObject({
+      kind: 'accepted',
+      transfer: {
+        state: 'reversed',
+        transferStatus: 'reversed',
+        amount,
+      },
+    })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('4550')
+    expect(db.rows('moneyAccounts')[0]?.recoveryDueUnits).toBe('0')
+    expect(db.rows('moneyAccounts')[0]?.version).toBe(5)
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyTransactions')[1]?.expectedAccountVersion).toBe(4)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+    expect(db.rows('moneyLedgerEntries')[1]).not.toHaveProperty('payoutRef')
+    creditProvider(db, '500', normalTransferObservedAt + 3)
+    await expect(
+      complete({ db, auth: identity }, reversal),
+    ).resolves.toMatchObject({ kind: 'accepted', transfer: { state: 'reversed' } })
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('5050')
+    expect(db.rows('moneyAccounts')[0]?.recoveryDueUnits).toBe('0')
+    expect(db.rows('moneyAccounts')[0]?.version).toBe(6)
+    expect(db.rows('moneyTransactions')).toHaveLength(2)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
+  })
+
+  it('keeps pending replay fenced by current account and recovery state', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '1'
+    provider.recoveryDueUnits = '1'
+    provider.version = 3
+    await expect(
+      begin({ db, auth: identity }, args),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payout_reconciliation_required',
+    })
+  })
+
+  it('keeps outcome-unknown replay and new commands fenced by account/recovery state', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const args = commandArgs()
+    await begin({ db, auth: identity }, args)
+    await markUnknown(
+      { db, auth: identity },
+      { ...args, failureCode: 'payout_outcome_unknown' },
+    )
+    const provider = db.rows('moneyAccounts')[0]
+    if (provider === undefined) throw new Error('provider_fixture_missing')
+    provider.balanceUnits = '1'
+    provider.recoveryDueUnits = '1'
+    provider.version = 3
+    await expect(
+      begin({ db, auth: identity }, args),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      code: 'payout_reconciliation_required',
+    })
+    const differentArgs = {
+      ...args,
+      commandId: 'command-2',
+      inputDigest: 'sha256:input-2',
+      requestDigest: 'sha256:request-2',
+      idempotencyKey: 'payout-idempotency-2',
+    }
+    const different = await begin(
+      { db, auth: identity },
+      differentArgs,
+    )
+    expect(different).toMatchObject({
+      kind: 'refused',
+      code: 'payout_not_ready',
+    })
+  })
   it('finalizes a successful Connect account atomically with its payout binding', async () => {
     const db = new MemoryDb()
     const args = {
@@ -1293,5 +2226,211 @@ describe('Convex payout persistence', () => {
       kind: 'refused',
       code: 'payment_binding_invalid',
     })
+  })
+  it('rejects terminal replay tampering through begin and owner readback', async () => {
+    const ownerReadbackArgs = {
+      businessId: 'business-1',
+      currency: 'USD',
+      payoutRef: dailyPayoutRef,
+      idempotencyKey: 'payout-idempotency-1',
+    }
+    const seedOwner = (db: MemoryDb): void => {
+      db.seed('owners', {
+        _id: 'owners:terminal-tamper',
+        clerkUserId: 'owner:test',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      db.seed('businesses', {
+        _id: 'business-1',
+        ownerId: 'owners:terminal-tamper',
+        updatedAt: 1,
+      })
+    }
+    const snapshot = (db: MemoryDb) => ({
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      payouts: structuredClone(db.rows('moneyPayouts')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+    })
+    const paidFixture = async () => {
+      const db = new MemoryDb()
+      seedOwner(db)
+      seedPayout(db)
+      const args = commandArgs()
+      await expect(begin({ db, auth: identity }, args)).resolves.toMatchObject({
+        kind: 'accepted',
+        transfer: { state: 'transfer_pending' },
+      })
+      await expect(
+        complete(
+          { db, auth: identity },
+          completionArgs(args, evidence('succeeded')),
+        ),
+      ).resolves.toMatchObject({
+        kind: 'accepted',
+        transfer: { state: 'paid' },
+      })
+      return {
+        db,
+        args,
+        reservationRef: canonicalDigest({
+          format: 'money-payout-reservation-transaction:v1',
+          payoutRef: args.payoutRef,
+          payoutCommandId: args.commandId,
+          inputDigest: args.inputDigest,
+          idempotencyKey: args.idempotencyKey,
+        } as const),
+      }
+    }
+    const reversedFixture = async () => {
+      const fixture = await paidFixture()
+      await expect(
+        complete(
+          { db: fixture.db, auth: identity },
+          completionArgs(
+            fixture.args,
+            evidence('reversed', 'sha256:evidence-reversal-tamper'),
+          ),
+        ),
+      ).resolves.toMatchObject({
+        kind: 'accepted',
+        transfer: { state: 'reversed' },
+      })
+      return fixture
+    }
+    const failedFixture = async () => {
+      const db = new MemoryDb()
+      seedOwner(db)
+      seedPayout(db)
+      const args = commandArgs()
+      await begin({ db, auth: identity }, args)
+      await expect(
+        complete(
+          { db, auth: identity },
+          completionArgs(args, evidence('failed')),
+        ),
+      ).resolves.toMatchObject({
+        kind: 'accepted',
+        transfer: { state: 'held_threshold', transferStatus: 'failed' },
+      })
+      return { db, args }
+    }
+    const assertTampered = async (
+      fixture: {
+        db: MemoryDb
+        args: Record<string, unknown>
+      },
+    ) => {
+      const before = snapshot(fixture.db)
+      await expect(
+        begin({ db: fixture.db, auth: identity }, fixture.args),
+      ).resolves.toEqual({
+        kind: 'refused',
+        code: 'payout_reconciliation_required',
+        retryable: false,
+      })
+      await expect(
+        readOwnerTransfer(
+          { db: fixture.db, auth: ownerIdentity },
+          ownerReadbackArgs,
+        ),
+      ).resolves.toEqual({
+        kind: 'refused',
+        code: 'payout_reconciliation_required',
+        retryable: false,
+      })
+      expect(snapshot(fixture.db)).toEqual(before)
+    }
+
+    for (const field of [
+      'providerHeldBeforeUnits',
+      'providerHeldAfterUnits',
+    ] as const) {
+      const fixture = await paidFixture()
+      const payout = fixture.db.rows('moneyPayouts')[0]
+      if (payout === undefined) throw new Error('paid_payout_fixture_missing')
+      payout[field] = field === 'providerHeldBeforeUnits' ? '4999' : '1'
+      await assertTampered(fixture)
+    }
+
+    for (const withCredit of [false, true]) {
+      const fixture = await paidFixture()
+      const linkedRef = `linked-reversal:${withCredit}`
+      fixture.db.seed('moneyTransactions', {
+        _id: `moneyTransactions:${linkedRef}`,
+        transactionRef: linkedRef,
+        kind: 'payout_accrual',
+        idempotencyKey: linkedRef,
+        inputDigest: 'sha256:linked-reversal',
+        principalId: 'business:business-1',
+        currency: 'USD',
+        amountUnits: '5000',
+        exponent: 2,
+        state: 'reversed',
+        expectedAccountVersion: 3,
+        externalRef: dailyPayoutRef,
+        reversalOf: fixture.reservationRef,
+        createdAt: normalTransferObservedAt + 1,
+        updatedAt: normalTransferObservedAt + 1,
+      })
+      if (withCredit) {
+        fixture.db.seed('moneyLedgerEntries', {
+          _id: `moneyLedgerEntries:${linkedRef}`,
+          entryRef: `${linkedRef}:payout-reversal`,
+          accountRef: 'business:business-1:USD',
+          entryType: 'payout_accrual',
+          direction: 'credit',
+          amountUnits: '5000',
+          currency: 'USD',
+          exponent: 2,
+          transactionRef: linkedRef,
+          idempotencyKey: linkedRef,
+          businessId: 'business-1',
+          sourceDigest: 'sha256:linked-reversal',
+          evidenceRefs: ['sha256:linked-reversal'],
+          reversalOf: fixture.reservationRef,
+          createdAt: normalTransferObservedAt + 1,
+        })
+      }
+      await assertTampered(fixture)
+    }
+
+    {
+      const fixture = await reversedFixture()
+      const payout = fixture.db.rows('moneyPayouts')[0]
+      if (payout === undefined)
+        throw new Error('reversed_payout_fixture_missing')
+      payout.transferReversalEvidenceDigest = undefined
+      await assertTampered(fixture)
+    }
+
+    {
+      const fixture = await reversedFixture()
+      const reversalEntry = fixture.db
+        .rows('moneyLedgerEntries')
+        .find(
+          (entry) =>
+            typeof entry.entryRef === 'string' &&
+            entry.entryRef.endsWith(':payout-reversal'),
+        )
+      if (reversalEntry === undefined)
+        throw new Error('reversal_entry_fixture_missing')
+      reversalEntry.sourceDigest = canonicalDigest({
+        format: 'money-payout-evidence:v1',
+        evidence: 'sha256:evidence-1',
+      })
+      reversalEntry.evidenceRefs = ['sha256:evidence-1']
+      await assertTampered(fixture)
+    }
+
+    {
+      const fixture = await failedFixture()
+      const payout = fixture.db.rows('moneyPayouts')[0]
+      if (payout === undefined)
+        throw new Error('failed_payout_fixture_missing')
+      payout.transferEvidenceDigest = undefined
+      await assertTampered(fixture)
+    }
   })
 })

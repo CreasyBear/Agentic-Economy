@@ -1642,24 +1642,6 @@ async function applyPayoutEvidence(
     ? 'moneyLedger:reconcilePayoutTransfer'
     : 'moneyLedger:completePayoutTransfer'
   const correlationId = command.payoutCommandId
-  const transactionRef = noTransferId
-    ? canonicalDigest({
-        format: 'money-payout-not-released-transaction:v1',
-        commandId: command.payoutCommandId,
-        evidenceDigest: evidence.evidenceDigest,
-      })
-    : evidence.status === 'reversed'
-      ? canonicalDigest({
-          format: 'money-payout-reversal-transaction:v1',
-          commandId: command.payoutCommandId,
-          transferId: evidence.transferId,
-          evidenceDigest: evidence.evidenceDigest,
-        })
-      : canonicalDigest({
-          format: 'money-payout-transaction:v1',
-          commandId: command.payoutCommandId,
-          transferId: evidence.transferId,
-        })
   const sourceDigest = canonicalDigest({
     format: 'money-payout-evidence:v1',
     evidence: evidence.evidenceDigest,
@@ -1678,7 +1660,6 @@ async function applyPayoutEvidence(
     inputDigest: command.inputDigest,
     idempotencyKey: command.idempotencyKey,
     evidence,
-    transactionRef,
     sourceDigest,
     evidenceRefs: [evidence.evidenceDigest],
     observedAt: runtime.now ?? Date.now(),

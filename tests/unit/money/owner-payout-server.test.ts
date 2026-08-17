@@ -1091,6 +1091,9 @@ describe('owner payout recovery', () => {
       idempotencyKey: input.idempotencyKey,
       failureCode: 'payout_outcome_unknown',
     })
+    expect(sourceMocks.callSourceMutation.mock.calls[1]?.[1]).not.toHaveProperty(
+      'transactionRef',
+    )
   })
   it('recovers an older payout by its exact durable identity after a newer owner projection', async () => {
     const oldInput = {
@@ -1293,10 +1296,11 @@ describe('owner payout recovery', () => {
     expect(sourceMocks.callSourceMutation.mock.calls[1]?.[1]).toMatchObject({
       operationKey: 'moneyLedger:completePayoutTransfer',
     })
-    expect(sourceMocks.callSourceMutation.mock.calls[1]?.[1]).not.toMatchObject(
-      {
-        operationKey: 'moneyLedger:reconcilePayoutTransfer',
-      },
+    expect(sourceMocks.callSourceMutation.mock.calls[1]?.[1]).not.toMatchObject({
+      operationKey: 'moneyLedger:reconcilePayoutTransfer',
+    })
+    expect(sourceMocks.callSourceMutation.mock.calls[1]?.[1]).not.toHaveProperty(
+      'transactionRef',
     )
   })
 
@@ -1384,6 +1388,9 @@ describe('owner payout recovery', () => {
         status: 'failed',
       },
     })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).not.toHaveProperty(
+      'transactionRef',
+    )
   })
 
   it('binds one matching transfer through complete evidence without creating another transfer', async () => {
@@ -1440,6 +1447,9 @@ describe('owner payout recovery', () => {
     expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({
       operationKey: 'moneyLedger:completePayoutTransfer',
     })
+    expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).not.toHaveProperty(
+      'transactionRef',
+    )
   })
 
   it('keeps ambiguous provider matches unknown after the deadline', async () => {
