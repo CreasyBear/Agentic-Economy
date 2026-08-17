@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -41,6 +42,8 @@ const result = {
 const operation = {
   operationRef: refs[0]!,
   operationId: 'reference.lookup',
+  callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  paymentLane: 'brokered',
   contract: {
     capabilityId: 'reference.lookup',
     version: 1,
