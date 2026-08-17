@@ -71,14 +71,14 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 
 ## Phase 4 — Replace chat orchestration
 
-| Card | Concern | Depends on |
-| --- | --- | --- |
-| P4-a | Rewrite `eval/answer/lib/cases.ts` first as the specification for model-chosen market tool use | P3-rev |
-| P4-b | Eval suite runs and documents expected tool-use behavior (no router tags) | P4-a |
-| P4-c | Drain in-flight router-named checkpoints; migrate thread tool IDs / optional intent; retain thread storage | P4-b |
-| P4-d | Replace named router files with one bounded AI SDK tool loop | P4-c |
-| P4-e | MCP/CLI/chat parity + "chat has no tool MCP lacks" structural assertion | P4-d |
-| P4-f | Review: no chat-only market capability; no quarantined surface reintroduced | P4-e |
+| Card | Concern | Depends on | Status |
+| --- | --- | --- | --- |
+| P4-a | Rewrite `eval/answer/lib/cases.ts` first as the specification for model-chosen market tool use | P3-rev | committed |
+| P4-b | Eval suite runs and documents expected tool-use behavior (no router tags) | P4-a | committed red target |
+| P4-c | Drain in-flight router-named checkpoints; migrate thread tool IDs / optional intent; retain thread storage | P4-b | pending |
+| P4-d | Replace named router files with one bounded AI SDK tool loop | P4-c | pending |
+| P4-e | MCP/CLI/chat parity + "chat has no tool MCP lacks" structural assertion | P4-d | pending |
+| P4-f | Review: no chat-only market capability; no quarantined surface reintroduced | P4-e | pending |
 
 ## Phase 5 — Quarantine and deprecate
 

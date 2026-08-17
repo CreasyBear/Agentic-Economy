@@ -906,3 +906,16 @@ The package `test:conformance` list and product-frontier manifest `requiredConfo
 - `typecheck` / `diff-check`: PASS.
 Review: PASS 0.99; no assertion weakening or fixture substitution. Evidence includes real `convex-test` persistence, stateful both-origin cancellation (`request_owned` and `standalone`), and the prior 7-files / 89-tests mapping.
 Phase 3 is complete. No quarantine, deprecation, production-runtime, hosted, live-money, or push claim is made; Phase 4 is the next gate.
+
+## Phase 4 model-loop specification and red baseline
+Accepted P4-a commit `1a2303c18aae0c0849d8f88a33a3ca0a4ae0572a` (`1a2303c`): `test: specify model-chosen answer tool loop`.
+Static Node22 coverage PASS: 13 cases (11 turn, 2 thread), 16 tags including `model-chosen-tool-loop` and `bounded-tool-loop`.
+`typecheck`: PASS.
+Focused `answer-tool-use-agent` helper regression: 1 file / 21 tests PASS.
+Independent reviewer: PASS.
+P4-b executed `npm run test:eval:report` and is intentionally RED at the current staged runtime.
+Exact error: `unexpected_unstructured_tool_request: expected capability_operation_v1_3e80c2a3a9b09f6a53b90856f1e077e173b2a151c6bc2530fe3478b76b2d8b31`.
+After model-planned registry operation search/detail, the current router requests its separate navigation decision instead of exposing the pending dynamic capability in the same loop.
+The eval case contract contains no `navigationOperationRef` / `stageOperationReads` / `stageBusinessRecovery` / `direct-retrieval-fast-path` metadata.
+P4-b is a committed red target, not a green eval claim; P4-c/P4-d must make it green.
+No runtime/product behavior changed.
