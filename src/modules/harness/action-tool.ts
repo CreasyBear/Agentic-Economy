@@ -14,8 +14,10 @@ import {
 import { resolveHarnessApproval } from './tool-policy'
 import type { HarnessApprovalMode } from './approval-policy'
 import {
+  describeActionToolExecutionValidation,
+} from '@/modules/actions/tool-contract'
+import {
   actionToHarnessToolContract,
-  describeHarnessToolExecutionValidation,
   harnessToolContractToDefinition,
   type HarnessToolContract,
 } from './tool-contract'
@@ -51,7 +53,7 @@ export type RunHarnessToolOutcome = {
 export function actionToHarnessTool(action: AnyAction): ActionHarnessTool {
   const contract = actionToHarnessToolContract(action)
   const definition = harnessToolContractToDefinition(contract)
-  const validation = describeHarnessToolExecutionValidation(contract)
+  const validation = describeActionToolExecutionValidation(contract)
 
   return {
     ...definition,

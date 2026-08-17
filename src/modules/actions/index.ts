@@ -216,3 +216,21 @@ export {
   type AgentToolDescriptor,
   type AnyAction,
 } from '@/modules/common/action'
+
+export {
+  findStrictToolSchemaViolation,
+  type StrictSchemaViolation,
+} from './strict-schema'
+
+export {
+  actionToToolContract,
+  describeActionToolExecutionValidation,
+  describeActionToolForModel,
+  type ActionToolContract,
+  type ActionToolDescriptorProjection,
+  type ActionToolExecuteArgs,
+  type ActionToolExecutionValidationMetadata,
+  type ActionToolFunctionDescriptor,
+  type ActionToolSchemaBundle,
+  type ActionToolSchemaDiagnostic,
+} from './tool-contract'

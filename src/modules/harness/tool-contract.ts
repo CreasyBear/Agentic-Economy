@@ -1,17 +1,18 @@
-import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
-import type { z } from 'zod'
+import type { JSONSchema } from '@tanstack/ai'
 
-import type {
-  ActionContext,
-  ActionParameter,
-  ActionSurface,
-  AnyAction,
+import {
+  type ActionSurface,
+  type AnyAction,
 } from '@/modules/common/action'
-import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
+import {
+  actionToToolContract,
+  type ActionToolContract,
+  type ActionToolExecuteArgs,
+} from '@/modules/actions/tool-contract'
 import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/answer-thread.schema'
-import type { StableHashValue } from '@/modules/common/stable-hash'
-import { isRecord } from '@/modules/common/is-record'
-
+import type {
+  HarnessApprovalMode,
+} from './approval-policy'
 import type {
   HarnessApprovalPolicy,
   HarnessToolConcurrency,
@@ -19,17 +20,7 @@ import type {
   HarnessToolLoadMode,
   HarnessToolTier,
 } from './harness.schema'
-import {
-  findStrictToolSchemaViolation,
-  type StrictSchemaViolation,
-} from './strict-schema'
-
-export type HarnessApprovalMode =
-  | 'public-read'
-  | 'public-qualified-write'
-  | 'owner-ui'
-  | 'admin-explicit'
-  | 'internal-break-glass'
+import { isRecord } from '@/modules/common/is-record'
 
 export type HarnessApprovalDeclaration = {
   mode: HarnessApprovalMode
@@ -53,43 +44,22 @@ export type HarnessToolPolicy = {
   timeoutMs?: number
 }
 
-export type HarnessToolSchemaDiagnostic = StrictSchemaViolation & {
-  schema: 'input' | 'output'
-}
-
-export type HarnessToolSchemaBundle<Input, Output> = {
-  inputSchema: z.ZodType<Input>
-  outputSchema: z.ZodType<Output>
-  inputJsonSchema?: JSONSchema
-  outputJsonSchema?: JSONSchema
-  descriptorHash: string
-  providerViolations: readonly string[]
-  providerDiagnostics: readonly HarnessToolSchemaDiagnostic[]
-}
-
-export type HarnessExecuteArgs<Input> = {
-  input: Input
-  context: ActionContext
-  signal?: AbortSignal
-}
-
 export type HarnessToolProjection<Output> = {
   publicProjection: HarnessToolExposure['publicProjection']
   summarizeOutput(output: Output): unknown
 }
 
-export type HarnessToolContract<Input = unknown, Output = unknown> = {
-  id: string
-  name: string
-  summary: string
-  boundaries: readonly string[]
-  parameters: readonly ActionParameter[]
-  exposure: HarnessToolExposure
-  policy: HarnessToolPolicy
-  schemas: HarnessToolSchemaBundle<Input, Output>
-  execute(args: HarnessExecuteArgs<Input>): Promise<Output>
-  projection: HarnessToolProjection<Output>
+export type HarnessExecuteArgs<Input> = ActionToolExecuteArgs<Input> & {
+  signal?: AbortSignal
 }
+
+export type HarnessToolContract<Input = unknown, Output = unknown> =
+  Omit<ActionToolContract<Input, Output>, 'readOnly' | 'surfaces' | 'execute'> & {
+    execute(args: HarnessExecuteArgs<Input>): Promise<Output>
+    exposure: HarnessToolExposure
+    policy: HarnessToolPolicy
+    projection: HarnessToolProjection<Output>
+  }
 
 export type HarnessToolBoundaryEvent =
   | Readonly<{ kind: 'approval_policy'; policy: HarnessApprovalPolicy; reason: string }>
@@ -144,29 +114,6 @@ export function createHarnessToolBoundaryInstrumentation(
   }
 }
 
-export type HarnessAnswerModelToolDescriptor = {
-  type: 'function'
-  function: {
-    name: string
-    description: string
-    parameters: JSONSchema
-  }
-}
-
-export type HarnessDescriptorProjection<Descriptor> = {
-  descriptor: Descriptor
-  descriptorHash: string
-}
-
-export type HarnessToolExecutionValidationMetadata = {
-  descriptorHash: string
-  providerViolations: readonly string[]
-  strictInputSchemaViolation?: string
-  strictOutputSchemaViolation?: string
-  inputJsonSchema?: JSONSchema
-  outputJsonSchema?: JSONSchema
-}
-
 export type HarnessToolEvalFixture = {
   schemaVersion: 1
   toolId: string
@@ -182,13 +129,9 @@ export function actionToHarnessToolContract(
   action: AnyAction,
   instrumentation?: HarnessToolBoundaryInstrumentation,
 ): HarnessToolContract<unknown, unknown> {
-  const schemas = buildHarnessToolSchemaBundle({
-    id: action.id,
-    inputSchema: action.schema,
-    outputSchema: action.outputSchema,
-  })
-  const exposure = exposureForAction(action)
-  const policy = policyForAction(action, exposure)
+  const actionContract = actionToToolContract(action)
+  const exposure = exposureForAction(actionContract)
+  const policy = policyForAction(actionContract, exposure)
 
   const execute: HarnessToolContract<unknown, unknown>['execute'] = async ({ input, context }) => {
     instrumentation?.record({
@@ -197,7 +140,7 @@ export function actionToHarnessToolContract(
       reason: policy.approval.reason,
     })
     instrumentation?.record({ kind: 'direct_runner_started', actionId: action.id })
-    const result = await action.run({ data: input, context })
+    const result = await actionContract.execute({ input, context }) as { kind: string }
     instrumentation?.record({
       kind: 'direct_runner_returned',
       actionId: action.id,
@@ -210,47 +153,19 @@ export function actionToHarnessToolContract(
   }
 
   return {
-    id: action.id,
-    name: action.name,
-    summary: action.summary,
-    boundaries: action.boundaries,
-    parameters: action.parameters,
+    id: actionContract.id,
+    name: actionContract.name,
+    summary: actionContract.summary,
+    boundaries: actionContract.boundaries,
+    parameters: actionContract.parameters,
     exposure,
     policy,
-    schemas,
+    schemas: actionContract.schemas,
     execute,
     projection: {
       publicProjection: exposure.publicProjection,
       summarizeOutput: summarizeActionOutput,
     },
-  }
-}
-
-export function buildHarnessToolSchemaBundle<Input, Output>(input: {
-  id: string
-  inputSchema: z.ZodType<Input>
-  outputSchema: z.ZodType<Output>
-}): HarnessToolSchemaBundle<Input, Output> {
-  const inputJsonSchema = convertSchemaToJsonSchema(input.inputSchema)
-  const outputJsonSchema = convertSchemaToJsonSchema(input.outputSchema)
-  const providerDiagnostics = [
-    ...strictViolationDiagnostics('input', inputJsonSchema),
-    ...strictViolationDiagnostics('output', outputJsonSchema),
-  ]
-  const descriptorHash = schemaDescriptorDigest({
-    toolId: input.id,
-    inputJsonSchema: stableJsonValue(inputJsonSchema),
-    outputJsonSchema: stableJsonValue(outputJsonSchema),
-  }).toString()
-
-  return {
-    inputSchema: input.inputSchema,
-    outputSchema: input.outputSchema,
-    ...(inputJsonSchema === undefined ? {} : { inputJsonSchema }),
-    ...(outputJsonSchema === undefined ? {} : { outputJsonSchema }),
-    descriptorHash,
-    providerViolations: providerDiagnostics.map(formatProviderDiagnostic),
-    providerDiagnostics,
   }
 }
 
@@ -275,51 +190,6 @@ export function harnessToolContractToDefinition<Input, Output>(
     ...(contract.policy.interruptible === undefined ? {} : { interruptible: contract.policy.interruptible }),
     run: contract.execute,
     summarizeOutput: contract.projection.summarizeOutput,
-  }
-}
-
-export function describeHarnessToolExecutionValidation(
-  contract: HarnessToolContract,
-): HarnessToolExecutionValidationMetadata {
-  const strictInputSchemaViolation = contract.schemas.providerDiagnostics.find(
-    (diagnostic) => diagnostic.schema === 'input',
-  )
-  const strictOutputSchemaViolation = contract.schemas.providerDiagnostics.find(
-    (diagnostic) => diagnostic.schema === 'output',
-  )
-
-  return {
-    descriptorHash: contract.schemas.descriptorHash,
-    providerViolations: contract.schemas.providerViolations,
-    ...(strictInputSchemaViolation === undefined ? {} : { strictInputSchemaViolation: strictInputSchemaViolation.reason }),
-    ...(strictOutputSchemaViolation === undefined ? {} : { strictOutputSchemaViolation: strictOutputSchemaViolation.reason }),
-    ...(contract.schemas.inputJsonSchema === undefined ? {} : { inputJsonSchema: contract.schemas.inputJsonSchema }),
-    ...(contract.schemas.outputJsonSchema === undefined ? {} : { outputJsonSchema: contract.schemas.outputJsonSchema }),
-  }
-}
-
-export function describeHarnessToolForAnswerModel(
-  contract: HarnessToolContract,
-): HarnessDescriptorProjection<HarnessAnswerModelToolDescriptor> {
-  const inputJsonSchema = contract.schemas.inputJsonSchema
-  if (inputJsonSchema === undefined) {
-    throw new Error(`Action ${contract.id} has no representable strict input schema`)
-  }
-
-  return {
-    descriptor: {
-      type: 'function',
-      function: {
-        name: contract.id,
-        description: [
-          contract.summary,
-          'Boundaries:',
-          ...contract.boundaries.map((boundary) => `- ${boundary}`),
-        ].join('\n'),
-        parameters: inputJsonSchema,
-      },
-    },
-    descriptorHash: contract.schemas.descriptorHash,
   }
 }
 
@@ -359,7 +229,9 @@ export function filterAnswerModelToolContracts(
   )
 }
 
-function exposureForAction(action: AnyAction): HarnessToolExposure {
+function exposureForAction(
+  action: Pick<ActionToolContract, 'id' | 'readOnly' | 'surfaces'>,
+): HarnessToolExposure {
   const answerModel = action.readOnly && isAnswerModelToolId(action.id)
   const publicProjection = action.readOnly
     ? 'sanitized-counts'
@@ -374,7 +246,10 @@ function exposureForAction(action: AnyAction): HarnessToolExposure {
   }
 }
 
-function policyForAction(action: AnyAction, exposure: HarnessToolExposure): HarnessToolPolicy {
+function policyForAction(
+  action: Pick<ActionToolContract, 'id' | 'readOnly'>,
+  _exposure: HarnessToolExposure,
+): HarnessToolPolicy {
   const tier: HarnessToolTier = action.readOnly ? 'read' : 'write'
 
   if (action.id === 'inquiry.submit') {
@@ -421,52 +296,9 @@ function sortContractsById(
   })
 }
 
-function strictViolationDiagnostics(
-  schema: HarnessToolSchemaDiagnostic['schema'],
-  jsonSchema: JSONSchema | undefined,
-): readonly HarnessToolSchemaDiagnostic[] {
-  const violation = findStrictToolSchemaViolation(jsonSchema)
-  if (violation === null) {
-    return []
-  }
-  return [{ schema, path: violation.path, reason: violation.reason }]
-}
-
-function formatProviderDiagnostic(diagnostic: HarnessToolSchemaDiagnostic): string {
-  return `${diagnostic.schema} schema at ${diagnostic.path}: ${diagnostic.reason}`
-}
-
 function summarizeActionOutput(output: unknown): unknown {
   if (isRecord(output) && typeof output.kind === 'string') {
     return { kind: output.kind }
   }
   return { kind: 'ok' }
 }
-
-function stableJsonValue(value: unknown): StableHashValue {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(stableJsonValue)
-  }
-
-  if (isRecord(value)) {
-    const record: Record<string, StableHashValue> = {}
-    for (const [key, child] of Object.entries(value)) {
-      if (child !== undefined) {
-        record[key] = stableJsonValue(child)
-      }
-    }
-    return record
-  }
-
-  return null
-}
-

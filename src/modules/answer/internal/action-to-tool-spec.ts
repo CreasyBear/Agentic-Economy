@@ -1,9 +1,7 @@
 import type { JSONSchema } from '@tanstack/ai'
+import { actionToToolContract } from '@/modules/actions/tool-contract'
+import { findStrictToolSchemaViolation } from '@/modules/actions/strict-schema'
 import type { AnyAction } from '@/modules/common/action'
-import {
-  actionToHarnessTool,
-  findStrictToolSchemaViolation,
-} from '@/modules/harness/public'
 type StrictObjectJsonSchema = JSONSchema & {
   type: 'object'
   properties: Record<string, JSONSchema>
@@ -41,8 +39,8 @@ export type OpenRouterToolSpec = {
 export function actionToOpenRouterTool(
   action: AnyAction,
 ): OpenRouterToolSpec {
-  const tool = actionToHarnessTool(action)
-  const parameters = tool.inputJsonSchema
+  const contract = actionToToolContract(action)
+  const parameters = contract.schemas.inputJsonSchema
   if (!isObjectJsonSchema(parameters)) {
     throw new Error(`Action ${action.id} has no representable strict input schema`)
   }

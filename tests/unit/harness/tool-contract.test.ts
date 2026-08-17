@@ -1,59 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 
-import { defineAction, findAction, listActions } from '@/modules/actions'
+import {
+  actionToToolContract,
+  defineAction,
+  describeActionToolExecutionValidation,
+  findAction,
+  listActions,
+} from '@/modules/actions'
 import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import {
   actionToHarnessTool,
   actionToHarnessToolContract,
   buildHarnessToolContracts,
-  describeHarnessToolExecutionValidation,
-  describeHarnessToolForAnswerModel,
   filterAnswerModelToolContracts,
-  harnessToolContractToDefinition,
 } from '@/modules/harness/public'
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
 describe('harness tool contract', () => {
-  it('filters answer-model descriptors to the complete read toolset', () => {
+  it('filters answer-model contracts to the complete read toolset', () => {
     const contracts = buildHarnessToolContracts(listActions())
     const answerContracts = filterAnswerModelToolContracts(contracts)
-    const descriptors = answerContracts.map(describeHarnessToolForAnswerModel)
 
     expect(answerContracts.map((contract) => contract.id)).toEqual(ANSWER_READ_TOOL_IDS)
     expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
+    expect(answerContracts.every((contract) => contract.exposure.answerModel)).toBe(true)
     expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)
-    expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual(ANSWER_READ_TOOL_IDS)
-    expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })
 
-  it('projects answer-model descriptors from the canonical schema hash', () => {
-    const contracts = filterAnswerModelToolContracts(buildHarnessToolContracts(listActions()))
-
-    for (const contract of contracts) {
-      const modelProjection = describeHarnessToolForAnswerModel(contract)
-
-      expect(modelProjection.descriptorHash).toBe(contract.schemas.descriptorHash)
-      expect(modelProjection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
-    }
-  })
-  it('builds canonical operation read contracts and preserves full input schemas', () => {
-    for (const actionId of ['registry.operations.compare', 'registry.operations.inspectPlan'] as const) {
-      const action = findAction(actionId)
-      expect(action).toBeDefined()
-      expect(() => actionToHarnessToolContract(action!)).not.toThrow('canonical_digest_value_invalid')
-
-      const contract = actionToHarnessToolContract(action!)
-      const projection = describeHarnessToolForAnswerModel(contract)
-
-      expect(contract.schemas.descriptorHash).toMatch(/^sha256:[0-9a-f]{64}$/)
-      expect(contract.schemas.inputJsonSchema).toBeDefined()
-      expect(projection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
-    }
-  })
-
-  it('preserves invalid schema diagnostics for execution gating', () => {
+  it('preserves action schema diagnostics through the harness adapter', () => {
     const action = defineAction({
       id: 'registry.search',
       name: 'Search listed businesses',
@@ -99,23 +75,38 @@ describe('harness tool contract', () => {
       run: async (): Promise<FakeActionResult> => ({ kind: 'ok' }),
     })
 
+    const actionContract = actionToToolContract(action)
     const contract = actionToHarnessToolContract(action)
-    const validation = describeHarnessToolExecutionValidation(contract)
+    const validation = describeActionToolExecutionValidation(actionContract)
     const tool = actionToHarnessTool(action)
 
-    expect(contract.schemas.providerViolations).toEqual([
-      'input schema at $.properties.mode.enum[1]: enum value 42 does not match declared type string',
-      'output schema at $.properties.kind.const: const value false does not match declared type string',
-    ])
-    expect(validation.strictInputSchemaViolation).toBe(
-      'enum value 42 does not match declared type string',
-    )
-    expect(validation.strictOutputSchemaViolation).toBe(
-      'const value false does not match declared type string',
-    )
     expect(tool.providerViolations).toEqual(contract.schemas.providerViolations)
     expect(tool.strictInputSchemaViolation).toBe(validation.strictInputSchemaViolation)
     expect(tool.strictOutputSchemaViolation).toBe(validation.strictOutputSchemaViolation)
   })
 
+  it('projects action identity into harness policy and exposure', () => {
+    const action = findAction('registry.operations.compare')
+    expect(action).toBeDefined()
+
+    const contract = actionToHarnessToolContract(action!)
+
+    expect(contract.exposure).toEqual({
+      surfaces: action!.surfaces,
+      answerModel: true,
+      publicProjection: 'sanitized-counts',
+    })
+    expect(contract.policy).toMatchObject({
+      tier: 'read',
+      approval: {
+        mode: 'owner-ui',
+        policy: 'allow',
+        reason: 'owner_read_requires_auth',
+      },
+      concurrency: 'shared',
+      interruptible: true,
+      loadMode: 'discoverable',
+      hidden: true,
+    })
+  })
 })

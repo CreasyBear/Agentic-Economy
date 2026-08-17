@@ -8,6 +8,7 @@ export {
   type HarnessApprovalTool,
   type HarnessSourceWriteAdmissionDeclaration,
   type ResolveHarnessApprovalPolicyInput,
+  type HarnessApprovalMode,
 } from './approval-policy'
 
 export {
@@ -128,32 +129,18 @@ export {
 } from './protected-evidence'
 
 export {
-  findStrictToolSchemaViolation,
-  type StrictSchemaViolation,
-} from './strict-schema'
-
-export {
   actionToHarnessToolContract,
   buildHarnessToolContracts,
   buildHarnessToolEvalFixture,
-  buildHarnessToolSchemaBundle,
-  describeHarnessToolExecutionValidation,
-  describeHarnessToolForAnswerModel,
   filterAnswerModelToolContracts,
   harnessToolContractToDefinition,
-  type HarnessAnswerModelToolDescriptor,
   type HarnessApprovalDeclaration,
-  type HarnessApprovalMode,
-  type HarnessDescriptorProjection,
   type HarnessExecuteArgs,
   type HarnessToolContract,
   type HarnessToolEvalFixture,
-  type HarnessToolExecutionValidationMetadata,
   type HarnessToolExposure,
   type HarnessToolPolicy,
   type HarnessToolProjection,
-  type HarnessToolSchemaBundle,
-  type HarnessToolSchemaDiagnostic,
 } from './tool-contract'
 
 export {

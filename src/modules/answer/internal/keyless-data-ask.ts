@@ -28,7 +28,7 @@ import type {
   KeylessExecutableSourcePort,
   KeylessExecutableToolDescriptor,
 } from '@/modules/capability-execution/operation-execute.actions'
-import { findStrictToolSchemaViolation } from '@/modules/harness/strict-schema'
+import { findStrictToolSchemaViolation } from '@/modules/actions/strict-schema'
 export type KeylessDataAskDecisionCandidate = AnswerOperationCandidate
 
 export type KeylessDataAskClarificationStatus = 'changed' | 'unavailable'

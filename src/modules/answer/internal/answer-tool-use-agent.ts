@@ -36,7 +36,7 @@ import {
   type PublicOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { findStrictToolSchemaViolation } from '@/modules/harness/strict-schema'
+import { findStrictToolSchemaViolation } from '@/modules/actions/strict-schema'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 import { isRecord } from '@/modules/common/is-record'
 import type { AnyAction } from '@/modules/common/action'

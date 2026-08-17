@@ -144,4 +144,3 @@ function matchesJsonType(value: unknown, type: string): boolean {
       return true
   }
 }
-
