@@ -987,11 +987,16 @@ function buildStreamAnswerTurnPhases(input: {
           ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
           ...(state.responsePlan?.mode === 'clarify'
           || keylessDataAsk?.kind === 'needs_clarification'
+          || state.intent === 'filter_known'
+          || state.intent === 'compare_known'
+          || state.intent === 'inquiry_handoff'
+          || state.intent === 'explain_boundary'
+          || state.intent === 'unsupported'
             ? { disableTools: true }
             : {}),
         },
         seedToolCalls,
-        undefined,
+        state.responsePlan?.mode,
         keylessDataAsk === undefined
           ? undefined
           : state.responsePlan?.toolPolicy,

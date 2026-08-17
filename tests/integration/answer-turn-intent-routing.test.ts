@@ -196,6 +196,68 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
     }
   })
 
+  it('keeps clarification in the common agent without recovery prompts', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'Which kind of plumbing help do you need?',
+        summary: 'Tell me the plumbing service you need so I can narrow the search.',
+        whatToDoNow: 'Name the plumbing service you need.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+
+    priorThreadPort()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const response = await handleLocalAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: `ae_session=${FIXED_SESSION_ID}`,
+            'X-AE-Turn-Key': 'intent:clarify-plumber',
+          },
+          body: JSON.stringify({ query: 'plumber' }),
+        }),
+      )
+
+      const frames = await readAnswerTurnStream(response)
+      const complete = frames.at(-1)?.event
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
+      const plan = frames.find(({ event }) => event.type === 'plan')?.event
+      if (plan?.type !== 'plan') {
+        throw new Error('expected clarification plan event')
+      }
+      expect(plan.layoutProfile).toBe('clarification')
+      expect(frames.some(({ event }) =>
+        event.type === 'thinking' && event.label === 'Searching for matches…',
+      )).toBe(false)
+      expect(frames.some(({ event }) =>
+        event.type === 'artifact' && event.artifact.kind === 'recovery-prompts',
+      )).toBe(false)
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.providers).toEqual([])
+      expect(complete.answer.layoutProfile).toBe('clarification')
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
+  })
+
   it('reuses frozen prior providers as the common agent answer source', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
@@ -223,6 +285,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       // The common agent receives the frozen provider projection after the mandatory safety preflight.
       expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
@@ -262,6 +325,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       const complete = frames.at(-1)?.event
       expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
@@ -305,6 +372,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       const complete = frames.at(-1)?.event
       expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
@@ -355,6 +426,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       const complete = frames.at(-1)?.event
       expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
       if (complete?.type !== 'complete') {
         throw new Error(`expected complete event, got ${JSON.stringify(complete)}`)
       }
@@ -393,6 +468,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       const complete = frames.at(-1)?.event
       expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests[1]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }

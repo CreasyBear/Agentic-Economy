@@ -105,30 +105,27 @@ async function streamAgentTurn(
           ? 'Choosing a live capability…'
           : `Running ${capabilityName}…`,
     })
-  } else if (agentInput.disableTools === true) {
-    ctx.workLog.emit({
-      id: 'search.registry.recovery',
-      phase: 'search',
-      status: 'skipped',
-      title: 'Using businesses already found',
-      summary: 'No extra search is needed for this follow-up.',
-      completedAtMs: recoveryStartedAt,
-    })
-    ctx.send({
-      type: 'thinking',
-      step: 'search',
-      label: 'Searching for matches…',
-    })
-  } else {
-    ctx.workLog.emit({
-      id: 'search.registry.recovery',
-      phase: 'search',
-      status: 'running',
-      title: 'Trying another search',
-      summary:
-        'The first search did not settle the answer, so another search is underway.',
-      startedAtMs: recoveryStartedAt,
-    })
+  } else if (planMode !== 'clarify' || agentInput.disableTools !== true) {
+    if (agentInput.disableTools === true) {
+      ctx.workLog.emit({
+        id: 'search.registry.recovery',
+        phase: 'search',
+        status: 'skipped',
+        title: 'Using businesses already found',
+        summary: 'No extra search is needed for this follow-up.',
+        completedAtMs: recoveryStartedAt,
+      })
+    } else {
+      ctx.workLog.emit({
+        id: 'search.registry.recovery',
+        phase: 'search',
+        status: 'running',
+        title: 'Trying another search',
+        summary:
+          'The first search did not settle the answer, so another search is underway.',
+        startedAtMs: recoveryStartedAt,
+      })
+    }
     ctx.send({
       type: 'thinking',
       step: 'search',
@@ -293,9 +290,11 @@ async function streamAgentTurn(
     emitReadAndCompareSteps(ctx.workLog, result.providers)
     const snapshot = {
       ...withFollowUpLayout(result.snapshot, ctx.priorTurnsCount, ctx.intent),
-      ...(hasCapabilityActivity
-        ? { layoutProfile: 'data_answer' as const }
-        : {}),
+      ...(planMode === 'clarify'
+        ? { layoutProfile: 'clarification' as const }
+        : hasCapabilityActivity
+          ? { layoutProfile: 'data_answer' as const }
+          : {}),
     }
     const finalized = finalizeAnswerTurnSnapshot({
       snapshot,
@@ -491,7 +490,7 @@ function buildRecoveryWorkStepDetailRows(
             value: queries.map(safeWorkLogUserText).join(' -> '),
           },
         ]),
-    { label: 'Matches found', value: String(providerCount) },
+    { label: 'Results', value: String(providerCount) },
   ]
 }
 

@@ -2681,13 +2681,17 @@ function resolveAgentQuery(
   toolCalls: readonly AnswerToolCallRecord[],
   fallback: string,
 ): string {
-  for (const call of toolCalls) {
-    if (call.toolId !== 'registry.search') {
+  for (const call of toolCalls.toReversed()) {
+    if (call.toolId !== 'registry.search' || call.status !== 'complete') {
       continue
     }
     try {
-      const input = JSON.parse(call.inputJson) as { query?: unknown }
-      if (typeof input.query === 'string' && input.query.trim().length > 0) {
+      const input: unknown = JSON.parse(call.inputJson)
+      if (
+        isRecord(input) &&
+        typeof input.query === 'string' &&
+        input.query.trim().length > 0
+      ) {
         return input.query.trim()
       }
     } catch {
@@ -2701,14 +2705,18 @@ function resolveAgentJsonScope(
   toolCalls: readonly AnswerToolCallRecord[],
   searchContext: AeSearchContext | undefined,
 ): { mode?: 'near_me' | 'whole_catalogue'; location?: string } | undefined {
-  for (const call of toolCalls) {
-    if (call.toolId !== 'registry.search') {
+  for (const call of toolCalls.toReversed()) {
+    if (call.toolId !== 'registry.search' || call.status !== 'complete') {
       continue
     }
     try {
-      const input = JSON.parse(call.inputJson) as {
-        mode?: unknown
-        location?: unknown
+      const input: unknown = JSON.parse(call.inputJson)
+      if (
+        !isRecord(input) ||
+        typeof input.query !== 'string' ||
+        input.query.trim().length === 0
+      ) {
+        continue
       }
       const mode =
         input.mode === 'near_me' || input.mode === 'whole_catalogue'
@@ -2724,8 +2732,9 @@ function resolveAgentJsonScope(
           ...(location === undefined ? {} : { location }),
         }
       }
+      break
     } catch {
-      // Fall through to the active search context.
+      // Fall through to the next call or the active search context.
     }
   }
   if (searchContext?.mode === 'whole_catalogue') {

@@ -1275,6 +1275,103 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
       await server.close();
     }
   });
+  it("uses the latest successful search for projections without rewriting evidence", async () => {
+    let nextSearch = 0;
+    const plannedSearches = [
+      {
+        id: "call-search-misspelled",
+        query: "paramata",
+        mode: "near_me",
+        location: "Joondalup",
+      },
+      {
+        id: "call-search-corrected",
+        query: "parramatta",
+        mode: "whole_catalogue",
+        location: undefined,
+      },
+    ] as const;
+    const server = await startOpenRouterContractServer((request) => {
+      const planned = plannedSearches[nextSearch];
+      if ((request.tools?.length ?? 0) > 0 && planned !== undefined) {
+        nextSearch += 1;
+        return openRouterToolResponse([
+          {
+            id: planned.id,
+            toolId: "registry.search",
+            input: {
+              query: planned.query,
+              mode: planned.mode,
+              ...(planned.location === undefined
+                ? {}
+                : { location: planned.location }),
+            },
+          },
+        ]);
+      }
+      return openRouterStructuredProseResponse(matchingProviderProse());
+    });
+    const restoreOpenRouter = server.installEnv();
+    const previousLocalRegistry =
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+    const previousConvexUrl = process.env.CONVEX_URL;
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL;
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = "true";
+    delete process.env.CONVEX_URL;
+    delete process.env.VITE_CONVEX_URL;
+    const restoreRegistry = setPublicRegistrySourcePortForTests(
+      createLocalE2eRegistrySourcePort(),
+    );
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: "paramata",
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
+        maxToolCalls: 2,
+      });
+
+      expect(
+        result.toolCalls.map((call) => JSON.parse(call.inputJson).query),
+      ).toEqual(["paramata", "parramatta"]);
+      expect(result.toolCalls.map((call) => call.status)).toEqual([
+        "complete",
+        "complete",
+      ]);
+      expect(result.providers.map((provider) => provider.slug)).toContain(
+        "parramatta-emergency-plumbing",
+      );
+      expect(result.providers.map((provider) => provider.slug)).not.toContain(
+        "joondalup-rapid-plumbing",
+      );
+      expect(result.snapshot.providers.map((provider) => provider.slug)).toEqual(
+        result.providers.map((provider) => provider.slug),
+      );
+      expect(result.snapshot.agentJsonUrl).toBe(
+        "/api/businesses/search?q=parramatta&limit=3&mode=whole_catalogue",
+      );
+      expect(result.snapshot.query).toBe("paramata");
+    } finally {
+      restoreRegistry();
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry;
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL;
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl;
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL;
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl;
+      }
+      restoreOpenRouter();
+      await server.close();
+    }
+  });
 
   it("does not schedule additional tool calls after the per-turn budget is reached", async () => {
     const server = await startOpenRouterContractServer(
