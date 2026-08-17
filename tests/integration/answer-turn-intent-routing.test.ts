@@ -112,7 +112,7 @@ function turnRequest(query: string, threadId: string = PRIOR_THREAD_ID): Request
   })
 }
 
-describe('POST /api/answer/turn intent routing (tool-use)', () => {
+describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () => {
   let previousConvexUrl: string | undefined
   let previousViteConvexUrl: string | undefined
   let restoreRegistrySource: (() => void) | undefined
@@ -143,7 +143,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
-  it('refine_search: runs the agent with registry tools and records the tool call', async () => {
+  it('uses the common agent to recover a misspelled business search with registry tools', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
@@ -160,7 +160,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      // First turn (no threadId) → refine_search.
+      // First turn without thread context enters the common agent path.
       const response = await handleLocalAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -176,11 +176,11 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(server.requests).toHaveLength(5)
+      expect(server.requests).toHaveLength(3)
       expect(server.requests[0]?.response_format?.json_schema?.name).toBe('answer_request_preflight')
-      const stagedAgentRequests = server.requests.slice(1)
-      expect(stagedAgentRequests).toHaveLength(4)
-      for (const request of stagedAgentRequests) {
+      const agentRequests = server.requests.slice(1)
+      expect(agentRequests).toHaveLength(2)
+      for (const request of agentRequests) {
         const userPrompt = request.messages.find((message) => message.role === 'user')?.content ?? ''
         expect(userPrompt).toContain('User query: paramata')
         expect(userPrompt).not.toContain('<catalog_data>')
@@ -196,7 +196,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
-  it('filter_known: reuses frozen prior providers and calls no registry tool', async () => {
+  it('reuses frozen prior providers as the common agent answer source', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
         oneLine: 'One business accepts requests.',
@@ -220,9 +220,12 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      // Frozen provider reused deterministically; only the mandatory safety preflight runs.
-      expect(server.requests).toHaveLength(1)
+      // The common agent receives the frozen provider projection after the mandatory safety preflight.
+      expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
+      expect(server.requests.slice(1).flatMap((request) =>
+        request.messages.filter((message) => message.role === 'tool'),
+      )).toHaveLength(0)
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
@@ -237,8 +240,15 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
-  it('inquiry_handoff: resolves a prior provider without calling the agent', async () => {
-    const server = await startOpenRouterContractServer([])
+  it('uses frozen provider evidence in the common agent answer', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'Ready to send a request to Parramatta Emergency Plumbing.',
+        summary:
+          'The business has a request form, but timing, price, and availability are not confirmed yet.',
+        whatToDoNow: 'Open the request form and send the business the details of what you need.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
@@ -250,7 +260,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(1)
+      expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
@@ -258,22 +268,11 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       expect(complete.answer.oneLine).toBe(
         'Ready to send a request to Parramatta Emergency Plumbing.',
       )
-      expect(complete.answer.selectedProvider?.slug).toBe('parramatta-emergency-plumbing')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
       expect(complete.answer.nextStep).toContain('request form')
       expect(complete.answer.summary).toContain('timing, price, and availability are not confirmed yet')
-      const eventTypes = frames.map((frame) => frame.event.type)
-      const selectedProviderArtifactEvent = frames
-        .map((frame) => frame.event)
-        .find((event) =>
-          event.type === 'artifact' && event.artifact.kind === 'selected-provider')
-      if (selectedProviderArtifactEvent?.type !== 'artifact' || selectedProviderArtifactEvent.artifact.kind !== 'selected-provider') {
-        throw new Error('expected selected-provider artifact')
-      }
-      expect(selectedProviderArtifactEvent.artifact.provider.slug).toBe('parramatta-emergency-plumbing')
-      expect(eventTypes.indexOf('artifact')).toBeLessThan(eventTypes.indexOf('next-step'))
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -285,8 +284,14 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
-  it('explain_boundary: answers from boundary-prose directly without calling the agent', async () => {
-    const server = await startOpenRouterContractServer([])
+  it('uses the common agent to explain the safe operating boundary', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'The assistant compares published details, but it cannot book or start the job.',
+        summary: 'Use the cards to compare published details and contact the business for anything beyond comparison.',
+        whatToDoNow: 'Open a business page and contact the business when you are ready.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
@@ -298,11 +303,12 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(1)
+      expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
+      expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('cannot book or start the job')
     } finally {
       restoreOpenRouter()
@@ -318,8 +324,14 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
   it.each([
     ['book this plumber and charge my card'],
     ['send a technician now'],
-  ])('first-turn imperative "%s" stays on the safe-action boundary without registry tools', async (query) => {
-    const server = await startOpenRouterContractServer([])
+  ])('keeps imperative requests on the safe-action boundary through the common agent: "%s"', async (query) => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'This kind of request is not available here; the business would need to handle it directly.',
+        summary: 'The business reviews your message and replies using the contact details you provide.',
+        whatToDoNow: 'Open a business page to use its request option when available.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
@@ -341,7 +353,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(1)
+      expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error(`expected complete event, got ${JSON.stringify(complete)}`)
@@ -360,8 +372,14 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
-  it('unsupported: answers from unsupported-prose directly without calling the agent', async () => {
-    const server = await startOpenRouterContractServer([])
+  it('keeps unsupported requests on the safe-action boundary through the common agent', async () => {
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'This kind of request is not available here; the business would need to handle it directly.',
+        summary: 'The business reviews your message and replies using the contact details you provide.',
+        whatToDoNow: 'Open a business page to use its request option when available.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
@@ -373,11 +391,12 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(1)
+      expect(server.requests).toHaveLength(2)
       expect(server.requests[0]?.tools).toBeUndefined()
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
+      expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('This kind of request is not available here')
     } finally {
       restoreOpenRouter()

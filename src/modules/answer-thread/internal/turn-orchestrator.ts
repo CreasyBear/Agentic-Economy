@@ -1,5 +1,4 @@
 import {
-  buildRationaleFollowUpProse,
   classifyAnswerRequestPreflight,
   keylessDataAskFromCandidates,
   resolveKeylessDataAskFromInterpretation,
@@ -81,10 +80,6 @@ import {
 } from './turn-digests'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
 import {
-  filterProvidersBySuburb,
-  parseNarrowToSuburb,
-} from './follow-up-query'
-import {
   answerHarnessFinalizationSucceeded,
   collectLatestFrozenAllowedSlugs,
   collectLatestFrozenOperationCandidates,
@@ -104,8 +99,6 @@ import {
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
 import {
-  buildCorrectiveRegistryQuery,
-  buildRationaleEvidence,
   latestPriorOperationPresentation,
   pendingDecisionFor,
   priorTurnOperation,
@@ -114,29 +107,14 @@ import {
   readPriorContinuationState,
   readPriorOperationInput,
   readPriorSearchContext,
-  readDurableFailureEvidence,
   selectedInputDigestFor,
 } from './answer-continuation-state'
-import {
-  resolveEffectiveAnswerRoute,
-  type EffectiveAnswerRoute,
-} from './effective-answer-route'
+import type { EffectiveAnswerRoute } from './effective-answer-route'
 import { agentTurnPath, readOperationArtifacts } from './turns/agent'
 import { boundaryTurnPath } from './turns/boundary'
-import { clarificationTurnPath } from './turns/clarification'
-import { inquiryHandoffTurnPath } from './turns/inquiry-handoff'
-import { insufficientFrozenTurnPath } from './turns/insufficient-frozen'
-import {
-  frozenKnownTurnPath,
-  selectFrozenProviders,
-} from './turns/frozen-known'
-import { retrievalFirstTurnPath } from './turns/retrieval-first'
 import { parseFrozenEvidence } from './public-projection'
 import {
-  describeProviderCount,
   makeCopyId,
-  reindexProviders,
-  withFollowUpLayout,
   type SnapshotAssemblyPlan,
   type SnapshotPlanMetadata,
   type TurnPathContext,
@@ -166,6 +144,9 @@ type AnswerTurnLeaseLoss =
     }
   | { kind: 'transport' }
 
+type RuntimeAnswerRoute =
+  | Extract<EffectiveAnswerRoute, { agent: unknown }>
+  | Readonly<{ kind: 'safety_refusal' }>
 
 type StreamAnswerTurnRuntimeState = {
   checkpointDigestRef: { value?: string }
@@ -192,11 +173,11 @@ type StreamAnswerTurnRuntimeState = {
   continuationSource?: AnswerContinuationSource
   pendingDecision?: AnswerPendingDecision
   querySafety?: AnswerRequestPreflightResult
-  route?: EffectiveAnswerRoute | undefined
+  route?: RuntimeAnswerRoute
+
   responsePlan?: AnswerResponsePlan | undefined
   keylessDataAsk?: KeylessDataAskResolution | undefined
   publicOperationCandidates: readonly AnswerOperationCandidate[]
-  narrowSuburb?: string | undefined
   captured?: AnswerSnapshot | undefined
   errorCopyId?: string | undefined
   errorProblem?: AnswerTurnProblem | undefined
@@ -802,37 +783,37 @@ function buildStreamAnswerTurnPhases(input: {
       return {
         ...state,
         intent,
-        narrowSuburb: parseNarrowToSuburb(state.query),
         priorProviders: collectLatestFrozenProviders(state.priorTurns),
         priorAllowedSlugs: collectLatestFrozenAllowedSlugs(state.priorTurns),
       }
     },
     route: ({ state }) => {
-      const correctiveRegistryQuery =
-        state.priorProviders.length === 0
-          ? buildCorrectiveRegistryQuery(state.query, state.priorTurns)
-          : undefined
-      const decision = resolveEffectiveAnswerRoute({
-        query: state.query,
-        ...(correctiveRegistryQuery === undefined
-          ? {}
-          : { registryQuery: correctiveRegistryQuery }),
-        querySafetyRefused: state.querySafety?.kind === 'refused',
-        intent: state.intent,
-        interpretation: state.interpretation,
-        priorTurnCount: state.priorTurnCount,
-        priorProviderCount: state.priorProviders.length,
-        priorOperationRef: state.priorOperationRef,
-        resuming: state.resumeCheckpoint !== undefined,
-      })
-      const registryQuery =
-        decision.shouldBuildCorrectiveRegistryQuery
-          ? correctiveRegistryQuery
-          : undefined
+      const interpretation = state.interpretation
+      const lane =
+        interpretation?.route === 'operation'
+        || interpretation?.route === 'confirmation'
+          ? ('operation' as const)
+          : ('business' as const)
+      const continuation = interpretation?.continuation ?? 'new'
+      const route: RuntimeAnswerRoute =
+        state.querySafety?.kind === 'refused'
+          ? { kind: 'safety_refusal' }
+          : {
+              kind: 'tool_search',
+              shouldRunBusinessRetrievalFirst: false,
+              agent: {
+                lane,
+                continuation,
+                allowedReadToolFamily: 'shared',
+                exactOperationDetailRequired: lane === 'operation',
+                effectAllowed:
+                  lane === 'operation'
+                  && interpretation?.effectPolicy !== 'candidate_only',
+              },
+            }
       return {
         ...state,
-        route: decision.route,
-        ...(registryQuery === undefined ? {} : { registryQuery }),
+        route,
       }
     },
     retrieval: async ({ state }) => {
@@ -846,25 +827,8 @@ function buildStreamAnswerTurnPhases(input: {
           }),
         }
       }
-      if (
-        state.route?.kind !== 'tool_search' &&
-        state.route?.kind !== 'initial_retrieval'
-      ) {
+      if (state.route?.kind !== 'tool_search') {
         return state
-      }
-      if (state.registryQuery !== undefined) {
-        const previousFailure = readDurableFailureEvidence(state.priorTurns)
-        if (previousFailure !== undefined) {
-          input.workLog.emit({
-            id: 'search.previous_failure',
-            phase: 'search',
-            status: 'error',
-            title: 'Using the earlier search result',
-            summary: `The earlier search did not complete: ${previousFailure}`,
-            detailRows: [{ label: 'Earlier failure', value: previousFailure }],
-            completedAtMs: Date.now(),
-          })
-        }
       }
       const priorOperationCandidates =
         collectLatestFrozenOperationCandidates(state.priorTurns)
@@ -952,9 +916,9 @@ function buildStreamAnswerTurnPhases(input: {
     },
     model: async ({ state }) => {
       if (
-        state.captured !== undefined ||
-        state.errorCopyId !== undefined ||
-        state.errorProblem !== undefined
+        state.captured !== undefined
+        || state.errorCopyId !== undefined
+        || state.errorProblem !== undefined
       ) {
         return state
       }
@@ -963,274 +927,76 @@ function buildStreamAnswerTurnPhases(input: {
       if (route === undefined) {
         return state
       }
-
-      const responsePlan = state.responsePlan
-      switch (route.kind) {
-        case 'initial_retrieval': {
-          if (responsePlan?.mode === 'clarify') {
-            return applyToolLedResult(
-              state,
-              await clarificationTurnPath.run(
-                runtimeTurnPathContext(input, state),
-                responsePlan,
-              ),
-            )
-          }
-          if (responsePlan?.mode !== 'answer') return state
-          let seedToolCalls =
-            state.resumeCheckpoint === undefined ? state.toolCalls : []
-          if (
-            state.resumeCheckpoint === undefined
-            && route.shouldRunBusinessRetrievalFirst
-          ) {
-            const retrieval = await retrievalFirstTurnPath.run(
-              runtimeTurnPathContext(input, state),
-              responsePlan,
-            )
-            if (
-              retrieval === undefined
-              || retrieval.snapshot !== undefined
-              || retrieval.toolCalls.some((call) => call.status !== 'complete')
-              || input.input.signal?.aborted === true
-            ) {
-              return applyToolLedResult(state, retrieval)
-            }
-            seedToolCalls = retrieval.toolCalls
-          }
-          const result = await agentTurnPath.run(
+      if (route.kind === 'safety_refusal') {
+        return applyToolLedResult(
+          state,
+          await boundaryTurnPath.run(
             runtimeTurnPathContext(input, state),
             {
-              query: state.query,
-              followUpIntent: state.intent,
-              searchContext: state.searchContext,
-              effectiveRoute: route.agent,
-              ...(state.interpretation === undefined
-                ? {}
-                : { requestedIntents: state.interpretation.requestedIntents }),
-              ...(state.priorOperationInput === undefined
-                ? {}
-                : {
-                    priorOperationInput: state.priorOperationInput,
-                    ...(state.priorOperationRef === undefined
-                      ? {}
-                      : { priorOperationRef: state.priorOperationRef }),
-                  }),
-              keylessExecutableSource:
-                input.input.keylessExecutableSource ??
-                convexKeylessExecutableSource,
+              kind: 'safety_refusal',
+              safetyReason:
+                state.querySafety?.kind === 'refused'
+                  ? state.querySafety.reason
+                  : 'unsafe_request',
             },
-            seedToolCalls,
-            undefined,
-            undefined,
-          )
-          return applyToolLedResult(state, result)
-        }
-        case 'safety_refusal':
-          return applyToolLedResult(
-            state,
-            await boundaryTurnPath.run(
-              runtimeTurnPathContext(input, state),
-              {
-                kind: 'safety_refusal',
-                safetyReason:
-                  state.querySafety?.kind === 'refused'
-                    ? state.querySafety.reason
-                    : 'unsafe_request',
-              },
-            ),
-          )
-        case 'rationale': {
-          const evidence = buildRationaleEvidence({
-            query: state.query,
-            priorTurns: state.priorTurns,
-            searchContext: state.searchContext,
-          })
-          const prose = buildRationaleFollowUpProse(evidence)
-          const snapshot = withFollowUpLayout(
-            {
-              query: state.query,
-              oneLine: prose.oneLine,
-              providers: [],
-              summary: prose.summary,
-              nextStep: prose.nextStep,
-              agentJsonUrl: '',
-            },
-            state.priorTurnCount,
-            'compare_known',
-          )
-          const allowedSlugs =
-            state.priorAllowedSlugs.length > 0
-              ? new Set(state.priorAllowedSlugs)
-              : state.allowedSlugs
-          const finalized = finalizeAnswerTurnSnapshot({
-            snapshot,
-            allowedSlugs,
-          })
-          if (!finalized.ok) {
-            return applyToolLedResult(state, {
-              snapshot: undefined,
-              toolCalls: [],
-              allowedSlugs,
-              errorCopyId: finalized.copyId,
-              errorProblem: buildAnswerTurnProblem(finalized.code),
-              gate: finalized.gate,
-            })
-          }
-          const assembly = await runtimeTurnPathContext(
-            input,
-            state,
-          ).emitOrDeferSnapshot(finalized.snapshot, 'frozen_compare', {
-            planMode: 'compare',
-          })
-          return applyToolLedResult(state, {
-            snapshot: finalized.snapshot,
-            toolCalls: [],
-            allowedSlugs,
-            errorCopyId: undefined,
-            gate: finalized.gate,
-            ...(assembly === undefined ? {} : { assembly }),
-          })
-        }
-        case 'boundary_explain':
-        case 'unsupported':
-          return applyToolLedResult(
-            state,
-            await boundaryTurnPath.run(
-              runtimeTurnPathContext(input, state),
-              route.kind,
-            ),
-          )
-        case 'inquiry_handoff':
-          return applyToolLedResult(
-            state,
-            await inquiryHandoffTurnPath.run(
-              runtimeTurnPathContext(input, state),
-            ),
-          )
-        case 'frozen_filter':
-        case 'frozen_compare': {
-          const frozen = selectFrozenProviders(route.kind, state.priorProviders)
-          if (
-            state.priorProviders.length === 0 ||
-            (route.kind === 'frozen_compare' && frozen.length < 2)
-          ) {
-            return applyToolLedResult(
-              state,
-              await insufficientFrozenTurnPath.run(
-                runtimeTurnPathContext(input, state),
-                route.kind,
-              ),
-            )
-          }
-          emitFrozenProviderSteps(input.workLog, route.kind, frozen)
-          const result = await frozenKnownTurnPath.run(
-            runtimeTurnPathContext(input, state),
-            frozen,
-            route.kind,
-          )
-          return applyToolLedResult(state, result)
-        }
-        case 'tool_search': {
-          if (
-            state.narrowSuburb !== undefined
-            && state.priorProviders.length > 0
-          ) {
-            const narrowed = reindexProviders(
-              filterProvidersBySuburb(state.priorProviders, state.narrowSuburb),
-            )
-            const result = await frozenKnownTurnPath.run(
-              runtimeTurnPathContext(input, state),
-              narrowed,
-              'frozen_filter',
-            )
-            return applyToolLedResult(state, result)
-          }
-          let seedToolCalls =
-            state.resumeCheckpoint === undefined ? state.toolCalls : []
-          if (
-            state.keylessDataAsk === undefined
-            && state.responsePlan !== undefined
-          ) {
-            if (state.responsePlan.mode === 'clarify') {
-              return applyToolLedResult(
-                state,
-                await clarificationTurnPath.run(
-                  runtimeTurnPathContext(input, state),
-                  state.responsePlan,
-                ),
-              )
-            }
-            if (
-              state.responsePlan.mode === 'answer'
-              && route.shouldRunBusinessRetrievalFirst
-            ) {
-              const retrieval = await retrievalFirstTurnPath.run(
-                runtimeTurnPathContext(input, state),
-                state.responsePlan,
-              )
-              if (
-                retrieval === undefined
-                || retrieval.snapshot !== undefined
-                || retrieval.toolCalls.some((call) => call.status !== 'complete')
-                || input.input.signal?.aborted === true
-              ) {
-                return applyToolLedResult(state, retrieval)
-              }
-              seedToolCalls = retrieval.toolCalls
-            }
-          }
-          const keylessExecutableSource =
-            input.input.keylessExecutableSource ?? convexKeylessExecutableSource
-          const keylessDataAsk = state.keylessDataAsk
-          const priorOperationPresentation =
-            latestPriorOperationPresentation(state.priorTurns)
-          const result = await agentTurnPath.run(
-            runtimeTurnPathContext(input, state),
-            {
-              query: state.query,
-              followUpIntent: state.intent,
-              searchContext: state.searchContext,
-              effectiveRoute: route.agent,
-              ...(state.interpretation === undefined
-                ? {}
-                : { requestedIntents: state.interpretation.requestedIntents }),
-              ...(state.priorOperationInput === undefined
-                ? {}
-                : {
-                    priorOperationInput: state.priorOperationInput,
-                    ...(state.priorOperationRef === undefined
-                      ? {}
-                      : { priorOperationRef: state.priorOperationRef }),
-                  }),
-              ...(state.priorOperationRef === undefined ||
-              priorOperationPresentation === undefined
-                ? {}
-                : { priorOperationPresentation }),
-              keylessExecutableSource,
-              ...(input.input.operationExecuteDeps === undefined
-                ? {}
-                : {
-                    operationExecuteDeps:
-                      input.input.operationExecuteDeps,
-                  }),
-              ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
-              ...(keylessDataAsk?.kind === 'needs_clarification'
-                ? { disableTools: true }
-                : {}),
-            },
-            seedToolCalls,
-            undefined,
-            keylessDataAsk === undefined
-              ? undefined
-              : responsePlan?.toolPolicy,
-          )
-          return applyToolLedResult(state, result)
-        }
-        default: {
-          const _exhaustive: never = route
-          return _exhaustive
-        }
+          ),
+        )
       }
+
+      const seedToolCalls =
+        state.resumeCheckpoint === undefined ? state.toolCalls : []
+      const keylessExecutableSource =
+        input.input.keylessExecutableSource ?? convexKeylessExecutableSource
+      const keylessDataAsk = state.keylessDataAsk
+      const priorOperationPresentation = latestPriorOperationPresentation(state.priorTurns)
+      const priorProviderEvidenceAllowed =
+        state.intent === 'filter_known'
+        || state.intent === 'compare_known'
+        || state.intent === 'inquiry_handoff'
+      const result = await agentTurnPath.run(
+        runtimeTurnPathContext(input, state),
+        {
+          query: state.query,
+          followUpIntent: state.intent,
+          searchContext: state.searchContext,
+          priorProviders: priorProviderEvidenceAllowed ? state.priorProviders : [],
+          priorAllowedSlugs: priorProviderEvidenceAllowed ? state.priorAllowedSlugs : [],
+          effectiveRoute: route.agent,
+          ...(state.interpretation === undefined
+            ? {}
+            : { requestedIntents: state.interpretation.requestedIntents }),
+          ...(state.priorOperationInput === undefined
+            ? {}
+            : {
+                priorOperationInput: state.priorOperationInput,
+                ...(state.priorOperationRef === undefined
+                  ? {}
+                  : { priorOperationRef: state.priorOperationRef }),
+              }),
+          ...(state.priorOperationRef === undefined
+          || priorOperationPresentation === undefined
+            ? {}
+            : { priorOperationPresentation }),
+          keylessExecutableSource,
+          ...(input.input.operationExecuteDeps === undefined
+            ? {}
+            : {
+                operationExecuteDeps:
+                  input.input.operationExecuteDeps,
+              }),
+          ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
+          ...(state.responsePlan?.mode === 'clarify'
+          || keylessDataAsk?.kind === 'needs_clarification'
+            ? { disableTools: true }
+            : {}),
+        },
+        seedToolCalls,
+        undefined,
+        keylessDataAsk === undefined
+          ? undefined
+          : state.responsePlan?.toolPolicy,
+      )
+      return applyToolLedResult(state, result)
     },
     gate: async ({ state }) => {
       let captured = state.captured
@@ -2242,42 +2008,6 @@ function describeSearchContext(
     return 'All available options'
   }
   return aeSearchContextLocationQuery(searchContext) ?? 'Your request'
-}
-
-function emitFrozenProviderSteps(
-  workLog: WorkStepEmitter,
-  routeKind: 'frozen_filter' | 'frozen_compare',
-  providers: readonly AnswerSource[],
-): void {
-  const completedAt = Date.now()
-  workLog.emit({
-    id: 'read.providers',
-    phase: 'read',
-    status: 'complete',
-    title: 'Reading the details already found',
-    summary: describeProviderCount(providers.length, 'match'),
-    detailRows: [
-      { label: 'From latest answer', value: String(providers.length) },
-    ],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    completedAtMs: completedAt,
-  })
-  workLog.emit({
-    id: 'compare.fit',
-    phase: 'compare',
-    status: 'complete',
-    title:
-      routeKind === 'frozen_compare'
-        ? 'Comparing the matches'
-        : 'Checking the matches',
-    summary:
-      routeKind === 'frozen_compare'
-        ? 'Comparing the matches already in the answer thread.'
-        : 'Checking which matches fit this request.',
-    detailRows: [{ label: 'Matches kept', value: String(providers.length) }],
-    relatedProviderSlugs: providers.map((provider) => provider.slug),
-    completedAtMs: completedAt,
-  })
 }
 
 function createTurnTimingCollector(): TurnTimingCollector {

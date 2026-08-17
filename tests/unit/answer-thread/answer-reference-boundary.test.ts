@@ -174,7 +174,7 @@ async function runTurn(query: string, keylessExecutableSource = emptyKeylessSour
 
 
 describe('answer reference boundary', () => {
-  it('uses staged operation reads before explaining an unavailable Wikipedia request', async () => {
+  it('uses operation reads before explaining an unavailable Wikipedia request', async () => {
     operationSourceMocks.readCapabilityOperationSearch.mockResolvedValue({
       kind: 'no_candidates',
       schemaVersion: 'registry-operations:v1',
@@ -211,7 +211,7 @@ describe('answer reference boundary', () => {
       const evidence = JSON.parse(turn?.evidenceJson ?? '{}') as {
         toolCalls?: readonly { toolId?: string; status?: string }[]
       }
-      expect(evidence.toolCalls ?? []).toHaveLength(4)
+      expect(evidence.toolCalls ?? []).toHaveLength(1)
       expect(evidence.toolCalls ?? []).toEqual(expect.arrayContaining([
         expect.objectContaining({
           toolId: 'registry.operations.search',

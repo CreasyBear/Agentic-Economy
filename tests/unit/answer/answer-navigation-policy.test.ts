@@ -29,6 +29,14 @@ const businessRoute = {
   effectAllowed: false,
 } as const satisfies EffectiveAnswerAgentRoute
 
+const sharedRoute = {
+  lane: 'operation',
+  continuation: 'new',
+  allowedReadToolFamily: 'shared',
+  exactOperationDetailRequired: true,
+  effectAllowed: false,
+} as const satisfies EffectiveAnswerAgentRoute
+
 describe('answer navigation policy', () => {
   it('enforces the orchestrator-selected read family and effect policy', () => {
     expect(answerRouteForbidsTool(
@@ -51,6 +59,29 @@ describe('answer navigation policy', () => {
       businessRoute,
       'registry.detail',
     )).toBe(false)
+  })
+
+  it('allows both read families on a shared route but still refuses effects', () => {
+    expect(answerRouteForbidsTool(
+      sharedRoute,
+      'registry.search',
+    )).toBe(false)
+    expect(answerRouteForbidsTool(
+      sharedRoute,
+      'registry.detail',
+    )).toBe(false)
+    expect(answerRouteForbidsTool(
+      sharedRoute,
+      'registry.operations.search',
+    )).toBe(false)
+    expect(answerRouteForbidsTool(
+      sharedRoute,
+      'registry.operations.detail',
+    )).toBe(false)
+    expect(answerRouteForbidsTool(
+      sharedRoute,
+      'operation.execute',
+    )).toBe(true)
   })
 
   it('starts staged navigation only when unresolved evidence needs it', () => {
@@ -87,6 +118,19 @@ describe('answer navigation policy', () => {
     })
     expect(answerNavigationStepPolicy({
       route: businessRoute,
+      toolCalls: [],
+      candidates: [],
+      navigationReadCallAttempts: 0,
+      maxToolCalls: 4,
+    })).toEqual({
+      readBudgetAvailable: true,
+      requireAnyRead: true,
+    })
+  })
+
+  it('requires any unresolved read on a shared route without forcing a family', () => {
+    expect(answerNavigationStepPolicy({
+      route: sharedRoute,
       toolCalls: [],
       candidates: [],
       navigationReadCallAttempts: 0,

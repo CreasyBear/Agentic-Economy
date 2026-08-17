@@ -470,11 +470,19 @@ describe('answer turn structured selection gate', () => {
 
     expect(executableSource.search).not.toHaveBeenCalled()
     expect(executableSource.read).not.toHaveBeenCalled()
-    expect(runAnswerToolUseAgent).not.toHaveBeenCalled()
+    expect(runAnswerToolUseAgent).toHaveBeenCalledTimes(1)
+    expect(runAnswerToolUseAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        disableTools: true,
+        effectiveRoute: expect.objectContaining({
+          lane: 'operation',
+        }),
+      }),
+    )
     expect(events.at(-1)).toMatchObject({
       type: 'complete',
       answer: {
-        oneLine: 'What should I execute?',
+        oneLine: 'No live operation was selected.',
       },
     })
   })
@@ -540,13 +548,19 @@ describe('answer turn structured selection gate', () => {
     expect(executableSource.list).not.toHaveBeenCalled()
     expect(executableSource.search).not.toHaveBeenCalled()
     expect(executableSource.read).not.toHaveBeenCalled()
-    expect(runAnswerToolUseAgent).not.toHaveBeenCalled()
+    expect(runAnswerToolUseAgent).toHaveBeenCalledTimes(1)
+    expect(runAnswerToolUseAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        disableTools: true,
+        effectiveRoute: expect.objectContaining({
+          lane: 'operation',
+        }),
+      }),
+    )
     expect(events.at(-1)).toMatchObject({
       type: 'complete',
       answer: {
-        oneLine: 'What should I execute?',
-        summary: 'Name the operation and result you want before I run anything.',
-        nextStep: 'Name the operation and result you want.',
+        oneLine: 'No live operation was selected.',
       },
     })
 

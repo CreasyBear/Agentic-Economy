@@ -393,14 +393,7 @@ function buildAgentResult(
       safeToolCalls,
       input.effectiveRoute?.effectAllowed,
     )
-  const effectiveProse =
-    deterministicOperationProse ??
-    (finalProviders.length === 0 &&
-    !operationNavigationAttempted &&
-    !capabilityAttempted &&
-    !hasOperationEvidence
-      ? buildNoMatchesProse(input.query)
-      : prose)
+  const effectiveProse = deterministicOperationProse ?? prose
   const mapped = snapshotProseFromAnswer(effectiveProse)
   // The agent JSON URL points at the search that actually grounded the answer.
   // When the model chose a corrected `registry.search` argument (e.g.
@@ -1436,11 +1429,11 @@ async function runRealToolUseAgent(
     const navigationToolNames = ANSWER_READ_TOOL_IDS.map(openRouterToolName)
     const navigationPrompt = [
       userPrompt,
-      ...(input.effectiveRoute?.lane === 'operation'
+      ...(input.effectiveRoute?.allowedReadToolFamily === 'operation'
         ? [
             'The structured request route is Market Operation. Before any navigation decision, call registry.operations.search. Do not substitute local-business reads.',
           ]
-        : input.effectiveRoute?.lane === 'business'
+        : input.effectiveRoute?.allowedReadToolFamily === 'business'
           ? [
               'The structured request route is local business. Keep discovery on registry.search/detail and do not call Market Operation reads.',
             ]
@@ -1544,7 +1537,7 @@ async function runRealToolUseAgent(
           undefined,
       )
       if (
-        input.effectiveRoute?.lane === 'operation' &&
+        input.effectiveRoute?.allowedReadToolFamily === 'operation' &&
         (
           !hasOperationSearch ||
           (
@@ -2734,14 +2727,6 @@ function buildKeylessClarificationProse(
   }
 }
 
-function buildNoMatchesProse(query: string): AnswerProse {
-  const request = query.trim() || 'this request'
-  return {
-    oneLine: `No businesses match "${request}" yet.`,
-    summary: `No matches found yet. Try a nearby location or a broader service description.`,
-    whatToDoNow: 'Try a nearby location or a broader service description.',
-  }
-}
 
 function listAnswerModelToolActions(): AnyAction[] {
   return ANSWER_READ_TOOL_IDS.map((toolId) => {

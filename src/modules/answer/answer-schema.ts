@@ -566,7 +566,7 @@ export type AnswerEffectPolicy = (typeof AnswerEffectPolicyValues)[number]
 export type EffectiveAnswerAgentRoute = Readonly<{
   lane: 'business' | 'operation'
   continuation: AnswerContinuation
-  allowedReadToolFamily: 'business' | 'operation'
+  allowedReadToolFamily: 'business' | 'operation' | 'shared'
   exactOperationDetailRequired: boolean
   effectAllowed: boolean
 }>
