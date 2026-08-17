@@ -5,7 +5,7 @@ import {
   parseActReceiptFromInquirySubmitBody,
   parseDeliveryTrailFromDispatchReadback,
   type ActReceiptProof,
-} from '@/modules/harness/agentic-loop-proof'
+} from '@/modules/inquiries/agentic-loop-proof'
 
 const fullReceipt: ActReceiptProof = {
   threadId: 'inquiry_thread:1',

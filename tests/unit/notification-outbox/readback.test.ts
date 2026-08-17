@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   evaluateAgenticLoopProof,
   parseDeliveryTrailFromDispatchReadback,
-} from '@/modules/harness/public'
+} from '@/modules/inquiries/public'
 import * as notificationOutbox from '@/modules/notification-outbox/public'
 import type {
   EnqueueInquiryNotificationCommand,

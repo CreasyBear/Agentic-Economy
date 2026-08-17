@@ -171,3 +171,13 @@ export {
   readInquiryPrivacyTombstone,
   evaluateInquiryLaunchSupportReadiness,
 } from './internal/commands'
+
+export {
+  evaluateAgenticLoopProof,
+  parseActReceiptFromInquirySubmitBody,
+  parseDeliveryTrailFromDispatchReadback,
+  type ActReceiptProof,
+  type AgenticLoopProofInput,
+  type AgenticLoopProofResult,
+  type DeliveryTrailProof,
+} from './agentic-loop-proof'

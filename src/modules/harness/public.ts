@@ -12,16 +12,6 @@ export {
 } from './approval-policy'
 
 export {
-  evaluateAgenticLoopProof,
-  parseActReceiptFromInquirySubmitBody,
-  parseDeliveryTrailFromDispatchReadback,
-  type ActReceiptProof,
-  type AgenticLoopProofInput,
-  type AgenticLoopProofResult,
-  type DeliveryTrailProof,
-} from './agentic-loop-proof'
-
-export {
   actionToHarnessTool,
   runHarnessTool,
   type ActionHarnessTool,
