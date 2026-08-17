@@ -20,7 +20,7 @@ import type {
   CustomerRequestProblemResult,
   CustomerRequestProblemStatusChange,
 } from '@/modules/customer-request/agent-contract'
-import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 
 const COOKIE_NAME = 'ae_request_session'
 const SESSION_SCOPE = 'customer_requests:create'

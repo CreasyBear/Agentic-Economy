@@ -22,7 +22,7 @@ import {
   handleCustomerRequestRunPost,
 } from '@/lib/server/customer-request-route-action-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 const key = 'entrypoint-parity-key-with-at-least-32-bytes'
 const requestRef = 'request:parity:1'

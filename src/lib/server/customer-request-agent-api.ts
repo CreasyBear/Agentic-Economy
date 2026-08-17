@@ -42,7 +42,7 @@ import {
   handleCustomerRequestProblemPost,
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
-import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { withCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
 
 type HandlerOptions = Readonly<{

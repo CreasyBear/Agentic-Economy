@@ -12,7 +12,7 @@ import {
   gardenerVerbSchema,
   type GardenerVerb,
 } from '../src/modules/work-tree/convex'
-import { createCustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import { createTestOperationLineage } from '../tests/helpers/customer-request-lineage'
 import { customerRouteRef } from '../src/modules/customer-request/route-plan-customer-projection'
 import { mintBrowserGuestAssertion } from '../src/lib/server/browser-guest-assertion'

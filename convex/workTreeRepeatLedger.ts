@@ -5,7 +5,7 @@ import { v } from 'convex/values'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '../src/modules/customer-request/service-auth-envelope'
+} from '../src/modules/agent-access/service-auth-envelope'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   addExactAmounts,

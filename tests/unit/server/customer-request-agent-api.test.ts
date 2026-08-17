@@ -9,7 +9,7 @@ import {
 } from '@/lib/server/customer-request-agent-api'
 import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { customerRequestAgentResultSchema } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 const key = 'agent-source-gateway-key-with-at-least-32-bytes'
 const authenticate = async () => ({

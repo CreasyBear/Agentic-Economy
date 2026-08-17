@@ -11,7 +11,7 @@ import {
   handleCustomerRequestProblemPost,
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import type {
   CustomerRequestEvidenceExport,
   CustomerRequestProblemReceipt,

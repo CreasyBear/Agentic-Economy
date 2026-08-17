@@ -5,7 +5,7 @@ import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '../src/modules/customer-request/service-auth-envelope'
+} from '../src/modules/agent-access/service-auth-envelope'
 
 import {
   isAnonymousKeylessOperationEligible,

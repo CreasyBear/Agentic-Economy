@@ -4,7 +4,7 @@ import { anyApi } from 'convex/server'
 import { convexTest } from 'convex-test'
 
 import { mintBrowserGuestAssertion } from '../src/lib/server/browser-guest-assertion'
-import { createCustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import schema from './schema'
 
 const modules = import.meta.glob('./**/*.ts')

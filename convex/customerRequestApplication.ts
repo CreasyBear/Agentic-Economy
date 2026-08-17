@@ -11,7 +11,7 @@ import {
 import {
   type CustomerRequestAmendment,
 } from '@/modules/customer-request/semantic-interpreter'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import {
   customerRequestJsonValueSchema,
   customerRequestAuthorityModeForScopes,

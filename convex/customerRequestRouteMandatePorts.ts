@@ -21,7 +21,7 @@ import type {
   RouteMandateMutationPorts,
   ServiceAuthorization,
 } from '@/modules/customer-request/route-mandate-mutation'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 import { env, type MutationCtx, type QueryCtx } from './_generated/server'
 import {

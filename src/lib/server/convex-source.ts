@@ -1,7 +1,7 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
-import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { ConvexHttpClient } from 'convex/browser'
 import { anyApi, makeFunctionReference } from 'convex/server'
 import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'

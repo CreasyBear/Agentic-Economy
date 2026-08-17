@@ -4,7 +4,7 @@ import {
   createCustomerRequestServiceAssertion,
   toStableHashValue,
   type CustomerRequestServiceAssertion,
-} from '@/modules/customer-request/service-auth-envelope'
+} from '@/modules/agent-access/service-auth-envelope'
 
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from './contract'
 import {

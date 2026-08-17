@@ -56,7 +56,7 @@ import {
   writableCustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import type { CustomerRoutePlan as PublicCustomerRoutePlan, CustomerRoutePlanDecision } from '@/modules/customer-request/agent-contract'
 import {
   aggregateIsInternallyConsistent,

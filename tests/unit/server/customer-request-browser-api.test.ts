@@ -13,7 +13,7 @@ import {
   handleBrowserCustomerRequestProblemPost,
   handleBrowserCustomerRequestRunPost,
 } from '@/lib/server/customer-request-browser-lifecycle-api'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { verifyBrowserGuestAssertion } from '@/lib/server/browser-guest-assertion'
 
 const serviceKey = 'browser-session-service-key-for-unit-tests'

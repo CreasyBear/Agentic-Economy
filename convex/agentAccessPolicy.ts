@@ -8,7 +8,7 @@ import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '@/modules/customer-request/service-auth-envelope'
+} from '@/modules/agent-access/service-auth-envelope'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import { serviceAssertion } from './customerRequestRouteMandate'

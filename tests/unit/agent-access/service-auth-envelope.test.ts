@@ -4,7 +4,7 @@ import {
   createCustomerRequestServiceAssertion,
   toStableHashValue,
   verifyCustomerRequestServiceAssertion,
-} from '@/modules/customer-request/service-auth-envelope'
+} from '@/modules/agent-access/service-auth-envelope'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 describe('CustomerRequest service assertion', () => {

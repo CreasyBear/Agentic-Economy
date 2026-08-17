@@ -3,7 +3,7 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { makeFunctionReference } from 'convex/server'
-import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import {
   createAgentAccessGrant,
   defaultAgentAccessPolicy,

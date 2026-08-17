@@ -4,7 +4,7 @@ import { anyApi, type DataModelFromSchemaDefinition } from 'convex/server'
 import { convexTest, type TestConvex, type TestConvexForDataModel } from 'convex-test'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import { createCustomerRequestServiceAssertion } from '../src/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import { internal } from './_generated/api'
 import schema from './schema'
 

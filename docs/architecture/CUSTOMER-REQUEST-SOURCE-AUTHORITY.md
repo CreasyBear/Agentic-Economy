@@ -13,7 +13,7 @@ The production path is owned by these TypeScript sources:
 | Durable V2 Request aggregate | `convex/customerRequestV2.ts` |
 | Durable preparation, exact RouteMandate, run, problem, and evidence state | `convex/customerRequestV2Preparation.ts`, `convex/customerRequestV2PreparedAction.ts`, `convex/customerRequestRouteMandate.ts`, `convex/customerRequestRouteExecution.ts` |
 | Machine submit, refinement, facts, resume, comparison, confirmation, run, cancellation, problem, evidence, and preparation-authorization boundaries | `src/lib/server/customer-request-api.ts`, `src/lib/server/customer-request-messages-api.ts`, `src/lib/server/customer-request-facts-api.ts`, `src/lib/server/customer-request-inspect-api.ts`, `src/lib/server/customer-options-api.ts`, `src/lib/server/customer-request-confirmation-api.ts`, `src/lib/server/customer-request-route-action-api.ts`, `src/lib/server/customer-request-recovery-api.ts`, `src/lib/server/customer-request-authorization-api.ts` |
-| External-agent admission and service assertion | `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts` |
+| External-agent admission and service assertion | `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/agent-access/service-auth-envelope.ts` |
 | Human Request workspace | `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` |
 | Registered provider protocol | `src/modules/routing-kernel/http-capability-binding.ts` |
 

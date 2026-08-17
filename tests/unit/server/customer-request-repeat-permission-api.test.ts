@@ -16,7 +16,7 @@ import {
   handleCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-repeat-permission-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 
 const key = 'repeat-permission-http-key-with-at-least-32-bytes'
 const requestRef = 'request:repeat-http'

@@ -19,7 +19,7 @@ import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '../src/modules/customer-request/service-auth-envelope'
+} from '../src/modules/agent-access/service-auth-envelope'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
 import { isBoundedJsonValue } from '../src/modules/capability-contract/public'

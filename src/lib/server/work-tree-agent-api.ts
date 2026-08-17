@@ -7,7 +7,7 @@ import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge
 import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessPrincipal } from './agent-access-auth'
 import { resolveCanonicalBaseUrl } from './canonical-url'
 import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from './convex-source'
-import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
 import { customerRequestScopeForMode, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import { findAction } from '@/modules/actions'
 import { workTreeApplyResultSchema, workTreeDecisionResultSchema, workTreeRawApplyReceiptSchema, type WorkTreeApplyResult } from '@/modules/work-tree/work-tree.functions'

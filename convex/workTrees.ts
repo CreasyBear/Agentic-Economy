@@ -31,7 +31,7 @@ import {
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
-} from '../src/modules/customer-request/service-auth-envelope'
+} from '../src/modules/agent-access/service-auth-envelope'
 import {
   consumeWorkTreeApproval,
 } from './workTreeApprovals'

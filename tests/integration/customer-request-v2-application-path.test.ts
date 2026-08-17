@@ -34,7 +34,7 @@ import {
   registerCapabilityOfferingCommand,
   setCapabilitySupplyEligibility,
 } from '../../convex/capabilitySupply'
-import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 import { readCuratedContract } from '../helpers/curated-supply'
 const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
