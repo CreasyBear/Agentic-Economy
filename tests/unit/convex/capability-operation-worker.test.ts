@@ -1,14 +1,14 @@
 import { getFunctionName } from 'convex/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 type ActionInvocationModule = Record<string, unknown>
-
+type SignRouteTransportCall = typeof import('@/modules/capability-supply/server').signRouteTransportCall
 const mocks = vi.hoisted(() => {
   const claimCanonicalInvocation = vi.fn()
   const persistCanonicalReleaseFence = vi.fn()
   const persistCanonicalTerminalOutcome = vi.fn()
   const prepareRegisteredRouteTransportInvocation = vi.fn()
   const invokePreparedRouteTransport = vi.fn()
-  const signRouteTransportCall = vi.fn(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
+  const signRouteTransportCall = vi.fn<SignRouteTransportCall>(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
   const createEvmX402PaymentSignature = vi.fn(async () => 'signed:payment')
   const credentialFromEnvironment = vi.fn((reference: string) => (
     reference === 'env:AE_TEST_PROVIDER_CREDENTIAL'
@@ -804,6 +804,40 @@ describe('capability operation invocation worker', () => {
     expect(mocks.prepareRegisteredRouteTransportInvocation).not.toHaveBeenCalled()
     expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
     expect(worker.state.transportCalls).toBe(0)
+  })
+  it('refuses failed route-call signing before money or provider I/O', async () => {
+    mocks.signRouteTransportCall.mockReturnValueOnce(undefined)
+    const worker = createWorker('http')
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(0)
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: false },
+    })
+    expect(worker.state.records.some((record) => record.state === 'completed')).toBe(false)
+  })
+
+  it('refuses a non-public prepared endpoint before money or provider I/O', async () => {
+    mocks.isPublicHttpTarget.mockResolvedValueOnce(false)
+    const worker = createWorker('http')
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(mocks.prepareRegisteredRouteTransportInvocation).toHaveBeenCalledTimes(1)
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'moneyLedger:authorizeInvocationCharge')).toHaveLength(0)
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'pre_release_failed', retryable: false },
+    })
+    expect(worker.state.records.some((record) => record.state === 'completed')).toBe(false)
   })
 
   it('settles exactly one AE-internal charge after valid output', async () => {
