@@ -875,7 +875,21 @@ The conformance cutover ports proof at the test/manifest boundary. It does not a
 - `P3-transport-proof` ports only market-owned claim/release/registered-transport/output/redaction invariants from the transport canonical worker into atomic worker/transport proof.
 - `P3-cancel-proof` maps only atomic status/cancel/reconcile invariants from the cancellation canonical worker and excludes Customer Request provider-cancellation orchestration.
 - `P3-invoke-proof` maps only single-operation identity/authority/replay/settlement/recovery invariants from the multi-capability route and excludes planning/DAG/confirmation/repeat/problem/support/progress semantics.
-- `P3-cutover` removes those three Customer Request entries from the conformance command and product-frontier manifest and adds these five atomic successors, only after the three proof cards are complete: `tests/unit/convex/capability-operation-worker.test.ts`, `tests/integration/capability-operation-workpool.test.ts`, `tests/unit/capability-execution/operation-recovery-actions.test.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/server/operation-invoke-api.test.ts` (24→26 paths).
+- `P3-cutover` removes those three Customer Request entries from the conformance command and product-frontier manifest and adds these seven atomic successors, only after the three proof cards are complete: `tests/unit/convex/capability-operation-worker.test.ts`, `tests/integration/capability-operation-workpool.test.ts`, `tests/unit/capability-execution/operation-recovery-actions.test.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/server/operation-invoke-api.test.ts`, `tests/unit/action-invocation/durable-action-invocation.test.ts`, `tests/unit/convex/capability-operation-recovery.test.ts` (24→27 paths; `durable-action-invocation.test.ts` is already one of the 24, so six new atomic paths replace three Customer Request paths).
 - If an atomic invariant lacks production code, test it and fix the source at the atomic seam. If behavior is Customer Request-only, classify it for Phase 5; never fabricate equivalence.
 
 No test command was run; this receipt records scope and source facts only.
+
+## Phase 3 atomic proof ports — accepted
+
+Accepted at HEAD/commit `ca212e9c0911ccdccd0acc9641995a915f124d6a` (`ca212e9`): `test: prove durable atomic operation ordering`.
+
+The exact seven successor suites and role mapping are:
+
+- **Transport:** `tests/unit/convex/capability-operation-worker.test.ts`; `tests/integration/capability-operation-workpool.test.ts`.
+- **Cancellation/recovery:** `tests/unit/capability-execution/operation-recovery-actions.test.ts`; `tests/unit/action-invocation/durable-action-invocation.test.ts`; `tests/unit/convex/capability-operation-recovery.test.ts`.
+- **Direct invoke/API:** `tests/unit/capability-execution/operation-invoke.test.ts`; `tests/unit/server/operation-invoke-api.test.ts`.
+
+Observed Node `v22.22.0` focused proof: 7 files / 89 tests PASS. The Workpool durable history is `claim_before_effect` → `release_fence_before_network` → `terminal_returned`, versions 1 → 2 → 3, with a provider-time fence, exact output, public replay without a second effect, and canonical redaction. Durable cancellation covers both origins (`request_owned` and `standalone`) plus interrupted outer projection. The direct invoke, API, and recovery suites cover their mapped atomic proof.
+
+Independent reviewer: PASS `0.98`. This receipt claims no product behavior change, Customer Request runtime bridge or deletion, hosted proof, live-money proof, or push. P3 cutover, P3 validation, and P3 review remain pending.
