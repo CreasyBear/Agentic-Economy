@@ -1437,3 +1437,9 @@ workstreams, duplicate observations, and explicit remediation status.
 195. gpt-5.6: Spawning a typed GSD researcher with fork_turns=all failed because full-history forks inherit the parent agent type; the tool schema permits both fields but this combination is rejected only at runtime. Retrying with a bounded fork worked.
 
 196. gpt-5.6: Google Trends blocked the direct comparison request with HTTP 429 and pytrends is not installed, so relative keyword volume could not be verified from Trends in this pass; autocomplete can establish query families but not volume.
+
+197. gpt-5.6: While reading the grilling skill and inspecting the product workspace, every login shell printed a missing /Users/joelchan/.cargo/env error from .zshenv. Commands still run, but the stale shell startup reference adds noise and can obscure real failures.
+
+198. gpt-5.6: While filing an Obsidian note, qmd returned a normalized resource path whose spaces/hyphens did not match the actual vault filename, causing the first direct read to fail. Search results should expose the exact filesystem path or clearly label normalized URIs.
+
+199. gpt-5.6: While verifying an Obsidian qmd query, piping qmd output through head caused qmd to crash with an unhandled EPIPE after the consumer closed. The CLI should handle a closed stdout pipe without emitting a Node stack trace.
