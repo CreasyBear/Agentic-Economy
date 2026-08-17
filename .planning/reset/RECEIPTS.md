@@ -560,3 +560,31 @@ Observed Node 22 evidence on the accepted product diff:
 - Independent correctness review: PASS after retracting an unreachable snapshot-bound concern and classifying failed-residual carry-forward under the explicit P1-d3 dependency.
 
 No hosted migration or real provider transfer ran. Live money remains source-closed and fail-closed. This is not a full release-gate or hosted-acceptance result.
+
+## P1-f — committed
+
+Product commit `c7e58ecfc22c5483f5d61e7e9efb39b54ac2771b` (`feat: add standard supplier actions`); `main` was clean immediately after the commit and the commit was not pushed.
+
+Core invariants:
+
+- The canonical action set is exactly three actions: `supply.publish`, `supply.withdraw`, and `supply.earnings`.
+- The actions require the exact `market_supply:manage` scope and use an owner-wide bounded mandate.
+- Every Convex operation revalidates the current durable principal, grant, scope, lifecycle, and expiry, plus the owner→business binding; mutations also revalidate source-write authority.
+- Publication reuses the existing standard artifact import, normalization, preflight, operation-ledger, and publish path.
+- Withdrawal excludes the current resolution without cancelling claimed or running invocations.
+- Earnings preserves exact accounting and status while stripping the payout command, idempotency, Stripe destination/transfer, request/transfer digest, and other mutable or internal handles.
+- Authenticated MCP list/call filters exact scopes and publishes canonical object-root output schemas.
+- Generic credentialed CLI actions use authenticated MCP with exact origin binding.
+- MCP remains bounded at 320 KiB to carry the existing 262,144-byte source artifact.
+
+Observed Node 22 evidence:
+
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- Complete focused P1-f suite: 141 PASS.
+- Post-copy focused action/registry: 32 PASS.
+- Frozen frontier manifest: 5 PASS.
+- Independent correctness: PASS.
+- Independent security: PASS.
+
+No hosted provider publication, provider network call, live money, or push was performed; this is not the Phase One acceptance packet or release gate.
