@@ -1427,3 +1427,5 @@ workstreams, duplicate observations, and explicit remediation status.
 190. opus-5: npm ci exits EUSAGE on main: package.json and package-lock.json are out of sync (~25 missing entries incl. gcp-metadata, @vercel/functions, jose, zod). Clean installs, CI, fresh clones and new worktrees all fail at install; needs an npm install to resync the lock.
 
 191. gpt-5.6: While running research commands, every login shell emitted a missing ~/.cargo/env warning from ~/.zshenv; the stale source line adds noise to every tool result and should be guarded with a file-exists check.
+
+192. gpt-5.6: While applying the Aecon vault update, an exact-context patch missed because the actively edited Hermes Brand System had changed between read and write; use narrower section anchors or re-read immediately before patching shared vault files.
