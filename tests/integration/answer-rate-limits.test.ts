@@ -123,7 +123,7 @@ describe('answer HTTP rate limits', () => {
         principal: {
           principalId: 'clerk_api_key:key:answer',
           credentialId: 'key:answer',
-          ownerId: 'owner:answer',
+          ownerId: 'user_answer',
         },
         service,
       })
@@ -146,7 +146,7 @@ describe('answer HTTP rate limits', () => {
           isAuthenticated: true,
           tokenType: 'api_key',
           id: 'key:answer',
-          subject: 'owner:answer',
+          subject: 'user_answer',
           scopes: ['market_operations:invoke'],
         }),
         operationInvokeService: service,
