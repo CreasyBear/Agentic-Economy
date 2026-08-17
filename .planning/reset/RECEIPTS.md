@@ -733,3 +733,46 @@ Git records the strict-schema move as R099; the accepted allowlist contained 13 
 - Independent security review: PASS.
 
 **Explicit exclusions:** no hosted proof, provider proof, network proof, live-money proof, push, or release proof.
+
+## P2-b — committed
+
+**Accepted product chain:**
+
+1. Product commit `9d2063a6af3f58ff6df74d2fd7d8e9239f8e4208`, parent
+   `134a8a1fec56fd37ea65015d87bb7457b9af88e4`, message
+   `refactor: move curated publications to seed ownership`.
+   The commit covered 17 unique paths and four R099 moves. The typed static
+   20-publication payload moved to `src/modules/dev/internal`, exported through
+   `src/modules/dev/public.ts`; runtime mapping, admission, normalization, and the Convex host stayed
+   runtime authorities.
+
+2. Product HEAD commit `f805c50b7ecfe3ee1aa71224ef61224ce4558501`, parent
+   `9d2063a6af3f58ff6df74d2fd7d8e9239f8e4208`, message
+   `refactor: move development fixtures out of runtime`.
+   The commit covered exactly 63 raw paths, 15 moves across R97-R100, and 33
+   consumer/boundary edits. Development fixtures moved out of runtime into
+   test/seed ownership without moving runtime authority.
+
+**Validation and reviews:**
+
+- First commit: 10 files / 86 tests PASS; Node 22 typecheck, lint, and build
+  PASS; independent correctness review: 0.98 PASS; independent boundary/security
+  review: PASS.
+- Second commit: 28 files / 411 tests PASS; Node 22 typecheck, lint, and build
+  PASS; independent correctness review: 0.98 PASS; independent boundary/security
+  review: PASS.
+
+**Invocation evidence and clean-revision proof:**
+
+- Invocation run+verify checksum:
+  `sha256:bfd6b9b24762295e17597433987387a924f4a9ad60c155a28cbe7fc1a8c2d79a`.
+- Working-tree phase3b run+verify checksum:
+  `sha256:163d3548d57022c5572966d376bb7e09fb01e0e91850c84756e196e3d61fc770`.
+- Post-commit clean-revision phase3b run+verify checksum:
+  `sha256:1ae9496f437915b674c1165885bf5cfb9f8bd65099beda4b9d479e764bfd15f6`.
+- Temporary smoke artifacts were deleted; the post-commit revision was clean.
+
+**Preserved authorities and explicit exclusions:** runtime mapping, admission,
+normalization, and the Convex host remained runtime authorities. No
+source/Convex→tools import, aliases, runtime authority move, hosted/provider/
+network/live-money/push/release proof was performed.
