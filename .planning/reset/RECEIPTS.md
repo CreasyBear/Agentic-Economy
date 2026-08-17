@@ -672,3 +672,38 @@ Observed evidence and reviews:
 
 Explicit exclusions: no product source change, test change, new action, new route,
 provider call, network call, live-money operation, hosted run, push, or release proof.
+
+## P1-a-sweep — committed
+
+**Founder decision:** “rip it out. there are no users yet.”
+
+Product HEAD is `3638ae7420c1400cce73356bec75f4a0b3572716`, with parent
+`8b6d195fd155620825edf6d939e008489483e254` and message
+`refactor: remove unused legacy buyer accounts`. The final product commit porcelain was empty.
+
+**Deletion scope:** the product removed only the legacy
+`moneyAccounts.accountRef = clerk_api_key:*` compatibility helper/export, its Convex detector,
+refusals, and calls, plus detector-only fixtures and tests. Ordinary Clerk API-key principal
+attribution and canonical owner-pooled accounts remain.
+
+**Canonical invariants preserved:** ordinary Clerk API-key principal attribution remains on the
+existing transactions, usage, and budget records; canonical owner-pooled accounts remain the
+money authority. No migration, schema change, balance transfer, quarantine, or fallback was
+introduced.
+
+**Validation and reviews:**
+
+- Node 22 focused validation: 3 files / 24 tests PASS.
+- Convex codegen dry-run: PASS.
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS.
+- Independent correctness review: 0.98 PASS.
+- Independent security review: PASS.
+
+This receipt explicitly supersedes the earlier detection-only compatibility note in the P1-a-core
+receipt, which recorded that `accountRefForOperator` survived as `legacyPerKeyAccountRef` solely to
+name legacy rows for detection. That historical receipt remains unchanged.
+
+**Explicit exclusions:** no hosted deploy, data mutation, provider call, network call, live-money
+operation, push, or release proof.
