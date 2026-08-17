@@ -12,7 +12,6 @@ import {
   type AnswerContinuation,
   type AnswerOperationCandidate,
 } from '../answer-schema'
-import { isAnonymousKeylessOperationEligible } from '@/modules/capability-execution'
 import { operationDetailOutputSchema } from '@/modules/registry/operation-action-contracts'
 import {
   isPublicOperationRef,
@@ -21,6 +20,7 @@ import {
   type PublicOperationRef,
 } from '@/modules/registry/public'
 import {
+  isAnonymousKeylessOperationEligible,
   operationExecutionBindingDigest,
   type OperationExecutableDescriptor,
 } from '@/modules/capability-execution/operation-execute.functions'
