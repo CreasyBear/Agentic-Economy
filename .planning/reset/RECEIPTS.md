@@ -707,3 +707,29 @@ name legacy rows for detection. That historical receipt remains unchanged.
 
 **Explicit exclusions:** no hosted deploy, data mutation, provider call, network call, live-money
 operation, push, or release proof.
+
+## P2-a — committed
+
+Product HEAD is `a03d3eff11b38d625b2e0cd0984cbb904127c7e5`, parent
+`aba35dce2d5d379eac86d03fc851da03695fbe42`, with message
+`refactor: move tool projection into actions`; final product porcelain was empty.
+
+Git records the strict-schema move as R099; the accepted allowlist contained 13 unique paths.
+
+**Ownership cutover:**
+
+- `actions` now owns the strict schema walker, canonical schema/hash/provider diagnostics, the generic `ActionToolContract` and model projection, and uninstrumented execute.
+- `harness` retains the adapter, policy, instrumentation, Zod runtime validation, status/hash/timeouts, and the existing public `HarnessToolContract`/`ExecuteArgs` interface.
+- The Answer descriptor and dynamic strict checks consume the action-owned seam.
+- The harness run loop, session journal, replay, and collector were untouched.
+
+**Run-loop decision:** KEEP the custom run loop. The installed AI SDK is `7.0.44`, but no SDK↔Harness parity validator exists; custom loop removal was explicitly not authorized.
+
+**Validation and reviews:**
+
+- Focused validation: 11 files / 70 tests PASS.
+- Node 22 `typecheck`, `lint`, and `build`: PASS after the exact five-diagnostic correction.
+- Independent correctness review: `0.97 PASS`.
+- Independent security review: PASS.
+
+**Explicit exclusions:** no hosted proof, provider proof, network proof, live-money proof, push, or release proof.

@@ -49,12 +49,12 @@ on the account re-key, since `/execute` was already the paid invoke path.
 
 ## Phase 2 — Decouple without changing behavior
 
-| Card | Concern | Depends on |
-| --- | --- | --- |
-| P2-a | Move generic strict action-to-tool projection from `harness` into `actions`; keep replay-safe journal; remove custom run loop only after parity validator passes | P1 |
-| P2-b | Move development/curated fixtures out of `capability-supply` into test/seed ownership | P1 |
-| P2-c | Remove Layer-0 imports from Answer and Customer Request; split oversized invoke/projection modules | P2-a |
-| P2-d | Keep public five-state invocation vocabulary; keep lease/attempt states internal | P2-c |
+| Card | Concern | Depends on | Status |
+| --- | --- | --- | --- |
+| P2-a | Move generic strict action-to-tool projection from `harness` into `actions`; keep replay-safe journal; remove custom run loop only after parity validator passes | P1 | committed |
+| P2-b | Move development/curated fixtures out of `capability-supply` into test/seed ownership | P1 | pending |
+| P2-c | Remove Layer-0 imports from Answer and Customer Request; split oversized invoke/projection modules | P2-a | pending |
+| P2-d | Keep public five-state invocation vocabulary; keep lease/attempt states internal | P2-c | pending |
 
 ## Phase 3 — Port proof before quarantine
 
