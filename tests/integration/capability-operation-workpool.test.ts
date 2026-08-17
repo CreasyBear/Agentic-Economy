@@ -214,10 +214,15 @@ async function readEvidence(
     const usage = await ctx.db.query('moneyUsageEvents')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
       .collect()
+    const history = await ctx.db.query('actionInvocationHistory')
+      .withIndex('by_invocationRef_and_invocationVersion', (query) => query.eq('invocationRef', invocationRef))
+      .order('asc')
+      .collect()
     return {
       invocation,
       control,
       attempt,
+      history,
       transactions,
       usage,
     }
@@ -232,7 +237,8 @@ afterEach(() => {
 
 describe('capability operation Workpool lifecycle', () => {
   it('executes once, replays without another effect, and refuses a revoked grant before claim', async () => {
-    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    const signingSecretSentinel = 'operation-workpool-signing-secret-sentinel-32-bytes'
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', signingSecretSentinel)
     vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     vi.useFakeTimers()
@@ -255,14 +261,25 @@ describe('capability operation Workpool lifecycle', () => {
       now,
     })).resolves.toMatchObject({ grantRef: first.grantRef })
 
+    const providerOutput = [{ date: '2099-12-31', base: 'EUR', quote: 'USD', rate: 1.08123456789 }]
+    let historyObservedDuringProvider: string[] = []
+    let pendingInvocationRef: string | undefined
     providerFetch.mockImplementation(async (input) => {
       expect(String(input)).toContain('api.frankfurter.dev')
-      return new UndiciResponse(JSON.stringify([{
-        date: '2026-08-12',
-        base: 'EUR',
-        quote: 'USD',
-        rate: 1.08,
-      }]), {
+      const providerInvocationRef = pendingInvocationRef
+      if (providerInvocationRef === undefined) {
+        throw new Error('operation invocation not assigned before provider transport')
+      }
+      historyObservedDuringProvider = await backend.run(async (ctx) => (
+        (await ctx.db.query('actionInvocationHistory')
+          .withIndex('by_invocationRef_and_invocationVersion', (query) => (
+            query.eq('invocationRef', providerInvocationRef)
+          ))
+          .order('asc')
+          .collect())
+          .map((row) => row.kind)
+      ))
+      return new UndiciResponse(JSON.stringify(providerOutput), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -272,10 +289,13 @@ describe('capability operation Workpool lifecycle', () => {
     const pending = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'success')
     expect(pending.kind).toBe('pending')
     if (pending.kind !== 'pending') throw new Error('successful operation did not enqueue')
+    pendingInvocationRef = pending.invocationRef
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
 
-    const completed = await readEvidence(backend, pending.invocationRef, first.principal.principalId)
-    expect(completed.invocation?.result).toMatchObject({ kind: 'completed' })
+    const completed = await readEvidence(backend, pendingInvocationRef, first.principal.principalId)
+    const completedResult = completed.invocation?.result
+    expect(completedResult).toMatchObject({ kind: 'completed' })
+    if (completedResult?.kind !== 'completed') throw new Error('completed operation result missing')
     expect(completed.invocation).toMatchObject({
       state: 'completed',
       dispatchState: 'completed',
@@ -285,27 +305,46 @@ describe('capability operation Workpool lifecycle', () => {
     expect(completed.control?.control.control).toMatchObject({ state: 'terminal' })
     expect(completed.attempt?.release).toMatchObject({ state: 'released' })
     expect(completed.attempt?.outcome).toMatchObject({ state: 'returned' })
+    expect(completed.history.map((row) => row.kind)).toEqual([
+      'claim_before_effect',
+      'release_fence_before_network',
+      'terminal_returned',
+    ])
+    expect(completed.history.map((row) => row.invocationVersion)).toEqual([1, 2, 3])
+    expect(completedResult.output).toEqual(providerOutput)
+    const canonicalCommandJson = JSON.stringify({
+      control: completed.control,
+      attempt: completed.attempt,
+      history: completed.history,
+    })
+    expect(canonicalCommandJson).not.toContain(JSON.stringify(providerOutput))
+    expect(canonicalCommandJson).not.toContain(signingSecretSentinel)
     expect(completed.transactions).toHaveLength(1)
     expect(completed.transactions[0]).toMatchObject({
       kind: 'charge',
       state: 'applied',
       amountUnits: '0',
-      idempotencyKey: `operation-money:${pending.invocationRef}:${completed.attempt?.attemptRef}:1`,
+      idempotencyKey: `operation-money:${pendingInvocationRef}:${completed.attempt?.attemptRef}:1`,
     })
     expect(completed.usage).toHaveLength(1)
     expect(completed.usage[0]).toMatchObject({
-      invocationRef: pending.invocationRef,
+      invocationRef: pendingInvocationRef,
       chargeState: 'free_tier',
       amountUnits: '0',
     })
+    expect(historyObservedDuringProvider).toEqual([
+      'claim_before_effect',
+      'release_fence_before_network',
+    ])
     expect(providerFetch).toHaveBeenCalledTimes(1)
     const workId = completed.invocation?.workId
 
     const replay = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'replay')
-    expect(replay).toMatchObject({ kind: 'completed', invocationRef: pending.invocationRef })
+    expect(replay).toEqual(completedResult)
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    const replayed = await readEvidence(backend, pending.invocationRef, first.principal.principalId)
+    const replayed = await readEvidence(backend, pendingInvocationRef, first.principal.principalId)
     expect(replayed.invocation?.workId).toBe(workId)
+    expect(replayed.history).toHaveLength(3)
     expect(replayed.transactions).toHaveLength(1)
     expect(replayed.usage).toHaveLength(1)
     expect(providerFetch).toHaveBeenCalledTimes(1)
