@@ -8,12 +8,12 @@ import type { StableHashValue } from '../../src/modules/common/stable-hash'
 import {
   buildDevelopmentAlternatePublishedOperationEvidence,
   verifyDevelopmentAlternatePublishedOperationEvidence,
-} from '../../src/modules/capability-supply/development-alternate-published-operation-evidence'
+} from './fixtures/capability-supply/development-alternate-published-operation-evidence'
 import {
   buildDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
-} from '../../src/modules/capability-supply/development-published-operation-evidence'
-import { runDevelopmentProviderConformanceScenario } from '../../src/modules/capability-supply/development-provider-conformance-scenario'
+} from './fixtures/capability-supply/development-published-operation-evidence'
+import { runDevelopmentProviderConformanceScenario } from './fixtures/capability-supply/development-provider-conformance-scenario'
 
 import { captureOfficialEvidenceProvenance } from './evidence-provenance'
 

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 import { parseArgs } from '../ae/lib/args'
 
-import { runDevelopmentEvidenceScenario } from '../../src/modules/capability-supply/development-evidence-scenario'
+import { runDevelopmentEvidenceScenario } from './fixtures/capability-supply/development-evidence-scenario'
 import {
   readAndVerifyEvidencePacket,
   writeEvidencePacket,

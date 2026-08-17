@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { runDevelopmentEvidenceScenario } from '@/modules/capability-supply/development-evidence-scenario'
+import { runDevelopmentEvidenceScenario } from '../../../tools/dev/fixtures/capability-supply/development-evidence-scenario'
 import {
   readAndVerifyEvidencePacket,
   writeEvidencePacket,

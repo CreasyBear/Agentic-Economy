@@ -13,7 +13,7 @@ import {
   type InvocationActor,
   type DynamicPublishedSnapshotAnchors,
 } from '@/modules/action-invocation'
-import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import type {
   RouteTransportFetch,
   RouteTransportRuntime,
@@ -27,7 +27,7 @@ import {
   encodeX402PaymentRequiredHeader,
   encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
-} from './server'
+} from '@/modules/capability-supply/server'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -39,7 +39,7 @@ import {
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
-} from './published-operation'
+} from '@/modules/capability-supply/published-operation'
 
 function requireDynamicFixture<T>(value: T | undefined, errorCode: string): T {
   if (value === undefined) throw new Error(errorCode)

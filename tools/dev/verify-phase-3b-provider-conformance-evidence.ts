@@ -8,13 +8,13 @@ import type { StableHashValue } from '../../src/modules/common/stable-hash'
 import {
   buildDevelopmentAlternatePublishedOperationEvidence,
   verifyDevelopmentAlternatePublishedOperationEvidence,
-} from '../../src/modules/capability-supply/development-alternate-published-operation-evidence'
-import { projectDevelopmentAlternateBtcUsdQuoteResult } from '../../src/modules/capability-supply/development-alternate-btc-usd-quote-result'
+} from './fixtures/capability-supply/development-alternate-published-operation-evidence'
+import { projectDevelopmentAlternateBtcUsdQuoteResult } from './fixtures/capability-supply/development-alternate-btc-usd-quote-result'
 import {
   buildDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
-} from '../../src/modules/capability-supply/development-published-operation-evidence'
-import { projectDevelopmentBtcUsdQuoteResult } from '../../src/modules/capability-supply/btc-usd-quote-result'
+} from './fixtures/capability-supply/development-published-operation-evidence'
+import { projectDevelopmentBtcUsdQuoteResult } from './fixtures/capability-supply/btc-usd-quote-result'
 
 import { buildPhase3bProviderConformanceEvidence } from './phase-3b-provider-conformance-evidence'
 

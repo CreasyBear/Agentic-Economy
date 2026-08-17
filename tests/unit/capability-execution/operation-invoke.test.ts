@@ -15,7 +15,7 @@ import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
 } from '@/modules/capability-supply/public'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { projectOuterResult, run } from '../../../convex/capabilityOperationInvocationWorker'
 

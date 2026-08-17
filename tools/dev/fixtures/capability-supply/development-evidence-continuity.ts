@@ -25,7 +25,7 @@ import type { DevelopmentInvocationEvidence } from './development-evidence-invoc
 import {
   collectSuppliedCandidateQuoteAction,
   type SuppliedCandidateQuoteInput,
-} from './server'
+} from '@/modules/capability-supply/server'
 
 type Graph = ReturnType<typeof createDevelopmentEvidenceSupplyPorts>
 type Input = Awaited<ReturnType<typeof createDevelopmentEvidenceQuoteInput>>

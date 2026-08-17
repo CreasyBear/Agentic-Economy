@@ -3,22 +3,22 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDevelopmentAlternatePublishedOperationEvidence,
   verifyDevelopmentAlternatePublishedOperationEvidence,
-} from '@/modules/capability-supply/development-alternate-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-alternate-published-operation-evidence'
 import {
   developmentAlternateBtcUsdQuoteSource,
   projectDevelopmentAlternateBtcUsdQuoteResult,
-} from '@/modules/capability-supply/development-alternate-btc-usd-quote-result'
+} from '../../../tools/dev/fixtures/capability-supply/development-alternate-btc-usd-quote-result'
 import {
   buildDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   developmentBtcUsdQuoteSource,
   presentDevelopmentBtcUsdQuoteResult,
   projectDevelopmentBtcUsdQuoteResult,
   type BtcUsdQuoteProjectionDecision,
   type BtcUsdQuoteResult,
-} from '@/modules/capability-supply/btc-usd-quote-result'
+} from '../../../tools/dev/fixtures/capability-supply/btc-usd-quote-result'
 import type {
   CapabilityOfferingRegistration,
   PublishedOperation,

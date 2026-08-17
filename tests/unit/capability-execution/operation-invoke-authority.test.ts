@@ -8,7 +8,7 @@ import {
   type OperationInvokeRuntime,
 } from '@/modules/capability-execution/operation-invoke'
 import { validateOperationInvokeAuthority } from '../../../convex/capabilityOperationInvocationWorker'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   createPublicOperationRef,
   materializeRuntimePublishedOperation,

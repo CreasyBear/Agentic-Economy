@@ -5,7 +5,7 @@ import {
   presentDevelopmentBtcUsdQuoteResult,
   projectDevelopmentBtcUsdQuoteResult,
   type BtcUsdQuoteResult,
-} from '@/modules/capability-supply/btc-usd-quote-result'
+} from '../../../tools/dev/fixtures/capability-supply/btc-usd-quote-result'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const receivedAt = '2026-07-20T08:05:00.000Z'

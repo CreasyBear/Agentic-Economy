@@ -1,4 +1,4 @@
-import { createDevelopmentFileX402PaymentAttemptPort } from '../../src/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentFileX402PaymentAttemptPort } from './fixtures/action-invocation/development-file-x402-payment-attempt-port'
 import type {
   X402PaymentAttempt,
   X402PaymentAuthorizationEvent,

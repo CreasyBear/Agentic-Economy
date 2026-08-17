@@ -4,13 +4,13 @@ import {
   buildDevelopmentHostParityEvidence,
   digestDevelopmentHostParityMaterial,
   type DevelopmentHostParityEvidence,
-} from '@/modules/capability-supply/development-host-parity-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-host-parity-evidence'
 import {
   verifyDevelopmentHostParityEvidence,
-} from '@/modules/capability-supply/development-host-parity-verifier'
+} from '../../../tools/dev/fixtures/capability-supply/development-host-parity-verifier'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { loadDynamicPublishedAdapterSnapshot } from '@/modules/action-invocation'
 
 const provenance = {

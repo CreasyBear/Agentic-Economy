@@ -2,10 +2,9 @@ import { existsSync, globSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Quarantine proof for Product-Frontier Cleanup Batch 3.
- * Development evidence, tools/dev, and test fixtures must not enter deployable
- * route/component/convex graphs. We intentionally do not move ~5.5k LOC of
- * development-* modules unless a move shrinks production reachability.
+ * Development evidence fixtures and the file-backed x402 payment-attempt
+ * fixture live under tools/dev/fixtures; production runtime authorities remain
+ * in src.
  */
 
 const deployableGlobs = [
@@ -69,9 +68,32 @@ describe('development evidence boundary', () => {
     expect(offenders).toEqual([])
   })
 
-  it('records that development-* modules remain co-located until a reachability-reducing move is proven', () => {
-    const developmentModules = globSync('src/modules/capability-supply/development-*.ts').sort()
-    expect(developmentModules.length).toBeGreaterThan(5)
-    expect(existsSync('tools/dev/action-invocation-development-evidence.ts')).toBe(true)
+  it('keeps development fixtures owned by tools/dev/fixtures', () => {
+    const expectedCapabilitySupplyFixtures = [
+      'tools/dev/fixtures/capability-supply/btc-usd-quote-result.ts',
+      'tools/dev/fixtures/capability-supply/development-alternate-btc-usd-quote-result.ts',
+      'tools/dev/fixtures/capability-supply/development-alternate-published-operation-evidence.ts',
+      'tools/dev/fixtures/capability-supply/development-dynamic-invocation-evidence.ts',
+      'tools/dev/fixtures/capability-supply/development-evidence-continuity.ts',
+      'tools/dev/fixtures/capability-supply/development-evidence-fixture.ts',
+      'tools/dev/fixtures/capability-supply/development-evidence-invocations.ts',
+      'tools/dev/fixtures/capability-supply/development-evidence-scenario.ts',
+      'tools/dev/fixtures/capability-supply/development-host-parity-evidence.ts',
+      'tools/dev/fixtures/capability-supply/development-host-parity-verifier.ts',
+      'tools/dev/fixtures/capability-supply/development-host-scenario-runtime.ts',
+      'tools/dev/fixtures/capability-supply/development-host-scenarios.ts',
+      'tools/dev/fixtures/capability-supply/development-provider-conformance-scenario.ts',
+      'tools/dev/fixtures/capability-supply/development-published-operation-evidence.ts',
+    ].sort()
+
+    expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
+    expect(existsSync('src/modules/capability-supply/btc-usd-quote-result.ts')).toBe(false)
+    expect(existsSync('src/modules/action-invocation/development-file-x402-payment-attempt-port.ts')).toBe(false)
+    expect(globSync('tools/dev/fixtures/capability-supply/*.ts').sort()).toEqual(
+      expectedCapabilitySupplyFixtures,
+    )
+    expect(globSync('tools/dev/fixtures/action-invocation/*.ts')).toEqual([
+      'tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port.ts',
+    ])
   })
 })

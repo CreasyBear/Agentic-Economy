@@ -13,12 +13,12 @@ import {
   createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
-} from './public'
+} from '@/modules/capability-supply/public'
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
-} from './published-operation'
-import type { SuppliedCandidateQualification } from './server'
+} from '@/modules/capability-supply/published-operation'
+import type { SuppliedCandidateQualification } from '@/modules/capability-supply/server'
 
 const observedAt = Date.parse('2026-07-20T08:00:00.000Z')
 const validUntil = observedAt + 300_000

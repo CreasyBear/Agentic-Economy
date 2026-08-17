@@ -11,7 +11,7 @@ import {
   type DynamicPublishedInvocationResult,
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
-import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { presentDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
@@ -26,15 +26,15 @@ import {
   createDevelopmentProviderLeaseIssuer,
 } from './development-published-operation-evidence'
 import { projectDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
-import type { PublishedOperation } from './public'
+import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type {
   RouteTransportRuntime,
   X402RouteTransportRuntime,
-} from './route-transport-runtime'
+} from '@/modules/capability-supply/route-transport-runtime'
 import {
   encodeX402PaymentRequiredHeader,
   encodeX402PaymentResponseHeader,
-} from './server'
+} from '@/modules/capability-supply/server'
 
 type ProviderKey = 'A' | 'B'
 type Counters = { authorizations: number; signatures: number; sends: number }

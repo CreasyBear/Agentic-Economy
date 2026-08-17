@@ -2,7 +2,7 @@ import type {
   RouteTransportFetch,
   RouteTransportRuntime,
   X402RouteTransportRuntime,
-} from './route-transport-runtime'
+} from '@/modules/capability-supply/route-transport-runtime'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -10,7 +10,7 @@ import {
   encodeX402PaymentRequiredHeader,
   encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
-} from './server'
+} from '@/modules/capability-supply/server'
 import { developmentProviderConnectionAuthorityDigest } from './development-published-operation-evidence'
 
 export type DevelopmentEffectCounts = {

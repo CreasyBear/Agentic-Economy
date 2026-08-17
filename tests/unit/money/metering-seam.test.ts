@@ -11,7 +11,7 @@ import type { RouteTransportRuntime } from '../../../src/modules/capability-supp
 import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,
-} from '../../../src/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import type { MoneyInvocationPort } from '../../../src/modules/money/public'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 

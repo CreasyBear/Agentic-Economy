@@ -7,10 +7,10 @@ import {
 } from '@/modules/action-invocation'
 import {
   buildDevelopmentPublishedOperationEvidence,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   runDevelopmentHostScenarioMatrix,
-} from '@/modules/capability-supply/development-host-scenarios'
+} from '../../../tools/dev/fixtures/capability-supply/development-host-scenarios'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('source-owned Action Invocation input work', () => {

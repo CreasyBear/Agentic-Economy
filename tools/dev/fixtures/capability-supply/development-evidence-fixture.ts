@@ -2,9 +2,9 @@ import type { InvocationActor, ReconciliationEvidence, ReconciliationEvidenceMat
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { pricingConfigDigest } from '@/modules/money/public'
-import type { CapabilityBindingRow } from './internal/binding'
-import type { CapabilityGraphPorts, GraphCatalogAccessPath, GraphPublicationRow } from './internal/graph'
-import type { CapabilityOfferingRow } from './internal/offering'
+import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding'
+import type { CapabilityGraphPorts, GraphCatalogAccessPath, GraphPublicationRow } from '@/modules/capability-supply/internal/graph'
+import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
   capabilityBindingEligibilityHash,
   capabilityBindingRegistrationHash,
@@ -14,8 +14,8 @@ import {
   createPublicOperationRef,
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
-} from './public'
-import { qualifySuppliedCandidate, type SuppliedCandidateQuoteInput } from './server'
+} from '@/modules/capability-supply/public'
+import { qualifySuppliedCandidate, type SuppliedCandidateQuoteInput } from '@/modules/capability-supply/server'
 
 export const developmentEvidenceNowMs = Date.parse('2026-07-19T08:00:00.000Z')
 export const developmentEvidenceNow = () => new Date(developmentEvidenceNowMs).toISOString()

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ActionResult } from '@/modules/common/action'
 import schema from '../../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
+import { createDevelopmentEvidenceVerifier } from '../../../tools/dev/fixtures/capability-supply/development-evidence-fixture'
 
 vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicOfferingRegistryBusinessDetail: vi.fn(),

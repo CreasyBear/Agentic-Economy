@@ -14,7 +14,7 @@ import {
   prepareSuppliedCandidateQuote,
   type SuppliedCandidateQuoteInput,
   type SuppliedCandidateQuoteResult,
-} from './server'
+} from '@/modules/capability-supply/server'
 import {
   createDevelopmentEvidenceVerifier,
   developmentEvidenceActor as actor,

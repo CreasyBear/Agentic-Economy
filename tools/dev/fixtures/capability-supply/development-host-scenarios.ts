@@ -19,7 +19,7 @@ import {
   type RichInvocationTaskProjection,
   type StructuredInvocationTaskProjection,
 } from '@/modules/action-invocation'
-import { createDevelopmentScenarioX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   attachCompletedTaskReference,
@@ -39,7 +39,7 @@ import {
   developmentSuccessRuntime,
   type DevelopmentEffectCounts,
 } from './development-host-scenario-runtime'
-import type { RouteTransportRuntime } from './route-transport-runtime'
+import type { RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 
 type Fixture = ReturnType<typeof buildDevelopmentPublishedOperationEvidence>
 function requireFirst<T>(values: readonly T[], error: string): T {

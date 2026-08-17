@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   runDevelopmentProviderConformanceScenario,
-} from '@/modules/capability-supply/development-provider-conformance-scenario'
+} from '../../../tools/dev/fixtures/capability-supply/development-provider-conformance-scenario'
 
 describe('explicit paid-operation provider selection', () => {
   it('runs the closed two-provider conformance matrix', async () => {

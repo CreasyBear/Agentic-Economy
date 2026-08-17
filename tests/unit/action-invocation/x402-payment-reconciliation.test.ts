@@ -12,10 +12,10 @@ import {
   type X402PaymentReconciliationEvidenceMaterial,
 } from '@/modules/action-invocation'
 import type { ExactAmount } from '@/modules/money/public'
-import { createDevelopmentFileX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentFileX402PaymentAttemptPort } from '../../../tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port'
 import type { X402PaymentAttempt, X402PaymentAuthorizationEvent } from '@/modules/action-invocation/x402-payment-attempt'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   invokePreparedRouteTransport,

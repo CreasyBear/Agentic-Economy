@@ -90,4 +90,26 @@ describe('Action Invocation public host graph', () => {
     expect(existsSync('src/modules/provider-operation-fixture')).toBe(false)
     expect(existsSync('tools/dev/fixtures/provider-operation')).toBe(true)
   })
+
+  it('keeps moved development fixtures outside production source graphs', () => {
+    const oldFixturePaths = [
+      'src/modules/capability-supply/btc-usd-quote-result.ts',
+      'src/modules/action-invocation/development-file-x402-payment-attempt-port.ts',
+    ]
+    const violations = productionSourceFiles.filter((path) => {
+      const source = readFileSync(path, 'utf8')
+      return (
+        /tools\/dev\/fixtures\/(?:capability-supply|action-invocation)/u.test(source) ||
+        /src\/modules\/capability-supply\/development-[^'"]+/u.test(source) ||
+        /src\/modules\/capability-supply\/btc-usd-quote-result/u.test(source) ||
+        /src\/modules\/action-invocation\/development-file-x402-payment-attempt-port/u.test(source)
+      )
+    })
+
+    expect(violations).toEqual([])
+    expect(globSync('src/modules/capability-supply/development-*.ts')).toEqual([])
+    expect(oldFixturePaths.filter(existsSync)).toEqual([])
+    expect(existsSync('tools/dev/fixtures/capability-supply')).toBe(true)
+    expect(existsSync('tools/dev/fixtures/action-invocation')).toBe(true)
+  })
 })

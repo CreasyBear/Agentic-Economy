@@ -24,7 +24,7 @@ import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,
   developmentProviderConnectionAuthorityDigest,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   admitRegisteredTransport,
   capabilityBindingRegistrationHash,
@@ -54,7 +54,7 @@ import {
 import {
   buildDevelopmentDynamicInvocationEvidence,
   verifyDevelopmentDynamicInvocationEvidence,
-} from '@/modules/capability-supply/development-dynamic-invocation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-dynamic-invocation-evidence'
 import {
   createPaymentAttemptRuntime,
   type DynamicPublishedPreparedTransport,

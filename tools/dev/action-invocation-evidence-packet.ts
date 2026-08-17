@@ -18,11 +18,11 @@ import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { projectReferenceComposition } from '../../src/modules/customer-request/application/public'
 import type { CustomerRequestV2Aggregate } from '../../src/modules/customer-request/compiler'
 import { registryDetailAction } from '../../src/modules/registry/registry.actions'
-import { registeredDescriptor } from '../../src/modules/capability-supply/development-evidence-continuity'
+import { registeredDescriptor } from './fixtures/capability-supply/development-evidence-continuity'
 import {
   developmentEvidenceActor,
   developmentEvidenceNow,
-} from '../../src/modules/capability-supply/development-evidence-fixture'
+} from './fixtures/capability-supply/development-evidence-fixture'
 import {
   collectSuppliedCandidateQuoteAction,
   type SuppliedCandidateQuoteInput,

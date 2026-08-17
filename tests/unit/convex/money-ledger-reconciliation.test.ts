@@ -21,7 +21,7 @@ import { LIVE_MONEY_GATE_POLICY } from '@/modules/money/internal/live-money-gate
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   buildDevelopmentPublishedOperationEvidence,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   createPublicOperationRef,
   materializeRuntimePublishedOperation,

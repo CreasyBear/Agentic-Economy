@@ -9,7 +9,7 @@ import {
   developmentEvidenceCandidate,
 } from './development-evidence-fixture'
 import { runDevelopmentInvocations } from './development-evidence-invocations'
-import { collectSuppliedCandidateQuoteAction } from './server'
+import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/server'
 
 export async function runDevelopmentEvidenceScenario() {
   const graph = createDevelopmentEvidenceSupplyPorts()

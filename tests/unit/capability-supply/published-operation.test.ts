@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildDevelopmentPublishedOperationEvidence,
   verifyDevelopmentPublishedOperationEvidence,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,

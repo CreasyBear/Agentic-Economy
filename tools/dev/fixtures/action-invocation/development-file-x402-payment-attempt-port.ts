@@ -18,7 +18,7 @@ import {
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
   type X402PaymentAuthorizationEvent,
-} from './x402-payment-attempt'
+} from '@/modules/action-invocation/x402-payment-attempt'
 
 type DevelopmentPaymentState = Readonly<{
   format: 'x402-payment-attempts:development:v1'

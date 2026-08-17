@@ -7,7 +7,7 @@ import {
   type IssueProviderConnectionLeaseCommand,
   type ProviderConnection,
   type ProviderConnectionInvocationLease,
-} from './provider-connection'
+} from '@/modules/capability-supply/provider-connection'
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
   admitRegisteredTransport,
@@ -21,13 +21,13 @@ import {
   defineCapabilityTransportBindingRegistration,
   type CapabilityConnectionAuthoritySnapshot,
   type PublishedOperation,
-} from './public'
+} from '@/modules/capability-supply/public'
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
   type RuntimePublishedOperationDescriptor,
-} from './published-operation'
-import type { SuppliedCandidateQualification } from './server'
+} from '@/modules/capability-supply/published-operation'
+import type { SuppliedCandidateQualification } from '@/modules/capability-supply/server'
 
 const observedAt = Date.parse('2026-07-19T08:00:00.000Z')
 const validUntil = observedAt + 300_000

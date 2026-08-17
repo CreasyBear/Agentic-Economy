@@ -8,7 +8,7 @@ import { verifyDevelopmentPublishedOperationEvidence } from './development-publi
 import {
   materializePublishedOperation,
   materializeRuntimePublishedOperation,
-} from './published-operation'
+} from '@/modules/capability-supply/published-operation'
 import {
   assertHostParityProvenance,
   compareHostSemantics,

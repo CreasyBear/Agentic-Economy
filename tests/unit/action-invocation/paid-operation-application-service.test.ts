@@ -10,7 +10,7 @@ import {
   type PaidOperationInterpreter,
 } from '@/modules/action-invocation'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
 import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'

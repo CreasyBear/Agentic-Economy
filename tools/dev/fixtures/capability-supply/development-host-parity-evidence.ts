@@ -19,7 +19,7 @@ import {
   buildDevelopmentPublishedOperationEvidence,
   projectDevelopmentPublishedOperationEvidence,
 } from './development-published-operation-evidence'
-import { materializeRuntimePublishedOperation } from './published-operation'
+import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/published-operation'
 import {
   runDevelopmentHostScenarioMatrix,
   type DevelopmentHostScenarioRecord,

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { createDevelopmentFileX402PaymentAttemptPort } from '@/modules/action-invocation/development-file-x402-payment-attempt-port'
+import { createDevelopmentFileX402PaymentAttemptPort } from '../../../tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port'
 
 const child = join(process.cwd(), 'tools/dev/x402-payment-attempt-child.ts')
 

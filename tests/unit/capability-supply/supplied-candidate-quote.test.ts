@@ -14,7 +14,7 @@ vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
 }))
 
 import { listActions } from '@/modules/actions'
-import { createDevelopmentEvidenceVerifier } from '@/modules/capability-supply/development-evidence-fixture'
+import { createDevelopmentEvidenceVerifier } from '../../../tools/dev/fixtures/capability-supply/development-evidence-fixture'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import {
   connectionAuthoritySnapshotFromProviderConnection,

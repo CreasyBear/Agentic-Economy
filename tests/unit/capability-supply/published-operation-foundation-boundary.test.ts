@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { listActions } from '@/modules/actions'
 import {
   buildDevelopmentPublishedOperationEvidence,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 
 describe('published operation foundation boundary', () => {
   it('does not statically register a business-published operation', () => {

@@ -10,7 +10,7 @@ import {
   createDynamicPublishedActionInvocationAdapter,
   type DynamicPublishedInvocationResult,
 } from '@/modules/action-invocation'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 

@@ -15,11 +15,11 @@ import {
 import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,
-} from '@/modules/capability-supply/development-published-operation-evidence'
+} from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import {
   developmentLostResponseRuntime,
   developmentSuccessRuntime,
-} from '@/modules/capability-supply/development-host-scenario-runtime'
+} from '../../../tools/dev/fixtures/capability-supply/development-host-scenario-runtime'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 

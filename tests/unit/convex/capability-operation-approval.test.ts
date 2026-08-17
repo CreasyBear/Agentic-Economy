@@ -20,7 +20,7 @@ import {
   listPendingOperationApprovals,
   reserve,
 } from '../../../convex/capabilityOperationInvocations'
-import { buildDevelopmentPublishedOperationEvidence } from '@/modules/capability-supply/development-published-operation-evidence'
+import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
