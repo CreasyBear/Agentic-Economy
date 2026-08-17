@@ -598,7 +598,7 @@ export const registrySearchAction = defineAction({
   },
   run: async ({ data, context }) => projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
     normalizeRegistrySearchInput(data),
-    { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
+    { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: context.caller === 'answerThread' ? 'answer_thread' : 'registry_action' },
   )),
 })
 
