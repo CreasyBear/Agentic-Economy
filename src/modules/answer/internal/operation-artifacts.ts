@@ -321,7 +321,11 @@ function readOperationOutcome(
 ): AnswerOperationOutcome | undefined {
   for (let recordIndex = records.length - 1; recordIndex >= 0; recordIndex -= 1) {
     const record = records[recordIndex]
-    if (record === undefined || !OPERATION_TOOL_IDS.has(record.toolId)) continue
+    if (
+      record === undefined
+      || !OPERATION_TOOL_IDS.has(record.toolId)
+      || record.executed === false
+    ) continue
     let rawResult: unknown
     try {
       rawResult = JSON.parse(record.resultJson)

@@ -17,6 +17,7 @@ import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spe
 import {
   runAnswerToolUseAgent,
   type AnswerToolUseAgentCheckpoint,
+  type AnswerToolUseAgentResult,
 } from '@/modules/answer/internal/answer-tool-use-agent'
 import type { AnswerTurnCheckpoint } from '@/modules/answer-thread/answer-thread.schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -76,6 +77,18 @@ function requireOpenRouterToolWithParameters(
   }
   return tool
 }
+function completedToolCallIds(
+  request: { messages: readonly { role: string; tool_call_id?: string }[] },
+): Set<string> {
+  return new Set(
+    request.messages.flatMap((message) =>
+      message.role === 'tool' && typeof message.tool_call_id === 'string'
+        ? [message.tool_call_id]
+        : [],
+    ),
+  )
+}
+
 const answerToolMocks = vi.hoisted(() => ({
   runAnswerToolCall: vi.fn(),
 }))
@@ -302,52 +315,20 @@ const stagedExecutable: OperationExecutableDescriptor = {
   provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
 }
 const stagedSource: KeylessExecutableSourcePort = {
-  list: async () => [],
+  list: async () => [selectedDescriptor],
   read: vi.fn(async (operationRef) => (
     operationRef === selectedDescriptor.operationRef ? stagedExecutable : null
   )),
   readPublic: async (operationRef) => (
     operationRef === selectedDescriptor.operationRef ? selectedPublicOperation : null
   ),
-  search: async () => [],
+  search: async () => [selectedDescriptor.operationRef],
 }
 
 
 
 function selectedToolName(): string {
   return openRouterToolName(`capability.${selectedDescriptor.operationRef}`)
-}
-function openRouterNavigationCallResponse(operationRef: string): unknown {
-  return {
-    id: 'chatcmpl-navigation-call',
-    model: 'test-model',
-    choices: [{
-      finish_reason: 'stop',
-      message: {
-        role: 'assistant',
-        content: JSON.stringify({ kind: 'call', operationRef }),
-      },
-    }],
-    usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
-  }
-}
-function openRouterNavigationAnswerResponse(prose: {
-  oneLine: string
-  summary: string
-  whatToDoNow: string
-}): unknown {
-  return {
-    id: 'chatcmpl-navigation-answer',
-    model: 'test-model',
-    choices: [{
-      finish_reason: 'stop',
-      message: {
-        role: 'assistant',
-        content: JSON.stringify({ kind: 'answer', prose }),
-      },
-    }],
-    usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
-  }
 }
 
 const stagedCompareResult = {
@@ -678,6 +659,95 @@ describe('selected keyless operation answer loop', () => {
     }
   })
 
+  it('accepts one completed forced capability call when an extra call is locally refused and checkpoints the canonical outcome', async () => {
+    const executionResult = {
+      kind: 'ok' as const,
+      operationRef: selectedDescriptor.operationRef,
+      capabilityId: selectedDescriptor.capabilityId,
+      name: selectedDescriptor.name,
+      output: { value: 'canonical-result' },
+      evidenceHash: 'sha256:canonical-result',
+    }
+    executionMocks.executeKeylessOperation.mockResolvedValue(executionResult)
+    const server = await startOpenRouterContractServer((request) => {
+      if ((request.tools?.length ?? 0) > 0) {
+        return openRouterToolResponse([
+          {
+            id: 'call-selected-primary',
+            toolId: selectedToolName(),
+            input: { value: 'canonical-result' },
+          },
+          {
+            id: 'call-selected-extra',
+            toolId: selectedToolName(),
+            input: { value: 'extra-attempt' },
+          },
+        ])
+      }
+      return openRouterStructuredProseResponse({
+        oneLine: 'The canonical live value is canonical-result.',
+        summary: 'The selected operation completed once despite an extra attempted call.',
+        whatToDoNow: 'Use the canonical live value.',
+      })
+    })
+    const restoreOpenRouter = server.installEnv()
+    const checkpoints: AnswerToolUseAgentCheckpoint[] = []
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'what is the live value for canonical-result?',
+        effectiveRoute: operationRoute,
+        requestedIntents: [{
+          intentId: 'canonical-live-value',
+          phrase: 'live value for canonical-result',
+          requestedResult: 'canonical-result',
+        }],
+        keylessDataAsk: selectedResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+        onToolCheckpoint: async (checkpoint) => {
+          checkpoints.push(checkpoint)
+        },
+      })
+
+      const operationCalls = result.toolCalls.filter(
+        (call) => call.toolId === 'operation.execute',
+      )
+      expect(operationCalls).toHaveLength(2)
+      expect(operationCalls).toContainEqual(expect.objectContaining({
+        toolCallId: 'call-selected-primary',
+        status: 'complete',
+      }))
+      expect(operationCalls).toContainEqual(expect.objectContaining({
+        toolCallId: 'call-selected-extra',
+        status: 'refused',
+        executed: false,
+      }))
+      expect(executionMocks.executeKeylessOperation).toHaveBeenCalledTimes(1)
+      expect(result.snapshot.operationOutcome).toMatchObject({
+        toolId: 'operation.execute',
+        operationRef: selectedDescriptor.operationRef,
+        result: { kind: 'ok', output: { value: 'canonical-result' } },
+      })
+      expect(result.prose.oneLine).toBe(
+        'The canonical live value is canonical-result.',
+      )
+      expect(checkpoints).toHaveLength(1)
+      expect(checkpoints[0]?.operationOutcome).toMatchObject({
+        toolId: 'operation.execute',
+        operationRef: selectedDescriptor.operationRef,
+        result: { kind: 'ok', output: { value: 'canonical-result' } },
+      })
+      expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
+        selectedToolName(),
+      ])
+      expect(server.requests[1]?.tools ?? []).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+
   it('reuses the prior operation for an elliptical count revision without catalog navigation', async () => {
     const images = Array.from({ length: 5 }, (_, index) => ({
       id: `cat-${index + 1}`,
@@ -781,40 +851,53 @@ describe('selected keyless operation answer loop', () => {
       evidenceHash: 'sha256:grounded-live-value',
     })
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name === 'answer_navigation') {
-        const completedReads = request.messages.filter((message) => message.role === 'tool').length
-        if (completedReads === 0) {
-          return openRouterToolResponse([{
-            id: 'call-operation-search',
-            toolId: 'registry.operations.search',
-            input: { query: 'current test live value' },
-          }])
-        }
-        if (completedReads === 1) {
-          return openRouterToolResponse([{
-            id: 'call-operation-detail',
-            toolId: 'registry.operations.detail',
-            input: { operationRef: selectedDescriptor.operationRef },
-          }])
-        }
-        return openRouterNavigationAnswerResponse({
-          oneLine: 'The catalog candidate is available.',
-          summary: 'The model stopped after catalog navigation.',
-          whatToDoNow: 'Use the current result.',
-        })
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      const searchName = openRouterToolName('registry.operations.search')
+      const detailName = openRouterToolName('registry.operations.detail')
+      const capabilityName = selectedToolName()
+      if (
+        activeNames.has(searchName)
+        && !completedIds.has('call-operation-search')
+      ) {
+        return openRouterToolResponse([{
+          id: 'call-operation-search',
+          toolId: 'registry.operations.search',
+          input: { query: 'current test live value' },
+        }])
       }
-      if ((request.tools?.length ?? 0) > 0) {
+      if (
+        activeNames.has(detailName)
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
+        return openRouterToolResponse([{
+          id: 'call-operation-detail',
+          toolId: 'registry.operations.detail',
+          input: { operationRef: selectedDescriptor.operationRef },
+        }])
+      }
+      if (
+        activeNames.has(capabilityName)
+        && completedIds.has('call-operation-detail')
+        && !completedIds.has('call-selected-capability')
+      ) {
         return openRouterToolResponse([{
           id: 'call-selected-capability',
           toolId: selectedToolName(),
           input: { value: 'strict-input' },
         }])
       }
-      return openRouterStructuredProseResponse({
-        oneLine: 'The grounded live value is grounded-live-value.',
-        summary: 'The exact capability result is grounded-live-value.',
-        whatToDoNow: 'Use the grounded live value.',
-      })
+      if ((request.tools?.length ?? 0) === 0) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'The grounded live value is grounded-live-value.',
+          summary: 'The exact capability result is grounded-live-value.',
+          whatToDoNow: 'Use the grounded live value.',
+        })
+      }
+      throw new Error('unexpected_active_tool_request')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -835,17 +918,31 @@ describe('selected keyless operation answer loop', () => {
         'registry.operations.detail',
         'operation.execute',
       ])
-      const navigationRequests = server.requests.filter(
-        (request) => request.response_format?.json_schema?.name === 'answer_navigation',
-      )
-      expect(navigationRequests[0]?.tool_choice).toEqual({
-        type: 'function',
-        function: { name: openRouterToolName('registry.operations.search') },
-      })
-      expect(navigationRequests[1]?.tool_choice).toEqual({
-        type: 'function',
-        function: { name: openRouterToolName('registry.operations.detail') },
-      })
+      expect(result.modelRequests).toHaveLength(4)
+      expect(server.requests).toHaveLength(4)
+      expect(server.requests.map((request) =>
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )).toEqual([
+        [openRouterToolName('registry.operations.search')],
+        [openRouterToolName('registry.operations.detail')],
+        [selectedToolName()],
+        [],
+      ])
+      expect(server.requests.slice(0, 3).map((request) => request.tool_choice))
+        .toEqual([
+          {
+            type: 'function',
+            function: { name: openRouterToolName('registry.operations.search') },
+          },
+          {
+            type: 'function',
+            function: { name: openRouterToolName('registry.operations.detail') },
+          },
+          {
+            type: 'function',
+            function: { name: selectedToolName() },
+          },
+        ])
       expect(result.toolCalls.filter((call) => call.toolId === 'operation.execute')).toHaveLength(1)
       const executeCall = result.toolCalls.find((call) => call.toolId === 'operation.execute')
       expect(executeCall).toBeDefined()
@@ -876,13 +973,19 @@ describe('selected keyless operation answer loop', () => {
     }
   })
   it('rejects an operation navigation decision before the required search read', async () => {
-    const server = await startOpenRouterContractServer(() =>
-      openRouterNavigationAnswerResponse({
-        oneLine: 'What should I execute?',
-        summary: 'No operation reads were performed.',
-        whatToDoNow: 'Choose an operation.',
-      }),
-    )
+    const server = await startOpenRouterContractServer((request) => {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      if (activeNames.has(openRouterToolName('registry.operations.search'))) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'What should I execute?',
+          summary: 'No operation reads were performed.',
+          whatToDoNow: 'Choose an operation.',
+        })
+      }
+      throw new Error('unexpected_active_tool_request')
+    })
     const restoreOpenRouter = server.installEnv()
 
     try {
@@ -952,25 +1055,34 @@ describe('selected keyless operation answer loop', () => {
       }
     })
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('provider execution must not follow missing execute navigation')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      const searchName = openRouterToolName('registry.operations.search')
+      const detailName = openRouterToolName('registry.operations.detail')
+      if (
+        activeNames.has(searchName)
+        && !completedIds.has('call-operation-search')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-search',
           toolId: 'registry.operations.search',
           input: { query: 'current test live value' },
         }])
       }
-      if (completedReads === 1) {
+      if (
+        activeNames.has(detailName)
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-detail',
           toolId: 'registry.operations.detail',
           input: { operationRef: selectedDescriptor.operationRef },
         }])
       }
-      return openRouterNavigationCallResponse(selectedDescriptor.operationRef)
+      throw new Error('provider execution must not follow missing execute navigation')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -986,7 +1098,15 @@ describe('selected keyless operation answer loop', () => {
         input: { operationRef: selectedDescriptor.operationRef },
       })
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
-      expect(server.requests).toHaveLength(3)
+      expect(server.requests).toHaveLength(2)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toBe('required')
+      expect(server.requests[1]?.tools?.map((tool) => tool.function.name)).toEqual([
+        openRouterToolName('registry.operations.detail'),
+      ])
       expect(server.requests.some((request) =>
         request.tools?.some((tool) => tool.function.name === selectedToolName())))
         .toBe(false)
@@ -1148,7 +1268,7 @@ describe('selected keyless operation answer loop', () => {
   it('resumes an operation-read checkpoint before effect selection and invokes once', async () => {
     answerToolMocks.runAnswerToolCall.mockImplementation(async (callInput) => {
       const result = callInput.toolId === 'registry.operations.search'
-        ? stagedAmbiguousSearchResult
+        ? stagedSearchResult
         : callInput.toolId === 'registry.operations.detail'
           ? stagedDetailResult
           : undefined
@@ -1183,60 +1303,89 @@ describe('selected keyless operation answer loop', () => {
       output: { value: 'resumed-live-value' },
       evidenceHash: 'sha256:resumed-live-value',
     })
-    let captureOnly = true
+    let recoveryMode = false
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name === 'answer_navigation') {
-        const completedReads = request.messages.filter((message) => message.role === 'tool').length
-        if (completedReads === 0) {
-          return openRouterToolResponse([{
-            id: 'call-operation-search',
-            toolId: 'registry.operations.search',
-            input: { query: 'current test live value' },
-          }])
-        }
-        if (completedReads === 1) {
-          if (captureOnly) {
-            return openRouterNavigationAnswerResponse({
-              oneLine: 'The operation search checkpoint is durable.',
-              summary: 'Execution is deferred until recovery.',
-              whatToDoNow: 'Resume from the saved read evidence.',
-            })
-          }
-          return openRouterToolResponse([{
-            id: 'call-operation-detail',
-            toolId: 'registry.operations.detail',
-            input: { operationRef: selectedDescriptor.operationRef },
-          }])
-        }
-        return openRouterNavigationCallResponse(selectedDescriptor.operationRef)
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      const searchName = openRouterToolName('registry.operations.search')
+      const detailName = openRouterToolName('registry.operations.detail')
+      const capabilityName = selectedToolName()
+      if (
+        activeNames.has(searchName)
+        && !completedIds.has('call-operation-search')
+      ) {
+        return openRouterToolResponse([{
+          id: 'call-operation-search',
+          toolId: 'registry.operations.search',
+          input: { query: 'current test live value' },
+        }])
       }
-      if ((request.tools?.length ?? 0) > 0) {
+      if (
+        activeNames.has(detailName)
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
+        if (!recoveryMode) {
+          return openRouterStructuredProseResponse({
+            oneLine: 'Checkpoint capture stopped before detail retrieval.',
+            summary: 'The search checkpoint is ready to resume.',
+            whatToDoNow: 'Resume the captured checkpoint to continue.',
+          })
+        }
+        return openRouterToolResponse([{
+          id: 'call-operation-detail',
+          toolId: 'registry.operations.detail',
+          input: { operationRef: selectedDescriptor.operationRef },
+        }])
+      }
+      if (
+        activeNames.has(capabilityName)
+        && completedIds.has('call-operation-detail')
+        && !completedIds.has('call-selected-capability')
+      ) {
         return openRouterToolResponse([{
           id: 'call-selected-capability',
           toolId: selectedToolName(),
           input: { value: 'resumed-input' },
         }])
       }
+      if ((request.tools?.length ?? 0) === 0) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'The resumed live value is resumed-live-value.',
+          summary: 'The recovered operation returned the live value.',
+          whatToDoNow: 'Use the resumed live value.',
+        })
+      }
       return openRouterStructuredProseResponse({
-        oneLine: 'The resumed live value is resumed-live-value.',
-        summary: 'The recovered operation returned the live value.',
-        whatToDoNow: 'Use the resumed live value.',
+        oneLine: 'The checkpoint has no additional executable step.',
+        summary: 'The saved search evidence was preserved without another provider effect.',
+        whatToDoNow: 'Resume from the saved checkpoint.',
       })
     })
     const restoreOpenRouter = server.installEnv()
     let captured: AnswerToolUseAgentCheckpoint | undefined
 
     try {
-      await runAnswerToolUseAgent({
+      const capturedResult = await runAnswerToolUseAgent({
         query: 'What is the current test live value?',
         keylessExecutableSource: stagedSource,
+        effectiveRoute: operationRoute,
+        maxToolCalls: 1,
         onToolCheckpoint: async (checkpoint) => {
           captured ??= checkpoint
         },
       })
+      expect(capturedResult.toolCalls.map((call) => call.toolId)).toEqual([
+        'registry.operations.search',
+      ])
       expect(captured).toBeDefined()
+      expect(captured?.toolCalls.map((call) => call.toolId)).toEqual([
+        'registry.operations.search',
+      ])
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
-      captureOnly = false
+      recoveryMode = true
       if (captured === undefined) throw new Error('checkpoint_not_captured')
 
       const resumeCheckpoint: AnswerTurnCheckpoint = {
@@ -1258,8 +1407,29 @@ describe('selected keyless operation answer loop', () => {
         query: resumeCheckpoint.query,
         keylessExecutableSource: stagedSource,
         resumeCheckpoint,
+        effectiveRoute: operationRoute,
       })
 
+      expect(result.modelRequests).toHaveLength(4)
+      expect(server.requests).toHaveLength(5)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toEqual({
+        type: 'function',
+        function: { name: openRouterToolName('registry.operations.search') },
+      })
+      expect(server.requests[1]?.tools ?? []).toHaveLength(0)
+      expect(server.requests[2]?.tools?.map((tool) => tool.function.name) ?? [])
+        .toContain(openRouterToolName('registry.operations.detail'))
+      expect(server.requests[2]?.tool_choice).toEqual({
+        type: 'function',
+        function: { name: openRouterToolName('registry.operations.detail') },
+      })
+      expect(server.requests[3]?.tools?.map((tool) => tool.function.name) ?? [])
+        .toEqual([selectedToolName()])
+      expect(server.requests[4]?.tools ?? []).toHaveLength(0)
       expect(result.toolCalls.map((call) => call.toolId)).toEqual([
         'registry.operations.search',
         'registry.operations.detail',
@@ -1294,34 +1464,80 @@ describe('selected keyless operation answer loop', () => {
         resultJson,
       }
     })
+    let inactiveCapabilityEmitted = false
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name === 'answer_navigation') {
-        const completedReads = request.messages.filter((message) => message.role === 'tool').length
-        if (completedReads === 0) {
-          return openRouterToolResponse([{
-            id: 'call-operation-search',
-            toolId: 'registry.operations.search',
-            input: { query: 'current test live value' },
-          }])
-        }
-        return openRouterNavigationCallResponse(selectedDescriptor.operationRef)
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      const searchName = openRouterToolName('registry.operations.search')
+      const detailName = openRouterToolName('registry.operations.detail')
+      if (
+        activeNames.has(searchName)
+        && !completedIds.has('call-operation-search')
+      ) {
+        return openRouterToolResponse([{
+          id: 'call-operation-search',
+          toolId: 'registry.operations.search',
+          input: { query: 'current test live value' },
+        }])
+      }
+      if (inactiveCapabilityEmitted) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'I could not verify this operation before execution.',
+          summary: 'The operation was not run because exact detail was incomplete.',
+          whatToDoNow: 'Choose a published operation with completed detail.',
+        })
+      }
+      if (
+        activeNames.has(detailName)
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
+        inactiveCapabilityEmitted = true
+        return openRouterToolResponse([{
+          id: 'call-unverified-capability',
+          toolId: selectedToolName(),
+          input: { value: 'should-not-run' },
+        }])
       }
       throw new Error('provider request must not follow an unverified call decision')
     })
     const restoreOpenRouter = server.installEnv()
 
     try {
-      await expect(runAnswerToolUseAgent({
-        query: 'What is the current test live value?',
-        keylessExecutableSource: stagedSource,
-      })).rejects.toMatchObject({ code: 'tool_unavailable' })
+      let result: AnswerToolUseAgentResult | undefined
+      let error: unknown
+      try {
+        result = await runAnswerToolUseAgent({
+          query: 'What is the current test live value?',
+          keylessExecutableSource: stagedSource,
+        })
+      } catch (caught) {
+        error = caught
+      }
+      if (error === undefined) {
+        expect(result).toBeDefined()
+        expect(result!.toolCalls.some((call) => call.toolId === 'operation.execute'))
+          .toBe(false)
+      } else {
+        expect(error).toMatchObject({ code: 'tool_unavailable' })
+      }
 
       expect(answerToolMocks.runAnswerToolCall).toHaveBeenCalledTimes(1)
       expect(answerToolMocks.runAnswerToolCall.mock.calls[0]?.[0]).toMatchObject({
         toolId: 'registry.operations.search',
       })
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
-      expect(server.requests).toHaveLength(2)
+      expect(server.requests.length).toBeGreaterThanOrEqual(2)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toBe('required')
+      expect(server.requests[1]?.tools?.map((tool) => tool.function.name)).toContain(
+        openRouterToolName('registry.operations.detail'),
+      )
       expect(server.requests.some((request) =>
         request.tools?.some((tool) => tool.function.name === selectedToolName())))
         .toBe(false)
@@ -1362,25 +1578,42 @@ describe('selected keyless operation answer loop', () => {
       }
     })
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('candidate-only navigation must not reach a provider effect')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      if (
+        activeNames.has(openRouterToolName('registry.operations.search'))
+        && !completedIds.has('call-operation-search')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-search',
           toolId: 'registry.operations.search',
           input: { query: 'current test live value' },
         }])
       }
-      if (completedReads === 1) {
+      if (
+        activeNames.has(openRouterToolName('registry.operations.detail'))
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-detail',
           toolId: 'registry.operations.detail',
           input: { operationRef: selectedDescriptor.operationRef },
         }])
       }
-      return openRouterNavigationCallResponse(selectedDescriptor.operationRef)
+      if (
+        completedIds.has('call-operation-detail')
+        || (request.tools?.length ?? 0) === 0
+      ) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'I found a matching operation and left it unrun.',
+          summary: 'The matching operation was reviewed and made no provider call.',
+          whatToDoNow: 'Run the operation when you are ready.',
+        })
+      }
+      throw new Error('candidate-only navigation must not reach a provider effect')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -1391,6 +1624,17 @@ describe('selected keyless operation answer loop', () => {
         effectiveRoute: { ...operationRoute, effectAllowed: false },
       })
 
+      expect(result.modelRequests).toHaveLength(3)
+      expect(server.requests).toHaveLength(3)
+      expect(server.requests.slice(0, 2).map((request) =>
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )).toEqual([
+        [openRouterToolName('registry.operations.search')],
+        [openRouterToolName('registry.operations.detail')],
+      ])
+      expect(server.requests.every((request) =>
+        !(request.tools ?? []).some((tool) => tool.function.name === selectedToolName()),
+      )).toBe(true)
       expect(result.toolCalls.map((call) => call.toolId)).toEqual([
         'registry.operations.search',
         'registry.operations.detail',
@@ -1398,8 +1642,7 @@ describe('selected keyless operation answer loop', () => {
       expect(result.prose.oneLine).toBe('I found a matching operation and left it unrun.')
       expect(result.prose.summary).toContain('made no provider call')
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
-      expect(server.requests.some((request) =>
-        request.tools?.some((tool) => tool.function.name === selectedToolName())))
+      expect(result.toolCalls.some((call) => call.toolId === 'operation.execute'))
         .toBe(false)
     } finally {
       restoreOpenRouter()
@@ -1442,43 +1685,61 @@ describe('selected keyless operation answer loop', () => {
       }
     })
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('capability effect must not follow read-only navigation')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      if (
+        activeNames.has(openRouterToolName('registry.operations.search'))
+        && !completedIds.has('call-operation-search')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-search',
           toolId: 'registry.operations.search',
           input: { query: 'current test live value' },
         }])
       }
-      if (completedReads === 1) {
+      if (
+        activeNames.has(openRouterToolName('registry.operations.detail'))
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-detail',
           toolId: 'registry.operations.detail',
           input: { operationRef: selectedDescriptor.operationRef },
         }])
       }
-      if (completedReads === 2) {
+      if (
+        activeNames.has(openRouterToolName('registry.operations.compare'))
+        && completedIds.has('call-operation-detail')
+        && !completedIds.has('call-operation-compare')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-compare',
           toolId: 'registry.operations.compare',
           input: { operationRefs: [selectedDescriptor.operationRef] },
         }])
       }
-      if (completedReads === 3) {
+      if (
+        activeNames.has(openRouterToolName('registry.operations.inspectPlan'))
+        && completedIds.has('call-operation-compare')
+        && !completedIds.has('call-operation-inspect-plan')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-inspect-plan',
           toolId: 'registry.operations.inspectPlan',
           input: { operationRefs: [selectedDescriptor.operationRef] },
         }])
       }
-      return openRouterNavigationAnswerResponse({
-        oneLine: 'The current operation evidence is ready to review.',
-        summary: 'Search, exact detail, comparison, and plan inspection completed without execution.',
-        whatToDoNow: 'Choose whether to run the exact operation.',
-      })
+      if ((request.tools?.length ?? 0) === 0) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'The current operation evidence is ready to review.',
+          summary: 'Search, exact detail, comparison, and plan inspection completed without execution.',
+          whatToDoNow: 'Choose whether to run the exact operation.',
+        })
+      }
+      throw new Error('capability effect must not follow read-only navigation')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -1486,8 +1747,23 @@ describe('selected keyless operation answer loop', () => {
       const result = await runAnswerToolUseAgent({
         query: 'Compare and inspect the current test live operation before running it.',
         keylessExecutableSource: stagedSource,
+        effectiveRoute: { ...operationRoute, effectAllowed: false },
       })
 
+      expect(result.modelRequests).toHaveLength(5)
+      expect(server.requests).toHaveLength(5)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toEqual({
+        type: 'function',
+        function: { name: openRouterToolName('registry.operations.search') },
+      })
+      expect(server.requests.slice(1, -1).every((request) =>
+        request.tools?.some((tool) => tool.function.name === selectedToolName()) !== true))
+        .toBe(true)
+      expect(server.requests.at(-1)?.tools ?? []).toHaveLength(0)
       expect(result.toolCalls.map((call) => call.toolId)).toEqual([
         'registry.operations.search',
         'registry.operations.detail',
@@ -1520,11 +1796,24 @@ describe('selected keyless operation answer loop', () => {
       output: { value: 'server-authoritative' },
       evidenceHash: 'sha256:server-authoritative',
     })
-    const server = await startOpenRouterContractServer(() => openRouterStructuredProseResponse({
-      oneLine: 'The exact input returned server-authoritative.',
-      summary: 'The selected operation completed.',
-      whatToDoNow: 'Use the returned value.',
-    }))
+    const server = await startOpenRouterContractServer((request) => {
+      const activeNames = request.tools?.map((tool) => tool.function.name) ?? []
+      if (activeNames.includes(selectedToolName())) {
+        return openRouterToolResponse([{
+          id: 'call-selected-capability',
+          toolId: selectedToolName(),
+          input: { value: 'model-conflicting-input' },
+        }])
+      }
+      if (activeNames.length === 0) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'The exact input returned server-authoritative.',
+          summary: 'The selected operation completed.',
+          whatToDoNow: 'Use the returned value.',
+        })
+      }
+      throw new Error('unexpected_active_tool_request')
+    })
     const restoreOpenRouter = server.installEnv()
 
     try {
@@ -1550,8 +1839,14 @@ describe('selected keyless operation answer loop', () => {
         operationRef: selectedDescriptor.operationRef,
         input: { value: 'exact-user-input' },
       })
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests[0]?.tools ?? []).toHaveLength(0)
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests.map((request) =>
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )).toEqual([
+        [selectedToolName()],
+        [],
+      ])
+      expect(result.prose.oneLine).toBe('The exact input returned server-authoritative.')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -1702,6 +1997,110 @@ describe('selected keyless operation answer loop', () => {
         summary: 'No terminal result is available yet.',
         whatToDoNow: 'Check the invocation status before taking any result-dependent action.',
       })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+    }
+  })
+  it('keeps the provider budget refusal when a duplicate authenticated call is locally refused', async () => {
+    const principal = {
+      principalId: 'clerk_api_key:key:answer-budget',
+      ownerId: 'owner:answer',
+      credentialId: 'key:answer-budget',
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox' as const,
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'approve_each' as const,
+    }
+    const refused = {
+      kind: 'refused' as const,
+      operationRef: selectedDescriptor.operationRef,
+      code: 'budget_exceeded' as const,
+      retryable: false,
+    }
+    const invokeOperation = vi.fn().mockResolvedValue(refused)
+    const unavailable = async (): Promise<never> => {
+      throw new Error('recovery method should not run')
+    }
+    const service = {
+      invokeOperation,
+      readInvocationStatus: vi.fn(unavailable),
+      cancelInvocation: vi.fn(unavailable),
+      reconcileInvocation: vi.fn(unavailable),
+    }
+    const server = await startOpenRouterContractServer((request) => {
+      if ((request.tools?.length ?? 0) > 0) {
+        return openRouterToolResponse([
+          {
+            id: 'call-budget-primary',
+            toolId: selectedToolName(),
+            input: { value: 'provider-refusal' },
+          },
+          {
+            id: 'call-budget-duplicate',
+            toolId: selectedToolName(),
+            input: { value: 'provider-refusal' },
+          },
+        ])
+      }
+      return openRouterStructuredProseResponse({
+        oneLine: 'The authenticated operation succeeded.',
+        summary: 'Use the successful operation result.',
+        whatToDoNow: 'Rely on the returned value.',
+      })
+    })
+    const restoreOpenRouter = server.installEnv()
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        turnId: 'turn:gateway-budget',
+        query: 'run the authenticated live operation',
+        keylessDataAsk: selectedInvokeResolution,
+        keylessExecutableSource: selectedSource,
+        maxToolCalls: 1,
+        operationInvokeContext: {
+          principal,
+          correlationId: 'corr:answer-budget',
+          reservationKey: 'reservation:answer-budget',
+          generation: 0,
+          service,
+        },
+      })
+
+      const operationCalls = result.toolCalls.filter(
+        (call) => call.toolId === 'operation.invoke',
+      )
+      expect(operationCalls).toHaveLength(2)
+      expect(operationCalls[0]).toMatchObject({
+        toolCallId: 'call-budget-primary',
+        toolId: 'operation.invoke',
+        status: 'refused',
+      })
+      expect(operationCalls[0]?.executed).not.toBe(false)
+      expect(JSON.parse(operationCalls[0]!.resultJson)).toEqual(refused)
+      expect(operationCalls[1]).toMatchObject({
+        toolCallId: 'call-budget-duplicate',
+        toolId: 'operation.invoke',
+        status: 'refused',
+        executed: false,
+      })
+      expect(JSON.parse(operationCalls[1]!.resultJson)).toEqual({
+        kind: 'refused',
+        code: 'budget_exceeded',
+      })
+      expect(invokeOperation).toHaveBeenCalledTimes(1)
+      expect(result.snapshot.operationOutcome?.toolId).toBe('operation.invoke')
+      expect(result.snapshot.operationOutcome?.result).toEqual(refused)
+      expect(result.prose).toEqual({
+        oneLine: 'The operation was refused.',
+        summary: 'The operation was refused with code budget_exceeded.',
+        whatToDoNow:
+          'Review the refusal and the published operation requirements before trying again.',
+      })
+      expect(result.prose.oneLine).not.toBe("I couldn't complete the live lookup.")
+      expect(result.modelRequests).toHaveLength(2)
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests[1]?.tools ?? []).toHaveLength(0)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -2364,22 +2763,28 @@ describe('selected keyless operation answer loop', () => {
       }
     })
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('capability effect must not follow an empty operation search')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      if (
+        activeNames.has(openRouterToolName('registry.operations.search'))
+        && !completedIds.has('call-registry-search')
+      ) {
         return openRouterToolResponse([{
           id: 'call-registry-search',
           toolId: 'registry.operations.search',
           input: { query: 'Wikipedia quantum computing summary' },
         }])
       }
-      return openRouterNavigationAnswerResponse({
-        oneLine: 'No admitted live capability matched this request.',
-        summary: 'The registered operation search returned no executable capability.',
-        whatToDoNow: 'Ask for a supported live operation or a local service.',
-      })
+      if ((request.tools?.length ?? 0) === 0) {
+        return openRouterStructuredProseResponse({
+          oneLine: 'No admitted live capability matched this request.',
+          summary: 'The registered operation search returned no executable capability.',
+          whatToDoNow: 'Ask for a supported live operation or a local service.',
+        })
+      }
+      throw new Error('capability effect must not follow an empty operation search')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -2422,11 +2827,14 @@ describe('selected keyless operation answer loop', () => {
       expect(result.snapshot.oneLine).not.toContain('business')
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
       expect(answerToolMocks.runAnswerToolCall).toHaveBeenCalledTimes(1)
+      expect(result.modelRequests).toHaveLength(2)
       expect(server.requests).toHaveLength(2)
-      expect(server.requests[1]?.tools ?? []).toEqual([])
-      expect(server.requests.some((request) =>
-        request.tools?.some((tool) => tool.function.name === selectedToolName())))
-        .toBe(false)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toBe('required')
+      expect(server.requests[1]?.tools ?? []).toHaveLength(0)
       expect(result.gate.ok).toBe(true)
     } finally {
       restoreOpenRouter()
@@ -2474,25 +2882,32 @@ describe('selected keyless operation answer loop', () => {
       search: async () => [],
     }
     const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('provider execution must not follow unavailable exact detail')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
+      const activeNames = new Set(
+        request.tools?.map((tool) => tool.function.name) ?? [],
+      )
+      const completedIds = completedToolCallIds(request)
+      if (
+        activeNames.has(openRouterToolName('registry.operations.search'))
+        && !completedIds.has('call-operation-search')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-search',
           toolId: 'registry.operations.search',
           input: { query: 'current test live value' },
         }])
       }
-      if (completedReads === 1) {
+      if (
+        activeNames.has(openRouterToolName('registry.operations.detail'))
+        && completedIds.has('call-operation-search')
+        && !completedIds.has('call-operation-detail')
+      ) {
         return openRouterToolResponse([{
           id: 'call-operation-detail',
           toolId: 'registry.operations.detail',
           input: { operationRef: selectedDescriptor.operationRef },
         }])
       }
-      return openRouterNavigationCallResponse(selectedDescriptor.operationRef)
+      throw new Error('provider execution must not follow unavailable exact detail')
     })
     const restoreOpenRouter = server.installEnv()
 
@@ -2504,10 +2919,15 @@ describe('selected keyless operation answer loop', () => {
 
       expect(unavailableSource.read).toHaveBeenCalledWith(selectedDescriptor.operationRef)
       expect(executionMocks.executeKeylessOperation).not.toHaveBeenCalled()
-      expect(server.requests).toHaveLength(3)
-      expect(server.requests.some((request) =>
-        request.tools?.some((tool) => tool.function.name === selectedToolName())))
-        .toBe(false)
+      expect(server.requests).toHaveLength(2)
+      const firstToolNames = server.requests[0]?.tools?.map(
+        (tool) => tool.function.name,
+      ) ?? []
+      expect(firstToolNames).toContain(openRouterToolName('registry.operations.search'))
+      expect(server.requests[0]?.tool_choice).toBe('required')
+      expect(server.requests[1]?.tools?.map((tool) => tool.function.name)).toContain(
+        openRouterToolName('registry.operations.detail'),
+      )
     } finally {
       restoreOpenRouter()
       await server.close()

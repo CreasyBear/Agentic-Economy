@@ -275,15 +275,6 @@ export function projectAnswerOperationPlan(
   return artifact.success ? artifact.data : undefined
 }
 
-export const AnswerNavigationDecisionSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('answer'), prose: AnswerProseSchema })
-    .describe('Answer only a catalog, availability, source, or comparison question. Never use this to ask permission or offer to call a free keyless operation.'),
-  z.strictObject({ kind: z.literal('clarify'), question: z.string().min(1).max(400) })
-    .describe('Ask one question only when a required user input or choice is genuinely missing.'),
-  z.strictObject({ kind: z.literal('call'), operationRef: operationRefSchema })
-    .describe('Choose this when the user requested a current or live result and exact detail shows one routeable operation. A free keyless read needs no extra approval.'),
-])
-export type AnswerNavigationDecision = z.infer<typeof AnswerNavigationDecisionSchema>
 
 export const AnswerOperationPrivacyFailureSchema = operationPrivacyFailureSchema
 export type AnswerOperationPrivacyFailure = z.infer<typeof operationPrivacyFailureSchema>

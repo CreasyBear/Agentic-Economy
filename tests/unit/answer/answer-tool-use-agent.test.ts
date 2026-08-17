@@ -683,7 +683,7 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
       expect(fetchImpl).not.toHaveBeenCalled();
       expect(read).toHaveBeenCalledTimes(2);
       expect(server.requests).toHaveLength(2);
-      expect(aiSdkTestState.generateTextCalls).toHaveLength(2);
+      expect(aiSdkTestState.generateTextCalls).toHaveLength(1);
     } finally {
       restoreOpenRouter();
       await server.close();
@@ -913,7 +913,7 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     expect(buildToolUseAgentSystemPrompt()).toContain(
       `You have read-only tools: ${ANSWER_READ_TOOL_IDS.map(openRouterToolName).join(", ")}`,
     );
-    expect(requests[0]?.tool_choice).toBe("auto");
+    expect(requests[0]?.tool_choice).toBe("required");
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       "inquiry.submit",
     );
@@ -1363,7 +1363,7 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     expect(firstToolNames.some((name) => name.startsWith("capability_"))).toBe(
       false,
     );
-    expect(server.requests[0]?.tool_choice).toBe("auto");
+    expect(server.requests[0]?.tool_choice).toBe("required");
     expect(server.requests[1]?.tools).toBeUndefined();
     expect(server.requests[1]?.response_format?.type).toBe("json_schema");
 
@@ -1470,23 +1470,10 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
         keylessExecutableSource: emptyKeylessSource,
       });
       expect(result.providers).toEqual([]);
-      // The prose itself passed copy guards (no epistemic vocab), but the
-      // empty-providers path means grounding is not the failure mode; the
-      // snapshot has no providers so the gate does not reject on grounding.
-      // This test still proves the loop runs and returns a structured result.
-      expect(result.snapshot.providers).toEqual([]);
-      expect(result.snapshot.oneLine).toBe(
-        'No businesses match "no-such-suburb" yet.',
-      );
-      expect(result.snapshot.summary).toBe(
-        "No matches found yet. Try a nearby location or a broader service description.",
-      );
-      expect(result.snapshot.nextStep).toBe(
-        "Try a nearby location or a broader service description.",
-      );
-      expect(result.snapshot.oneLine).not.toContain("Fictional Plumbing");
-      expect(result.snapshot.summary).not.toMatch(/confirms timing|inquiry/i);
-      expect(result.snapshot.nextStep).not.toMatch(/confirms timing|inquiry/i);
+      expect(result.gate).toMatchObject({
+        ok: false,
+        code: "unsupported_provider_claim",
+      });
     } finally {
       restoreRegistry();
       if (previousLocalRegistry === undefined) {

@@ -4,7 +4,6 @@ import { isRecord } from '@/modules/common/is-record'
 import {
   isAnswerOperationReadToolId,
   type AnswerToolCallRecord,
-  type AnswerToolId,
 } from '@/modules/answer-thread/tooling'
 
 import type {
@@ -89,7 +88,9 @@ function activeOptionalModifierCoversIntents(input: {
   }
   // One intent names the operation's primary result. Every additional intent
   // must be covered by an explicitly supplied optional schema field.
-  return matchedIntentIds.size >= input.requestedIntents.length - 1
+  return input.requestedIntents
+    .slice(1)
+    .every((intent) => matchedIntentIds.has(intent.intentId))
 }
 
 export function oneNativeBatchCoversRequestedIntents(
@@ -189,24 +190,6 @@ export function answerRouteForbidsTool(
   )
 }
 
-export function shouldRunStagedAnswerNavigation(input: {
-  route: EffectiveAnswerAgentRoute | undefined
-  hasSelectedOperation: boolean
-  hasKeylessDataAsk: boolean
-  resumeNavigation: boolean
-  hasExplicitSelection: boolean
-  resumedHasEffectSelection: boolean
-}): boolean {
-  return (
-    (
-      (input.route?.lane === 'operation' && !input.hasSelectedOperation)
-      || !input.hasKeylessDataAsk
-      || input.resumeNavigation
-    )
-    && !input.hasExplicitSelection
-    && !input.resumedHasEffectSelection
-  )
-}
 
 export type AnswerOperationNavigationState = Readonly<{
   navigationReadCallAttempts: number
@@ -309,55 +292,4 @@ export function completedOperationDetailResult(
     }
   }
   return undefined
-}
-
-export type AnswerNavigationStepPolicy = Readonly<{
-  readBudgetAvailable: boolean
-  forcedToolId?: Extract<
-    AnswerToolId,
-    'registry.operations.search' | 'registry.operations.detail'
-  >
-  requireAnyRead: boolean
-  detailedCandidate?: AnswerOperationCandidate
-}>
-
-export function answerNavigationStepPolicy(input: {
-  route: EffectiveAnswerAgentRoute | undefined
-  toolCalls: readonly AnswerToolCallRecord[]
-  candidates: readonly AnswerOperationCandidate[]
-  navigationReadCallAttempts: number
-  maxToolCalls: number
-}): AnswerNavigationStepPolicy {
-  const operationSearchCompleted = input.toolCalls.some(
-    (call) =>
-      call.toolId === 'registry.operations.search'
-      && call.status === 'complete',
-  )
-  const detailedCandidate = input.candidates.find(
-    ({ operationRef }) =>
-      completedOperationDetailResult(input.toolCalls, operationRef) !==
-      undefined,
-  )
-  const readBudgetAvailable =
-    input.navigationReadCallAttempts < input.maxToolCalls
-  const forcedToolId =
-    readBudgetAvailable
-    && input.route?.allowedReadToolFamily === 'operation'
-    && !operationSearchCompleted
-      ? 'registry.operations.search'
-      : readBudgetAvailable
-          && input.candidates.length > 0
-          && detailedCandidate === undefined
-        ? 'registry.operations.detail'
-        : undefined
-
-  return {
-    readBudgetAvailable,
-    ...(forcedToolId === undefined ? {} : { forcedToolId }),
-    requireAnyRead:
-      readBudgetAvailable
-      && input.route?.allowedReadToolFamily !== 'operation'
-      && input.candidates.length === 0,
-    ...(detailedCandidate === undefined ? {} : { detailedCandidate }),
-  }
 }

@@ -50,7 +50,6 @@ import {
   resolveKeylessDataAskSelection,
   type KeylessDataAskResolution,
 } from './keyless-data-ask'
-import { labelForContractInput } from './contract-input-binding'
 import { runAnswerGate, type AnswerGateResult } from './answer-gate'
 import { collectAllowedSlugsFromToolResults } from './catalog-grounding'
 import {
@@ -75,14 +74,12 @@ import {
 import {
   answerNavigationBudgetExceeded,
   answerNavigationBudgetExhausted,
-  answerNavigationStepPolicy,
   answerRouteForbidsTool,
   completedOperationDetailResult,
   initialAnswerOperationNavigationState,
   oneNativeBatchCoversRequestedIntents,
   reduceAnswerOperationNavigation,
   selectedCandidateAdvertisesAnswerThreadEffect,
-  shouldRunStagedAnswerNavigation,
   type AnswerOperationEffectToolId,
 } from './answer-navigation-policy'
 import {
@@ -92,7 +89,6 @@ import {
 } from './operation-result-presentation'
 import {
   answerOperationCandidateSetDigest,
-  AnswerNavigationDecisionSchema,
   type AnswerOperationCandidate,
   type AnswerOperationComparison,
   type AnswerOperationOutcome,
@@ -389,10 +385,7 @@ function buildAgentResult(
         input.keylessDataAsk.candidates.length) > 0)
 
   const deterministicOperationProse =
-    buildDeterministicOperationProse(
-      safeToolCalls,
-      input.effectiveRoute?.effectAllowed,
-    )
+    buildDeterministicOperationProse(safeToolCalls)
   const effectiveProse = deterministicOperationProse ?? prose
   const mapped = snapshotProseFromAnswer(effectiveProse)
   // The agent JSON URL points at the search that actually grounded the answer.
@@ -613,17 +606,6 @@ async function rebindIntermediateKeylessDataAsk(
     return undefined
   }
   return rebound
-}
-async function readPublicOperationForInputBinding(
-  source: KeylessExecutableSourcePort,
-  operationRef: string,
-): Promise<PublicOperationDescriptor | undefined> {
-  if (source.readPublic === undefined) return undefined
-  try {
-    return (await source.readPublic(operationRef)) ?? undefined
-  } catch {
-    return undefined
-  }
 }
 
 type OperationInputField = Readonly<{
@@ -865,6 +847,9 @@ async function runRealToolUseAgent(
     KeylessDataAskResolution,
     { kind: 'resolved' }
   > = initialKeylessDataAsk
+  const selectionWasPreselectedAtLoopEntry =
+    activeKeylessDataAsk.selected !== undefined
+  let selectionActivatedFromDiscovery = false
   const explicitSelectionInput = parseAnswerOperationSelectionInput(input.query)
   let navigationState = initialAnswerOperationNavigationState({
     toolCalls,
@@ -882,6 +867,8 @@ async function runRealToolUseAgent(
     )
   let repairAttempted = false
   let repairMissingFields: readonly string[] | undefined
+  let toolExecutionError = false
+  const expectedToolNameForStep = new Map<number, string>()
   let toolQueue: Promise<void> = Promise.resolve()
   const runToolCall = (
     toolId: string,
@@ -894,13 +881,29 @@ async function runRealToolUseAgent(
         toolId === OPERATION_EXECUTE_TOOL_ID && invokeContext !== undefined
           ? OPERATION_INVOKE_TOOL_ID
           : toolId
+      const appliedRawInput = applyToolSearchDefaults(
+        input,
+        routedToolId,
+        rawInput,
+      )
+      const exactExplicitInput =
+        explicitSelectionInput !== undefined
+        && isRecord(appliedRawInput)
+        && appliedRawInput.operationRef === explicitSelectionInput.operationRef
+        && activeKeylessDataAsk.selected?.operationRef ===
+          explicitSelectionInput.operationRef
+        && activeKeylessDataAsk.candidateSetDigest ===
+          explicitSelectionInput.candidateSetDigest
+          ? explicitSelectionInput
+          : undefined
       const callInput = {
         toolId: routedToolId,
-        input: applyToolSearchDefaults(
-          input,
-          routedToolId,
-          rawInput,
-        ),
+        input: exactExplicitInput === undefined
+          ? appliedRawInput
+          : {
+              operationRef: exactExplicitInput.operationRef,
+              input: exactExplicitInput.input,
+            },
         turnId: input.turnId ?? 'pending',
         seq: toolSeq,
         ...(input.harnessLoop === undefined
@@ -919,10 +922,6 @@ async function runRealToolUseAgent(
           at: toolStartedAt,
         })
       }
-      const routeToolForbidden = answerRouteForbidsTool(
-        input.effectiveRoute,
-        callInput.toolId,
-      )
       const requiresCapabilityIntent =
         callInput.toolId === OPERATION_EXECUTE_TOOL_ID &&
         invokeContext === undefined
@@ -937,6 +936,10 @@ async function runRealToolUseAgent(
           : callInput.toolId === OPERATION_INVOKE_TOOL_ID
             ? OPERATION_INVOKE_TOOL_ID
             : undefined
+      const routeToolForbidden = answerRouteForbidsTool(
+        input.effectiveRoute,
+        callInput.toolId,
+      )
       const operationEffectContinuationAdvertised =
         !isOperationTool ||
         (operationEffectToolId !== undefined &&
@@ -1039,7 +1042,7 @@ async function runRealToolUseAgent(
                 errorCode: observedResult.record.status === 'refused'
                   ? 'tool_refused'
                   : 'tool_error',
-              }),
+                })
         })
       }
       navigationState = reduceAnswerOperationNavigation(
@@ -1069,6 +1072,9 @@ async function runRealToolUseAgent(
       )
       toolSeq += records.length
       return safeToolResultJsonForPrompt(observedResult.resultJson)
+    }).catch((error: unknown) => {
+      toolExecutionError = true
+      throw error
     })
     toolQueue = run.then(
       () => undefined,
@@ -1076,50 +1082,152 @@ async function runRealToolUseAgent(
     )
     return run
   }
-  if (
-    explicitSelectionInput !== undefined &&
-    (
+  if (explicitSelectionInput !== undefined) {
+    if (
       activeKeylessDataAsk.selected?.operationRef !==
-        explicitSelectionInput.operationRef ||
-      activeKeylessDataAsk.candidateSetDigest === undefined ||
-      activeKeylessDataAsk.candidateSetDigest !==
-        explicitSelectionInput.candidateSetDigest ||
-      !selectedEffectContinuationAdvertised()
+        explicitSelectionInput.operationRef
+      || activeKeylessDataAsk.candidateSetDigest === undefined
+      || activeKeylessDataAsk.candidateSetDigest !==
+        explicitSelectionInput.candidateSetDigest
+      || !selectedEffectContinuationAdvertised()
+    ) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    const selectedDescriptor = activeKeylessDataAsk.selected
+    if (
+      selectedDescriptor === undefined
+      || !validateJsonSchema(
+        selectedDescriptor.inputSchema,
+        explicitSelectionInput.input,
+      )
+    ) {
+      return finalizeAgentResult(
+        { ...input, keylessDataAsk: activeKeylessDataAsk },
+        {
+          oneLine:
+            'The operation input does not match the current published schema.',
+          summary: 'Nothing was executed or sent to the provider.',
+          whatToDoNow:
+            'Correct the JSON input using the required and optional parameter constraints shown above.',
+        },
+        toolCalls,
+        providers,
+        timings,
+        modelRequests,
+      )
+    }
+  }
+  if (
+    explicitSelectionInput === undefined
+    && activeKeylessDataAsk.selected !== undefined
+    && !selectedEffectContinuationAdvertised()
+  ) {
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
+  let dynamicDescriptors: readonly KeylessExecutableToolDescriptor[]
+  if (disableTools || activeKeylessDataAsk.selected !== undefined) {
+    dynamicDescriptors = activeKeylessDataAsk.candidates
+  } else {
+    let listedDescriptors: readonly KeylessExecutableToolDescriptor[]
+    let rankedRefs: readonly string[]
+    try {
+      listedDescriptors = await keylessExecutableSource.list()
+      rankedRefs = await keylessExecutableSource.search(
+        input.query,
+        listedDescriptors,
+      )
+    } catch {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    const listedByRef = new Map<string, KeylessExecutableToolDescriptor>()
+    for (const descriptor of listedDescriptors) {
+      listedByRef.set(descriptor.operationRef, descriptor)
+    }
+    const rankedDescriptors = rankedRefs.slice(0, 10).flatMap((operationRef) => {
+      const descriptor = listedByRef.get(operationRef)
+      return descriptor === undefined ? [] : [descriptor]
+    })
+    const seen = new Set<string>()
+    dynamicDescriptors = [
+      ...activeKeylessDataAsk.candidates,
+      ...rankedDescriptors,
+    ].filter((descriptor) => {
+      if (seen.has(descriptor.operationRef)) return false
+      seen.add(descriptor.operationRef)
+      return true
+    })
+  }
+  const tools = buildAnswerAgentTools(runToolCall, dynamicDescriptors)
+  const readToolEntries = ANSWER_READ_TOOL_IDS.map((toolId) => ({
+    toolId,
+    toolName: openRouterToolName(toolId),
+  }))
+  const readToolNames = readToolEntries.map(({ toolName }) => toolName)
+  const readToolIds = new Set<string>(ANSWER_READ_TOOL_IDS)
+  const dynamicNameToDescriptor = new Map<
+    string,
+    KeylessExecutableToolDescriptor
+  >()
+  for (const descriptor of dynamicDescriptors) {
+    const toolName = capabilityToolName(descriptor.operationRef)
+    if (tools[toolName] !== undefined) {
+      dynamicNameToDescriptor.set(toolName, descriptor)
+    }
+  }
+  const dynamicToolNames = [...dynamicNameToDescriptor.keys()]
+  if (
+    !disableTools
+    && activeKeylessDataAsk.selected !== undefined
+    && !dynamicNameToDescriptor.has(
+      capabilityToolName(activeKeylessDataAsk.selected.operationRef),
     )
   ) {
     throw new AnswerToolUseAgentError('tool_unavailable')
   }
-  if (
-    explicitSelectionInput === undefined &&
-    activeKeylessDataAsk.selected !== undefined &&
-    !selectedEffectContinuationAdvertised()
-  ) {
-    throw new AnswerToolUseAgentError('tool_unavailable')
+  const rebindEffectSelection = async (
+    operationRef: string,
+    detailResult: unknown,
+  ): Promise<boolean> => {
+    let rebound: KeylessDataAskResolution
+    try {
+      rebound =
+        invokeContext === undefined
+          ? await rebindKeylessDataAskFromRegistryDetail(
+              operationRef,
+              detailResult,
+              keylessExecutableSource,
+            )
+          : invocationResolutionFromRegistryDetail(
+              operationRef,
+              detailResult,
+            )
+    } catch {
+      return false
+    }
+    const toolName = capabilityToolName(operationRef)
+    if (
+      rebound.kind !== 'resolved'
+      || rebound.selected?.operationRef !== operationRef
+      || rebound.selectedCandidate?.operationRef !== operationRef
+      || !selectedCandidateAdvertisesAnswerThreadEffect(
+        rebound.selectedCandidate,
+        operationRef,
+        effectToolId,
+      )
+      || !dynamicNameToDescriptor.has(toolName)
+    ) {
+      return false
+    }
+    activeKeylessDataAsk = rebound
+    if (!selectionWasPreselectedAtLoopEntry) {
+      selectionActivatedFromDiscovery = true
+    }
+    navigationState = reduceAnswerOperationNavigation(
+      navigationState,
+      { kind: 'effect_unlocked' },
+    )
+    return true
   }
-  const selectedCapabilityCandidates = (): readonly KeylessExecutableToolDescriptor[] =>
-    activeKeylessDataAsk.selected !== undefined &&
-    selectedEffectContinuationAdvertised()
-      ? activeKeylessDataAsk.candidates.filter(
-          (candidate) =>
-            candidate.operationRef === activeKeylessDataAsk.selected?.operationRef,
-        )
-      : []
-  let tools = buildAnswerAgentTools(
-    runToolCall,
-    selectedCapabilityCandidates(),
-  )
-  let capabilityToolNames = Object.keys(tools).filter((name) =>
-    name.startsWith('capability_'),
-  )
-  let selectedCapabilityToolName =
-    activeKeylessDataAsk.selected === undefined
-      ? undefined
-      : capabilityToolName(activeKeylessDataAsk.selected.operationRef)
-  let selectedToolAvailable =
-    navigationState.effectUnlocked &&
-    selectedEffectContinuationAdvertised() &&
-    selectedCapabilityToolName !== undefined &&
-    tools[selectedCapabilityToolName] !== undefined
   const persistToolCheckpoint = async (
     replayMessagesJson: string,
   ): Promise<void> => {
@@ -1187,6 +1295,7 @@ async function runRealToolUseAgent(
       accounting: ModelCallAccountingState,
       timingName: string,
       extraMetadata: Record<string, string | number | boolean | null>,
+      enforceExpectedTool = false,
     ) =>
     async (step: StepResult<ToolSet>): Promise<void> => {
       const seq = modelRequests.length
@@ -1219,6 +1328,38 @@ async function runRealToolUseAgent(
           model: resolvedModel,
         }),
       )
+      const expectedToolName = enforceExpectedTool
+        ? expectedToolNameForStep.get(step.stepNumber)
+        : undefined
+      if (enforceExpectedTool) {
+        expectedToolNameForStep.delete(step.stepNumber)
+      }
+      const forcedDynamicCapability =
+        expectedToolName !== undefined
+        && dynamicNameToDescriptor.has(expectedToolName)
+      const canonicalExpectedToolResults = forcedDynamicCapability
+        ? step.toolResults.filter((result) => {
+            if (result.toolName !== expectedToolName) return false
+            const record = toolCalls.findLast(
+              (call) => call.toolCallId === result.toolCallId,
+            )
+            return record !== undefined && record.executed !== false
+          })
+        : []
+      if (
+        expectedToolName !== undefined
+        && (
+          forcedDynamicCapability
+            ? canonicalExpectedToolResults.length !== 1
+              || !step.toolCalls.some(
+                (call) => call.toolName === expectedToolName,
+              )
+            : step.toolCalls.length !== 1
+              || step.toolCalls[0]?.toolName !== expectedToolName
+        )
+      ) {
+        throw new AnswerToolUseAgentError('tool_unavailable')
+      }
       if (step.toolCalls.length === 0) return
       const replayMessages = [
         ...(resumedReplayMessages ?? [
@@ -1251,17 +1392,6 @@ async function runRealToolUseAgent(
     input,
     activeKeylessDataAsk.selected,
   )
-  const hasSelectedOperation =
-    input.keylessDataAsk?.kind === 'resolved'
-    && input.keylessDataAsk.selected !== undefined
-  const shouldRunStagedNavigation = shouldRunStagedAnswerNavigation({
-    route: input.effectiveRoute,
-    hasSelectedOperation,
-    hasKeylessDataAsk: input.keylessDataAsk !== undefined,
-    resumeNavigation,
-    hasExplicitSelection: explicitSelectionInput !== undefined,
-    resumedHasEffectSelection,
-  })
   const proseOutput = Output.object({
     schema: AnswerProseSchema,
     name: 'answer_prose',
@@ -1276,7 +1406,7 @@ async function runRealToolUseAgent(
         output: proseOutput,
         temperature: 0.2,
         maxRetries: 0,
-        onStepEnd: recordStep(accounting, timingName, { tools: 0 }),
+        onStepEnd: recordStep(accounting, timingName, { tools: 0 }, false),
         ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
       }),
     )
@@ -1294,13 +1424,7 @@ async function runRealToolUseAgent(
     ) {
       return null
     }
-    const descriptor =
-      activeKeylessDataAsk.kind === 'resolved'
-        ? activeKeylessDataAsk.candidates.find(
-            (candidate) =>
-              capabilityToolName(candidate.operationRef) === toolCall.toolName,
-          )
-        : undefined
+    const descriptor = dynamicNameToDescriptor.get(toolCall.toolName)
     if (descriptor === undefined) {
       return null
     }
@@ -1339,9 +1463,12 @@ async function runRealToolUseAgent(
           maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
           temperature: 0,
           maxRetries: 0,
-          onStepEnd: recordStep(accounting, 'model.openrouter_repair', {
-            tools: 0,
-          }),
+          onStepEnd: recordStep(
+            accounting,
+            'model.openrouter_repair',
+            { tools: 0 },
+            false,
+          ),
           ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
         }),
     )
@@ -1402,461 +1529,6 @@ async function runRealToolUseAgent(
     )
   }
 
-  if (shouldRunStagedNavigation) {
-    activeKeylessDataAsk = {
-      kind: 'resolved',
-      descriptors: [],
-      candidates: [],
-    }
-    userPrompt = appendSelectedCapabilityInputContext(
-      buildToolUseAgentUserPrompt({
-        query: input.query,
-        ...(input.priorProviders === undefined
-          ? {}
-          : { priorProviders: input.priorProviders }),
-        ...(input.followUpIntent === undefined
-          ? {}
-          : { followUpIntent: input.followUpIntent }),
-        ...(input.searchContext === undefined
-          ? {}
-          : { searchContext: input.searchContext }),
-        capabilityCandidates: [],
-      }),
-      input,
-      activeKeylessDataAsk.selected,
-    )
-    const navigationTools = buildAnswerAgentTools(runToolCall, [])
-    const navigationToolNames = ANSWER_READ_TOOL_IDS.map(openRouterToolName)
-    const navigationPrompt = [
-      userPrompt,
-      ...(input.effectiveRoute?.allowedReadToolFamily === 'operation'
-        ? [
-            'The structured request route is Market Operation. Before any navigation decision, call registry.operations.search. Do not substitute local-business reads.',
-          ]
-        : input.effectiveRoute?.allowedReadToolFamily === 'business'
-          ? [
-              'The structured request route is local business. Keep discovery on registry.search/detail and do not call Market Operation reads.',
-            ]
-          : []),
-      'Use the registered read tools to navigate current evidence.',
-      '`registry.search` and `registry.detail` are local-business reads only. `registry.operations.search`, `registry.operations.detail`, `registry.operations.compare`, and `registry.operations.inspectPlan` are callable Market Operation reads only.',
-      'Never use a business-registry read as a fallback for Market Operations, or an operation read as a fallback for local businesses. Compare or inspect a plan only when the request needs a choice, composition, or material disclosure; exact operation detail is mandatory before any call.',
-      'Return call only for a reference present in a completed exact-detail result. Otherwise answer from the read evidence or ask one plain-language clarification question.',
-      'For a specific current or live-data request, do not stop at catalog prose or ask permission for a free keyless read: search, inspect exact detail, then return call for a routeable reference.',
-    ].join('\n\n')
-    const navigation = await runGuardedModelCall(
-      input,
-      modelId,
-      modelRequests,
-      (accounting) =>
-        generateText({
-          model: openRouterModel(config, modelId, {
-            structuredOutputs: true,
-          }),
-          instructions: buildToolUseAgentSystemPrompt(),
-          ...(resumedReplayMessages === undefined
-            ? { prompt: navigationPrompt }
-            : { messages: resumedReplayMessages }),
-          maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
-          tools: navigationTools,
-          output: Output.object({
-            schema: AnswerNavigationDecisionSchema,
-            name: 'answer_navigation',
-          }),
-          temperature: 0.2,
-          maxRetries: 0,
-          prepareStep: () => {
-            accounting.stepRecorded = false
-            const candidates = buildOperationArtifactsFromToolCalls(toolCalls).candidates
-            const policy = answerNavigationStepPolicy({
-              route: input.effectiveRoute,
-              toolCalls,
-              candidates,
-              navigationReadCallAttempts:
-                navigationState.navigationReadCallAttempts,
-              maxToolCalls,
-            })
-            const forcedToolName =
-              policy.forcedToolId === undefined
-                ? undefined
-                : openRouterToolName(policy.forcedToolId)
-            return {
-              activeTools: policy.readBudgetAvailable
-                ? navigationToolNames
-                : [],
-              ...(forcedToolName !== undefined
-                ? {
-                    toolChoice: {
-                      type: 'tool' as const,
-                      toolName: forcedToolName,
-                    },
-                  }
-                : !policy.readBudgetAvailable
-                  ? { toolChoice: 'none' as const }
-                  : policy.requireAnyRead
-                    ? { toolChoice: 'required' as const }
-                    : {}),
-              ...(policy.detailedCandidate === undefined
-                ? {}
-                : {
-                    instructions: [
-                      buildToolUseAgentSystemPrompt(),
-                      `You selected and inspected ${policy.detailedCandidate.operationRef}. If the user asked for its current or live result, return call for this exact reference now; never stop at catalog prose or ask permission. Answer without calling only when the user asked to browse, compare, or inspect available operations.`,
-                    ].join('\n\n'),
-                  }),
-            }
-          },
-          stopWhen: isStepCount(ANSWER_AGENT_MAX_TOOL_CALLS + 1),
-          onStepEnd: recordStep(accounting, 'model.openrouter_navigation', {
-            tools: navigationToolNames.length,
-          }),
-          ...(input.signal === undefined
-            ? {}
-            : { abortSignal: input.signal }),
-        }),
-    )
-    await toolQueue
-    let decision = navigation.output
-    if (decision === undefined) {
-      throw new AnswerToolUseAgentError('prose_failed')
-    }
-    if (decision.kind !== 'call') {
-      const operationArtifacts = buildOperationArtifactsFromToolCalls(toolCalls)
-      const soleCandidate =
-        operationArtifacts.candidates.length === 1
-          ? operationArtifacts.candidates[0]
-          : undefined
-      const hasOperationSearch = toolCalls.some(
-        (call) =>
-          call.toolId === 'registry.operations.search' &&
-          call.status === 'complete',
-      )
-      const hasDetailedCandidate = operationArtifacts.candidates.some(
-        ({ operationRef }) =>
-          completedOperationDetailResult(toolCalls, operationRef) !==
-          undefined,
-      )
-      if (
-        input.effectiveRoute?.allowedReadToolFamily === 'operation' &&
-        (
-          !hasOperationSearch ||
-          (
-            operationArtifacts.candidates.length === 1 &&
-            !hasDetailedCandidate
-          )
-        )
-      ) {
-        throw new AnswerToolUseAgentError('tool_unavailable')
-      }
-      const hasOptionalOperationRead = toolCalls.some(
-        (call) =>
-          call.status === 'complete' &&
-          (call.toolId === 'registry.operations.compare' ||
-            call.toolId === 'registry.operations.inspectPlan'),
-      )
-      const exactDetail =
-        soleCandidate === undefined
-          ? undefined
-          : completedOperationDetailResult(
-              toolCalls,
-              soleCandidate.operationRef,
-            )
-      if (
-        input.effectiveRoute?.exactOperationDetailRequired === true &&
-        input.effectiveRoute.effectAllowed &&
-        input.requestedIntents?.length === 1 &&
-        hasOperationSearch &&
-        !hasOptionalOperationRead &&
-        soleCandidate !== undefined &&
-        exactDetail !== undefined &&
-        selectedCandidateAdvertisesAnswerThreadEffect(
-          soleCandidate,
-          soleCandidate.operationRef,
-          effectToolId,
-        )
-      ) {
-        decision = {
-          kind: 'call',
-          operationRef: soleCandidate.operationRef,
-        }
-      }
-    }
-    if (decision.kind === 'answer') {
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        decision.prose,
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    if (decision.kind === 'clarify') {
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        {
-          oneLine: decision.question,
-          summary:
-            'I need this information before I can choose or call a Market Operation.',
-          whatToDoNow: decision.question,
-        },
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    if (input.effectiveRoute?.effectAllowed === false) {
-      // The request authorized reads only, so the candidate stops here rather
-      // than unlocking the effect tool and refusing at the route gate.
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        buildCandidateOnlyProse(),
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    const detailResult = completedOperationDetailResult(
-      toolCalls,
-      decision.operationRef,
-    )
-    if (detailResult === undefined) {
-      throw new AnswerToolUseAgentError('tool_unavailable')
-    }
-    const rebound =
-      invokeContext === undefined
-        ? await rebindKeylessDataAskFromRegistryDetail(
-            decision.operationRef,
-            detailResult,
-            keylessExecutableSource,
-          )
-        : invocationResolutionFromRegistryDetail(
-            decision.operationRef,
-            detailResult,
-          )
-    if (
-      rebound.kind !== 'resolved' ||
-      rebound.selected?.operationRef !== decision.operationRef ||
-      rebound.candidateSetDigest === undefined ||
-      !selectedCandidateAdvertisesAnswerThreadEffect(
-        rebound.selectedCandidate,
-        decision.operationRef,
-        effectToolId,
-      )
-    ) {
-      throw new AnswerToolUseAgentError('tool_unavailable')
-    }
-    activeKeylessDataAsk = rebound
-    userPrompt = appendSelectedCapabilityInputContext(
-      userPrompt,
-      input,
-      activeKeylessDataAsk.selected,
-    )
-    navigationState = reduceAnswerOperationNavigation(
-      navigationState,
-      { kind: 'effect_unlocked' },
-    )
-    tools = buildAnswerAgentTools(
-      runToolCall,
-      selectedCapabilityCandidates(),
-    )
-    capabilityToolNames = Object.keys(tools).filter((name) =>
-      name.startsWith('capability_'),
-    )
-    selectedCapabilityToolName = capabilityToolName(decision.operationRef)
-    selectedToolAvailable =
-      selectedEffectContinuationAdvertised() &&
-      tools[selectedCapabilityToolName] !== undefined
-  }
-
-  const explicitlySelectedDescriptor = activeKeylessDataAsk.selected
-  if (selectedToolAvailable && explicitSelectionInput !== undefined) {
-    if (
-      explicitlySelectedDescriptor === undefined ||
-      !validateJsonSchema(
-        explicitlySelectedDescriptor.inputSchema,
-        explicitSelectionInput.input,
-      )
-    ) {
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        {
-          oneLine:
-            'The operation input does not match the current published schema.',
-          summary: 'Nothing was executed or sent to the provider.',
-          whatToDoNow:
-            'Correct the JSON input using the required and optional parameter constraints shown above.',
-        },
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    const executedResult = await runToolCall(
-      OPERATION_EXECUTE_TOOL_ID,
-      explicitSelectionInput,
-      `operation-input:${input.turnId ?? 'pending'}`,
-    )
-    await toolQueue
-    await persistToolCheckpoint(
-      safeJsonStringify([
-        ...(resumedReplayMessages ?? [
-          { role: 'user', content: userPrompt },
-        ]),
-        {
-          role: 'assistant',
-          content: `Executed operation result: ${executedResult}`,
-        },
-      ]),
-    )
-    if (unsafeOperationOutput) {
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        buildUnsafeOperationOutputProse(),
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    const grounded = await requestProse(
-      [
-        userPrompt,
-        `The server validated and executed the exact selected operation input. Ground the answer only in this result: ${executedResult}`,
-      ].join('\n\n'),
-      'model.openrouter_round',
-    )
-    if (grounded.output === undefined) {
-      throw new AnswerToolUseAgentError('prose_failed')
-    }
-    return finalizeAgentResult(
-      { ...input, keylessDataAsk: activeKeylessDataAsk },
-      grounded.output,
-      toolCalls,
-      providers,
-      timings,
-      modelRequests,
-    )
-  }
-  if (
-    selectedToolAvailable &&
-    selectedCapabilityToolName !== undefined &&
-    selectedEffectContinuationAdvertised()
-  ) {
-    const forced = await runGuardedModelCall(
-      input,
-      modelId,
-      modelRequests,
-      (accounting) =>
-        generateText({
-          model: openRouterModel(config, modelId),
-          instructions: buildToolUseAgentSystemPrompt(capabilityToolNames),
-          ...(resumedReplayMessages === undefined
-            ? { prompt: userPrompt }
-            : { messages: resumedReplayMessages }),
-          maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
-          tools,
-
-          activeTools: [selectedCapabilityToolName],
-          toolChoice: { type: 'tool', toolName: selectedCapabilityToolName },
-          stopWhen: isStepCount(1),
-          temperature: 0.2,
-          maxRetries: 0,
-          repairToolCall,
-          onStepEnd: recordStep(accounting, 'model.openrouter_round', {
-            tools: 1,
-          }),
-          ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-        }),
-    )
-    await toolQueue
-    if (unsafeOperationOutput) {
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        buildUnsafeOperationOutputProse(),
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    if (
-      !toolCalls.some(
-        (call) =>
-          call.toolId === OPERATION_EXECUTE_TOOL_ID ||
-          call.toolId === OPERATION_INVOKE_TOOL_ID,
-      )
-    ) {
-      if (repairMissingFields === undefined) {
-        throw new AnswerToolUseAgentError('tool_unavailable')
-      }
-      const repairDescriptor = activeKeylessDataAsk.selected
-      const repairPublicOperation = repairDescriptor === undefined
-        ? undefined
-        : await readPublicOperationForInputBinding(
-            keylessExecutableSource,
-            repairDescriptor.operationRef,
-          )
-      const repairLabels = repairDescriptor === undefined
-        ? []
-        : repairMissingFields.map((name) =>
-            labelForContractInput(repairDescriptor, name, repairPublicOperation))
-      const clarification = await requestProse(
-        [
-          userPrompt,
-          `The selected capability needs these user-facing inputs before it can run: ${repairLabels.join(', ')}.`,
-          'Ask for those inputs plainly. Do not claim a live result and do not switch to local businesses.',
-        ].join('\n\n'),
-        'model.openrouter_round',
-      )
-      if (clarification.output === undefined) {
-        throw new AnswerToolUseAgentError('prose_failed')
-      }
-      return finalizeAgentResult(
-        { ...input, keylessDataAsk: activeKeylessDataAsk },
-        clarification.output,
-        toolCalls,
-        providers,
-        timings,
-        modelRequests,
-      )
-    }
-    const grounded = await runGuardedModelCall(
-      input,
-      modelId,
-      modelRequests,
-      (accounting) =>
-        generateText({
-          model: openRouterModel(config, modelId, { structuredOutputs: true }),
-          instructions: buildToolUseAgentSystemPrompt(capabilityToolNames),
-          messages: [
-            { role: 'user', content: userPrompt },
-            ...forced.response.messages,
-          ],
-          maxOutputTokens: ANSWER_MODEL_MAX_OUTPUT_TOKENS,
-          output: proseOutput,
-          temperature: 0.2,
-          maxRetries: 0,
-          onStepEnd: recordStep(accounting, 'model.openrouter_round', {
-            tools: 0,
-          }),
-        }),
-    )
-    if (grounded.output === undefined) {
-      throw new AnswerToolUseAgentError('prose_failed')
-    }
-    return finalizeAgentResult(
-      { ...input, keylessDataAsk: activeKeylessDataAsk },
-      grounded.output,
-      toolCalls,
-      providers,
-      timings,
-      modelRequests,
-    )
-  }
 
   let finalStepRequested = false
   const stopAtMaxRounds = isStepCount(ANSWER_AGENT_MAX_TOOL_CALLS)
@@ -1889,7 +1561,7 @@ async function runRealToolUseAgent(
     (accounting) =>
       generateText({
         model: openRouterModel(config, modelId, { structuredOutputs: true }),
-        instructions: buildToolUseAgentSystemPrompt(capabilityToolNames),
+        instructions: buildToolUseAgentSystemPrompt(),
         ...(resumedReplayMessages === undefined
           ? { prompt: userPrompt }
           : { messages: resumedReplayMessages }),
@@ -1899,33 +1571,281 @@ async function runRealToolUseAgent(
         temperature: 0.2,
         maxRetries: 0,
         repairToolCall,
-        prepareStep: ({ stepNumber }) => {
+        prepareStep: async ({ stepNumber }) => {
           accounting.stepRecorded = false
-          if (
-            selectedToolAvailable &&
-            selectedCapabilityToolName !== undefined
-          ) {
-            return stepNumber === 0
-              ? {
-                  activeTools: [selectedCapabilityToolName],
-                  toolChoice: {
-                    type: 'tool',
-                    toolName: selectedCapabilityToolName,
-                  },
-                }
-              : { activeTools: [] }
+          const baseInstructions = buildToolUseAgentSystemPrompt()
+          const noTools = {
+            activeTools: [],
+            toolChoice: 'none' as const,
+            instructions: baseInstructions,
           }
-          return finalStepRequested ? { activeTools: [] } : undefined
+          if (
+            finalStepRequested
+            || repairMissingFields !== undefined
+            || unsafeOperationOutput
+            || navigationState.effectCallAttempts > 0
+            || toolExecutionError
+          ) {
+            return noTools
+          }
+          const effectsAllowed =
+            input.effectiveRoute?.effectAllowed !== false
+            && !answerRouteForbidsTool(input.effectiveRoute, effectToolId)
+          const selectedToolName =
+            activeKeylessDataAsk.selected === undefined
+              ? undefined
+              : capabilityToolName(activeKeylessDataAsk.selected.operationRef)
+          if (
+            effectsAllowed
+            && navigationState.effectUnlocked
+            && selectedToolName !== undefined
+          ) {
+            if (
+              explicitSelectionInput === undefined
+              && !selectionWasPreselectedAtLoopEntry
+              && !selectionActivatedFromDiscovery
+            ) {
+              const selectedOperationRef =
+                activeKeylessDataAsk.selected?.operationRef
+              const detailResult =
+                selectedOperationRef === undefined
+                  ? undefined
+                  : completedOperationDetailResult(
+                      toolCalls,
+                      selectedOperationRef,
+                    )
+              if (detailResult === undefined) {
+                const hasCompletedDetail = toolCalls.some(
+                  (call) =>
+                    call.toolId === 'registry.operations.detail'
+                    && call.status === 'complete',
+                )
+                if (hasCompletedDetail) {
+                  throw new AnswerToolUseAgentError('tool_unavailable')
+                }
+                const detailToolName = openRouterToolName(
+                  'registry.operations.detail',
+                )
+                if (
+                  tools[detailToolName] !== undefined
+                  && !answerRouteForbidsTool(
+                    input.effectiveRoute,
+                    'registry.operations.detail',
+                  )
+                ) {
+                  expectedToolNameForStep.set(stepNumber, detailToolName)
+                  return {
+                    activeTools: [detailToolName],
+                    toolChoice: {
+                      type: 'tool' as const,
+                      toolName: detailToolName,
+                    },
+                    instructions: baseInstructions,
+                  }
+                }
+                throw new AnswerToolUseAgentError('tool_unavailable')
+              }
+              if (
+                selectedOperationRef === undefined
+                || !(await rebindEffectSelection(
+                  selectedOperationRef,
+                  detailResult,
+                ))
+              ) {
+                throw new AnswerToolUseAgentError('tool_unavailable')
+              }
+            }
+            if (
+              selectedEffectContinuationAdvertised()
+              && dynamicNameToDescriptor.has(selectedToolName)
+            ) {
+              expectedToolNameForStep.set(stepNumber, selectedToolName)
+              return {
+                activeTools: [selectedToolName],
+                toolChoice: {
+                  type: 'tool' as const,
+                  toolName: selectedToolName,
+                },
+                instructions: buildToolUseAgentSystemPrompt([selectedToolName]),
+              }
+            }
+            throw new AnswerToolUseAgentError('tool_unavailable')
+          }
+          const operationCandidates =
+            buildOperationArtifactsFromToolCalls(toolCalls).candidates
+          if (
+            effectsAllowed
+            && !selectionWasPreselectedAtLoopEntry
+            && activeKeylessDataAsk.selected === undefined
+            && operationCandidates.length === 1
+          ) {
+            const candidate = operationCandidates[0]
+            const toolName =
+              candidate === undefined
+                ? undefined
+                : capabilityToolName(candidate.operationRef)
+            if (candidate !== undefined && toolName !== undefined) {
+              const detailResult = completedOperationDetailResult(
+                toolCalls,
+                candidate.operationRef,
+              )
+              if (detailResult !== undefined) {
+                if (
+                  !(await rebindEffectSelection(
+                    candidate.operationRef,
+                    detailResult,
+                  ))
+                ) {
+                  throw new AnswerToolUseAgentError('tool_unavailable')
+                }
+                expectedToolNameForStep.set(stepNumber, toolName)
+                return {
+                  activeTools: [toolName],
+                  toolChoice: {
+                    type: 'tool' as const,
+                    toolName,
+                  },
+                  instructions: buildToolUseAgentSystemPrompt([toolName]),
+                }
+              }
+            }
+          }
+          if (
+            answerNavigationBudgetExhausted({
+              state: navigationState,
+              maxNavigationCalls: maxToolCalls,
+              maxEffectCalls: MAX_EFFECT_CALLS,
+            })
+          ) {
+            return noTools
+          }
+          const operationSearchCompleted = toolCalls.some(
+            (call) =>
+              call.toolId === 'registry.operations.search'
+              && call.status === 'complete',
+          )
+          if (
+            input.effectiveRoute?.allowedReadToolFamily === 'operation'
+            && !operationSearchCompleted
+          ) {
+            const searchToolName = openRouterToolName(
+              'registry.operations.search',
+            )
+            if (
+              tools[searchToolName] === undefined
+              || answerRouteForbidsTool(
+                input.effectiveRoute,
+                'registry.operations.search',
+              )
+            ) {
+              throw new AnswerToolUseAgentError('tool_unavailable')
+            }
+            expectedToolNameForStep.set(stepNumber, searchToolName)
+            return {
+              activeTools: [searchToolName],
+              toolChoice: {
+                type: 'tool' as const,
+                toolName: searchToolName,
+              },
+              instructions: baseInstructions,
+            }
+          }
+          if (
+            !selectionWasPreselectedAtLoopEntry
+            && activeKeylessDataAsk.selected === undefined
+            && operationCandidates.length === 1
+          ) {
+            const candidate = operationCandidates[0]
+            if (
+              candidate !== undefined
+              && completedOperationDetailResult(
+                toolCalls,
+                candidate.operationRef,
+              ) === undefined
+            ) {
+              const detailToolName = openRouterToolName(
+                'registry.operations.detail',
+              )
+              if (
+                tools[detailToolName] !== undefined
+                && !answerRouteForbidsTool(
+                  input.effectiveRoute,
+                  'registry.operations.detail',
+                )
+              ) {
+                expectedToolNameForStep.set(stepNumber, detailToolName)
+                return {
+                  activeTools: [detailToolName],
+                  toolChoice: {
+                    type: 'tool' as const,
+                    toolName: detailToolName,
+                  },
+                  instructions: baseInstructions,
+                }
+              }
+              if (input.effectiveRoute?.lane === 'operation') {
+                throw new AnswerToolUseAgentError('tool_unavailable')
+              }
+            }
+          }
+          const activeReadToolNames = readToolEntries
+            .filter(
+              ({ toolId, toolName }) =>
+                tools[toolName] !== undefined
+                && !answerRouteForbidsTool(input.effectiveRoute, toolId),
+            )
+            .map(({ toolName }) => toolName)
+          if (activeReadToolNames.length === 0) return noTools
+          const hasCompletedRead = toolCalls.some(
+            (call) =>
+              call.status === 'complete' && readToolIds.has(call.toolId),
+          )
+          return {
+            activeTools: activeReadToolNames,
+            ...(hasCompletedRead
+              ? {}
+              : { toolChoice: 'required' as const }),
+            instructions: baseInstructions,
+          }
         },
         // Defer the existing round/budget stop once so the same SDK call can make
         // one structured, tool-less prose step after the final tool result.
         stopWhen: [toolStopCondition],
-        onStepEnd: recordStep(accounting, 'model.openrouter_round', {
-          tools: Object.keys(tools).length,
-        }),
+        onStepEnd: recordStep(
+          accounting,
+          'model.openrouter_round',
+          {
+            tools: readToolNames.length + dynamicToolNames.length,
+          },
+          true,
+        ),
         ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
       }),
-  )
+  ).catch((error: unknown) => {
+    if (toolExecutionError) {
+      throw new AnswerToolUseAgentError('tool_unavailable', { cause: error })
+    }
+    throw error
+  })
+  if (toolExecutionError) {
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
+  if (expectedToolNameForStep.size > 0) {
+    expectedToolNameForStep.clear()
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
+  if (
+    input.effectiveRoute?.allowedReadToolFamily === 'operation'
+    && initialKeylessDataAsk.selected === undefined
+    && !resumedHasEffectSelection
+    && !toolCalls.some(
+      (call) =>
+        call.toolId === 'registry.operations.search'
+        && call.status === 'complete',
+    )
+  ) {
+    throw new AnswerToolUseAgentError('tool_unavailable')
+  }
   if (unsafeOperationOutput) {
     return finalizeAgentResult(
       { ...input, keylessDataAsk: activeKeylessDataAsk },
@@ -2344,6 +2264,7 @@ function capabilityToolName(operationRef: string): string {
   return openRouterToolName(`capability.${operationRef}`)
 }
 
+
 /**
  * Runs one model interaction under the turn's harness guards and records a
  * failed request in the turn's model accounting when the interaction errors.
@@ -2524,29 +2445,37 @@ function requestsFabricatedLiveAnswerWithoutExecution(query: string): boolean {
 
 
 
-/** The turn stopped at a reviewable candidate because the request authorized reads only. */
-function buildCandidateOnlyProse(): AnswerProse {
-  return {
-    oneLine: 'I found a matching operation and left it unrun.',
-    summary:
-      'The current candidate is ready for review. This turn made no provider call because you asked to search only.',
-    whatToDoNow:
-      'Review the candidate, then explicitly select it if you want to run it.',
+
+function isLocallyBudgetRefusedEffect(
+  call: AnswerToolCallRecord,
+): boolean {
+  if (call.executed !== false) return false
+  try {
+    const result: unknown = JSON.parse(call.resultJson)
+    return (
+      isRecord(result)
+      && result.kind === 'refused'
+      && result.code === 'budget_exceeded'
+    )
+  } catch {
+    return false
   }
 }
 
 function buildDeterministicOperationProse(
   toolCalls: readonly AnswerToolCallRecord[],
-  effectAllowed: boolean | undefined,
 ): AnswerProse | undefined {
   const latestExecuteIndex = toolCalls.findLastIndex(
-    (call) => call?.toolId === OPERATION_EXECUTE_TOOL_ID,
+    (call) =>
+      call?.toolId === OPERATION_EXECUTE_TOOL_ID
+      && !isLocallyBudgetRefusedEffect(call),
   )
   for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
     const call = toolCalls[index]
     if (
       call === undefined ||
       call.toolId !== OPERATION_INVOKE_TOOL_ID ||
+      isLocallyBudgetRefusedEffect(call) ||
       latestExecuteIndex > index
     )
       continue
@@ -2599,7 +2528,11 @@ function buildDeterministicOperationProse(
 
   for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
     const call = toolCalls[index]
-    if (call === undefined || call.toolId !== OPERATION_EXECUTE_TOOL_ID)
+    if (
+      call === undefined
+      || call.toolId !== OPERATION_EXECUTE_TOOL_ID
+      || isLocallyBudgetRefusedEffect(call)
+    )
       continue
     let parsed: {
       kind?: unknown
@@ -2628,13 +2561,6 @@ function buildDeterministicOperationProse(
           'The selected operation accepts one requested item per invocation, so this turn made no provider call.',
         whatToDoNow: 'Choose one requested item, or select an operation whose published input batches all of them.',
       }
-    }
-    if (
-      parsed.kind === 'refused'
-      && parsed.code === 'route_tool_forbidden'
-      && effectAllowed === false
-    ) {
-      return buildCandidateOnlyProse()
     }
     const place =
       typeof parsed.composition?.place === 'string'

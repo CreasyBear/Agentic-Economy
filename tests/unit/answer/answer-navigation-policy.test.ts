@@ -4,12 +4,10 @@ import type { KeylessExecutableToolDescriptor } from '@/modules/capability-execu
 import {
   answerNavigationBudgetExceeded,
   answerNavigationBudgetExhausted,
-  answerNavigationStepPolicy,
   answerRouteForbidsTool,
   initialAnswerOperationNavigationState,
   oneNativeBatchCoversRequestedIntents,
   reduceAnswerOperationNavigation,
-  shouldRunStagedAnswerNavigation,
 } from '@/modules/answer/internal/answer-navigation-policy'
 import type { EffectiveAnswerAgentRoute } from '@/modules/answer/public'
 
@@ -82,63 +80,6 @@ describe('answer navigation policy', () => {
       sharedRoute,
       'operation.execute',
     )).toBe(true)
-  })
-
-  it('starts staged navigation only when unresolved evidence needs it', () => {
-    const base = {
-      route: operationRoute,
-      hasSelectedOperation: false,
-      hasKeylessDataAsk: true,
-      resumeNavigation: false,
-      hasExplicitSelection: false,
-      resumedHasEffectSelection: false,
-    }
-    expect(shouldRunStagedAnswerNavigation(base)).toBe(true)
-    expect(shouldRunStagedAnswerNavigation({
-      ...base,
-      hasSelectedOperation: true,
-    })).toBe(false)
-    expect(shouldRunStagedAnswerNavigation({
-      ...base,
-      hasExplicitSelection: true,
-    })).toBe(false)
-  })
-
-  it('forces operation search first and requires any read for unresolved business discovery', () => {
-    expect(answerNavigationStepPolicy({
-      route: operationRoute,
-      toolCalls: [],
-      candidates: [],
-      navigationReadCallAttempts: 0,
-      maxToolCalls: 4,
-    })).toEqual({
-      readBudgetAvailable: true,
-      forcedToolId: 'registry.operations.search',
-      requireAnyRead: false,
-    })
-    expect(answerNavigationStepPolicy({
-      route: businessRoute,
-      toolCalls: [],
-      candidates: [],
-      navigationReadCallAttempts: 0,
-      maxToolCalls: 4,
-    })).toEqual({
-      readBudgetAvailable: true,
-      requireAnyRead: true,
-    })
-  })
-
-  it('requires any unresolved read on a shared route without forcing a family', () => {
-    expect(answerNavigationStepPolicy({
-      route: sharedRoute,
-      toolCalls: [],
-      candidates: [],
-      navigationReadCallAttempts: 0,
-      maxToolCalls: 4,
-    })).toEqual({
-      readBudgetAvailable: true,
-      requireAnyRead: true,
-    })
   })
 
   it('reduces read/effect budgets and effect unlock as explicit state transitions', () => {
@@ -230,6 +171,14 @@ describe('answer navigation policy', () => {
             type: 'boolean',
             description: 'Whether to include the 24-hour percentage price change.',
           },
+          include_market_cap: {
+            type: 'boolean',
+            description: 'Whether to include the current market capitalization.',
+          },
+          include_source: {
+            type: 'boolean',
+            description: 'Whether to include the current price source.',
+          },
         },
         required: ['ids', 'vs_currencies'],
         additionalProperties: false,
@@ -241,6 +190,34 @@ describe('answer navigation policy', () => {
           ids: 'bitcoin',
           vs_currencies: 'usd',
           include_change: true,
+          include_market_cap: true,
+        },
+      },
+      descriptor,
+      [
+        {
+          intentId: 'price',
+          phrase: "Bitcoin's current price in USD",
+          requestedResult: 'Bitcoin current price in USD',
+        },
+        {
+          intentId: 'change',
+          phrase: 'Include the 24-hour percentage change',
+          requestedResult: '24-hour percentage change',
+        },
+        {
+          intentId: 'market-cap',
+          phrase: 'Include the current market capitalization',
+          requestedResult: 'current market capitalization',
+        },
+      ],
+    )).toBe(true)
+    expect(oneNativeBatchCoversRequestedIntents(
+      {
+        input: {
+          ids: 'bitcoin',
+          vs_currencies: 'usd',
+          include_source: true,
         },
       },
       descriptor,
@@ -256,6 +233,6 @@ describe('answer navigation policy', () => {
           requestedResult: '24-hour percentage change',
         },
       ],
-    )).toBe(true)
+    )).toBe(false)
   })
 })
