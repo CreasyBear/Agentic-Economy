@@ -98,8 +98,12 @@ describe('action registry', () => {
       'registry.operations.compare', 'registry.operations.inspectPlan',
       'operation.execute', 'operation.invoke', 'operation.status',
       'operation.cancel', 'operation.reconcile',
+      'supply.publish', 'supply.withdraw', 'supply.earnings',
     ])
-
+    expect(exposed.slice(-3).every((action) =>
+      action.credentialAdmission?.scope === 'market_supply:manage'
+      && action.surfaces.includes('cli')
+      && action.surfaces.includes('mcp'))).toBe(true)
     const anonymous = exposed.filter((action) => action.readOnly && action.credentialAdmission === undefined)
     expect(anonymous.map((action) => action.id)).toEqual([
       'registry.services_list', 'registry.services_search', 'registry.detail',
@@ -123,7 +127,36 @@ describe('action registry', () => {
       'ae_registry_operations_compare', 'ae_registry_operations_inspectPlan',
       'ae_operation_execute', 'ae_operation_invoke', 'ae_operation_status',
       'ae_operation_cancel', 'ae_operation_reconcile',
+      'ae_supply_publish', 'ae_supply_withdraw', 'ae_supply_earnings',
     ])
+  })
+  it('registers supply actions with narrow inputs and output contracts', () => {
+    const publish = findAction('supply.publish')
+    const withdraw = findAction('supply.withdraw')
+    const earnings = findAction('supply.earnings')
+    expect(publish?.parameters.map(({ name }) => name)).toEqual([
+      'version', 'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash',
+      'source', 'evidenceRefs', 'idempotencyKey',
+    ])
+    expect(withdraw?.parameters.map(({ name }) => name)).toEqual([
+      'businessId', 'offeringRef', 'offeringRevision', 'offeringSourceHash',
+      'publicationRef', 'publicationRevision', 'idempotencyKey',
+    ])
+    expect(earnings?.parameters.map(({ name }) => name)).toEqual(['currency'])
+    expect(publish?.schema.safeParse({
+      version: 'supply-publication:v1',
+      businessId: 'business_1',
+      offeringRef: 'offering_1',
+      offeringRevision: 1,
+      offeringSourceHash: 'sha256:source',
+      source: {},
+      evidenceRefs: [],
+      idempotencyKey: 'publish-command-1',
+      endpointUrl: 'https://attacker.example',
+    }).success).toBe(false)
+    expect(publish?.outputSchema).toBeDefined()
+    expect(withdraw?.outputSchema).toBeDefined()
+    expect(earnings?.outputSchema).toBeDefined()
   })
 
   it('describes operation composition arrays from their canonical schemas', () => {

@@ -50,6 +50,25 @@ describe('customer Request agent authentication', () => {
     })
   })
 
+  it('refuses organization-scoped keys when ownership is user-bound', async () => {
+    await expect(authenticateAgentAccess({
+      requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
+      authenticate: async () => ({
+        isAuthenticated: true,
+        tokenType: 'api_key',
+        id: 'ak_org',
+        subject: 'org_123',
+        userId: null,
+        orgId: 'org_123',
+        scopes: ['customer_requests:create'],
+      }),
+    })).resolves.toEqual({
+      kind: 'refused',
+      status: 403,
+      reason: 'scope_required',
+    })
+  })
+
   it('fails closed when current key state is revoked, expired, mismatched, or unavailable', async () => {
     const authenticate = async () => ({
       isAuthenticated: true, tokenType: 'api_key' as const, id: 'ak_123', subject: 'user_123',

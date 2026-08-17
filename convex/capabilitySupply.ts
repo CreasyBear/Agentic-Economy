@@ -77,6 +77,10 @@ import {
 import { internal } from './_generated/api'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import type { Id } from './_generated/dataModel'
+import {
+  agentAccessPrincipalValue,
+  verifySupplyAgentPrincipal,
+} from './agentAccessPrincipals'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
@@ -729,7 +733,10 @@ function convexPreparedPublicationResult(
     authorityMode: result.authorityMode,
     publisherRef: result.publisherRef,
     provenanceDigest: result.provenanceDigest,
-    lifecycle: convexPublicationLifecycle(result.lifecycle),
+    lifecycle: {
+      state: result.lifecycle.state,
+      reasons: [...result.lifecycle.reasons],
+    },
   }
 }
 export const publishPreparedCapability = mutation({
@@ -743,6 +750,7 @@ export const publishPreparedCapability = mutation({
     runtimeEnvironment: v.literal('production'),
     prepared: preparedPublicationMaterialValue,
     ...contextFields,
+    agentPrincipal: v.optional(agentAccessPrincipalValue),
     ...sourceWriteArgs,
   },
   returns: preparedPublicationResultValue,
@@ -757,10 +765,14 @@ export const publishPreparedCapability = mutation({
         reason: 'authorization_denied' as const,
       }
     }
-    if (
-      !validRegistrationContext(args) ||
-      !(await ownsPublishedBusiness(ctx, args.businessId))
-    ) {
+    const agentAdmission = args.agentPrincipal === undefined
+      ? undefined
+      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    const businessAuthorized = args.agentPrincipal === undefined
+      ? await ownsPublishedBusiness(ctx, args.businessId)
+      : agentAdmission?.kind === 'allowed'
+        && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
+    if (!validRegistrationContext(args) || !businessAuthorized) {
       return {
         kind: 'refused' as const,
         reason: 'authorization_denied' as const,
@@ -855,8 +867,10 @@ export const publishPreparedCapability = mutation({
         reason: 'catalog_offering_origin_changed' as const,
       }
     }
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null)
+    const identity = args.agentPrincipal === undefined
+      ? await ctx.auth.getUserIdentity()
+      : null
+    if (args.agentPrincipal === undefined && identity === null)
       return {
         kind: 'refused' as const,
         reason: 'authorization_denied' as const,
@@ -865,9 +879,9 @@ export const publishPreparedCapability = mutation({
       {
         businessId: String(args.businessId),
         runtimeEnvironment: args.runtimeEnvironment,
-        prepared: preparedPublicationMaterialFromConvex(args.prepared),
+        prepared: args.prepared,
+        actor: { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
         origin,
-        actor: { kind: 'owner', ref: identity.subject },
         operationKey: args.operationKey,
         correlationId: args.correlationId,
         reasonCode: args.reasonCode,
@@ -1622,6 +1636,19 @@ export async function ownsPublishedBusiness(
 
   const owner = await ctx.db.get(business.ownerId)
   return owner !== null && owner.clerkUserId === identity.subject
+}
+export async function ownsPublishedBusinessForOwnerId(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  businessId: Id<'businesses'>,
+  ownerId: string,
+): Promise<boolean> {
+  const business = await publishedBusiness(ctx.db, businessId)
+  if (business === null) return false
+  const owner = await ctx.db
+    .query('owners')
+    .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', ownerId))
+    .unique()
+  return owner !== null && business.ownerId === owner._id
 }
 type MappingAuthorityResult =
   | Readonly<{

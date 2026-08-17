@@ -862,7 +862,7 @@ function x402Resource(value: unknown): value is Record<string, unknown> {
   );
 }
 
-function ownerPublicationImport(source: Record<string, unknown>):
+export function ownerPublicationImport(source: Record<string, unknown>):
   | Readonly<{
       source: CapabilityPublicationImport;
       sourceRevision: string;
@@ -1406,7 +1406,7 @@ function canonicalOwnerEndpoint(value: string): string | undefined {
   }
 }
 
-function ownerPublicationWithCatalogOrigin(
+export function ownerPublicationWithCatalogOrigin(
   source: CapabilityPublicationImport,
   offering: OwnerSupplyOfferingReadback,
 ): CapabilityPublicationImport | undefined {

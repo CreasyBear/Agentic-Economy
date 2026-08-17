@@ -14,7 +14,7 @@ import {
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
 
-import { findAction } from '@/modules/actions'
+import { findAction, mcpToolName } from '@/modules/actions'
 import { runActionCommand } from '../../../tools/ae/commands/actions'
 import { runAskCommand } from '../../../tools/ae/commands/ask'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
@@ -49,6 +49,24 @@ function captureStdout(): { read: () => string; restore: () => void } {
   return {
     read: () => writes.join(''),
     restore: () => spy.mockRestore(),
+  }
+}
+
+function restoreEnvironmentVariable(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name]
+  else process.env[name] = value
+}
+
+function validSupplyPublishInput(): Record<string, unknown> {
+  return {
+    version: 'supply-publication:v1',
+    businessId: ' business:test ',
+    offeringRef: ' offering:test ',
+    offeringRevision: 1,
+    offeringSourceHash: ' hash:test ',
+    source: {},
+    evidenceRefs: ['evidence:test'],
+    idempotencyKey: ' idempotency-test ',
   }
 }
 async function startAnswerServer(frames: readonly AnswerTurnFrame[]): Promise<{
@@ -382,32 +400,177 @@ describe('market-terminal CLI error contracts', () => {
     }
   }, 30_000)
 
-  it('prints a terminal Ran line only after a human action succeeds', async () => {
+  it('prints a terminal Ran line only after a credentialed action succeeds', async () => {
     const action = findAction('operation.status')
     if (action === undefined) throw new Error('operation.status action missing')
-    const run = vi.spyOn(action, 'run').mockResolvedValue({
-      kind: 'found',
-      invocationRef: 'invocation:test',
-    })
+    const run = vi.spyOn(action, 'run')
+    const previousApiKey = process.env.AE_API_KEY
+    const previousApiKeyOrigin = process.env.AE_API_KEY_ORIGIN
+    process.env.AE_API_KEY = 'cli-test-key'
+    process.env.AE_API_KEY_ORIGIN = 'https://market.example'
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'cli-action',
+      result: {
+        structuredContent: {
+          result: { kind: 'found', invocationRef: 'invocation:test' },
+        },
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
     const output = captureStdout()
     try {
       await runActionCommand(['operation.status', '{"invocationRef":"invocation:test"}'], {
-        baseUrl: 'http://127.0.0.1:3000',
+        baseUrl: 'https://market.example',
         json: false,
         help: false,
         allowWrite: false,
         apply: false,
       })
+      expect(run).not.toHaveBeenCalled()
     } finally {
       output.restore()
       run.mockRestore()
+      restoreEnvironmentVariable('AE_API_KEY', previousApiKey)
+      restoreEnvironmentVariable('AE_API_KEY_ORIGIN', previousApiKeyOrigin)
     }
-
     const stdout = output.read()
+    expect(fetchMock).toHaveBeenCalledOnce()
     expect(stdout).toContain('Ran operation.status')
     expect(stdout).not.toContain('Running operation.status')
     expect(stdout).not.toContain('authority:')
     expect(stdout).toContain('result.kind = found')
+  })
+
+  it('dispatches credential-admitted CLI actions through authenticated MCP tools/call', async () => {
+    const action = findAction('supply.publish')
+    if (action === undefined) throw new Error('supply.publish action missing')
+    const run = vi.spyOn(action, 'run')
+    const previousApiKey = process.env.AE_API_KEY
+    const previousApiKeyOrigin = process.env.AE_API_KEY_ORIGIN
+    process.env.AE_API_KEY = 'cli-supply-key'
+    process.env.AE_API_KEY_ORIGIN = 'https://market.example'
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'cli-action',
+      result: {
+        structuredContent: {
+          result: {
+            kind: 'published',
+            publicationRef: 'publication:test',
+            publicationRevision: 1,
+            operationRef: 'operation:test',
+            lifecycle: { state: 'active', reasons: [] },
+          },
+        },
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    try {
+      await runActionCommand(['supply.publish', JSON.stringify(validSupplyPublishInput())], {
+        baseUrl: 'https://market.example',
+        json: false,
+        help: false,
+        allowWrite: true,
+        apply: false,
+      })
+      expect(run).not.toHaveBeenCalled()
+    } finally {
+      output.restore()
+      run.mockRestore()
+      restoreEnvironmentVariable('AE_API_KEY', previousApiKey)
+      restoreEnvironmentVariable('AE_API_KEY_ORIGIN', previousApiKeyOrigin)
+    }
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe('https://market.example/mcp')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer cli-supply-key')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      jsonrpc: '2.0',
+      id: 'cli-action',
+      method: 'tools/call',
+      params: {
+        name: mcpToolName(action),
+        arguments: {
+          version: 'supply-publication:v1',
+          businessId: 'business:test',
+          offeringRef: 'offering:test',
+          offeringRevision: 1,
+          offeringSourceHash: 'hash:test',
+          source: {},
+          evidenceRefs: ['evidence:test'],
+          idempotencyKey: 'idempotency-test',
+        },
+      },
+    })
+    expect(output.read()).toContain('Ran supply.publish')
+  })
+
+  it.each([
+    ['missing origin', undefined, 'agent_access_key_origin_required'],
+    ['mismatched origin', 'https://other.example', 'agent_access_key_origin_mismatch'],
+  ] as const)('refuses credential-admitted CLI actions before fetch when %s', async (_label, origin, code) => {
+    const previousApiKey = process.env.AE_API_KEY
+    const previousApiKeyOrigin = process.env.AE_API_KEY_ORIGIN
+    process.env.AE_API_KEY = 'cli-supply-key'
+    if (origin === undefined) delete process.env.AE_API_KEY_ORIGIN
+    else process.env.AE_API_KEY_ORIGIN = origin
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await expect(runActionCommand(['supply.publish', JSON.stringify(validSupplyPublishInput())], {
+        baseUrl: 'https://market.example',
+        json: true,
+        help: false,
+        allowWrite: true,
+        apply: false,
+      })).rejects.toMatchObject({
+        kind: 'INVALID_ARGUMENT',
+        code,
+      })
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      restoreEnvironmentVariable('AE_API_KEY', previousApiKey)
+      restoreEnvironmentVariable('AE_API_KEY_ORIGIN', previousApiKeyOrigin)
+    }
+  })
+
+  it('keeps a credential-free CLI action on its local runner', async () => {
+    const action = findAction('registry.services_list')
+    if (action === undefined) throw new Error('registry.services_list action missing')
+    if (action.credentialAdmission !== undefined) throw new Error('registry.services_list unexpectedly requires credentials')
+    const originalSurfaces = Object.getOwnPropertyDescriptor(action, 'surfaces')
+    if (originalSurfaces === undefined || originalSurfaces.configurable !== true) {
+      throw new Error('registry.services_list surfaces property cannot be scoped for this test')
+    }
+    Object.defineProperty(action, 'surfaces', {
+      ...originalSurfaces,
+      value: [...action.surfaces, 'cli'],
+    })
+    const run = vi.spyOn(action, 'run').mockResolvedValue({ kind: 'listed' })
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+    const output = captureStdout()
+    try {
+      await runActionCommand(['registry.services_list', '{}'], {
+        baseUrl: 'https://market.example',
+        json: false,
+        help: false,
+        allowWrite: false,
+        apply: false,
+      })
+      expect(run).toHaveBeenCalledOnce()
+    } finally {
+      output.restore()
+      run.mockRestore()
+      Object.defineProperty(action, 'surfaces', originalSurfaces)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+    const stdout = output.read()
+    expect(stdout).toContain('Ran registry.services_list')
+    expect(stdout).toContain('result.kind = listed')
   })
 
 

@@ -1,8 +1,11 @@
-import { describeActionForAgent, findAction, listActions, resolveActionContract } from '@/modules/actions/index'
+import { describeActionForAgent, findAction, listActions, mcpToolName, resolveActionContract, type AnyAction } from '@/modules/actions/index'
+import { isRecord } from '@/modules/common/is-record'
+import type { ActionResult } from '@/modules/common/action'
 import { OPERATION_INVOKE_ACTION_ID } from '@/modules/capability-execution/operation-invoke-entry'
 
 import type { CliOptions } from '../lib/args'
-import { CliFailure, heading, line, printJson, table } from '../lib/output'
+import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
+import { requireAgentAccessKey } from './status'
 /**
  * Generic dispatch by name over the real registry. Registration is visible in
  * the inventory; execution still requires the action to declare the CLI surface.
@@ -43,6 +46,40 @@ export async function runActionsCommand(_args: readonly string[], options: CliOp
   }
   line('')
   line('Registration alone does not create a reachable route. Run npm run audit:actions for drift.')
+}
+
+async function runCredentialAdmittedAction(
+  action: AnyAction,
+  data: unknown,
+  options: CliOptions,
+): Promise<ActionResult> {
+  const apiKey = requireAgentAccessKey(`action ${action.id}`, options)
+  const outcome = await callJson(options.baseUrl, '/mcp', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'cli-action',
+      method: 'tools/call',
+      params: {
+        name: mcpToolName(action),
+        arguments: data,
+      },
+    }),
+  })
+  const body = requireOk(outcome, '/mcp')
+  const structuredResult = isRecord(body)
+    && isRecord(body.result)
+    && isRecord(body.result.structuredContent)
+    ? body.result.structuredContent.result
+    : undefined
+  if (!isRecord(structuredResult) || typeof structuredResult.kind !== 'string') {
+    throw new CliFailure('The MCP action returned an invalid result.', {
+      kind: 'UNAVAILABLE',
+      code: 'mcp_action_result_invalid',
+    })
+  }
+  return structuredResult as ActionResult
 }
 
 export async function runActionCommand(args: readonly string[], options: CliOptions): Promise<void> {
@@ -105,7 +142,9 @@ export async function runActionCommand(args: readonly string[], options: CliOpti
   }
 
   const startedAt = Date.now()
-  const result = await action.run({ data: validated.data, context: { caller: 'cli' } })
+  const result = action.credentialAdmission === undefined
+    ? await action.run({ data: validated.data, context: { caller: 'cli' } })
+    : await runCredentialAdmittedAction(action, validated.data, options)
   const durationMs = Date.now() - startedAt
 
   if (options.json) {

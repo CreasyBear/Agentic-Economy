@@ -8,8 +8,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { safeParse, safeParseAsync } from '@modelcontextprotocol/sdk/server/zod-compat.js'
-import { getMethodLiteral, toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
-import { ErrorCode, ListToolsRequestSchema, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
+import { getMethodLiteral } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js'
+import { ErrorCode, McpError, type Notification, type Request as SdkRequest, type Result, type ServerNotification, type ServerRequest, type ServerResult } from '@modelcontextprotocol/sdk/types.js'
 import type { AnyObjectSchema, SchemaOutput } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
 import { z } from 'zod'
@@ -22,14 +22,15 @@ import { ConvexSourceError } from '@/lib/server/convex-source'
 import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
+import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
-import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
-const MAX_MCP_REQUEST_BODY_BYTES = 64 * 1024
+import { createSupplyManagementService, type SupplyManagementService } from '@/modules/capability-supply/supply-actions'
+const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
   authorityMode?: CustomerRequestAuthorityMode
@@ -38,11 +39,8 @@ export type McpAccessTier = Readonly<{
   correlationId?: string
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
+  supplyManagementService?: SupplyManagementService
 }>
-type SdkServerHandler = (
-  request: unknown,
-  extra: RequestHandlerExtra<ServerRequest | SdkRequest, ServerNotification | Notification>,
-) => ServerResult | Result | Promise<ServerResult | Result>
 
 type AeServerHandler<T extends AnyObjectSchema> = (
   request: SchemaOutput<T>,
@@ -65,11 +63,8 @@ class ConciseMcpRequestError extends McpError {
   }
 }
 class SafeMcpSdkServer extends Server {
-  private readonly captureToolsListHandler: ((handler: SdkServerHandler) => void) | undefined
-
-  constructor(captureToolsListHandler?: (handler: SdkServerHandler) => void) {
+  constructor() {
     super({ name: 'agentic-economy', version: '1.0.0' })
-    this.captureToolsListHandler = captureToolsListHandler
   }
 
   override setRequestHandler<T extends AnyObjectSchema>(
@@ -87,9 +82,6 @@ class SafeMcpSdkServer extends Server {
         throw new ConciseMcpRequestError()
       }
       return await handler(parsed.data, extra)
-    }
-    if (method === 'tools/list') {
-      this.captureToolsListHandler?.(safeHandler)
     }
 
     Reflect.apply(Protocol.prototype.setRequestHandler, this, [safeRequestSchema, safeHandler])
@@ -143,33 +135,6 @@ function mcpToolError(failure: McpToolFailure): {
       text: JSON.stringify(failure),
     }],
   }
-}
-/**
- * The SDK's high-level tool registration only emits object-shaped output
- * schemas. Project each canonical action schema explicitly so union outputs
- * remain visible without a second schema owner.
- */
-function projectMcpToolsList(
-  value: unknown,
-  actions: readonly AnyAction[],
-): ServerResult | Result {
-  if (!isRecord(value) || !Array.isArray(value.tools)) return value as ServerResult
-  const outputSchemas = new Map(actions.map((action) => [mcpToolName(action), action.outputSchema]))
-  return {
-    ...value,
-    tools: value.tools.map((tool) => {
-      if (!isRecord(tool) || typeof tool.name !== 'string') return tool
-      const outputSchema = outputSchemas.get(tool.name)
-      if (outputSchema === undefined) return tool
-      return {
-        ...tool,
-        outputSchema: toJsonSchemaCompat(outputSchema, {
-          strictUnions: true,
-          pipeStrategy: 'output',
-        }),
-      }
-    }),
-  } as ServerResult
 }
 
 function mcpGatewayEvent(
@@ -275,22 +240,18 @@ export function createAeMcpServer(
   const admittedActions = access.tier === 'anonymous'
     ? actions.filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
     : actions.filter((action) => action.surfaces.includes('mcp') && (
-      action.readOnly
-      || action.credentialAdmission !== undefined
-      || (access.authorityMode !== undefined && customerRequestModeAllows(access.authorityMode, requiredModeForAction(action)))
+      (action.credentialAdmission === undefined && action.readOnly)
+      || (action.credentialAdmission !== undefined
+        && access.principal?.scopes.includes(action.credentialAdmission.scope) === true)
+      || (action.credentialAdmission === undefined
+        && access.authorityMode !== undefined
+        && customerRequestModeAllows(access.authorityMode, requiredModeForAction(action)))
     ))
 
-  let toolsListHandler: SdkServerHandler | undefined
   const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
-  const sdkServer = new SafeMcpSdkServer((handler) => {
-    if (toolsListHandler === undefined) toolsListHandler = handler
-  })
+  const sdkServer = new SafeMcpSdkServer()
   const serverWithSdk = server as { server: Server }
   serverWithSdk.server = sdkServer
-  // The SDK's high-level output validator only accepts object schemas. Canonical
-  // action results are often top-level unions, so validate once in the callback
-  // with the action schema and project the full canonical JSON schema in tools/list below.
-
   for (const action of admittedActions) {
     server.registerTool(
       mcpToolName(action),
@@ -298,6 +259,7 @@ export function createAeMcpServer(
         title: action.name,
         description: `${action.summary}\n\nBoundaries:\n${action.boundaries.map((boundary) => `- ${boundary}`).join('\n')}`,
         inputSchema: action.schema,
+        outputSchema: { result: action.outputSchema },
         annotations: {
           readOnlyHint: action.readOnly,
           destructiveHint: !action.readOnly,
@@ -315,6 +277,7 @@ export function createAeMcpServer(
               ...(access.principal === undefined ? {} : { agentAccessPrincipal: access.principal }),
               ...(access.correlationId === undefined ? {} : { correlationId: access.correlationId }),
               ...(access.timing === undefined ? {} : { timing: access.timing }),
+              ...(access.supplyManagementService === undefined ? {} : { supplyManagementService: access.supplyManagementService }),
               ...(access.operationInvokeService === undefined ? {} : { operationInvokeService: access.operationInvokeService }),
             },
           })
@@ -330,8 +293,8 @@ export function createAeMcpServer(
           }
           recordMcpGatewayTelemetry(action.id, data, result, access, startedAt)
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-            structuredContent: result,
+            content: [{ type: 'text' as const, text: JSON.stringify(outputValidation.data) }],
+            structuredContent: { result: outputValidation.data },
           }
         } catch (error) {
           recordMcpGatewayTelemetry(action.id, data, undefined, access, startedAt)
@@ -340,12 +303,6 @@ export function createAeMcpServer(
       },
     )
   }
-  const baseToolsListHandler = toolsListHandler
-  if (baseToolsListHandler === undefined) throw new Error('MCP tools/list handler was not registered.')
-  sdkServer.removeRequestHandler('tools/list')
-  sdkServer.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
-    return projectMcpToolsList(await baseToolsListHandler(request, extra), admittedActions)
-  })
 
   return server
 }
@@ -353,6 +310,7 @@ export function createAeMcpServer(
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  supplyManagementService?: SupplyManagementService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
 }>
@@ -370,10 +328,11 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       }), correlationId)
     }
     const boundedRequest = bounded.request
-    const protectedAction = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
-    if (protectedAction !== undefined) {
+    const protectedTarget = await actionRequiringAuthenticationForRequest(boundedRequest, actions)
+    if (protectedTarget !== undefined) {
+      const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
-      const requiredScope = protectedAction.credentialAdmission?.scope
+      const requiredScope = protectedTarget.generic ? null : protectedAction.credentialAdmission?.scope
       const admitted = await authenticateAgentAccess({
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
         ...(options.authenticate === undefined
@@ -384,7 +343,7 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       })
       if (admitted.kind === 'refused') {
         const base = resolveCanonicalBaseUrl(request).baseUrl
-        const challenge = requiredScope !== undefined
+        const challenge = requiredScope !== undefined && requiredScope !== null
           ? bearerChallenge(base, requiredScope)
           : requiredMode === 'inspect_only'
             ? bearerChallenge(base)
@@ -407,9 +366,10 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
         principalId: admitted.principal.principalId,
         principal: admitted.principal,
         correlationId,
-        ...(options.timing === undefined ? {} : { timing: options.timing }),
         operationInvokeService: options.operationInvokeService
           ?? createOperationInvokeService(boundedRequest, bounded.bodyText),
+        supplyManagementService: options.supplyManagementService
+          ?? createSupplyManagementService(boundedRequest, bounded.bodyText),
       })
       return withRequestCorrelationHeader(await serveMcp(server, boundedRequest), correlationId)
     }
@@ -443,10 +403,15 @@ async function serveMcp(server: McpServer, request: Request): Promise<Response> 
   return await transport.handleRequest(request)
 }
 
+type McpAuthenticationTarget = Readonly<{
+  action: AnyAction
+  generic: boolean
+}>
+
 async function actionRequiringAuthenticationForRequest(
   request: Request,
   actions: readonly AnyAction[],
-): Promise<AnyAction | undefined> {
+): Promise<McpAuthenticationTarget | undefined> {
   if (request.method !== 'POST') return undefined
   try {
     const boundedBody = await readBoundedRequestJson(request.clone(), MAX_MCP_REQUEST_BODY_BYTES)
@@ -455,13 +420,16 @@ async function actionRequiringAuthenticationForRequest(
     const params = isRecord(body.params) ? body.params : undefined
     if (typeof params?.name === 'string') {
       const action = actions.find((candidate) => mcpToolName(candidate) === params.name)
-      if (action !== undefined && (action.credentialAdmission !== undefined || !action.readOnly)) return action
+      if (action !== undefined && (action.credentialAdmission !== undefined || !action.readOnly)) {
+        return { action, generic: false }
+      }
     }
     if (
       body.method === 'tools/list'
       && (request.headers.get('authorization')?.trim().length ?? 0) > 0
     ) {
-      return actions.find((candidate) => candidate.credentialAdmission !== undefined)
+      const action = actions.find((candidate) => candidate.credentialAdmission !== undefined)
+      return action === undefined ? undefined : { action, generic: true }
     }
     return undefined
   } catch {

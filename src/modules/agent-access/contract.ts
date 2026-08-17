@@ -1,4 +1,5 @@
 export const MARKET_OPERATIONS_INVOKE_SCOPE = 'market_operations:invoke' as const
+export const MARKET_SUPPLY_MANAGE_SCOPE = 'market_supply:manage' as const
 export const AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST = Object.freeze({
   client_name: 'Agentic Economy CLI',
   redirect_uris: Object.freeze(['http://127.0.0.1/callback'] as const),
@@ -64,6 +65,11 @@ export function agentAuthorityModeForScopes(
     if (!scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
     const mode = AGENT_ACCESS_AUTHORITY_MODE_VALUES.find((candidate) => AUTHORITY_MODE_SCOPES[candidate] === modeScopes[0])
     return mode
+  }
+  if (scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+    && !scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)
+    && modeScopes.length === 0) {
+    return 'bounded_mandate'
   }
   if (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) {
     return options.allowCustomerDefault === true ? 'inspect_only' : undefined

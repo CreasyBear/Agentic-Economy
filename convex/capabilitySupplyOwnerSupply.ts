@@ -93,7 +93,7 @@ async function ownerSupplyOffering(
 ): Promise<OwnerSupplyOffering | undefined> {
   const readback = await ctx.runQuery(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, { businessId })
   if (readback.kind !== 'available' || readback.businessId !== String(businessId)) return undefined
-  const offering = readback.offerings.find((candidate: OwnerSupplyFunnelCandidate) => (
+  const offering = readback.offerings.find((candidate) => (
     candidate.offeringRef === offeringRef
     && candidate.revision === offeringRevision
     && candidate.sourceHash === offeringSourceHash

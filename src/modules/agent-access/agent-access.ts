@@ -2,6 +2,7 @@ import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
@@ -309,11 +310,11 @@ async function rollbackAgentKey(api: AgentAccessKeyApi, keyId: string): Promise<
     // Best effort rollback: the issuance still fails closed.
   }
 }
-
 export function projectAgentAccessKey(record: AgentAccessKeyRecord): AgentAccessKeyInventoryItem | undefined {
   if (record.claims?.aePurpose !== AGENT_ACCESS_PURPOSE
     || record.scopes === undefined
-    || !record.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)) return undefined
+    || (!record.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+      && !record.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE))) return undefined
   const scopes = canonicalAgentScopes(record.scopes)
   const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
   const claimMode = record.claims.aeAuthorityMode
@@ -395,17 +396,20 @@ export async function revokeAgentAccessKey(input: Readonly<{
 
 function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | undefined {
   if (scopes.length === 0 || new Set(scopes).size !== scopes.length) return undefined
-  const withGatewayScope = scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+  const hasSupplyScope = scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+  const withGatewayScope = scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE) || hasSupplyScope
     ? [...scopes]
     : [MARKET_OPERATIONS_INVOKE_SCOPE, ...scopes]
   const authorityMode = agentAuthorityModeForScopes(withGatewayScope)
   if (authorityMode === undefined) return undefined
   const modeScope = withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? agentAuthorityScopeForMode(authorityMode) : undefined
   const extras = withGatewayScope.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE
+    && scope !== MARKET_SUPPLY_MANAGE_SCOPE
     && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== modeScope)
   if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, authorityMode))) return undefined
   return [
-    MARKET_OPERATIONS_INVOKE_SCOPE,
+    ...(withGatewayScope.includes(MARKET_OPERATIONS_INVOKE_SCOPE) ? [MARKET_OPERATIONS_INVOKE_SCOPE] : []),
+    ...(withGatewayScope.includes(MARKET_SUPPLY_MANAGE_SCOPE) ? [MARKET_SUPPLY_MANAGE_SCOPE] : []),
     ...(withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? [CUSTOMER_REQUEST_AGENT_SCOPE, modeScope as string] : []),
     ...extras.sort(),
   ]
@@ -415,6 +419,7 @@ export {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,

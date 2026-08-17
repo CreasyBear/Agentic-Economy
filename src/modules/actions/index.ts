@@ -15,6 +15,11 @@ import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
 import {
+  supplyEarningsAction,
+  supplyPublishAction,
+  supplyWithdrawAction,
+} from '@/modules/capability-supply/supply-actions'
+import {
   customerRequestCancelAction,
   customerRequestConfirmAction,
   customerRequestInspectEvidenceAction,
@@ -109,6 +114,9 @@ const actions: readonly AnyAction[] = [
   workTreeReconcileRepeatUseAction,
   workTreeInspectRepeatUseAction,
   updateOwnerNotificationPreferencesAction,
+  supplyPublishAction,
+  supplyWithdrawAction,
+  supplyEarningsAction,
 ]
 
 assertUniqueActionIds(actions)

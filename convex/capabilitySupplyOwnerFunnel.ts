@@ -1,5 +1,6 @@
 import { v, type Infer } from 'convex/values'
 
+import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   stableStringify,
@@ -8,6 +9,7 @@ import {
 import { isRecord } from '@/modules/common/is-record'
 import {
   beginOperation,
+  capabilityPublicationSourceSelectorValue,
   decodeConvexPublicationSource,
   failOperation,
   offeringRegistrationFromRow,
@@ -18,11 +20,13 @@ import {
   publicationMaterialContainsCredential,
   qualifySuppliedCandidate,
   readCapabilityProbeTarget,
+  readinessOutcomeValue,
   replayOperationResult,
   republishPreparedCapabilityCommand,
   succeedOperation,
   validCapabilityPublicationSourceRevision,
   withdrawCapabilityCommand,
+  pricingConfigValue,
   type CapabilityOfferingRegistration,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
@@ -31,6 +35,9 @@ import {
   type PreparedPublicationMaterial,
   type PublicationCommandRow,
 } from '@/modules/capability-supply/public'
+import { ownerSupplyAccessPathDescriptor, ownerSupplyAccessPathDescriptorValue, ownerSupplyLiteral, ownerSupplyOptionalNumber, ownerSupplyStringArray } from '@/modules/capability-supply/owner-supply-validators'
+import { normalizePricingConfig } from '@/modules/money/public'
+import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { internal } from './_generated/api'
 import {
   internalAction,
@@ -41,28 +48,15 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server'
-import type { Id } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import { resolveBusinessActor } from './authz'
-import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
-import {
-  ownerSupplyAccessPathDescriptor,
-  ownerSupplyAccessPathDescriptorValue,
-  ownerSupplyLiteral,
-  ownerSupplyOptionalNumber,
-  ownerSupplyStringArray,
-} from '@/modules/capability-supply/owner-supply-validators'
-import {
-  capabilityPublicationSourceSelectorValue,
-  pricingConfigValue,
-  readinessOutcomeValue,
-} from '@/modules/capability-supply/public'
-import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
-import { normalizePricingConfig } from '@/modules/money/public'
 import {
   ownsPublishedBusiness,
+  ownsPublishedBusinessForOwnerId,
   publicationPorts,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupply'
+import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const MAX_READINESS_VALIDITY_MS = 24 * 60 * 60_000
@@ -346,17 +340,27 @@ type OwnerSupplyOffering = OwnerSupplyAvailable['offerings'][number]
 type OwnerSupplyPublication = NonNullable<OwnerSupplyOffering['publication']>
 
 export const readOwnerSupplyFunnel = query({
-  args: { businessId: v.id('businesses') },
+  args: {
+    businessId: v.id('businesses'),
+  },
   returns: ownerSupplyFunnelResultValue,
   handler: async (ctx, args): Promise<OwnerSupplyFunnelResult> => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
-      return { kind: 'error' as const, code: 'unauthenticated' as const }
+      return { kind: 'error', code: 'unauthenticated' }
     const business = await ctx.db.get(args.businessId)
-    if (business === null) return { kind: 'not_found' as const }
+    if (business === null) return { kind: 'not_found' }
     const owner = await ctx.db.get(business.ownerId)
     if (owner === null || owner.clerkUserId !== actor.clerkUserId)
-      return { kind: 'not_found' as const }
+      return { kind: 'not_found' }
+    return await readOwnerSupplyFunnelProjection(ctx, args, business)
+  },
+})
+async function readOwnerSupplyFunnelProjection(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  args: { businessId: Id<'businesses'> },
+  business: Doc<'businesses'>,
+): Promise<OwnerSupplyFunnelResult> {
     const db = ctx.db
     // `businessOfferings.status` is draft|published|paused|retired — there is no
     // 'active'. Filtering on it returned nothing for every owner, so the funnel
@@ -1012,6 +1016,35 @@ export const readOwnerSupplyFunnel = query({
         environment: 'development',
       },
     }
+}
+
+const agentOwnerSupplyFunnelReadArgs = {
+  businessId: v.id('businesses'),
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const readAgentOwnerSupplyFunnel = mutation({
+  args: agentOwnerSupplyFunnelReadArgs,
+  returns: ownerSupplyFunnelResultValue,
+  handler: async (ctx, args): Promise<OwnerSupplyFunnelResult> => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected')
+      return { kind: 'error', code: 'unauthenticated' }
+    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
+    if (admission.kind !== 'allowed')
+      return { kind: 'error', code: 'unauthenticated' }
+    const owner = await ctx.db
+      .query('owners')
+      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
+      .unique()
+    if (owner === null) return { kind: 'not_found' }
+    const business = await ctx.db.get(args.businessId)
+    if (business === null || business.ownerId !== owner._id)
+      return { kind: 'not_found' }
+    return await readOwnerSupplyFunnelProjection(ctx, args, business)
   },
 })
 
@@ -1026,6 +1059,7 @@ const ownerSupplyCommandArgsValue = v.object({
   correlationId: v.string(),
   reasonCode: v.string(),
   evidenceRefs: v.array(v.string()),
+  agentPrincipal: v.optional(agentAccessPrincipalValue),
   ...sourceWriteArgs,
 })
 const ownerSupplyCommandResultValue = v.union(
@@ -1067,6 +1101,65 @@ const ownerSupplyCommandResultValue = v.union(
 )
 type OwnerSupplyCommandArgs = Infer<typeof ownerSupplyCommandArgsValue>
 type OwnerSupplyCommandResult = Infer<typeof ownerSupplyCommandResultValue>
+const ownerPublishReservationArgsValue = v.object({
+  businessId: v.id('businesses'),
+  offeringRef: v.string(),
+  offeringRevision: v.number(),
+  offeringSourceHash: v.string(),
+  materialDigest: v.string(),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  reasonCode: v.string(),
+  evidenceRefs: v.array(v.string()),
+  agentPrincipal: agentAccessPrincipalValue,
+  ...sourceWriteArgs,
+})
+const ownerPublishReservationResultValue = v.union(
+  v.object({ kind: v.literal('reserved') }),
+  v.object({ kind: v.literal('replayed') }),
+  v.object({ kind: v.literal('refused'), reason: v.string() }),
+)
+export const reserveOwnerCapabilityPublication = mutation({
+  args: ownerPublishReservationArgsValue,
+  returns: ownerPublishReservationResultValue,
+  handler: async (ctx, args): Promise<Infer<typeof ownerPublishReservationResultValue>> => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected') return { kind: 'refused', reason: 'authorization_denied' }
+    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    if (admission.kind !== 'allowed' || !(await ownsPublishedBusinessForOwnerId(ctx, args.businessId, admission.ownerId))) {
+      return { kind: 'refused', reason: 'authorization_denied' }
+    }
+    const now = Date.now()
+    const operation = await beginOperation(
+      publicationPorts(ctx),
+      { kind: 'owner', ref: admission.ownerId },
+      'reserveOwnerCapabilityPublication',
+      {
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+        reasonCode: args.reasonCode,
+        evidenceRefs: args.evidenceRefs,
+      },
+      {
+        version: 'supply-publication:v1',
+        businessId: String(args.businessId),
+        offeringRef: args.offeringRef,
+        offeringRevision: args.offeringRevision,
+        offeringSourceHash: args.offeringSourceHash,
+        materialDigest: args.materialDigest,
+      },
+      now,
+    )
+    const expected = { kind: 'reserved' as const }
+    if (operation.kind === 'conflict') return { kind: 'refused', reason: 'operation_key_conflict' }
+    if (operation.kind === 'replay') {
+      replayOperationResult(operation, expected)
+      return { kind: 'replayed' }
+    }
+    await succeedOperation(publicationPorts(ctx), operation.operationId, expected, [], now)
+    return expected
+  },
+})
 
 async function loadOwnerSupplyPublication(
   ctx: MutationCtx,
@@ -1075,8 +1168,14 @@ async function loadOwnerSupplyPublication(
   | Readonly<{ kind: 'ok'; publication: PublicationCommandRow }>
   | Readonly<{ kind: 'refused'; reason: string }>
 > {
-  if (!(await ownsPublishedBusiness(ctx, args.businessId)))
-    return { kind: 'refused', reason: 'authorization_denied' }
+  const agentAdmission = args.agentPrincipal === undefined
+    ? undefined
+    : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+  const owned = args.agentPrincipal === undefined
+    ? await ownsPublishedBusiness(ctx, args.businessId)
+    : agentAdmission?.kind === 'allowed'
+      && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
+  if (!owned) return { kind: 'refused', reason: 'authorization_denied' }
   const publication = await publicationPorts(ctx).loadPublicationAtRevision(
     args.publicationRef,
     args.publicationRevision,
@@ -1265,16 +1364,22 @@ async function beginOwnerMaintenanceOperation(
   operationName: 'withdrawOwnerCapability' | 'refreshOwnerCapability',
   now: number,
 ): Promise<OwnerMaintenanceBeginResult> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (
-    identity === null ||
-    !(await ownsPublishedBusiness(ctx, args.businessId))
-  ) {
+  const agentAdmission = args.agentPrincipal === undefined
+    ? undefined
+    : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+  const identity = args.agentPrincipal === undefined
+    ? await ctx.auth.getUserIdentity()
+    : null
+  const owned = args.agentPrincipal === undefined
+    ? identity !== null && await ownsPublishedBusiness(ctx, args.businessId)
+    : agentAdmission?.kind === 'allowed'
+      && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
+  if (!owned) {
     return { kind: 'refused', reason: 'authorization_denied' }
   }
   const operation = await beginOperation(
     publicationPorts(ctx),
-    { kind: 'owner', ref: identity.subject },
+    { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
     operationName,
     {
       operationKey: args.operationKey,
@@ -1600,11 +1705,23 @@ const MAX_SOURCE_DRAFT_OPERATION_KEY_LENGTH = 200
 async function ownerSourceDraftBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
+  agentPrincipal?: Infer<typeof agentAccessPrincipalValue>,
 ): Promise<Readonly<{ ownerId: Id<'owners'> }> | undefined> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return undefined
   const business = await ctx.db.get(businessId)
   if (business === null) return undefined
+  if (agentPrincipal !== undefined) {
+    const admission = await verifySupplyAgentPrincipal(ctx, agentPrincipal, true)
+    if (admission.kind !== 'allowed') return undefined
+    const owner = await ctx.db
+      .query('owners')
+      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
+      .unique()
+    return owner !== null && business.ownerId === owner._id
+      ? { ownerId: owner._id }
+      : undefined
+  }
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return undefined
   const owner = await ctx.db.get(business.ownerId)
   return owner?.clerkUserId === identity.subject
     ? { ownerId: business.ownerId }
@@ -1721,8 +1838,42 @@ function sourceDraftPricingConfig(
     : undefined
 }
 
+async function readOwnerSourceDraftProjection(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  businessId: Id<'businesses'>,
+  offeringRef: string,
+): Promise<OwnerSourceDraftQueryResult> {
+  const offering = await ctx.db
+    .query('businessOfferings')
+    .withIndex('by_offeringRef', (q) => q.eq('offeringRef', offeringRef))
+    .unique()
+  if (offering === null || offering.businessId !== businessId)
+    return { kind: 'not_found' }
+  const draft = await ctx.db
+    .query('capabilitySupplySourceDrafts')
+    .withIndex('by_businessId_and_offeringRef', (q) =>
+      q.eq('businessId', businessId).eq('offeringRef', offeringRef),
+    )
+    .first()
+  if (draft === null) return { kind: 'not_found' }
+  return {
+    kind: 'available',
+    businessId: String(draft.businessId),
+    offeringRef: draft.offeringRef,
+    offeringRevision: draft.offeringRevision,
+    revision: draft.revision,
+    operationKey: draft.operationKey,
+    sourceJson: draft.sourceJson,
+    sourceDigest: draft.sourceDigest,
+    preflight: draft.preflight,
+  }
+}
+
 export const readOwnerSourceDraft = query({
-  args: { businessId: v.id('businesses'), offeringRef: v.string() },
+  args: {
+    businessId: v.id('businesses'),
+    offeringRef: v.string(),
+  },
   returns: ownerSourceDraftQueryResultValue,
   handler: async (ctx, args): Promise<OwnerSourceDraftQueryResult> => {
     const actor = await resolveBusinessActor(ctx)
@@ -1730,30 +1881,38 @@ export const readOwnerSourceDraft = query({
       return { kind: 'error', code: 'unauthenticated' }
     const owned = await ownerSourceDraftBusiness(ctx, args.businessId)
     if (owned === undefined) return { kind: 'not_found' }
-    const offering = await ctx.db
-      .query('businessOfferings')
-      .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef))
+    return await readOwnerSourceDraftProjection(ctx, args.businessId, args.offeringRef)
+  },
+})
+
+const agentOwnerSourceDraftReadArgs = {
+  businessId: v.id('businesses'),
+  offeringRef: v.string(),
+  agentPrincipal: agentAccessPrincipalValue,
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const readAgentOwnerSourceDraft = mutation({
+  args: agentOwnerSourceDraftReadArgs,
+  returns: ownerSourceDraftQueryResultValue,
+  handler: async (ctx, args): Promise<OwnerSourceDraftQueryResult> => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected')
+      return { kind: 'error', code: 'unauthenticated' }
+    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
+    if (admission.kind !== 'allowed')
+      return { kind: 'error', code: 'unauthenticated' }
+    const owner = await ctx.db
+      .query('owners')
+      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
       .unique()
-    if (offering === null || offering.businessId !== args.businessId)
+    if (owner === null) return { kind: 'not_found' }
+    const business = await ctx.db.get(args.businessId)
+    if (business === null || business.ownerId !== owner._id)
       return { kind: 'not_found' }
-    const draft = await ctx.db
-      .query('capabilitySupplySourceDrafts')
-      .withIndex('by_businessId_and_offeringRef', (q) =>
-        q.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef),
-      )
-      .first()
-    if (draft === null) return { kind: 'not_found' }
-    return {
-      kind: 'available',
-      businessId: String(draft.businessId),
-      offeringRef: draft.offeringRef,
-      offeringRevision: draft.offeringRevision,
-      revision: draft.revision,
-      operationKey: draft.operationKey,
-      sourceJson: draft.sourceJson,
-      sourceDigest: draft.sourceDigest,
-      preflight: draft.preflight,
-    }
+    return await readOwnerSourceDraftProjection(ctx, args.businessId, args.offeringRef)
   },
 })
 
@@ -1766,6 +1925,7 @@ export const saveOwnerSourceDraft = mutation({
     operationKey: v.string(),
     correlationId: v.string(),
     sourceJson: v.string(),
+    agentPrincipal: v.optional(agentAccessPrincipalValue),
     ...sourceWriteArgs,
   },
   returns: ownerSourceDraftSaveResultValue,
@@ -1780,7 +1940,7 @@ export const saveOwnerSourceDraft = mutation({
       args.operationKey.length > MAX_SOURCE_DRAFT_OPERATION_KEY_LENGTH
     )
       return { kind: 'refused', reason: 'source_invalid' }
-    const owned = await ownerSourceDraftBusiness(ctx, args.businessId)
+    const owned = await ownerSourceDraftBusiness(ctx, args.businessId, args.agentPrincipal)
     if (owned === undefined)
       return { kind: 'refused', reason: 'authorization_denied' }
     const offering = await ctx.db
@@ -1979,6 +2139,7 @@ export const recordOwnerSourceDraftPreflight = mutation({
     evidenceRefs: v.array(v.string()),
     operationKey: v.string(),
     correlationId: v.string(),
+    agentPrincipal: v.optional(agentAccessPrincipalValue),
     ...sourceWriteArgs,
   },
   returns: v.boolean(),
@@ -1990,7 +2151,7 @@ export const recordOwnerSourceDraftPreflight = mutation({
       args.openApi.outcomes.length > MAX_OPENAPI_PREFLIGHT_OPERATIONS
     )
       return false
-    const owned = await ownerSourceDraftBusiness(ctx, args.businessId)
+    const owned = await ownerSourceDraftBusiness(ctx, args.businessId, args.agentPrincipal)
     if (owned === undefined) return false
     const draft = await ctx.db
       .query('capabilitySupplySourceDrafts')

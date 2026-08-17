@@ -38,17 +38,28 @@ function pinEnv(): void {
 }
 
 const currentOperationRef = `operation:v1:${'a'.repeat(64)}`
+function authenticateWithScopes(scopes: readonly string[]) {
+  return async () => ({
+    isAuthenticated: true as const,
+    tokenType: 'api_key' as const,
+    id: 'key:test',
+    subject: 'user_test',
+    scopes: [...scopes],
+  })
+}
 
 
 async function postMcp(
   body: object,
   options: Parameters<typeof handleMcpRequest>[1] = {},
+  headers: HeadersInit = {},
 ): Promise<Response> {
   const request = new Request('https://ae.example/mcp', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
+      ...headers,
     },
     body: JSON.stringify(body),
   })
@@ -209,10 +220,18 @@ describe('MCP host adapter', () => {
         properties: expect.any(Object),
         additionalProperties: false,
       }))
-      expect(tool.outputSchema).toEqual(toJsonSchemaCompat(action.outputSchema, {
+      const expectedOutputSchema = toJsonSchemaCompat(z.object({
+        result: action.outputSchema,
+      }), {
         strictUnions: true,
         pipeStrategy: 'output',
+      })
+      expect(tool.outputSchema).toEqual(expect.objectContaining({
+        type: 'object',
+        additionalProperties: false,
+        required: ['result'],
       }))
+      expect(tool.outputSchema).toEqual(expectedOutputSchema)
     }
 
     const detail = tools.find((tool) => tool.name === 'ae_registry_detail')
@@ -285,11 +304,62 @@ describe('MCP host adapter', () => {
       data: { query: 'plumbing' },
       context: expect.objectContaining({ caller: 'mcp' }),
     })
-    expect(result.structuredContent).toMatchObject({
+    expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
       kind: 'ok',
       schemaVersion: 'public-services-api:v2',
     })
   })
+  it('dispatches a publication artifact above 64 KiB below the MCP body cap', async () => {
+    const publicationSourceBytes = 262_144
+    const publicationSource = {
+      kind: 'openapi_http',
+      documentJson: 'x'.repeat(publicationSourceBytes),
+    }
+    const body = {
+      jsonrpc: '2.0',
+      id: 'large-publication',
+      method: 'tools/call',
+      params: {
+        name: 'ae_supply_publish',
+        arguments: {
+          version: 'supply-publication:v1',
+          businessId: 'business:test',
+          offeringRef: 'offering:test',
+          offeringRevision: 1,
+          offeringSourceHash: 'hash:test',
+          source: publicationSource,
+          evidenceRefs: ['evidence:test'],
+          idempotencyKey: 'large-publication-key',
+        },
+      },
+    }
+    const encoder = new TextEncoder()
+    const sourceBytes = encoder.encode(publicationSource.documentJson).byteLength
+    const requestBytes = encoder.encode(JSON.stringify(body)).byteLength
+    expect(sourceBytes).toBe(262_144)
+    expect(requestBytes).toBeGreaterThan(64 * 1024)
+    expect(requestBytes).toBeLessThan(320 * 1024)
+
+    const supplyService = {
+      publish: vi.fn().mockResolvedValue({ kind: 'refused', reason: 'boundary_probe' }),
+      withdraw: vi.fn(),
+      earnings: vi.fn(),
+    }
+    const response = await postMcp(body, {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+      supplyManagementService: supplyService,
+    }, {
+      authorization: 'Bearer supply-boundary',
+    })
+
+    expect(response.status).toBe(200)
+    const result = await readMcpBody(response)
+    expect(supplyService.publish).toHaveBeenCalledOnce()
+    expect(result.result).toMatchObject({
+      structuredContent: { result: { kind: 'refused', reason: 'boundary_probe' } },
+    })
+  })
+
   it('delegates a valid MCP operation call to the canonical keyless executor once', async () => {
     operationExecuteMocks.executeKeylessOperation.mockResolvedValue({
       kind: 'ok',
@@ -322,7 +392,7 @@ describe('MCP host adapter', () => {
       input: { latitude: -33.86, longitude: 151.2 },
     })
     expect(result.isError).not.toBe(true)
-    expect(result.structuredContent).toEqual({
+    expect((result.structuredContent as { result?: unknown } | undefined)?.result).toEqual({
       kind: 'ok',
       operationRef: currentOperationRef,
       capabilityId: 'weather.current',
@@ -384,7 +454,7 @@ describe('MCP host adapter', () => {
       const body = await readMcpBody(response)
       const result = body.result as Record<string, unknown>
       expect(result.isError).not.toBe(true)
-      expect(result.structuredContent).toMatchObject({
+      expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
         kind: 'refused',
         operationRef: currentOperationRef,
         reason,
@@ -607,7 +677,7 @@ describe('MCP host adapter', () => {
     let canceled = false
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
-        controller.enqueue(encoder.encode('x'.repeat(65 * 1024)))
+        controller.enqueue(encoder.encode('x'.repeat(320 * 1024 + 1)))
       },
       cancel() {
         canceled = true
@@ -663,6 +733,7 @@ describe('MCP host adapter', () => {
       run: async () => ({ kind: 'ok' }),
     })
 
+
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 8,
@@ -674,6 +745,175 @@ describe('MCP host adapter', () => {
       tools: [expect.objectContaining({ name: mcpToolName(registryDetailAction) })],
     })
   })
+  it('hides credential-admitted supplier tools from anonymous tools/list', async () => {
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'anonymous-supply-list',
+      method: 'tools/list',
+      params: {},
+    })
+    const body = await readMcpBody(response)
+    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
+
+    expect(names).not.toEqual(expect.arrayContaining([
+      'ae_supply_publish',
+      'ae_supply_withdraw',
+      'ae_supply_earnings',
+    ]))
+  })
+
+  it('lists operation tools without supplier tools for an operation-only principal', async () => {
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'operation-only-list',
+      method: 'tools/list',
+      params: {},
+    }, {
+      authenticate: authenticateWithScopes(['market_operations:invoke']),
+    }, {
+      authorization: 'Bearer operation-only',
+    })
+    const body = await readMcpBody(response)
+    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
+    const expectedNames = listMcpActions()
+      .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
+        || action.credentialAdmission?.scope === 'market_operations:invoke')
+      .map(mcpToolName)
+
+    expect(names).toEqual(expectedNames)
+    expect(names).not.toEqual(expect.arrayContaining([
+      'ae_supply_publish',
+      'ae_supply_withdraw',
+      'ae_supply_earnings',
+    ]))
+  })
+
+  it('lists exactly the three supplier tools plus anonymous reads for a supply-only principal', async () => {
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'supply-only-list',
+      method: 'tools/list',
+      params: {},
+    }, {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+    }, {
+      authorization: 'Bearer supply-only',
+    })
+    const body = await readMcpBody(response)
+    const names = ((body.result?.tools ?? []) as Array<Record<string, unknown>>).map((tool) => tool.name)
+    const supplyActions = listMcpActions()
+      .filter((action) => action.credentialAdmission?.scope === 'market_supply:manage')
+    const expectedNames = listMcpActions()
+      .filter((action) => (action.readOnly && action.credentialAdmission === undefined)
+        || action.credentialAdmission?.scope === 'market_supply:manage')
+      .map(mcpToolName)
+    const operationProtectedNames = listMcpActions()
+      .filter((action) => action.credentialAdmission?.scope === 'market_operations:invoke')
+      .map(mcpToolName)
+
+    expect(supplyActions).toHaveLength(3)
+    expect(supplyActions.map((action) => action.id).sort()).toEqual([
+      'supply.earnings',
+      'supply.publish',
+      'supply.withdraw',
+    ])
+    expect(names).toEqual(expectedNames)
+    expect(names).not.toEqual(expect.arrayContaining(operationProtectedNames))
+  })
+  it('rejects an operation-only principal from calling a supplier action without invoking its service', async () => {
+    const supplyService = {
+      publish: vi.fn(),
+      withdraw: vi.fn(),
+      earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+    }
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'operation-only-supply-call',
+      method: 'tools/call',
+      params: {
+        name: 'ae_supply_earnings',
+        arguments: { currency: 'USD' },
+      },
+    }, {
+      authenticate: authenticateWithScopes(['market_operations:invoke']),
+      supplyManagementService: supplyService,
+    })
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      status: 403,
+      kind: 'PERMISSION_DENIED',
+      code: 'scope_required',
+    })
+    expect(supplyService.earnings).not.toHaveBeenCalled()
+  })
+
+  it('rejects an anonymous principal from calling a supplier action without invoking its service', async () => {
+    const supplyService = {
+      publish: vi.fn(),
+      withdraw: vi.fn(),
+      earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+    }
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'anonymous-supply-call',
+      method: 'tools/call',
+      params: {
+        name: 'ae_supply_earnings',
+        arguments: { currency: 'USD' },
+      },
+    }, {
+      authenticate: async () => ({
+        isAuthenticated: false,
+        tokenType: null,
+        id: null,
+        subject: null,
+        scopes: null,
+      }),
+      supplyManagementService: supplyService,
+    })
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toMatchObject({
+      status: 401,
+      kind: 'UNAUTHENTICATED',
+      code: 'authentication_required',
+    })
+    expect(supplyService.earnings).not.toHaveBeenCalled()
+  })
+
+  it('dispatches a supplier action for a supply-only principal', async () => {
+    const supplyService = {
+      publish: vi.fn(),
+      withdraw: vi.fn(),
+      earnings: vi.fn().mockResolvedValue({ kind: 'not_found' }),
+    }
+    const response = await postMcp({
+      jsonrpc: '2.0',
+      id: 'supply-only-supply-call',
+      method: 'tools/call',
+      params: {
+        name: 'ae_supply_earnings',
+        arguments: { currency: 'USD' },
+      },
+    }, {
+      authenticate: authenticateWithScopes(['market_supply:manage']),
+      supplyManagementService: supplyService,
+    })
+
+    expect(response.status).toBe(200)
+    const body = await readMcpBody(response)
+    expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toEqual({ kind: 'not_found' })
+    expect(supplyService.earnings).toHaveBeenCalledOnce()
+    expect(supplyService.earnings).toHaveBeenCalledWith(expect.objectContaining({
+      input: { currency: 'USD' },
+      principal: expect.objectContaining({
+        credentialId: 'key:test',
+        scopes: ['market_supply:manage'],
+      }),
+    }))
+  })
+
   it('authenticates operation.invoke and delegates the same registered action', async () => {
     const executor = {
       invokeOperation: vi.fn().mockResolvedValue({
@@ -711,14 +951,14 @@ describe('MCP host adapter', () => {
         isAuthenticated: true,
         tokenType: 'api_key',
         id: 'key:test',
-        subject: 'owner:test',
+        subject: 'user_test',
         scopes: ['market_operations:invoke'],
       }),
       operationInvokeService: executor,
     })
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
-    expect(body.result?.structuredContent).toMatchObject({ kind: 'completed', operationRef: currentOperationRef })
+    expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({ kind: 'completed', operationRef: currentOperationRef })
     expect(executor.invokeOperation).toHaveBeenCalledOnce()
   })
 })

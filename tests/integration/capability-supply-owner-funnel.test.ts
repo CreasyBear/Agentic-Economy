@@ -435,6 +435,77 @@ async function createPublishedBusinessOwner(
   })) as Id<'businesses'>
   return { businessId, owner: backend.withIdentity(identity) }
 }
+async function seedSupplyAgentPrincipal(
+  backend: ConvexFixtureBackend,
+  ownerId: string,
+  suffix: string,
+) {
+  const principal = {
+    principalId: `principal:supply-reservation:${suffix}`,
+    ownerId,
+    credentialId: `credential:supply-reservation:${suffix}`,
+    applicationRef: 'agentic-economy',
+    environment: 'production' as const,
+    scopes: ['market_supply:manage'],
+    authorityMode: 'full_yolo' as const,
+  }
+  const now = Date.now()
+  const amount = { currency: 'USD', units: '0', exponent: 2 }
+  const policy = {
+    format: 'ae.agent-access-policy:v1' as const,
+    operationAccess: 'all_admitted' as const,
+    environment: 'production' as const,
+    budget: {
+      budgetPolicyRef: `budget-policy:supply-reservation:${suffix}`,
+      generation: 1,
+      currency: 'USD',
+      exponent: 2,
+      maximumSpendPerInvocation: amount,
+      maximumDailySpend: amount,
+      maximumMonthlySpend: amount,
+      maximumConcurrentInvocations: 4,
+    },
+    rate: {
+      ratePolicyRef: `rate-policy:supply-reservation:${suffix}`,
+      generation: 1,
+      maximumCallsPerMinute: 100,
+      maximumCallsPerHour: 1_000,
+    },
+  }
+  const grant = {
+    format: 'ae.agent-access-grant:v1' as const,
+    grantRef: `grant:supply-reservation:${suffix}`,
+    principalId: principal.principalId,
+    ownerId: principal.ownerId,
+    applicationRef: principal.applicationRef,
+    credentialId: principal.credentialId,
+    environment: principal.environment,
+    operationAccess: 'all_admitted' as const,
+    authorityMode: principal.authorityMode,
+    policy,
+    budgetPolicyRef: policy.budget.budgetPolicyRef,
+    ratePolicyRef: policy.rate.ratePolicyRef,
+    lifecycle: 'active' as const,
+    generation: 1,
+    policyDigest: canonicalDigest(policy as never),
+    createdAt: now,
+    updatedAt: now,
+    expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+  }
+  const recorded = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
+    ...principal,
+    scopes: [...principal.scopes],
+    ownerTokenIdentifier: `token:supply-reservation:${suffix}`,
+    grantGeneration: 1,
+    policyDigest: grant.policyDigest,
+    lifecycle: 'active',
+    seenAt: now,
+  })
+  if (recorded.kind !== 'recorded') throw new Error(`supply_reservation_principal_failed:${recorded.kind}`)
+  const granted = await backend.mutation(internal.agentAccessPolicy.upsertGrant, { grant })
+  if (granted.kind !== 'recorded') throw new Error(`supply_reservation_grant_failed:${granted.kind}`)
+  return principal
+}
 
 async function seedCatalogOffering(
   backend: ConvexFixtureBackend,
@@ -1301,6 +1372,72 @@ describe('owner capability publication admission', () => {
     ).toBe('completed')
   })
 })
+
+describe('owner publish reservation authority', () => {
+  it('requires a verified owner principal and rejects changed material before draft effects', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId } = await createPublishedBusinessOwner(backend, 'reservation-owner')
+    const principal = await seedSupplyAgentPrincipal(backend, 'user_reservation-owner', 'one')
+    const command = {
+      businessId,
+      offeringRef: 'offering:reservation',
+      offeringRevision: 1,
+      offeringSourceHash: 'source:reservation',
+      materialDigest: 'sha256:' + '1'.repeat(64),
+      operationKey: 'supply.publish:reservation:one',
+      correlationId: 'supply.publish:reservation:one',
+      reasonCode: 'supply.publish',
+      evidenceRefs: ['evidence:reservation:one'],
+      agentPrincipal: principal,
+    }
+    const forged = {
+      ...principal,
+      principalId: 'principal:supply-reservation:forged',
+      ownerId: 'user_other-owner',
+      credentialId: 'credential:supply-reservation:forged',
+    }
+    await expect(
+      backend.mutation(
+        api.capabilitySupplyOwnerFunnel.reserveOwnerCapabilityPublication,
+        await withSourceWrite('catalog_publish', {
+          ...command,
+          agentPrincipal: forged,
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+
+    await expect(
+      backend.mutation(
+        api.capabilitySupplyOwnerFunnel.reserveOwnerCapabilityPublication,
+        await withSourceWrite('catalog_publish', command),
+      ),
+    ).resolves.toEqual({ kind: 'reserved' })
+    await expect(
+      backend.mutation(
+        api.capabilitySupplyOwnerFunnel.reserveOwnerCapabilityPublication,
+        await withSourceWrite('catalog_publish', command),
+      ),
+    ).resolves.toEqual({ kind: 'replayed' })
+    await expect(
+      backend.mutation(
+        api.capabilitySupplyOwnerFunnel.reserveOwnerCapabilityPublication,
+        await withSourceWrite('catalog_publish', {
+          ...command,
+          materialDigest: 'sha256:' + '2'.repeat(64),
+          evidenceRefs: ['evidence:reservation:changed'],
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'operation_key_conflict' })
+
+    const state = await backend.run(async (ctx) => ({
+      operations: await ctx.db.query('operationKeys').collect(),
+      drafts: await ctx.db.query('capabilitySupplySourceDrafts').collect(),
+    }))
+    expect(state.operations.filter((row) => row.operationName === 'reserveOwnerCapabilityPublication')).toHaveLength(1)
+    expect(state.drafts).toHaveLength(0)
+  })
+})
+
 describe('owner source draft persistence', () => {
   afterEach(() => vi.useRealTimers())
 
@@ -1324,9 +1461,28 @@ describe('owner source draft persistence', () => {
       1,
       'catalog-source:draft-owner:v1',
     )
+    const missingSourceRevisionJson = JSON.stringify({
+      ...openApiSource(),
+      evidenceRefs: ['source:owner:lookup'],
+    })
+    await expect(
+      owner.mutation(
+        api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
+        await withSourceWrite('catalog_publish', {
+          businessId,
+          offeringRef,
+          offeringRevision: 1,
+          expectedRevision: 0,
+          operationKey: 'owner-source-draft:missing-revision',
+          correlationId: 'owner-source-draft:missing-revision',
+          sourceJson: missingSourceRevisionJson,
+        }),
+      ),
+    ).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
     const sourceJson = JSON.stringify({
       ...openApiSource(),
       sourceRevision: 'owner-api/2026-08-09',
+      evidenceRefs: ['source:owner:lookup'],
     })
 
     const saved = await owner.mutation(
@@ -1359,6 +1515,7 @@ describe('owner source draft persistence', () => {
       },
     })
     if (readback.kind !== 'available') throw new Error('draft_readback_missing')
+    expect((JSON.parse(readback.sourceJson) as Record<string, unknown>).sourceRevision).toBe('owner-api/2026-08-09')
     expect(readback.preflight.status).toBe('prepared')
     expect(readback.preflight.evidenceRefs).toEqual(['source:owner:lookup'])
     await expect(

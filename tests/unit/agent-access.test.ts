@@ -5,6 +5,7 @@ import {
   AGENT_ACCESS_KEY_TTL_SECONDS,
   CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
+  MARKET_SUPPLY_MANAGE_SCOPE,
   issueAgentAccessKey,
   listAgentAccessKeys,
   projectAgentAccessKey,
@@ -44,6 +45,42 @@ function existingKey(overrides: Record<string, unknown> = {}) {
 }
 
 describe('agent access', () => {
+  it('projects a supply-only key with the bounded supply authority', () => {
+    const projected = projectAgentAccessKey(existingKey({
+      scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+      claims: { ...canonicalClaims, aeAuthorityMode: 'bounded_mandate' },
+    }))
+    expect(projected).toMatchObject({
+      scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+      authorityMode: 'bounded_mandate',
+    })
+  })
+  it('issues a supply-only key without adding the default operation scope', async () => {
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { name: 'Supply key', idempotencyKey: 'supply-12345678', scopes: [MARKET_SUPPLY_MANAGE_SCOPE] },
+      policy,
+      api: {
+        create: vi.fn().mockResolvedValue({ id: 'supply_key', secret: 'supply_secret', revoked: false, expired: false }),
+        getSecret: vi.fn().mockResolvedValue({ secret: 'supply_secret' }),
+        list: vi.fn().mockResolvedValue({ data: [] }),
+      },
+      registerGrant: vi.fn().mockResolvedValue({
+        kind: 'recorded' as const,
+        grantRef: 'supply-12345678',
+        generation: 1,
+        policyDigest: 'policy:supply-12345678',
+        lifecycle: 'active' as const,
+        expiresAt: 2_000,
+      }),
+      registerPrincipal: vi.fn().mockResolvedValue({ kind: 'recorded' as const }),
+    })
+    expect(result).toMatchObject({
+      kind: 'created',
+      authorityMode: 'bounded_mandate',
+      scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+    })
+  })
   it('issues and exactly replays one canonical market-operations key', async () => {
     const create = vi.fn().mockResolvedValue({ id: 'key_123', secret: 'ae_test_secret', revoked: false, expired: false })
     const getSecret = vi.fn().mockResolvedValue({ secret: 'ae_test_secret' })

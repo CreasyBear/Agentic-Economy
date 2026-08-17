@@ -100,7 +100,7 @@ export type AgentAccessAuthenticationOptions = Readonly<{
   authenticate?: () => Promise<AgentAccessApiKeyAuth>
   verifyKeyState?: (keyId: string) => Promise<AgentAccessCurrentApiKey>
   resolvePrincipal?: (principal: AgentAccessPrincipal) => Promise<AgentAccessPrincipal | null>
-  requiredScope?: string
+  requiredScope?: string | null
   requiredMode?: AgentAccessAuthorityMode
 }>
 
@@ -111,7 +111,7 @@ export async function authenticateAgentAccess(
   status: 401 | 403
   reason: 'authentication_required' | 'scope_required'
 }>> {
-  const requiredScope = options.requiredScope ?? MARKET_OPERATIONS_INVOKE_SCOPE
+  const requiredScope = options.requiredScope === undefined ? MARKET_OPERATIONS_INVOKE_SCOPE : options.requiredScope
   let candidate: AgentAccessApiKeyAuth
   try {
     candidate = await (options.authenticate ?? (async () =>
@@ -122,7 +122,10 @@ export async function authenticateAgentAccess(
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (!candidate.subject.startsWith('user_')) {
+    return { kind: 'refused', status: 403, reason: 'scope_required' }
+  }
+  if (requiredScope !== null && !candidate.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
   let admittedScopes = candidate.scopes
   let claims = candidate.claims
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
@@ -141,7 +144,7 @@ export async function authenticateAgentAccess(
       if (current.id !== candidate.id || current.subject !== candidate.subject || current.revoked || current.expired) {
         return { kind: 'refused', status: 401, reason: 'authentication_required' }
       }
-      if (!current.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+      if (requiredScope !== null && !current.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
       admittedScopes = current.scopes
       claims = current.claims
     } catch {
@@ -149,12 +152,14 @@ export async function authenticateAgentAccess(
     }
   }
   const authorityMode = agentAuthorityModeForScopes(admittedScopes, { allowCustomerDefault: true })
-    ?? (requiredScope.startsWith('customer_requests:') || requiredScope.startsWith('work_trees:') ? undefined : 'inspect_only')
+    ?? (requiredScope === null
+      ? undefined
+      : (requiredScope.startsWith('customer_requests:') || requiredScope.startsWith('work_trees:') ? undefined : 'inspect_only'))
   if (authorityMode === undefined) return { kind: 'refused', status: 403, reason: 'scope_required' }
   if (options.requiredMode !== undefined && !agentAuthorityModeAllows(authorityMode, options.requiredMode)) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
-  const ownerId = candidate.userId ?? candidate.subject
+  const ownerId = candidate.subject
   const principalId = `clerk_api_key:${candidate.id}`
   const principal: AgentAccessPrincipal = Object.freeze({
     principalId,

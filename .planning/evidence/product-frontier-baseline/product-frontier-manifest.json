@@ -1,6 +1,6 @@
 {
   "schemaVersion": "ae-product-frontier:v1",
-  "capturedAt": "2026-08-15",
+  "capturedAt": "2026-08-16",
   "evidenceClass": "source-local",
   "requiredActionIds": [
     "supply.collectDevelopmentQuote",
@@ -46,7 +46,10 @@
     "workTree.finalizeRepeatUse",
     "workTree.reconcileRepeatUse",
     "workTree.inspectRepeatUse",
-    "settings.updateNotificationPreferences"
+    "settings.updateNotificationPreferences",
+    "supply.publish",
+    "supply.withdraw",
+    "supply.earnings"
   ],
   "protectedActionIds": [
     "study.start",
@@ -66,7 +69,10 @@
     "workTree.create",
     "workTree.inspect",
     "workTree.apply",
-    "workTree.decide"
+    "workTree.decide",
+    "supply.publish",
+    "supply.withdraw",
+    "supply.earnings"
   ],
   "requiredMcpTools": [
     {
@@ -128,6 +134,21 @@
       "id": "operation.reconcile",
       "toolName": "ae_operation_reconcile",
       "readOnly": false
+    },
+    {
+      "id": "supply.publish",
+      "toolName": "ae_supply_publish",
+      "readOnly": false
+    },
+    {
+      "id": "supply.withdraw",
+      "toolName": "ae_supply_withdraw",
+      "readOnly": false
+    },
+    {
+      "id": "supply.earnings",
+      "toolName": "ae_supply_earnings",
+      "readOnly": true
     }
   ],
   "requiredE2eSpecs": [

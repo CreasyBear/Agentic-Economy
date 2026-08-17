@@ -2,7 +2,7 @@ import { paginationOptsValidator } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
-import type { Doc } from './_generated/dataModel'
+import type { Doc, Id } from './_generated/dataModel'
 import {
   action,
   internalMutation,
@@ -14,6 +14,7 @@ import {
   env,
 } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
   verifyCustomerRequestServiceAssertion,
@@ -10705,18 +10706,70 @@ const ownerProviderEarningsResultValue = v.union(
   }),
 )
 
+async function readOwnerProviderEarningsProjection(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  business: Doc<'businesses'>,
+  currency: string | undefined,
+): Promise<Infer<typeof ownerProviderEarningsResultValue>> {
+  const businessId = String(business._id)
+  const accountRows = currency === undefined
+    ? await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_businessId_and_currency', (q) => q.eq('businessId', businessId))
+        .take(11)
+    : await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_businessId_and_currency', (q) =>
+          q.eq('businessId', businessId).eq('currency', currency),
+        )
+        .take(1)
+  const providerAccountRows = accountRows.filter(
+    (account) => account.accountKind === 'provider_earnings',
+  )
+  const providerAccounts = providerAccountRows.slice(0, 10)
+  const accountResults = await Promise.all(
+    providerAccounts.map(async (providerAccount) => {
+      const [earnings, payout] = await Promise.all([
+        readProviderEarningsForAccount(
+          ctx,
+          businessId,
+          providerAccount.currency,
+          providerAccount,
+        ),
+        readPayoutStatusForProviderAccount(
+          ctx,
+          businessId,
+          providerAccount.currency,
+          providerAccount,
+        ),
+      ])
+      return earnings.kind === 'ok' && payout.kind === 'ok'
+        ? { currency: providerAccount.currency, earnings, payout }
+        : undefined
+    }),
+  )
+  if (accountResults.some((account) => account === undefined))
+    return { kind: 'error', code: 'source_unavailable' }
+  return {
+    kind: 'available',
+    businessId,
+    accounts: accountResults.filter((account) => account !== undefined),
+    accountsTruncated: currency === undefined && providerAccountRows.length > 10,
+  }
+}
+
 export const readOwnerProviderEarnings = query({
-  args: {},
+  args: {
+    currency: v.optional(identifier),
+  },
   returns: ownerProviderEarningsResultValue,
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
       return { kind: 'error' as const, code: 'unauthenticated' as const }
     const owner = await ctx.db
       .query('owners')
-      .withIndex('by_clerkUserId', (q) =>
-        q.eq('clerkUserId', actor.clerkUserId),
-      )
+      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', actor.clerkUserId))
       .unique()
     if (owner === null) return { kind: 'not_found' as const }
     const business = await ctx.db
@@ -10725,47 +10778,40 @@ export const readOwnerProviderEarnings = query({
       .order('desc')
       .first()
     if (business === null) return { kind: 'not_found' as const }
-    const businessId = String(business._id)
-    const accountRows = await ctx.db
-      .query('moneyAccounts')
-      .withIndex('by_businessId_and_currency', (q) =>
-        q.eq('businessId', businessId),
-      )
-      .take(11)
-    const providerAccountRows = accountRows.filter(
-      (account) => account.accountKind === 'provider_earnings',
-    )
-    const providerAccounts = providerAccountRows.slice(0, 10)
-    const accountResults = await Promise.all(
-      providerAccounts.map(async (providerAccount) => {
-        const [earnings, payout] = await Promise.all([
-          readProviderEarningsForAccount(
-            ctx,
-            businessId,
-            providerAccount.currency,
-            providerAccount,
-          ),
-          readPayoutStatusForProviderAccount(
-            ctx,
-            businessId,
-            providerAccount.currency,
-            providerAccount,
-          ),
-        ])
-        return earnings.kind === 'ok' && payout.kind === 'ok'
-          ? { currency: providerAccount.currency, earnings, payout }
-          : undefined
-      }),
-    )
-    if (accountResults.some((account) => account === undefined)) {
-      return { kind: 'error' as const, code: 'source_unavailable' as const }
-    }
-    return {
-      kind: 'available' as const,
-      businessId,
-      accounts: accountResults.filter((account) => account !== undefined),
-      accountsTruncated: providerAccountRows.length > 10,
-    }
+    return await readOwnerProviderEarningsProjection(ctx, business, args.currency)
+  },
+})
+
+const agentProviderEarningsReadArgs = {
+  agentPrincipal: agentAccessPrincipalValue,
+  currency: v.optional(identifier),
+  operationKey: v.string(),
+  correlationId: v.string(),
+  ...sourceWriteArgs,
+} as const
+
+export const readAgentProviderEarnings = mutation({
+  args: agentProviderEarningsReadArgs,
+  returns: ownerProviderEarningsResultValue,
+  handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected')
+      return { kind: 'error' as const, code: 'unauthenticated' as const }
+    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
+    if (admission.kind !== 'allowed')
+      return { kind: 'error' as const, code: 'unauthenticated' as const }
+    const owner = await ctx.db
+      .query('owners')
+      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
+      .unique()
+    if (owner === null) return { kind: 'not_found' as const }
+    const business = await ctx.db
+      .query('businesses')
+      .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
+      .order('desc')
+      .first()
+    if (business === null) return { kind: 'not_found' as const }
+    return await readOwnerProviderEarningsProjection(ctx, business, args.currency)
   },
 })
 

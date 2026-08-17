@@ -2,7 +2,7 @@ import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
-import type { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
 import type { JsonValue } from '@/modules/capability-contract/public'
@@ -46,7 +46,7 @@ export type ActionHarnessApprovalContext = {
 
 export type ActionAgentAccessPrincipal = AgentAccessPrincipal
 export type ActionCredentialAdmission = Readonly<{
-  scope: typeof MARKET_OPERATIONS_INVOKE_SCOPE
+  scope: string
   authority: 'descriptor_classified'
 }>
 
@@ -125,6 +125,8 @@ export type ActionContext = {
   correlationId?: string
   /** One injected operation application service shared by HTTP and MCP adapters. */
   operationInvokeService?: OperationInvokeService
+  /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
+  supplyManagementService?: SupplyManagementService
 }
  
 

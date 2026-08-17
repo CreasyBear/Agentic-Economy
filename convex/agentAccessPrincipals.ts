@@ -1,12 +1,23 @@
-import { v } from 'convex/values'
-import { mutation, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
+import { v, type Infer } from 'convex/values'
+import { mutation, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
+import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
 const authorityMode = v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo'))
 const lifecycle = v.union(v.literal('active'), v.literal('revoked'), v.literal('expired'))
+export const agentAccessPrincipalValue = v.object({
+  principalId: v.string(),
+  ownerId: v.string(),
+  credentialId: v.string(),
+  applicationRef: v.string(),
+  environment,
+  scopes: v.array(v.string()),
+  authorityMode,
+})
+export type AgentAccessPrincipalValue = Infer<typeof agentAccessPrincipalValue>
 const agentPrincipalArgs = {
   principalId: v.string(),
   credentialId: v.string(),
@@ -83,6 +94,53 @@ async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrin
     lastSeenAt: args.seenAt,
   })
   return { kind: 'recorded' as const }
+}
+export type AgentSupplyPrincipalAdmission =
+  | Readonly<{ kind: 'allowed'; grantRef: string; ownerId: string }>
+  | Readonly<{ kind: 'refused'; reason: 'authorization_denied' }>
+
+export async function verifySupplyAgentPrincipal(
+  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
+  principal: AgentAccessPrincipalValue,
+  requireMandate = false,
+): Promise<AgentSupplyPrincipalAdmission> {
+  if (!principal.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+    || (requireMandate && principal.authorityMode !== 'bounded_mandate' && principal.authorityMode !== 'full_yolo')) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  const stored = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_principalId', (query) => query.eq('principalId', principal.principalId)).unique()
+  if (stored === null
+    || stored.ownerId !== principal.ownerId
+    || stored.credentialId !== principal.credentialId
+    || stored.applicationRef !== principal.applicationRef
+    || stored.environment !== principal.environment
+    || stored.authorityMode !== principal.authorityMode
+    || stored.lifecycle !== 'active'
+    || (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
+    || !stored.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+    || principal.scopes.some((scope) => !stored.scopes.includes(scope))) {
+    return { kind: 'refused', reason: 'authorization_denied' }
+  }
+  const grants = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => (
+      query.eq('credentialId', principal.credentialId)
+        .eq('environment', principal.environment)
+        .eq('lifecycle', 'active')
+    ))
+    .take(8)
+  const grant = grants.find((candidate) => candidate.principalId === stored.principalId
+    && candidate.ownerId === stored.ownerId
+    && candidate.credentialId === stored.credentialId
+    && candidate.applicationRef === stored.applicationRef
+    && candidate.authorityMode === stored.authorityMode
+    && candidate.operationAccess === 'all_admitted'
+    && candidate.generation === stored.grantGeneration
+    && candidate.policyDigest === stored.policyDigest
+    && candidate.expiresAt > Date.now())
+  return grant === undefined
+    ? { kind: 'refused', reason: 'authorization_denied' }
+    : { kind: 'allowed', grantRef: grant.grantRef, ownerId: stored.ownerId }
 }
 
 export const recordAgentPrincipal = internalMutation({
