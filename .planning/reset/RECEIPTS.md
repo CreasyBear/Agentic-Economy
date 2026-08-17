@@ -602,3 +602,29 @@ No hosted provider publication, provider network call, live money, or push was p
 - Independent correctness review: PASS.
 - Independent security/privacy review: PASS.
 - No hosted/live-provider call, network call, live money, push, release packet, or source-write was performed.
+
+## HK-topup-derivation — committed
+
+Product commit `338f219ad624614d28a7f4e19c38edf6dcb6e8d7` (`fix: derive credit top-up account server-side`); final product commit porcelain was empty.
+
+Authority and digest/callsite cutover:
+
+- Public browser top-up input no longer includes `accountRef`.
+- The default source resolver derives the owner from Clerk `userId` after the fail-closed live-money gate and before provider/source I/O.
+- `accountRefForOwner(ownerId, currency)` controls the command digests, input digests, and reserve payload.
+- Extra forged runtime input cannot override the derived account ref; missing owner refuses as `billing_identity_missing`.
+- The direct hosted-smoke callsite injects its already-bound `ownerUserId`.
+
+The Convex second check is unchanged: `reserveCreditTopup` independently re-authenticates the principal and re-derives the owner account ref, refusing mismatches.
+
+Observed validation and reviews:
+
+- Node 22 focused tests: 2 files / 36 passed.
+- `npm run typecheck`: PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS.
+- Correctness review: 0.97 PASS.
+- Security review: PASS.
+- A red-capable forged-input assertion covers the extra runtime `accountRef` case and fails if caller input can influence the derived owner ref.
+
+Explicit exclusions from the contract: no Convex edit, hosted run, provider call, live money, push, or release gate.
