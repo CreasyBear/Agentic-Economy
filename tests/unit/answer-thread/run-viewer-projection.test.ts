@@ -8,7 +8,7 @@ import { buildHarnessRunReport } from '@/modules/harness/public'
 import {
   buildHarnessRunViewerDetailProjection,
   buildHarnessRunViewerListResult,
-} from '@/modules/harness/internal/run-viewer-projection'
+} from '@/modules/answer-thread/internal/run-viewer-projection'
 
 describe('harness run viewer projection', () => {
   it('reports missing harness evidence without reconstructing a run', () => {

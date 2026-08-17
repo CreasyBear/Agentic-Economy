@@ -6,12 +6,12 @@ import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { stringSearch } from '@/lib/operator/string-search'
 import {
   readAdminRunViewerListServer,
-} from '@/modules/harness/run-viewer.functions'
+} from '@/modules/answer-thread/run-viewer.functions'
 import {
   HarnessRunViewerEvidenceFilterValues,
   HarnessRunViewerStatusFilterValues,
   type HarnessRunViewerFilters,
-} from '@/modules/harness/run-viewer.schema'
+} from '@/modules/answer-thread/run-viewer.schema'
 
 export const Route = createFileRoute('/_operator/admin/runs')({
   ...operatorRouteOptions,

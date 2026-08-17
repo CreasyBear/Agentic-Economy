@@ -9,7 +9,7 @@ import {
   readAdminRunViewerDetailThroughSource,
   readAdminRunViewerListThroughSource,
   setHarnessRunViewerSourcePortForTests,
-} from '@/modules/harness/run-viewer.functions'
+} from '@/modules/answer-thread/run-viewer.functions'
 
 let restoreSourcePort: (() => void) | undefined
 

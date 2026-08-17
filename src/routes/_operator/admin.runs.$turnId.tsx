@@ -5,7 +5,7 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   readAdminRunViewerDetailServer,
-} from '@/modules/harness/run-viewer.functions'
+} from '@/modules/answer-thread/run-viewer.functions'
 
 export const Route = createFileRoute('/_operator/admin/runs/$turnId')({
   ...operatorRouteOptions,

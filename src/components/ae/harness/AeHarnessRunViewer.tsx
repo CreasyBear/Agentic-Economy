@@ -28,7 +28,7 @@ import type {
   HarnessRunViewerListRow,
   HarnessRunViewerPhaseRow,
   HarnessRunViewerToolRow,
-} from '@/modules/harness/run-viewer.schema'
+} from '@/modules/answer-thread/run-viewer.schema'
 
 export function AeHarnessRunList({
   result,
