@@ -30,7 +30,7 @@ import { executeKeylessOperation } from '@/modules/capability-execution/operatio
 import {
   operationInvokeResultSchema,
   type OperationInvokeResult,
-} from '@/modules/capability-execution/operation-invoke'
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   operationDetailOutputSchema,
   type PublicOperationDescriptor,

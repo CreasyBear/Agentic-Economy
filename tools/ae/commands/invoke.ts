@@ -5,7 +5,7 @@ import {
   operationInvokeResultSchema,
   type OperationInvokeResult,
   type OperationInvokeStatusResult,
-} from '@/modules/capability-execution/operation-invoke'
+} from '@/modules/capability-execution/operation-invoke-contracts'
 
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'

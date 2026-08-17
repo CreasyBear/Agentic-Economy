@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema } from '@/modules/money/public'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
-import { operationInvokeResultSchema } from '@/modules/capability-execution/operation-invoke'
+import { operationInvokeResultSchema } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   operationCompareOutputSchema,
   operationInspectPlanOutputSchema,

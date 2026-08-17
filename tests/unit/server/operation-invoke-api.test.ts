@@ -7,7 +7,7 @@ const authenticate = async (scopes: readonly string[] = ['market_operations:invo
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
   id: 'key:test',
-  subject: 'owner:test',
+  subject: 'user_test',
   scopes,
 })
 

@@ -20,10 +20,8 @@ import type {
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
 import type { ExactAmount } from '@/modules/money/public'
-import type {
-  IndexStatus,
-  RegistrySourceState,
-} from '@/modules/registry/public'
+import type { IndexStatus } from './schema-values'
+import type { RegistrySourceState } from './projection-contracts'
 
 import {
   PublicBusinessCatalogApiSchemaVersion,

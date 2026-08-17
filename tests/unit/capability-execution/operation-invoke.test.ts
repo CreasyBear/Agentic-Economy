@@ -4,11 +4,13 @@ import { getFunctionName } from 'convex/server'
 
 import {
   createOperationInvokeApplication,
-  operationEnvironmentMismatchNextAction,
   type OperationInvokeGrant,
-  type OperationInvokeResult,
   type OperationInvokeRuntime,
 } from '@/modules/capability-execution/operation-invoke'
+import {
+  operationEnvironmentMismatchNextAction,
+  type OperationInvokeResult,
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import {
   createPublicOperationRef,

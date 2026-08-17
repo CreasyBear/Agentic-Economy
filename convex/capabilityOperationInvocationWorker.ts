@@ -85,7 +85,7 @@ import {
 import {
   isPrincipalEnvironmentCompatibleWithOperation,
   operationEnvironmentMismatchNextAction,
-} from '@/modules/capability-execution/operation-invoke'
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   x402PaymentReconciliationEvidenceValue,
 } from '@/modules/customer-request/convex'

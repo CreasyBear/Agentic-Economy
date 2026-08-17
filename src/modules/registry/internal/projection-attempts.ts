@@ -6,11 +6,10 @@ import type { BusinessId, CorrelationId, OfferingRef, OperationKey, SourceHash }
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { validateAuditEvent } from '@/modules/observability/public'
 import type { AuditEventContract, AuditEventType, RedactedPayload } from '@/modules/observability/public'
+import type { IndexStatus } from './schema-values'
 import type {
   CatalogHealthReadback,
-  IndexStatus,
   IndexStatusContract,
-  PublicBusinessCatalogApiV2Dto,
   RegistryProjectionAdapter,
   RegistryProjectionAttemptContract,
   RegistryProjectionItemContract,
@@ -20,7 +19,8 @@ import type {
   SyncCatalogProjectionInput,
   SyncCatalogProjectionOptions,
   SyncCatalogProjectionResult,
-} from '@/modules/registry/public'
+} from './projection-contracts'
+import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
 
 const sourceVersion = 'public-catalog:v1' as const
 const publicSurfaces = [

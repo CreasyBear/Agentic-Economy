@@ -6,11 +6,9 @@ import {
   TRADE_WORDS,
   tradeAliasesForText,
 } from './trade-vocabulary'
-import type {
-  PublicBusinessCatalogApiV2Dto,
-  PublicBusinessCatalogSearchInput,
-  RegistrySearchDocumentContract,
-} from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
+import type { PublicBusinessCatalogSearchInput } from './search'
+import type { RegistrySearchDocumentContract } from './projection-contracts'
 
 const RegistrySearchDocumentSchemaVersion: RegistrySearchDocumentContract['schemaVersion'] = 'registry-search-document:v1'
 

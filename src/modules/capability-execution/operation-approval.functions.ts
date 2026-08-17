@@ -6,7 +6,7 @@ import {
   listPendingOperationApprovalsThroughSource,
 } from '@/lib/server/operation-approval-source'
 
-import type { PublicAuthorityRequest } from './operation-invoke'
+import type { PublicAuthorityRequest } from './operation-invoke-contracts'
 
 export type PendingOperationApproval = Readonly<{
   invocationRef: string

@@ -15,7 +15,7 @@ import {
 import type {
   OperationInvokeRecoveryResult,
   OperationInvokeStatusResult,
-} from './operation-invoke'
+} from './operation-invoke-contracts'
 
 const owner = async (): Promise<{ userId: string } | undefined> => {
   const identity = await auth()

@@ -9,7 +9,7 @@ import {
   operationInvokeUsageSchema,
   type OperationInvokeRecoveryResult,
   type OperationInvokeStatusResult,
-} from './operation-invoke'
+} from './operation-invoke-contracts'
 import type { ReconciliationEvidence } from '@/modules/action-invocation/reconciliation-evidence'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from './operation-invoke-entry'
 

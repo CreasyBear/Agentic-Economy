@@ -1,6 +1,6 @@
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke'
+import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   AGENT_ACCESS_OAUTH_PATHS,
 } from '@/modules/agent-access/oauth-state'

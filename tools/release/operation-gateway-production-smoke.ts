@@ -23,7 +23,7 @@ import {
   operationInvokeUsageSchema,
   type OperationInvokeResult,
   type OperationInvokeUsageSummary,
-} from "../../src/modules/capability-execution/operation-invoke";
+} from "../../src/modules/capability-execution/operation-invoke-contracts";
 import { OPERATION_INVOKE_HTTP_PATH } from "../../src/modules/capability-execution/operation-invoke-entry";
 import {
   createAuthenticatedSourceTransport,

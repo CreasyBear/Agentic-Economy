@@ -11,9 +11,9 @@ import {
   createOperationInvokeApplication,
   type OperationInvokeApprovedAuthority,
   type OperationInvokeGrant,
-  type OperationInvokeResult,
   type OperationInvokeRuntime,
 } from '@/modules/capability-execution/operation-invoke'
+import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,

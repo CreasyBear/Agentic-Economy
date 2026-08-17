@@ -26,9 +26,9 @@ import {
 } from '@/modules/capability-execution/operation-invoke-entry'
 import type {
   OperationInvokeRequest,
-  OperationInvokeResult,
   OperationInvokeService,
 } from '@/modules/capability-execution/operation-invoke'
+import type { OperationInvokeResult } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
   recordGatewayTelemetry,

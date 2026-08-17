@@ -29,7 +29,7 @@ import type {
   OperationInvokeResult,
   OperationInvokeStatusResult,
   OperationInvokeUsageSummary,
-} from '@/modules/capability-execution/operation-invoke'
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { formatCurrencyAmount } from '@/modules/money/public'
 

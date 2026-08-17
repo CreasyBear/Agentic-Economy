@@ -1,12 +1,12 @@
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from './operation-invoke-entry'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
+import { executeOperationInvoke } from './operation-invoke'
 import {
-  executeOperationInvoke,
   operationInvokeInputSchema,
   operationInvokeResultSchema,
   type OperationInvokeInput,
   type OperationInvokeResult,
-} from './operation-invoke'
+} from './operation-invoke-contracts'
 
 const operationInvokeParameters: readonly ActionParameter[] = [
   {

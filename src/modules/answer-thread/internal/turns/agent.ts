@@ -8,7 +8,7 @@ import {
 import {
   operationInvokeResultSchema,
   type OperationInvokeResult,
-} from '@/modules/capability-execution/operation-invoke'
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   ANSWER_AGENT_MAX_TOOL_CALLS,
   isAnswerToolUseAgentError,

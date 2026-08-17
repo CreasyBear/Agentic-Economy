@@ -4,7 +4,7 @@ import {
   operationInvokeStatusResultSchema,
   operationStatusInputSchema,
 } from '@/modules/capability-execution/operation-recovery.actions'
-import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-invoke'
+import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 

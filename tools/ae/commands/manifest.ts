@@ -11,7 +11,7 @@ import {
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
 } from '@/modules/agent-access/oauth-state'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke'
+import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke-contracts'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { describeActionForAgent } from '@/modules/common/action'
 import {
