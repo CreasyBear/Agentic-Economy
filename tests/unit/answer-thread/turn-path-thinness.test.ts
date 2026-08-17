@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
@@ -15,7 +14,6 @@ const movedFunctionSymbols = [
   'streamRetrievalFirstTurn',
   'streamInsufficientFrozenContextTurn',
   'streamFrozenKnownProviderTurn',
-  'selectFrozenProviders',
   'streamAgentTurn',
   'resequenceToolCalls',
   'streamInquiryHandoffTurn',
@@ -31,13 +29,17 @@ const movedFunctionSymbols = [
   'rejectBlockedSnapshot',
 ] as const
 
-const turnPathExports = [
+const retiredRouteSymbols = [
   'clarificationTurnPath',
+  'retrievalFirstTurnPath',
   'insufficientFrozenTurnPath',
   'frozenKnownTurnPath',
-  'agentTurnPath',
   'inquiryHandoffTurnPath',
-  'boundaryTurnPath',
+  'selectFrozenProviders',
+  'resolveEffectiveAnswerRoute',
+  'EffectiveAnswerRoute',
+  'resolveIntentRoute',
+  'IntentRoute',
 ] as const
 
 const continuationHelpers = [
@@ -49,8 +51,7 @@ const continuationHelpers = [
   'latestPriorOperationPresentation',
   'readOperationInputFromToolCalls',
   'readPriorOperationInput',
-  'readDurableFailureEvidence',
-  'buildRationaleEvidence',
+  'readPriorSearchContext',
 ] as const
 
 describe('answer-thread turn-path thinness', () => {
@@ -64,37 +65,44 @@ describe('answer-thread turn-path thinness', () => {
     }
   })
 
-  it('keeps continuation/frozen-evidence helpers outside the orchestrator', () => {
-    expect(orchestratorSource).toMatch(
-      /from\s+['"]\.\/answer-continuation-state['"]/,
-    )
+  it('keeps continuation/frozen-evidence helpers imported from continuation state', () => {
+    const continuationImport =
+      orchestratorSource.match(
+        /import\s+\{([\s\S]*?)\}\s+from\s+['"]\.\/answer-continuation-state['"]/,
+      )?.[1] ?? ''
+    expect(continuationImport).not.toBe('')
+
     for (const symbol of continuationHelpers) {
+      expect(continuationImport).toContain(symbol)
       expect(orchestratorSource).not.toMatch(
         new RegExp(`(?:^|\\n)(?:export\\s+)?function\\s+${symbol}\\b`),
       )
-      expect(orchestratorSource).toContain(symbol)
     }
     expect(orchestratorSource).not.toMatch(
       /(?:^|\n)(?:export\s+)?function\s+shouldOverrideOperationRouteForBusiness\b/,
     )
   })
 
-  it('keeps effective route policy outside the orchestrator', () => {
+  it('imports and calls only the live agent and boundary turn paths', () => {
     expect(orchestratorSource).toMatch(
-      /from\s+['"]\.\/effective-answer-route['"]/,
+      /import\s+\{\s*agentTurnPath,\s*readOperationArtifacts\s*\}\s+from\s+['"]\.\/turns\/agent['"]/,
     )
-    expect(orchestratorSource).toContain('resolveEffectiveAnswerRoute')
-    expect(orchestratorSource).not.toMatch(
-      /(?:^|\n)(?:export\s+)?function\s+resolveEffectiveAnswerRoute\b/,
+    expect(orchestratorSource).toMatch(
+      /import\s+\{\s*boundaryTurnPath\s*\}\s+from\s+['"]\.\/turns\/boundary['"]/,
     )
+
+    for (const symbol of ['agentTurnPath', 'boundaryTurnPath'] as const) {
+      expect(orchestratorSource).toMatch(new RegExp(`\\b${symbol}\\.run\\(`))
+    }
+
+    const adapterSymbols = orchestratorSource.match(/\b[A-Za-z]+TurnPath\b/g) ?? []
+    expect([...new Set(adapterSymbols)].sort()).toEqual(['agentTurnPath', 'boundaryTurnPath'])
   })
 
-  it('imports TurnPath adapters from ./turns', () => {
-    expect(orchestratorSource).toMatch(/from\s+['"]\.\/turns\//)
-    for (const symbol of turnPathExports) {
-      expect(orchestratorSource).toContain(symbol)
+  it('rejects retired adapter and router symbols', () => {
+    for (const symbol of retiredRouteSymbols) {
+      expect(orchestratorSource).not.toContain(symbol)
     }
-    expect(orchestratorSource).toContain('selectFrozenProviders')
   })
 
   it('keeps turns/** free of Customer Request / RoutePlan authority and Convex runtime', () => {
@@ -109,15 +117,4 @@ describe('answer-thread turn-path thinness', () => {
       expect(source).not.toMatch(/\bMutationCtx\b/)
     }
   })
-
-  it('keeps inquiry handoff inquiry-only', () => {
-    const handoff = readFileSync(join(turnsRoot, 'inquiry-handoff.ts'), 'utf8')
-    expect(handoff).toContain('resolveInquiryHandoff')
-    expect(handoff).toContain('inquiryHandoffProviders')
-    expect(handoff).toContain('buildInquiryHandoffNextStep')
-    expect(handoff).not.toMatch(/customer-request|RoutePlan|mandate|approveRoute|compileRequest/i)
-    expect(handoff).toContain('The business decides whether to accept it; timing, price, and availability are not confirmed yet')
-  })
 })
-
-

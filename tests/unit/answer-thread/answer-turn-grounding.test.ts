@@ -89,15 +89,15 @@ describe('answer turn catalog grounding', () => {
     const reset = installAnswerThreadTestPort(store)
     const requestDigest = answerTurnRequestDigest({
       threadId: 'thread-1',
-      query: 'Can AE book this?',
+      query: 'Compare the top two',
     })
     const admission = await reserveAnswerTurn({
       sessionId: 'session-1',
       threadId: 'thread-1',
-      query: 'Can AE book this?',
+      query: 'Compare the top two',
       requestDigest,
       reservationKey: 'grounding:session-1:turn-1',
-      title: 'Can AE book this?',
+      title: 'Compare the top two',
     })
     if (admission.kind !== 'reserved') throw new Error(`fixture reservation ${admission.kind}`)
 
@@ -114,7 +114,7 @@ describe('answer turn catalog grounding', () => {
         {
           sessionId: 'session-1',
           threadId: 'thread-1',
-          query: 'Can AE book this?',
+          query: 'Compare the top two',
           requestDigest,
           admission,
           keylessExecutableSource: emptyKeylessSource,

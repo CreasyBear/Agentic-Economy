@@ -80,11 +80,6 @@ export {
   type AnswerOperationResultView,
 } from './internal/operation-result-presentation'
 export {
-  buildCompactFollowUpProse,
-  buildRationaleFollowUpProse,
-  buildProviderDecisionOneLine,
-} from './internal/follow-up-compact-prose'
-export {
   validateCatalogGrounding,
   collectAllowedSlugsFromToolResults,
   sanitizeStructuredAnswer,
@@ -103,14 +98,6 @@ export {
   buildUnsupportedOneLine,
   buildUnsupportedSummary,
 } from './internal/boundary-prose'
-export {
-  buildInquiryHandoffNextStep,
-  buildInquiryHandoffOneLine,
-  buildInquiryHandoffSummary,
-  inquiryHandoffProviders,
-  resolveInquiryHandoff,
-  type InquiryHandoffResolution,
-} from './internal/inquiry-handoff-prose'
 export {
   buildAnswerInquiryHref,
   type AnswerInquiryHrefInput,

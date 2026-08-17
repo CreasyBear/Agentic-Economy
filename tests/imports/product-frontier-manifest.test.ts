@@ -9,15 +9,16 @@ import {
   listOperationRouteDescriptors,
   mcpToolName,
 } from '@/modules/actions'
+import { ANSWER_OPERATION_EFFECT_DISPATCH_IDS } from '@/modules/answer/internal/answer-tool-use-agent'
+import { ANSWER_OPERATION_EFFECT_TOOL_IDS, ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import { AnswerToolIdValues } from '@/modules/answer-thread/answer-thread.values'
-import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/market-operations'
 import { runCompareCommand } from '../../tools/ae/commands/compare'
 import { runInspectCommand } from '../../tools/ae/commands/inspect'
 import { runInspectPlanCommand } from '../../tools/ae/commands/inspect-plan'
 import { runSearchCommand } from '../../tools/ae/commands/search'
-import { COMMANDS } from '../../tools/ae/commands/manifest'
+import { invokeCommandDescriptor, runInvokeCommand } from '../../tools/ae/commands/invoke'
 import { ANSWER_EVAL_COVERAGE_REQUIREMENTS } from '../../eval/answer/lib/cases'
 
 type ProductFrontierManifest = Readonly<{
@@ -89,7 +90,7 @@ describe('product frontier manifest', () => {
     expect(findActionId('study.start')).toBe('study.start')
     expect(findActionId('study.inspect')).toBe('study.inspect')
     expect(findActionId('workTree.create')).toBe('workTree.create')
-    expect(findActionId('operation.invoke')).toBe('operation.invoke')
+    expect(findActionId(ANSWER_OPERATION_EFFECT_TOOL_IDS[1])).toBe(ANSWER_OPERATION_EFFECT_TOOL_IDS[1])
   })
   it('keeps operation-read descriptors on the canonical Market Operation frontier', () => {
     const marketEntryIds = OPERATION_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId)
@@ -138,9 +139,13 @@ describe('product frontier manifest', () => {
   )
 
   it('fences direct operation execution and lifecycle surfaces', () => {
-    const directOperationIds = ['operation.execute', 'operation.invoke'] as const
+    const directOperationIds = ANSWER_OPERATION_EFFECT_DISPATCH_IDS
+    expect(directOperationIds).toBe(ANSWER_OPERATION_EFFECT_TOOL_IDS)
+    expect(directOperationIds).toEqual(ANSWER_OPERATION_EFFECT_TOOL_IDS)
+    const [executeId, invokeId] = directOperationIds
     const mcpActionIds = listMcpActions().map((action) => action.id)
-    const operationRouteActionIds = listOperationRouteDescriptors().map((route) => route.actionId)
+    const operationRouteDescriptors = listOperationRouteDescriptors()
+    const operationRouteActionIds = operationRouteDescriptors.map((route) => route.actionId)
 
     for (const id of directOperationIds) {
       expect(mcpActionIds).toContain(id)
@@ -148,18 +153,29 @@ describe('product frontier manifest', () => {
       expect(ANSWER_READ_TOOL_IDS).not.toContain(id)
     }
 
-    const execute = findAction('operation.execute')
+    const execute = findAction(executeId)
     expect(execute).toBeDefined()
     expect(execute?.surfaces).toEqual(['mcp'])
-    expect('execute' in COMMANDS).toBe(false)
-    expect(operationRouteActionIds).not.toContain('operation.execute')
+    expect(operationRouteActionIds).not.toContain(executeId)
 
-    const invoke = findAction('operation.invoke')
+    const invoke = findAction(invokeId)
     expect(invoke).toBeDefined()
-    expect(invoke?.surfaces).toEqual(['http', 'mcp', 'cli'])
-    expect(mcpActionIds).toContain('operation.invoke')
-    expect(COMMANDS.invoke).toBeDefined()
-    expect(operationRouteActionIds).toContain('operation.invoke')
+    if (invoke === undefined) return
+    expect(invoke.surfaces).toEqual(['http', 'mcp', 'cli'])
+    expect(mcpActionIds).toContain(invokeId)
+    expect(operationRouteActionIds).toContain(invokeId)
+
+    const invokeRoute = operationRouteDescriptors.find((route) => route.actionId === invokeId)
+    expect(invokeRoute).toBeDefined()
+    if (invokeRoute === undefined) return
+    expect(invokeCommandDescriptor.command).toBe('invoke')
+    expect(invokeCommandDescriptor.actionId).toBe(invoke.id)
+    expect(invokeCommandDescriptor.actionId).toBe(invokeRoute.actionId)
+    expect(invokeCommandDescriptor.path).toBe(invokeRoute.path)
+    expect(invokeCommandDescriptor.method).toBe(invokeRoute.method)
+    expect(invokeCommandDescriptor.inputSchema).toBe(invoke.schema)
+    expect(invokeCommandDescriptor.outputSchema).toBe(invoke.outputSchema)
+    expect(invokeCommandDescriptor.run).toBe(runInvokeCommand)
 
     for (const action of listActions()) {
       const isRegistryOperation = action.id.startsWith('registry.operations.')

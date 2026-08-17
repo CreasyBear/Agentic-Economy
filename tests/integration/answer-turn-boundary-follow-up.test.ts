@@ -5,6 +5,7 @@ vi.mock('@/lib/server/rate-limit', () => ({
   requestAdmissionKey: () => 'test-admission-key',
 }))
 
+import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { streamAnswerTurn } from '@/modules/answer-thread/server'
 import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
@@ -14,10 +15,17 @@ import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
+  type AnswerThreadTestStore,
 } from '../helpers/answer-thread-test-port'
 import {
+  openRouterProseResponse,
+  openRouterToolResponse,
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
+  type OpenRouterContractRequest,
+  type OpenRouterContractResponseSource,
+  type OpenRouterProsePlan,
+  type OpenRouterToolCallPlan,
 } from '../helpers/openrouter-contract-server'
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 
@@ -26,6 +34,70 @@ const emptyKeylessExecutableSource: KeylessExecutableSourcePort = {
   list: async () => [],
   read: async () => null,
   search: async () => [],
+}
+
+function isSafetyModelRequest(request: OpenRouterContractRequest): boolean {
+  const schemaName = request.response_format?.json_schema?.name
+  return schemaName === 'answer_query_safety'
+    || schemaName === 'answer_request_preflight'
+    || request.messages.some((message) =>
+      message.role === 'system' && message.content.includes('Classify the user request'),
+    )
+}
+
+type QueryAwareAnswerScenario = Readonly<{
+  query: RegExp
+  toolCall?: OpenRouterToolCallPlan
+  prose: OpenRouterProsePlan
+}>
+
+function queryAwareAnswerResponses(
+  scenarios: readonly QueryAwareAnswerScenario[],
+): OpenRouterContractResponseSource {
+  return (request) => {
+    const userMessage = request.messages.find((message) => message.role === 'user')?.content ?? ''
+    const latestQuery =
+      userMessage.match(/^User query:\s*(?<query>.*)$/m)?.groups?.query?.trim() ?? userMessage
+    const scenario = scenarios.find((candidate) => candidate.query.test(latestQuery))
+    if (scenario === undefined) {
+      throw new Error(`unexpected answer query: ${latestQuery}`)
+    }
+    const hasToolResult = request.messages.some((message) => message.role === 'tool')
+    const hasRegistrySearchTool = request.tools?.some((tool) =>
+      tool.function.name === openRouterToolName('registry.search'),
+    ) === true
+    if (scenario.toolCall === undefined) {
+      if (hasRegistrySearchTool) {
+        throw new Error('boundary scenario must not expose registry.search')
+      }
+      return openRouterProseResponse(scenario.prose)
+    }
+    if (!hasToolResult) {
+      if (!hasRegistrySearchTool) {
+        throw new Error('expected registry.search before answer prose')
+      }
+      return openRouterToolResponse([scenario.toolCall])
+    }
+    return openRouterProseResponse(scenario.prose)
+  }
+}
+
+type PersistedAnswerToolCall = Readonly<{
+  toolId?: string
+  inputJson?: string
+}>
+
+function persistedRegistrySearches(
+  store: AnswerThreadTestStore,
+): PersistedAnswerToolCall[][] {
+  return [...store.turns.values()]
+    .sort((left, right) => left.seq - right.seq)
+    .map((turn) => {
+      const evidence = JSON.parse(turn.evidenceJson) as {
+        toolCalls?: readonly PersistedAnswerToolCall[]
+      }
+      return evidence.toolCalls?.filter((call) => call.toolId === 'registry.search') ?? []
+    })
 }
 
 const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
@@ -93,7 +165,13 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     })
     store.getThreadTurnsError = new Error('convex unavailable')
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer([])
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'The assistant compares published details, but it cannot book or start the job.',
+        summary: 'Use the cards to compare what is offered and contact the business for anything beyond comparison.',
+        whatToDoNow: 'Open a business page and contact the business when you are ready.',
+      },
+    }))
     const restoreOpenRouter = server.installEnv()
 
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -125,6 +203,18 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       expect(complete.answer.oneLine).toContain('cannot book or start the job')
       expect(complete.answer.oneLine).not.toContain('No businesses match')
       expect(complete.answer.summary).toContain('Use the cards to compare what is offered')
+      expect(server.requests).toHaveLength(2)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(1)
+      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
+      expect(server.requests.filter((request) =>
+        request.tools?.some((tool) =>
+          tool.function.name === openRouterToolName('registry.search'),
+        ),
+      )).toHaveLength(0)
+      expect(
+        persistedRegistrySearches(store).reduce((count, calls) => count + calls.length, 0),
+      ).toBe(0)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -139,14 +229,29 @@ describe('POST /api/answer/turn boundary follow-up', () => {
   it('returns boundary copy after an empty first turn in the same thread', async () => {
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      prose: {
-        oneLine: 'No businesses match "Emergency plumber Brunswick" yet.',
-        summary:
-          'No matches found yet. You can add a business, or try a different need or suburb.',
-        whatToDoNow: 'Try a nearby suburb, see other options, or add a business that should appear here.',
+    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([
+      {
+        query: /Emergency plumber Brunswick/i,
+        toolCall: {
+          toolId: 'registry.search',
+          input: { query: 'Emergency plumber Brunswick' },
+        },
+        prose: {
+          oneLine: 'No businesses match "Emergency plumber Brunswick" yet.',
+          summary:
+            'No matches found yet. You can add a business, or try a different need or suburb.',
+          whatToDoNow: 'Try a nearby suburb, see other options, or add a business that should appear here.',
+        },
       },
-    }))
+      {
+        query: /What can Agentic Economy do here/i,
+        prose: {
+          oneLine: 'The assistant compares published details, but it cannot book or start the job.',
+          summary: 'Use the cards to compare what is offered and contact the business for anything beyond comparison.',
+          whatToDoNow: 'Open a business page and contact the business when you are ready.',
+        },
+      },
+    ]))
     const restoreOpenRouter = server.installEnv()
 
     let threadId = ''
@@ -195,6 +300,27 @@ describe('POST /api/answer/turn boundary follow-up', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toContain('cannot book or start the job')
+      // Two preflights plus the first turn's search/prose pair and one boundary prose request.
+      expect(server.requests).toHaveLength(5)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
+      const agentRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
+      expect(agentRequests).toHaveLength(3)
+      const boundaryRequests = agentRequests.filter((request) =>
+        request.messages.some((message) =>
+          message.role === 'user' && message.content.includes('User query: What can Agentic Economy do here?'),
+        ),
+      )
+      expect(boundaryRequests).toHaveLength(1)
+      expect(boundaryRequests[0]?.tools).toBeUndefined()
+      expect(boundaryRequests[0]?.messages.filter((message) => message.role === 'tool')).toHaveLength(0)
+
+      const searches = persistedRegistrySearches(store)
+      expect(searches).toHaveLength(2)
+      expect(searches[0]).toHaveLength(1)
+      expect(searches[1]).toHaveLength(0)
+      expect(JSON.parse(searches[0]?.[0]?.inputJson ?? '{}')).toMatchObject({
+        query: 'Emergency plumber Brunswick',
+      })
       expect(complete.answer.summary).not.toContain('No matches found yet')
     } finally {
       restoreOpenRouter()
@@ -207,17 +333,27 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     }
   })
 
-  it('narrows to Parramatta from frozen providers instead of searching the chip label', async () => {
+  it('re-searches Parramatta while retaining the service need instead of searching the chip label', async () => {
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([{
+      query: /parramatta/i,
+      toolCall: {
+        toolId: 'registry.search',
+        input: {
+          query: 'plumber Parramatta',
+          limit: 3,
+          mode: 'near_me',
+          location: 'Parramatta',
+        },
+      },
       prose: {
-        oneLine: 'One business is in Parramatta.',
+        oneLine: 'One business matches in Parramatta.',
         summary:
           'The business offers emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
       },
-    }))
+    }]))
     const restoreOpenRouter = server.installEnv()
 
     let threadId = ''
@@ -275,6 +411,28 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       expect(complete.answer.oneLine).toContain('matches in Parramatta')
       expect(complete.answer.oneLine).not.toContain('No businesses match "Narrow to Parramatta"')
       expect(complete.answer.compactLayout).toBe(true)
+      // Each refine_search turn pays one preflight plus a registry.search/prose pair.
+      expect(server.requests).toHaveLength(6)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(4)
+
+      const searches = persistedRegistrySearches(store)
+      expect(searches).toHaveLength(2)
+      for (const turnSearches of searches) {
+        expect(turnSearches).toHaveLength(1)
+      }
+      const searchInputs = searches.map((turnSearches) =>
+        JSON.parse(turnSearches[0]?.inputJson ?? '{}') as Record<string, unknown>,
+      )
+      for (const input of searchInputs) {
+        expect(input).toMatchObject({
+          location: 'Parramatta',
+          mode: 'near_me',
+        })
+        expect(input.query).toEqual(expect.stringContaining('plumber'))
+        expect(input.query).toEqual(expect.stringContaining('Parramatta'))
+      }
+      expect(searchInputs[1]?.query).not.toContain('Narrow to Parramatta')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -288,14 +446,24 @@ describe('POST /api/answer/turn boundary follow-up', () => {
   it('keeps the dental need while refining a natural Adelaide location follow-up', async () => {
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([{
+      query: /adelaide/i,
+      toolCall: {
+        toolId: 'registry.search',
+        input: {
+          query: 'dentist Adelaide',
+          limit: 3,
+          mode: 'near_me',
+          location: 'Adelaide',
+        },
+      },
       prose: {
         oneLine: 'Start with a dentist serving Adelaide.',
         summary:
           'The Adelaide listing publishes general dental care. Scope, price, and current availability still need confirmation.',
         whatToDoNow: 'Contact the listing and ask whether it handles this need, what it costs, and when it is available.',
       },
-    }))
+    }]))
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
@@ -345,10 +513,27 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
       expect(complete.answer.oneLine).toContain('Adelaide')
-      // Retrieval-first reuses the frozen provider snapshot for this location-only follow-up.
-      // Both turns perform the private safety preflight; no answer model request is needed.
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
+      // Each refine_search turn pays one preflight plus a registry.search/prose pair.
+      expect(server.requests).toHaveLength(6)
+      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(4)
+      const searches = persistedRegistrySearches(store)
+      expect(searches).toHaveLength(2)
+      for (const turnSearches of searches) {
+        expect(turnSearches).toHaveLength(1)
+      }
+      const searchInputs = searches.map((turnSearches) =>
+        JSON.parse(turnSearches[0]?.inputJson ?? '{}') as Record<string, unknown>,
+      )
+      for (const input of searchInputs) {
+        expect(input).toMatchObject({
+          location: 'Adelaide',
+          mode: 'near_me',
+        })
+        expect(input.query).toEqual(expect.stringContaining('dentist'))
+        expect(input.query).toEqual(expect.stringContaining('Adelaide'))
+      }
+      expect(searchInputs[1]?.query).not.toContain('Only show options near Adelaide')
     } finally {
       restoreOpenRouter()
       await server.close()

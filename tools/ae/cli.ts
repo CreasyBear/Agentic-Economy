@@ -375,7 +375,7 @@ async function main(): Promise<number> {
     manifest: manifestCommands.runManifestCommand,
     ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
-    invoke: invokeCommands.runInvokeCommand,
+    [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
     recover: recoverCommands.runRecoverCommand,
     demand: groupCommand('demand', demandCommands),

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  buildCompactFollowUpProse,
-  buildRationaleFollowUpProse,
-} from '@/modules/answer/internal/follow-up-compact-prose'
 import { buildArtifactsFromSnapshot } from '@/modules/answer/internal/snapshot-artifacts'
 import { parseLocationIntent } from '@/modules/answer/internal/location-intent'
 import type { AnswerSource } from '@/modules/answer/public'
@@ -34,96 +30,6 @@ const provider = (overrides: ProviderOverrides = {}): AnswerSource => {
   }
 }
 
-describe('follow-up compact prose', () => {
-  it('uses short narrow copy from the chip label', () => {
-    const prose = buildCompactFollowUpProse({
-      followUpIntent: 'refine_search',
-      displayQuery: 'Narrow to Parramatta',
-      providers: [provider(), provider({ citationIndex: 2, slug: 'other', name: 'Other Plumbing' })],
-    })
-
-    expect(prose.oneLine).toBe('2 matches in Parramatta.')
-    expect(prose.summary).toContain('Each card shows what the business offers')
-  })
-})
-
-describe('rationale compact prose', () => {
-  it('keeps rationale prose evidence-grounded without comparison-empty copy', () => {
-    const prose = buildRationaleFollowUpProse({
-      constraints: ['Location: Parramatta', 'Licensed providers requested'],
-      budget: 'Budget precedence: A$400 is the latest stated budget; earlier A$300 was superseded',
-      failure: 'The operation response did not match its contract',
-    })
-
-    expect(prose.oneLine).toBe('Here is what the earlier search retained.')
-    expect(prose.summary).toContain('Location: Parramatta')
-    expect(prose.summary).toContain('A$400')
-    expect(prose.summary).toContain('A$300')
-    expect(prose.summary).toContain('operation response did not match its contract')
-    expect(prose.oneLine).not.toContain('Comparing')
-  })
-
-  it('recalls a frozen operation choice and exact result without suggesting a rerun', () => {
-    const prose = buildRationaleFollowUpProse({
-      constraints: [],
-      operationRecall: {
-        operationLabel: 'Coin price lookup',
-        sourceLabel: 'Example prices',
-        rationale: 'Returns current prices and the requested 24-hour change.',
-        result: {
-          kind: 'ok',
-          output: { bitcoin: { usd: 63_039, usd_24h_change: -0.15 } },
-        },
-      },
-    })
-
-    expect(prose.oneLine).toContain('Coin price lookup')
-    expect(prose.summary).toContain('Returns current prices')
-    expect(prose.summary).toContain('"usd":63039')
-    expect(prose.summary).toContain('"usd_24h_change":-0.15')
-    expect(prose.nextStep).toContain('No operation was run')
-  })
-})
-describe('inquiry handoff compact prose', () => {
-  it('does not claim a selected business when no provider or request route exists', () => {
-    const noProviders = buildCompactFollowUpProse({
-      followUpIntent: 'inquiry_handoff',
-      displayQuery: 'Send a request',
-      providers: [],
-    })
-    expect(noProviders.oneLine).toBe('No business is selected yet. Search again before sending a request.')
-    expect(noProviders.nextStep).toBe('Search again or revise a constraint to find a match.')
-
-    expect(buildCompactFollowUpProse({
-      followUpIntent: 'inquiry_handoff',
-      displayQuery: 'Send a request',
-      providers: [provider({ inquiryUrl: undefined })],
-    }).oneLine).toBe('Demo Plumbing does not have a request form here yet.')
-
-    expect(buildCompactFollowUpProse({
-      followUpIntent: 'inquiry_handoff',
-      displayQuery: 'Send a request',
-      providers: [provider({ name: '' })],
-    }).oneLine).toBe('No business is selected yet. Search again before sending a request.')
-  })
-})
-describe('named option compact prose', () => {
-  it('leads with the named option and its published decision details', () => {
-    const prose = buildCompactFollowUpProse({
-      displayQuery: 'dentist Adelaide',
-      providers: [provider({
-        name: 'Adelaide Dental Clinic',
-        suburb: 'Adelaide',
-        pricingSummary: 'From $120',
-        availabilitySummary: 'Appointments this week',
-      })],
-    })
-
-    expect(prose.oneLine).toBe(
-      'Adelaide Dental Clinic — in Adelaide · Price: From $120 · Published availability: Appointments this week.',
-    )
-  })
-})
 describe('empty-state recovery prompts', () => {
   it('builds nearby recovery from normalized service and named suburb fields', () => {
     const artifacts = buildArtifactsFromSnapshot({

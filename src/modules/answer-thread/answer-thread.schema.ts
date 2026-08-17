@@ -72,6 +72,12 @@ export type AnswerTurnReservationState = (typeof AnswerTurnReservationStateValue
 export const ANSWER_TURN_EXECUTION_LEASE_MS = 30_000
 
 export type AnswerToolId = (typeof AnswerToolIdValues)[number]
+// Direct effect records. Answer exposes per-operation tools dynamically; these IDs stay out of the read-only model tool list.
+export const ANSWER_OPERATION_EFFECT_TOOL_IDS = [
+  'operation.execute',
+  'operation.invoke',
+] as const satisfies readonly AnswerToolId[]
+
 
 // Read-only model tools. `operation.execute` stays out: dynamic capability tools
 // bind one strict operation schema instead of exposing a free-form record tool.

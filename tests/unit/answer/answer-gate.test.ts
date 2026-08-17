@@ -186,6 +186,41 @@ describe('runAnswerGate', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('fails when prose names a location-rejected provider', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [],
+        oneLine: 'Parramatta Emergency Plumbing appeared in the wider search results.',
+        summary: 'No providers matched the requested location.',
+        nextStep: 'Try the registry.',
+      }),
+      allowedSlugs: new Set<string>(),
+      forbiddenProviderNames: ['parramatta emergency plumbing'],
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected gate failure')
+    expect(result.code).toBe('grounding_failed')
+  })
+  it.each([
+    ['A & B Plumbing', 'A and B Plumbing'],
+    ["O'Reilly Plumbing", 'OReilly Plumbing'],
+    ['O’Reilly Plumbing', 'OReilly Plumbing'],
+  ])('matches equivalent rejected provider spellings: %s', (forbiddenName, mentionedName) => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [],
+        oneLine: `${mentionedName} appeared in the wider search results.`,
+        summary: 'No providers matched the requested location.',
+        nextStep: 'Try the registry.',
+      }),
+      allowedSlugs: new Set<string>(),
+      forbiddenProviderNames: [forbiddenName],
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected gate failure')
+    expect(result.code).toBe('grounding_failed')
+  })
+
   it('fails when prose echoes poisoned owner injection strings', () => {
     const result = runAnswerGate({
       snapshot: snapshot({

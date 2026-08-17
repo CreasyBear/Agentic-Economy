@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   AnswerEvent,
@@ -10,6 +10,9 @@ import type {
   KeylessExecutableToolDescriptor,
   OperationExecutableDescriptor,
 } from '@/modules/capability-execution'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   setAnswerHarnessFinalizerForTests,
 } from '@/modules/answer-thread/testing'
@@ -40,7 +43,6 @@ import {
 import { runAnswerHarnessOperation } from '@/modules/answer-thread/internal/answer-harness-operation'
 import { createAnswerThreadTestStore, installAnswerThreadTestPort } from '../../helpers/answer-thread-test-port'
 import { createLocalE2eRegistrySourceState } from '../../helpers/registry-local-e2e'
-import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
@@ -52,11 +54,25 @@ const emptyKeylessSource: KeylessExecutableSourcePort = {
   read: async () => null,
   search: async () => [],
 }
+const operationSourceMocks = vi.hoisted(() => ({
+  readCapabilityOperationSearch: vi.fn(),
+  readCapabilityOperationDetail: vi.fn(),
+  readCapabilityOperationCompare: vi.fn(),
+  readCapabilityOperationInspectPlan: vi.fn(),
+  readCatalogOfferingOperationMap: vi.fn(async () => []),
+}))
+
+vi.mock('@/modules/capability-supply/operation-source', () => operationSourceMocks)
 
 afterEach(() => {
   while (resets.length > 0) {
     resets.pop()?.()
   }
+  operationSourceMocks.readCapabilityOperationSearch.mockReset()
+  operationSourceMocks.readCapabilityOperationDetail.mockReset()
+  operationSourceMocks.readCapabilityOperationCompare.mockReset()
+  operationSourceMocks.readCapabilityOperationInspectPlan.mockReset()
+  operationSourceMocks.readCatalogOfferingOperationMap.mockReset()
 })
 
 describe('answer harness operation persistence bridge', () => {
@@ -410,23 +426,21 @@ describe('answer harness operation persistence bridge', () => {
     const reportedReport = JSON.parse(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson ?? '{}').harnessRun
     expect(reportedReport?.summary.run.status).toBe('ok')
     expect(reportedReport?.summary.tools).toMatchObject({
-      total: 4,
-      ok: 4,
+      total: 1,
+      ok: 1,
       byName: {
         'registry.search': expect.objectContaining({
-          total: 4,
-          ok: 4,
+          total: 1,
+          ok: 1,
         }),
       },
     })
-    // The staged navigation fixture records the read activity in the aggregate
-    // harness counters; it does not promise one legacy registry.search key.
-    // The safety preflight is the first model request; the staged agent can
-    // use up to four read rounds before one tool-less prose round.
+    // The live fixture performs one planned registry.search call after the
+    // safety preflight; the tool round is followed by one prose round.
     const modelRequests: { seq: number; provider: string; model: string; status: string }[]
       = reportedReport?.privateTelemetry?.modelRequests ?? []
-    expect(modelRequests).toHaveLength(5)
-    expect(modelRequests.map(({ seq }) => seq)).toEqual([0, 1, 2, 3, 4])
+    expect(modelRequests).toHaveLength(3)
+    expect(modelRequests.map(({ seq }) => seq)).toEqual([0, 1, 2])
     expect(modelRequests.every(
       ({ provider, model, status }) =>
         provider === 'openrouter' &&
@@ -435,12 +449,12 @@ describe('answer harness operation persistence bridge', () => {
     )).toBe(true)
     expect(Object.keys(reportedReport?.summary.models?.byModel ?? {})).toEqual(['test-model'])
     expect(reportedReport?.summary.models?.byModel['test-model']).toMatchObject({
-      total: 5,
-      ok: 5,
+      total: 3,
+      ok: 3,
     })
     expect(reportedReport?.summary.models?.byProvider.openrouter).toMatchObject({
-      total: 5,
-      ok: 5,
+      total: 3,
+      ok: 3,
     })
     expect(reportedReport?.coverage.phases).toEqual(
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
@@ -452,7 +466,7 @@ describe('answer harness operation persistence bridge', () => {
       'context.loaded',
       'intent.routed',
       'intent.routed',
-      ...Array.from({ length: 4 }, () => [
+      ...Array.from({ length: 1 }, () => [
         'tool.started',
         'tool.completed',
       ]).flat(),
@@ -463,8 +477,8 @@ describe('answer harness operation persistence bridge', () => {
     expect(journalKinds.filter((kind) => kind === 'model.started')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'model.completed')).toHaveLength(1)
     expect(journalKinds.filter((kind) => kind === 'intent.routed')).toHaveLength(2)
-    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(4)
-    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(4)
+    expect(journalKinds.filter((kind) => kind === 'tool.started')).toHaveLength(1)
+    expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(1)
     expect(journalKinds).not.toContain('tool.failed')
     expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
     expect(finalizationWrites[0]?.finalizationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
@@ -491,7 +505,7 @@ describe('answer harness operation persistence bridge', () => {
       message: 'forced finalization denial',
     })))
     const query = 'what is the current test value for Sydney?'
-    const operationRef = `operation:v1:${'f'.repeat(64)}`
+    const operationRef = `operation:v1:${'f'.repeat(64)}` as PublicOperationDescriptor['operationRef']
     const descriptor: KeylessExecutableToolDescriptor = {
       operationRef,
       capabilityId: 'test.current-value',
@@ -526,14 +540,95 @@ describe('answer harness operation persistence bridge', () => {
     }
     const source: KeylessExecutableSourcePort = {
       list: async () => [descriptor],
-      read: async () => executable,
+      read: async (ref) => ref === operationRef ? executable : null,
       search: async () => [operationRef],
     }
-    const operationToolName = openRouterToolName(`capability.${operationRef}`)
+    const publicOperation = {
+      operationRef,
+      operationId: descriptor.capabilityId,
+      callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+      paymentLane: 'brokered',
+      contract: {
+        capabilityId: descriptor.capabilityId,
+        version: 1,
+        inputJsonSchema: descriptor.inputSchema as Record<string, JsonValue>,
+        outputJsonSchema: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+          additionalProperties: false,
+        },
+        customerAnnotations: [],
+      },
+      business: {
+        businessId: 'business:test',
+        slug: 'test-provider',
+        name: 'Test provider',
+      },
+      offering: {
+        offeringRef: 'offering:test.current-value',
+        revision: 1,
+        label: descriptor.name,
+        summary: descriptor.summary,
+      },
+      summary: descriptor.summary,
+      commercial: {
+        price: {
+          kind: 'fixed',
+          amount: { currency: 'USD', units: '0', exponent: 2 },
+        },
+        materialTerms: [],
+        relationship: {
+          kind: 'none',
+          summary: 'No published commercial relationship.',
+        },
+      },
+      dataUse: [],
+      effects: [],
+      evidence: [],
+      cancellation: { kind: 'unsupported' },
+      recovery: { idempotency: 'not_applicable', recovery: 'retry_safe' },
+      authentication: { kind: 'keyless' },
+      transport: { method: 'GET', requestTimeoutMs: 5_000 },
+      provenance: { publisher: 'provider_owned', sourceKind: 'openapi_http' },
+      availability: { posture: 'routeable' },
+      navigation: [{
+        relation: 'execute',
+        method: 'POST',
+        actionId: 'operation.execute',
+        authentication: 'none',
+        surfaces: ['answerThread'],
+      }],
+    } satisfies PublicOperationDescriptor
+    const stagedSearchResult = {
+      kind: 'ok' as const,
+      schemaVersion: 'registry-operations:v1' as const,
+      query: 'current test value',
+      items: [publicOperation],
+      matchedCount: 1,
+      ranking: [{ operationRef, rank: 1, score: 1 }],
+      pagination: { limit: 3, hasMore: false },
+      navigation: [],
+    }
+    const stagedDetailResult = {
+      kind: 'found' as const,
+      schemaVersion: 'registry-operations:v1' as const,
+      operation: publicOperation,
+    }
+    operationSourceMocks.readCapabilityOperationSearch.mockResolvedValue(stagedSearchResult)
+    operationSourceMocks.readCapabilityOperationDetail.mockResolvedValue(stagedDetailResult)
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
         {
-          toolId: operationToolName,
+          toolId: 'registry.operations.search',
+          input: { query: 'current test value', limit: 3 },
+        },
+        {
+          toolId: 'registry.operations.detail',
+          input: { operationRef },
+        },
+        {
+          toolId: `capability.${operationRef}`,
           input: { city: 'Sydney' },
         },
       ],
@@ -542,7 +637,7 @@ describe('answer harness operation persistence bridge', () => {
         summary: 'The successful operation returned the current test value.',
         whatToDoNow: 'Use the returned value.',
       },
-    }))
+    }), { preflightRoute: 'operation' })
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
@@ -615,10 +710,13 @@ describe('answer harness operation persistence bridge', () => {
     expect(reservationRow).toMatchObject({ state: 'finalized', finalStatus: 'error' })
     const persistedEvidence = JSON.parse(stored?.evidenceJson ?? '{}') as {
       providers?: unknown
-      toolCalls?: unknown
+      toolCalls?: { toolId?: unknown; status?: unknown }[]
       answerRun?: unknown
     }
     expect(persistedEvidence.providers).toEqual(expect.any(Array))
+    expect(persistedEvidence.toolCalls).toEqual(expect.arrayContaining([
+      expect.objectContaining({ toolId: 'operation.execute', status: 'complete' }),
+    ]))
     expect(persistedEvidence.toolCalls).toEqual(expect.any(Array))
     expect(persistedEvidence.answerRun).toEqual(expect.any(Object))
     const replay = await reserveAnswerTurn({

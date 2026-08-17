@@ -13,6 +13,7 @@ import {
   type KeylessDataAskResolution,
   type AnswerPriorTurnContext,
   type AnswerRequestPreflightResult,
+  type EffectiveAnswerAgentRoute,
 } from '@/modules/answer/public'
 import {
   convexKeylessExecutableSource,
@@ -109,7 +110,6 @@ import {
   readPriorSearchContext,
   selectedInputDigestFor,
 } from './answer-continuation-state'
-import type { EffectiveAnswerRoute } from './effective-answer-route'
 import { agentTurnPath, readOperationArtifacts } from './turns/agent'
 import { boundaryTurnPath } from './turns/boundary'
 import { parseFrozenEvidence } from './public-projection'
@@ -145,7 +145,11 @@ type AnswerTurnLeaseLoss =
   | { kind: 'transport' }
 
 type RuntimeAnswerRoute =
-  | Extract<EffectiveAnswerRoute, { agent: unknown }>
+  | Readonly<{
+      kind: 'tool_search'
+      agent: EffectiveAnswerAgentRoute
+      shouldRunBusinessRetrievalFirst: boolean
+    }>
   | Readonly<{ kind: 'safety_refusal' }>
 
 type StreamAnswerTurnRuntimeState = {

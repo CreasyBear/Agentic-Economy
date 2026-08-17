@@ -11,7 +11,6 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { openRouterToolName } from '@/modules/answer/internal/action-to-tool-spec'
 import {
   answerTurnRequestDigest,
   reserveAnswerTurn,
@@ -22,8 +21,7 @@ import {
   installAnswerThreadTestPort,
 } from '../../helpers/answer-thread-test-port'
 import {
-  openRouterStructuredProseResponse,
-  openRouterToolResponse,
+  openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
 
@@ -199,49 +197,27 @@ describe('answer turn execution lease durability', () => {
         resultJson,
       }
     })
-    const operationTool = openRouterToolName(`capability.${operationRef}`)
-    const modelServer = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name === 'answer_navigation') {
-        const completedReads = request.messages.filter((message) => message.role === 'tool').length
-        if (completedReads === 0) {
-          return openRouterToolResponse([{
-            id: 'call-operation-search',
-            toolId: 'registry.operations.search',
-            input: { query: 'current test value' },
-          }])
-        }
-        if (completedReads === 1) {
-          return openRouterToolResponse([{
-            id: 'call-operation-detail',
-            toolId: 'registry.operations.detail',
-            input: { operationRef },
-          }])
-        }
-        return {
-          id: 'chatcmpl-navigation-call',
-          model: 'test-model',
-          choices: [{
-            finish_reason: 'stop',
-            message: {
-              role: 'assistant',
-              content: JSON.stringify({ kind: 'call', operationRef }),
-            },
-          }],
-          usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
-        }
-      }
-      if ((request.tools?.length ?? 0) > 0) {
-        return openRouterToolResponse([{
-          toolId: operationTool,
+    const modelServer = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [
+        {
+          toolId: 'registry.operations.search',
+          input: { query: 'current test value' },
+        },
+        {
+          toolId: 'registry.operations.detail',
+          input: { operationRef },
+        },
+        {
+          toolId: `capability.${operationRef}`,
           input: { city: 'Sydney' },
-        }])
-      }
-      return openRouterStructuredProseResponse({
+        },
+      ],
+      prose: {
         oneLine: 'The current test value for Sydney is 42.',
         summary: 'The operation returned the current test value.',
         whatToDoNow: 'Use the returned value.',
-      })
-    }, { preflightRoute: 'operation' })
+      },
+    }), { preflightRoute: 'operation' })
     const restoreOpenRouter = modelServer.installEnv()
     const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL

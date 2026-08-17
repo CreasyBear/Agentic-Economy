@@ -113,6 +113,7 @@ import {
   type AnswerSnapshot,
 } from '../answer-synthesizer'
 import {
+  ANSWER_OPERATION_EFFECT_TOOL_IDS,
   ANSWER_READ_TOOL_IDS,
   findAnswerReadToolAction,
   isAnswerOperationReadToolId,
@@ -178,12 +179,12 @@ const RepairDecisionSchema = z.discriminatedUnion('kind', [
  * the prose guard key on ONE id rather than a per-op set — never per-capability
  * registered actions. The free-form action is not itself a direct LLM tool.
  */
-const OPERATION_EXECUTE_TOOL_ID = 'operation.execute'
+export const ANSWER_OPERATION_EFFECT_DISPATCH_IDS = ANSWER_OPERATION_EFFECT_TOOL_IDS
+const [OPERATION_EXECUTE_TOOL_ID, OPERATION_INVOKE_TOOL_ID] = ANSWER_OPERATION_EFFECT_DISPATCH_IDS
 
 type ModelCallAccountingState = {
   stepRecorded: boolean
 }
-const OPERATION_INVOKE_TOOL_ID = 'operation.invoke'
 const ANSWER_OPERATION_EFFECT_KEY_PREFIX = 'answer-operation-effect:v1'
 type OperationToolCallResult = RunAnswerToolCallResult &
   Readonly<{
@@ -267,15 +268,167 @@ export type AnswerToolUseAgentResult = {
   gate: AnswerGateResult
 }
 
+type PriorProviderProjection = Readonly<{
+  providers: readonly AnswerSource[]
+  allowedSlugs: readonly string[]
+}>
+
+const FOLLOW_UP_ORDINALS: Readonly<Record<string, number>> = {
+  first: 0,
+  '1st': 0,
+  second: 1,
+  '2nd': 1,
+  third: 2,
+  '3rd': 2,
+  fourth: 3,
+  '4th': 3,
+  fifth: 4,
+  '5th': 4,
+  sixth: 5,
+  '6th': 5,
+  seventh: 6,
+  '7th': 6,
+  eighth: 7,
+  '8th': 7,
+  ninth: 8,
+  '9th': 8,
+  tenth: 9,
+  '10th': 9,
+  top: 0,
+}
+
+export function projectPriorProvidersForFollowUp(input: {
+  query: string
+  followUpIntent?: FollowUpIntent
+  priorProviders?: readonly AnswerSource[]
+  priorAllowedSlugs?: readonly string[]
+}): PriorProviderProjection {
+  const providers = [...(input.priorProviders ?? [])]
+  let projected = providers
+
+  if (input.followUpIntent === 'filter_known') {
+    const inquiryReady = providers.filter(hasPublishedInquiryPath)
+    projected = asksForInquiryReadyFilter(input.query) && inquiryReady.length > 0
+      ? inquiryReady
+      : providers
+  } else if (input.followUpIntent === 'compare_known') {
+    projected = providers.slice(0, 2)
+  } else if (input.followUpIntent === 'inquiry_handoff') {
+    const ordinal = resolveFollowUpOrdinal(input.query)
+    const named = ordinal === undefined
+      ? providers.find((provider) => providerMatchesFollowUpName(input.query, provider))
+      : undefined
+    const explicit = ordinal === undefined
+      ? named
+      : providers[ordinal]
+    if (explicit !== undefined) {
+      projected = [explicit]
+    } else if (providers.length === 1) {
+      projected = providers
+    } else {
+      const inquiryReady = providers.filter(hasPublishedInquiryPath)
+      projected = asksToPrepareInquiry(input.query) && inquiryReady.length === 1
+        ? inquiryReady
+        : providers
+    }
+  }
+
+  const reindexed = projected.map((provider, index) => ({
+    ...provider,
+    citationIndex: index + 1,
+  }))
+  const projectedSlugs = new Set(reindexed.map((provider) => provider.slug))
+  return {
+    providers: reindexed,
+    allowedSlugs: (input.priorAllowedSlugs ?? []).filter((slug) =>
+      projectedSlugs.has(slug),
+    ),
+  }
+}
+
+function hasPublishedInquiryPath(provider: AnswerSource): boolean {
+  return typeof provider.inquiryUrl === 'string'
+    && provider.inquiryUrl.trim().length > 0
+}
+
+function asksForInquiryReadyFilter(query: string): boolean {
+  return /\bcontactable\b/i.test(query)
+    || /\b(?:accept(?:ing)?|take|taking)\b[\s\S]{0,32}\b(?:inquir(?:y|ies)|requests?)\b/i.test(
+      query,
+    )
+}
+
+function normalizeFollowUpProviderText(value: string): string {
+  return value
+    .toLocaleLowerCase('en-US')
+    .normalize('NFKC')
+    .replace(/&/g, ' and ')
+    .replace(/['’‘]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function resolveFollowUpOrdinal(query: string): number | undefined {
+  const normalized = normalizeFollowUpProviderText(query)
+  const token = normalized.match(
+    /\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|sixth|6th|seventh|7th|eighth|8th|ninth|9th|tenth|10th|top)\b/,
+  )?.[1]
+  return token === undefined ? undefined : FOLLOW_UP_ORDINALS[token]
+}
+
+function providerNamePhrases(provider: AnswerSource): readonly string[] {
+  return [provider.name, provider.slug.replace(/[-_]+/g, ' ')]
+    .map(normalizeFollowUpProviderText)
+    .filter((value) => value.length > 0)
+}
+
+function providerMatchesFollowUpName(
+  query: string,
+  provider: AnswerSource,
+): boolean {
+  const normalizedQuery = ` ${normalizeFollowUpProviderText(query)} `
+  return providerNamePhrases(provider).some((phrase) =>
+    normalizedQuery.includes(` ${phrase} `),
+  )
+}
+
+function asksToPrepareInquiry(query: string): boolean {
+  return /\b(?:prepare|open|send|submit|start)\b[\s\S]{0,40}\b(?:inquir(?:y|ies)|request)\b/i.test(
+    query,
+  )
+}
+
 export async function runAnswerToolUseAgent(
   input: AnswerToolUseAgentInput,
 ): Promise<AnswerToolUseAgentResult> {
+  const followUpIntent = input.followUpIntent ?? input.resumeCheckpoint?.intent
+  const projected = projectPriorProvidersForFollowUp({
+    query: input.query,
+    ...(followUpIntent === undefined ? {} : { followUpIntent }),
+    ...(input.priorProviders === undefined
+      ? {}
+      : { priorProviders: input.priorProviders }),
+    ...(input.priorAllowedSlugs === undefined
+      ? {}
+      : { priorAllowedSlugs: input.priorAllowedSlugs }),
+  })
+  const projectedInput: AnswerToolUseAgentInput = {
+    ...input,
+    ...(followUpIntent === undefined ? {} : { followUpIntent }),
+    ...(input.priorProviders === undefined
+      ? {}
+      : { priorProviders: projected.providers }),
+    ...(input.priorAllowedSlugs === undefined
+      ? {}
+      : { priorAllowedSlugs: projected.allowedSlugs }),
+  }
   const config = input.config ?? openRouterGatewayConfig()
   if (config.apiKey === undefined) {
     throw new AnswerToolUseAgentError('unavailable')
   }
 
-  return runRealToolUseAgent(input, config)
+  return runRealToolUseAgent(projectedInput, config)
 }
 
 function buildAgentResult(
@@ -349,7 +502,7 @@ function buildAgentResult(
     toolCallRecordsToGateInput(safeToolCalls),
   )
   const priorAllowed = new Set(input.priorAllowedSlugs ?? [])
-  const allowedSlugs = new Set<string>([...toolAllowedSlugs, ...priorAllowed])
+  const candidateAllowedSlugs = new Set<string>([...toolAllowedSlugs, ...priorAllowed])
 
   const agentQueryFromTools = resolveAgentQuery(safeToolCalls, input.query)
   const locationFiltered = filterProvidersForRequestedLocation({
@@ -368,6 +521,10 @@ function buildAgentResult(
     : providers.length > 0
       ? (locationFiltered?.providers ?? providers)
       : (input.priorProviders ?? [])
+  const finalProviderSlugs = new Set(finalProviders.map((provider) => provider.slug))
+  const allowedSlugs = new Set(
+    [...candidateAllowedSlugs].filter((slug) => finalProviderSlugs.has(slug)),
+  )
   const capabilityAttempted = safeToolCalls.some(
     (toolCall) =>
       toolCall.toolId === OPERATION_EXECUTE_TOOL_ID ||
@@ -408,6 +565,9 @@ function buildAgentResult(
     query: input.query,
     oneLine: mapped.oneLine,
     providers: finalProviders,
+    ...(input.followUpIntent === 'inquiry_handoff' && finalProviders.length === 1
+      ? { selectedProvider: finalProviders[0] }
+      : {}),
     ...(operationArtifacts.candidates.length === 0
       ? {}
       : { operationCandidates: operationArtifacts.candidates }),
@@ -433,6 +593,9 @@ function buildAgentResult(
   const rawGate = runAnswerGate({
     snapshot: rawSnapshot,
     allowedSlugs,
+    forbiddenProviderNames: locationFiltered.rejectedProviders.map(
+      (provider) => provider.name,
+    ),
   })
   if (!rawGate.ok) {
     return {
@@ -559,8 +722,8 @@ async function rebindIntermediateKeylessDataAsk(
   const selectedToolId = checkpoint.selectedToolId ?? selection?.toolId
   if (
     selectedToolId !== undefined &&
-    selectedToolId !== 'operation.execute' &&
-    selectedToolId !== 'operation.invoke'
+    selectedToolId !== OPERATION_EXECUTE_TOOL_ID &&
+    selectedToolId !== OPERATION_INVOKE_TOOL_ID
   ) {
     return undefined
   }
@@ -717,6 +880,19 @@ async function runRealToolUseAgent(
       resumed.selectedToolId === OPERATION_EXECUTE_TOOL_ID ||
       resumed.selectedToolId === OPERATION_INVOKE_TOOL_ID ||
       resumed.toolCalls.length > 0)
+  const resumedFollowUpIntent =
+    resumed === undefined ? undefined : input.followUpIntent ?? resumed.intent
+  const resumedPriorProjection =
+    resumed === undefined
+      ? undefined
+      : projectPriorProvidersForFollowUp({
+          query: resumed.query,
+          ...(resumedFollowUpIntent === undefined
+            ? {}
+            : { followUpIntent: resumedFollowUpIntent }),
+          priorProviders: resumed.priorProviders,
+          priorAllowedSlugs: resumed.priorAllowedSlugs,
+        })
   // generateText calls, each of which resets the SDK's stepNumber to zero.
   let checkpointStepOrdinal = resumed?.stepOrdinal ?? 0
   let resumedReplayMessages: ModelMessage[] | undefined
@@ -758,15 +934,17 @@ async function runRealToolUseAgent(
     if (resumedProse.output === undefined) {
       throw new AnswerToolUseAgentError('prose_failed')
     }
+    const resumedProviders = resumedPriorProjection?.providers ?? []
+    const resumedAllowedSlugs = resumedPriorProjection?.allowedSlugs ?? []
     return finalizeAgentResult(
       {
         ...input,
-        priorProviders: resumed.priorProviders,
-        priorAllowedSlugs: resumed.priorAllowedSlugs,
+        priorProviders: resumedProviders,
+        priorAllowedSlugs: resumedAllowedSlugs,
       },
       resumedProse.output,
       [...resumed.toolCalls],
-      resumed.priorProviders,
+      resumedProviders,
       timings,
       modelRequests,
     )
@@ -779,7 +957,7 @@ async function runRealToolUseAgent(
     ? [...(resumed?.modelRequests ?? [])]
     : []
   const providers: AnswerSource[] = resumedIntermediate
-    ? [...(resumed?.priorProviders ?? [])]
+    ? [...(resumedPriorProjection?.providers ?? [])]
     : []
   const slugSeen = new Set(providers.map((provider) => provider.slug))
   const maxToolCalls = normalizeMaxToolCalls(
@@ -1070,8 +1248,12 @@ async function runRealToolUseAgent(
         slugSeen,
         observedResult.providers,
       )
-      toolSeq += records.length
-      return safeToolResultJsonForPrompt(observedResult.resultJson)
+      const modelResultJson = modelFacingToolResultJson(
+        input,
+        appliedRawInput,
+        observedResult,
+      )
+      return safeToolResultJsonForPrompt(modelResultJson)
     }).catch((error: unknown) => {
       toolExecutionError = true
       throw error
@@ -2877,6 +3059,60 @@ function normalizeMaxRegistrySearchLimit(value: number | undefined): number {
     return DEFAULT_LIMIT
   }
   return Math.max(1, Math.floor(value))
+}
+
+function modelFacingToolResultJson(
+  input: AnswerToolUseAgentInput,
+  appliedRawInput: unknown,
+  result: RunAnswerToolCallResult,
+): string {
+  if (result.record.toolId !== 'registry.search') return result.resultJson
+  const toolQuery =
+    isRecord(appliedRawInput) && typeof appliedRawInput.query === 'string'
+      ? appliedRawInput.query
+      : undefined
+  const locationFiltered = filterProvidersForRequestedLocation({
+    providers: result.providers,
+    userQuery: input.query,
+    ...(toolQuery === undefined ? {} : { toolQuery }),
+    searchContext: input.searchContext,
+  })
+  if (locationFiltered.rejectedProviders.length === 0) {
+    return result.resultJson
+  }
+  return filterRegistrySearchResultForPrompt(
+    result.resultJson,
+    new Set(locationFiltered.providers.map((provider) => provider.slug)),
+  )
+}
+
+function filterRegistrySearchResultForPrompt(
+  resultJson: string,
+  visibleSlugs: ReadonlySet<string>,
+): string {
+  try {
+    const parsed: unknown = JSON.parse(resultJson)
+    if (
+      !isRecord(parsed)
+      || !Array.isArray(parsed.items)
+      || !isRecord(parsed.pagination)
+    ) {
+      return resultJson
+    }
+    const items = parsed.items.filter(
+      (item) =>
+        isRecord(item)
+        && typeof item.slug === 'string'
+        && visibleSlugs.has(item.slug),
+    )
+    const pagination = { ...parsed.pagination }
+    delete pagination.nextCursor
+    pagination.total = items.length
+    pagination.hasMore = false
+    return safeJsonStringify({ ...parsed, items, pagination })
+  } catch {
+    return resultJson
+  }
 }
 
 function safeToolResultJsonForPrompt(resultJson: string): string {

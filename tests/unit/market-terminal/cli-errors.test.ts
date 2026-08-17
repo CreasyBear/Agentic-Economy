@@ -206,6 +206,17 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 30_000)
   afterEach(() => vi.unstubAllGlobals())
+  it('routes root invoke through the invoke runner before network access', async () => {
+    const result = await spawnCli(['invoke', '--json'])
+
+    expect(result.status).toBe(1)
+    expect(result.signal).toBeNull()
+    expect(result.stderr).toBe('')
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'invoke-usage',
+    })
+  }, 15_000)
 
   it('prints a canonical JSON envelope for parse failures without a stack', () => {
     const result = spawnSync(process.execPath, [

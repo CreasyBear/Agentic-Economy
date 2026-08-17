@@ -20,10 +20,15 @@ export type AnswerGateResult =
 export type RunAnswerGateInput = {
   snapshot: AnswerSnapshot
   allowedSlugs: ReadonlySet<string>
+  forbiddenProviderNames?: readonly string[]
 }
 
 export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
-  const { snapshot, allowedSlugs } = input
+  const {
+    snapshot,
+    allowedSlugs,
+    forbiddenProviderNames = [],
+  } = input
   const copyId = makeGateCopyId()
 
   if (snapshot.oneLine.trim().length === 0 || snapshot.summary.trim().length === 0 || snapshot.nextStep.trim().length === 0) {
@@ -38,6 +43,10 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
   }
 
   const humanText = joinHumanCopy([snapshot.oneLine, snapshot.summary, snapshot.nextStep])
+
+  if (hasForbiddenProviderName(humanText, forbiddenProviderNames)) {
+    return { ok: false, code: 'grounding_failed', copyId }
+  }
 
   if (hasEpistemicVocabulary(humanText)) {
     return { ok: false, code: 'epistemic_vocabulary', copyId }
@@ -56,6 +65,28 @@ export function runAnswerGate(input: RunAnswerGateInput): AnswerGateResult {
   }
 
   return { ok: true }
+}
+
+function hasForbiddenProviderName(
+  text: string,
+  providerNames: readonly string[],
+): boolean {
+  const normalizedText = ` ${normalizeProviderOccurrenceText(text)} `
+  return providerNames.some((name) => {
+    const normalizedName = normalizeProviderOccurrenceText(name)
+    return normalizedName.length > 0 && normalizedText.includes(` ${normalizedName} `)
+  })
+}
+
+function normalizeProviderOccurrenceText(value: string): string {
+  return value
+    .toLocaleLowerCase('en-US')
+    .normalize('NFKC')
+    .replace(/&/g, ' and ')
+    .replace(/['’‘]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function hasUnsupportedProviderClaim(text: string, providerNames: readonly string[]): boolean {

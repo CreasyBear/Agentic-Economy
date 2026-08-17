@@ -20,7 +20,7 @@ import {
 } from './status'
 
 function parseInvokeResult(value: unknown): OperationInvokeResult {
-  const parsed = operationInvokeResultSchema.safeParse(value)
+  const parsed = invokeCommandDescriptor.outputSchema.safeParse(value)
   if (parsed.success) return parsed.data
   throw new CliFailure('The gateway returned an invalid operation invocation result.', {
     kind: 'UNAVAILABLE',
@@ -157,7 +157,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
     throw new CliFailure('Operation input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'invoke-input' })
   }
   const idempotencyKey = resolveIdempotencyKey(options)
-  const parsedInput = operationInvokeInputSchema.safeParse({ operationRef, input, idempotencyKey })
+  const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({ operationRef, input, idempotencyKey })
   if (!parsedInput.success) {
     throw new CliFailure('Operation input or identity does not match operation.invoke:v1.', {
       kind: 'INVALID_ARGUMENT',
@@ -168,11 +168,11 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
 
   const apiKey = requireAgentAccessKey('invoke', options)
 
-  const path = OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path
+  const path = invokeCommandDescriptor.path
   let outcome
   try {
     outcome = await callJson(options.baseUrl, path, {
-      method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
+      method: invokeCommandDescriptor.method,
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
@@ -212,3 +212,12 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
   ])
   line(JSON.stringify(rendered, undefined, 2))
 }
+export const invokeCommandDescriptor = {
+  command: 'invoke',
+  actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
+  path: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+  method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
+  inputSchema: operationInvokeInputSchema,
+  outputSchema: operationInvokeResultSchema,
+  run: runInvokeCommand,
+} as const

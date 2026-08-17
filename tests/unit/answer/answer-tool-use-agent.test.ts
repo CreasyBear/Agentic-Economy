@@ -12,6 +12,7 @@ import {
   type OperationExecutableDescriptor,
 } from "@/modules/capability-execution";
 import {
+  projectPriorProvidersForFollowUp,
   runAnswerToolUseAgent,
   type AnswerToolUseAgentCheckpoint,
 } from "@/modules/answer/internal/answer-tool-use-agent";
@@ -1666,20 +1667,12 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
     delete process.env.VITE_CONVEX_URL;
 
     try {
-      const priorProvider = {
-        citationIndex: 1,
+      const priorProvider = frozenProvider({
         slug: "parramatta-emergency-plumbing",
         name: "Parramatta Emergency Plumbing",
         category: "Emergency plumbing",
         suburb: "Parramatta",
-        stateTerritory: "NSW",
         serviceArea: "Parramatta and nearby suburbs",
-        hoursLabel: "Hours supplied by owner",
-        availabilityLabel: "Checked by Agentic Economy",
-        trustLabel: "Checked",
-        responseTimeLabel: "Response time not supplied",
-        trustCue: "Checked",
-        nextStepLabel: "Send inquiry",
         detailUrl: "/parramatta-emergency-plumbing",
         inquiryUrl: "/parramatta-emergency-plumbing/inquiry",
         services: [
@@ -1689,14 +1682,25 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
             summary: "x",
           },
         ],
-      };
+      });
+      const notInquiryReadyProvider = frozenProvider({
+        citationIndex: 2,
+        slug: "brunswick-plumbing",
+        name: "Brunswick Plumbing",
+        suburb: "Brunswick",
+        serviceArea: "Brunswick and nearby suburbs",
+        detailUrl: "/brunswick-plumbing",
+      });
 
       const result = await runAnswerToolUseAgent({
         query: "which ones take inquiries?",
         keylessDataAsk: emptyKeylessDataAsk,
         keylessExecutableSource: emptyKeylessSource,
-        priorProviders: [priorProvider],
-        priorAllowedSlugs: ["parramatta-emergency-plumbing"],
+        priorProviders: [priorProvider, notInquiryReadyProvider],
+        priorAllowedSlugs: [
+          "parramatta-emergency-plumbing",
+          "brunswick-plumbing",
+        ],
         followUpIntent: "filter_known",
         disableTools: true,
       });
@@ -1706,8 +1710,14 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
       expect(result.allowedSlugs.has("parramatta-emergency-plumbing")).toBe(
         true,
       );
+      expect(result.allowedSlugs.has("brunswick-plumbing")).toBe(false);
       expect(result.toolCalls).toEqual([]);
       expect(server.requests[0]?.tools).toBeUndefined();
+      const prompt = server.requests[0]?.messages
+        .map((message) => message.content)
+        .join("\n");
+      expect(prompt).toContain("Parramatta Emergency Plumbing");
+      expect(prompt).not.toContain("Brunswick Plumbing");
       expect(result.gate.ok).toBe(true);
     } finally {
       if (previousLocalRegistry === undefined) {
@@ -1724,6 +1734,183 @@ describe("runAnswerToolUseAgent — tool-choice recovery", () => {
         delete process.env.VITE_CONVEX_URL;
       } else {
         process.env.VITE_CONVEX_URL = previousPublicConvexUrl;
+      }
+      restoreOpenRouter();
+      await server.close();
+    }
+  });
+  it("keeps all frozen providers for a non-inquiry filter", () => {
+    const projection = projectPriorProvidersForFollowUp({
+      query: "Which ones are open now?",
+      followUpIntent: "filter_known",
+      priorProviders: [
+        frozenProvider({ slug: "alpha-provider", name: "Alpha Provider" }),
+        frozenProvider({ slug: "beta-provider", name: "Beta Provider" }),
+      ],
+      priorAllowedSlugs: ["alpha-provider", "beta-provider"],
+    });
+
+    expect(projection.providers.map((provider) => provider.slug)).toEqual([
+      "alpha-provider",
+      "beta-provider",
+    ]);
+    expect(projection.allowedSlugs).toEqual([
+      "alpha-provider",
+      "beta-provider",
+    ]);
+  });
+  it("keeps prior providers as zero-match context when no inquiry path exists", () => {
+    const projection = projectPriorProvidersForFollowUp({
+      query: "Which ones take inquiries?",
+      followUpIntent: "filter_known",
+      priorProviders: [
+        frozenProvider({ slug: "parramatta-provider", name: "Parramatta Provider" }),
+      ],
+      priorAllowedSlugs: ["parramatta-provider"],
+    });
+
+    expect(projection.providers.map((provider) => provider.slug)).toEqual([
+      "parramatta-provider",
+    ]);
+    expect(projection.allowedSlugs).toEqual(["parramatta-provider"]);
+  });
+
+
+  it.each([
+    {
+      query: "Message the first one",
+      expectedSlug: "alpha-provider",
+      omittedName: "Beta Provider",
+    },
+    {
+      query: "Message Beta Provider",
+      expectedSlug: "beta-provider",
+      omittedName: "Alpha Provider",
+    },
+  ])(
+    "projects inquiry handoff to the explicit provider: $query",
+    async ({ query, expectedSlug, omittedName }) => {
+      const server = await startOpenRouterContractServer(
+        openRouterToolThenProseResponses({
+          prose: matchingProviderProse(),
+        }),
+      );
+      const restoreOpenRouter = server.installEnv();
+      const previousLocalRegistry =
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = "true";
+
+      try {
+        const result = await runAnswerToolUseAgent({
+          query,
+          keylessDataAsk: emptyKeylessDataAsk,
+          keylessExecutableSource: emptyKeylessSource,
+          priorProviders: [
+            frozenProvider({
+              slug: "alpha-provider",
+              name: "Alpha Provider",
+              inquiryUrl: "/alpha-provider/inquiry",
+            }),
+            frozenProvider({
+              citationIndex: 2,
+              slug: "beta-provider",
+              name: "Beta Provider",
+              inquiryUrl: "/beta-provider/inquiry",
+            }),
+          ],
+          priorAllowedSlugs: ["alpha-provider", "beta-provider"],
+          followUpIntent: "inquiry_handoff",
+          disableTools: true,
+        });
+
+        expect(result.providers.map((provider) => provider.slug)).toEqual([
+          expectedSlug,
+        ]);
+        expect(result.snapshot.selectedProvider?.slug).toBe(expectedSlug);
+        expect(result.allowedSlugs).toEqual(new Set([expectedSlug]));
+        expect(result.toolCalls).toEqual([]);
+        expect(server.requests[0]?.tools).toBeUndefined();
+        const prompt = server.requests[0]?.messages
+          .map((message) => message.content)
+          .join("\n");
+        expect(prompt).toContain(expectedSlug);
+        expect(prompt).not.toContain(omittedName);
+      } finally {
+        if (previousLocalRegistry === undefined) {
+          delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+        } else {
+          process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry;
+        }
+        restoreOpenRouter();
+        await server.close();
+      }
+    },
+  );
+
+  it("projects compare_known to the first two frozen providers", async () => {
+    const server = await startOpenRouterContractServer(
+      openRouterToolThenProseResponses({
+        prose: matchingProviderProse(),
+      }),
+    );
+    const restoreOpenRouter = server.installEnv();
+    const previousLocalRegistry =
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = "true";
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: "compare the options",
+        keylessDataAsk: emptyKeylessDataAsk,
+        keylessExecutableSource: emptyKeylessSource,
+        priorProviders: [
+          frozenProvider({
+            slug: "alpha-provider",
+            name: "Alpha Provider",
+          }),
+          frozenProvider({
+            citationIndex: 2,
+            slug: "beta-provider",
+            name: "Beta Provider",
+          }),
+          frozenProvider({
+            citationIndex: 3,
+            slug: "gamma-provider",
+            name: "Gamma Provider",
+          }),
+        ],
+        priorAllowedSlugs: [
+          "alpha-provider",
+          "beta-provider",
+          "gamma-provider",
+        ],
+        followUpIntent: "compare_known",
+        disableTools: true,
+      });
+
+      expect(result.providers.map((provider) => provider.slug)).toEqual([
+        "alpha-provider",
+        "beta-provider",
+      ]);
+      expect(result.providers.map((provider) => provider.citationIndex)).toEqual([
+        1,
+        2,
+      ]);
+      expect(result.allowedSlugs).toEqual(
+        new Set(["alpha-provider", "beta-provider"]),
+      );
+      expect(result.toolCalls).toEqual([]);
+      const prompt = server.requests[0]?.messages
+        .map((message) => message.content)
+        .join("\n");
+      expect(prompt).toContain("Alpha Provider");
+      expect(prompt).toContain("Beta Provider");
+      expect(prompt).not.toContain("Gamma Provider");
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E;
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry;
       }
       restoreOpenRouter();
       await server.close();
@@ -1748,6 +1935,33 @@ describe("hidden rewrite guard", () => {
     );
   });
 });
+
+function frozenProvider(overrides: Partial<AnswerSource> = {}): AnswerSource {
+  return {
+    citationIndex: 1,
+    slug: "frozen-provider",
+    name: "Frozen Provider",
+    category: "Plumbing",
+    suburb: "Parramatta",
+    stateTerritory: "NSW",
+    serviceArea: "Parramatta and nearby suburbs",
+    hoursLabel: "Hours supplied by owner",
+    availabilityLabel: "Checked by Agentic Economy",
+    trustLabel: "Checked",
+    responseTimeLabel: "Response time not supplied",
+    trustCue: "Checked",
+    nextStepLabel: "Send inquiry",
+    detailUrl: "/frozen-provider",
+    services: [
+      {
+        name: "Emergency pipe repair",
+        category: "Plumbing",
+        summary: "x",
+      },
+    ],
+    ...overrides,
+  };
+}
 
 function matchingProviderProse(): OpenRouterProsePlan {
   return {

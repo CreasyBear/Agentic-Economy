@@ -13,7 +13,6 @@ import {
 } from '../../helpers/answer-thread-test-port'
 import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import {
-  openRouterToolResponse,
   openRouterToolThenProseResponses,
   startOpenRouterContractServer,
 } from '../../helpers/openrouter-contract-server'
@@ -28,21 +27,6 @@ const operationSourceMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/modules/capability-supply/operation-source', () => operationSourceMocks)
-
-function navigationClarifyResponse(question: string): unknown {
-  return {
-    id: 'chatcmpl-navigation-clarify',
-    model: 'test-model',
-    choices: [{
-      finish_reason: 'stop',
-      message: {
-        role: 'assistant',
-        content: JSON.stringify({ kind: 'clarify', question }),
-      },
-    }],
-    usage: { prompt_tokens: 100, completion_tokens: 25, total_tokens: 125 },
-  }
-}
 
 function publicOperationFor(
   descriptor: KeylessExecutableToolDescriptor,
@@ -223,7 +207,7 @@ describe('answer reference boundary', () => {
       )).toBe(true)
       expect(server.requests.filter(
         (request) => request.response_format?.json_schema?.name === 'answer_navigation',
-      ).length).toBeGreaterThanOrEqual(2)
+      )).toHaveLength(0)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -267,20 +251,17 @@ describe('answer reference boundary', () => {
       read: async () => null,
       search: async () => descriptors.map(({ operationRef }) => operationRef),
     }
-    const server = await startOpenRouterContractServer((request) => {
-      if (request.response_format?.json_schema?.name !== 'answer_navigation') {
-        throw new Error('ambiguous operation fixture expected navigation requests')
-      }
-      const completedReads = request.messages.filter((message) => message.role === 'tool').length
-      if (completedReads === 0) {
-        return openRouterToolResponse([{
-          id: 'call-operation-search',
-          toolId: 'registry.operations.search',
-          input: { query: 'current measurement for Sydney', limit: 3 },
-        }])
-      }
-      return navigationClarifyResponse('Which live source should I use?')
-    }, { preflightRoute: 'operation' })
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{
+        toolId: 'registry.operations.search',
+        input: { query: 'current measurement for Sydney', limit: 3 },
+      }],
+      prose: {
+        oneLine: 'Which live source should I use?',
+        summary: 'Multiple admitted live operations match this request.',
+        whatToDoNow: 'Choose the live source you want.',
+      },
+    }), { preflightRoute: 'operation' })
     const restoreOpenRouter = server.installEnv()
     try {
       const result = await runTurn('Get the current measurement for Sydney', keylessSource)
@@ -289,11 +270,11 @@ describe('answer reference boundary', () => {
       if (complete?.type !== 'complete') throw new Error('expected a complete ambiguous answer')
 
       expect(complete.answer.oneLine).toBe('Which live source should I use?')
-      expect(complete.answer.nextStep).toBe('Which live source should I use?')
+      expect(complete.answer.nextStep).toBe('Choose the live source you want.')
       expect(complete.answer.providers).toEqual([])
       expect(server.requests.filter(
         (request) => request.response_format?.json_schema?.name === 'answer_navigation',
-      ).length).toBeGreaterThanOrEqual(2)
+      )).toHaveLength(0)
       const evidence = JSON.parse(result.store.turns.get(result.turnId)?.evidenceJson ?? '{}') as {
         toolCalls?: readonly { toolId?: string; status?: string }[]
       }
