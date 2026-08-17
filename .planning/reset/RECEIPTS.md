@@ -777,7 +777,7 @@ normalization, and the Convex host remained runtime authorities. No
 source/Convex→tools import, aliases, runtime authority move, hosted/provider/
 network/live-money/push/release proof was performed.
 
-## P2-c — partial (splits committed; Layer-0 imports pending)
+## P2-c — committed
 
 **Accepted commit lineage from the P2-b HEAD:**
 
@@ -792,11 +792,17 @@ network/live-money/push/release proof was performed.
 | `be76bdd5f62c76541ec3e2e43aef4a328541329f` | `c5f790b1f148dc0d965caeba799801da4674fc23` | `refactor: move inquiry proof out of harness` | 5 changed records / 7 raw path endpoints: proof source `R100`, proof test `R098`, plus `harness/public.ts`, `inquiries/public.ts`, and notification readback test edits |
 | `9db36a215316c6bac3b658a04819bfc994a8a648` | `be76bdd5f62c76541ec3e2e43aef4a328541329f` | `docs: map existing codebase` | 7 modified `.planning/codebase/{ARCHITECTURE,CONCERNS,CONVENTIONS,INTEGRATIONS,STACK,STRUCTURE,TESTING}.md` paths |
 | `9c8e6fbc4de7de66a2866694824e848b3774d343` | `9db36a215316c6bac3b658a04819bfc994a8a648` | `refactor: split oversized market modules` | 28 changed paths; added exactly `src/modules/capability-execution/operation-invoke-contracts.ts`, `src/modules/capability-supply/internal/operation-projection-wire.ts`, and `src/modules/registry/internal/projection-contracts.ts`; remaining paths are the existing invoke/projection/registry consumers, Convex invoke consumers, Answer/discovery consumers, operation route/tests, CLI, and release-smoke adapter |
+| `9b17267c541613e9a55ddc835f5d9ddadd6925b4` | `4188989757359147c2d5dec350e038538519ad09` | `refactor: route demand through market seams` | 12 paths; product |
+| `9a887be8e1456531d7d5979c14a0229086e103b7` | `197b58da7299988cf3d7c5baa45c3afeb218eff3` | `refactor: route answer evidence through registry action` | 2 paths; product |
+| `78d34714e75bf444703f8741346d335aacce0a03` | `120f057e3992fa7b6c1eaeb5294c4e254502fd41` | `test: pin demand market boundaries` | 1 test path; product |
+| `588b15c9a672f44f2d62011328f14a1697f9b52f` | `776caa0e3a29a8828df3dba4fbac44fc314990f6` | `fix: keep Convex bundles off execution barrel` | 1 path; product |
 
-The target `9c8e6fbc4de7de66a2866694824e848b3774d343` is an ancestor of clean current HEAD `7fba18f317d8504d80974b5749ebd27403b60f77` on `main`.
+**Non-product interleaves:** Documentation/PAPERCUTS-only commits in this parent chronology are `2f65de9bf03a0477f9e720bc9c7935f32cd570f9`, `b2a8f2866eaf7e9e3dcc60a84923ecec3c7cf973`, `7fba18f317d8504d80974b5749ebd27403b60f77`, `d9a631646eab081809c011298ce1748593154f9f`, `4188989757359147c2d5dec350e038538519ad09`, `197b58da7299988cf3d7c5baa45c3afeb218eff3`, `120f057e3992fa7b6c1eaeb5294c4e254502fd41`, `776caa0e3a29a8828df3dba4fbac44fc314990f6`, and `eb2b6e0a97c13a654e4923ff67c6e73669d5cdc3`; they do not count as product cutovers.
+
+The earlier target `9c8e6fbc4de7de66a2866694824e848b3774d343` was an ancestor of clean intermediate HEAD `7fba18f317d8504d80974b5749ebd27403b60f77`; the accepted P2-c product tail above ends at `588b15c9a672f44f2d62011328f14a1697f9b52f`.
 
 **Ownership and preserved behavior:** service-auth assertion ownership moved to `agent-access`; the Customer Request consumer adapter remains behind `customer-request/application`; Answer tool selection is owned by the canonical Answer-thread registry; the run viewer is owned by Answer Thread; inquiry proof is owned by Inquiries; and invoke/projection/registry wire contracts were extracted into leaf modules. Existing operation-result/status/refusal schemas, serializers/deserializers, validators, public barrel exports, invocation routing, dispatch, and runtime authority remained unchanged. The capability-supply and registry public barrels re-export the extracted wire/contract names. Reverse edges from the new wire/contracts modules are type-only; no runtime cycle, duplicate implementation, alias, or retired-path consumer remains. No Layer-0 Answer/Customer Request import was introduced.
-**Current blockers:** `.planning/codebase/CONCERNS.md` records these remaining Layer-0 import edges: Answer `answer-tool-use-agent.ts` / `keyless-data-ask.ts` / `answer-schema.ts` → `capability-supply`; Answer `evidence-assembler.ts` → `registry/registry.functions`; and Customer Request `interpret-compile/discover.ts` → `capability-supply`. The commit lineage above proves completed moves/splits only; it does not satisfy the import-removal half.
+**Boundary state after P2-c:** Demand consumes registry/action-contract/capability-execution public seams; the evidence assembler calls `registrySearchAction.run` with caller `answerThread`, while other callers retain `registry_action`. The AST guard covers 41 unique Answer/Customer Request files, alias/relative normalization, comments/dynamic-import exclusion, and passes 7/7; no target implementation imports `capability-supply` or `registry.functions`.
 
 **Focused validation and reviews:** the supplied focused records report Answer-edge `4 files / 29 tests PASS` with Node 22 typecheck/lint/build PASS; run-viewer `2 files / 8 tests PASS` with the same checks; and inquiry-proof `2 files / 13 tests PASS` with the same checks. Final independent correctness and boundary/security reviews passed for service auth, consumer adapter, dead candidate removal, Answer edge, run viewer, inquiry proof, and projection/registry extraction. The interim invoke review BLOCK was solely because a newly added contracts file was absent from an indexed patch; after commit, the final refactor validator passed and confirmed the file/import cutover. No current review finding remains.
 
@@ -815,7 +821,7 @@ Docs and tests make that ownership explicit: `.planning/codebase/ARCHITECTURE.md
 Focused P2-d validation: 10 files / 91 tests passed; `git diff --check` passed; all seven moved declarations occurred exactly once in `operation-recovery-contracts.ts` and no stale moved imports remained; typecheck, lint, and build passed (build warnings only). Independent correctness review passed at 0.98; independent boundary/security review passed at 0.98; no findings across all 14 paths.
 **Dependency-order correction:** P2-d landed out of ledger dependency order and does not advance Phase 2 until P2-c closes.
 
-## Phase 2 source gate — green; card acceptance pending
+## Intermediate Phase 2 source gate — green; card acceptance was pending
 Green source/conformance/codegen evidence does not override the open P2-c acceptance.
 
 Current HEAD is `7fba18f317d8504d80974b5749ebd27403b60f77` on `main`; final porcelain, untracked files, and stashes were empty. Under Node `v22.22.0` / npm `10.9.4`:
@@ -836,3 +842,17 @@ Attributable post-P2-d gate-fix commits/messages:
 Intermediate gate attribution was direct: the target revision's after-codegen segment had two unit failures (compare fixture and prompt-map link); after those fixes, the answer rate-limit integration fixture returned 403 until the admitted subject fix; after that, ts-standards reached the supply typing and money-ledger state fixes. A later run stopped on one integration timeout, while the clean current-HEAD rerun passed all 86 files / 722 tests.
 
 No bypass was used; no hosted, live-money, push, or release proof is claimed. Production `gate:release` remains blocked at the deployment manifest above.
+
+## Phase 2 closure — accepted
+
+The accepted P2-c product head is `588b15c9a672f44f2d62011328f14a1697f9b52f`; it is an ancestor of these closure docs. Final porcelain/stash status is intentionally not fabricated here; the committer supplies that receipt.
+
+Under exact Node `v22.22.0`, all reported stages exited 0:
+
+- `npm run test:release:source:after-codegen`: source unit `505 / 4307`, integration `86 / 722`, types `1 / 4`, imports `15 / 61`, TypeScript standards `1 / 1`, SEO `6 / 35`, UI `1 / 1`, eval `13 / 15` (`failedCases=0`, `failedScoreCases=0`, minimum score `9.5 / 9`, average `9.87`, p95 `1257ms`); kernel-retirement, product-frontier, and client/SSR/Nitro build all passed.
+- `npm run test:conformance`: `24 / 396` in `8.50s`.
+- `npm run check:convex-codegen`: all generation, bundling, upload, binding, and TypeScript stages passed in `5.53s`.
+
+Focused proof: demand projection `8 files / 104 tests`; evidence action `2 files / 29 tests` plus registry `25 tests`; boundary guard `1 / 7`; Node 22 typecheck; and independent correctness/boundary reviews PASS after TSX, alias/relative, and static-re-export corrections.
+
+No hosted, provider, live-money, push, or release claim is made. The deployment-manifest blocker is retained.

@@ -5,18 +5,11 @@
 ## Tech Debt
 
 **Oversized monolith modules:**
-- Issue: Core market, money, and Answer paths live in single files far above maintainability thresholds (10k+ and 2.5k+ lines).
+- Issue: Core money, worker, Answer, transport, and thread modules remain above maintainability thresholds (10k+ and 2.5k+ lines); P2-c extracted invoke/projection contracts, but these host modules remain oversized.
 - Files: `convex/moneyLedger.ts` (~10,780 lines), `convex/capabilityOperationInvocationWorker.ts` (~2,990), `src/modules/answer/internal/answer-tool-use-agent.ts` (~3,007), `src/modules/capability-supply/route-transport-runtime.ts` (~2,507), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~2,325)
-- Why: Incremental feature accretion on the exact-money and invoke spines without a split card landing yet.
-- Impact: Small contract changes require wide diffs, merge conflicts, and hard-to-review money/invoke regressions; P2-c is explicitly carded to split invoke/projection modules.
-- Fix approach: Execute `P2-c` / `P2-d` from `.planning/reset/CARD-LEDGER.md` — extract wire contracts, admission, transport, and evidence hooks into focused modules with boundary tests before touching behavior.
-
-**Layer-0 imports in demand surfaces:**
-- Issue: Answer and Customer Request still import capability-supply and registry internals directly instead of going through action ports.
-- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/internal/keyless-data-ask.ts`, `src/modules/answer/answer-schema.ts`, `src/modules/answer/internal/evidence-assembler.ts`, `src/modules/customer-request/application/interpret-compile/discover.ts`
-- Why: Answer was built as a proving ground co-located with the kernel; reset Phase 2 decoupling is only partially landed (`P2-a`, `P2-b` committed; `P2-c` pending).
-- Impact: Quarantine or refactor of Customer Request / WorkTree risks breaking Answer silently; import-boundary tests may fail on adjacent edits.
-- Fix approach: Land `P2-c` (remove Layer-0 imports; split oversized invoke/projection modules) before Phase 3 conformance ports.
+- Why: Incremental feature accretion remains on the exact-money, invocation-worker, Answer, transport, and thread spines despite the P2-c contract extraction.
+- Impact: Small contract changes require wide diffs, merge conflicts, and hard-to-review money/worker/Answer/transport/thread regressions.
+- Fix approach: Measure one concrete seam at a time and card any remaining module split separately; preserve runtime authorities and boundary tests.
 
 **Action inventory vs end-state guardrail:**
 - Issue: The product-frontier manifest pins 46 required actions; the operating model targets ≤14 active actions after quarantine.
@@ -45,13 +38,6 @@
 - Why: `@convex-dev/agent` 0.6.4 peers `ai ^6.0.35`; v7 support is draft-only; P2-a explicitly kept the custom loop without a parity validator.
 - Impact: Higher maintenance burden on tool accounting, checkpoints, and eval parity; risk of SDK drift on upgrade.
 - Fix approach: Do not remove the custom loop until a SDK↔Harness parity validator exists (P2-a decision); track `@convex-dev/agent` v7 readiness separately.
-
-**In-flight operation-invoke contract consolidation:**
-- Issue: Working tree carries a large uncommitted refactor across invoke contracts, projection wire types, registry search documents, and CLI/smoke adapters (~32 paths, net −2,900 lines in current diff stat).
-- Files: `src/modules/capability-execution/operation-invoke-contracts.ts`, `src/modules/capability-execution/operation-invoke.ts`, `src/modules/capability-supply/operation-projection.ts`, `src/modules/registry/internal/projection-contracts.ts`, `convex/capabilityOperationInvocations.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`
-- Why: Active Phase 1/2 hardening to centralize refusal/status unions and wire contracts.
-- Impact: Concurrent edits on invoke/money/registry paths will conflict; orchestrator cards must treat this as occupied territory until committed and validated serially.
-- Fix approach: Finish executor → validator → reviewer pipeline on one card; run full `test:release:source:after-codegen` serially (rule 7a — no concurrent validators).
 
 **Dead action registration for storefront import:**
 - Issue: `storefrontImportDraftAction` is imported in `src/modules/actions/index.ts` but omitted from the `actions` array; it is reachable only via a dedicated HTTP route and server function.
