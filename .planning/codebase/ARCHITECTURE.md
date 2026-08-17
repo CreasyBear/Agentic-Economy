@@ -3,6 +3,10 @@
 
 **Analysis Date:** 2026-08-17
 
+[`PROMPT-DATA-FLOW.md`](PROMPT-DATA-FLOW.md) is the primary prompt and data-flow
+map. Any change to prompt construction, model/tool orchestration, evidence,
+persistence, replay, or projection boundaries MUST update it in the same batch.
+
 ## System Overview
 
 ```text
