@@ -13,7 +13,6 @@ import {
   readCapabilityOperationDetail,
   readCapabilityOperationSearch,
 } from '@/modules/capability-supply/operation-source'
-import type { AnswerOperationCandidate } from '@/modules/answer/answer-schema'
 import type { OperationExecutableDescriptor } from './operation-execute.functions'
 
 export type { PublicOperationDescriptor }
@@ -31,14 +30,12 @@ export type KeylessExecutableToolDescriptor = Readonly<{
   inputSchema: Record<string, unknown>
   /** Public registry projection used only for candidate presentation/binding. */
   publicOperation?: PublicOperationDescriptor
-  /** Canonical candidate projection frozen with this descriptor snapshot. */
-  operationCandidate?: AnswerOperationCandidate
   /** Digest of the exact executable descriptor read during selection. */
   executionBindingDigest?: string
 }>
 
 type KeylessExecutableListing = Readonly<
-  Omit<KeylessExecutableToolDescriptor, 'inputSchema' | 'inputExamples' | 'publicOperation' | 'operationCandidate'> & {
+  Omit<KeylessExecutableToolDescriptor, 'inputSchema' | 'inputExamples' | 'publicOperation'> & {
     inputSchemaJson: string
     inputExamplesJson?: string
   }
