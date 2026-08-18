@@ -39,7 +39,7 @@ export function verifyProductFrontier(root = process.cwd()) {
   const expectedQuarantineFamilies = [
     {
       id: 'customer-request',
-      status: 'tombstoned-pending-unlist',
+      status: 'tombstoned-unlisted',
       evidenceDisposition: 'exported-then-unlisted',
       successor: 'registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration',
       actionIds: [
@@ -66,14 +66,14 @@ export function verifyProductFrontier(root = process.cwd()) {
     },
     {
       id: 'study',
-      status: 'tombstoned-pending-unlist',
+      status: 'tombstoned-unlisted',
       evidenceDisposition: 'exported-then-unlisted',
       successor: 'consuming-agent planning and orchestration',
       actionIds: ['study.start', 'study.inspect'],
     },
     {
       id: 'work-tree',
-      status: 'tombstoned-pending-unlist',
+      status: 'tombstoned-unlisted',
       evidenceDisposition: 'exported-then-unlisted',
       successor: 'consuming-agent planning and orchestration',
       actionIds: [

@@ -1,4 +1,4 @@
-/** P6 closeout census lists. Sourced from tests/unit/schema/convex-schema.test.ts. */
+/** P6 closeout census lists. Hasher still names unlisted families; listed schema is durableTables. */
 
 export const CUSTOMER_REQUEST_EXPORT_TABLES = [
   'customerRequestRouteMandateIssues',

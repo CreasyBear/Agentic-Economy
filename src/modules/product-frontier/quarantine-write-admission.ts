@@ -54,7 +54,7 @@ export function quarantineWriteServerError(actionId: string): {
     kind: 'error',
     code: QUARANTINE_WRITES_FROZEN_CODE,
     retryable: false,
-    reason: problem.detail ?? problem.title,
+    reason: problem.detail ?? problem.title ?? 'Writes frozen',
   }
 }
 
