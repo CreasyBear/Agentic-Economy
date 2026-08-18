@@ -151,7 +151,7 @@ export function verifyProductFrontier(root = process.cwd()) {
     errors,
   )
 
-  if (requiredActionIds.length < 20) {
+  if (requiredActionIds.length < 14) {
     errors.push(`required_action_floor_too_low:${requiredActionIds.length}`)
   }
   if (protectedActionIds.length < 10) {

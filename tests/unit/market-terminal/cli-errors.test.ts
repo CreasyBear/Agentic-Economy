@@ -549,12 +549,12 @@ describe('market-terminal CLI error contracts', () => {
   })
 
   it('keeps a credential-free CLI action on its local runner', async () => {
-    const action = findAction('registry.services_list')
-    if (action === undefined) throw new Error('registry.services_list action missing')
-    if (action.credentialAdmission !== undefined) throw new Error('registry.services_list unexpectedly requires credentials')
+    const action = findAction('registry.search')
+    if (action === undefined) throw new Error('registry.search action missing')
+    if (action.credentialAdmission !== undefined) throw new Error('registry.search unexpectedly requires credentials')
     const originalSurfaces = Object.getOwnPropertyDescriptor(action, 'surfaces')
     if (originalSurfaces === undefined || originalSurfaces.configurable !== true) {
-      throw new Error('registry.services_list surfaces property cannot be scoped for this test')
+      throw new Error('registry.search surfaces property cannot be scoped for this test')
     }
     Object.defineProperty(action, 'surfaces', {
       ...originalSurfaces,
@@ -565,7 +565,7 @@ describe('market-terminal CLI error contracts', () => {
     vi.stubGlobal('fetch', fetchMock)
     const output = captureStdout()
     try {
-      await runActionCommand(['registry.services_list', '{}'], {
+      await runActionCommand(['registry.search', '{"query":"plumber"}'], {
         baseUrl: 'https://market.example',
         json: false,
         help: false,
@@ -580,7 +580,7 @@ describe('market-terminal CLI error contracts', () => {
     }
     expect(fetchMock).not.toHaveBeenCalled()
     const stdout = output.read()
-    expect(stdout).toContain('Ran registry.services_list')
+    expect(stdout).toContain('Ran registry.search')
     expect(stdout).toContain('result.kind = listed')
   })
 

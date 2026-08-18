@@ -28,7 +28,10 @@ import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import { isQuarantineFamilyActionId, isQuarantineSurfaceRetired, quarantineSurfaceRetiredProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
 import { DEPRECATION_SUCCESSOR_PATH } from '@/modules/product-frontier/deprecation-notice'
-import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
+import {
+  agentAuthorityModeAllows,
+  type AgentAccessAuthorityMode,
+} from '@/modules/agent-access/contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import { createOperationInvokeService } from '@/lib/server/operation-invoke-api'
@@ -36,7 +39,7 @@ import { createSupplyManagementService, type SupplyManagementService } from '@/m
 const MAX_MCP_REQUEST_BODY_BYTES = 320 * 1024
 export type McpAccessTier = Readonly<{
   tier: 'anonymous' | 'authenticated'
-  authorityMode?: CustomerRequestAuthorityMode
+  authorityMode?: AgentAccessAuthorityMode
   principalId?: string
   principal?: ActionAgentAccessPrincipal
   correlationId?: string
@@ -248,7 +251,7 @@ export function createAeMcpServer(
         && access.principal?.scopes.includes(action.credentialAdmission.scope) === true)
       || (action.credentialAdmission === undefined
         && access.authorityMode !== undefined
-        && customerRequestModeAllows(access.authorityMode, requiredModeForAction(action)))
+        && agentAuthorityModeAllows(access.authorityMode, requiredModeForAction(action)))
     ))
 
   const server = new McpServer({ name: 'agentic-economy', version: '1.0.0' })
@@ -456,7 +459,7 @@ function mcpToolDescription(action: AnyAction): string {
   return `${action.summary}\n\nDeprecated. Successor: POST ${DEPRECATION_SUCCESSOR_PATH}.\n\n${boundaries}`
 }
 
-function requiredModeForAction(action: AnyAction): CustomerRequestAuthorityMode {
+function requiredModeForAction(action: AnyAction): AgentAccessAuthorityMode {
   if (action.credentialAdmission?.authority === 'descriptor_classified' || action.readOnly) return 'inspect_only'
   const requirement = action.invocationContract?.authorityRequirement
   if (requirement === 'principal' || requirement === 'caller') return 'approve_each'

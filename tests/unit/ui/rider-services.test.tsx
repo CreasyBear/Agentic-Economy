@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AeServiceList } from '@/components/ae/services/AeServiceList'
 import { AeServiceRow } from '@/components/ae/services/AeServiceRow'
-import type { ConsumerPlan } from '@/modules/customer-request/application/public'
+import type { ConsumerPlan } from '@/components/ae/plan/consumer-plan'
 import type { ServiceDto } from '@/modules/registry/public'
 
 

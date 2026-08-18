@@ -12,7 +12,7 @@ import {
 } from '@/modules/actions'
 import {
   registryDetailAction,
-  registryServicesSearchAction,
+  registrySearchAction,
 } from '@/modules/registry/registry.actions'
 import type * as PosthogServerModule from '@/lib/observability/posthog.server'
 
@@ -204,8 +204,7 @@ describe('MCP host adapter', () => {
       .filter((action) => action.surfaces.includes('mcp') && action.readOnly && action.credentialAdmission === undefined)
     const expectedToolNames = mcpActions.map(mcpToolName)
     expect(expectedToolNames).toEqual([
-      'ae_registry_services_list',
-      'ae_registry_services_search',
+      'ae_registry_search',
       'ae_registry_detail',
       'ae_registry_operations_search',
       'ae_registry_operations_detail',
@@ -248,7 +247,7 @@ describe('MCP host adapter', () => {
     const operations = tools.find((tool) => tool.name === 'ae_registry_operations_search')
     const compare = tools.find((tool) => tool.name === 'ae_registry_operations_compare')
     const inspectPlan = tools.find((tool) => tool.name === 'ae_registry_operations_inspectPlan')
-    const search = tools.find((tool) => tool.name === 'ae_registry_services_search')
+    const search = tools.find((tool) => tool.name === 'ae_registry_search')
     const execute = tools.find((tool) => tool.name === 'ae_operation_execute')
     expect(detail?.inputSchema).toEqual(expect.objectContaining({
       properties: expect.objectContaining({ slug: expect.any(Object) }),
@@ -288,21 +287,21 @@ describe('MCP host adapter', () => {
 
   })
 
-  it('calls the registered services search action with MCP attribution', async () => {
-    const run = vi.spyOn(registryServicesSearchAction, 'run').mockResolvedValue({
+  it('calls the registered registry search action with MCP attribution', async () => {
+    const run = vi.spyOn(registrySearchAction, 'run').mockResolvedValue({
       kind: 'ok',
-      schemaVersion: 'public-services-api:v2',
+      schemaVersion: 'public-business-catalog-api:v2',
       query: 'plumbing',
-      services: [],
+      items: [],
       pagination: { limit: 10, total: 0, hasMore: false },
-    })
+    } as never)
 
     const response = await postMcp({
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'ae_registry_services_search',
+        name: 'ae_registry_search',
         arguments: { query: 'plumbing' },
       },
     })
@@ -316,11 +315,10 @@ describe('MCP host adapter', () => {
     })
     expect((result.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({
       kind: 'ok',
-      schemaVersion: 'public-services-api:v2',
     })
     expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledTimes(1)
     expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledWith(
-      'registry.services_search',
+      'registry.search',
       'mcp',
     )
   })
@@ -617,7 +615,7 @@ describe('MCP host adapter', () => {
     })
     const body = await readMcpBody(response)
     const result = body.result as Record<string, unknown>
-    const names = (result.tools as Array<Record<string, unknown>>).map((tool) => tool.name)
+    const names = (result.tools as Array<Record<string, unknown>>).map((tool) => String(tool.name))
 
     expect(names).not.toContain('customerRequest_confirm')
     expect(names).not.toContain('customer.request.confirm')

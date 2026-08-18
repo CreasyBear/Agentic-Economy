@@ -576,7 +576,7 @@ export const registrySearchAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson', 'answerThread'],
+  surfaces: ['http', 'agentJson', 'answerThread', 'mcp'],
   invocationContract: {
     version: 'registry.search:v2',
     consequenceClass: 'read_only',

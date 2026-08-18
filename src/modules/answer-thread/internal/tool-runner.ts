@@ -99,10 +99,9 @@ export async function runAnswerToolCall(
         }),
   }
   let outcome: RunHarnessToolOutcome
-  const classifyResult = input.toolId === 'web.discover' ? classifyWebDiscoveryResult : undefined
   captureLegacyRegistryActionRequest(action.id, 'answer')
   if (input.harnessLoop === undefined) {
-    const rawOutcome = await runHarnessTool({
+    outcome = await runHarnessTool({
       tool,
       input: input.input,
       context,
@@ -110,9 +109,6 @@ export async function runAnswerToolCall(
       mode: 'public-read',
       toolCallId,
     })
-    outcome = classifyResult === undefined
-      ? rawOutcome
-      : { ...rawOutcome, result: classifyResult(rawOutcome.result) }
   } else {
     outcome = await input.harnessLoop.runTool({
       tool,
@@ -121,7 +117,6 @@ export async function runAnswerToolCall(
       surface: 'answerThread',
       mode: 'public-read',
       toolCallId,
-      ...(classifyResult === undefined ? {} : { classifyResult }),
     })
   }
   timings.record('tool.run', outcome.result.durationMs, {
@@ -238,14 +233,6 @@ function extractProviders(
   toolId: AnswerToolId,
   result: unknown,
 ): { providers: AnswerSource[]; count: number } {
-  if (toolId === 'web.discover') {
-    const discovery = result as { kind?: unknown; claims?: unknown[] }
-    return {
-      providers: [],
-      count: discovery.kind === 'found' && Array.isArray(discovery.claims) ? discovery.claims.length : 0,
-    }
-  }
-
   if (toolId === 'registry.search') {
     const page = result as PublicBusinessCatalogApiV2SearchPage
     return {
@@ -296,58 +283,6 @@ function extractProviders(
 
   return { providers: [], count: 0 }
 }
-
-function webDiscoveryFailure(
-  output: unknown,
-): { status: Extract<AnswerToolCallStatus, 'error' | 'refused'>; errorCode: string } | undefined {
-  const discovery = output as { kind?: unknown; code?: unknown; reason?: unknown }
-  if (discovery.kind === 'error') {
-    return {
-      status: 'error',
-      errorCode: typeof discovery.code === 'string' ? discovery.code : 'discovery_failed',
-    }
-  }
-  if (discovery.kind === 'unavailable') {
-    return {
-      status: 'refused',
-      errorCode: typeof discovery.reason === 'string' ? discovery.reason : 'discovery_unavailable',
-    }
-  }
-  return undefined
-}
-
-function classifyWebDiscoveryResult(
-  result: RunHarnessToolOutcome['result'],
-): RunHarnessToolOutcome['result'] {
-  if (result.status !== 'ok' || result.output === undefined) {
-    return result
-  }
-
-  const failure = webDiscoveryFailure(result.output)
-  if (failure === undefined) {
-    return result
-  }
-
-  const summaryJson = safeJsonStringify(
-    failure.status === 'refused'
-      ? { kind: 'unavailable', reason: failure.errorCode }
-      : { kind: 'error', code: failure.errorCode },
-  )
-  return {
-    ...result,
-    status: failure.status,
-    summaryJson,
-    errorCode: failure.errorCode,
-    resultHash: canonicalDigest({
-      toolId: result.toolId,
-      input: result.inputJson,
-      summary: summaryJson,
-      status: failure.status,
-      ...(result.outputJson === undefined ? {} : { output: result.outputJson }),
-    }).toString(),
-  }
-}
-
 
 function harnessStatusToAnswerStatus(status: HarnessToolStatus): AnswerToolCallStatus {
   switch (status) {

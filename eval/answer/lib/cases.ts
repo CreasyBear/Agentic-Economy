@@ -347,7 +347,6 @@ export const ANSWER_TURN_EVAL_CASES = [
     openRouterAgent: {
       toolCalls: [
         { toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } },
-        { toolId: 'web.discover', input: { query: 'Emergency plumber Brunswick' } },
       ],
       prose: {
         oneLine: 'No businesses match this Brunswick request.',
@@ -358,14 +357,14 @@ export const ANSWER_TURN_EVAL_CASES = [
     },
     expected: {
       status: 'complete',
-      expectedModelToolRuns: 2,
+      expectedModelToolRuns: 1,
       maxModelRequests: 5,
-      maxModelToolRuns: 2,
-      maxToolRuns: 2,
+      maxModelToolRuns: 1,
+      maxToolRuns: 1,
       slugs: [],
-      toolQueries: ['Emergency plumber Brunswick', 'Emergency plumber Brunswick'],
-      toolIds: ['registry.search', 'web.discover'],
-      toolStatuses: ['complete', 'complete'],
+      toolQueries: ['Emergency plumber Brunswick'],
+      toolIds: ['registry.search'],
+      toolStatuses: ['complete'],
       includeTimingNames: [
         'model.agent_total',
         'registry.search.convex',
@@ -452,7 +451,6 @@ export const ANSWER_TURN_EVAL_CASES = [
     openRouterAgent: {
       toolCalls: [
         { toolId: 'registry.search', input: { query: 'emergency plumber' } },
-        { toolId: 'web.discover', input: { query: 'emergency plumber' } },
       ],
       prose: {
         oneLine: 'No businesses match this service in Perth.',
@@ -463,14 +461,14 @@ export const ANSWER_TURN_EVAL_CASES = [
     },
     expected: {
       status: 'complete',
-      expectedModelToolRuns: 2,
+      expectedModelToolRuns: 1,
       maxModelRequests: 5,
-      maxModelToolRuns: 2,
-      maxToolRuns: 2,
+      maxModelToolRuns: 1,
+      maxToolRuns: 1,
       slugs: [],
-      toolQueries: ['emergency plumber', 'emergency plumber'],
-      toolIds: ['registry.search', 'web.discover'],
-      toolStatuses: ['complete', 'complete'],
+      toolQueries: ['emergency plumber'],
+      toolIds: ['registry.search'],
+      toolStatuses: ['complete'],
       includeTimingNames: [
         'model.agent_total',
         'registry.search.convex',

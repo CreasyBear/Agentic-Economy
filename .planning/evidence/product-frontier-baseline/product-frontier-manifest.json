@@ -3,11 +3,6 @@
   "capturedAt": "2026-08-17",
   "evidenceClass": "source-local",
   "requiredActionIds": [
-    "supply.collectDevelopmentQuote",
-    "registry.list",
-    "registry.services_detail",
-    "registry.services_list",
-    "registry.services_search",
     "registry.search",
     "registry.detail",
     "registry.operations.search",
@@ -19,10 +14,6 @@
     "operation.status",
     "operation.cancel",
     "operation.reconcile",
-    "storefront.enrichDraft",
-    "web.discover",
-    "demand.capture",
-    "settings.updateNotificationPreferences",
     "supply.publish",
     "supply.withdraw",
     "supply.earnings"
@@ -43,13 +34,8 @@
   ],
   "requiredMcpTools": [
     {
-      "id": "registry.services_list",
-      "toolName": "ae_registry_services_list",
-      "readOnly": true
-    },
-    {
-      "id": "registry.services_search",
-      "toolName": "ae_registry_services_search",
+      "id": "registry.search",
+      "toolName": "ae_registry_search",
       "readOnly": true
     },
     {
@@ -121,7 +107,6 @@
   "requiredE2eSpecs": [
     "tests/e2e/chat-discovery-inquiry-loop.spec.ts",
     "tests/e2e/code-block-hit-target.spec.ts",
-    "tests/e2e/customer-request-decision-experience.spec.ts",
     "tests/e2e/developer-discovery.spec.ts",
     "tests/e2e/governed-send-review-record.spec.ts",
     "tests/e2e/landing-answer.spec.ts",
@@ -199,7 +184,6 @@
     "src/modules/capability-execution",
     "src/modules/capability-supply",
     "src/modules/money",
-    "src/modules/customer-request",
     "src/modules/answer",
     "src/modules/answer-thread"
   ],
@@ -279,7 +263,7 @@
       "retiredAt": "2026-08-18",
       "paths": [],
       "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile",
-      "evidenceDisposition": "exported-then-unlisted; remaining Customer Request tables unlisted from schema, module retained"
+      "evidenceDisposition": "TypeScript module deleted; tombstone actions remain in product-frontier; remaining tables unlisted from schema"
     }
   ],
   "dirtyTreePathCount": 0,

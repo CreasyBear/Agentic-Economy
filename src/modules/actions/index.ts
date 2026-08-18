@@ -13,35 +13,29 @@
 
 import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
-import { collectSuppliedCandidateQuoteAction } from '@/modules/capability-supply/supplied-quote.actions'
 import {
   supplyEarningsAction,
   supplyPublishAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
+import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
+  customerRequestAllowRepeatPermissionAction,
   customerRequestCancelAction,
   customerRequestConfirmAction,
   customerRequestInspectEvidenceAction,
   customerRequestInspectRepeatPermissionAction,
   customerRequestListConnectedAssistantsAction,
-  customerRequestAllowRepeatPermissionAction,
-  customerRequestReportProblemAction,
+  customerRequestPlanPreviewAction,
   customerRequestReplyProblemAction,
+  customerRequestReportProblemAction,
   customerRequestRunAction,
   customerRequestUseRepeatPermissionAction,
   customerRequestWithdrawRepeatPermissionAction,
-} from '@/modules/customer-request/customer-request.actions'
-import { customerRequestPlanPreviewAction } from '@/modules/customer-request/plan-preview.actions'
-import { demandCaptureAction } from '@/modules/demand/demand.actions'
-import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
+} from '@/modules/product-frontier/quarantine-family-actions'
 import {
   registryDetailAction,
-  registryListAction,
   registrySearchAction,
-  registryServicesDetailAction,
-  registryServicesListAction,
-  registryServicesSearchAction,
 } from '@/modules/registry/registry.actions'
 import {
   registryOperationsCompareAction,
@@ -56,8 +50,6 @@ import {
   operationStatusAction,
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
-import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
-import { storefrontEnrichDraftAction, storefrontImportDraftAction, webDiscoverAction } from '@/modules/storefront/storefront.actions'
 import { studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
 import { workTreeCreateAction, workTreeInspectAction } from '@/modules/work-tree/work-tree.actions'
 import { workTreeApplyAction, workTreeDecideAction } from '@/modules/work-tree/work-tree-agent.actions'
@@ -70,7 +62,6 @@ import {
 import { isQuarantineFamilyActionId } from '@/modules/product-frontier/quarantine-write-admission'
 
 const registeredActions: readonly AnyAction[] = [
-  collectSuppliedCandidateQuoteAction,
   customerRequestConfirmAction,
   customerRequestRunAction,
   customerRequestCancelAction,
@@ -85,10 +76,6 @@ const registeredActions: readonly AnyAction[] = [
   customerRequestWithdrawRepeatPermissionAction,
   submitInquiryAction,
   readCustomerRecordAction,
-  registryListAction,
-  registryServicesDetailAction,
-  registryServicesListAction,
-  registryServicesSearchAction,
   registrySearchAction,
   registryDetailAction,
   registryOperationsSearchAction,
@@ -100,12 +87,8 @@ const registeredActions: readonly AnyAction[] = [
   operationStatusAction,
   operationCancelAction,
   operationReconcileAction,
-  storefrontEnrichDraftAction,
   studyStartAction,
   studyInspectAction,
-
-  webDiscoverAction,
-  demandCaptureAction,
   workTreeCreateAction,
   workTreeInspectAction,
   workTreeApplyAction,
@@ -114,7 +97,6 @@ const registeredActions: readonly AnyAction[] = [
   workTreeFinalizeRepeatUseAction,
   workTreeReconcileRepeatUseAction,
   workTreeInspectRepeatUseAction,
-  updateOwnerNotificationPreferencesAction,
   supplyPublishAction,
   supplyWithdrawAction,
   supplyEarningsAction,

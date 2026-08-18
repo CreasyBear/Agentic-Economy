@@ -33,7 +33,6 @@ export type AnswerToolCallStatus = (typeof AnswerToolCallStatusValues)[number]
 export const AnswerToolIdValues = [
   'registry.search',
   'registry.detail',
-  'web.discover',
   'registry.operations.search',
   'registry.operations.detail',
   'registry.operations.compare',

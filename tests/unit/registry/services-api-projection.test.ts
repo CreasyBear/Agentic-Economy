@@ -7,7 +7,7 @@ import type {
   ServiceOperationMap,
 } from '@/modules/registry/public'
 import { projectPublicServicesPage } from '@/modules/registry/public'
-import { toConsumerSupplyOption } from '@/modules/customer-request/application/public'
+import { toConsumerSupplyOption } from '@/components/ae/plan/consumer-plan'
 
 describe('agentic.market Service mapping', () => {
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {

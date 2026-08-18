@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
-import type { ConsumerPlanResult } from '@/modules/customer-request/application/public'
+import type { ConsumerPlanResult } from '../plan/consumer-plan'
 import type { ServiceDto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 

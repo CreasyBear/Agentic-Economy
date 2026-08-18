@@ -85,9 +85,9 @@ describe('answer run summary', () => {
       code: 'grounding_failed',
     })
     expect(report.coverage).toEqual({
-      toolsAvailable: ['registry.search', 'registry.detail', 'web.discover', 'registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'],
+      toolsAvailable: ['registry.search', 'registry.detail', 'registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'],
       toolsInvoked: ['registry.detail', 'registry.search'],
-      toolsUnused: ['web.discover', 'registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'],
+      toolsUnused: ['registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'],
       workLogPhases: ['assemble', 'interpret', 'search'],
       hasProviders: true,
       hasAllowedSlugs: true,
@@ -126,7 +126,7 @@ describe('answer run summary', () => {
       refused: 1,
       totalDurationMs: 7,
     })
-    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.operations.compare', 'registry.operations.detail', 'registry.operations.inspectPlan', 'registry.operations.search', 'web.discover'])
+    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.operations.compare', 'registry.operations.detail', 'registry.operations.inspectPlan', 'registry.operations.search'])
     expect(harnessReport.summary.errors.codes).toContain('grounding_failed')
   })
 
@@ -151,7 +151,7 @@ describe('answer run summary', () => {
       ok: false,
       source: 'turn_status',
     })
-    expect(report.coverage.toolsUnused).toEqual(['registry.search', 'registry.detail', 'web.discover', 'registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'])
+    expect(report.coverage.toolsUnused).toEqual(['registry.search', 'registry.detail', 'registry.operations.search', 'registry.operations.detail', 'registry.operations.compare', 'registry.operations.inspectPlan'])
     expect(buildPublicAnswerCheckSummary(report)).toEqual({
       catalogSearches: 0,
       listingsRead: 0,
@@ -175,7 +175,7 @@ describe('answer run summary', () => {
       },
     })
     expect(harnessReport.summary.run.status).toBe('error')
-    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.detail', 'registry.operations.compare', 'registry.operations.detail', 'registry.operations.inspectPlan', 'registry.operations.search', 'registry.search', 'web.discover'])
+    expect(harnessReport.coverage.toolsUnused).toEqual(['registry.detail', 'registry.operations.compare', 'registry.operations.detail', 'registry.operations.inspectPlan', 'registry.operations.search', 'registry.search'])
   })
 })
 
