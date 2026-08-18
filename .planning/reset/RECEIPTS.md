@@ -1086,4 +1086,19 @@ Remainder exits after this card. No P5-d 410. No P6. `/call` is not deprecated. 
 - `npm run check:product-frontier` — `{ok:true,errors:[]}`
 - no full conformance (retry/onComplete semantics unchanged)
 
-Wave 1 closed. STATE: `p6_x402_rehomed; table_drops_not_started`. No table drops, no P5-d, no inquiry split. `/call` is not deprecated. Hold still covers unpushed `main`.
+Wave 1 closed. STATE: `p6_x402_rehomed; table_drops_not_started`. No table drops, no P5-d, no inquiry split. `/call` is not deprecated. Hold still covers unpushed `main`. Product SHA `5b61eadf`.
+
+## P6-freeze-gaps — committed
+
+**AUTHORITY:** RFC 9457. P5-b froze action-inventory / agent HTTP. Membership prefixes unchanged.
+
+**LOCAL_CANDIDATE:** `quarantineWriteProblemInput` / new `quarantineWriteServerError` at TanStack server-fns.
+
+**FIT:** match P5-b door pattern. Public inquiry submit, owner inbox reply/markRead/close, and human-root start/claim/decide/approval return typed `quarantine_writes_frozen` without throwing. Convex mutations stay writable. Inquiry abuse cron untouched. HTTP still 403, not 410. `/call` is not frozen. Read paths stay (WorkTree inspect; inquiry throughSource still used by tests).
+
+**COMMANDS:**
+- scoped freeze tests — 4 files / 11 tests passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full conformance (market kernel untouched)
+
+`/call` is not deprecated. No table drops. Hold still covers unpushed `main`.

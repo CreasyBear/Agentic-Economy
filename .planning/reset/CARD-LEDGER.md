@@ -88,7 +88,7 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 | P5-a | Three-artifact frontier v2 receipt: manifest, `verify-product-frontier.mjs`, `product-frontier-manifest.test.ts` | P3-rev, P4 | committed |
 | P5-b | Freeze writes for Customer Request / WorkTree / Study / inquiries; deregister actions only after notice | P5-a | committed |
 | P5-c | Advertise `Deprecation`/`Sunset` + successors in HTTP, MCP, UCP, `SKILL.md`, `llms.txt`, for-agents | P5-b | committed |
-| P5-d | Later release card: RFC 9457 HTTP 410 tombstones | P5-c | later |
+| P5-d | RFC 9457 HTTP 410 on mutating family doors and `/execute`; Sunset pulled to 18 Aug 2026; never `/call` | P6-export-tool | pending |
 | P5-e | Freeze business/services expansion; keep measured public URLs pending founder decision | P5-a | committed |
 
 ## Phase 6 — Retire data separately
@@ -99,6 +99,8 @@ One table-family card at a time, separate deployments only.
 | --- | --- | --- | --- |
 | P6-x402-rehome | Move invoke x402 attempt persist off `customerRequestX402PaymentAttempts` onto money-owned storage; production x402 stays refused | P5-e | committed |
 | P6-workpool-own | Own the existing Workpool mount as market dispatch; keep invoke enqueue; do not delete the pool | P6-x402-rehome | committed |
+| P6-freeze-gaps | RFC 9457 403 at missed UI/server-fn writers; Convex mutations stay writable | P6-workpool-own | committed |
+| P6-export-tool | Checksummed per-table export toolchain; hash-only for governedSendReceiptKeys wrap fields | P6-freeze-gaps | pending |
 | P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 | later |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.

@@ -99,7 +99,7 @@ export type WorkTreeDecisionResult =
   | WorkTreeDecisionReceipt
   | Readonly<{
       kind: 'refused'
-      code: 'authentication_required'
+      code: 'authentication_required' | 'quarantine_writes_frozen'
       replayed: false
     }>
   | Readonly<{ kind: 'unknown' }>

@@ -33,9 +33,11 @@ vi.mock('@/modules/work-tree/work-tree.functions', () => ({
 }))
 
 import { mintBrowserGuestAssertion } from '@/lib/server/browser-guest-assertion'
+import { QUARANTINE_WRITES_FROZEN_CODE } from '@/modules/product-frontier/quarantine-write-admission'
 import {
   claimRootWorkTreeServer,
   decideRootWorkTreeServer,
+  issueRootWorkTreeApprovalServer,
   readRootWorkTreeServer,
   startRootWorkTreeServer,
 } from '@/modules/work-tree/human-root.functions'
@@ -149,21 +151,18 @@ beforeEach(async () => {
 })
 
 describe('human WorkTree claim host seam', () => {
-  it('claims, clears guest transport, then uses authenticated owner source calls', async () => {
-    const claim = await claimRootWorkTreeServer({ data: { projectId, idempotencyKey: 't45:claim' } })
-    expect(claim).toMatchObject({ kind: 'accepted', code: 'work_tree_claimed' })
-    expect(serverMocks.claim).toHaveBeenCalledWith({
-      projectId,
-      idempotencyKey: 't45:claim',
-      guestAssertion: expect.any(String),
+  it('freezes start, claim, decide, and approval writes without HTTP 410', async () => {
+    const started = await startRootWorkTreeServer({
+      data: { outcome: 'Prepare a bounded BAS path.' },
     })
-    expect(serverMocks.setCookie).toHaveBeenCalledWith('ae_guest_session', '', expect.objectContaining({ maxAge: 0 }))
+    expect(started).toEqual({ kind: 'refused', reason: QUARANTINE_WRITES_FROZEN_CODE })
+    expect(serverMocks.create).not.toHaveBeenCalled()
 
-    await readRootWorkTreeServer({ data: { projectId } })
-    expect(serverMocks.inspect).toHaveBeenCalledWith({ projectId })
-    expect(serverMocks.inspect).not.toHaveBeenCalledWith(expect.objectContaining({ guestAssertion: expect.any(String) }))
+    const claim = await claimRootWorkTreeServer({ data: { projectId, idempotencyKey: 't45:claim' } })
+    expect(claim).toEqual({ kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE, replayed: false })
+    expect(serverMocks.claim).not.toHaveBeenCalled()
 
-    await decideRootWorkTreeServer({
+    const decided = await decideRootWorkTreeServer({
       data: {
         projectId,
         nodeId: 'decision:one',
@@ -172,60 +171,35 @@ describe('human WorkTree claim host seam', () => {
         expectedRevision: 1,
       },
     })
-    expect(serverMocks.decide).toHaveBeenCalledWith(expect.not.objectContaining({ guestAssertion: expect.any(String) }))
-  })
-  it('keeps an authenticated start on the owner source path', async () => {
-    serverMocks.auth.mockResolvedValue({ isAuthenticated: true })
+    expect(decided).toEqual({
+      receipt: { kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE, replayed: false },
+      readback: { kind: 'refused', reason: QUARANTINE_WRITES_FROZEN_CODE },
+    })
+    expect(serverMocks.decide).not.toHaveBeenCalled()
 
-    const started = await startRootWorkTreeServer({
+    const issued = await issueRootWorkTreeApprovalServer({
       data: {
-        outcome: 'Prepare a bounded BAS path.',
-        lineage: {
-          kind: 'customer_request',
-          requestRef: 'request:human-root',
-          revision: 2,
-          routeGenerationRef: 'generation:human-root',
-          routeRef: 'route-choice:human-root',
-        },
+        projectId,
+        nodeId: 'decision:one',
+        kind: 'lock',
+        expectedGeneration: 1,
+        expectedRevision: 1,
+        proposalDigest: 'sha256:approval',
+        credentialId: 'cred:1',
+        authority: { kind: 'per_item' },
+        expiresAt: Date.now() + 60_000,
+        idempotencyKey: 'approval:1',
+        acknowledgedConsequence: true,
+        approvalKind: 'per_item',
       },
     })
-
-    expect(started).toEqual({ kind: 'started', projectId })
-    expect(serverMocks.create).toHaveBeenCalledWith(expect.objectContaining({
-      idempotencyKey: expect.any(String),
-      charterText: 'Prepare a bounded BAS path.',
-    }))
-    expect(serverMocks.create).toHaveBeenCalledWith(expect.objectContaining({
-      lineage: {
-        kind: 'customer_request',
-        requestRef: 'request:human-root',
-        revision: 2,
-        routeGenerationRef: 'generation:human-root',
-        routeRef: 'route-choice:human-root',
-      },
-    }))
-    expect(serverMocks.create).not.toHaveBeenCalledWith(expect.objectContaining({ guestAssertion: expect.any(String) }))
-    await readRootWorkTreeServer({ data: { projectId } })
-    expect(serverMocks.inspect).toHaveBeenCalledWith({ projectId })
+    expect(issued).toEqual({ kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE })
   })
 
-  it('claims an anonymous start when sign-in returns to its project URL', async () => {
-    serverMocks.auth.mockResolvedValue({ isAuthenticated: false })
-    serverMocks.cookie = undefined
-
-    const started = await startRootWorkTreeServer({ data: { outcome: 'Prepare a bounded BAS path.' } })
-    expect(started).toEqual({ kind: 'started', projectId })
-    expect(serverMocks.create).toHaveBeenCalledWith(expect.objectContaining({ guestAssertion: expect.any(String) }))
-    const guestAssertion = serverMocks.cookie
-
-    serverMocks.auth.mockResolvedValue({ isAuthenticated: true })
+  it('keeps authenticated readback off the freeze path', async () => {
     await readRootWorkTreeServer({ data: { projectId } })
-
-    expect(serverMocks.claim).toHaveBeenCalledWith({
-      projectId,
-      idempotencyKey: `work-tree:claim:${projectId}`,
-      guestAssertion,
-    })
     expect(serverMocks.inspect).toHaveBeenCalledWith({ projectId })
+    expect(serverMocks.inspect).not.toHaveBeenCalledWith(expect.objectContaining({ guestAssertion: expect.any(String) }))
+    expect(serverMocks.claim).not.toHaveBeenCalled()
   })
 })

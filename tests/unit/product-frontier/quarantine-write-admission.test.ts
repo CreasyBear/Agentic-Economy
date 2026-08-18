@@ -6,6 +6,7 @@ import {
   isQuarantineWrite,
   QUARANTINE_FAMILY_ACTION_PREFIXES,
   quarantineWriteProblemInput,
+  quarantineWriteServerError,
 } from '@/modules/product-frontier/quarantine-write-admission'
 import { findAction, listActions } from '@/modules/actions'
 import { actionToToolContract } from '@/modules/actions/tool-contract'
@@ -59,5 +60,17 @@ describe('quarantine write admission', () => {
       .rejects.toThrow(QUARANTINE_WRITES_FROZEN_CODE)
     expect(inspect.readOnly).toBe(true)
     expect(isQuarantineWrite(inspect.id, inspect.readOnly)).toBe(false)
+  })
+
+  it('projects a typed server-fn error without HTTP 410', () => {
+    const error = quarantineWriteServerError('inquiry.submit')
+    expect(error).toEqual({
+      kind: 'error',
+      code: QUARANTINE_WRITES_FROZEN_CODE,
+      retryable: false,
+      reason:
+        'This quarantined surface no longer accepts writes. Evidence remains readable. Use /api/v1/operations/call for paid market work.',
+    })
+    expect(quarantineWriteProblemInput('inquiry.submit').status).toBe(403)
   })
 })

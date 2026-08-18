@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { exactAmountSchema } from '@/modules/money/public'
 
-import { clearBrowserGuestSession, readBrowserGuestSession, resolveBrowserGuestSession } from '@/lib/server/browser-guest-session'
+import { readBrowserGuestSession, resolveBrowserGuestSession } from '@/lib/server/browser-guest-session'
 
 import type {
   RootWorkTreeReadback,
@@ -12,6 +12,7 @@ import type {
   WorkTreeSourcePort,
 } from './internal/root-loop'
 
+import { QUARANTINE_WRITES_FROZEN_CODE } from '@/modules/product-frontier/quarantine-write-admission'
 import type { WorkTreeApprovalIssueResult } from './work-tree-approval.functions'
 import { workTreeLineageSchema } from './public'
 import type { WorkTreeClaimResult } from './work-tree.functions'
@@ -101,33 +102,15 @@ export type RootWorkTreeDecisionResult = Readonly<{
  */
 export const startRootWorkTreeServer = createServerFn({ method: 'POST' })
   .validator((data) => outcomeSchema.parse(data))
-  .handler(async ({ data }): Promise<RootWorkTreeStart> => {
-    const caller = await resolveRootBrowserCaller({ mintGuest: true })
-    if (caller.kind === 'unavailable') return { kind: 'refused', reason: 'browser_guest_session_unavailable' }
-    // Static import would pull Graphology-backed scheduling into the browser route.
-    const { startRootWorkTree } = await import('./internal/root-loop')
-    return startRootWorkTree({
-      outcome: data.outcome,
-      ...(data.lineage === undefined ? {} : { lineage: data.lineage }),
-      ...(caller.kind === 'guest' ? { guestAssertion: caller.assertion } : {}),
-    }, await convexWorkTreeSourcePort())
+  .handler(async (): Promise<RootWorkTreeStart> => {
+    return { kind: 'refused', reason: QUARANTINE_WRITES_FROZEN_CODE }
   })
 
 /** Claims the exact browser-created project for the authenticated Clerk owner. */
 export const claimRootWorkTreeServer = createServerFn({ method: 'POST' })
   .validator((data) => claimSchema.parse(data))
-  .handler(async ({ data }): Promise<WorkTreeClaimResult> => {
-    const guest = await readBrowserGuestSession()
-    if (guest === undefined) return { kind: 'refused', code: 'authentication_required', replayed: false }
-    // Keep the server-only Convex source graph out of the client route bundle.
-    const { claimWorkTreeThroughSource } = await import('./work-tree.functions')
-    const result = await claimWorkTreeThroughSource({
-      projectId: data.projectId,
-      idempotencyKey: data.idempotencyKey,
-      guestAssertion: guest.assertion,
-    })
-    if (result.kind === 'accepted' || result.kind === 'replayed') clearBrowserGuestSession()
-    return result
+  .handler(async (): Promise<WorkTreeClaimResult> => {
+    return { kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE, replayed: false }
   })
 
 /** Pure source readback. No model call, no transcript, no stream replay. */
@@ -136,8 +119,7 @@ export const readRootWorkTreeServer = createServerFn()
   .handler(async ({ data }): Promise<RootWorkTreeReadback> => {
     const caller = await resolveRootBrowserCaller()
     if (caller.kind === 'unavailable') return { kind: 'refused', reason: 'authentication_required' }
-    if (caller.kind === 'authenticated') await claimGuestProjectIfPresent(data.projectId)
-    // Static import would pull Graphology-backed scheduling into the browser route.
+    // Writes are frozen; do not claim on the read path.
     const { readRootWorkTree } = await import('./internal/root-loop')
     return readRootWorkTree({
       projectId: data.projectId,
@@ -148,28 +130,11 @@ export const readRootWorkTreeServer = createServerFn()
 
 export const decideRootWorkTreeServer = createServerFn({ method: 'POST' })
   .validator((data) => decisionSchema.parse(data))
-  .handler(async ({ data }): Promise<RootWorkTreeDecisionResult> => {
-    const caller = await resolveRootBrowserCaller()
-    if (caller.kind === 'unavailable') {
-      return {
-        receipt: { kind: 'refused', code: 'authentication_required', replayed: false },
-        readback: { kind: 'refused', reason: 'authentication_required' },
-      }
+  .handler(async (): Promise<RootWorkTreeDecisionResult> => {
+    return {
+      receipt: { kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE, replayed: false },
+      readback: { kind: 'refused', reason: QUARANTINE_WRITES_FROZEN_CODE },
     }
-    if (caller.kind === 'authenticated') await claimGuestProjectIfPresent(data.projectId)
-    const authority = caller.kind === 'guest' ? { guestAssertion: caller.assertion } : {}
-    // Static import would pull Graphology-backed scheduling into the browser route.
-    const { decideRootWorkTree } = await import('./internal/root-loop')
-    return decideRootWorkTree({
-      projectId: data.projectId,
-      nodeId: data.nodeId,
-      kind: data.kind,
-      expectedGeneration: data.expectedGeneration,
-      expectedRevision: data.expectedRevision,
-      nowMs: Date.now(),
-      ...(data.stepUp === undefined ? {} : { stepUp: data.stepUp }),
-      ...authority,
-    }, await convexWorkTreeSourcePort())
   })
 /**
  * Issue one owner-authenticated, expiring approval artifact for an exact
@@ -178,14 +143,8 @@ export const decideRootWorkTreeServer = createServerFn({ method: 'POST' })
  */
 export const issueRootWorkTreeApprovalServer = createServerFn({ method: 'POST' })
   .validator((data) => approvalIssueSchema.parse(data))
-  .handler(async ({ data }): Promise<WorkTreeApprovalIssueResult> => {
-    const {
-      acknowledgedConsequence: _acknowledgedConsequence,
-      approvalKind: _approvalKind,
-      ...issue
-    } = data
-    const { issueWorkTreeApprovalThroughSource } = await import('./work-tree-approval.functions')
-    return issueWorkTreeApprovalThroughSource(issue)
+  .handler(async (): Promise<WorkTreeApprovalIssueResult> => {
+    return { kind: 'refused', code: QUARANTINE_WRITES_FROZEN_CODE }
   })
 /**
  * Binds the host to the source functions the framework owns: create/inspect
@@ -218,18 +177,6 @@ async function resolveRootBrowserCaller(options: Readonly<{ mintGuest?: boolean 
     ? await resolveBrowserGuestSession()
     : await readBrowserGuestSession()
   return guest === undefined ? { kind: 'unavailable' } : { kind: 'guest', assertion: guest.assertion }
-}
-
-async function claimGuestProjectIfPresent(projectId: string): Promise<void> {
-  const guest = await readBrowserGuestSession()
-  if (guest === undefined) return
-  const { claimWorkTreeThroughSource } = await import('./work-tree.functions')
-  const result = await claimWorkTreeThroughSource({
-    projectId,
-    idempotencyKey: `work-tree:claim:${projectId}`,
-    guestAssertion: guest.assertion,
-  })
-  if (result.kind === 'accepted' || result.kind === 'replayed') clearBrowserGuestSession()
 }
 
 async function convexWorkTreeSourcePort(): Promise<WorkTreeSourcePort> {

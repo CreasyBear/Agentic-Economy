@@ -297,7 +297,14 @@ const workTreeClaimReplayedResultSchema = z.strictObject({
 })
 const workTreeClaimRefusedResultSchema = z.strictObject({
   kind: z.literal('refused'),
-  code: z.enum(['authentication_required', 'forbidden', 'not_found', 'claim_conflict', 'source_unavailable']),
+  code: z.enum([
+    'authentication_required',
+    'forbidden',
+    'not_found',
+    'claim_conflict',
+    'source_unavailable',
+    'quarantine_writes_frozen',
+  ]),
   replayed: z.literal(false),
 })
 export const workTreeClaimResultSchema = z.discriminatedUnion('kind', [

@@ -33,3 +33,19 @@ export function quarantineWriteProblemInput(actionId: string): ProblemInput {
     instance: actionId,
   }
 }
+
+/** Typed server-fn refusal. Not HTTP 410. Convex mutations stay writable. */
+export function quarantineWriteServerError(actionId: string): {
+  kind: 'error'
+  code: typeof QUARANTINE_WRITES_FROZEN_CODE
+  retryable: false
+  reason: string
+} {
+  const problem = quarantineWriteProblemInput(actionId)
+  return {
+    kind: 'error',
+    code: QUARANTINE_WRITES_FROZEN_CODE,
+    retryable: false,
+    reason: problem.detail ?? problem.title,
+  }
+}

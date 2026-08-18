@@ -35,6 +35,7 @@ import {
   type PublicInquiryContactInput,
   type R1TargetAdmission,
 } from '@/modules/inquiries/public'
+import { quarantineWriteServerError } from '@/modules/product-frontier/quarantine-write-admission'
 import {
   buildSubmittedInquiryReceipt,
   type SubmittedInquiryReceipt,
@@ -306,7 +307,7 @@ const markReadOwnerInquiryMutation = sourceMutation<OwnerMutationArgs, OwnerInqu
 
 export const submitPublicInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => publicInquirySubmitSchema.parse(data))
-  .handler(async ({ data, context }) => submitPublicInquiryThroughSource(data, context))
+  .handler(async () => quarantineWriteServerError('inquiry.submit'))
 
 export const readPublicTargetAdmissionServer = createServerFn()
   .validator((data) => publicTargetAdmissionSchema.parse(data))
@@ -332,15 +333,15 @@ export const readCurrentOwnerInquiryThreadServer = createServerFn()
 
 export const replyCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerReplySchema.parse(data))
-  .handler(async ({ data, context }) => replyCurrentOwnerInquiryThroughSource(data, context))
+  .handler(async () => quarantineWriteServerError('inquiry.reply'))
 
 export const markCurrentOwnerInquiryReadServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async ({ data, context }) => markCurrentOwnerInquiryReadThroughSource(data, context))
+  .handler(async () => quarantineWriteServerError('inquiry.markRead'))
 
 export const closeCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async ({ data, context }) => closeCurrentOwnerInquiryThroughSource(data, context))
+  .handler(async () => quarantineWriteServerError('inquiry.close'))
 
 export type InquiryServerBackend = Readonly<{
   submitPublicInquiry: (
