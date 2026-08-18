@@ -102,9 +102,9 @@
     },
     {
       "table": "customerRequestX402PaymentAttempts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:fa3acd8b6d11847c907dd49826be95a4d1d97b35de750ec47532636ff61d8635",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2Heads",

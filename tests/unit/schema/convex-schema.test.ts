@@ -100,7 +100,6 @@ const durableTables = [
   'customerRequestRouteProblemUpdates',
   'customerRequestRouteStepAttempts',
   'customerRequestRouteDispatchOutbox',
-  'customerRequestX402PaymentAttempts',
   'customerRequestV2Heads',
   'customerRequestV2Revisions',
   'customerRequestV2RoutePlanGenerations',

@@ -1173,3 +1173,15 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts r
 - `rg customerRequestX402PaymentAttempts convex` excluding `_generated` — no matches
 
 No table drops. Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts remain `unmeasured`. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-x402-orphan-schema — committed
+
+**AUTHORITY:** Convex 1.42 unlist ≠ dashboard delete. Empty count is a real digest of zero rows via `digestTableRows(table, [])`, not a fake live census.
+
+**FIT:** unlisted `customerRequestX402PaymentAttempts` from `route-mandate-convex-schema.ts` and schema inventory. No other CR tables. Empty digest `sha256:fa3acd8b6d11847c907dd49826be95a4d1d97b35de750ec47532636ff61d8635` (count 0). Deployment unavailable; workspace-unobserved. Hasher list still names the table. Dashboard Delete Table not done.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/schema/convex-schema.test.ts tests/unit/convex/x402-orphan-unplug.test.ts tests/unit/product-frontier/table-export-digest.test.ts` — 13 passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema tables 207 (was 208). 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
