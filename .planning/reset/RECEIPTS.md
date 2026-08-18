@@ -944,3 +944,21 @@ No runtime/product behavior changed.
 **Shared-contract exclusions:** this receipt makes no claim of hosted, provider, network, live-money, push, or production-release proof.
 
 The next gate is founder review before Phase 5.
+
+## HK-hygiene — remainder 2026-08-18
+
+**Verdict: committed. Lockfile EUSAGE closed as stale. Leftover executor worktrees removed.**
+
+Measured on this machine: `npm ci` exit 0 (no `EUSAGE`). Engine warning only: required Node `22.x`, current `v25.2.1`. Lockfile is in sync; no lockfile-only commit.
+
+Leftover executor worktrees were clean. Unique SHAs were not ancestors of `main` but equivalent commits already landed (`ceb0b392`, `b3cecc5f`, `8f225a22`). Archived before delete:
+
+| Tag | SHA | Note |
+| --- | --- | --- |
+| `archive/worktree-p1a-operation-projection` | `fe57ed2e` | superseded by `ceb0b392` |
+| `archive/worktree-p1c-dispute-recovery` | `e97b62a5` | superseded by `b3cecc5f` |
+| `archive/worktree-p1g-legacy-traffic` | `126957ca` | superseded by `8f225a22` |
+
+Merged worktrees `p1-e-2-canonical-call-route` and `p1a-core-owner-account` removed without extra tags (ancestors of `main`). Stash list empty. Original Cursor plan YAML: P2–P4 `completed`; P1 remains `in_progress` because P1-d3 is still open. STATE.md and PROJECT.md phase list match that.
+
+HK-lockfile-drift ledger row: committed (stale). No product-row rewrites.

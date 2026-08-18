@@ -1449,3 +1449,9 @@ workstreams, duplicate observations, and explicit remediation status.
 201. gpt-5.6: A second gsd-ai-researcher dispatch failed because full-history forks cannot specify a specialist role. The orchestration interface makes role selection and context inheritance appear independently selectable; it should reject this combination earlier or document that specialist agents require fork_turns none/limited.
 
 202. gpt-5.6: Every login-shell command emits duplicate missing /Users/joelchan/.cargo/env warnings from .zshenv, adding noise to otherwise successful vault and verification commands; guard the source with a file-exists check.
+
+203. Cursor Grok 4.6: Every zsh command prints '/Users/joelchan/.zshenv:.:1: no such file or directory: /Users/joelchan/.cargo/env' before real output — .zshenv sources a rustup file that is not installed, which pollutes git/gsd receipts.
+
+204. Cursor Grok 4.6: gsd-map-codebase full refresh spawned four parallel generalPurpose mapper agents; all four failed immediately with resource_exhausted and wrote nothing. Sequential in-session mapping is the working fallback on this host.
+
+205. grok-4.6: Bugbot product-tree retry wrapper summarized 'found no bugs' while the agent transcript contained two XML <bug> blocks (held charge on leased refuseBeforeClaim; search-only provider-failure copy). The completion notification dropped the findings; had to re-read the jsonl. Cause: wrapper/parser likely expects a different bug schema than the XML the agent wrote, especially when the original diff was docs-only.

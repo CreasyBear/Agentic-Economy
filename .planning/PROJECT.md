@@ -40,12 +40,12 @@ kernel with thin MCP/CLI/chat adapters and removes AE-owned workflow orchestrati
 
 ```text
 Phase 0 — Preserve the current baseline                complete (tag baseline/pre-atomic-market-reset)
-Phase 1 — Close the category additively                open
-Phase 2 — Decouple without changing behavior           pending
-Phase 3 — Port proof before quarantine                 pending
-Phase 4 — Replace chat orchestration                   pending
-Phase 5 — Quarantine and deprecate                     pending
-Phase 6 — Retire data separately                       pending
+Phase 1 — Close the category additively                open (P1-d3 remainder)
+Phase 2 — Decouple without changing behavior           complete
+Phase 3 — Port proof before quarantine                 complete
+Phase 4 — Replace chat orchestration                   complete
+Phase 5 — Quarantine and deprecate                     P5-a files landed; freeze/notice remainder
+Phase 6 — Retire data separately                       pending (not this remainder)
 ```
 
 **What AE owns after the reset:** operation identity and contract, authorization,
