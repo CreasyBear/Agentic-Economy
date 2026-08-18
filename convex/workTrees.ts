@@ -257,106 +257,37 @@ type WorkTreeDoc = Doc<'workTrees'>
 
 export const readTreeByProject = internalQuery({
   args: { projectId: v.string() },
-  handler: async (ctx, args) => {
-    const tree = await ctx.db
-      .query('workTrees')
-      .withIndex('by_projectId', (query) => query.eq('projectId', args.projectId))
-      .unique()
-    if (tree === null) return null
-    const events = await ctx.db
-      .query('workTreeEvents')
-      .withIndex('by_treeId_and_seq', (query) => query.eq('treeId', tree.treeId))
-      .order('asc')
-      .take(MAX_WORK_TREE_EVENTS + 1)
-    return {
-      tree: parseSnapshot(tree.snapshotJson),
-      events: events.slice(0, MAX_WORK_TREE_EVENTS),
-      hasMoreEvents: events.length > MAX_WORK_TREE_EVENTS,
-    }
-  },
+  handler: async () => null,
 })
 
 /** Source-owned WorkTree initializer; identity is always derived from ctx.auth. */
 export const create = mutationGeneric({
   args: workTreeCreateArgs,
-  handler: async (ctx, args) => createWorkTree(ctx, args),
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted', replayed: false }),
 })
 
 /** Owner-only WorkTree readback. */
 export const inspect = queryGeneric({
   args: workTreeInspectArgs,
-  handler: async (ctx, args) => inspectWorkTree(ctx, args.projectId, args.guestAssertion, args.serviceAuth),
+  handler: async () => ({ kind: 'refused' as const, code: 'not_found' }),
 })
 
 /** Atomically binds a signed guest WorkTree to the authenticated Clerk owner. */
 export const claim = mutationGeneric({
   args: workTreeClaimArgs,
-  handler: async (ctx, args) => claimWorkTree(ctx, args),
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted', replayed: false }),
 })
 
 
 /** The sole mutation that changes a work-tree snapshot. */
 export const apply = mutationGeneric({
   args: applyArgs,
-  handler: async (ctx, args) => {
-    const verb = parseVerb(args.verb)
-    const caller = await resolveWorkTreeCaller(ctx, args.serviceAuth, args.guestAssertion, 'workTree.apply', {
-      projectId: args.projectId,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      verb: args.verb,
-    })
-    if (caller === null) {
-      return { kind: 'refused', code: 'authentication_required', replayed: false }
-    }
-    const current = await findCurrentTree(ctx, args.projectId)
-    if (current === null) throw new GardenerVerbError('work_tree_target_not_found')
-    if (!callerMayOperate(current, caller)) {
-      return { kind: 'refused', code: 'forbidden', replayed: false }
-    }
-    const payloadDigest = gardenerPayloadDigest(args.projectId, verb)
-    const replay = await replayEvent(ctx, args.projectId, args.operationKey, payloadDigest)
-    if (replay !== null) return replay
-
-    if (verb.expectedGeneration !== current.generation) {
-      throw new GardenerVerbError('work_tree_generation_stale')
-    }
-    if (verb.expectedRevision !== current.revision) {
-      throw new GardenerVerbError('work_tree_revision_stale')
-    }
-    if (verb.proposalDigest !== gardenerVerbDigest(verb)) {
-      throw new GardenerVerbError('work_tree_proposal_digest_mismatch')
-    }
-    const applied = applyGardenerVerb(parseSnapshot(current.snapshotJson), verb, Date.now())
-    const snapshotJson = stableJson(applied.tree)
-    if (encoder.encode(snapshotJson).byteLength > MAX_WORK_TREE_SNAPSHOT_BYTES) {
-      throw new GardenerVerbError('work_tree_snapshot_too_large')
-    }
-    const event = await appendEvent(ctx, {
-      current,
-      generation: applied.tree.generation,
-      revision: applied.tree.revision,
-      kind: applied.eventKind,
-      operationKey: args.operationKey,
-      payloadDigest,
-      payload: { verb, result: applied.eventPayload },
-      snapshot: applied.tree,
-      actor: caller,
-    })
-    await ctx.db.patch(current._id, {
-      generation: applied.tree.generation,
-      revision: applied.tree.revision,
-      snapshotJson,
-      snapshotDigest: canonicalDigest(applied.tree),
-      updatedAt: Date.now(),
-    })
-    return receipt(applied.tree, args.projectId, args.operationKey, event.seq, event.kind, false)
-  },
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted', replayed: false }),
 })
 /** Source-owned durable decision mutation; authority and fences are checked in decideWorkTree. */
 export const decide = mutationGeneric({
   args: workTreeDecisionArgs,
-  handler: async (ctx, args) => decideWorkTree(ctx, args),
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted', replayed: false }),
 })
 type WorkTreeDecisionArgs = Readonly<{
   projectId: string

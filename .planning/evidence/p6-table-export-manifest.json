@@ -654,39 +654,39 @@
     },
     {
       "table": "workTreeApprovals",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:624bdfb9484b280e9942ee3fccf548edff571f9d36f7895f30f86df0f5cea293",
+      "classification": "full-digest"
     },
     {
       "table": "workTreeDecisionReceipts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:909d9a86c51bb712b94aa072b2baacd3f0d4026dfb37a3db04381cec3529ed06",
+      "classification": "full-digest"
     },
     {
       "table": "workTreeEvents",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:c6a03f0c9245eb42383061d767edc77d25bb8e14ccfcfcdbeb9c1672df984e41",
+      "classification": "full-digest"
     },
     {
       "table": "workTreeRepeatPermissions",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3758307f1849165c33cf1a500c899af57db5b5df1a9c95bf3ec4bf405d1aaef6",
+      "classification": "full-digest"
     },
     {
       "table": "workTreeRepeatUses",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:c86e633f3918673d6907a06af92c9735872a0fc9d05b8567a964d45a06604d94",
+      "classification": "full-digest"
     },
     {
       "table": "workTrees",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:1cb8b3ee2a79405a8b4f2618cac576e3ec5d67f1e1089abc17041f10e8b9ef79",
+      "classification": "full-digest"
     },
     {
       "table": "studies",

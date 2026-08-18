@@ -96,41 +96,22 @@ const conflict = (operationKey: string, useRef?: string) => ({
 
 export const reserveRepeatUse = mutation({
   args: reserveArgs,
-  handler: async (ctx, args) => {
-    const actor = await resolveRepeatActor(ctx, 'workTree.reserveRepeatUse', args, args.serviceAuth)
-    if (actor === null) return refusal('authentication_required')
-    const { serviceAuth: _serviceAuth, ...command } = args
-    return reserve(ctx, command, actor)
-  },
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted' }),
 })
 
 export const finalizeRepeatUse = mutation({
   args: finalizeArgs,
-  handler: async (ctx, args) => {
-    const actor = await resolveRepeatActor(ctx, 'workTree.finalizeRepeatUse', args, args.serviceAuth)
-    if (actor === null) return refusal('authentication_required', args.useRef)
-    const { serviceAuth: _serviceAuth, ...command } = args
-    return finalize(ctx, command, actor)
-  },
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted' }),
 })
 
 export const reconcileRepeatUse = mutation({
   args: reconcileArgs,
-  handler: async (ctx, args) => {
-    const actor = await resolveRepeatActor(ctx, 'workTree.reconcileRepeatUse', args, args.serviceAuth)
-    if (actor === null) return refusal('authentication_required', args.useRef)
-    const { serviceAuth: _serviceAuth, ...command } = args
-    return reconcile(ctx, command, actor)
-  },
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted' }),
 })
 
 export const inspectRepeatUse = query({
   args: { useRef: v.string(), serviceAuth: v.optional(serviceAuthArg) },
-  handler: async (ctx, args) => {
-    const actor = await resolveRepeatActor(ctx, 'workTree.inspectRepeatUse', args, args.serviceAuth)
-    if (actor === null) return refusal('authentication_required', args.useRef)
-    return inspect(ctx, args.useRef, actor)
-  },
+  handler: async () => ({ kind: 'refused' as const, code: 'not_found' }),
 })
 
 /** Source decision seam: only an accepted eligible decision may call this helper. */

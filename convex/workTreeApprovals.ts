@@ -36,15 +36,12 @@ const issueArgs = {
 
 export const issue = mutationGeneric({
   args: issueArgs,
-  handler: async (ctx, args) => issueApproval(ctx, args),
+  handler: async () => ({ kind: 'refused' as const, code: 'work_tree_tables_unlisted' }),
 })
 
 export const readByApprovalRef = internalQuery({
   args: { approvalRef: v.string() },
-  handler: async (ctx, args) => await ctx.db
-    .query('workTreeApprovals')
-    .withIndex('by_approvalRef', (query) => query.eq('approvalRef', args.approvalRef))
-    .unique(),
+  handler: async () => null,
 })
 
 type ApprovalIssueArgs = Readonly<{

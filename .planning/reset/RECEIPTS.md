@@ -1210,3 +1210,15 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 - `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 202. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-work-tree — committed
+
+**AUTHORITY:** Convex 1.42 unlist. Empty digests of zero rows. HTTP inspect already 410 from P6-read-tombstone. Do not touch Workpool.
+
+**FIT:** unlisted 6 WorkTree tables. Convex create/inspect/claim/apply/decide/repeat/approval seams refuse without querying. Characterization tests rewritten. Workpool unchanged. Module retained.
+
+**COMMANDS:**
+- empty digests in `p6-table-export-manifest.json`
+- scoped tests (10 files / 31) passed; `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 196. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
