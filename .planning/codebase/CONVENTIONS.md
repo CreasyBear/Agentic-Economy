@@ -1,6 +1,6 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-08-17
+**Analysis Date:** 2026-08-18
 
 ## Naming Patterns
 
@@ -158,7 +158,7 @@ allowJs: false
 
 **Size:**
 - Complex orchestration split across `internal/` helpers and machine/port files
-- State machines in dedicated files (`route-execution/machines/`, `turn-orchestrator.ts`)
+- State machines in dedicated files (`route-execution/machines/`). Answer persistence stays in `turn-orchestrator.ts`; model tool choice lives in `turns/agent.ts` plus `answer-tool-use-agent.ts`
 - No hard line limit enforced; prefer focused functions with explicit ports/interfaces
 
 **Parameters:**
@@ -209,5 +209,5 @@ export const StatusSchema = z.enum(StatusValues)
 
 ---
 
-*Convention analysis: 2026-08-17*
+*Convention analysis: 2026-08-18*
 *Update when patterns change*

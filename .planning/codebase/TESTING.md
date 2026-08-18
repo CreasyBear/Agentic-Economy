@@ -1,6 +1,6 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-08-17
+**Analysis Date:** 2026-08-18
 
 ## Test Framework
 
@@ -247,6 +247,8 @@ export function createAnswerThreadTestStore(): AnswerThreadTestStore {
 **Eval Tests** (`tests/eval/`, `eval/`):
 - Product-foundry portfolio assertions, action-bundle evals
 - Promptfoo config: `eval/answer/promptfooconfig.yaml`
+- Eval case contract: `eval/answer/lib/cases.ts` requires tags `model-chosen-tool-loop` and `bounded-tool-loop` (pinned by frontier `evalCoverageTags`)
+- Quality gate: `eval/quality/gate.ts` (structural L0 + optional live L1)
 - Quality gate: `eval/quality/gate.ts` (structural L0 + optional live L1)
 - Braintrust: `eval/braintrust/answer.eval.ts`
 - Run: `npm run test:eval`, `npm run test:quality:gate`
@@ -266,8 +268,11 @@ export function createAnswerThreadTestStore(): AnswerThreadTestStore {
 - Credential verification: `tools/release/verify-customer-request-release-credential.ts`
 
 **Conformance Suite** (`npm run test:conformance`):
-- Named list of ~25 critical path tests spanning action-invocation, capability-supply, customer-request, answer-thread, deployment, server diagnostics
-- Subset gate within `test:release:source`
+- Named list of **27** critical-path files, pinned identically in `package.json` `test:conformance` and `requiredConformancePaths` in `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`ae-product-frontier:v2`)
+- Atomic kernel successors (Phase 3 cutover): `tests/unit/convex/capability-operation-worker.test.ts`, `tests/integration/capability-operation-workpool.test.ts`, `tests/unit/capability-execution/operation-recovery-actions.test.ts`, `tests/unit/capability-execution/operation-invoke.test.ts`, `tests/unit/server/operation-invoke-api.test.ts`, `tests/unit/action-invocation/durable-action-invocation.test.ts`, `tests/unit/convex/capability-operation-recovery.test.ts`
+- Customer Request `transport-canonical`, `cancellation-canonical`, and `customer-request-v2-multi-capability-route` files remain in the tree but are **not** on the conformance floor
+- Remainder covers capability-supply publication/readiness/transport, answer-thread harness/checkpoints, deployment manifest, and server diagnostics
+- Subset gate within `test:release:source` (after `verify:deployment-manifest`)
 
 ## Common Patterns
 
@@ -337,5 +342,5 @@ await backend.mutation(fn, args)
 
 ---
 
-*Testing analysis: 2026-08-17*
+*Testing analysis: 2026-08-18*
 *Update when test patterns change*

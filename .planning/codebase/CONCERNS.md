@@ -1,22 +1,22 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-17
+**Analysis Date:** 2026-08-18
 
 ## Tech Debt
 
 **Oversized monolith modules:**
-- Issue: Core money, worker, Answer, transport, and thread modules remain above maintainability thresholds (10k+ and 2.5k+ lines); P2-c extracted invoke/projection contracts, but these host modules remain oversized.
-- Files: `convex/moneyLedger.ts` (~10,780 lines), `convex/capabilityOperationInvocationWorker.ts` (~2,990), `src/modules/answer/internal/answer-tool-use-agent.ts` (~3,007), `src/modules/capability-supply/route-transport-runtime.ts` (~2,507), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~2,325)
+- Issue: Core money, worker, Answer, transport, and thread modules remain above maintainability thresholds (10k+ and 2k+ lines); P2-c extracted invoke/projection contracts, but these host modules remain oversized.
+- Files: `convex/moneyLedger.ts` (10,790 lines), `convex/capabilityOperationInvocationWorker.ts` (2,990), `src/modules/answer/internal/answer-tool-use-agent.ts` (3,161), `src/modules/capability-supply/route-transport-runtime.ts` (2,507), `src/modules/answer-thread/internal/turn-orchestrator.ts` (2,060)
 - Why: Incremental feature accretion remains on the exact-money, invocation-worker, Answer, transport, and thread spines despite the P2-c contract extraction.
 - Impact: Small contract changes require wide diffs, merge conflicts, and hard-to-review money/worker/Answer/transport/thread regressions.
 - Fix approach: Measure one concrete seam at a time and card any remaining module split separately; preserve runtime authorities and boundary tests.
 
 **Action inventory vs end-state guardrail:**
-- Issue: The product-frontier manifest pins 46 required actions; the operating model targets ≤14 active actions after quarantine.
-- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`
-- Why: Customer Request (13 actions), WorkTree (8), Study (2), inquiry, storefront, and legacy registry actions remain registered while quarantine is deferred to Phase 5.
-- Impact: Every new action requires manifest surgery; agents discover quarantined surfaces as first-class; reduction work is blocked until Phase 3 ports prove parity.
-- Fix approach: Complete Phase 3 atomic-invoke ports, then Phase 5 quarantine cards — do not add net-new actions without a manifest update and a retirement plan.
+- Issue: Product-frontier v2 pins 47 required actions; the operating model targets ≤14 active actions after quarantine.
+- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts` (47 registered), `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
+- Why: `quarantineFamilies` in the v2 manifest mark Customer Request, WorkTree, Study, and inquiries as `approved-pending-deprecation`, but those actions remain registered. P5-a product files landed at `1aaf4aa5`; freeze/deregister cards P5-b/c are not started.
+- Impact: Every new action requires manifest surgery; agents still discover quarantined surfaces as first-class.
+- Fix approach: Run P5-b freeze writes and P5-c deprecation notice — do not add net-new actions without a manifest update and a retirement plan.
 
 **Dual paid HTTP invoke paths:**
 - Issue: `/api/v1/operations/call` and `/api/v1/operations/execute` both delegate to `handleOperationInvokePost` but route literals are hardcoded in TanStack route files rather than read from `OPERATION_INVOKE_ROUTE_CONTRACT`.
@@ -33,11 +33,11 @@
 - Fix approach: Reorder gate scripts so static import/TS-standard scans run before `test:release:unit`, or add a fast preflight target invoked first.
 
 **Custom Answer run loop vs `@convex-dev/agent`:**
-- Issue: Answer retains a custom AI SDK tool loop; `@convex-dev/agent` remains blocked on AI SDK v7 peer alignment.
-- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/harness/`, `.planning/STATE.md` (2026-08-02 gold-standard wave), `P2-a` receipt in `.planning/reset/RECEIPTS.md`
-- Why: `@convex-dev/agent` 0.6.4 peers `ai ^6.0.35`; v7 support is draft-only; P2-a explicitly kept the custom loop without a parity validator.
+- Issue: Answer uses a custom bounded AI SDK tool loop (`turns/agent.ts` → `answer-tool-use-agent.ts`). Persistence still lives in a 2,060-line `turn-orchestrator.ts`. `@convex-dev/agent` remains blocked on AI SDK v7 peer alignment.
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/turns/agent.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/harness/`, P2-a and P4 receipts in `.planning/reset/RECEIPTS.md`
+- Why: `@convex-dev/agent` 0.6.4 peers `ai ^6.0.35`; v7 support is draft-only. P4 deleted `intent-router.ts` / `effective-answer-route.ts` but kept the custom loop and the orchestrator as lease/checkpoint host. P2-a forbids loop removal without a SDK↔Harness parity validator.
 - Impact: Higher maintenance burden on tool accounting, checkpoints, and eval parity; risk of SDK drift on upgrade.
-- Fix approach: Do not remove the custom loop until a SDK↔Harness parity validator exists (P2-a decision); track `@convex-dev/agent` v7 readiness separately.
+- Fix approach: Do not remove the custom loop until a SDK↔Harness parity validator exists; track `@convex-dev/agent` v7 readiness separately; split persistence from the 2k-line orchestrator only with a dedicated card.
 
 **Dead action registration for storefront import:**
 - Issue: `storefrontImportDraftAction` is imported in `src/modules/actions/index.ts` but omitted from the `actions` array; it is reachable only via a dedicated HTTP route and server function.
@@ -52,6 +52,13 @@
 - Why: Caret-range manifest changes landed without a resync commit.
 - Impact: CI, fresh clones, and worktrees fail at install until manual `npm install`; undermines reproducible validator runs.
 - Fix approach: Run `npm install` on Node 22, commit lockfile-only via `HK-lockfile-drift` card, enforce lockfile-only CI install.
+
+**Unpushed `main` (67 commits):**
+- Issue: Local `main` is 67 commits ahead of `origin/main`. The reset operating model caps unpushed product commits at 3 without a written reason.
+- Files: `.planning/reset/OPERATING-MODEL.md`, git `main...origin/main`
+- Why: Phase 1–5 product cards committed locally and not pushed.
+- Impact: Hosted proof, CI on origin, and other worktrees cannot see accepted Phases 2–4; a machine loss would drop the reset.
+- Fix approach: Founder push decision, then push or document an explicit hold. Do not open a new product card that assumes origin is current.
 
 ## Known Bugs
 
@@ -163,11 +170,11 @@
 - Files: `convex/capabilityOperationInvocationWorker.ts`, `convex/capabilityOperationInvocations.ts`
 
 **Answer tool-use agent:**
-- Why fragile: 3k-line custom loop coupling registry reads, dynamic `capability.{operationRef}` tools, invoke/execute, budget gates, and evidence assembly.
+- Why fragile: 3,161-line custom loop coupling registry reads, dynamic `capability.{operationRef}` tools, invoke/execute, budget gates, and evidence assembly. Persistence remains in `turn-orchestrator.ts` (2,060 lines) even after P4 deleted `intent-router.ts`.
 - Common failures: Tool withholding after execution, wrong completion copy, model request accounting drift, frozen evidence not recalled on follow-ups.
-- Safe modification: Run `tests/unit/answer/answer-selected-operation-loop.test.ts`, eval cases in `eval/answer/lib/cases.ts`, and answer-thread boundary tests before behavior changes.
+- Safe modification: Run `tests/unit/answer/answer-selected-operation-loop.test.ts`, eval cases in `eval/answer/lib/cases.ts` (tags `model-chosen-tool-loop`, `bounded-tool-loop`), and answer-thread boundary tests before behavior changes.
 - Test coverage: Deep unit tests; persisted harness accounting gap remains.
-- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/answer-schema.ts`
+- Files: `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/turns/agent.ts`, `src/modules/answer/answer-schema.ts`
 
 **Route transport runtime:**
 - Why fragile: Executes HTTP/x402/provider connections with schema validation, network guard, timeout/abort composition, and response normalization.
@@ -199,10 +206,10 @@
 - Scaling path: Indexed search documents (`src/modules/registry/internal/search-documents.ts`), Convex-backed pagination, load tests with larger catalogs.
 
 **Action and module guardrails (reset targets):**
-- Current capacity: 46 pinned actions; 698 module TypeScript files under `src/modules/`; 117 Convex TS files (excluding generated).
+- Current capacity: 47 pinned required actions; 690 module TypeScript files under `src/modules/`; 117 Convex TS files (excluding generated).
 - Limit: Operating model targets ≤14 active actions, ≤60k active module LOC, ≤60 live tables (quarantined reported separately).
 - Symptoms at limit: Manifest churn blocks every feature; LOC/table audits fail Phase 6 cards.
-- Scaling path: Phase 5 quarantine of `customerRequest.*`, `workTree.*`, `study.*`; retire legacy registry list/detail actions after port proof.
+- Scaling path: Phase 5 freeze of `customerRequest.*`, `workTree.*`, `study.*`, inquiries; retire legacy registry list/detail actions after deprecation notice.
 
 **Concurrent validator / CI parallelism:**
 - Current capacity: Full unit suite ~4,000+ tests; integration ~580 tests with 15s timeout and `no-file-parallelism`.
@@ -257,19 +264,12 @@
 - Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
 - Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Phase 3 Customer Request conformance ports:**
-- Problem: Customer Request spine still uses its own orchestration; reset requires ports to atomic `operation.invoke` / `/api/v1/operations/call` before quarantine.
-- Current workaround: Customer Request remains in product-frontier manifest and active modules.
-- Blocks: Phase 5 quarantine of 13 `customerRequest.*` actions; action inventory reduction.
-- Implementation complexity: High — one card per conformance path with no assertion weakening.
-- Files: `src/modules/customer-request/`, `.planning/reset/CARD-LEDGER.md` Phase 3
-
-**Phase 4 chat orchestration replacement:**
-- Problem: Answer still uses dynamic tool naming and router-era checkpoints; target is one bounded AI SDK tool loop with eval-specified behavior.
-- Current workaround: Eval suite partially specifies tool use; router tags remain in thread types.
-- Blocks: Parity assertion "chat has no tool MCP lacks" (P4-e).
-- Implementation complexity: High — rewrite `eval/answer/lib/cases.ts` first, then drain checkpoints.
-- Files: `eval/answer/lib/cases.ts`, `src/modules/answer-thread/internal/turns/types.ts`, `.planning/reset/CARD-LEDGER.md` Phase 4
+**Phase 5 quarantine (freeze not implemented):**
+- Problem: P5-a recorded frontier v2 (`schemaVersion: ae-product-frontier:v2`, `quarantineFamilies` with `approved-pending-deprecation`) at `1aaf4aa5`, but Customer Request / WorkTree / Study / inquiries still accept writes and remain in `src/modules/actions/index.ts`. CARD-LEDGER has no Status column for P5 rows; RECEIPTS still say founder review before Phase 5.
+- Current workaround: Families remain live; business/services policy is `freeze-approved-pending-implementation` in the same manifest.
+- Blocks: Action inventory reduction to ≤14; P5-c deprecation headers; P6 table retirement.
+- Implementation complexity: High — freeze writes, deprecation notice, then later HTTP 410 (P5-d).
+- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
 
 **Legal / counsel signoffs for live money (T52):**
 - Problem: Live money gate requires complete counsel decision set; T52 explicitly **LIVE MONEY: REFUSED** until compliance gate accepts.
@@ -307,12 +307,12 @@
 - Priority: Medium
 - Difficulty to test: Already exists — needs gate promotion decision.
 
-**Customer Request / WorkTree integration under quarantine plan:**
-- What's not tested: Post-quarantine absence of write paths; port equivalence between legacy Customer Request routes and atomic invoke.
-- Files: `tests/integration/customer-request-v2-*.test.ts`, `tests/imports/customer-request-source-completeness.test.ts`
-- Risk: Quarantine cards freeze wrong surfaces or break proving ground silently.
-- Priority: Medium
-- Difficulty to test: Phase 3 port cards must add equivalence tests before Phase 5 freeze.
+**Customer Request / WorkTree freeze under quarantine plan:**
+- What's not tested: Post-quarantine absence of write paths; HTTP `Deprecation`/`Sunset` headers; 410 tombstones (P5-d).
+- Files: `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `tests/imports/product-frontier-manifest.test.ts`
+- Risk: Quarantine cards freeze wrong surfaces or leave agent-discoverable writes after notice.
+- Priority: High
+- Difficulty to test: P5-b/c must add freeze and notice tests before P6 schema narrow.
 
 **Development-host parity and x402 conformance:**
 - What's not tested: Full official development evidence packets when checkout is dirty or local Convex unavailable (`evidence_checkout_dirty`, `convex_dev_server_unavailable`).
@@ -323,5 +323,5 @@
 
 ---
 
-*Concerns audit: 2026-08-17*
+*Concerns audit: 2026-08-18*
 *Update as issues are fixed or new ones discovered*

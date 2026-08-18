@@ -1,6 +1,6 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-08-17
+**Analysis Date:** 2026-08-18
 
 ## Directory Layout
 
@@ -55,7 +55,8 @@ Agentic-Economy/
 - Purpose: Domain-owned logic for the atomic operation market and first-party surfaces
 - Contains: One directory per bounded context (~35 modules)
 - Key modules (kernel): `capability-contract`, `capability-supply`, `capability-execution`, `registry`, `action-invocation`, `money`, `agent-access`, `network-guard`, `actions`, `common`
-- Key modules (proving ground): `answer`, `answer-thread`, `customer-request`, `work-tree`, `study`
+- Key modules (demand adapters): `answer`, `answer-thread`, `demand`, `harness`
+- Key modules (Phase 5 quarantine families, still registered): `customer-request`, `work-tree`, `study`, `inquiries`
 - Key modules (owner): `storefront`, `inquiries`, `settings`, `discovery`
 - Subdirectories per module: see Naming Conventions below
 
@@ -118,6 +119,8 @@ Agentic-Economy/
 - `src/modules/capability-execution/operation-invoke-contracts.ts`: Wire DTOs and Zod schemas
 - `src/modules/capability-execution/operation-invoke-entry.ts`: HTTP route contracts
 - `src/modules/capability-supply/public.ts`: Published operation types and search helpers
+- `src/modules/capability-supply/supply-actions.ts`: `supply.publish` / `withdraw` / `earnings`
+- `src/modules/capability-execution/operation-recovery-contracts.ts`: Internal recovery diagnostics (not public invoke `result.kind`)
 - `src/modules/registry/public.ts`: Registry-facing exports (re-exports supply projection)
 - `convex/capabilityOperationInvocations.ts`: Durable invoke mutations/actions
 - `convex/capabilityOperationInvocationWorker.ts`: Outbound dispatch worker
@@ -131,8 +134,10 @@ Agentic-Economy/
 
 **Answer runtime:**
 - `src/routes/api.answer.turn.ts`: Turn streaming endpoint
-- `src/modules/answer/internal/answer-tool-use-agent.ts`: AI SDK tool loop
-- `src/modules/answer-thread/server.ts`: Turn orchestration (import from route)
+- `src/modules/answer/internal/answer-tool-use-agent.ts`: Bounded AI SDK tool loop
+- `src/modules/answer-thread/internal/turns/agent.ts`: `agentTurnPath` used by the orchestrator
+- `src/modules/answer-thread/internal/turn-orchestrator.ts`: Lease/checkpoint/harness persistence (not a deterministic intent router)
+- `src/modules/answer-thread/server.ts`: Re-exports `streamAnswerTurn`
 
 **Testing:**
 - `tests/unit/`: Domain unit tests
@@ -246,9 +251,10 @@ Agentic-Economy/
 
 **New Answer tool behavior:**
 - Tool/agent logic: `src/modules/answer/internal/`
-- Turn wiring: `src/modules/answer-thread/internal/turns/`
+- Bounded loop path: `src/modules/answer-thread/internal/turns/agent.ts`
+- Persistence/lease: `src/modules/answer-thread/internal/turn-orchestrator.ts`
 - Route: extend `src/routes/api.answer.turn.ts` only for HTTP concerns; keep logic in modules
-- Eval: `eval/answer/` and `tests/eval/`
+- Eval: `eval/answer/lib/cases.ts` (tags `model-chosen-tool-loop`, `bounded-tool-loop`) and `tests/eval/`
 
 **New operator UI page:**
 - Route: `src/routes/_operator/<area>.tsx` or nested under existing owner/admin paths
@@ -308,4 +314,4 @@ Agentic-Economy/
 
 ---
 
-*Structure analysis: 2026-08-17*
+*Structure analysis: 2026-08-18*

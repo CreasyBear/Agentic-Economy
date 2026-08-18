@@ -1,7 +1,7 @@
-<!-- refreshed: 2026-08-17 -->
+<!-- refreshed: 2026-08-18 -->
 # Architecture
 
-**Analysis Date:** 2026-08-17
+**Analysis Date:** 2026-08-18
 
 [`PROMPT-DATA-FLOW.md`](PROMPT-DATA-FLOW.md) is the primary prompt and data-flow
 map. Any change to prompt construction, model/tool orchestration, evidence,
@@ -49,7 +49,7 @@ persistence, replay, or projection boundaries MUST update it in the same batch.
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Program context (2026-08-16): the repo is in the **atomic operation market reset** milestone. AE owns operation identity, authorization, exactly-once durable invocation, delivery evidence, and brokered money. Consuming agents own planning and orchestration. MCP, CLI, and chat are thin adapters over one market kernel. See `.planning/reset/OPERATING-MODEL.md` and `.planning/codebase/CAPABILITY-MAP.md`.
+Program context (2026-08-18): Phases 0–4 of the **atomic operation market reset** are accepted on `main`. Phase 5 has a product-frontier v2 artifact (`ae-product-frontier:v2` in `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`) but freeze/deprecation cards are not started. AE owns operation identity, authorization, exactly-once durable invocation, delivery evidence, and brokered money. Consuming agents own planning and orchestration. MCP, CLI, and chat are thin adapters over one market kernel. See `.planning/reset/OPERATING-MODEL.md` and `.planning/codebase/CAPABILITY-MAP.md`.
 
 ## Component Responsibilities
 
@@ -66,8 +66,8 @@ Program context (2026-08-16): the repo is in the **atomic operation market reset
 | Convex dispatch worker | Outbound provider transport, x402 settlement hooks, evidence | `convex/capabilityOperationInvocationWorker.ts` |
 | Agent access | Bearer keys, scopes, OAuth device flow, rate limits | `src/modules/agent-access/` + `src/lib/server/agent-access-auth.ts` |
 | Money ledger | Exact charges, budgets, external spend identity | `src/modules/money/` |
-| Answer runtime | AI SDK tool loop over registry + keyless/invoke actions | `src/modules/answer/internal/answer-tool-use-agent.ts` |
-| Answer thread | Turn streaming, checkpoints, harness operations | `src/modules/answer-thread/` |
+| Answer runtime | Bounded AI SDK tool loop over registry + keyless/invoke actions | `src/modules/answer/internal/answer-tool-use-agent.ts` |
+| Answer turn path | Lease/checkpoint persistence wrapping `agentTurnPath` | `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/answer-thread/internal/turns/agent.ts` |
 | Customer Request | Outcome → plan → mandate → route execution (proving ground) | `src/modules/customer-request/` |
 | AE CLI | External-agent terminal over anonymous reads + authenticated invoke | `tools/ae/cli.ts` |
 | MCP adapter | Read-only anonymous + authenticated action projection | `src/lib/server/mcp-api.ts` |
@@ -156,9 +156,10 @@ Program context (2026-08-16): the repo is in the **atomic operation market reset
 ### Answer turn path
 
 1. `POST /api/answer/turn` (`src/routes/api.answer.turn.ts`) admits rate limit and parses `answerTurnRequestSchema` (`src/modules/answer-thread/public.ts`).
-2. `streamAnswerTurn` (`src/modules/answer-thread/server`) runs AI SDK loop via `answer-tool-use-agent.ts`.
-3. Tools map from registered actions (`actionToOpenRouterTool` in `src/modules/answer/internal/action-to-tool-spec.ts`); invoke context wired through `createOperationInvokeService`.
-4. Turn frames persisted in Convex answer-thread tables; share/read routes under `src/routes/api.answer.threads.*`.
+2. `streamAnswerTurn` (`src/modules/answer-thread/server.ts`) delegates to `src/modules/answer-thread/internal/turn-orchestrator.ts` for reservation, lease, checkpoint, and harness finalization.
+3. Safe turns run `agentTurnPath` (`src/modules/answer-thread/internal/turns/agent.ts`) as one bounded AI SDK tool loop via `answer-tool-use-agent.ts`. Eval tags `model-chosen-tool-loop` and `bounded-tool-loop` in `eval/answer/lib/cases.ts` specify that behavior. Files `intent-router.ts` and `effective-answer-route.ts` do not exist.
+4. Tools map from registered actions (`actionToOpenRouterTool` in `src/modules/answer/internal/action-to-tool-spec.ts`); invoke context wired through `createOperationInvokeService`.
+5. Turn frames persisted in Convex answer-thread tables; share/read routes under `src/routes/api.answer.threads.*`.
 
 ### CLI invoke path
 
@@ -289,6 +290,7 @@ Program context (2026-08-16): the repo is in the **atomic operation market reset
 - Invoke refusals return typed `kind: 'refused'` with `retryable` and `nextAction` fields rather than throwing for expected denials.
 - MCP uses JSON-RPC error codes via `@modelcontextprotocol/sdk` wrappers in `mcp-api.ts`.
 - Answer turn errors stream as problem frames via `answerTurnSourceErrorResponse` (`src/lib/server/answer-source-error.ts`).
+- Exhaustive `switch` over discriminated unions must use a `never` default (workspace rule).
 
 ## Cross-Cutting Concerns
 
@@ -315,4 +317,4 @@ Program context (2026-08-16): the repo is in the **atomic operation market reset
 
 ---
 
-*Architecture analysis: 2026-08-17*
+*Architecture analysis: 2026-08-18*
