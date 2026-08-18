@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isQuarantineWrite,
   QUARANTINE_FAMILY_ACTION_PREFIXES,
+  quarantineSurfaceRetiredProblemInput,
   quarantineWriteProblemInput,
   quarantineWriteServerError,
 } from '@/modules/product-frontier/quarantine-write-admission'
@@ -60,6 +61,15 @@ describe('quarantine write admission', () => {
       .rejects.toThrow(QUARANTINE_WRITES_FROZEN_CODE)
     expect(inspect.readOnly).toBe(true)
     expect(isQuarantineWrite(inspect.id, inspect.readOnly)).toBe(false)
+  })
+
+  it('projects HTTP/MCP tombstones as RFC 9457 410 without a GONE kind', () => {
+    const problem = quarantineSurfaceRetiredProblemInput('customerRequest.run')
+    expect(problem.status).toBe(410)
+    expect(problem.kind).toBe('NOT_FOUND')
+    expect(problem.code).toBe('quarantine_surface_retired')
+    expect(problem.retryable).toBe(false)
+    expect(problem.instance).toBe('customerRequest.run')
   })
 
   it('projects a typed server-fn error without HTTP 410', () => {

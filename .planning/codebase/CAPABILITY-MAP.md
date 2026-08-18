@@ -51,10 +51,10 @@ If these break, you do not have a market.
 | Compare | `registry.operations.compare` | `POST /api/v1/market-operations/compare` |
 | Plan | `registry.operations.inspectPlan` | `POST /api/v1/market-operations/inspect-plan` |
 | Keyless read | `operation.execute` | **MCP + Answer only** (no HTTP route) |
-| Paid/auth invoke | `operation.invoke` | `POST /api/v1/operations/execute` ← name collision |
+| Paid/auth invoke | `operation.invoke` | `POST /api/v1/operations/call` |
 | Lifecycle | `operation.status` / `cancel` / `reconcile` | `/api/v1/operations/:invocationRef…` |
 
-**Trap:** `/api/v1/operations/execute` is **`operation.invoke`**, not `operation.execute`.
+**Trap:** `/api/v1/operations/execute` is a 410 tombstone for the old **`operation.invoke`** path, not keyless `operation.execute`. Use `/call`.
 
 ### Core gaps (real, not “more features”)
 

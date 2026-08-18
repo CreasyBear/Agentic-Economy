@@ -26,7 +26,7 @@ import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server
 import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
-import { isQuarantineFamilyActionId, isQuarantineWrite, quarantineWriteProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
+import { isQuarantineFamilyActionId, isQuarantineWrite, quarantineSurfaceRetiredProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
 import { DEPRECATION_SUCCESSOR_PATH } from '@/modules/product-frontier/deprecation-notice'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
@@ -276,7 +276,7 @@ export function createAeMcpServer(
           captureLegacyRegistryActionRequest(action.id, 'mcp')
           if (isQuarantineWrite(action.id, action.readOnly)) {
             recordMcpGatewayTelemetry(action.id, data, { kind: 'refused' }, access, startedAt)
-            return mcpToolError(buildProblem(quarantineWriteProblemInput(action.id)))
+            return mcpToolError(buildProblem(quarantineSurfaceRetiredProblemInput(action.id)))
           }
           const result = await action.run({
             data,

@@ -29,7 +29,7 @@ function post(body: unknown, path = '/api/v1/operations/call'): Request {
 }
 
 describe('operation.invoke HTTP adapter', () => {
-  it('dual-serves call and execute with identical results for the same request', async () => {
+  it('keeps the invoke handler path-agnostic for call and execute URLs', async () => {
     const result = {
       kind: 'completed' as const,
       invocationRef: 'invocation:dual',

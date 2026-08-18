@@ -88,7 +88,7 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 | P5-a | Three-artifact frontier v2 receipt: manifest, `verify-product-frontier.mjs`, `product-frontier-manifest.test.ts` | P3-rev, P4 | committed |
 | P5-b | Freeze writes for Customer Request / WorkTree / Study / inquiries; deregister actions only after notice | P5-a | committed |
 | P5-c | Advertise `Deprecation`/`Sunset` + successors in HTTP, MCP, UCP, `SKILL.md`, `llms.txt`, for-agents | P5-b | committed |
-| P5-d | RFC 9457 HTTP 410 on mutating family doors and `/execute`; Sunset pulled to 18 Aug 2026; never `/call` | P6-export-tool | pending |
+| P5-d | RFC 9457 HTTP 410 on mutating family doors and `/execute`; Sunset pulled to 18 Aug 2026; never `/call` | P6-export-tool | committed |
 | P5-e | Freeze business/services expansion; keep measured public URLs pending founder decision | P5-a | committed |
 
 ## Phase 6 — Retire data separately

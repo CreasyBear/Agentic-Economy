@@ -9,15 +9,14 @@ export function postJsonRequest(path: string, body: unknown): Request {
 }
 
 export async function expectQuarantineWriteFrozen(response: Response, actionId?: string) {
-  expect(response.status).toBe(403)
-  expect(response.status).not.toBe(410)
+  expect(response.status).toBe(410)
   expect(response.headers.get('content-type')).toBe('application/problem+json')
   const body = await response.json() as Record<string, unknown>
   expect(body).toMatchObject({
     type: 'about:blank',
-    status: 403,
-    kind: 'FAILED_PRECONDITION',
-    code: 'quarantine_writes_frozen',
+    status: 410,
+    kind: 'NOT_FOUND',
+    code: 'quarantine_surface_retired',
     retryable: false,
     ...(actionId === undefined ? {} : { instance: actionId }),
   })

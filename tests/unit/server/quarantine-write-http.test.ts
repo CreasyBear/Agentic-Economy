@@ -6,15 +6,14 @@ import { handleWorkTreeAgentAction } from '@/lib/server/work-tree-agent-api'
 import { handleBusinessToolInvoke } from '@/lib/server/business-tool-api'
 import { BUSINESS_TOOL_AGENT_SCOPE } from '@/modules/business-tools/public'
 import { buildProblem } from '@/lib/errors'
-import { quarantineWriteProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
+import { quarantineSurfaceRetiredProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
 import { postJsonRequest } from '../../helpers/http'
 
-async function expectFrozenWrite(response: Response, actionId: string) {
-  expect(response.status).toBe(403)
-  expect(response.status).not.toBe(410)
+async function expectRetiredWrite(response: Response, actionId: string) {
+  expect(response.status).toBe(410)
   expect(response.headers.get('content-type')).toBe('application/problem+json')
   const body: unknown = await response.json()
-  expect(body).toEqual(buildProblem(quarantineWriteProblemInput(actionId)))
+  expect(body).toEqual(buildProblem(quarantineSurfaceRetiredProblemInput(actionId)))
 }
 
 describe('quarantine family HTTP write freeze', () => {
@@ -22,7 +21,7 @@ describe('quarantine family HTTP write freeze', () => {
     const response = await handleCustomerRequestPost(postJsonRequest('/api/requests', {
       idempotencyKey: 'command:1', requestRef: 'request:1', agentRef: 'agent:claude', request: 'Find a suitable option',
     }), { submit: async () => { throw new Error('submit_must_not_run') } })
-    await expectFrozenWrite(response, 'customerRequest.run')
+    await expectRetiredWrite(response, 'customerRequest.run')
   })
 
   it('keeps Customer Request evidence GET off the freeze path', async () => {
@@ -41,12 +40,13 @@ describe('quarantine family HTTP write freeze', () => {
       postJsonRequest('https://ae.example/api/v1/work-tree/create', {}),
       'create',
     )
-    await expectFrozenWrite(create, 'workTree.create')
+    await expectRetiredWrite(create, 'workTree.create')
     const inspect = await handleWorkTreeAgentAction(
       postJsonRequest('https://ae.example/api/v1/work-tree/inspect', { projectId: 'project:1' }),
       'inspect',
     )
     expect(inspect.status).not.toBe(403)
+    expect(inspect.status).not.toBe(410)
   })
 
   it('refuses inquiry submit invoke as RFC 9457', async () => {
@@ -69,6 +69,6 @@ describe('quarantine family HTTP write freeze', () => {
         }),
       },
     )
-    await expectFrozenWrite(response, 'inquiry.submit')
+    await expectRetiredWrite(response, 'inquiry.submit')
   })
 })

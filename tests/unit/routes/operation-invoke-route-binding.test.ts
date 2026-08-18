@@ -37,25 +37,34 @@ describe('operation invoke route binding', () => {
       .toContain(`createFileRoute('${invokeContract.legacyRouterPath}')`)
   })
 
-  it('wires POST and rejects at least one non-POST verb on both routes', async () => {
-    for (const route of [OperationCallRoute, OperationExecuteRoute]) {
-      const handlers = routeHandlers(route)
-      const postHandler = handlers[invokeContract.method]
-      expect(postHandler).toBeTypeOf('function')
-      if (postHandler === undefined) throw new Error('POST handler missing')
+  it('wires POST invoke on /call and 410 tombstone on /execute', async () => {
+    const callHandlers = routeHandlers(OperationCallRoute)
+    const callPost = callHandlers[invokeContract.method]
+    expect(callPost).toBeTypeOf('function')
+    if (callPost === undefined) throw new Error('POST handler missing')
+    const callResponse = await callPost({ request, params: {} })
+    expect(callResponse.status).toBe(201)
 
-      const response = await postHandler({ request, params: {} })
-      expect(response.status).toBe(201)
+    const callGet = callHandlers.GET
+    expect(callGet).toBeTypeOf('function')
+    if (callGet === undefined) throw new Error('GET handler missing')
+    const callRejected = await callGet({ request, params: {} })
+    expect(callRejected.status).toBe(405)
+    expect(callRejected.headers.get('allow')).toBe(invokeContract.method)
 
-      const getHandler = handlers.GET
-      expect(getHandler).toBeTypeOf('function')
-      if (getHandler === undefined) throw new Error('GET handler missing')
+    const executeHandlers = routeHandlers(OperationExecuteRoute)
+    const executePost = executeHandlers.POST
+    expect(executePost).toBeTypeOf('function')
+    if (executePost === undefined) throw new Error('execute POST handler missing')
+    const executeResponse = await executePost({ request, params: {} })
+    expect(executeResponse.status).toBe(410)
 
-      const rejected = await getHandler({ request, params: {} })
-      expect(rejected.status).toBe(405)
-      expect(rejected.headers.get('allow')).toBe(invokeContract.method)
-    }
+    const executeGet = executeHandlers.GET
+    expect(executeGet).toBeTypeOf('function')
+    if (executeGet === undefined) throw new Error('execute GET handler missing')
+    const executeRejected = await executeGet({ request, params: {} })
+    expect(executeRejected.status).toBe(410)
 
-    expect(mocks.invoke).toHaveBeenCalledTimes(2)
+    expect(mocks.invoke).toHaveBeenCalledTimes(1)
   })
 })

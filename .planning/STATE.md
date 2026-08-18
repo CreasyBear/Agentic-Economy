@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; table_drops_not_started
-stopped_at: 2026-08-18 P6 wave 2 export-tool — no P5-d 410 yet, no table drops
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; table_drops_not_started
+stopped_at: 2026-08-18 P6 wave 2 exited — P5-d 410 landed, no table drops
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 85
 current_phase: 06
-current_phase_name: p6-wave-2-export-tool
+current_phase_name: p6-wave-2-exited
 
 # Current state
 
@@ -31,12 +31,15 @@ kernel. `/api/v1/operations/call` is the paid door and is not deprecated.
 **Landed on local `main`:** Phases 0, 1, 2, 3, and 4. P5-a frontier v2 files
 exist (`1aaf4aa5`). P5-b freezes quarantined family writes as RFC 9457; P5-c
 advertises RFC 9745/8594 notice then deregisters those ids from the public
-action inventory. P5-e implements `businessServicesPolicy`: expansion frozen,
+action inventory. P5-d pulls Sunset to 18 Aug 2026 and 410s mutating family
+HTTP plus `/execute` (`quarantine_surface_retired`, never `/call`). P5-e
+implements `businessServicesPolicy`: expansion frozen,
 measured businesses/services URLs retained and instrumented. Reads and evidence
 stay. Live money stays fail-closed.
 
 **Remainder exit:** after P5-e. No P5-d 410 in that remainder.
-Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. P6-export-tool landed: `canonicalDigest` over Convex export jsonl, wrap fields omitted, live counts unmeasured until a gitignored zip exists. Table drops not started. Local `main` remains unpushed under the written hold.
+Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. P6-export-tool landed: `canonicalDigest` over Convex export jsonl, wrap fields omitted, live counts unmeasured until a gitignored zip exists.
+Wave 2 closed: P5-d 410 on mutating family doors and `/execute`; Sunset `Tue, 18 Aug 2026 23:59:59 GMT`; MCP in-tool tombstone not host-410; RK 410s unchanged; inquiry 12 tables stay. Table drops not started. Local `main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
 

@@ -1116,3 +1116,18 @@ Wave 1 closed. STATE: `p6_x402_rehomed; table_drops_not_started`. No table drops
 - wrap fields never appear in hashed payload fixture
 
 No table drops. Zip not in git. Hold still covers unpushed `main`.
+
+## P5-d — committed
+
+**AUTHORITY:** RFC 9457 410; RFC 8594 Sunset must not precede Deprecation and must match the tombstone. One error model: `kind: NOT_FOUND`, `code: quarantine_surface_retired`. No RK `requestApi`. Never `Deprecation` or 410 on `/call`.
+
+**LOCAL_CANDIDATE:** mutating family HTTP (CR POST, WorkTree mutating ops, business-tool prepare/invoke) plus `/api/v1/operations/execute`. MCP `tools/call` write freeze. Server-fns stay 403. Reads/evidence stay.
+
+**FIT:** match. Sunset pulled to `Tue, 18 Aug 2026 23:59:59 GMT` (still after Deprecation `@1787011200`). HTTP writes and every `/execute` method return 410 with RFC 9745 notice headers. `handleOperationInvokePost` stays path-agnostic; 410 lives in the execute route file only. MCP returns in-tool `isError` problem, not HTTP 410 on the MCP host. Inspect/evidence GET keep notice headers and stay off 410. Routing-kernel `routing_v1_retired` unchanged. Inquiry 12 tables stay.
+
+**COMMANDS:**
+- scoped 410 / family HTTP / `/call` / RK tests — 19 files / 89 tests passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full conformance (market kernel `/call` path unchanged)
+
+Wave 2 closed. STATE: `p6_wave_2_exited; table_drops_not_started`. `/call` is not deprecated. No table drops, no inquiry split, no CR module delete. Hold still covers unpushed `main`.

@@ -131,7 +131,7 @@ Program context (2026-08-18): Phases 0–4 of the **atomic operation market rese
 
 ### Primary invoke path (paid / auth)
 
-1. Client hits canonical gateway: `POST /api/v1/operations/call` (`src/routes/api.v1.operations.call.ts`) — legacy alias remains at `/api/v1/operations/execute` (`src/routes/api.v1.operations.execute.ts`).
+1. Client hits canonical gateway: `POST /api/v1/operations/call` (`src/routes/api.v1.operations.call.ts`). `/api/v1/operations/execute` is a 410 tombstone (`src/routes/api.v1.operations.execute.ts`).
 2. Handler authenticates bearer principal (`src/lib/server/operation-invoke-api.ts` → `authenticateAgentAccess` in `src/lib/server/agent-access-auth.ts`).
 3. Request body validated against `operationInvokeInputSchema` (`src/modules/capability-execution/operation-invoke-contracts.ts`).
 4. Source-write admission computed (`src/lib/server/source-write-admission.ts`) for exactly-once command identity.
@@ -253,7 +253,7 @@ Program context (2026-08-18): Phases 0–4 of the **atomic operation market rese
 - **Circular imports:** Keep contracts in `*-contracts.ts` files (e.g. `operation-invoke-contracts.ts`, `projection-contracts.ts`). Domain modules must not import from `src/routes/`.
 - **Import boundaries:** `internal/` is module-private; `public.ts` is the cross-module API. Enforced by `tests/imports/*-boundaries.test.ts`.
 - **Legacy routing kernel:** `src/modules/routing-kernel/` and `convex/http.ts` return retired responses; do not build new features on `/v1/route` paths.
-- **Execute vs invoke naming:** `/api/v1/operations/execute` is legacy path for **`operation.invoke`**, not keyless `operation.execute`. Canonical paid path is `/api/v1/operations/call`.
+- **Execute vs invoke naming:** `/api/v1/operations/execute` is a 410 tombstone for the old **`operation.invoke`** path, not keyless `operation.execute`. Canonical paid path is `/api/v1/operations/call`.
 
 ## Anti-Patterns
 

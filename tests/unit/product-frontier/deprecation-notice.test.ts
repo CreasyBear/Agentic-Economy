@@ -40,7 +40,7 @@ function expectRfc9745Notice(response: Response) {
 describe('RFC 9745/8594 deprecation notice', () => {
   it('keeps Sunset after Deprecation as RFC 9745 section 4 requires', () => {
     expect(sunsetIsAfterDeprecation()).toBe(true)
-    expect(RFC9745_DEPRECATION_HEADER).toBe(`@${DEPRECATION_NOTICE_EPOCH_SECONDS}`)
+    expect(SUNSET_HTTP_DATE).toBe('Tue, 18 Aug 2026 23:59:59 GMT')
   })
 
   it('advertises notice on /execute and never on /call', async () => {
@@ -55,7 +55,15 @@ describe('RFC 9745/8594 deprecation notice', () => {
       params: {},
     })
     expectRfc9745Notice(executeRejected)
-    expect(executeRejected.status).toBe(405)
+    expect(executeRejected.status).toBe(410)
+    const executePost = executeHandlers.POST
+    if (executePost === undefined) throw new Error('post_handlers_missing')
+    const executePosted = await executePost({
+      request: new Request('https://ae.example/api/v1/operations/execute', { method: 'POST' }),
+      params: {},
+    })
+    expectRfc9745Notice(executePosted)
+    expect(executePosted.status).toBe(410)
 
     const callRejected = await callGet({
       request: new Request('https://ae.example/api/v1/operations/call'),
@@ -72,6 +80,7 @@ describe('RFC 9745/8594 deprecation notice', () => {
       idempotencyKey: 'notice:1', requestRef: 'request:1', agentRef: 'agent:claude', request: 'Find a suitable option',
     }), { submit: async () => { throw new Error('submit_must_not_run') } })
     expectRfc9745Notice(frozen)
+    expect(frozen.status).toBe(410)
 
     const evidence = await handleCustomerRequestEvidenceGet(
       new Request('https://ae.example/api/requests/request:1/evidence'),

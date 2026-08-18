@@ -44,8 +44,8 @@ Phase 1 — Close the category additively                committed
 Phase 2 — Decouple without changing behavior           complete
 Phase 3 — Port proof before quarantine                 complete
 Phase 4 — Replace chat orchestration                   complete
-Phase 5 — Quarantine and deprecate                     P5-a/b/c/e landed; P5-d later
-Phase 6 — Retire data separately                       pending (not this remainder)
+Phase 5 — Quarantine and deprecate                     complete (P5-d 410 landed)
+Phase 6 — Retire data separately                       wave 2 committed; table drops not started
 ```
 
 **What AE owns after the reset:** operation identity and contract, authorization,

@@ -4,10 +4,10 @@
  *
  * RFC 9745 example: `Deprecation: @1688169599` (SF Date) plus
  * `Link: <...>; rel="deprecation"`. RFC 8594 `Sunset` is an HTTP-date and MUST
- * NOT precede Deprecation. P5-d is the later unresponsive/410 card.
+ * NOT precede Deprecation. P5-d 410s mutating doors; Sunset is 18 Aug 2026.
  */
 export const DEPRECATION_NOTICE_EPOCH_SECONDS = 1_787_011_200
-export const SUNSET_HTTP_DATE = 'Wed, 18 Aug 2027 23:59:59 GMT'
+export const SUNSET_HTTP_DATE = 'Tue, 18 Aug 2026 23:59:59 GMT'
 export const DEPRECATION_SUCCESSOR_PATH = '/api/v1/operations/call'
 
 export const RFC9745_DEPRECATION_HEADER = `@${DEPRECATION_NOTICE_EPOCH_SECONDS}` as const

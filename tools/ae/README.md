@@ -17,7 +17,7 @@ npm run -s ae -- <command> [args] [flags]
 | `npm run -s ae -- compare <operationRef> [operationRef ...]` | `POST /api/v1/market-operations/compare` | One to four exact references are compared without selecting or authorizing one. |
 | `npm run -s ae -- inspect-plan <operationRef> [operationRef ...]` | `POST /api/v1/market-operations/inspect-plan` | One to four exact references are validated as a bounded, non-authorizing composition plan. |
 | `npm run -s ae -- connect` | OAuth device flow plus authenticated validation | One owner-approved AE credential is issued, or an existing key is validated by the gateway. |
-| `npm run -s ae -- invoke <operationRef> '<json>' --idempotency-key <key>` | `POST /api/v1/operations/call` | One AE key invokes through the canonical gateway with a required body replay identity. `/api/v1/operations/execute` continues to accept the same request. |
+| `npm run -s ae -- invoke <operationRef> '<json>' --idempotency-key <key>` | `POST /api/v1/operations/call` | One AE key invokes through the canonical gateway with a required body replay identity. `/api/v1/operations/execute` is gone (HTTP 410). |
 | `npm run -s ae -- status <invocationRef>` | `GET /api/v1/operations/<invocationRef>` | The same caller reads durable state, exact refs, usage, evidence, and the typed next action. |
 | `npm run -s ae -- recover <invocationRef> '<evidence-json>' --idempotency-key <key>` | `POST /api/v1/operations/<invocationRef>/reconcile` | Evidence-bound reconciliation after a real uncertain outcome; it preserves the same stable identity and does not replay a known result. |
 

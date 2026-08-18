@@ -14,16 +14,16 @@
 **Action inventory vs end-state guardrail:**
 - Issue: Product-frontier v2 now pins 23 required public actions after P5-c deregister; the operating model still targets ≤14 active actions after remaining catalog/settings/storefront/web/demand cleanup.
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
-- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; HTTP implementations stay findable for freeze/notice until P5-d.
+- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; mutating HTTP/MCP doors are 410 after P5-d. Reads/evidence stay.
 - Impact: New public actions still require manifest surgery.
-- Fix approach: Do not add net-new public actions without a manifest update and a retirement plan. P5-d later 410s the doors.
+- Fix approach: Do not add net-new public actions without a manifest update and a retirement plan.
 
-**Dual paid HTTP invoke paths:**
-- Issue: `/api/v1/operations/call` and `/api/v1/operations/execute` both delegate to `handleOperationInvokePost` but route literals are hardcoded in TanStack route files rather than read from `OPERATION_INVOKE_ROUTE_CONTRACT`.
+**Paid invoke tombstone vs handler:**
+- Issue: `/api/v1/operations/execute` is an HTTP 410 tombstone; `handleOperationInvokePost` remains path-agnostic and still used by `/call`.
 - Files: `src/routes/api.v1.operations.call.ts`, `src/routes/api.v1.operations.execute.ts`, `src/modules/capability-execution/operation-invoke-entry.ts`, `tests/unit/routes/operation-invoke-route-binding.test.ts`
-- Why: P1-e-2 dual-served `/execute` for compatibility while `/call` became canonical; route registration constraints prevented spreading contract fields into public descriptors.
-- Impact: Silent drift if the contract path changes but route files are not updated; agent docs and CLI may disagree on the canonical door.
-- Fix approach: Keep the binding test importing both route modules; when deprecating `/execute`, use Phase 5 cards for `Deprecation`/`Sunset` headers — do not re-expose `legacyPath` in public UCP/handshake projections (regression caught in P1-e-2 review).
+- Why: P1-e-2 dual-served `/execute`; P5-d retired the route file without 410ing the handler.
+- Impact: Tests that call the handler with an execute URL still succeed; live HTTP `/execute` does not.
+- Fix approach: Keep the binding test importing both route modules. Never attach `Deprecation` or 410 to `/call`. Do not re-expose `legacyPath` in public UCP/handshake projections.
 
 **Release gate ordering hides cheap failures:**
 - Issue: `test:ts-standards` and parts of `test:imports` run after the full unit suite in `test:release:source:after-codegen`.
@@ -262,11 +262,11 @@
 - Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
 - Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Phase 5 quarantine (writes frozen; public inventory deregistered; business/services expansion frozen):**
-- Problem: P5-c advertised RFC 9745/8594 notice on quarantined doors and `/execute` (never `/call`), then dropped family ids from `listActions()` / `requiredActionIds`. HTTP freeze + notice remain until P5-d 410.
-- Current workaround: `businessServicesPolicy.expansion` is `frozen`; measured businesses/services URLs stay instrumented. No URL dies without RFC 8594.
-- Blocks: P5-d HTTP 410 tombstones; P6 table retirement.
-- Implementation complexity: Medium — later HTTP 410 (P5-d), then family table retirement (P6).
+**Phase 5 quarantine (writes 410 on mutating doors; public inventory deregistered; business/services expansion frozen):**
+- Problem: P5-d pulled Sunset to 18 Aug 2026 and 410s mutating family HTTP plus `/execute`. Reads/evidence stay. `/call` never carries Deprecation or 410.
+- Current workaround: `businessServicesPolicy.expansion` is `frozen`; measured businesses/services URLs stay instrumented. No further URL dies without RFC 8594.
+- Blocks: P6 table retirement (export exists; drops not started).
+- Implementation complexity: Medium — family table retirement after checksummed export.
 - Files: `src/modules/product-frontier/business-services-policy.ts`, `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
 
 **Legal / counsel signoffs for live money (T52):**
@@ -306,11 +306,11 @@
 - Difficulty to test: Already exists — needs gate promotion decision.
 
 **Customer Request / WorkTree freeze under quarantine plan:**
-- What's not tested: HTTP 410 tombstones (P5-d). Header fixture covers RFC 9745/8594 on quarantined doors and `/execute` only.
-- Files: `src/modules/product-frontier/quarantine-write-admission.ts`, `src/modules/product-frontier/deprecation-notice.ts`, `src/lib/server/quarantine-write.ts`, `tests/unit/product-frontier/deprecation-notice.test.ts`
-- Risk: later 410 without Sunset, or `Deprecation` on `/call`.
+- What's not tested: Table drops and live Convex export zip counts. HTTP 410 tombstones for mutating family doors and `/execute` are asserted; reads/evidence stay off 410; `/call` stays without Deprecation.
+- Files: `src/modules/product-frontier/quarantine-write-admission.ts`, `src/modules/product-frontier/deprecation-notice.ts`, `src/lib/server/quarantine-write.ts`, `tests/unit/product-frontier/deprecation-notice.test.ts`, `tests/unit/server/quarantine-write-http.test.ts`
+- Risk: later table drop without checksummed export, or `Deprecation` on `/call`.
 - Priority: High
-- Difficulty to test: P5-d later; remainder gate is header fixture plus `check:product-frontier`.
+- Difficulty to test: P6 table cards; remainder gate is frontier plus 410 fixtures.
 
 **Development-host parity and x402 conformance:**
 - What's not tested: Full official development evidence packets when checkout is dirty or local Convex unavailable (`evidence_checkout_dirty`, `convex_dev_server_unavailable`).
