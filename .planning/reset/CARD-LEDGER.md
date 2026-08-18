@@ -111,5 +111,5 @@ One table-family card at a time, separate deployments only.
 | P6-rk-tables | Unlist 44 RK tables; keep HTTP 410 handlers | P6-work-tree | committed |
 | P6-customer-request | Unlist remaining 63 CR tables; stop CR workpool enqueue; module stays | P6-rk-tables | committed |
 
-Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.
-Routing-kernel HTTP tombstones are permanent; historical tables drop only after approved checksummed export.
+Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage, inquiry 12, Answer, catalog/supply, external-run, RK HTTP 410, `marketDispatchWorkpool`.
+Routing-kernel HTTP tombstones are permanent. Named P6 families are unlisted after hashed empty digest; Convex 1.42 unlist is not Dashboard Delete Table.

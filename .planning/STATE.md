@@ -9,10 +9,10 @@ progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 8
-  completed_plans: 7
-  percent: 85
+  completed_plans: 8
+  percent: 90
 current_phase: 06
-current_phase_name: p6-wave-2-exited
+current_phase_name: p6_complete
 
 # Current state
 
@@ -40,7 +40,9 @@ stays. Live money stays fail-closed.
 
 **Remainder exit:** after P5-e. No P5-d 410 in that remainder.
 Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. P6-export-tool landed: `canonicalDigest` over Convex export jsonl, wrap fields omitted, live counts unmeasured until a gitignored zip exists.
-Wave 2 closed: P5-d 410 on mutating family doors and `/execute`; Sunset `Tue, 18 Aug 2026 23:59:59 GMT`; MCP in-tool tombstone not host-410; RK 410s unchanged; inquiry 12 tables stay. Table drops not started. Local `main` remains unpushed under the written hold.
+Wave 2 closed: P5-d 410 on mutating family doors and `/execute`; Sunset `Tue, 18 Aug 2026 23:59:59 GMT`; MCP in-tool tombstone not host-410; RK 410s unchanged; inquiry 12 tables stay. Local `main` remains unpushed under the written hold.
+
+P6 closeout closed on local `main`: hashed empty digests, remaining family reads 410, then one-family unlists (x402 orphan, study, spine, work-tree, RK 44, CR 63). Listed schema 89. Cap 60 not claimed. Modules and Workpool retained. Dashboard Delete Table not done.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
 

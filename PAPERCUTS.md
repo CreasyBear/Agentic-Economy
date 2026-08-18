@@ -1463,3 +1463,5 @@ workstreams, duplicate observations, and explicit remediation status.
 208. grok-4.6: npx convex codegen tried to deploy to local 127.0.0.1:3210 and failed DeploymentNotConfiguredForNodeActions; had to hand-edit convex/_generated/api.d.ts so internal.moneyX402PaymentAttempts typechecked. Fix: CONVEX_AGENT_MODE=anonymous or codegen without start_push.
 
 209. grok-4.6: P6-freeze-gaps commit: React Doctor flagged pre-existing dynamic import of work-tree.functions in human-root.functions.ts (routeTree client-bundle isolation). False positive for this card; commit still landed.
+
+210. Cursor Grok 4.6: Hashing P6 empty table digests: node register('tsx/esm') fails with 'tsx must be loaded with --import instead of --loader' on Node 25; use node --import tsx.
