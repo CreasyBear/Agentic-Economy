@@ -49,3 +49,7 @@ eval/parity/results.tsv
 
 # local ae CLI session state
 /.ae-cli/
+
+# Convex snapshot zips are secrets-bearing; never commit
+*.convex-export.zip
+.planning/evidence/*.zip

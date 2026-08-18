@@ -1101,4 +1101,18 @@ Wave 1 closed. STATE: `p6_x402_rehomed; table_drops_not_started`. No table drops
 - `npm run check:product-frontier` — `{ok:true,errors:[]}`
 - no full conformance (market kernel untouched)
 
-`/call` is not deprecated. No table drops. Hold still covers unpushed `main`.
+`/call` is not deprecated. No table drops. Hold still covers unpushed `main`. Product SHA `f8192c13`.
+
+## P6-export-tool — committed
+
+**AUTHORITY:** Convex 1.42 `npx convex export`; existing `canonicalDigest` (`sha256:` + `@noble/hashes`).
+
+**LOCAL_CANDIDATE:** zip is gitignored; hasher in `src/modules/product-frontier/table-export-digest.ts`; CLI `tools/release/p6-table-export.ts` reads unpacked `{table}.jsonl` or writes unmeasured inventory.
+
+**FIT:** missing-adopt CLI + match existing digest. No Convex paginator. `governedSendReceiptKeys` omits `wrappedKeyBase64` / `wrapIvBase64` before digest (hash-only). Inquiry 12 tables listed. No live deployment this card: counts `unmeasured`.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/product-frontier/table-export-digest.test.ts` — 1 file / 3 tests passed
+- wrap fields never appear in hashed payload fixture
+
+No table drops. Zip not in git. Hold still covers unpushed `main`.

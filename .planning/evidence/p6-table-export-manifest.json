@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "ae-p6-table-export:v1",
+  "capturedAt": "2026-08-18",
+  "evidenceClass": "source-local",
+  "tables": [
+    {
+      "table": "capabilityLaunchSupportRecords",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryThreads",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryCustomerAccessGrants",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryMessages",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryNotifications",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryReadStates",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryAbuseBuckets",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "inquiryPrivacyTombstones",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "governedSendReceipts",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "governedSendIntegrityCommitments",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "governedSendReceiptKeys",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    },
+    {
+      "table": "governedSendErasureLineage",
+      "count": "unmeasured",
+      "sha256": null,
+      "classification": "unmeasured"
+    }
+  ]
+}

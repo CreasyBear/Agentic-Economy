@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_e_landed; p6_x402_rehomed; p6_freeze_gaps; table_drops_not_started
-stopped_at: 2026-08-18 P6 wave 2 freeze-gaps — no P5-d 410 yet, no table drops
+status: phases_0_1_2_3_4_committed; p5_a_b_c_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; table_drops_not_started
+stopped_at: 2026-08-18 P6 wave 2 export-tool — no P5-d 410 yet, no table drops
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
@@ -12,7 +12,7 @@ progress:
   completed_plans: 6
   percent: 75
 current_phase: 06
-current_phase_name: p6-wave-2-freeze-gaps
+current_phase_name: p6-wave-2-export-tool
 
 # Current state
 
@@ -36,7 +36,7 @@ measured businesses/services URLs retained and instrumented. Reads and evidence
 stay. Live money stays fail-closed.
 
 **Remainder exit:** after P5-e. No P5-d 410 in that remainder.
-Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. Table drops not started. Local `main` remains unpushed under the written hold.
+Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. P6-export-tool landed: `canonicalDigest` over Convex export jsonl, wrap fields omitted, live counts unmeasured until a gitignored zip exists. Table drops not started. Local `main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
 

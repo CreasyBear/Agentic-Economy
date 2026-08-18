@@ -1461,3 +1461,5 @@ workstreams, duplicate observations, and explicit remediation status.
 207. Cursor Grok 4.6: Appending P5-c/P5-e receipts: StrReplace replace_all on the repeated remainder closer inserted the new sections after P1-fix-held-charge as well as P5-b and left a duplicate P5-b body. Unique context or a one-shot append is safer than replace_all on formulaic receipt closers.
 
 208. grok-4.6: npx convex codegen tried to deploy to local 127.0.0.1:3210 and failed DeploymentNotConfiguredForNodeActions; had to hand-edit convex/_generated/api.d.ts so internal.moneyX402PaymentAttempts typechecked. Fix: CONVEX_AGENT_MODE=anonymous or codegen without start_push.
+
+209. grok-4.6: P6-freeze-gaps commit: React Doctor flagged pre-existing dynamic import of work-tree.functions in human-root.functions.ts (routeTree client-bundle isolation). False positive for this card; commit still landed.
