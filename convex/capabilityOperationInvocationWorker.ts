@@ -2144,6 +2144,26 @@ async function finalizeOperationDispatch(
   if (result.kind === 'refused') throw new Error(`operation_finalize_${result.code}`)
 }
 
+async function restoreHoldIfReserved(
+  ctx: ActionCtx,
+  dispatch: OpenDispatch,
+  attemptRef: string,
+): Promise<ChargeSettlementResult> {
+  const operation = parsePublishedOperationSnapshot(dispatch.operationJson)
+  if (operation === undefined) return { kind: 'reconciliation_required' }
+  return await reconcileAcceptedCharge(
+    ctx,
+    dispatch,
+    operation,
+    {
+      chargeState: 'paid',
+      transactionRef: `operation-money:${dispatch.invocationRef}:${attemptRef}:1`,
+    },
+    attemptRef,
+    'not_released',
+  )
+}
+
 async function refuseBeforeClaim(
   ctx: ActionCtx,
   dispatch: OpenDispatch,
@@ -2162,7 +2182,8 @@ async function refuseBeforeClaim(
         return await convergeReleaseFenceBeforeGates(ctx, dispatch, snapshot)
       }
       if (control.control.control.state === 'leased') {
-        return await convergePreRelease(ctx, dispatch, snapshot, code, retryable, nextAction)
+        const settlement = await restoreHoldIfReserved(ctx, dispatch, attemptRef)
+        return await convergePreRelease(ctx, dispatch, snapshot, code, retryable, nextAction, settlement)
       }
       if (
         control.control.control.state === 'terminal'
@@ -2298,7 +2319,7 @@ async function reconcileAcceptedCharge(
   ctx: ActionCtx,
   dispatch: OpenDispatch,
   operation: PublishedOperation,
-  charge: WorkerAcceptedCharge,
+  charge: Pick<WorkerAcceptedCharge, 'transactionRef' | 'chargeState'>,
   attemptRef: string,
   outcome: 'not_released' | 'released' | 'unknown',
 ): Promise<ChargeSettlementResult> {
@@ -2355,9 +2376,10 @@ async function reconcileAcceptedCharge(
       evidenceRefs,
       observedAt: now,
     })
-    return result.kind === 'settled'
-      ? { kind: 'settled', outcome }
-      : { kind: 'reconciliation_required' }
+    if (result.kind === 'none' || result.kind === 'settled') {
+      return { kind: 'settled', outcome }
+    }
+    return { kind: 'reconciliation_required' }
   } catch {
     return { kind: 'reconciliation_required' }
   }

@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_2_3_4_committed; p1_d3_open; p5_a_files_landed; remainder_hygiene_2026-08-18
-stopped_at: 2026-08-18 remainder HK-hygiene — leftover executor worktrees archived/removed, lockfile EUSAGE closed as stale, original Cursor plan YAML P2–P4 completed
+status: phases_0_2_3_4_committed; p1_held_charge_landing; p1_d3_open; p5_a_files_landed; remainder_hygiene_2026-08-18
+stopped_at: 2026-08-18 remainder P1-fix-held-charge — leased refuse restores-or-freezes AE-internal holds; P1-d3 still open
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
@@ -31,10 +31,9 @@ kernel. `/api/v1/operations/call` is the paid door and is not deprecated.
 **Landed on local `main`:** Phases 0, 2, 3, and 4. Phase 1 cards except P1-d3.
 P5-a frontier v2 files exist (`1aaf4aa5`). Live money stays fail-closed.
 
-**Open (remainder):** P1 held-charge restore-or-freeze, P1-d3 daily settlement
-cron (skip when live-money gate is open), then founder freeze go/no-go, P5-b/c/e.
-No P5-d 410 and no P6 in this remainder. Local `main` is 68 commits ahead of
-`origin/main` pending push-or-hold.
+**Open (remainder):** P1-d3 daily settlement cron (skip when live-money gate is
+open), then founder freeze go/no-go, P5-b/c/e. No P5-d 410 and no P6. Local
+`main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder continues locally. See RECEIPTS HK-push-or-hold.
 

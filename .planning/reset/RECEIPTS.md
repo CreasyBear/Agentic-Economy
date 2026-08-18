@@ -972,3 +972,17 @@ Local `main` is 69 commits ahead of `origin/main` (was 68 at remainder start; HK
 **Hold:** do not push this remainder until the founder explicitly asks to push `main`. Product remainder continues on local `main`. Hosted proof, CI on origin, and other clones still cannot see Phases 1–4. That is accepted for this remainder so 69 commits are not force-landed on origin without a push command.
 
 This receipt satisfies the remainder card: push **or** write the hold. Further product cards may proceed against this hold. Unpushed count remains above 3 until a later founder push.
+
+## P1-fix-held-charge — committed
+
+**AUTHORITY:** ADR-034 restore-or-freeze. Stripe: abandoned capture voids the authorization.
+
+**LOCAL_CANDIDATE:** `reconcileAcceptedCharge` / `convergePreRelease` settlement arg.
+
+**FIT:** diverge-fix-toward-authority. `refuseBeforeClaim` on `leased` (not `possibly_released`) now passes settlement into `convergePreRelease`. `reconcileAcceptedCharge` treats `none` or `settled` as settled so a leased retry with no hold refuses cleanly instead of `reconciliation_required`. Identity is the existing `operation-money:{invocationRef}:{attemptRef}:1` used by the recovery path. No third money path. No Stripe I/O.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/convex/capability-operation-worker.test.ts` — 23 passed
+- `npm run test:conformance` — 27 files / 426 tests passed
+
+Product commit is this remainder commit. Live-money gate and production x402 refusal untouched. No `/call` deprecation.

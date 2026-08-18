@@ -106,10 +106,13 @@ type WorkerOptions = Readonly<{
   finalGrant?: Readonly<Record<string, unknown>> | null
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
+  reconcileNone?: boolean
   failPaymentObservation?: boolean
   preparePaymentErrorState?: 'possibly_submitted'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentOperation?: (operation: PublishedOperation) => PublishedOperation
+  alreadyLeased?: boolean
+  stalePrincipal?: boolean
 }>
 type PaymentState = {
   prepare: Record<string, unknown> | undefined
@@ -248,7 +251,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     applicationRef: dispatch.applicationRef,
     environment: dispatch.environment,
     lifecycle: 'active',
-    grantGeneration: 1,
+    grantGeneration: options.stalePrincipal === true ? 2 : 1,
     scopes: ['market_operations:invoke'],
     authorityMode: 'approve_each',
   }
@@ -321,7 +324,7 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
     outcome: { state: 'running' as const },
     recordedAt,
   }
-  let canonicalClaimed = false
+  let canonicalClaimed = options.alreadyLeased === true
   const payment: PaymentState = {
     prepare: undefined,
     read: undefined,
@@ -613,9 +616,9 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
           }
         case 'moneyLedger:reconcileInvocationCharge':
           state.reconciliations.push(args)
-          return options.reconcileRefused
-            ? { kind: 'reconciliation_required' }
-            : { kind: 'settled' }
+          if (options.reconcileRefused) return { kind: 'reconciliation_required' }
+          if (options.reconcileNone) return { kind: 'none' }
+          return { kind: 'settled' }
         case 'moneyLedger:markChargeOutcomeUnknown':
           state.unknownCharges.push(args)
           return { kind: 'outcome_unknown', transactionRef: args.transactionRef }
@@ -977,6 +980,39 @@ describe('capability operation invocation worker', () => {
         priceDigest: digest('p'),
       },
     })
+  })
+
+  it('restores an AE-internal hold when a leased retry refuses before reclaim', async () => {
+    const worker = createWorker('http', { alreadyLeased: true, stalePrincipal: true })
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.money).toBeUndefined()
+    expect(worker.state.reconciliations).toEqual([
+      expect.objectContaining({
+        transactionRef: `operation-money:${invocationRef}:${attemptRef}:1`,
+        outcome: 'not_released',
+      }),
+    ])
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      dispatchState: 'failed',
+      result: { kind: 'refused', code: 'grant_generation_stale' },
+    })
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+  })
+
+  it('refuses a leased retry without a hold as refused, not reconciliation_required', async () => {
+    const worker = createWorker('http', {
+      alreadyLeased: true,
+      stalePrincipal: true,
+      reconcileNone: true,
+    })
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+    expect(worker.state.reconciliations).toHaveLength(1)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'grant_generation_stale' },
+    })
+    expect(worker.state.records.some((record) => record.state === 'reconciliation_required')).toBe(false)
   })
 
   it('invalidates a provider-direct x402 lease before transport without AE money effects', async () => {
