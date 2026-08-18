@@ -1161,3 +1161,15 @@ No table drops. Wrap fields still omitted. Inquiry 12 stay on the census. Hold s
 - `/call` still 405 GET without Deprecation (deprecation-notice test)
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts remain `unmeasured` / deployment unavailable. 89 tables remaining and cap 60 are not claimed. Hold still covers unpushed `main`.
+
+## P6-x402-orphan-unplug — committed
+
+**AUTHORITY:** P6-x402-rehome already writes money-owned `moneyX402PaymentAttempts`. This card only stops the leftover query.
+
+**FIT:** `backfillMoneyX402PaymentAttempts` is a no-op and no longer paginates `customerRequestX402PaymentAttempts`. CR wrappers already delegate to `internal.moneyX402PaymentAttempts`. No other CR tables touched. Schema still lists the orphan until the next card.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/convex/x402-orphan-unplug.test.ts` — 1 passed
+- `rg customerRequestX402PaymentAttempts convex` excluding `_generated` — no matches
+
+No table drops. Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts remain `unmeasured`. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.

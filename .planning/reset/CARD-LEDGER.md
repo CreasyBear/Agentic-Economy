@@ -103,7 +103,7 @@ One table-family card at a time, separate deployments only.
 | P6-export-tool | Checksummed per-table export toolchain; hash-only for governedSendReceiptKeys wrap fields | P6-freeze-gaps | committed |
 | P6-export-live | Live/dev Convex zip hashed for 131 closeout tables; wrap fields omitted; zip gitignored | P6-export-tool | committed |
 | P6-read-tombstone | RFC 9457 410 remaining family reads (CR evidence/inspect, WorkTree inspect, study.inspect); never `/call` or `inquiry.readCustomerRecord` | P6-export-live | committed |
-| P6-x402-orphan-unplug | Stop remaining queries of `customerRequestX402PaymentAttempts` | P6-read-tombstone | pending |
+| P6-x402-orphan-unplug | Stop remaining queries of `customerRequestX402PaymentAttempts` | P6-read-tombstone | committed |
 | P6-x402-orphan-schema | Unlist only the x402 orphan CR table | P6-x402-orphan-unplug | pending |
 | P6-study | Unlist `studies`, `studyEvents` after hashed export | P6-x402-orphan-schema | pending |
 | P6-project-spine | Unplug Workflow then unlist 3 spine tables; successor is consuming agents | P6-study | pending |
