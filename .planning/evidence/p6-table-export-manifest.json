@@ -2,7 +2,7 @@
   "schemaVersion": "ae-p6-table-export:v1",
   "capturedAt": "2026-08-18",
   "evidenceClass": "source-local",
-  "deployment": "unavailable",
+  "deployment": "observed",
   "tables": [
     {
       "table": "customerRequestRouteMandateIssues",
@@ -720,75 +720,75 @@
     },
     {
       "table": "capabilityLaunchSupportRecords",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 1,
+      "sha256": "sha256:3eaaba0c481c5cf1d7a6aa1546ea52a0514b19ca4e31e4ae058e86e0714f6b21",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryThreads",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:84f432e8b8f1e7a2bebb2b0c55c88c489d49bab133b21579cfdf3d0026e35441",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryCustomerAccessGrants",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:65a3ed5c4951e842cac99a577b4c56d214a347daf3915258bfd32a286ba40f9f",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryMessages",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:859b867a5224b0bbb8cf93022f645ef4269b659506445e579f38d2c322c84d73",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryNotifications",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:cc420f276ec9d46d079896175b3b474a65aedc2e1cd8e4563bd2755de3d36f08",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryReadStates",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:8e523bf2cc685bf5457fa1bc1e78f3cb069ae65fa3d3c44b7fe5833b590e2811",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryAbuseBuckets",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:642b1b7bfb35e0c0da14f862749aa87733722cc4ea3ac47bdb8d230bea32c92d",
+      "classification": "full-digest"
     },
     {
       "table": "inquiryPrivacyTombstones",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:eaed3cbe7a05a8847dfc3224263afeef7aca1deb4edf9fd56ae257457257b9e3",
+      "classification": "full-digest"
     },
     {
       "table": "governedSendReceipts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:f45441293499ec76ef72d7515df841e21d0f8f0856839135ab89cf063bd04e2c",
+      "classification": "full-digest"
     },
     {
       "table": "governedSendIntegrityCommitments",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:689fd44e1662426ccb7e24855dfd487e2a1786b4abbb3943238cb24ecf38c242",
+      "classification": "full-digest"
     },
     {
       "table": "governedSendReceiptKeys",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:df2a82ea6a7de671863c02cf30de4ab877254293d422e81262b76fc4d556d0ce",
+      "classification": "hash-only"
     },
     {
       "table": "governedSendErasureLineage",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:505853024d65c6a72bf50cc26541b439137783ab0e8abda46ca7fbc38c03fc8c",
+      "classification": "full-digest"
     }
   ]
 }

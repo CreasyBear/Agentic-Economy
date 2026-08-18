@@ -1249,3 +1249,30 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 - `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 89. Cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-export-live — re-observed 2026-08-18
+
+**AUTHORITY:** Convex 1.42 `npx convex export`. Existing `canonicalDigest`. Deploy-guard: local only.
+
+**LOCAL_CANDIDATE:** gitignored zip `.planning/evidence/p6-live-export.convex-export.zip`; hasher `tools/release/p6-table-export.ts --input`.
+
+**FIT:** target `local (127.0.0.1:3210, joel-chan:agentic-economy-ea30d local)` on Node 22. Downloaded snapshot timestamp `1787069144260191000`. Flattened `{table}/documents.jsonl` → `{table}.jsonl` for the hasher. Manifest `deployment: observed`; 131/131 tables present; wrap fields omitted (`governedSendReceiptKeys` hash-only); inquiry 12 stay with count 0; closeout CR/RK/WorkTree/Study/spine counts 0; `capabilityLaunchSupportRecords` count 1 (not a drop family). sha256 not faked. Zip remains gitignored. No Dashboard Delete Table. No origin push.
+
+**COMMANDS:**
+- `npx convex export --path .planning/evidence/p6-live-export.convex-export.zip` after `npx convex dev` on Node 22
+- `npx tsx tools/release/p6-table-export.ts --input /tmp/p6-live-export-jsonl --out .planning/evidence/p6-table-export-manifest.json`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts observed. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-customer-request — mutation bodies gone 2026-08-18
+
+**AUTHORITY:** Wave 3: mutations go away with the family. Tables already unlisted.
+
+**FIT:** leftover CR/WorkTree Convex ports and helpers no longer `db.query` unlisted tables. Registered handlers and port factories throw `customer_request_tables_unlisted` / `work_tree_tables_unlisted`. Module stays. Workpool stays. Thinness tests expect the unlist refuse. `npx tsc -p convex` green. Local `npx convex dev --once` on Node 22 pushed. Inquiry 12 stay.
+
+**COMMANDS:**
+- `npx tsc -p convex --noEmit`
+- `npx vitest run` CR/WorkTree thinness + characterization + schema + frontier + deprecation-notice — 87 files / 720 passed
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 89. Cap 60 not claimed. Hold still covers unpushed `main`.

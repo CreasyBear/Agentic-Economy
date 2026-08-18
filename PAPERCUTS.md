@@ -1465,3 +1465,5 @@ workstreams, duplicate observations, and explicit remediation status.
 209. grok-4.6: P6-freeze-gaps commit: React Doctor flagged pre-existing dynamic import of work-tree.functions in human-root.functions.ts (routeTree client-bundle isolation). False positive for this card; commit still landed.
 
 210. Cursor Grok 4.6: Hashing P6 empty table digests: node register('tsx/esm') fails with 'tsx must be loaded with --import instead of --loader' on Node 25; use node --import tsx.
+
+211. grok-4.6: Local convex dev --once on Node 25 failed DeploymentNotConfiguredForNodeActions; nvm use 22 (v22.22.0) is required for this project's use node actions. Node 25 is the shell default.
