@@ -158,6 +158,8 @@ export const reserveSubmission = internalMutation({
   args: submissionShell,
   returns: reserveSubmissionResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const priorCommand = await ctx.db.query('customerRequestV2SubmissionShells')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
     if (priorCommand !== null) {
@@ -194,6 +196,8 @@ export const getSubmissionShell = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
   returns: submissionShellResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const shell = await ctx.db.query('customerRequestV2SubmissionShells')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (shell === null || shell.principalId !== args.principalId) return { kind: 'not_found' as const }
@@ -217,6 +221,8 @@ export const commitAggregate = internalMutation({
   },
   returns: commitResult,
   handler: async (ctx, args): Promise<Infer<typeof commitResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const { aggregate, routeGeneration, ...command } = args
     return await commitAggregateMachine({
       ...command,
@@ -236,6 +242,8 @@ export const recordNoopCommand = internalMutation({
   },
   returns: noopCommitResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const prior = await ctx.db.query('customerRequestV2Commands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
     if (prior !== null) {
@@ -289,6 +297,8 @@ export const refreshRoutePlanGeneration = internalMutation({
   },
   returns: generationRefreshResult,
   handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const { candidateAggregate, candidateRouteGeneration, ...command } = args
     return writableGenerationRefreshResult(await refreshRoutePlanGenerationMachine({
       ...command,
@@ -314,12 +324,15 @@ export const recordRoutePlanGenerationRetry = internalMutation({
     recordedAt: v.number(),
   },
   returns: generationRefreshResult,
-  handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     writableGenerationRefreshResult(await recordRoutePlanGenerationRetryMachine(
       args,
       customerRequestV2WritePorts(ctx),
     ))
-  ),
+  )
+  },
 })
 
 export const getRoutePlanGenerationRefreshReplay = internalQuery({
@@ -327,12 +340,15 @@ export const getRoutePlanGenerationRefreshReplay = internalQuery({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
   },
   returns: generationRefreshReplayResult,
-  handler: async (ctx, args): Promise<Infer<typeof generationRefreshReplayResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof generationRefreshReplayResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await getRoutePlanGenerationRefreshReplayMachine(
       args,
       customerRequestV2ReadPorts(ctx),
     ) as Infer<typeof generationRefreshReplayResult>
-  ),
+  )
+  },
 })
 
 function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
@@ -361,18 +377,23 @@ function writableGenerationRefreshResult(
 export const getCurrentAggregate = internalQuery({
   args: { requestId: v.string() },
   returns: currentAggregateResult,
-  handler: async (ctx, args): Promise<Infer<typeof currentAggregateResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof currentAggregateResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await getCurrentAggregateMachine(
       args,
       customerRequestV2ReadPorts(ctx),
     ) as Infer<typeof currentAggregateResult>
-  ),
+  )
+  },
 })
 
 export const getCurrentRoutePlanGeneration = internalQuery({
   args: { requestId: v.string() },
   returns: routePlanGenerationResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const head = await ctx.db.query('customerRequestV2RoutePlanHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (head?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
@@ -389,18 +410,23 @@ export const getCurrentRoutePlanGeneration = internalQuery({
 export const getRoutePlanGeneration = internalQuery({
   args: { requestId: v.string(), generationRef: v.string() },
   returns: routePlanGenerationResult,
-  handler: async (ctx, args): Promise<Infer<typeof routePlanGenerationResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof routePlanGenerationResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await getRoutePlanGenerationMachine(
       args,
       customerRequestV2ReadPorts(ctx),
     ) as Infer<typeof routePlanGenerationResult>
-  ),
+  )
+  },
 })
 
 export const getCurrentRoutePlanProjectionMaterial = internalQuery({
   args: { requestId: v.string() },
   returns: routePlanProjectionMaterialResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const current = await ctx.db.query('customerRequestV2RoutePlanHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (current?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
@@ -481,6 +507,8 @@ export const getCommandReplay = internalQuery({
   },
   returns: commandReplayResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = await ctx.db.query('customerRequestV2Commands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
     if (command === null) return { kind: 'not_found' as const }

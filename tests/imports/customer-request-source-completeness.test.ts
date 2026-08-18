@@ -194,6 +194,7 @@ describe('CustomerRequest source completeness', () => {
       { root: 'src', includeExtensions: ['.ts', '.tsx'] },
       { root: 'convex', includeExtensions: ['.ts'], exclude: ['convex/_generated'] },
     ]).filter((file) => file !== 'src/modules/customer-request/internal/convex-v2-schema.ts'
+      && file !== 'src/modules/product-frontier/table-export-tables.ts'
       && !file.endsWith('.test.ts'))
     expect(runtimeFiles.filter((file) => retiredIdentifiers.test(readFileSync(file, 'utf8')))).toEqual([])
 
@@ -226,8 +227,9 @@ describe('CustomerRequest source completeness', () => {
     }
 
     const historicalSchema = readFileSync('src/modules/customer-request/internal/convex-v2-schema.ts', 'utf8')
+    expect(historicalSchema).toContain('export const customerRequestV2Tables = {} as const')
     for (const table of historicalAuthorityTables) {
-      expect(historicalSchema, `${table} history was removed`).toContain(`${table}: defineTable`)
+      expect(historicalSchema, `${table} should stay unlisted`).not.toContain(`${table}: defineTable`)
     }
   })
 

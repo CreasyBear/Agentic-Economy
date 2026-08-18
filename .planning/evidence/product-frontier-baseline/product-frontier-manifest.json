@@ -273,6 +273,13 @@
       "paths": [],
       "successor": "consuming-agent planning and orchestration",
       "evidenceDisposition": "exported-then-unlisted; studies and studyEvents unlisted from schema, module retained"
+    },
+    {
+      "id": "customer-request-tables",
+      "retiredAt": "2026-08-18",
+      "paths": [],
+      "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile",
+      "evidenceDisposition": "exported-then-unlisted; remaining Customer Request tables unlisted from schema, module retained"
     }
   ],
   "dirtyTreePathCount": 0,

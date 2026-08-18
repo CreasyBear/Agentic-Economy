@@ -54,7 +54,7 @@ const result = v.union(
 export const admitStep = internalMutation({
   args: command,
   returns: result,
-  handler: admitRouteStep,
+  handler: async () => { throw new Error('customer_request_tables_unlisted') },
 })
 
 export async function admitRouteStep(

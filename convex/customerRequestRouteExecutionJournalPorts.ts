@@ -33,7 +33,6 @@ import {
   effectiveRouteAttemptState,
 } from '@/modules/customer-request/route-execution/journal'
 import type { RouteStepGrant } from '@/modules/customer-request/route-mandate-admission'
-import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
@@ -46,7 +45,6 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
-import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 
 type StoredRouteStepGrant = Infer<typeof routeStepGrantValue>
 
@@ -131,21 +129,11 @@ const PRE_RELEASE_CANCELLATION_WINDOW_MS = 5_000
 
 
 async function enqueueRouteTransport(
-  ctx: MutationCtx,
-  dispatchRef: string,
-  runAfter: number,
+  _ctx: MutationCtx,
+  _dispatchRef: string,
+  _runAfter: number,
 ): Promise<void> {
-  await marketDispatchWorkpool.enqueueAction(
-    ctx,
-    internal.customerRequestRouteTransportWorker.run,
-    { dispatchRef },
-    {
-      runAfter,
-      retry: true,
-      onComplete: internal.customerRequestRouteExecution.completeRouteTransportWork,
-      context: { dispatchRef },
-    },
-  )
+  throw new Error('customer_request_tables_unlisted')
 }
 
 export function journalMutationPorts(ctx: MutationCtx): JournalMutationPorts {

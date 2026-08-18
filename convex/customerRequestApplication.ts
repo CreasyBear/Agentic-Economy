@@ -673,6 +673,8 @@ export const preview = action({
   args: { customerJob: v.string(), network: v.string() },
   returns: previewResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const admission = await ctx.runMutation(internal.rateLimit.admit, {
       name: 'public-read',
       key: await admissionKey(ctx, 'customer-request-preview'),
@@ -716,6 +718,8 @@ export const submit = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const admission = await ctx.runMutation(internal.rateLimit.admit, {
       name: 'public-mutation',
       key: await admissionKey(ctx, 'customer-request-submit'),
@@ -786,6 +790,8 @@ export const refine = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, message: args.message,
@@ -814,6 +820,8 @@ export const provideFacts = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const value = customerRequestJsonValueSchema.parse(args.value)
     const command = {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
@@ -833,12 +841,15 @@ export const provideFacts = action({
 export const resume = action({
   args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => (
+  handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     withRestoredRequest(
       await resumeRequest(ctx, args) as CustomerRequestActionResult,
       Date.now(),
     ) as ActionResult
-  ),
+  )
+  },
 })
 
 async function resumeRequest(
@@ -862,6 +873,8 @@ export const compare = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       revision: args.revision,
@@ -888,6 +901,8 @@ export const confirmRoute = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef, revision: args.revision,
       routeRef: args.routeRef, idempotencyKey: args.idempotencyKey,
@@ -908,6 +923,8 @@ export const listRepeatPermissionAssistants = action({
   args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: repeatPermissionAssistantsResult,
   handler: async (ctx, args): Promise<RepeatPermissionAssistantsResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = { requestRef: args.requestRef }
     const caller = await resolveRequestCaller(ctx, 'inspect_repeat', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
@@ -933,6 +950,8 @@ export const allowRepeatRoute = action({
   },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       revision: args.revision,
@@ -971,6 +990,8 @@ export const useRepeatRoute = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       revision: args.revision,
@@ -1004,6 +1025,8 @@ export const inspectRepeatRoute = action({
   },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       permissionRef: args.permissionRef,
@@ -1028,6 +1051,8 @@ export const revokeRepeatRoute = action({
   },
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       permissionRef: args.permissionRef,
@@ -1057,6 +1082,8 @@ export const runRoute = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey }
     const caller = await resolveRequestCaller(ctx, 'run', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
@@ -1092,6 +1119,8 @@ export const cancelRoute = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const mode = args.mode ?? 'current_and_downstream'
     const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey, mode }
     const caller = await resolveRequestCaller(ctx, 'cancel', command, args.serviceAuth)
@@ -1197,6 +1226,8 @@ export const reportRouteProblem = action({
   },
   returns: problemActionResult,
   handler: async (ctx, args): Promise<ProblemActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef, idempotencyKey: args.idempotencyKey,
       category: args.category, summary: args.summary,
@@ -1293,9 +1324,12 @@ type BusinessProblemViewActionResult = Infer<typeof businessProblemViewActionRes
 export const readRouteProblemForBusiness = action({
   args: { reportRef: v.string() },
   returns: businessProblemViewActionResult,
-  handler: async (ctx, args): Promise<BusinessProblemViewActionResult> => (
+  handler: async (ctx, args): Promise<BusinessProblemViewActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await readRouteProblemForBusinessApplication(args, problemRoutePorts(ctx)) as BusinessProblemViewActionResult
-  ),
+  )
+  },
 })
 
 export const recordRouteProblemBusinessReport = action({
@@ -1311,9 +1345,12 @@ export const recordRouteProblemBusinessReport = action({
     evidenceReceiptRefs: v.optional(v.array(v.string())),
   },
   returns: businessProblemReportActionResult,
-  handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => (
+  handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await recordRouteProblemBusinessReportApplication(args, problemRoutePorts(ctx)) as BusinessProblemReportActionResult
-  ),
+  )
+  },
 })
 
 export const updateRouteProblemStatus = action({
@@ -1325,9 +1362,12 @@ export const updateRouteProblemStatus = action({
     publicMessage: v.string(),
   },
   returns: problemStatusChangeResult,
-  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => (
+  handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await updateRouteProblemStatusApplication(args, problemRoutePorts(ctx)) as ProblemStatusChangeResult
-  ),
+  )
+  },
 })
 
 export const replyRouteProblem = action({
@@ -1341,6 +1381,8 @@ export const replyRouteProblem = action({
   },
   returns: problemStatusChangeResult,
   handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = {
       requestRef: args.requestRef,
       reportRef: args.reportRef,
@@ -1425,11 +1467,14 @@ type SupportProblemListResult = Infer<typeof supportProblemListResult>
 export const listRouteProblemsForSupport = action({
   args: { limit: v.optional(v.number()) },
   returns: supportProblemListResult,
-  handler: async (ctx, args): Promise<SupportProblemListResult> => (
+  handler: async (ctx, args): Promise<SupportProblemListResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await listRouteProblemsForSupportApplication({
       limit: args.limit ?? 50,
     }, problemRoutePorts(ctx)) as SupportProblemListResult
-  ),
+  )
+  },
 })
 
 const supportProblemExportResult = v.union(
@@ -1581,9 +1626,12 @@ type SupportProblemExportResult = Infer<typeof supportProblemExportResult>
 export const exportRouteProblemForSupport = action({
   args: { reportRef: v.string() },
   returns: supportProblemExportResult,
-  handler: async (ctx, args): Promise<SupportProblemExportResult> => (
+  handler: async (ctx, args): Promise<SupportProblemExportResult> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await exportRouteProblemForSupportApplication(args, problemRoutePorts(ctx)) as SupportProblemExportResult
-  ),
+  )
+  },
 })
 
 const evidenceExport = v.object({
@@ -1673,6 +1721,8 @@ export const exportRouteEvidence = action({
   args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: evidenceActionResult,
   handler: async (ctx, args): Promise<EvidenceActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const command = { requestRef: args.requestRef }
     const caller = await resolveRequestCaller(ctx, 'evidence', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
@@ -1689,6 +1739,8 @@ export const authorizePreparation = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
     const command = {

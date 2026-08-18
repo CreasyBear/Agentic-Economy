@@ -324,9 +324,12 @@ async function readRunProjection(
 export const startOrResume = internalMutation({
   args: startCommand.fields,
   returns: startResult,
-  handler: async (ctx, args): Promise<Infer<typeof startResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof startResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await startOrResumeMachine(args, journalMutationPorts(ctx)) as Infer<typeof startResult>
-  ),
+  )
+  },
 })
 
 const cancelCurrentResult = v.union(
@@ -344,9 +347,12 @@ export const cancelCurrent = internalMutation({
     mode: v.union(v.literal('current_and_downstream'), v.literal('after_current_step')),
   },
   returns: cancelCurrentResult,
-  handler: async (ctx, args): Promise<Infer<typeof cancelCurrentResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof cancelCurrentResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await cancelCurrentMachine(args, cancelMutationPorts(ctx)) as Infer<typeof cancelCurrentResult>
-  ),
+  )
+  },
 })
 
 const dispatchInvocation = v.object({
@@ -381,9 +387,12 @@ const openDispatchResult = v.union(
 export const openDispatch = internalQuery({
   args: { dispatchRef: v.string() },
   returns: openDispatchResult,
-  handler: async (ctx, args): Promise<Infer<typeof openDispatchResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof openDispatchResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await openDispatchFromJournal(args, dispatchLifecycleOpenPorts(ctx)) as Infer<typeof openDispatchResult>
-  ),
+  )
+  },
 })
 
 const cancellationInvocation = v.object({
@@ -415,11 +424,14 @@ const openCancellationAttemptResult = v.union(
 export const openCancellationAttempt = internalQuery({
   args: { cancellationRef: v.string() },
   returns: openCancellationAttemptResult,
-  handler: async (ctx, args): Promise<Infer<typeof openCancellationAttemptResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof openCancellationAttemptResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await openCancellationAttemptMachine(args, cancelOpenPorts(ctx)) as Infer<
       typeof openCancellationAttemptResult
     >
-  ),
+  )
+  },
 })
 
 const resolveCancellationAttemptResult = v.union(
@@ -444,17 +456,22 @@ export const resolveCancellationAttempt = internalMutation({
     }),
   },
   returns: resolveCancellationAttemptResult,
-  handler: async (ctx, args): Promise<Infer<typeof resolveCancellationAttemptResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof resolveCancellationAttemptResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await resolveCancellationAttemptMachine(args, cancelMutationPorts(ctx)) as Infer<
       typeof resolveCancellationAttemptResult
     >
-  ),
+  )
+  },
 })
 
 export const completeRouteCancellationWork = internalMutation({
   args: vOnCompleteArgs(v.object({ cancellationRef: v.string() })),
   returns: v.null(),
   handler: async (ctx, { context }) => {
+    throw new Error('customer_request_tables_unlisted')
+
     await resolveCancellationAttemptMachine({
       cancellationRef: context.cancellationRef,
       observation: {
@@ -477,11 +494,14 @@ const markDispatchedResult = v.union(
 export const markDispatched = internalMutation({
   args: { dispatchRef: v.string(), attemptRef: v.string() },
   returns: markDispatchedResult,
-  handler: async (ctx, args): Promise<Infer<typeof markDispatchedResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof markDispatchedResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await markDispatchedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
       typeof markDispatchedResult
     >
-  ),
+  )
+  },
 })
 
 const recordNotReleasedResult = v.union(
@@ -496,17 +516,22 @@ export const recordNotReleased = internalMutation({
     observationJson: v.string(),
   },
   returns: recordNotReleasedResult,
-  handler: async (ctx, args): Promise<Infer<typeof recordNotReleasedResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof recordNotReleasedResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await recordNotReleasedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
       typeof recordNotReleasedResult
     >
-  ),
+  )
+  },
 })
 
 export const completeRouteTransportWork = internalMutation({
   args: vOnCompleteArgs(v.object({ dispatchRef: v.string() })),
   returns: v.null(),
   handler: async (ctx, { context }) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const dispatchPorts = dispatchLifecyclePorts(ctx)
     const journalPorts = journalMutationPorts(ctx)
     await reconcileRouteTransportWorkCompletion(context.dispatchRef, {
@@ -549,9 +574,12 @@ export const recordOutcome = internalMutation({
     ),
   },
   returns: outcomeResult,
-  handler: async (ctx, args): Promise<Infer<typeof outcomeResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof outcomeResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await recordOutcomeMachine(args, journalMutationPorts(ctx)) as Infer<typeof outcomeResult>
-  ),
+  )
+  },
 })
 export const prepareX402PaymentAuthorization = internalMutation({
   args: x402PaymentPrepareArgs,
@@ -560,6 +588,8 @@ export const prepareX402PaymentAuthorization = internalMutation({
     authorizationDigest: v.string(),
   }),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const result: { custodyRef: string; authorizationDigest: string } = await ctx.runMutation(
       internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
       args,
@@ -576,6 +606,8 @@ export const recordX402PaymentSignature = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignature, args)
     return null
   },
@@ -584,23 +616,31 @@ export const recordX402PaymentSignature = internalMutation({
 export const readX402PaymentAuthorization = internalQuery({
   args: { custodyRef: v.string(), authorizationDigest: v.string() },
   returns: v.union(x402PaymentAuthorizationMaterial, v.null()),
-  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => (
+  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAuthorization, args)
-  ),
+  )
+  },
 })
 
 export const readX402PaymentAuthorizationByDigest = internalQuery({
   args: { custodyRef: v.string(), authorizationDigest: v.string() },
   returns: v.union(x402PaymentAuthorizationMaterial, v.null()),
-  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => (
+  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAuthorizationByDigest, args)
-  ),
+  )
+  },
 })
 
 export const markX402PaymentPossiblySubmitted = internalMutation({
   args: x402PaymentEventArgs,
   returns: v.null(),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, args)
     return null
   },
@@ -610,6 +650,8 @@ export const observeX402PaymentAttempt = internalMutation({
   args: x402PaymentObservationArgs,
   returns: v.null(),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     await ctx.runMutation(internal.moneyX402PaymentAttempts.observeX402PaymentAttempt, args)
     return null
   },
@@ -621,9 +663,12 @@ export const readX402PaymentAttempt = internalQuery({
     effectGeneration: v.number(),
   },
   returns: v.union(x402PaymentAttemptReadValue, v.null()),
-  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAttemptReadValue> | null> => (
+  handler: async (ctx, args): Promise<Infer<typeof x402PaymentAttemptReadValue> | null> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAttempt, args)
-  ),
+  )
+  },
 })
 export const recordX402PaymentObservation = internalMutation({
   args: {
@@ -642,6 +687,8 @@ export const recordX402PaymentObservation = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentObservation, args)
     return null
   },
@@ -649,15 +696,20 @@ export const recordX402PaymentObservation = internalMutation({
 export const reconcileX402PaymentAttempt = internalMutation({
   args: x402PaymentObservationReconciliationArgs,
   returns: x402PaymentObservationReconciliationResult,
-  handler: async (ctx, args): Promise<Infer<typeof x402PaymentObservationReconciliationResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof x402PaymentObservationReconciliationResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args)
-  ),
+  )
+  },
 })
 
 export const getCurrent = internalQuery({
   args: { requestId: v.string() },
   returns: v.union(v.object({ kind: v.literal('found'), run: runProjection }), v.object({ kind: v.literal('none') })),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const head = await ctx.db.query('customerRequestRouteRunHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (head === null) return { kind: 'none' as const }
@@ -707,6 +759,8 @@ export const reportProblem = internalMutation({
     }),
   ),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const result = await reportProblemMachine(args, problemMutationPorts(ctx))
     // The machine returns a readonly evidence list; the return validator declares a mutable array.
     return 'evidence' in result
@@ -788,6 +842,8 @@ export const readProblemForBusiness = internalQuery({
   args: { reportRef: v.string() },
   returns: businessProblemViewResult,
   handler: async (ctx, args): Promise<Infer<typeof businessProblemViewResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
     if (args.reportRef.trim().length === 0 || args.reportRef.length > 300) {
@@ -851,11 +907,14 @@ export const recordProblemBusinessReport = internalMutation({
     evidenceReceiptRefs: v.array(v.string()),
   },
   returns: businessProblemReportResult,
-  handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await recordProblemBusinessReportMachine(args, problemMutationPorts(ctx)) as Infer<
       typeof businessProblemReportResult
     >
-  ),
+  )
+  },
 })
 
 const problemUpdateState = v.union(
@@ -893,11 +952,14 @@ export const updateProblemStatus = internalMutation({
     publicMessage: v.string(),
   },
   returns: problemUpdateResult,
-  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await updateProblemStatusMachine(args, problemMutationPorts(ctx)) as Infer<
       typeof problemUpdateResult
     >
-  ),
+  )
+  },
 })
 
 export const replyProblem = internalMutation({
@@ -910,9 +972,12 @@ export const replyProblem = internalMutation({
     message: v.string(),
   },
   returns: problemUpdateResult,
-  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await replyProblemMachine(args, problemMutationPorts(ctx)) as Infer<typeof problemUpdateResult>
-  ),
+  )
+  },
 })
 
 export const listProblemsForSupport = internalQuery({
@@ -967,6 +1032,8 @@ export const listProblemsForSupport = internalQuery({
     }),
   ),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authority = await resolveAdminAuthority(
       { db: ctx.db, auth: ctx.auth },
       'read_admin_readbacks',
@@ -1119,6 +1186,8 @@ export const exportProblemForSupport = internalQuery({
     }),
   ),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authority = await resolveAdminAuthority(
       { db: ctx.db, auth: ctx.auth },
       'read_admin_readbacks',
@@ -1213,7 +1282,10 @@ export const exportCustomerEvidence = internalQuery({
       })),
     }),
   ),
-  handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx)),
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))
+  },
 })
 
 

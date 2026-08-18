@@ -130,29 +130,37 @@ const revokeResult = v.union(
 export const issue = internalMutation({
   args: { ...issueCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueResult,
-  handler: async (ctx, args): Promise<Infer<typeof issueResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof issueResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await issueMachine(
       args,
       routeMandateMutationPorts(ctx),
     ) as Infer<typeof issueResult>
-  ),
+  )
+  },
 })
 
 export const revoke = internalMutation({
   args: { requestId: v.string(), mandateRef: v.string(), idempotencyKey: v.string() },
   returns: revokeResult,
-  handler: async (ctx, args): Promise<Infer<typeof revokeResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof revokeResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await revokeMachine(
       args,
       routeMandateMutationPorts(ctx),
     ) as Infer<typeof revokeResult>
-  ),
+  )
+  },
 })
 
 export const getCurrent = internalQuery({
   args: { requestId: v.string() },
   returns: currentResult,
   handler: async (ctx, args): Promise<Infer<typeof currentResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const current = await readCurrentRouteMandateState(ctx, args.requestId)
     return (current.kind === 'active'
       ? { kind: 'active' as const, mandate: writableMandate(current.mandate) }
@@ -164,6 +172,8 @@ export const getCurrentForPrincipal = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
   returns: currentResult,
   handler: async (ctx, args): Promise<Infer<typeof currentResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+
     const current = await readCurrentRouteMandateStateForPrincipal(
       ctx, args.requestId, args.principalId,
     )
@@ -176,12 +186,15 @@ export const getCurrentForPrincipal = internalQuery({
 export const getHistory = internalQuery({
   args: { requestId: v.string() },
   returns: historyResult,
-  handler: async (ctx, args): Promise<Infer<typeof historyResult>> => (
+  handler: async (ctx, args): Promise<Infer<typeof historyResult>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await getHistoryMachine(
       args,
       routeMandateMutationPorts(ctx),
     ) as Infer<typeof historyResult>
-  ),
+  )
+  },
 })
 
 export type { RouteMandate }

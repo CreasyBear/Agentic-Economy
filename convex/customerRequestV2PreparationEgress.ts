@@ -51,43 +51,55 @@ export const run = internalAction({
     preparationRef: v.string(), now: v.number(),
   },
   returns: runResultValue,
-  handler: async (ctx, args): Promise<Infer<typeof runResultValue>> => (
+  handler: async (ctx, args): Promise<Infer<typeof runResultValue>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await runEgressMachine(
       args,
       customerRequestV2PreparationEgressActionPorts(ctx),
     ) as Infer<typeof runResultValue>
-  ),
+  )
+  },
 })
 
 export const resume = internalAction({
   args: { preparationRef: v.string(), principalId: v.string() },
   returns: resumeResultValue,
-  handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => (
+  handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await resumeEgressMachine(
       args,
       customerRequestV2PreparationEgressActionPorts(ctx),
     ) as Infer<typeof resumeResultValue>
-  ),
+  )
+  },
 })
 
 export const resumeRequest = internalAction({
   args: { requestId: v.string(), principalId: v.string() },
   returns: resumeRequestResultValue,
-  handler: async (ctx, args): Promise<Infer<typeof resumeRequestResultValue>> => (
+  handler: async (ctx, args): Promise<Infer<typeof resumeRequestResultValue>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await resumeRequestEgressMachine(
       args,
       customerRequestV2PreparationEgressActionPorts(ctx),
     ) as Infer<typeof resumeRequestResultValue>
-  ),
+  )
+  },
 })
 
 export const reconcile = internalAction({
   args: { operationRef: v.string(), principalId: v.string() },
   returns: reconcileResultValue,
-  handler: async (ctx, args): Promise<Infer<typeof reconcileResultValue>> => (
+  handler: async (ctx, args): Promise<Infer<typeof reconcileResultValue>> => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await reconcileEgressMachine(
       args,
       customerRequestV2PreparationEgressActionPorts(ctx),
     ) as Infer<typeof reconcileResultValue>
-  ),
+  )
+  },
 })

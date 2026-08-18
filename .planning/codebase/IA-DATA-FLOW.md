@@ -315,7 +315,7 @@ The exact current root is:
 | 5 | `catalogTables` | 4 | offerings, revisions, access paths, supply snapshots | `src/modules/catalog/internal/schema.ts` |
 | 6 | `capabilityContractRegistryTables` | 1 | immutable capability contract documents | `src/modules/capability-contract-registry/internal/convex-schema.ts` |
 | 7 | `capabilitySupplyTables` | 9 | publications, offerings, bindings, drafts, provider authority, mappings, call events | `src/modules/capability-supply/internal/convex-schema.ts` |
-| 8 | `customerRequestTables` | 64 | V2 ancestry, preparations, grants, attempts, mandates, runs, evidence, problems, x402 attempts | `src/modules/customer-request/internal/convex-schema.ts` |
+| 8 | `customerRequestTables` | 0 | unlisted after P6 hashed export; TypeScript module retained | `src/modules/customer-request/internal/convex-schema.ts` |
 | 9 | `agentAccessPrincipalTables` | 1 | durable caller principals | `src/modules/agent-access/internal/principal-convex-schema.ts` |
 | 10 | `agentAccessOAuthTables` | 2 | OAuth grants and dynamic clients | `src/modules/agent-access/internal/oauth-convex-schema.ts` |
 | 11 | `agentAccessPolicyTables` | 1 | generation-bound policy grants | `src/modules/agent-access/internal/convex-schema.ts` |
@@ -330,9 +330,9 @@ The exact current root is:
 | 20 | `securityTables` | 6 | disputes, suppression, admin membership/audit, fingerprints, source-write nonces | `src/modules/security/internal/schema.ts` |
 | 21 | `moneyTables` | 13 | accounts, ledger, transactions, usage, budgets, external spend, Stripe, payouts | `src/modules/money/internal/convex-schema.ts` |
 | 22 | `settingsTables` | 1 | owner notification preferences | `src/modules/settings/internal/schema.ts` |
-| 23 | `projectSpineTables` | 3 | project spine, events, quotes | `src/modules/project-spine/internal/convex-schema.ts` |
-| 24 | `workTreeTables` | 6 | trees, events, decisions, repeat permission/use, approval | `src/modules/work-tree/internal/convex-schema.ts` |
-| 25 | `studyTables` | 2 | studies and append-only study events | `src/modules/study/internal/convex-schema.ts` |
+| 23 | `projectSpineTables` | 0 | unlisted after P6; successor is consuming agents | `src/modules/project-spine/internal/convex-schema.ts` |
+| 24 | `workTreeTables` | 0 | unlisted after P6 hashed export; Workpool kept | `src/modules/work-tree/internal/convex-schema.ts` |
+| 25 | `studyTables` | 0 | unlisted after P6 hashed export; module retained | `src/modules/study/internal/convex-schema.ts` |
 | 26 | `externalRunTables` | 4 | frozen manifests, starts, evidence, gate decisions | `src/modules/external-run/internal/convex-schema.ts` |
 
 ### Information-bearing row groups

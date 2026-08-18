@@ -48,7 +48,7 @@ describe('customer-request route-execution evidence-load thinness', () => {
     expect(exportEnd).toBeGreaterThan(exportStart)
     const exportBody = convexHost.slice(exportStart, exportEnd)
     expect(exportBody).toContain(
-      'handler: async (ctx, args) => await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))',
+      'assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))',
     )
     expect(exportBody).not.toContain("query('customerRequestRouteRunHeads')")
     expect(exportBody).not.toContain("query('capabilityTransportBindings')")

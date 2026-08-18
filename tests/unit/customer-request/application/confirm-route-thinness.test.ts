@@ -29,7 +29,8 @@ describe('customer-request confirm-route thinness', () => {
 
     const confirmStart = convexHost.indexOf('export const confirmRoute = action({')
     expect(confirmStart).toBeGreaterThanOrEqual(0)
-    const confirmBody = convexHost.slice(confirmStart, confirmStart + 900)
+    const confirmEnd = convexHost.indexOf('\n})', confirmStart)
+    const confirmBody = convexHost.slice(confirmStart, confirmEnd)
     expect(confirmBody).toContain('confirmCustomerRoute')
     expect(confirmBody).toContain('confirmRoutePorts')
     expect(confirmBody).not.toContain('getCurrentRoutePlanGeneration')

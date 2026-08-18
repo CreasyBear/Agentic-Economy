@@ -8,7 +8,6 @@ import type {
 import type { RouteMandate } from '@/modules/customer-request/route-mandate'
 import { cancelReplayKind } from '@/modules/customer-request/route-execution/journal'
 import type { Doc } from './_generated/dataModel'
-import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import {
   markUnknownOutcome,
@@ -25,7 +24,6 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
-import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 
 type CancellationMandateLoad = Readonly<
   | {
@@ -105,25 +103,7 @@ export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
           query.eq('runRef', input.runRef).eq('attemptRef', input.attemptRef)
         )).unique()
       if (existingCancellation === null) {
-        await ctx.db.insert('customerRequestRouteCancellationAttempts', {
-          cancellationRef: input.cancellationRef,
-          runRef: input.runRef,
-          attemptRef: input.attemptRef,
-          operationKeyDigest: input.operationKeyDigest,
-          state: 'pending',
-          requestedAt: input.now,
-          updatedAt: input.now,
-        })
-        await marketDispatchWorkpool.enqueueAction(
-          ctx,
-          internal.customerRequestRouteCancellationWorker.run,
-          { cancellationRef: input.cancellationRef },
-          {
-            retry: false,
-            onComplete: internal.customerRequestRouteExecution.completeRouteCancellationWork,
-            context: { cancellationRef: input.cancellationRef },
-          },
-        )
+        throw new Error('customer_request_tables_unlisted')
       }
       await insertCancelCommand(ctx, input)
       return await cancelResultProjection(ctx, input.runRef, input.result)

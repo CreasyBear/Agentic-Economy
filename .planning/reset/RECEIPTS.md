@@ -1235,3 +1235,17 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 - `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 152. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-customer-request — committed
+
+**AUTHORITY:** Convex 1.42 unlist. Empty digests of zero rows. HTTP POSTs and evidence GET already 410. Module stays. Workpool stays for invoke + connection cleanup.
+
+**FIT:** unlisted remaining 63 Customer Request tables. Stopped `enqueueAction` on journal/cancel CR workers. Convex CR handlers refuse with `customer_request_tables_unlisted` without querying. Characterization tests rewritten. Inquiry 12 stay. `marketDispatchWorkpool` still enqueued from invoke and provider-connection cleanup only.
+
+**COMMANDS:**
+- empty digests in `p6-table-export-manifest.json` (63 tables, count 0)
+- `npx vitest run` CR unit/import/characterization + schema inventory — 91 files / 737 passed
+- `npx vitest run` operation-invoke, RK retirement, deprecation-notice — 3 files / 17 passed
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 89. Cap 60 not claimed. Hold still covers unpushed `main`.

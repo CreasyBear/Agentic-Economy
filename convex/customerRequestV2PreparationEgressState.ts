@@ -33,9 +33,12 @@ export const allocate = internalMutation({
       v.literal('unsupported_recipient'), v.literal('no_eligible_bindings'),
     ) }),
   ),
-  handler: async (ctx, args) => (
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await allocateEgressMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  )
+  },
 })
 
 export const beginDispatch = internalMutation({
@@ -57,6 +60,8 @@ export const beginDispatch = internalMutation({
     v.object({ kind: v.literal('needs_attention') }),
   ),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const result = await beginDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
     if (result.kind !== 'dispatch') return result
     const { connectionAuthority, ...dispatch } = result
@@ -78,9 +83,12 @@ export const resolveDispatch = internalMutation({
     failureCode: v.optional(v.string()),
   },
   returns: terminalState,
-  handler: async (ctx, args) => (
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await resolveDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  )
+  },
 })
 
 export const reconcileUncertain = internalMutation({
@@ -90,9 +98,12 @@ export const reconcileUncertain = internalMutation({
     ), providerEvidenceRef: v.string(), responseDigest: v.string(), evidenceDigest: v.string(), observedAt: v.number(),
   },
   returns: terminalState,
-  handler: async (ctx, args) => (
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await reconcileUncertainMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  )
+  },
 })
 
 export const status = internalQuery({
@@ -103,7 +114,9 @@ export const status = internalQuery({
       v.literal('not_released'), v.literal('uncertain'),
     ),
   })) }),
-  handler: async (ctx, args) => (
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await egressStatusMachine(args, customerRequestV2PreparationEgressPorts(ctx)) as {
       operationCount: number
       states: Array<{
@@ -111,15 +124,19 @@ export const status = internalQuery({
         state: 'allocated' | 'dispatching' | 'released' | 'not_released' | 'uncertain'
       }>
     }
-  ),
+  )
+  },
 })
 
 export const unresolvedForRequest = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
   returns: v.array(v.object({ operationRef: v.string(), requestRevision: v.number() })),
-  handler: async (ctx, args) => (
+  handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+    return (
     await unresolvedForRequestMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  ),
+  )
+  },
 })
 
 export const openReconciliation = internalQuery({
@@ -137,6 +154,8 @@ export const openReconciliation = internalQuery({
     v.object({ kind: v.literal('unavailable') }),
   ),
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const result = await openReconciliationMachine(args, customerRequestV2PreparationEgressPorts(ctx))
     if (result.kind !== 'available') return result
     const { connectionAuthority, ...reconciliation } = result

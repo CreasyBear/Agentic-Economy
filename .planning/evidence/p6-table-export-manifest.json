@@ -6,99 +6,99 @@
   "tables": [
     {
       "table": "customerRequestRouteMandateIssues",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:0953441e2acdf8aaa25e51fecbf41d02fd1902301ffb0fc01e5cea213f93c4c3",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteMandateHeads",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:658c3a687eb2e35811217c632120405cee384578844f29d1b05103a7d030b667",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteMandateCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:72e7ae75f51a0decb442c6395a876b51cdbeadf33fb6766f822cbcd0193c8b79",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteMandateRevocations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:87a08dd4004d66da7b61d1cfb64aa788b2a7b7dd5a8347a3a941e77aac8ad3d9",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteMandateRevocationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:0da5a05e1b77201d62692978718bc6dd596d88227969caef4dcf405ddc35557b",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteStepReservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3e6abb306af5613037b39fca44b9d09ed8373d9c1654fc11976572ef88753507",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteDataReservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:5f311af56904fdc92468c2ac4a67dd43b48d52009cce5499d29789902bd2325a",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteStepAdmissionCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:c3950764c5b2be621d0e991fe393028d6a84b975e8bf5904ab3f7a405cdfbd33",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteRuns",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:fdc71748c93ffab39696ca2cd7ac5c79739d459bf41b7d7f5828967f294ed800",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteRunHeads",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:9f4be3ecbd3c12cd13f4497b9c0d7018755b4bee3d255f7b91a5054480089c70",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteRunCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3143d4362f325333ce24b5c1e65a7e3ee149509a47807686d8560ec0674a8c8f",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteCancellationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:b8b25116384eed31d8f9dc85516b6894c3344e20657d0646065e106850cfb459",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteProblemReports",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:47fbd4fececdd5374dd7f6aedb768a83d53c1391d9dd19cee8103b4cb16692ba",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteProblemUpdates",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:c097c6f0098bf56e2f7444983c52e07ef0ce910ab1f6ef654b3fd4178a582710",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteStepAttempts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:d0fc3994e4e3e209f59a99f93e9be7858a9c1d0e622a06e9aa571d401c353f1c",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteDispatchOutbox",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:1fd09e7bb570ba2499e46c7b129b7172f9e22b8b8553ae13e04ee3f6a22a5dc2",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestX402PaymentAttempts",
@@ -108,285 +108,285 @@
     },
     {
       "table": "customerRequestV2Heads",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3b647b1b32cda8f82dda7667ad99027aa5cca17679ae1d7ce96e7924d1f3a864",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2Revisions",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:4091b13041dd394efc20791c202ae139713d804ef1d887c741069b73ec521bdf",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2RoutePlanGenerations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:18393598424b5df27ea9cb2d0654a3510b2cf7b53e2059338ed3b9d02e38beb5",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2RoutePlanHeads",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:fd891e27b9a3cba1b66ea5aa6dc13f1cb4cd514d887790ea35604c4930e59ee5",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2Commands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:503f407657d9f60d6cd52d02f45313550449e72c9eab80dff58ef1399bb310af",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2RoutePlanGenerationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:412011eb9bb3eb2e63245b0239ae99e55df4c5e14fc3e421368bb76bcb43a14f",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionPreparations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:d74656e53d81b91f71a19cf971a73136ae5d4197c4b1c9d68cd06f162bd59cb6",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:7acf48835aa29808dac8de39c54ef81b2efe3949f64c5bd1649f0d5939341954",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationDisclosureReviews",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:a5545275119d1fa7b458294915710527c847104b268d732d429bc0ca4ecce221",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationApprovalEvidence",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:8d57ddeb90c2a9483d58448148f19379ae6e2f83671e49d6d9661b47494a8a70",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationAuthorityReservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:8748ed1f627f92c9ecb105d6688bfc3911589ff174e5bbfee6a7249b4afee665",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationEgressConsumption",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:12c74f4314e3cd5583268a1cd8701b4bdf78eaa4f23209d5088df7c8ba2e2fbc",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationEgressCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:c6687f55fdf426d2fcbe371cea9eb48a447e77192c7b148aa1032a285c25fe28",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationEgressOperations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:8e16703a8133456847ba89c484346d3405ba28c92bbc617af82907f0ba0f8045",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationDisclosureAllocations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:1b7b77f4ef15e124108b92f7d7086beb9a6b9891cf3a57d7faa0b5e0e17e6592",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparationReconciliationObservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:82222ce2308fd26268898f39aa17d96489831134598bf0db017e32415392316f",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparedActions",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:6918a90f4e57a694a1d65725a62d251507d8d9ed3bc05f1c5331c2b3abd096a4",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparedActionRecoveries",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:ddad468211d99db2e2ec42bba5fd29ba4f1c8430a8d6a6ffc15298d17a879a7b",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2PreparedActionCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3647abc6aeafe4cfe51775654d0841d10f13ba07aa8a7ba8b8e3f7a7054c4a22",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ApprovalGrants",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:5b10a1972b520045cd61501f420abaa02012e979f2a36cb48d21a0d510a7ccf0",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ApprovalGrantCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:75ff3523f31be7b3da233219504682cbd4e251dd43d46382ca4f8b501dd6669f",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttempts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:59e275f3a0a6794700c8da6038e6ece932d0e09a7e6de7cb0d3cec86cd338ec2",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAuthorityBudgets",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:746d311c1fd9f094a7b50edcaef9738bf77bf2939a2419c6401cb36a8926084b",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ApprovalGrantConsumptions",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:57312fdd410ced3dde718a136a4c62d7509086661c11b0da52a879dddec27864",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptIdempotencyClaims",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:86054823031572e4f5abf4995a921d61b199ff2e7f98ce6f8822893ee8d820ff",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptSpendReservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:6b62fb03fa5f593a1dbe3a7872932e6d813a737cd7565ad70c21eef0e0447486",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptDataReservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:fd3c05483019d4313a0d9db7f0db759ba4e9b3316c03ae1b2300df3691f88ecc",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderReleaseGrants",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:b327dbaa3ff2a340c48494357ca214cb174bdce0562d9554225b790ded324c9a",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionDisclosureGrants",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:919564dacf9603d6dcfe8010196045bdebef3989116e1d8124125b77d87611c6",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptReleases",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:57c177e619ddce5ef3afc1a1f068e95ecccf3ee4ed82ab9a185092f7f0e77760",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderOutcomes",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:e8ea9795fe70613f500ff4c453ec8a4097e6dc9bc9446fe7f032ceeccd1e3182",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderRootRuns",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:85b03f78c3e9b3ce3dcfa89843a2fac757d4a8c9f5aef832e112a8615e1f057b",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderLeafRuns",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:9628c625506f1fc98849f854e4ac364cef7be1a2d0f49b2375c4bdf0d70fb4e7",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderProtocolEvidence",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:f0b0811a846439897395ca2bcb6ae354e74d1344c9763f1da1776d70cca6f900",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderReconciliationObservations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:e80557ccb73a45059a381c3ae53bab8eba9f70c744abfec32272891d8ccfe638",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptResolutions",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:a9c5f2e8fa915d32e284cb92b9ef1ff7519026660363aec01b5d4e740d71f23c",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ProviderReconciliationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:320cf6c87ac7a865f12fa4e8994ee1390a1ef1fc7c08824a2e03050d8b10d602",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2ActionAttemptAdmissionCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:21802fa10d75bb91b6e0f3b509e7b64827d04f8957776eaf075b7b57f200f84c",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteCancellationAttempts",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:31a9f73bc4e4103605aa96b9dbbb3f25be6424dd905349bca2f5d480041b735c",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestRouteProblemBusinessReports",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:4b68dbd8b225ffc3ff4ce7861182eb466e466cf0e484e1f347cc3323184a291e",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRoutePolicyIssues",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:7fcba9f5128a0dfb79cfbd8abd31df552e3024e876c84f6faa6dc8690f3211a6",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRoutePolicyCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:74d1c376d2d7f44737132af8bb9c69db607f83aeceb502f6e0d47607e728273f",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRoutePolicyRevocations",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:e71baa562ed9d39056f47b7558668e611b2c304833555c18e2e552993e1a0335",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRoutePolicyRevocationCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:8667efb1fd1679cdd71ebcf1c2834966d477440c2ae946c80b5b4ea520ea1fd3",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRouteAuthorityUses",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:172f81a3560ce0c7406503f1a33c58b5982cbe5946e04dc07fe1fe0287541875",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestStandingRouteAuthorityUseCommands",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:a57ed7774608761c7b881d6af7b9ea7b6d7529c818f3543c3db60713b64a94a8",
+      "classification": "full-digest"
     },
     {
       "table": "customerRequestV2SubmissionShells",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:7af3e48948f4816f5b5834ffd7bfc3c3a6cf0c84445a1e592a25f8687ee1a186",
+      "classification": "full-digest"
     },
     {
       "table": "routingKernelAdmissionMeters",

@@ -204,6 +204,8 @@ export const issue = internalMutation({
   args: { ...issueCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authenticated = await authenticateStandingRequestOwner(
       ctx,
       args.requestId,
@@ -383,6 +385,8 @@ export const issueMandate = internalMutation({
   args: { ...issueMandateCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueMandateResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authenticated = await authenticateStandingRequestOwner(
       ctx,
       args.requestId,
@@ -613,6 +617,8 @@ export const get = internalQuery({
   args: { requestId: v.string(), policyRef: v.string() },
   returns: getResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authenticated = await authenticateRequestOwner(ctx, args.requestId)
     if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
     const issueRow = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
@@ -643,6 +649,8 @@ export const resolvePermission = internalQuery({
   args: { requestId: v.string(), permissionRef: v.string(), principalId: v.string() },
   returns: resolvePermissionResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const rows = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
       .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
       .order('desc')
@@ -681,6 +689,8 @@ export const listPermissions = internalQuery({
   args: { requestId: v.string(), principalId: v.string() },
   returns: listPermissionsResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const rows = await ctx.db.query('customerRequestStandingRoutePolicyIssues')
       .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
       .order('desc')
@@ -719,6 +729,8 @@ export const revoke = internalMutation({
   },
   returns: revokeResult,
   handler: async (ctx, args) => {
+    throw new Error('customer_request_tables_unlisted')
+
     const authenticated = await authenticateStandingRequestOwner(
       ctx,
       args.requestId,
