@@ -106,7 +106,7 @@ One table-family card at a time, separate deployments only.
 | P6-x402-orphan-unplug | Stop remaining queries of `customerRequestX402PaymentAttempts` | P6-read-tombstone | committed |
 | P6-x402-orphan-schema | Unlist only the x402 orphan CR table | P6-x402-orphan-unplug | committed |
 | P6-study | Unlist `studies`, `studyEvents` after hashed export | P6-x402-orphan-schema | committed |
-| P6-project-spine | Unplug Workflow then unlist 3 spine tables; successor is consuming agents | P6-study | pending |
+| P6-project-spine | Unplug Workflow then unlist 3 spine tables; successor is consuming agents | P6-study | committed |
 | P6-work-tree | Unlist 6 WorkTree tables; keep Workpool | P6-project-spine | pending |
 | P6-rk-tables | Unlist 44 RK tables; keep HTTP 410 handlers | P6-work-tree | pending |
 | P6-customer-request | Unlist remaining 63 CR tables; stop CR workpool enqueue; module stays | P6-rk-tables | pending |

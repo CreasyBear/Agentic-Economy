@@ -702,21 +702,21 @@
     },
     {
       "table": "projectSpine",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:68ab3dfe8efe05f03a3151a56c345f07fe464686b060fa80f8cd0158d7f87809",
+      "classification": "full-digest"
     },
     {
       "table": "projectSpineEvents",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:470cf1b4d6d655678f35739598046b97f00824581b49d9b5961a4ebd6b9689dd",
+      "classification": "full-digest"
     },
     {
       "table": "projectSpineQuotes",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:dd6bf67aa9de9454da74105700e678c8ab447106a7790226e09be883f68fee64",
+      "classification": "full-digest"
     },
     {
       "table": "capabilityLaunchSupportRecords",

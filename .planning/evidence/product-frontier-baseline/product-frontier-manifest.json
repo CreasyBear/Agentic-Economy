@@ -238,7 +238,7 @@
     },
     "projectSpine": {
       "status": "parked",
-      "successor": "WorkTree wayfinding/chase (characterization pending)",
+      "successor": "consuming-agent planning and orchestration",
       "successorDecisionRequired": false,
       "paths": [
         "src/modules/project-spine",

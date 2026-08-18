@@ -1197,3 +1197,16 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 - scoped tests (6 files / 28) passed; `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 205. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-project-spine — committed
+
+**AUTHORITY:** Wave 1 lock: P6 successor is consuming agents, not WorkTree. Convex 1.42 unlist. Empty digests of zero rows.
+
+**FIT:** `startProject` / `startProjectV1` / `advanceGeneration` / `sendDecision` no longer start Workflow or write spine rows. Workflow definitions remain so a hosted drain can finish. Tables `projectSpine`, `projectSpineEvents`, `projectSpineQuotes` unlisted. Module retained. Parked successor updated.
+
+**COMMANDS:**
+- empty digests recorded in `p6-table-export-manifest.json`
+- `npx vitest run convex/projectSpine.test.ts tests/unit/schema/convex-schema.test.ts tests/imports/product-frontier-manifest.test.ts` — 22 passed
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 202. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.

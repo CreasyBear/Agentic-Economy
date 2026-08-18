@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; p6_read_tombstone; p6_x402_orphan_unplug; p6_x402_orphan_schema; p6_study; table_drops_in_progress
-stopped_at: 2026-08-18 P6-study — studies/studyEvents unlisted
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; p6_read_tombstone; p6_x402_orphan_unplug; p6_x402_orphan_schema; p6_study; p6_project_spine; table_drops_in_progress
+stopped_at: 2026-08-18 P6-project-spine — Workflow unplugged; 3 spine tables unlisted
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
