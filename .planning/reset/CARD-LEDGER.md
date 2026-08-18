@@ -101,6 +101,7 @@ One table-family card at a time, separate deployments only.
 | P6-workpool-own | Own the existing Workpool mount as market dispatch; keep invoke enqueue; do not delete the pool | P6-x402-rehome | committed |
 | P6-freeze-gaps | RFC 9457 403 at missed UI/server-fn writers; Convex mutations stay writable | P6-workpool-own | committed |
 | P6-export-tool | Checksummed per-table export toolchain; hash-only for governedSendReceiptKeys wrap fields | P6-freeze-gaps | committed |
+| P6-export-live | Live/dev Convex zip hashed for 131 closeout tables; wrap fields omitted; zip gitignored | P6-export-tool | committed |
 | P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 | later |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.

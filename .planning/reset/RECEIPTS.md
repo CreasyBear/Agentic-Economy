@@ -1131,3 +1131,18 @@ No table drops. Zip not in git. Hold still covers unpushed `main`.
 - no full conformance (market kernel `/call` path unchanged)
 
 Wave 2 closed. STATE: `p6_wave_2_exited; table_drops_not_started`. `/call` is not deprecated. No table drops, no inquiry split, no CR module delete. Hold still covers unpushed `main`.
+
+## P6-export-live — committed
+
+**AUTHORITY:** Convex 1.42 `npx convex export`; existing `canonicalDigest`. Deploy-guard: no `.env.local` / `convex.json` / `CONVEX_DEPLOYMENT` in this workspace.
+
+**LOCAL_CANDIDATE:** `tools/release/p6-table-export.ts` inquiry-only list.
+
+**FIT:** extend list to 131 closeout tables (64 CR + 44 RK + 6 WorkTree + 2 Study + 3 spine + 12 inquiry). No new hasher. Zip still gitignored. Target could not be classified, so no export was run (ambiguity = stop). Manifest `deployment: unavailable`; counts remain `unmeasured`; sha256 not faked.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/product-frontier/table-export-digest.test.ts` — 1 file / 3 tests passed
+- `npx tsx tools/release/p6-table-export.ts` — writes 131 unmeasured rows
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+
+No table drops. Wrap fields still omitted. Inquiry 12 stay on the census. Hold still covers unpushed `main`. Unlist cards need an observed zip or empty-file digest from `--input`; this card does not unlist.

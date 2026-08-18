@@ -1,25 +1,13 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { INQUIRY_EXPORT_TABLES, P6_CLOSEOUT_EXPORT_TABLES } from './table-export-tables'
 
+export { INQUIRY_EXPORT_TABLES, P6_CLOSEOUT_EXPORT_TABLES }
 export const P6_TABLE_EXPORT_SCHEMA_VERSION = 'ae-p6-table-export:v1' as const
-
-export const INQUIRY_EXPORT_TABLES = [
-  'capabilityLaunchSupportRecords',
-  'inquiryThreads',
-  'inquiryCustomerAccessGrants',
-  'inquiryMessages',
-  'inquiryNotifications',
-  'inquiryReadStates',
-  'inquiryAbuseBuckets',
-  'inquiryPrivacyTombstones',
-  'governedSendReceipts',
-  'governedSendIntegrityCommitments',
-  'governedSendReceiptKeys',
-  'governedSendErasureLineage',
-] as const
 
 export type InquiryExportTable = (typeof INQUIRY_EXPORT_TABLES)[number]
 
 export type TableExportClassification = 'full-digest' | 'hash-only' | 'unmeasured'
+export type TableExportDeployment = 'unavailable' | 'observed'
 
 const HASH_ONLY_OMIT_FIELDS: Readonly<Record<string, readonly string[]>> = {
   governedSendReceiptKeys: ['wrappedKeyBase64', 'wrapIvBase64'],
@@ -36,6 +24,7 @@ export type TableExportManifest = Readonly<{
   schemaVersion: typeof P6_TABLE_EXPORT_SCHEMA_VERSION
   capturedAt: string
   evidenceClass: 'source-local'
+  deployment: TableExportDeployment
   tables: readonly TableExportEntry[]
 }>
 
@@ -91,6 +80,17 @@ export function buildUnmeasuredInquiryExportManifest(capturedAt: string): TableE
     schemaVersion: P6_TABLE_EXPORT_SCHEMA_VERSION,
     capturedAt,
     evidenceClass: 'source-local',
+    deployment: 'unavailable',
     tables: INQUIRY_EXPORT_TABLES.map(unmeasuredTableEntry),
+  }
+}
+
+export function buildUnmeasuredCloseoutExportManifest(capturedAt: string): TableExportManifest {
+  return {
+    schemaVersion: P6_TABLE_EXPORT_SCHEMA_VERSION,
+    capturedAt,
+    evidenceClass: 'source-local',
+    deployment: 'unavailable',
+    tables: P6_CLOSEOUT_EXPORT_TABLES.map(unmeasuredTableEntry),
   }
 }

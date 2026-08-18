@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
 import {
-  buildUnmeasuredInquiryExportManifest,
+  buildUnmeasuredCloseoutExportManifest,
   digestTableRows,
-  INQUIRY_EXPORT_TABLES,
+  P6_CLOSEOUT_EXPORT_TABLES,
   type TableExportEntry,
   type TableExportManifest,
   P6_TABLE_EXPORT_SCHEMA_VERSION,
@@ -32,7 +32,7 @@ function readJsonlRows(path: string): readonly Record<string, unknown>[] {
 }
 
 function digestFromInputDir(inputDir: string, capturedAt: string): TableExportManifest {
-  const tables: TableExportEntry[] = INQUIRY_EXPORT_TABLES.map((table) => {
+  const tables: TableExportEntry[] = P6_CLOSEOUT_EXPORT_TABLES.map((table) => {
     const filePath = join(inputDir, `${table}.jsonl`)
     try {
       return digestTableRows(table, readJsonlRows(filePath))
@@ -47,6 +47,7 @@ function digestFromInputDir(inputDir: string, capturedAt: string): TableExportMa
     schemaVersion: P6_TABLE_EXPORT_SCHEMA_VERSION,
     capturedAt,
     evidenceClass: 'source-local',
+    deployment: 'observed',
     tables,
   }
 }
@@ -55,7 +56,7 @@ const inputDir = argValue('--input')
 const outPath = resolve(argValue('--out') ?? '.planning/evidence/p6-table-export-manifest.json')
 const capturedAt = new Date().toISOString().slice(0, 10)
 const manifest = inputDir === undefined
-  ? buildUnmeasuredInquiryExportManifest(capturedAt)
+  ? buildUnmeasuredCloseoutExportManifest(capturedAt)
   : digestFromInputDir(resolve(inputDir), capturedAt)
 
 mkdirSync(dirname(outPath), { recursive: true })

@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; table_drops_not_started
-stopped_at: 2026-08-18 P6 wave 2 exited — P5-d 410 landed, no table drops
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; table_drops_not_started
+stopped_at: 2026-08-18 P6-export-live — 131-table census listed; Convex deployment unavailable, no unlist yet
 last_updated: "2026-08-18"
 progress:
   total_phases: 7

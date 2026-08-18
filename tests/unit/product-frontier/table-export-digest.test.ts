@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildUnmeasuredCloseoutExportManifest,
   buildUnmeasuredInquiryExportManifest,
   classificationForTable,
   digestTableRows,
   INQUIRY_EXPORT_TABLES,
   omitSecretFields,
+  P6_CLOSEOUT_EXPORT_TABLES,
 } from '@/modules/product-frontier/table-export-digest'
 
 describe('P6 table export digest', () => {
@@ -59,9 +61,20 @@ describe('P6 table export digest', () => {
   })
 
   it('records unmeasured counts when no Convex export is present', () => {
-    const manifest = buildUnmeasuredInquiryExportManifest('2026-08-18')
-    expect(manifest.schemaVersion).toBe('ae-p6-table-export:v1')
-    expect(manifest.tables).toHaveLength(12)
-    expect(manifest.tables.every((entry) => entry.count === 'unmeasured' && entry.sha256 === null)).toBe(true)
+    const inquiry = buildUnmeasuredInquiryExportManifest('2026-08-18')
+    expect(inquiry.schemaVersion).toBe('ae-p6-table-export:v1')
+    expect(inquiry.deployment).toBe('unavailable')
+    expect(inquiry.tables).toHaveLength(12)
+    expect(inquiry.tables.every((entry) => entry.count === 'unmeasured' && entry.sha256 === null)).toBe(true)
+
+    const closeout = buildUnmeasuredCloseoutExportManifest('2026-08-18')
+    expect(closeout.deployment).toBe('unavailable')
+    expect(closeout.tables).toHaveLength(131)
+    expect(P6_CLOSEOUT_EXPORT_TABLES).toHaveLength(131)
+    expect(P6_CLOSEOUT_EXPORT_TABLES).toContain('customerRequestX402PaymentAttempts')
+    expect(P6_CLOSEOUT_EXPORT_TABLES).toContain('studies')
+    expect(P6_CLOSEOUT_EXPORT_TABLES).toContain('routingKernelRootRuns')
+    expect(P6_CLOSEOUT_EXPORT_TABLES).toContain('inquiryPrivacyTombstones')
+    expect(closeout.tables.every((entry) => entry.count === 'unmeasured' && entry.sha256 === null)).toBe(true)
   })
 })
