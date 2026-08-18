@@ -45,13 +45,13 @@ describe('routing authority retirement', () => {
     )
   })
 
-  it('keeps V1 history readback bounded, query-only, and outside routing authority', () => {
+  it('keeps V1 history readback query-only, table-free, and outside routing authority', () => {
     const source = readFileSync(join(root, 'convex/routingKernelV1History.ts'), 'utf8')
 
     expect(source).toContain('resolveAdminAuthority(')
     expect(source).toContain("'read_admin_readbacks'")
     expect(source).toContain('export const read = query({')
-    expect(source).toContain('.take(MAXIMUM_CHILDREN + 1)')
+    expect(source).not.toMatch(/ctx\.db\.query\(/)
     expect(source).not.toMatch(/\b(?:mutation|action|internalMutation|internalAction)\s*\(/)
     expect(source).not.toMatch(/\.collect\s*\(/)
     expect(source).not.toMatch(/ctx\.db\.(?:insert|patch|replace|delete)\s*\(/)
@@ -81,7 +81,7 @@ describe('routing authority retirement', () => {
     ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n')
 
     expect(crons).not.toContain('routingKernel')
-    expect(createHash('sha256').update(schema).digest('hex')).toBe('ee699971d33bfd7bef74d599a06ec6032852edb97305f9240cceb3cdf54dc90d')
+    expect(createHash('sha256').update(schema).digest('hex')).toBe('e6827f21da4bf426348241fc84c35a30da946a6d4527bb165ada1d59a53eddbf')
     expect(currentRequest).not.toMatch(/routingKernel|routing-kernel|createRegisteredRoutingKernel/)
   })
 

@@ -569,8 +569,6 @@ describe('V2 capability supply registration', () => {
     expect(recovered).toMatchObject({
       kind: 'available', supplies: [{ binding: { bindingId: healthyBinding.bindingId } }],
     })
-    const legacy = await backend.run(async (ctx) => await ctx.db.query('routingKernelBindings').collect())
-    expect(legacy).toEqual([])
   })
 
   it('rolls back the offering and operation when its deterministic audit slot is forged', async () => {

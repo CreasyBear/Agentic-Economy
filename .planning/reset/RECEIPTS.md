@@ -1222,3 +1222,16 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 - scoped tests (10 files / 31) passed; `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 196. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-rk-tables — committed
+
+**AUTHORITY:** Convex 1.42 unlist. Founder waived hosted-proof for tables only (2026-08-18). Empty digests of zero rows. RK HTTP 410 handlers and `ROUTING_V1_RETIRED_PATHS` unchanged.
+
+**FIT:** unlisted 44 `routingKernel*` tables. `routingKernelV1History.read` stays query-only: admin authority then typed `not_found`; no table queries. Characterization tests no longer `db.insert`. Module + HTTP retirement retained.
+
+**COMMANDS:**
+- empty digests in `p6-table-export-manifest.json` (44 tables, count 0)
+- `npx vitest run` schema inventory, history readback, kernel retirement, RK HTTP 410, capability-supply-registration, table-export-digest — 7 files / 44 passed
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 152. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.

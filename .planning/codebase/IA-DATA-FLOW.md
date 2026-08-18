@@ -320,7 +320,7 @@ The exact current root is:
 | 10 | `agentAccessOAuthTables` | 2 | OAuth grants and dynamic clients | `src/modules/agent-access/internal/oauth-convex-schema.ts` |
 | 11 | `agentAccessPolicyTables` | 1 | generation-bound policy grants | `src/modules/agent-access/internal/convex-schema.ts` |
 | 12 | `registryTables` | 4 | projection items/attempts, search documents, index status | `src/modules/registry/internal/schema.ts` |
-| 13 | `routingKernelTables` | 44 | admission, incident control, authority budgets, quote/run/protocol/evidence spine | `src/modules/routing-kernel/internal/convex-schema.ts` |
+| 13 | `routingKernelTables` | 0 | unlisted after P6 hashed export; HTTP 410 handlers remain | `src/modules/routing-kernel/internal/convex-schema.ts` |
 | 14 | `demandTables` | 3 | demand signals and search-gap records | `src/modules/demand/internal/schema.ts` |
 | 15 | `discoveryTables` | 2 | manifests and generation attempts | `src/modules/discovery/internal/schema.ts` |
 | 16 | `harnessTables` | 2 | harness sessions and append-only entries | `src/modules/harness/internal/convex-schema.ts` |
