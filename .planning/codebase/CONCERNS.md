@@ -12,10 +12,10 @@
 - Fix approach: Measure one concrete seam at a time and card any remaining module split separately; preserve runtime authorities and boundary tests.
 
 **Action inventory vs end-state guardrail:**
-- Issue: Product-frontier v2 now pins 23 required public actions after P5-c deregister; the operating model still targets ≤14 active actions after remaining catalog/settings/storefront/web/demand cleanup.
+- Issue: Product-frontier v2 pins 14 required public actions (cap claimed 2026-08-19). New public actions still require manifest surgery.
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
-- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; family HTTP/MCP doors including inspect are 410 after P6-read-tombstone except `inquiry.readCustomerRecord`.
-- Impact: New public actions still require manifest surgery.
+- Why: Founder closeout dropped catalog/settings/storefront/web/demand extras from `listActions()` / `requiredActionIds`. HTTP businesses/services URLs stay (P5-e). Family HTTP/MCP doors including inspect remain 410 except `inquiry.readCustomerRecord`.
+- Impact: New public actions still require a manifest update and a retirement plan.
 - Fix approach: Do not add net-new public actions without a manifest update and a retirement plan.
 
 **Paid invoke tombstone vs handler:**
@@ -53,12 +53,12 @@
 - Impact: CI, fresh clones, and worktrees fail at install until manual `npm install`; undermines reproducible validator runs.
 - Fix approach: Run `npm install` on Node 22, commit lockfile-only via `HK-lockfile-drift` card, enforce lockfile-only CI install.
 
-**Unpushed `main` (67 commits):**
-- Issue: Local `main` is 67 commits ahead of `origin/main`. The reset operating model caps unpushed product commits at 3 without a written reason.
+**Unpushed `main` (resolved 2026-08-19):**
+- Issue: Local `main` was 94+ commits ahead of `origin/main`. The reset operating model caps unpushed product commits at 3 without a written reason.
 - Files: `.planning/reset/OPERATING-MODEL.md`, git `main...origin/main`
-- Why: Phase 1–5 product cards committed locally and not pushed.
-- Impact: Hosted proof, CI on origin, and other worktrees cannot see accepted Phases 2–4; a machine loss would drop the reset.
-- Fix approach: Founder push decision, then push or document an explicit hold. Do not open a new product card that assumes origin is current.
+- Why: Phase 1–6 product cards committed locally under a written hold; founder authorized origin push on 2026-08-19.
+- Impact: Closed by `Closeout-origin-push`.
+- Fix approach: Do not re-accumulate unpushed product commits without a written reason.
 
 ## Known Bugs
 
@@ -206,10 +206,10 @@
 - Scaling path: Indexed search documents (`src/modules/registry/internal/search-documents.ts`), Convex-backed pagination, load tests with larger catalogs.
 
 **Action and module guardrails (reset targets):**
-- Current capacity: 47 pinned required actions; 690 module TypeScript files under `src/modules/`; 117 Convex TS files (excluding generated).
-- Limit: Operating model targets ≤14 active actions, ≤60k active module LOC, ≤60 live tables (quarantined reported separately).
-- Symptoms at limit: Manifest churn blocks every feature; LOC/table audits fail Phase 6 cards.
-- Scaling path: Phase 5 freeze of `customerRequest.*`, `workTree.*`, `study.*`, inquiries; retire legacy registry list/detail actions after deprecation notice.
+- Current capacity: 14 pinned required public actions; listed Convex tables 60 (caps claimed 2026-08-19). Module LOC still above the 60k guardrail.
+- Limit: Operating model targets 14 active actions, ≤60k active module LOC, 60 live tables.
+- Symptoms at limit: Manifest churn blocks every feature; LOC audits fail if modules grow.
+- Scaling path: Do not add net-new public actions or listed tables without a retirement plan. CR TypeScript module is deleted; leftover local unlisted tables were dropped after hashed export.
 
 **Concurrent validator / CI parallelism:**
 - Current capacity: Full unit suite ~4,000+ tests; integration ~580 tests with 15s timeout and `no-file-parallelism`.

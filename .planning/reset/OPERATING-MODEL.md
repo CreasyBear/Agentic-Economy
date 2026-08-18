@@ -15,7 +15,7 @@ Core loop: `publish → admit → search/get/compare → execute-or-invoke → v
 - Chat is a bounded AI SDK tool loop over the same market actions — no deterministic intent router.
 - Organization/account owns funds and aggregate budget; API keys receive narrower grants.
 - V1 money is AE-brokered only. x402 stays as import/discovery metadata, refused as a live lane.
-- Customer Request, WorkTree, Study: quarantined; family HTTP including inspect is 410 after hashed-export closeout. Inquiry customer-record stays readable. Inquiry tables never drop. Other quarantined tables unlist after hashed export.
+- Customer Request TypeScript module is deleted; `customerRequest.*` tombstone actions remain so family HTTP stays 410. WorkTree and Study modules stay quarantined. Inquiry customer-record stays readable. Inquiry tables never drop. Other quarantined tables are unlisted; leftover local empty tables were deleted after hashed export.
 
 ## Roles
 
@@ -174,7 +174,7 @@ Cards draw commands from this set so validators never improvise:
 
 ## End-state guardrails
 
-- ≤14 active actions, ≤60k active module LOC, ≤60 live tables; quarantined tables reported separately.
+- 14 active public actions (cap claimed 2026-08-19), ≤60k active module LOC, 60 live listed tables (cap claimed 2026-08-19); leftover unlisted tables were deleted on local after hashed export.
 - No public URL disappears without one deprecation release.
 - No conformance path disappears without an equivalent atomic-market proof.
 - No chat-only market capability.

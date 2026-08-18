@@ -1276,3 +1276,56 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts o
 - `npm run check:product-frontier` `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 89. Cap 60 not claimed. Hold still covers unpushed `main`.
+
+## Closeout-actions-14 — committed 2026-08-19
+
+**AUTHORITY:** founder, this session: public actions 23→14.
+
+**SHA:** `568db431`
+
+**FIT:** `listActions()` / `requiredActionIds` are the 14 market actions (registry search/detail + operations search/detail/compare/inspectPlan, operation execute/invoke/status/cancel/reconcile, supply publish/withdraw/earnings). Dropped `supply.collectDevelopmentQuote`, `registry.list`, `registry.services_*`, `storefront.enrichDraft`, `web.discover`, `demand.capture`, `settings.updateNotificationPreferences`. HTTP businesses/services URLs stay. `/call` stays. Frontier floor is 14.
+
+**COMMANDS:**
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+- `npm run typecheck` green
+
+## Closeout-tables-60 — committed 2026-08-19
+
+**AUTHORITY:** founder, this session: listed tables 89→60.
+
+**SHA:** `80ea3164`
+
+**FIT:** 29 leftover listed names frozen in `retired-listed-tables.ts`; Convex writers throw `retired_listed_tables_unlisted`. Schema inventory `durableTables` length 60. Inquiry 12 stay. `marketDispatchWorkpool` stays. Money kernel except free-tier counters and connect-account commands stays.
+
+**COMMANDS:**
+- `npx tsc -p convex --noEmit` green
+- `npx vitest run tests/unit/schema/convex-schema.test.ts` (durableTables 60)
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+## Closeout-cr-module — committed 2026-08-19
+
+**AUTHORITY:** founder, this session: delete the CR TypeScript module.
+
+**SHA:** `3ffbbae9`
+
+**FIT:** `src/modules/customer-request/` deleted. Tombstone `customerRequest.*` actions live in `quarantine-family-actions.ts` so HTTP 410 still resolves `findAction`. x402 Convex validators rehomed to action-invocation. `serviceAssertion` lives in `convex/serviceAssertion.ts`. Study and WorkTree modules stay. Workpool stays.
+
+**COMMANDS:**
+- `npm run typecheck` green
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+## Closeout-dashboard-delete — local 2026-08-19
+
+**AUTHORITY:** founder, this session: Dashboard Delete Table. Local only. Never `--prod`.
+
+**FIT:** target `local (127.0.0.1:3210, joel-chan:agentic-economy-ea30d local)` on Node 22. Empty-import `--replace` cleared 148 leftover tables (failed=0) but left names listed (208). Then snapshot export timestamp `1787072553395139000`, stripped 148 leftover dirs, `npx convex import --replace-all -y` keep-60 zip. `npx convex data` count 60; leftover names none; `npx convex data --component workpool` still lists workpool tables. No production dashboard delete.
+
+**COMMANDS:**
+- `npx convex import --table $t --replace --format jsonLines empty.jsonl -y` (148 leftover names)
+- `npx convex export --path /tmp/ae-local-snapshot.zip` then strip + `--replace-all`
+
+## Closeout-origin-push — 2026-08-19
+
+**AUTHORITY:** founder, this session: origin push. No force-push. No `--no-verify`.
+
+**FIT:** Hold lifted. Product closeout commits on `main` then `git push origin main`. SHAs recorded after the push lands.

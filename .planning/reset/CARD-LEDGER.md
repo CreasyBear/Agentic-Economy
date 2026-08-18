@@ -110,6 +110,11 @@ One table-family card at a time, separate deployments only.
 | P6-work-tree | Unlist 6 WorkTree tables; keep Workpool | P6-project-spine | committed |
 | P6-rk-tables | Unlist 44 RK tables; keep HTTP 410 handlers | P6-work-tree | committed |
 | P6-customer-request | Unlist remaining 63 CR tables; stop CR workpool enqueue; module stays | P6-rk-tables | committed |
+| Closeout-actions-14 | Public inventory 23→14; keep registry/operations/supply; HTTP businesses/services stay | P6-customer-request | committed |
+| Closeout-tables-60 | Unlist 29 leftover listed tables; listed schema 60; inquiry 12 stay | Closeout-actions-14 | committed |
+| Closeout-cr-module | Delete CR TypeScript module; tombstone actions for HTTP 410; x402 validators rehomed | Closeout-tables-60 | committed |
+| Closeout-dashboard-delete | Local leftover table delete via keep-60 `--replace-all`; never `--prod` | Closeout-cr-module | committed |
+| Closeout-origin-push | Founder-authorized `git push origin main`; no force-push | Closeout-dashboard-delete | committed |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage, inquiry 12, Answer, catalog/supply, external-run, RK HTTP 410, `marketDispatchWorkpool`.
-Routing-kernel HTTP tombstones are permanent. Named P6 families are unlisted after hashed empty digest; Convex 1.42 unlist is not Dashboard Delete Table.
+Routing-kernel HTTP tombstones are permanent. Named P6 families are unlisted after hashed empty digest. Local leftover empty tables were then deleted with a keep-60 `--replace-all` import (CLI analog of Dashboard Delete Table). Production dashboard delete was not authorized.

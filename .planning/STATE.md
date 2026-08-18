@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; p6_read_tombstone; p6_x402_orphan_unplug; p6_x402_orphan_schema; p6_study; p6_project_spine; p6_work_tree; p6_rk_tables; p6_customer_request; p6_complete
-stopped_at: 2026-08-18 P6 complete — live hashed export observed on local; 89 listed tables; inquiry 12 stay; cap 60 not claimed
-last_updated: "2026-08-18"
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_complete; closeout_actions_14; closeout_tables_60; closeout_cr_module; closeout_dashboard_delete; origin_push
+stopped_at: 2026-08-19 founder closeout — 14 public actions; 60 listed tables; CR module deleted; leftover local tables deleted; origin push authorized
+last_updated: "2026-08-19"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -15,6 +15,16 @@ current_phase: 06
 current_phase_name: p6_complete
 
 # Current state
+
+## Atomic Operation Market Reset — 2026-08-19
+
+Founder-authorized closeout on local `main`, then origin push:
+
+- Public action inventory **23→14**. HTTP businesses/services URLs stay (P5-e retain-measured). `/api/v1/operations/call` stays. `inquiry.readCustomerRecord` stays.
+- Listed Convex tables **89→60**. The 29 leftover listed names are frozen unlisted; writers throw `retired_listed_tables_unlisted`. Inquiry 12 stay. `marketDispatchWorkpool` stays.
+- Customer Request **TypeScript module deleted**. Tombstone `customerRequest.*` actions remain for HTTP 410. Study and WorkTree modules stay.
+- Local Dashboard Delete Table analog: snapshot export, strip 148 leftover table dirs, `npx convex import --replace-all` (never `--prod`). `npx convex data` is exactly the keep-60 set. Workpool component tables remain.
+- Hold lifted: founder asked to push `origin/main`. No force-push. No production dashboard delete.
 
 ## Atomic Operation Market Reset — 2026-08-18
 
@@ -45,12 +55,11 @@ Wave 2 closed: P5-d 410 on mutating family doors and `/execute`; Sunset `Tue, 18
 P6 closeout closed on local `main`: live hashed export observed from local Convex
 (`deployment: observed`, 131 closeout tables, wrap fields omitted), remaining
 family reads 410, then one-family unlists (x402 orphan, study, spine, work-tree,
-RK 44, CR 63). Listed schema 89. Cap 60 not claimed. Modules and Workpool
-retained. Dashboard Delete Table not done. CR/WorkTree Convex ports throw
-`customer_request_tables_unlisted` / `work_tree_tables_unlisted` without querying
-unlisted tables. Hold still covers unpushed `main`.
+RK 44, CR 63). 2026-08-19 founder closeout claimed the 14-action and 60-table
+caps, deleted the CR TypeScript module, and deleted leftover local tables via
+keep-60 `--replace-all`. Workpool retained. RK HTTP 410 retained. Inquiry 12 stay.
 
-**Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
+**Hold (2026-08-18, lifted 2026-08-19):** founder authorized origin push. See RECEIPTS Closeout-origin-push.
 
 ## Atomic Operation Market Reset — 2026-08-16
 

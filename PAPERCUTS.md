@@ -1467,3 +1467,13 @@ workstreams, duplicate observations, and explicit remediation status.
 210. Cursor Grok 4.6: Hashing P6 empty table digests: node register('tsx/esm') fails with 'tsx must be loaded with --import instead of --loader' on Node 25; use node --import tsx.
 
 211. grok-4.6: Local convex dev --once on Node 25 failed DeploymentNotConfiguredForNodeActions; nvm use 22 (v22.22.0) is required for this project's use node actions. Node 25 is the shell default.
+
+212. cursor-grok-4.6: Grep/Glob kept hitting tests/unit/customer-request/route-execution/journal-thinness.test.ts after it was deleted from disk (Read/ls 404); likely searching git-indexed deleted content. Also tsc -p convex first failed on sibling table-unlisting edits that spliced import { unlistedRetiredListedTables } inside existing import { } blocks.
+
+213. Cursor Grok 4.6: Unlisting 29 Convex tables: early-return stubs left the original function body in the file, so db.query of unlisted names still typechecked. Cause: mechanical insert of return unlistedRetiredListedTables() without deleting the old body. Fix: delete leftover bodies, not just early-return.
+
+214. Cursor Grok 4.6: Mechanical unlist leftover `undefined` / `[]` in convex-test callbacks typed as never[] or undefined-vs-Promise; empty arrays need an explicit row type, and backend.run callbacks need async, or tsc fails even after the table names are gone.
+
+215. cursor-grok-4.6: Empty-import --replace of leftover Convex tables left the names listed (208 still). Dashboard Delete Table has no CLI; local analog is export, strip unlisted dirs from the zip, then import --replace-all (never --prod). After that, npx convex data is exactly the keep-60 set.
+
+216. cursor-grok-4.6: Background npx convex dev on Node 22 got stuck collecting TypeScript errors with stale 1332 line numbers (settings.ts:130 after the file shrank to 80). Filesystem-changed-during-push retry loop; a later npx convex codegen on Node 22 still uploaded. Restart the watcher after a large schema unlist instead of trusting the looping typecheck.
