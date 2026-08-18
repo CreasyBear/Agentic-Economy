@@ -23,6 +23,7 @@ import {
 } from '@/lib/server/customer-request-route-action-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'entrypoint-parity-key-with-at-least-32-bytes'
 const requestRef = 'request:parity:1'
@@ -213,9 +214,9 @@ describe('human and external-agent Request entrypoint parity', () => {
       post('/api/v1/requests', body), agentOptions(agentCall),
     )
 
-    expect(humanResponse.status).toBe(422)
-    expect(agentResponse.status).toBe(humanResponse.status)
-    expect(await agentResponse.json()).toEqual(await humanResponse.json())
+    const humanBody = await expectQuarantineWriteFrozen(humanResponse, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agentResponse, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
     expect(humanSubmit).not.toHaveBeenCalled()
     expect(agentCall).not.toHaveBeenCalled()
   })
@@ -234,14 +235,31 @@ describe('human and external-agent Request entrypoint parity', () => {
       post('/api/v1/requests/request/messages', body), requestRef, agentOptions(agentCall),
     )
 
-    expect(humanResponse.status).toBe(422)
-    expect(agentResponse.status).toBe(humanResponse.status)
-    expect(await agentResponse.json()).toEqual(await humanResponse.json())
     expect(humanRefine).not.toHaveBeenCalled()
     expect(agentCall).not.toHaveBeenCalled()
+    const humanBody = await expectQuarantineWriteFrozen(humanResponse, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agentResponse, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
   })
 
-  it.each(cases)('$operation uses the same application command and customer response', async (entrypoint) => {
+  it.each(cases.filter((entrypoint) => entrypoint.operation !== 'resume'))(
+    'freezes $operation on both human and agent HTTP entrypoints',
+    async (entrypoint) => {
+      const humanResponse = await entrypoint.human(async () => {
+        throw new Error('human_write_must_not_run')
+      })
+      const agentResponse = await entrypoint.agent(async () => {
+        throw new Error('agent_write_must_not_run')
+      })
+      const humanBody = await expectQuarantineWriteFrozen(humanResponse, 'customerRequest.run')
+      const agentBody = await expectQuarantineWriteFrozen(agentResponse, 'customerRequest.run')
+      expect(agentBody).toEqual(humanBody)
+    },
+  )
+
+  it('keeps resume GET available on both entrypoints', async () => {
+    const entrypoint = cases.find((candidate) => candidate.operation === 'resume')
+    if (entrypoint === undefined) throw new Error('resume_case_missing')
     let humanCommand: Record<string, unknown> | undefined
     let agentCommand: Record<string, unknown> | undefined
     let calledAction: string | undefined

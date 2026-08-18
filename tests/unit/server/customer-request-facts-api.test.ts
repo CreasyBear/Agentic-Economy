@@ -1,47 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleCustomerRequestFactsPost } from '@/lib/server/customer-request-facts-api'
-import { postJsonRequest } from '../../helpers/http'
+import { expectQuarantineWriteFrozen, postJsonRequest } from '../../helpers/http'
 
 describe('customer Request answer HTTP API', () => {
-  it('provides one opaque requirement answer and optimistic revision to the source application', async () => {
-    const provideFacts = vi.fn().mockResolvedValue({
-      kind: 'request', requestRef: 'request:1', revision: 2, state: 'ready_to_compare',
-      summary: 'Ready', nextAction: 'prepare_options', missingFields: [], options: [],
-    })
-    const response = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
+  it('freezes fact writes as RFC 9457 and does not call the application', async () => {
+    const provideFacts = vi.fn()
+    const valid = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
       idempotencyKey: 'facts:1', expectedRevision: 1,
       requirementKey: 'requirement:opaque', value: { destination: '6000' },
     }), 'request:1', { provideFacts })
-    expect(response.status).toBe(200)
-    expect(provideFacts).toHaveBeenCalledWith({
-      requestRef: 'request:1', idempotencyKey: 'facts:1', expectedRevision: 1,
-      requirementKey: 'requirement:opaque', value: { destination: '6000' },
-    })
-    const serialized = JSON.stringify(provideFacts.mock.calls[0])
-    for (const forbidden of ['agentRef', 'capability', 'binding', 'plan', 'digest']) expect(serialized).not.toContain(forbidden)
-  })
+    await expectQuarantineWriteFrozen(valid, 'customerRequest.run')
 
-  it('rejects an answer without an opaque requirement key before calling the application', async () => {
-    const provideFacts = vi.fn()
-    const response = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
+    const missingKey = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
       idempotencyKey: 'facts:1', expectedRevision: 1, value: '6000',
     }), 'request:1', { provideFacts })
-    expect(provideFacts).not.toHaveBeenCalled()
-  })
+    await expectQuarantineWriteFrozen(missingKey, 'customerRequest.run')
 
-  it('refuses a sensitive answer before calling the application', async () => {
-    const provideFacts = vi.fn()
-    const response = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
+    const sensitive = await handleCustomerRequestFactsPost(postJsonRequest('/api/requests/request%3A1/facts', {
       idempotencyKey: 'facts:sensitive', expectedRevision: 1,
       requirementKey: 'requirement:opaque', value: { password: 'synthetic-password' },
     }), 'request:1', { provideFacts })
-
-    expect(response.status).toBe(422)
+    await expectQuarantineWriteFrozen(sensitive, 'customerRequest.run')
     expect(provideFacts).not.toHaveBeenCalled()
-    await expect(response.json()).resolves.toMatchObject({
-      reason: 'sensitive_information_not_accepted', nextAction: 'revise_request',
-    })
   })
 })
-

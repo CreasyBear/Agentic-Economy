@@ -12,6 +12,7 @@ import {
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 import type {
   CustomerRequestEvidenceExport,
   CustomerRequestProblemReceipt,
@@ -27,64 +28,21 @@ const authenticate = async () => ({
 const resolvePrincipal = async (principal: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => principal
 
 describe('Customer Request recovery surface', () => {
-  it('reports a customer-semantic problem through the same signed command', async () => {
-    const receipt = {
-      kind: 'problem_reported' as const, requestRef, reportRef: 'problem:opaque',
-      state: 'received' as const, reportedAt: 1_000,
-      problem: {
-        category: 'incorrect_result' as const,
-        claimSource: 'customer' as const,
-        causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const,
-        nextAction: 'await_status_update' as const,
-        nextActor: 'ae' as const,
-        nextUpdateDueAt: 86_400_100,
-        decisionAuthority: 'not_assigned' as const,
-        visibility: 'customer_and_ae_only' as const,
-        evidence: [],
-        affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
-        claims: [],
-      },
-    }
-    let humanCommand: Record<string, unknown> | undefined
-    const human = await handleCustomerRequestProblemPost(problemRequest(), requestRef, {
-      report: async (command) => { humanCommand = command; return receipt },
-    })
-    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => receipt)
+  it('freezes problem reports as RFC 9457 on both human and agent HTTP entrypoints', async () => {
+    const report = vi.fn()
+    const callAction = vi.fn()
+    const human = await handleCustomerRequestProblemPost(problemRequest(), requestRef, { report })
     const agent = await handleAgentCustomerRequestProblemPost(problemRequest(), requestRef, agentOptions(callAction))
-
-    expect(await agent.json()).toEqual(await human.json())
-    const [name, calledArgs] = callAction.mock.calls[0] ?? []
-    expect(name).toBe('customerRequestApplication:reportRouteProblem')
-    const { serviceAuth, ...command } = calledArgs ?? {}
-    expect(command).toEqual(humanCommand)
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'report', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(report).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('accepts the same suspected duplicate charge or effect report through human and agent surfaces', async () => {
-    const receipt = {
-      kind: 'problem_reported' as const,
-      requestRef,
-      reportRef: 'problem:duplicate-effect',
-      state: 'received' as const,
-      reportedAt: 1_000,
-      problem: {
-        category: 'duplicate_charge_or_effect' as const,
-        claimSource: 'customer' as const,
-        causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const,
-        nextAction: 'await_status_update' as const,
-        nextActor: 'ae' as const,
-        nextUpdateDueAt: 86_400_100,
-        decisionAuthority: 'not_assigned' as const,
-        visibility: 'share_with_affected_business' as const,
-        evidence: [],
-        affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
-        claims: [],
-      },
-    }
+  it('freezes suspected duplicate-effect reports as RFC 9457', async () => {
+    const report = vi.fn()
+    const callAction = vi.fn()
     const request = () => new Request('https://ae.test/problems', {
       method: 'POST',
       headers: { Authorization: 'Bearer ak_secret', 'Content-Type': 'application/json' },
@@ -97,22 +55,13 @@ describe('Customer Request recovery surface', () => {
         visibility: 'share_with_affected_business',
       }),
     })
-    let humanCommand: Record<string, unknown> | undefined
-    const human = await handleCustomerRequestProblemPost(request(), requestRef, {
-      report: async (command) => {
-        humanCommand = command
-        return receipt
-      },
-    })
-    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => receipt)
+    const human = await handleCustomerRequestProblemPost(request(), requestRef, { report })
     const agent = await handleAgentCustomerRequestProblemPost(request(), requestRef, agentOptions(callAction))
-
-    expect(human.status).toBe(200)
-    expect(agent.status).toBe(200)
-    expect(await agent.json()).toEqual(await human.json())
-    const [, calledArgs] = callAction.mock.calls[0] ?? []
-    const { serviceAuth: _serviceAuth, ...agentCommand } = calledArgs ?? {}
-    expect(agentCommand).toEqual(humanCommand)
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(report).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('exports only customer-safe observed evidence through the same signed read', async () => {
@@ -158,18 +107,9 @@ describe('Customer Request recovery surface', () => {
     })).resolves.toBe(true)
   })
 
-  it('records the same exact-version customer reply through human and agent surfaces', async () => {
-    const recorded = {
-      kind: 'problem_reply_recorded' as const,
-      reportRef: 'problem:opaque',
-      version: 2,
-      state: 'investigating' as const,
-      nextAction: 'await_status_update' as const,
-      nextActor: 'ae' as const,
-      nextUpdateDueAt: 86_401_000,
-      decisionAuthority: 'not_assigned' as const,
-      recordedAt: 1_000,
-    }
+  it('freezes problem replies as RFC 9457 on both human and agent HTTP entrypoints', async () => {
+    const reply = vi.fn()
+    const callAction = vi.fn()
     const request = () => new Request('https://ae.test/problems/problem%3Aopaque/replies', {
       method: 'POST',
       headers: { Authorization: 'Bearer ak_secret', 'Content-Type': 'application/json' },
@@ -179,48 +119,35 @@ describe('Customer Request recovery surface', () => {
         message: 'The result exceeded the confirmed maximum by 25 dollars.',
       }),
     })
-    let humanCommand: Record<string, unknown> | undefined
-    const human = await handleCustomerRequestProblemReplyPost(request(), requestRef, 'problem:opaque', {
-      reply: async (command) => { humanCommand = command; return recorded },
-    })
-    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => recorded)
+    const human = await handleCustomerRequestProblemReplyPost(request(), requestRef, 'problem:opaque', { reply })
     const agent = await handleAgentCustomerRequestProblemReplyPost(
       request(),
       requestRef,
       'problem:opaque',
       agentOptions(callAction),
     )
-
-    expect(await agent.json()).toEqual(await human.json())
-    const [name, calledArgs] = callAction.mock.calls[0] ?? []
-    expect(name).toBe('customerRequestApplication:replyRouteProblem')
-    const { serviceAuth, ...command } = calledArgs ?? {}
-    expect(command).toEqual(humanCommand)
-    await expect(verifyCustomerRequestServiceAssertion({
-      key,
-      operation: 'reply',
-      command: command as never,
-      assertion: serviceAuth as never,
-      now: 1_001,
-    })).resolves.toBe(true)
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(reply).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('rejects unbounded or structurally invalid problem reports before source', async () => {
+  it('freezes invalid problem reports before source', async () => {
     const report = vi.fn()
     const response = await handleCustomerRequestProblemPost(new Request('https://ae.test/problems', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idempotencyKey: 'one', category: 'kernel_failed', summary: 'x' }),
     }), requestRef, { report })
-    expect(response.status).toBe(400)
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
     expect(report).not.toHaveBeenCalled()
   })
 
-  it('returns invalid evidence selection as a customer-correctable request error', async () => {
+  it('freezes problem reports even when the source would refuse evidence selection', async () => {
     const response = await handleCustomerRequestProblemPost(problemRequest(), requestRef, {
       report: async () => ({ kind: 'refused', reason: 'evidence_not_found' }),
     })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ kind: 'refused', reason: 'evidence_not_found' })
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
   })
 })
 

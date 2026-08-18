@@ -11,6 +11,7 @@ vi.mock('@/lib/server/agent-access-auth', () => ({
 
 import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { handleWorkTreeAgentAction } from '@/lib/server/work-tree-agent-api'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const principal = {
   principalId: 'clerk_api_key:repeat',
@@ -117,8 +118,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
       'reserveRepeatUse',
       { resolvePrincipal, callOperation },
     )
-    expect(reserve.status).toBe(200)
-    await expect(reserve.json()).resolves.toMatchObject({ kind: 'accepted', useRef: 'repeat-use:http' })
+    await expectQuarantineWriteFrozen(reserve, 'workTree.reserveRepeatUse')
 
     const inspect = await handleWorkTreeAgentAction(
       new Request('https://ae.test/api/v1/work-tree/inspectRepeatUse', {
@@ -130,13 +130,8 @@ describe('WorkTree repeat agent HTTP seam', () => {
       { resolvePrincipal, callOperation },
     )
     expect(inspect.status).toBe(200)
-    expect(calls[0]?.principal.credentialId).toBe('credential:repeat')
-    expect(calls.map((call) => call.operation)).toEqual(['reserveRepeatUse', 'inspectRepeatUse'])
+    expect(calls.map((call) => call.operation)).toEqual(['inspectRepeatUse'])
     expect(mocks.authenticate).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      requiredScope: 'work_trees:repeat_reserve',
-      requiredMode: 'approve_each',
-    }))
-    expect(mocks.authenticate).toHaveBeenNthCalledWith(2, expect.objectContaining({
       requiredScope: 'work_trees:repeat_inspect',
       requiredMode: 'inspect_only',
     }))
@@ -161,14 +156,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
       'reserveRepeatUse',
       { resolvePrincipal, callOperation },
     )
-    expect(malformed.status).toBe(400)
-    await expect(malformed.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Invalid argument',
-      status: 400,
-      kind: 'INVALID_ARGUMENT',
-      code: 'invalid_input',
-    })
+    await expectQuarantineWriteFrozen(malformed, 'workTree.reserveRepeatUse')
     expect(callOperation).not.toHaveBeenCalled()
 
     mocks.authenticate.mockResolvedValue({ kind: 'refused', status: 403, reason: 'scope_required' })
@@ -188,16 +176,7 @@ describe('WorkTree repeat agent HTTP seam', () => {
       'reserveRepeatUse',
       { resolvePrincipal, callOperation },
     )
-    expect(unauthorized.status).toBe(403)
-    expect(unauthorized.headers.get('content-type')).toBe('application/problem+json')
-    await expect(unauthorized.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Permission denied',
-      status: 403,
-      kind: 'PERMISSION_DENIED',
-      code: 'scope_required',
-      detail: 'scope_required',
-    })
+    await expectQuarantineWriteFrozen(unauthorized, 'workTree.reserveRepeatUse')
     expect(callOperation).not.toHaveBeenCalled()
   })
 })

@@ -14,9 +14,9 @@
 **Action inventory vs end-state guardrail:**
 - Issue: Product-frontier v2 pins 47 required actions; the operating model targets ≤14 active actions after quarantine.
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts` (47 registered), `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
-- Why: `quarantineFamilies` in the v2 manifest mark Customer Request, WorkTree, Study, and inquiries as `approved-pending-deprecation`, but those actions remain registered. P5-a product files landed at `1aaf4aa5`; freeze/deregister cards P5-b/c are not started.
-- Impact: Every new action requires manifest surgery; agents still discover quarantined surfaces as first-class.
-- Fix approach: Run P5-b freeze writes and P5-c deprecation notice — do not add net-new actions without a manifest update and a retirement plan.
+- Why: `quarantineFamilies` in the v2 manifest mark Customer Request, WorkTree, Study, and inquiries as `approved-pending-deprecation`. P5-b freezes writes as RFC 9457; the actions remain registered until P5-c notice then deregister.
+- Impact: Every new action requires manifest surgery; agents still discover quarantined surfaces as first-class until P5-c.
+- Fix approach: Run P5-c deprecation notice then drop those `actionIds` from `actions` + `requiredActionIds` — do not add net-new actions without a manifest update and a retirement plan.
 
 **Dual paid HTTP invoke paths:**
 - Issue: `/api/v1/operations/call` and `/api/v1/operations/execute` both delegate to `handleOperationInvokePost` but route literals are hardcoded in TanStack route files rather than read from `OPERATION_INVOKE_ROUTE_CONTRACT`.
@@ -262,11 +262,11 @@
 - Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
 - Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Phase 5 quarantine (freeze not implemented):**
-- Problem: P5-a recorded frontier v2 (`schemaVersion: ae-product-frontier:v2`, `quarantineFamilies` with `approved-pending-deprecation`) at `1aaf4aa5`, but Customer Request / WorkTree / Study / inquiries still accept writes and remain in `src/modules/actions/index.ts`. CARD-LEDGER has no Status column for P5 rows; RECEIPTS still say founder review before Phase 5.
-- Current workaround: Families remain live; business/services policy is `freeze-approved-pending-implementation` in the same manifest.
+**Phase 5 quarantine (writes frozen; still registered):**
+- Problem: P5-b freezes Customer Request / WorkTree / Study / inquiry writes as RFC 9457 `application/problem+json` (`quarantine_writes_frozen`, HTTP 403, never 410). Those action ids remain registered until P5-c notice then deregister.
+- Current workaround: Reads and evidence stay. business/services policy is still `freeze-approved-pending-implementation` until P5-e.
 - Blocks: Action inventory reduction to ≤14; P5-c deprecation headers; P6 table retirement.
-- Implementation complexity: High — freeze writes, deprecation notice, then later HTTP 410 (P5-d).
+- Implementation complexity: High — deprecation notice, then later HTTP 410 (P5-d).
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
 
 **Legal / counsel signoffs for live money (T52):**
@@ -306,11 +306,11 @@
 - Difficulty to test: Already exists — needs gate promotion decision.
 
 **Customer Request / WorkTree freeze under quarantine plan:**
-- What's not tested: Post-quarantine absence of write paths; HTTP `Deprecation`/`Sunset` headers; 410 tombstones (P5-d).
-- Files: `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `tests/imports/product-frontier-manifest.test.ts`
-- Risk: Quarantine cards freeze wrong surfaces or leave agent-discoverable writes after notice.
+- What's not tested: HTTP `Deprecation`/`Sunset` headers (P5-c); 410 tombstones (P5-d).
+- Files: `src/modules/product-frontier/quarantine-write-admission.ts`, `src/lib/server/quarantine-write.ts`, `tests/unit/server/quarantine-write-http.test.ts`
+- Risk: P5-c notice on `/call`, or Sunset earlier than Deprecation.
 - Priority: High
-- Difficulty to test: P5-b/c must add freeze and notice tests before P6 schema narrow.
+- Difficulty to test: P5-c header fixture plus `check:product-frontier`; no full conformance.
 
 **Development-host parity and x402 conformance:**
 - What's not tested: Full official development evidence packets when checkout is dirty or local Convex unavailable (`evidence_checkout_dirty`, `convex_dev_server_unavailable`).

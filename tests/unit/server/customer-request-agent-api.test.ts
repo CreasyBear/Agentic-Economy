@@ -10,6 +10,7 @@ import {
 import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { customerRequestAgentResultSchema } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'agent-source-gateway-key-with-at-least-32-bytes'
 const authenticate = async () => ({
@@ -25,13 +26,8 @@ describe('agent-native customer Request API', () => {
       request: 'Find the cheapest option. Card: 4242 4242 4242 4242; password is synthetic-password.',
     }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
-    expect(response.status).toBe(422)
     expect(callAction).not.toHaveBeenCalled()
-    await expect(response.json()).resolves.toEqual({
-      kind: 'refused', reason: 'sensitive_information_not_accepted',
-      summary: 'Remove payment card and account-secret details before submitting this request.',
-      nextAction: 'revise_request',
-    })
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
   })
 
   it('turns a scoped Clerk API key into a signed stable Convex principal without forwarding the bearer', async () => {
@@ -46,15 +42,8 @@ describe('agent-native customer Request API', () => {
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
       idempotencyKey: 'submit:1', requestRef: 'request:agent:1', agentRef: 'caller-controlled', request: 'Find an option',
     }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
-    expect(response.status).toBe(200)
-    const called = calls[0]
-    expect(called?.name).toBe('customerRequestApplication:submit')
-    expect(called?.args).toMatchObject({ delegatedAgentId: 'clerk_api_key:ak_agent_1' })
-    expect(JSON.stringify(called)).not.toContain('Bearer')
-    const { serviceAuth, ...command } = called?.args ?? {}
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'submit', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('uses the same scoped principal for resume and preparation', async () => {
@@ -80,20 +69,13 @@ describe('agent-native customer Request API', () => {
     await expect(resumedResponse.json()).resolves.toMatchObject({
       recovery: { state: 'restored', restoredAt: 1_000, workRestarted: false },
     })
-    expect((await handleAgentCustomerOptionsPost(request('/options', {
+    const optionsResponse = await handleAgentCustomerOptionsPost(request('/options', {
       revision: 1, idempotencyKey: 'prepare:1',
     }), 'request:agent:1', {
       authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
-    })).status).toBe(200)
-    expect(calls.map(({ name }) => name)).toEqual(['customerRequestApplication:resume', 'customerRequestApplication:compare'])
-    const { serviceAuth, ...command } = calls[1]?.args ?? {}
-    expect(command).toMatchObject({
-      requestRef: 'request:agent:1', revision: 1,
-      idempotencyKey: 'prepare:1',
     })
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'compare', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    await expectQuarantineWriteFrozen(optionsResponse, 'customerRequest.run')
+    expect(calls.map(({ name }) => name)).toEqual(['customerRequestApplication:resume'])
   })
 
   it('signs a natural-language clarification as a refinement of the same Request', async () => {
@@ -107,16 +89,8 @@ describe('agent-native customer Request API', () => {
       message: 'Arrival before 09:00 is now immovable.',
       replacesPriorStatement: 'Arrival before 08:00 is immovable.',
     }), 'request:1', { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
-    expect(response.status).toBe(200)
-    const [name, calledArgs] = callAction.mock.calls[0] ?? []
-    expect(name).toBe('customerRequestApplication:refine')
-    const { serviceAuth, ...command } = calledArgs ?? {}
-    expect(command).toMatchObject({
-      replacesPriorStatement: 'Arrival before 08:00 is immovable.',
-    })
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'refine', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('uses the human Request fact contract and signs the unchanged application command', async () => {
@@ -130,24 +104,8 @@ describe('agent-native customer Request API', () => {
       requirementKey: 'requirement:opaque', value: { destination: '6000' },
     }), 'request:1', { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
-      ...result,
-      navigation: {
-        current: `/api/v1/requests/${encodeURIComponent('request:1')}`,
-        actions: [{ relation: 'prepare_options', href: `/api/v1/requests/${encodeURIComponent('request:1')}/options` }],
-      },
-    })
-    const [name, calledArgs] = callAction.mock.calls[0] ?? []
-    expect(name).toBe('customerRequestApplication:provideFacts')
-    const { serviceAuth, ...command } = calledArgs ?? {}
-    expect(command).toEqual({
-      requestRef: 'request:1', idempotencyKey: 'facts:1', expectedRevision: 1,
-      requirementKey: 'requirement:opaque', value: { destination: '6000' },
-    })
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'facts', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('tells a cold external agent exactly how to answer the returned clarification', async () => {
@@ -173,24 +131,8 @@ describe('agent-native customer Request API', () => {
       request: 'Find the cheapest sandbox option.',
     }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(customerRequestAgentResultSchema.parse(body)).toMatchObject({
-      requestRef: 'request:agent:cold',
-      navigation: {
-        current: `/api/v1/requests/${encodeURIComponent('request:agent:cold')}`,
-        actions: [{
-          relation: 'answer_clarification',
-          method: 'POST',
-          href: `/api/v1/requests/${encodeURIComponent('request:agent:cold')}/facts`,
-          summary: 'Answer this question to continue the same Request.',
-          input: {
-            idempotencyKey: '<unique string>', expectedRevision: 1,
-            requirementKey: 'lookup_instruction', value: '<typed value>',
-          },
-        }],
-      },
-    })
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('gives a cold agent only a safe resume action for a durable pre-interpretation shell', async () => {
@@ -205,14 +147,8 @@ describe('agent-native customer Request API', () => {
       request: 'Find a labelled sandbox option.',
     }), { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
-    expect(response.status).toBe(200)
-    const body = await response.json() as { navigation: { actions: unknown[] } }
-    expect(body.navigation.actions[0]).toMatchObject({
-      relation: 'inspect_progress', method: 'GET',
-      href: `/api/v1/requests/${encodeURIComponent('request:agent:retry')}`,
-      summary: 'Resume this Request, then follow the latest safe action.',
-    })
-    expect(body.navigation.actions).toHaveLength(1)
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('gives a cold agent the same partial progress and no-retry recovery state as the human view', async () => {

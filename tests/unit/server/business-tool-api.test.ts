@@ -5,6 +5,7 @@ import {
   handleBusinessToolPrepare,
 } from '@/lib/server/business-tool-api'
 import { BUSINESS_TOOL_AGENT_SCOPE } from '@/modules/business-tools/public'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const SLUG = 'joondalup-rapid-plumbing'
 const TOOL = 'inquiry.submit'
@@ -84,25 +85,16 @@ describe('business tool calling over HTTP', () => {
     expect(await readJson(refusedByWrongTool)).toMatchObject({ kind: 'NOT_FOUND', code: 'unknown_tool' })
   })
 
-  it('rejects a payload that does not match the published schema', async () => {
-    const response = await handleBusinessToolInvoke(
+  it('freezes authenticated inquiry submit before schema or target checks', async () => {
+    const invoke = await handleBusinessToolInvoke(
       post(`${SLUG}/tools/${TOOL}`, { body: '', contact: {}, expectedDigest: 'not-a-digest' }),
       SLUG,
       TOOL,
       { authenticate: scopedKey([BUSINESS_TOOL_AGENT_SCOPE]) },
     )
+    await expectQuarantineWriteFrozen(invoke, 'inquiry.submit')
 
-    expect([400, 404, 409]).toContain(response.status)
-    const payload = await readJson(response)
-    expect(payload.kind).toBe('INVALID_ARGUMENT')
-  })
-
-  /**
-   * The business is named by the URL and never by the payload, so a caller
-   * cannot aim a prepared call at a business it did not name.
-   */
-  it('never accepts a target from the caller', async () => {
-    const response = await handleBusinessToolPrepare(
+    const prepare = await handleBusinessToolPrepare(
       post(`${SLUG}/tools/${TOOL}/prepare`, {
         body: 'hello',
         contact: {},
@@ -112,8 +104,6 @@ describe('business tool calling over HTTP', () => {
       TOOL,
       { authenticate: scopedKey([BUSINESS_TOOL_AGENT_SCOPE]) },
     )
-
-    expect(response.status).toBe(400)
-    expect(await readJson(response)).toMatchObject({ kind: 'INVALID_ARGUMENT', code: 'invalid_input' })
+    await expectQuarantineWriteFrozen(prepare, 'inquiry.submit')
   })
 })

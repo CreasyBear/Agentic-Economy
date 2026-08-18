@@ -4,6 +4,7 @@ import { kindForStatus } from '@/lib/errors'
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { problem } from '@/lib/server/problem'
+import { quarantineFamilyWriteResponse } from '@/lib/server/quarantine-write'
 import {
   customerRequestCancelAction,
   customerRequestRunAction,
@@ -86,9 +87,11 @@ export async function handleCustomerRequestPostBoundary<Input extends object, Re
   buildCommand,
   includeInvalidFields = false,
 }: CustomerRequestPostBoundaryOptions<Input, Result>): Promise<Response> {
+  const frozen = quarantineFamilyWriteResponse('customerRequest.run')
   if (requestRef !== undefined && (requestRef.trim().length === 0 || requestRef.length > 200)) {
     return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref', detail: 'invalid_request_ref' })
   }
+  if (frozen !== undefined) return frozen
   const body = await readBoundedRequestJson(request, maxBodyBytes)
   if (!body.ok) {
     return body.code === 'payload_too_large'

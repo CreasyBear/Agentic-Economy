@@ -1,6 +1,7 @@
 import { kindForStatus } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { problem } from '@/lib/server/problem'
+import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
@@ -118,6 +119,8 @@ export async function handleWorkTreeAgentAction(request: Request, operationInput
   if (operation === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'unknown_action' }, { Vary: 'Authorization' })
   const action = findAction(`workTree.${operation}`)
   if (action === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'unknown_action' }, { Vary: 'Authorization' })
+  const frozen = quarantineWriteResponse(action.id, action.readOnly)
+  if (frozen !== undefined) return frozen
   const body = await readBody(request)
   if (!body.ok) return body.status === 413
     ? problem({ status: 413, kind: 'PAYLOAD_TOO_LARGE', code: 'request_too_large' }, { Vary: 'Authorization' })

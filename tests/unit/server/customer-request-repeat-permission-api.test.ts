@@ -17,6 +17,7 @@ import {
 } from '@/lib/server/customer-request-repeat-permission-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'repeat-permission-http-key-with-at-least-32-bytes'
 const requestRef = 'request:repeat-http'
@@ -114,7 +115,7 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('binds the external-agent allow command and returns the same customer receipt as the human handler', async () => {
+  it('freezes allow writes on both human and agent HTTP entrypoints', async () => {
     const body = {
       revision: 2,
       routeRef,
@@ -124,79 +125,42 @@ describe('Customer Request repeat-permission HTTP surface', () => {
       validUntil: 50_000,
       idempotencyKey: 'allow-repeat:http',
     }
-    const receipt = repeatPermissionReceipt()
-    let humanCommand: Record<string, unknown> | undefined
-    const human = await handleCustomerRequestRepeatPermissionAllowPost(post(body), requestRef, {
-      allow: async (command) => {
-        humanCommand = command
-        return receipt
-      },
-    })
-    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-      expect(await verifyCustomerRequestServiceAssertion({
-        key,
-        operation: 'allow_repeat',
-        command: humanCommand as never,
-        assertion: args.serviceAuth as never,
-        now: 1_001,
-      })).toBe(true)
-      const { serviceAuth: _serviceAuth, ...command } = args
-      expect(command).toEqual(humanCommand)
-      return receipt
-    })
+    const allow = vi.fn()
+    const callAction = vi.fn()
+    const human = await handleCustomerRequestRepeatPermissionAllowPost(post(body), requestRef, { allow })
     const agent = await handleAgentCustomerRequestRepeatPermissionAllowPost(
       post(body),
       requestRef,
       agentOptions(callAction),
     )
-
-    expect(human.status).toBe(200)
-    expect(agent.status).toBe(200)
-    expect(await agent.json()).toEqual(await human.json())
-    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:allowRepeatRoute', expect.any(Object))
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(allow).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('binds use to the opaque permission and returns the canonical confirmed Request projection', async () => {
+  it('freezes use writes on both human and agent HTTP entrypoints', async () => {
     const body = {
       revision: 2,
       routeRef,
       delegatedCredentialId: 'credential:repeat',
       idempotencyKey: 'use-repeat:http',
     }
-    const result = {
-      kind: 'refused' as const,
-      reason: 'request_not_found' as const,
-    }
-    let humanCommand: Record<string, unknown> | undefined
-    const human = await handleCustomerRequestRepeatPermissionUsePost(post(body), requestRef, permissionRef, {
-      use: async (command) => {
-        humanCommand = command
-        return result
-      },
-    })
-    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-      expect(await verifyCustomerRequestServiceAssertion({
-        key,
-        operation: 'use_repeat',
-        command: humanCommand as never,
-        assertion: args.serviceAuth as never,
-        now: 1_001,
-      })).toBe(true)
-      const { serviceAuth: _serviceAuth, ...command } = args
-      expect(command).toEqual(humanCommand)
-      return result
-    })
+    const use = vi.fn()
+    const callAction = vi.fn()
+    const human = await handleCustomerRequestRepeatPermissionUsePost(post(body), requestRef, permissionRef, { use })
     const agent = await handleAgentCustomerRequestRepeatPermissionUsePost(
       post(body),
       requestRef,
       permissionRef,
       agentOptions(callAction),
     )
-
-    expect(human.status).toBe(404)
-    expect(agent.status).toBe(404)
-    expect(await agent.json()).toEqual(await human.json())
-    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:useRepeatRoute', expect.any(Object))
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(use).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('binds inspection to the opaque permission and returns the same receipt', async () => {
@@ -233,43 +197,27 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     expect(callAction).toHaveBeenCalledWith('customerRequestApplication:inspectRepeatRoute', expect.any(Object))
   })
 
-  it('binds withdrawal and preserves the customer receipt', async () => {
+  it('freezes withdrawal writes on both human and agent HTTP entrypoints', async () => {
     const body = { routeRef, idempotencyKey: 'withdraw-repeat:http' }
-    const receipt = { ...repeatPermissionReceipt(), status: 'withdrawn' as const, withdrawnAt: 1_000 }
-    let humanCommand: Record<string, unknown> | undefined
+    const withdraw = vi.fn()
+    const callAction = vi.fn()
     const human = await handleCustomerRequestRepeatPermissionWithdrawPost(
       post(body),
       requestRef,
       permissionRef,
-      {
-        withdraw: async (command) => {
-          humanCommand = command
-          return receipt
-        },
-      },
+      { withdraw },
     )
-    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-      expect(await verifyCustomerRequestServiceAssertion({
-        key,
-        operation: 'revoke_repeat',
-        command: humanCommand as never,
-        assertion: args.serviceAuth as never,
-        now: 1_001,
-      })).toBe(true)
-      const { serviceAuth: _serviceAuth, ...command } = args
-      expect(command).toEqual(humanCommand)
-      return receipt
-    })
     const agent = await handleAgentCustomerRequestRepeatPermissionWithdrawPost(
       post(body),
       requestRef,
       permissionRef,
       agentOptions(callAction),
     )
-
-    expect(agent.status).toBe(200)
-    expect(await agent.json()).toEqual(await human.json())
-    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:revokeRepeatRoute', expect.any(Object))
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.run')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.run')
+    expect(agentBody).toEqual(humanBody)
+    expect(withdraw).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 })
 

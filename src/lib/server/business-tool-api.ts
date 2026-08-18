@@ -21,6 +21,7 @@ import { selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
 import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
 
 const MAX_BUSINESS_TOOL_BODY_BYTES = 4 * 1024
 
@@ -60,6 +61,8 @@ export async function handleBusinessToolPrepare(
 ): Promise<Response> {
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated
+  const frozen = quarantineWriteResponse(toolId, false)
+  if (frozen !== undefined) return frozen
 
   const body = await readJsonBody(request)
   if (body.kind === 'too_large') return refuse(413, 'request_too_large', 'Request body is too large.')
@@ -101,6 +104,8 @@ export async function handleBusinessToolInvoke(
 ): Promise<Response> {
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated
+  const frozen = quarantineWriteResponse(toolId, false)
+  if (frozen !== undefined) return frozen
 
   const body = await readJsonBody(request)
   if (body.kind === 'too_large') return refuse(413, 'request_too_large', 'Request body is too large.')

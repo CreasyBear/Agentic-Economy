@@ -5,6 +5,7 @@ import { describeActionForAgent, findAction } from '@/modules/actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { handleWorkTreeAgentAction, type WorkTreeAgentOperation } from '@/lib/server/work-tree-agent-api'
 import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
+import { expectQuarantineWriteFrozen } from '../../helpers/http'
 import {
   decideRootWorkTree,
   readRootWorkTree,
@@ -261,15 +262,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       { resolvePrincipal, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: 's'.repeat(32) } },
     )
 
-    expect(response.status).toBe(400)
-    expect(response.headers.get('content-type')).toBe('application/problem+json')
-    await expect(response.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Invalid argument',
-      status: 400,
-      kind: 'INVALID_ARGUMENT',
-      code: 'invalid_request',
-    })
+    await expectQuarantineWriteFrozen(response, 'workTree.decide')
     expect(sourceMocks.callPublicSourceMutation).not.toHaveBeenCalled()
     expect(sourceMocks.callPublicSourceQuery).not.toHaveBeenCalled()
     expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled()
@@ -364,8 +357,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
         readback: { projectId: 'project:typed-decision', revision: 1 },
       }) },
     )
-    expect(decideUnknown.status).toBe(200)
-    await expect(decideUnknown.json()).resolves.toEqual({ kind: 'unknown' })
+    await expectQuarantineWriteFrozen(decideUnknown, 'workTree.decide')
 
     authScopes.add('work_trees:repeat_reconcile')
     const repeatInvalidRequest = await handleWorkTreeAgentAction(
@@ -382,15 +374,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       'reconcileRepeatUse',
       { resolvePrincipal, callOperation: async () => ({ kind: 'refused', reason: 'invalid_request', useRef: 'repeat-use:typed' }) },
     )
-    expect(repeatInvalidRequest.status).toBe(400)
-    await expect(repeatInvalidRequest.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Invalid argument',
-      status: 400,
-      kind: 'INVALID_ARGUMENT',
-      code: 'invalid_request',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(repeatInvalidRequest, 'workTree.reconcileRepeatUse')
   })
 
   it('lets an agent create and a person inspect the same project and revision', async () => {
@@ -399,16 +383,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     if (started.kind === 'refused') throw new Error('initial create refused')
 
     const createResponse = await handleAgentWorkTree('create', createInput)
-    expect(createResponse.status).toBe(200)
-    const agentCreated = await createResponse.json() as {
-      kind: string
-      readback?: { projectId: string; revision: number; tree: unknown }
-    }
-    expect(agentCreated.kind).toBe('replayed')
-    expect(agentCreated.readback).toMatchObject({
-      projectId: started.projectId,
-      revision: started.revision,
-    })
+    await expectQuarantineWriteFrozen(createResponse, 'workTree.create')
 
     const human = await readRootWorkTree({ projectId: started.projectId, nowMs: 1_754_000_000_000 }, humanSourcePort())
     expect(human).toMatchObject({
@@ -417,7 +392,6 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       revision: started.revision,
       treeId: started.treeId,
     })
-    expect(agentCreated.readback?.tree).toEqual(human.kind === 'ready' ? human.tree : undefined)
   })
 
   it('projects an agent proposal into the person inbox with the same decision identity', async () => {
@@ -448,23 +422,12 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       correlationId: 'agent:correlation:parity',
       verb,
     })
-    expect(response.status).toBe(200)
-    const proposalBody = await response.json()
-    expect(proposalBody).toMatchObject({ kind: 'accepted', readback: { projectId: started.projectId } })
+    await expectQuarantineWriteFrozen(response, 'workTree.apply')
     const after = await readRootWorkTree({ projectId: started.projectId, nowMs: 1_754_000_000_000 }, humanSourcePort())
     expect(after.kind).toBe('ready')
     if (after.kind !== 'ready') throw new Error('proposal readback refused')
     const projected = after.inbox.items.find((item) => item.nodeId === decisionNode.nodeId)
     expect(projected).toMatchObject({ projectId: started.projectId, nodeId: decisionNode.nodeId })
-    expect(projected?.exits.lock.proposalDigest).toBe(
-      canonicalDigest({
-        projectId: started.projectId,
-        nodeId: decisionNode.nodeId,
-        kind: 'lock',
-        expectedGeneration: after.generation,
-        expectedRevision: after.revision,
-      }),
-    )
   })
 
   it('returns the human Lock receipt through agent inspect after the person decides', async () => {
@@ -519,12 +482,9 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     }
 
     const first = await handleAgentWorkTree('decide', proposal)
-    const firstText = await first.text()
+    await expectQuarantineWriteFrozen(first, 'workTree.decide')
     const retry = await handleAgentWorkTree('decide', proposal)
-    const retryText = await retry.text()
-    expect(first.status).toBe(200)
-    expect(retry.status).toBe(200)
-    expect(retryText).toBe(firstText)
+    await expectQuarantineWriteFrozen(retry, 'workTree.decide')
 
     const afterReplay = await source.inspect({ projectId: started.projectId })
     if (afterReplay.kind !== 'accepted') throw new Error('project source inspect refused')
@@ -533,15 +493,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       ...proposal,
       kind: 'park',
     })
-    expect(changed.status).toBe(409)
-    await expect(changed.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Already exists',
-      status: 409,
-      kind: 'ALREADY_EXISTS',
-      code: 'digest_mismatch',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(changed, 'workTree.decide')
     const afterConflict = await source.inspect({ projectId: started.projectId })
     expect(afterConflict.kind === 'accepted' ? afterConflict.revision : undefined).toBe(revisionAfterReplay)
   })
@@ -575,15 +527,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     }
 
     const stale = await handleAgentWorkTree('decide', proposal)
-    expect(stale.status).toBe(409)
-    await expect(stale.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Already exists',
-      status: 409,
-      kind: 'ALREADY_EXISTS',
-      code: 'stale_fence',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(stale, 'workTree.decide')
     const afterStale = await source.inspect({ projectId: started.projectId })
     expect(afterStale.kind === 'accepted' ? afterStale.revision : undefined).toBe(before.revision)
 
@@ -603,15 +547,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     authScopes.add('work_trees:inspect')
     authenticatedPrincipal = Object.freeze({ ...PRINCIPAL, principalId: 'clerk_api_key:other' })
     const wrongPrincipal = await handleAgentWorkTree('decide', currentProposal)
-    expect(wrongPrincipal.status).toBe(403)
-    await expect(wrongPrincipal.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Permission denied',
-      status: 403,
-      kind: 'PERMISSION_DENIED',
-      code: 'forbidden',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(wrongPrincipal, 'workTree.decide')
     const afterPrincipal = await source.inspect({ projectId: started.projectId })
     expect(afterPrincipal.kind === 'accepted' ? afterPrincipal.revision : undefined).toBe(before.revision)
   })

@@ -1004,3 +1004,18 @@ Phase 1 ledger closed. Original Cursor plan YAML `close-market-loop` completed. 
 ## Founder freeze go/no-go — remainder 2026-08-18
 
 Ask: freeze writes and later deregister Customer Request / WorkTree / Study / inquiries, keep evidence, no 410 this cycle. Founder instruction for this remainder is to implement through P5-e. **Go.** Do not re-litigate frontier v2 / P5-a.
+
+## P5-b — committed
+
+**AUTHORITY:** RFC 9457 `application/problem+json`. `quarantineFamilies` is the membership list.
+
+**LOCAL_CANDIDATE:** `problem()` / `refused` admission on Customer Request PostBoundary, WorkTree agent HTTP, business-tool inquiry, MCP `tools/call`, and `actionToToolContract` execute.
+
+**FIT:** match. Mutating family ids fail closed as RFC 9457 problems (`kind: FAILED_PRECONDITION`, `code: quarantine_writes_frozen`, HTTP 403, `retryable: false`, `instance` = action id). Never HTTP 410. Reads and evidence stay. Actions stay registered until P5-c. `/call` is not frozen.
+
+**COMMANDS:**
+- scoped freeze tests (Customer Request, WorkTree, inquiry, Study tool-contract) — 15 files / 75 tests passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full `test:conformance` (diff does not touch the market kernel)
+
+Product commit is this remainder commit. Live-money gate and production x402 refusal untouched. No `/call` deprecation.
