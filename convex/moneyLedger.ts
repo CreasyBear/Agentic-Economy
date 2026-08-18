@@ -1552,6 +1552,9 @@ async function readPayoutAccrualAmounts(
 }
 
 const DAILY_PAYOUT_ALLOCATION_READ_LIMIT = 1_000
+const DAILY_SETTLEMENT_LOOKBACK_DAYS = 7
+const DAILY_SETTLEMENT_READ_LIMIT = 32
+const DAILY_SETTLEMENT_BEGIN_LIMIT = 16
 
 type QualifiedUsePayoutAmounts = Readonly<{
   businessId: string
@@ -1585,6 +1588,15 @@ type DailyPayoutIdentity = Readonly<{
   periodEndAt: number
 }>
 
+function utcDayStartAt(timestamp: number): number {
+  const date = new Date(timestamp)
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+}
+
+function utcPeriodStartIso(now: number, daysAgo: number): string {
+  return new Date(utcDayStartAt(now) - daysAgo * 86_400_000).toISOString()
+}
+
 function dailyPayoutIdentity(
   businessId: string,
   currency: string,
@@ -1593,12 +1605,7 @@ function dailyPayoutIdentity(
   const timestamp = new Date(qualifiedAt).getTime()
   if (!Number.isFinite(timestamp))
     throw new Error('qualified_use_payout_allocation_invalid')
-  const date = new Date(timestamp)
-  const periodStartAt = Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-  )
+  const periodStartAt = utcDayStartAt(timestamp)
   const periodEndAt = periodStartAt + 86_400_000
   const periodStart = new Date(periodStartAt).toISOString()
   const periodEnd = new Date(periodEndAt).toISOString()
@@ -7132,21 +7139,24 @@ const payoutBeginArgs = {
   ...billingSourceArgs,
 }
 
-export const beginPayoutTransfer = mutation({
-  args: payoutBeginArgs,
-  returns: payoutTransferResultValue,
-  handler: async (ctx, args) => {
-    const gate = evaluateLiveMoneyGate()
-    if (gate.kind === 'refused') return gate
-    await requireBillingSourceWrite(ctx, args)
-    if (
-      !(await payoutAuthorityAllowed(
-        ctx,
-        args.businessId,
-        args.authority.principalId,
-      ))
-    )
-      return refusedTopup('billing_identity_missing', false)
+type PayoutTransferBeginInput = Readonly<{
+  businessId: string
+  amount: unknown
+  providerAccountRef: string
+  destinationAccountId: string
+  payoutRef: string
+  commandId: string
+  inputDigest: string
+  requestDigest: string
+  idempotencyKey: string
+  providerRecoveryDeadlineAt: number
+  observedAt: number
+}>
+
+async function beginPayoutTransferReservation(
+  ctx: MutationCtx,
+  args: PayoutTransferBeginInput,
+): Promise<Infer<typeof payoutTransferResultValue>> {
     const requested = readAmount(args.amount)
     if (
       requested === undefined ||
@@ -7462,6 +7472,191 @@ export const beginPayoutTransfer = mutation({
     return transfer === undefined
       ? refusedTopup('payout_reconciliation_required', false)
       : { kind: 'accepted' as const, transfer }
+}
+
+export const beginPayoutTransfer = mutation({
+  args: payoutBeginArgs,
+  returns: payoutTransferResultValue,
+  handler: async (ctx, args) => {
+    const gate = evaluateLiveMoneyGate()
+    if (gate.kind === 'refused') return gate
+    await requireBillingSourceWrite(ctx, args)
+    if (
+      !(await payoutAuthorityAllowed(
+        ctx,
+        args.businessId,
+        args.authority.principalId,
+      ))
+    )
+      return refusedTopup('billing_identity_missing', false)
+    return await beginPayoutTransferReservation(ctx, args)
+  },
+})
+
+const dailySettlementResultValue = v.union(
+  v.object({
+    kind: v.literal('skipped'),
+    code: v.string(),
+  }),
+  v.object({
+    kind: v.literal('ran'),
+    periodStart: v.string(),
+    unresolvedReservationCount: v.number(),
+    begunCount: v.number(),
+    notReadyCount: v.number(),
+  }),
+)
+
+function dailySettlementCommand(
+  payout: Doc<'moneyPayouts'>,
+  destinationAccountId: string,
+  now: number,
+): PayoutTransferBeginInput | undefined {
+  if (payout.providerAccountRef === undefined) return undefined
+  const amount = amountFromParts(
+    payout.currency,
+    payout.providerNetUnits,
+    payout.exponent,
+  )
+  if (amount === undefined || amount.units === '0') return undefined
+  const commandId = canonicalDigest({
+    format: 'money-payout-command:v1',
+    businessId: payout.businessId,
+    payoutRef: payout.payoutRef,
+    idempotencyKey: payout.idempotencyKey,
+  } as StableHashValue)
+  const inputDigest = canonicalDigest({
+    format: 'money-payout-input:v1',
+    businessId: payout.businessId,
+    payoutRef: payout.payoutRef,
+    amount,
+    idempotencyKey: payout.idempotencyKey,
+  } as StableHashValue)
+  const requestDigest = canonicalDigest({
+    format: 'money-transfer-request:v1',
+    payoutRef: payout.payoutRef,
+    commandId,
+    providerAccountRef: payout.providerAccountRef,
+    amount,
+    inputDigest,
+    idempotencyKey: payout.idempotencyKey,
+  } as StableHashValue)
+  return {
+    businessId: payout.businessId,
+    amount,
+    providerAccountRef: payout.providerAccountRef,
+    destinationAccountId,
+    payoutRef: payout.payoutRef,
+    commandId,
+    inputDigest,
+    requestDigest,
+    idempotencyKey: payout.idempotencyKey,
+    providerRecoveryDeadlineAt: now + STRIPE_TRANSFER_RECOVERY_WINDOW_MS,
+    observedAt: now,
+  }
+}
+
+async function listDailyPayoutsByState(
+  ctx: MutationCtx,
+  periodStart: string,
+  state: 'held_threshold' | 'transfer_pending' | 'outcome_unknown',
+): Promise<Doc<'moneyPayouts'>[]> {
+  return await ctx.db
+    .query('moneyPayouts')
+    .withIndex('by_periodStart_and_state', (q) =>
+      q.eq('periodStart', periodStart).eq('state', state),
+    )
+    .take(DAILY_SETTLEMENT_READ_LIMIT)
+}
+
+/**
+ * UTC daily supplier settlement. Convex cron docs: internal.*, idempotent.
+ * Live-money gate open → named skip, never throw. Stripe Transfer I/O is not
+ * issued here; this reuses beginPayoutTransferReservation only.
+ */
+export const runDailySupplierSettlement = internalMutation({
+  args: { now: v.optional(v.number()) },
+  returns: dailySettlementResultValue,
+  handler: async (ctx, args) => {
+    const gate = evaluateLiveMoneyGate()
+    if (gate.kind === 'refused') {
+      return { kind: 'skipped' as const, code: gate.code }
+    }
+    const now = args.now ?? Date.now()
+    const periodStart = utcPeriodStartIso(now, 1)
+    const unresolvedKeys = new Set<string>()
+    let unresolvedReservationCount = 0
+    for (let daysAgo = 1; daysAgo <= DAILY_SETTLEMENT_LOOKBACK_DAYS; daysAgo += 1) {
+      const start = utcPeriodStartIso(now, daysAgo)
+      const [pending, unknown] = await Promise.all([
+        listDailyPayoutsByState(ctx, start, 'transfer_pending'),
+        listDailyPayoutsByState(ctx, start, 'outcome_unknown'),
+      ])
+      for (const row of [...pending, ...unknown]) {
+        unresolvedKeys.add(`${row.businessId}:${row.currency}`)
+        unresolvedReservationCount += 1
+      }
+    }
+    const eligible: Doc<'moneyPayouts'>[] = []
+    for (let daysAgo = 1; daysAgo <= DAILY_SETTLEMENT_LOOKBACK_DAYS; daysAgo += 1) {
+      if (eligible.length >= DAILY_SETTLEMENT_BEGIN_LIMIT) break
+      const held = await listDailyPayoutsByState(
+        ctx,
+        utcPeriodStartIso(now, daysAgo),
+        'held_threshold',
+      )
+      for (const payout of held) {
+        if (eligible.length >= DAILY_SETTLEMENT_BEGIN_LIMIT) break
+        eligible.push(payout)
+      }
+    }
+    let begunCount = 0
+    let notReadyCount = 0
+    for (const payout of eligible) {
+      const key = `${payout.businessId}:${payout.currency}`
+      if (unresolvedKeys.has(key)) {
+        unresolvedReservationCount += 1
+        continue
+      }
+      const payoutAccount = await ctx.db
+        .query('moneyPayoutAccounts')
+        .withIndex('by_businessId_and_currency', (q) =>
+          q.eq('businessId', payout.businessId).eq('currency', payout.currency),
+        )
+        .unique()
+      if (payoutAccount === null || payoutAccount.stripeAccountId.length === 0) {
+        notReadyCount += 1
+        continue
+      }
+      const command = dailySettlementCommand(
+        payout,
+        payoutAccount.stripeAccountId,
+        now,
+      )
+      if (command === undefined) {
+        notReadyCount += 1
+        continue
+      }
+      const result = await beginPayoutTransferReservation(ctx, command)
+      if (result.kind === 'accepted') {
+        begunCount += 1
+        unresolvedKeys.add(key)
+        continue
+      }
+      if (result.code === 'payout_reconciliation_required') {
+        unresolvedReservationCount += 1
+        unresolvedKeys.add(key)
+        continue
+      }
+      notReadyCount += 1
+    }
+    return {
+      kind: 'ran' as const,
+      periodStart,
+      unresolvedReservationCount,
+      begunCount,
+      notReadyCount,
+    }
   },
 })
 

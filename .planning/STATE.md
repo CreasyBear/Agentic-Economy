@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_2_3_4_committed; p1_held_charge_landing; p1_d3_open; p5_a_files_landed; remainder_hygiene_2026-08-18
-stopped_at: 2026-08-18 remainder P1-fix-held-charge — leased refuse restores-or-freezes AE-internal holds; P1-d3 still open
+status: phases_0_1_2_3_4_committed; p5_a_files_landed; remainder_p5_freeze
+stopped_at: 2026-08-18 remainder P1-d3 — UTC daily settlement cron skips while live-money gate is open
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 8
-  completed_plans: 4
-  percent: 57
-current_phase: 01
-current_phase_name: remainder-p1-d3-then-p5-freeze
+  completed_plans: 5
+  percent: 71
+current_phase: 05
+current_phase_name: remainder-p5-freeze
 
 # Current state
 
@@ -28,12 +28,12 @@ durable invocation, delivery evidence, and brokered money. Consuming agents own
 planning and orchestration. MCP, CLI, and chat are thin adapters over one market
 kernel. `/api/v1/operations/call` is the paid door and is not deprecated.
 
-**Landed on local `main`:** Phases 0, 2, 3, and 4. Phase 1 cards except P1-d3.
-P5-a frontier v2 files exist (`1aaf4aa5`). Live money stays fail-closed.
+**Landed on local `main`:** Phases 0, 1, 2, 3, and 4. P5-a frontier v2 files
+exist (`1aaf4aa5`). Live money stays fail-closed. Daily settlement cron exists
+and skips while the live-money gate is open.
 
-**Open (remainder):** P1-d3 daily settlement cron (skip when live-money gate is
-open), then founder freeze go/no-go, P5-b/c/e. No P5-d 410 and no P6. Local
-`main` remains unpushed under the written hold.
+**Open (remainder):** founder freeze go/no-go, P5-b/c/e. No P5-d 410 and no P6.
+Local `main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder continues locally. See RECEIPTS HK-push-or-hold.
 

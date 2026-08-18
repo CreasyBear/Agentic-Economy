@@ -32,5 +32,11 @@ crons.interval(
   {}
 )
 
+crons.cron(
+  'run daily supplier settlement',
+  '0 0 * * *',
+  internal.moneyLedger.runDailySupplierSettlement,
+  {},
+)
 
 export default crons

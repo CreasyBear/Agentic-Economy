@@ -40,7 +40,7 @@ kernel with thin MCP/CLI/chat adapters and removes AE-owned workflow orchestrati
 
 ```text
 Phase 0 — Preserve the current baseline                complete (tag baseline/pre-atomic-market-reset)
-Phase 1 — Close the category additively                open (P1-d3 remainder)
+Phase 1 — Close the category additively                committed
 Phase 2 — Decouple without changing behavior           complete
 Phase 3 — Port proof before quarantine                 complete
 Phase 4 — Replace chat orchestration                   complete

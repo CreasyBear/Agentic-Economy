@@ -251,11 +251,9 @@
 ## Missing Critical Features
 
 **Daily supplier settlement cron (P1-d3 / PRA-003):**
-- Problem: ADR-034 automatic daily full-balance settlement decided; reservation before provider I/O landed in P1-d2; idempotent daily cron not implemented.
-- Current workaround: Payout commands remain source-closed; live money gate refuses provider transfer I/O.
-- Blocks: Hosted value-exchange certification, supplier earnings payout proof, SG-024 exit gate.
-- Implementation complexity: Medium — cron + idempotent command identities + production policy values.
-- Files: `src/modules/money/internal/payout-policy.ts`, `convex/moneyLedger.ts`, `.planning/reset/CARD-LEDGER.md` (`P1-d3` status: recon)
+- Status: committed. UTC `internal.*` cron skips with `live_money_gate_open` while counsel signoffs are open. Reservation reuses P1-d2 `beginPayoutTransferReservation`; Stripe Transfer I/O is still refused.
+- Remaining: hosted Transfer after live-money gate closes; failed-residual carry-forward.
+- Files: `convex/crons.ts`, `convex/moneyLedger.ts` (`runDailySupplierSettlement`)
 
 **Hosted gateway certification (SG-024 / ADR-035):**
 - Problem: No strict hosted receipt with real Clerk key invoking two real operations from distinct suppliers with approval, budget, credentials, recovery, usage readback, and revoke→refused replay.

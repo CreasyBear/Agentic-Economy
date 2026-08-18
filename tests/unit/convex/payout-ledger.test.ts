@@ -29,6 +29,7 @@ import {
   reconcilePayoutTransfer,
   markPayoutTransferOutcomeUnknown,
   recordConnectAccountEvent,
+  runDailySupplierSettlement,
 } from '../../../convex/moneyLedger'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
 
@@ -167,6 +168,8 @@ type Handler = (
 ) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
 const begin = (beginPayoutTransfer as unknown as HandlerExport)._handler
+const dailySettle = (runDailySupplierSettlement as unknown as HandlerExport)
+  ._handler
 const readOwnerTransfer = (
   readOwnerPayoutTransfer as unknown as HandlerExport
 )._handler
@@ -2432,5 +2435,55 @@ describe('Convex payout persistence', () => {
       payout.transferEvidenceDigest = undefined
       await assertTampered(fixture)
     }
+  })
+
+  it('reserves yesterday UTC daily payouts once and does not double-reserve on replay', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const now = Date.parse(dailyPayoutPeriodEnd) + 1
+    await expect(
+      dailySettle({ db, auth: identity }, { now }),
+    ).resolves.toMatchObject({
+      kind: 'ran',
+      periodStart: dailyPayoutPeriodStart,
+      begunCount: 1,
+      unresolvedReservationCount: 0,
+    })
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({
+      state: 'transfer_pending',
+      payoutRef: dailyPayoutRef,
+    })
+    await expect(
+      dailySettle({ db, auth: identity }, { now }),
+    ).resolves.toMatchObject({
+      kind: 'ran',
+      begunCount: 0,
+    })
+    expect(db.rows('moneyTransactions')).toHaveLength(1)
+  })
+
+  it('accounts an unresolved reservation instead of beginning a second transfer', async () => {
+    const db = new MemoryDb()
+    seedPayout(db, 'transfer_pending')
+    seedAdditionalDailyPayout(
+      db,
+      'prior-day',
+      '2026-06-30T00:00:00.000Z',
+      '2026-07-01T00:00:00.000Z',
+    )
+    const now = Date.parse(dailyPayoutPeriodEnd) + 1
+    await expect(
+      dailySettle({ db, auth: identity }, { now }),
+    ).resolves.toMatchObject({
+      kind: 'ran',
+      begunCount: 0,
+    })
+    const result = await dailySettle({ db, auth: identity }, { now })
+    expect(result).toMatchObject({ kind: 'ran', begunCount: 0 })
+    expect(
+      (result as { unresolvedReservationCount: number }).unresolvedReservationCount,
+    ).toBeGreaterThan(0)
+    expect(db.rows('moneyTransactions')).toHaveLength(0)
   })
 })

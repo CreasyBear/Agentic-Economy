@@ -986,3 +986,21 @@ This receipt satisfies the remainder card: push **or** write the hold. Further p
 - `npm run test:conformance` — 27 files / 426 tests passed
 
 Product commit is this remainder commit. Live-money gate and production x402 refusal untouched. No `/call` deprecation.
+
+## P1-d3 — committed
+
+**AUTHORITY:** Convex cron docs (`crons.cron` UTC, `internal.*`, idempotent); Stripe Connect Transfer + idempotency keys; ADR-034 daily net, `transferred_to_stripe`.
+
+**LOCAL_CANDIDATE:** `crons.ts`, `beginPayoutTransfer` / `beginPayoutTransferReservation`, `evaluateLiveMoneyGate()`, existing `money-payout-command:v1` digests.
+
+**FIT:** match. Thin `internalMutation runDailySupplierSettlement` reuses the P1-d2 reservation body. Cron is `0 0 * * *` UTC via `crons.cron` (Convex guidelines forbid `crons.daily`). Gate open → `{ kind: 'skipped', code }` and does not throw. Replay does not insert a second reservation. Unresolved `transfer_pending` / `outcome_unknown` rows are counted and block a second begin for that business+currency. Stripe I/O is not issued; cron existence is not a live-money claim.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/convex/daily-supplier-settlement.test.ts tests/unit/convex/payout-ledger.test.ts` — 31 passed
+- `npm run test:conformance` — 27 files / 426 tests passed
+
+Phase 1 ledger closed. Original Cursor plan YAML `close-market-loop` completed. P1-fix-held-charge SHA `e5e7da41`.
+
+## Founder freeze go/no-go — remainder 2026-08-18
+
+Ask: freeze writes and later deregister Customer Request / WorkTree / Study / inquiries, keep evidence, no 410 this cycle. Founder instruction for this remainder is to implement through P5-e. **Go.** Do not re-litigate frontier v2 / P5-a.
