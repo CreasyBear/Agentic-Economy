@@ -2,6 +2,7 @@ import { kindForStatus } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { problem } from '@/lib/server/problem'
 import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 import { readRequestCorrelationId } from '@/lib/server/request-correlation'
 import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
@@ -115,6 +116,10 @@ const deterministicConflictCodes: Readonly<Record<string, true>> = {
 
 /** One authenticated adapter for registered WorkTree actions; URL operation and source rechecks remain authoritative. */
 export async function handleWorkTreeAgentAction(request: Request, operationInput: string, options: HandlerOptions = {}): Promise<Response> {
+  return withRfc9745DeprecationNotice(await dispatchWorkTreeAgentAction(request, operationInput, options))
+}
+
+async function dispatchWorkTreeAgentAction(request: Request, operationInput: string, options: HandlerOptions): Promise<Response> {
   const operation = normalizeOperation(operationInput)
   if (operation === undefined) return problem({ status: 404, kind: 'NOT_FOUND', code: 'unknown_action' }, { Vary: 'Authorization' })
   const action = findAction(`workTree.${operation}`)

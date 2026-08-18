@@ -22,6 +22,7 @@ import {
 import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 
 type AllowOptions = Readonly<{
   allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
@@ -63,6 +64,14 @@ export async function handleCustomerRequestConnectedAssistantsGet(
   request: Request,
   requestRef: string,
   options: ListOptions = {},
+): Promise<Response> {
+  return withRfc9745DeprecationNotice(await listConnectedAssistants(request, requestRef, options))
+}
+
+async function listConnectedAssistants(
+  request: Request,
+  requestRef: string,
+  options: ListOptions,
 ): Promise<Response> {
   if (!validRef(requestRef, 200)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
   try {
@@ -114,6 +123,17 @@ export async function handleCustomerRequestRepeatPermissionGet(
   requestRef: string,
   permissionRef: string,
   options: InspectOptions = {},
+): Promise<Response> {
+  return withRfc9745DeprecationNotice(
+    await inspectRepeatPermission(request, requestRef, permissionRef, options),
+  )
+}
+
+async function inspectRepeatPermission(
+  request: Request,
+  requestRef: string,
+  permissionRef: string,
+  options: InspectOptions,
 ): Promise<Response> {
   if (!validRef(requestRef, 200)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
   if (!validRef(permissionRef, 300)) return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_permission_ref' })

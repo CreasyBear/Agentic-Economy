@@ -4,12 +4,17 @@ import { customerRequestInspectResultSchema } from '@/modules/customer-request/a
 import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 
 export type InspectResult = CustomerRequestView | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
 const inspectAction = sourceAction<Record<string, unknown>, InspectResult>('customerRequestApplication:resume')
 type HandlerOptions = Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<InspectResult> }>
 
 export async function handleCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
+  return withRfc9745DeprecationNotice(await inspectCustomerRequest(requestRef, options))
+}
+
+async function inspectCustomerRequest(requestRef: string, options: HandlerOptions): Promise<Response> {
   if (requestRef.trim().length === 0 || requestRef.length > 200) {
     return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })
   }

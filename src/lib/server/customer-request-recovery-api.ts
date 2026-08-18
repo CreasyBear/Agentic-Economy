@@ -20,6 +20,7 @@ import type {
 import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 
 export async function handleCustomerRequestProblemPost(
   request: Request,
@@ -71,6 +72,14 @@ export async function handleCustomerRequestEvidenceGet(
   request: Request,
   requestRef: string,
   options: Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<CustomerRequestEvidenceResult> }> = {},
+): Promise<Response> {
+  return withRfc9745DeprecationNotice(await inspectCustomerRequestEvidence(request, requestRef, options))
+}
+
+async function inspectCustomerRequestEvidence(
+  request: Request,
+  requestRef: string,
+  options: Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<CustomerRequestEvidenceResult> }>,
 ): Promise<Response> {
   if (!validRequestRef(requestRef)) {
     return problem({ status: 400, kind: 'INVALID_ARGUMENT', code: 'invalid_request_ref' })

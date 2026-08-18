@@ -26,7 +26,8 @@ import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server
 import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
-import { isQuarantineWrite, quarantineWriteProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
+import { isQuarantineFamilyActionId, isQuarantineWrite, quarantineWriteProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
+import { DEPRECATION_SUCCESSOR_PATH } from '@/modules/product-frontier/deprecation-notice'
 import { customerRequestModeAllows, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
@@ -259,13 +260,14 @@ export function createAeMcpServer(
       mcpToolName(action),
       {
         title: action.name,
-        description: `${action.summary}\n\nBoundaries:\n${action.boundaries.map((boundary) => `- ${boundary}`).join('\n')}`,
+        description: mcpToolDescription(action),
         inputSchema: action.schema,
         outputSchema: { result: action.outputSchema },
         annotations: {
           readOnlyHint: action.readOnly,
           destructiveHint: !action.readOnly,
           idempotentHint: true,
+          ...(isDeprecatedMcpAction(action.id) ? { deprecated: true } : {}),
         },
       },
       async (data: unknown) => {
@@ -442,6 +444,16 @@ async function actionRequiringAuthenticationForRequest(
   } catch {
     return undefined
   }
+}
+
+function isDeprecatedMcpAction(actionId: string): boolean {
+  return actionId === 'operation.execute' || isQuarantineFamilyActionId(actionId)
+}
+
+function mcpToolDescription(action: AnyAction): string {
+  const boundaries = `Boundaries:\n${action.boundaries.map((boundary) => `- ${boundary}`).join('\n')}`
+  if (!isDeprecatedMcpAction(action.id)) return `${action.summary}\n\n${boundaries}`
+  return `${action.summary}\n\nDeprecated. Successor: POST ${DEPRECATION_SUCCESSOR_PATH}.\n\n${boundaries}`
 }
 
 function requiredModeForAction(action: AnyAction): CustomerRequestAuthorityMode {

@@ -5,6 +5,7 @@ import { readBoundedRequestJson } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { problem } from '@/lib/server/problem'
 import { quarantineFamilyWriteResponse } from '@/lib/server/quarantine-write'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 import {
   customerRequestCancelAction,
   customerRequestRunAction,
@@ -75,6 +76,34 @@ export async function handleCustomerRequestCancelPost(
 }
 
 export async function handleCustomerRequestPostBoundary<Input extends object, Result>({
+  request,
+  requestRef,
+  maxBodyBytes,
+  inputSchema,
+  resultSchema,
+  run,
+  unavailableError,
+  resultToStatus,
+  domainAdmission,
+  buildCommand,
+  includeInvalidFields = false,
+}: CustomerRequestPostBoundaryOptions<Input, Result>): Promise<Response> {
+  return withRfc9745DeprecationNotice(await handleCustomerRequestPostBoundaryBody({
+    request,
+    requestRef,
+    maxBodyBytes,
+    inputSchema,
+    resultSchema,
+    run,
+    unavailableError,
+    resultToStatus,
+    domainAdmission,
+    buildCommand,
+    includeInvalidFields,
+  }))
+}
+
+async function handleCustomerRequestPostBoundaryBody<Input extends object, Result>({
   request,
   requestRef,
   maxBodyBytes,

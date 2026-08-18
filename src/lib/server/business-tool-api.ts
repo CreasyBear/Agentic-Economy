@@ -22,6 +22,8 @@ import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
+import { isQuarantineFamilyActionId } from '@/modules/product-frontier/quarantine-write-admission'
+import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
 
 const MAX_BUSINESS_TOOL_BODY_BYTES = 4 * 1024
 
@@ -58,6 +60,16 @@ export async function handleBusinessToolPrepare(
   slug: string,
   toolId: string,
   options: BusinessToolHandlerOptions = {},
+): Promise<Response> {
+  const response = await prepareBusinessTool(request, slug, toolId, options)
+  return isQuarantineFamilyActionId(toolId) ? withRfc9745DeprecationNotice(response) : response
+}
+
+async function prepareBusinessTool(
+  request: Request,
+  slug: string,
+  toolId: string,
+  options: BusinessToolHandlerOptions,
 ): Promise<Response> {
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated
@@ -101,6 +113,16 @@ export async function handleBusinessToolInvoke(
   slug: string,
   toolId: string,
   options: BusinessToolHandlerOptions = {},
+): Promise<Response> {
+  const response = await invokeBusinessTool(request, slug, toolId, options)
+  return isQuarantineFamilyActionId(toolId) ? withRfc9745DeprecationNotice(response) : response
+}
+
+async function invokeBusinessTool(
+  request: Request,
+  slug: string,
+  toolId: string,
+  options: BusinessToolHandlerOptions,
 ): Promise<Response> {
   const authenticated = await authenticateToolCall(toolId, options)
   if (authenticated !== undefined) return authenticated

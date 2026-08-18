@@ -1455,3 +1455,5 @@ workstreams, duplicate observations, and explicit remediation status.
 204. Cursor Grok 4.6: gsd-map-codebase full refresh spawned four parallel generalPurpose mapper agents; all four failed immediately with resource_exhausted and wrote nothing. Sequential in-session mapping is the working fallback on this host.
 
 205. grok-4.6: Bugbot product-tree retry wrapper summarized 'found no bugs' while the agent transcript contained two XML <bug> blocks (held charge on leased refuseBeforeClaim; search-only provider-failure copy). The completion notification dropped the findings; had to re-read the jsonl. Cause: wrapper/parser likely expects a different bug schema than the XML the agent wrote, especially when the original diff was docs-only.
+
+206. Cursor Grok 4.6: Pre-commit React Doctor scanned the P5-b freeze commit (server/problem JSON, no React UI) and reported a staged regression warning that did not block git commit. False positive on non-React remainder cards.
