@@ -262,12 +262,12 @@
 - Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
 - Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Phase 5 quarantine (writes frozen; public inventory deregistered):**
+**Phase 5 quarantine (writes frozen; public inventory deregistered; business/services expansion frozen):**
 - Problem: P5-c advertised RFC 9745/8594 notice on quarantined doors and `/execute` (never `/call`), then dropped family ids from `listActions()` / `requiredActionIds`. HTTP freeze + notice remain until P5-d 410.
-- Current workaround: business/services policy is still `freeze-approved-pending-implementation` until P5-e.
-- Blocks: P5-e URL retention policy; P6 table retirement.
-- Implementation complexity: Medium — implement measured URL freeze, then later HTTP 410 (P5-d).
-- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
+- Current workaround: `businessServicesPolicy.expansion` is `frozen`; measured businesses/services URLs stay instrumented. No URL dies without RFC 8594.
+- Blocks: P5-d HTTP 410 tombstones; P6 table retirement.
+- Implementation complexity: Medium — later HTTP 410 (P5-d), then family table retirement (P6).
+- Files: `src/modules/product-frontier/business-services-policy.ts`, `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
 
 **Legal / counsel signoffs for live money (T52):**
 - Problem: Live money gate requires complete counsel decision set; T52 explicitly **LIVE MONEY: REFUSED** until compliance gate accepts.
@@ -306,11 +306,11 @@
 - Difficulty to test: Already exists — needs gate promotion decision.
 
 **Customer Request / WorkTree freeze under quarantine plan:**
-- What's not tested: HTTP `Deprecation`/`Sunset` headers (P5-c); 410 tombstones (P5-d).
-- Files: `src/modules/product-frontier/quarantine-write-admission.ts`, `src/lib/server/quarantine-write.ts`, `tests/unit/server/quarantine-write-http.test.ts`
-- Risk: P5-c notice on `/call`, or Sunset earlier than Deprecation.
+- What's not tested: HTTP 410 tombstones (P5-d). Header fixture covers RFC 9745/8594 on quarantined doors and `/execute` only.
+- Files: `src/modules/product-frontier/quarantine-write-admission.ts`, `src/modules/product-frontier/deprecation-notice.ts`, `src/lib/server/quarantine-write.ts`, `tests/unit/product-frontier/deprecation-notice.test.ts`
+- Risk: later 410 without Sunset, or `Deprecation` on `/call`.
 - Priority: High
-- Difficulty to test: P5-c header fixture plus `check:product-frontier`; no full conformance.
+- Difficulty to test: P5-d later; remainder gate is header fixture plus `check:product-frontier`.
 
 **Development-host parity and x402 conformance:**
 - What's not tested: Full official development evidence packets when checkout is dirty or local Convex unavailable (`evidence_checkout_dirty`, `convex_dev_server_unavailable`).

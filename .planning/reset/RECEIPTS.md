@@ -1019,3 +1019,41 @@ Ask: freeze writes and later deregister Customer Request / WorkTree / Study / in
 - no full `test:conformance` (diff does not touch the market kernel)
 
 Product commit is this remainder commit. Live-money gate and production x402 refusal untouched. No `/call` deprecation.
+
+## P5-c — committed
+
+**AUTHORITY:** RFC 9745 `Deprecation: @epoch`; RFC 8594 `Sunset` HTTP-date; RFC 9651 `Link rel="deprecation"` to the successor. MCP deprecation annotations.
+
+**LOCAL_CANDIDATE:** quarantined family doors + `/execute`. Never `/call`.
+
+**FIT:** match. Two enumerated commits. Notice headers on quarantined HTTP/MCP/docs and `/execute` only:
+
+```
+Deprecation: @1787011200
+Sunset: Wed, 18 Aug 2027 23:59:59 GMT
+Link: </api/v1/operations/call>; rel="deprecation"
+```
+
+Sunset is after Deprecation. Then those `actionIds` dropped from `listActions()` / `requiredActionIds`. `findAction()` still resolves them so freeze + notice keep working until P5-d. No `Deprecation` on `/call`. No new `legacyPath` on handshake.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/product-frontier/deprecation-notice.test.ts` — header fixture matches RFC 9745/8594 shapes
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full `test:conformance` (header-only then inventory; remainder gate is frontier + fixture)
+
+Notice SHA `0585f988`. Deregister SHA `025d559b`. P5-b product SHA `f6d3aac8`. Live-money gate and production x402 refusal untouched.
+
+## P5-e — committed
+
+**AUTHORITY:** RFC 8594 before any URL dies. Manifest `businessServicesPolicy`.
+
+**LOCAL_CANDIDATE:** existing `/api/v1/services*` and `/api/businesses*` routes plus `captureLegacyRegistry*` instrumentation.
+
+**FIT:** match. Expansion is `frozen`. Measured public URLs stay. Traffic instrumentation stays keyed from `MEASURED_BUSINESS_SERVICES_ACTION_ROUTES`. Extra `api.v1.services*` / `api.businesses*` route files fail the policy assertion. No silent deletion.
+
+**COMMANDS:**
+- `npx vitest run tests/unit/product-frontier/business-services-policy.test.ts tests/imports/product-frontier-manifest.test.ts tests/unit/observability/posthog-server.test.ts` — 3 files / 30 tests passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full `test:conformance`
+
+Remainder exits after this card. No P5-d 410. No P6. `/call` is not deprecated. Live-money gate untouched.

@@ -13,6 +13,7 @@ import { ANSWER_OPERATION_EFFECT_DISPATCH_IDS } from '@/modules/answer/internal/
 import { ANSWER_OPERATION_EFFECT_TOOL_IDS, ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
 import { AnswerToolIdValues } from '@/modules/answer-thread/answer-thread.values'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
+import { businessServicesPolicy } from '@/modules/product-frontier/business-services-policy'
 import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/market-operations'
 import { runCompareCommand } from '../../tools/ae/commands/compare'
 import { runInspectCommand } from '../../tools/ae/commands/inspect'
@@ -147,11 +148,7 @@ describe('product frontier manifest', () => {
         ],
       },
     ])
-    expect(productFrontierManifest.businessServicesPolicy).toEqual({
-      expansion: 'freeze-approved-pending-implementation',
-      publicUrls: 'retain-measured',
-      trafficInstrumentation: 'retain',
-    })
+    expect(productFrontierManifest.businessServicesPolicy).toEqual(businessServicesPolicy)
   })
 
   it('keeps the live action registry at or above the frozen frontier floor', () => {

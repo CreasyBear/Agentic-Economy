@@ -89,7 +89,7 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 | P5-b | Freeze writes for Customer Request / WorkTree / Study / inquiries; deregister actions only after notice | P5-a | committed |
 | P5-c | Advertise `Deprecation`/`Sunset` + successors in HTTP, MCP, UCP, `SKILL.md`, `llms.txt`, for-agents | P5-b | committed |
 | P5-d | Later release card: RFC 9457 HTTP 410 tombstones | P5-c | later |
-| P5-e | Freeze business/services expansion; keep measured public URLs pending founder decision | P5-a | pending |
+| P5-e | Freeze business/services expansion; keep measured public URLs pending founder decision | P5-a | committed |
 
 ## Phase 6 — Retire data separately
 

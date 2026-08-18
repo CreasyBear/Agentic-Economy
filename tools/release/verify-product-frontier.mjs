@@ -115,7 +115,7 @@ export function verifyProductFrontier(root = process.cwd()) {
   }
 
   const expectedBusinessServicesPolicy = {
-    expansion: 'freeze-approved-pending-implementation',
+    expansion: 'frozen',
     publicUrls: 'retain-measured',
     trafficInstrumentation: 'retain',
   }

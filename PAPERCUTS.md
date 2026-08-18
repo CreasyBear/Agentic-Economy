@@ -1457,3 +1457,5 @@ workstreams, duplicate observations, and explicit remediation status.
 205. grok-4.6: Bugbot product-tree retry wrapper summarized 'found no bugs' while the agent transcript contained two XML <bug> blocks (held charge on leased refuseBeforeClaim; search-only provider-failure copy). The completion notification dropped the findings; had to re-read the jsonl. Cause: wrapper/parser likely expects a different bug schema than the XML the agent wrote, especially when the original diff was docs-only.
 
 206. Cursor Grok 4.6: Pre-commit React Doctor scanned the P5-b freeze commit (server/problem JSON, no React UI) and reported a staged regression warning that did not block git commit. False positive on non-React remainder cards.
+
+207. Cursor Grok 4.6: Appending P5-c/P5-e receipts: StrReplace replace_all on the repeated remainder closer inserted the new sections after P1-fix-held-charge as well as P5-b and left a duplicate P5-b body. Unique context or a one-shot append is safer than replace_all on formulaic receipt closers.

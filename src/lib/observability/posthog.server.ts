@@ -3,6 +3,7 @@ import { PostHog } from 'posthog-node'
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
+import { MEASURED_BUSINESS_SERVICES_ACTION_ROUTES } from '@/modules/product-frontier/business-services-policy'
 
 let client: PostHog | undefined
 
@@ -58,14 +59,7 @@ export function captureServerEvent(
 
 type LegacyRegistrySurface = 'http' | 'mcp' | 'answer'
 
-const legacyRegistryActionRoutes = {
-  'registry.list': { routeFamily: 'businesses', routeKind: 'list' },
-  'registry.search': { routeFamily: 'businesses', routeKind: 'search' },
-  'registry.detail': { routeFamily: 'businesses', routeKind: 'detail' },
-  'registry.services_list': { routeFamily: 'services', routeKind: 'list' },
-  'registry.services_search': { routeFamily: 'services', routeKind: 'search' },
-  'registry.services_detail': { routeFamily: 'services', routeKind: 'detail' },
-} as const
+const legacyRegistryActionRoutes = MEASURED_BUSINESS_SERVICES_ACTION_ROUTES
 
 function captureLegacyRegistryRequest(
   routeFamily: 'businesses' | 'services',

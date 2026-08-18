@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_files_landed; remainder_p5_freeze
-stopped_at: 2026-08-18 remainder P1-d3 — UTC daily settlement cron skips while live-money gate is open
+status: phases_0_1_2_3_4_committed; p5_a_b_c_e_landed; remainder_exited
+stopped_at: 2026-08-18 remainder exit after P5-e — no P5-d 410, no P6
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 8
-  completed_plans: 5
-  percent: 71
+  completed_plans: 6
+  percent: 75
 current_phase: 05
-current_phase_name: remainder-p5-freeze
+current_phase_name: p5-d-later
 
 # Current state
 
@@ -31,12 +31,14 @@ kernel. `/api/v1/operations/call` is the paid door and is not deprecated.
 **Landed on local `main`:** Phases 0, 1, 2, 3, and 4. P5-a frontier v2 files
 exist (`1aaf4aa5`). P5-b freezes quarantined family writes as RFC 9457; P5-c
 advertises RFC 9745/8594 notice then deregisters those ids from the public
-action inventory. Reads and evidence stay. Live money stays fail-closed.
+action inventory. P5-e implements `businessServicesPolicy`: expansion frozen,
+measured businesses/services URLs retained and instrumented. Reads and evidence
+stay. Live money stays fail-closed.
 
-**Open (remainder):** P5-e. No P5-d 410 and no P6.
+**Remainder exit:** after P5-e. No P5-d 410 and no P6 in this remainder.
 Local `main` remains unpushed under the written hold.
 
-**Hold (2026-08-18):** founder has not asked to push. Remainder continues locally. See RECEIPTS HK-push-or-hold.
+**Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
 
 ## Atomic Operation Market Reset — 2026-08-16
 
