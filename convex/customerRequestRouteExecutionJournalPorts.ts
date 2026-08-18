@@ -46,7 +46,7 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
-import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 
 type StoredRouteStepGrant = Infer<typeof routeStepGrantValue>
 
@@ -135,7 +135,7 @@ async function enqueueRouteTransport(
   dispatchRef: string,
   runAfter: number,
 ): Promise<void> {
-  await customerRequestRouteWorkpool.enqueueAction(
+  await marketDispatchWorkpool.enqueueAction(
     ctx,
     internal.customerRequestRouteTransportWorker.run,
     { dispatchRef },

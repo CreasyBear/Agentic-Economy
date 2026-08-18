@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
   readCurrentPublishedOperation: vi.fn(async (): Promise<unknown> => undefined),
 }))
 
-vi.mock('../../../convex/customerRequestRouteWorkpool', () => ({
-  customerRequestRouteWorkpool: { enqueueAction: mocks.enqueueAction },
+vi.mock('../../../convex/marketDispatchWorkpool', () => ({
+  marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
 
 vi.mock('../../../convex/capabilitySupplyOperations', () => ({

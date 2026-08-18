@@ -1071,4 +1071,19 @@ Remainder exits after this card. No P5-d 410. No P6. `/call` is not deprecated. 
 - `npm run test:conformance` — 27 files / 426 tests passed
 - `npx tsc --noEmit` — no new Convex errors (two pre-existing unrelated diagnostics remain)
 
-`/call` is not deprecated. Production x402 remains refused. CR table not dropped. Hold still covers unpushed `main`.
+`/call` is not deprecated. Production x402 remains refused. CR table not dropped. Hold still covers unpushed `main`. Product SHA `63c29fef`.
+
+## P6-workpool-own — committed
+
+**AUTHORITY:** Convex Workpool docs for installed `@convex-dev/workpool`. Component-first: one pool, `internal.*` complete handlers, drain before removing enqueue sites.
+
+**LOCAL_CANDIDATE:** `convex/customerRequestRouteWorkpool.ts` mounted on `components.workpool`. Enqueue sites: invoke, CR transport/cancel, provider-connection cleanup.
+
+**FIT:** match. Renamed the existing mount to `marketDispatchWorkpool` in `convex/marketDispatchWorkpool.ts`. Same `maxParallelism: 32`, same retry (`maxAttempts: 3`, `initialBackoffMs: 1000`, `base: 2`). Invoke still `enqueueAction`s `capabilityOperationInvocationWorker.run`. CR and connection cleanup still share this component. No second pool. Pool not deleted.
+
+**COMMANDS:**
+- scoped invoke + connection-cleanup + workpool tests — 4 files / 32 tests passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- no full conformance (retry/onComplete semantics unchanged)
+
+Wave 1 closed. STATE: `p6_x402_rehomed; table_drops_not_started`. No table drops, no P5-d, no inquiry split. `/call` is not deprecated. Hold still covers unpushed `main`.

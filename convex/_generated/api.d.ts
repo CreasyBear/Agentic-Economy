@@ -63,7 +63,7 @@ import type * as customerRequestRouteMandateIntegrity from "../customerRequestRo
 import type * as customerRequestRouteMandateLifecycle from "../customerRequestRouteMandateLifecycle.js";
 import type * as customerRequestRouteMandatePorts from "../customerRequestRouteMandatePorts.js";
 import type * as customerRequestRouteTransportWorker from "../customerRequestRouteTransportWorker.js";
-import type * as customerRequestRouteWorkpool from "../customerRequestRouteWorkpool.js";
+import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as customerRequestStandingRoutePolicy from "../customerRequestStandingRoutePolicy.js";
 import type * as customerRequestStandingRoutePorts from "../customerRequestStandingRoutePorts.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
@@ -175,7 +175,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestRouteMandateLifecycle: typeof customerRequestRouteMandateLifecycle;
   customerRequestRouteMandatePorts: typeof customerRequestRouteMandatePorts;
   customerRequestRouteTransportWorker: typeof customerRequestRouteTransportWorker;
-  customerRequestRouteWorkpool: typeof customerRequestRouteWorkpool;
+  marketDispatchWorkpool: typeof marketDispatchWorkpool;
   customerRequestStandingRoutePolicy: typeof customerRequestStandingRoutePolicy;
   customerRequestStandingRoutePorts: typeof customerRequestStandingRoutePorts;
   customerRequestV2: typeof customerRequestV2;

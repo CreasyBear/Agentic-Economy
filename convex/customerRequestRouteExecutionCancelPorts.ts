@@ -25,7 +25,7 @@ import {
   toDispatchRecord,
   toRunRecord,
 } from './customerRequestRouteExecutionSnapshots'
-import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 
 type CancellationMandateLoad = Readonly<
   | {
@@ -114,7 +114,7 @@ export function cancelMutationPorts(ctx: MutationCtx): CancelMutationPorts {
           requestedAt: input.now,
           updatedAt: input.now,
         })
-        await customerRequestRouteWorkpool.enqueueAction(
+        await marketDispatchWorkpool.enqueueAction(
           ctx,
           internal.customerRequestRouteCancellationWorker.run,
           { cancellationRef: input.cancellationRef },

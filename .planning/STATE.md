@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
 status: phases_0_1_2_3_4_committed; p5_a_b_c_e_landed; p6_x402_rehomed; table_drops_not_started
-stopped_at: 2026-08-18 P6-x402-rehome landed; wave 1 continues at P6-workpool-own — no P5-d 410, no table drops
+stopped_at: 2026-08-18 P6 wave 1 exit after workpool-own — no P5-d 410, no table drops
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
@@ -12,7 +12,7 @@ progress:
   completed_plans: 6
   percent: 75
 current_phase: 06
-current_phase_name: p6-x402-rehome
+current_phase_name: p6-wave-1-exited
 
 # Current state
 
@@ -36,7 +36,7 @@ measured businesses/services URLs retained and instrumented. Reads and evidence
 stay. Live money stays fail-closed.
 
 **Remainder exit:** after P5-e. No P5-d 410 in that remainder.
-Wave 1 P6 started: x402 attempt persist rehomed to `moneyX402PaymentAttempts`. Table drops not started. Local `main` remains unpushed under the written hold.
+Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). Table drops not started. Local `main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder has exited on local `main`. See RECEIPTS HK-push-or-hold.
 

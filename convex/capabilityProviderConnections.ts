@@ -1,4 +1,4 @@
-import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 import type { WorkId } from '@convex-dev/workpool'
 import { v } from 'convex/values'
 import {
@@ -455,7 +455,7 @@ async function enqueueCleanupWork(
   context: Omit<CleanupWorkContext, 'workKind'> & { workKind: CleanupWorkKind },
   now: number,
 ): Promise<ProviderConnection> {
-  const workId = await customerRequestRouteWorkpool.enqueueAction(
+  const workId = await marketDispatchWorkpool.enqueueAction(
     ctx,
     internal.capabilityProviderConnectionCleanup.run,
     {
@@ -1201,7 +1201,7 @@ export const retryOwnerCleanup = mutation({
     }
     if (row.cleanupWorkId !== undefined) {
       try {
-        const status = await customerRequestRouteWorkpool.status(ctx, row.cleanupWorkId as WorkId)
+        const status = await marketDispatchWorkpool.status(ctx, row.cleanupWorkId as WorkId)
         if (status.state === 'pending' || status.state === 'running') {
           return {
             kind: 'duplicate' as const,

@@ -101,7 +101,7 @@ import { internalAction, type ActionCtx, env } from './_generated/server'
 import { internal } from './_generated/api'
 
 import type { WorkId } from '@convex-dev/workpool'
-import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 const workerResult = v.union(
   v.object({ kind: v.literal('recorded') }),
   v.object({ kind: v.literal('none') }),
@@ -1366,7 +1366,7 @@ export const recover = internalAction({
       if (decision.kind === 'refused') return recoveryNotFound(args.invocationRef)
       if (decision.kind === 'cancelled') {
         if (decision.workId !== undefined) {
-          await customerRequestRouteWorkpool.cancel(ctx, decision.workId as WorkId).catch(() => undefined)
+          await marketDispatchWorkpool.cancel(ctx, decision.workId as WorkId).catch(() => undefined)
         }
         return cancelledRecoveryResult(row)
       }

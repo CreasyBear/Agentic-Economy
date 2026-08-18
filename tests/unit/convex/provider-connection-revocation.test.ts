@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   enqueueAction: vi.fn(async (..._args: unknown[]) => 'workpool:cleanup:first'),
 }))
 
-vi.mock('../../../convex/customerRequestRouteWorkpool', () => ({
-  customerRequestRouteWorkpool: { enqueueAction: mocks.enqueueAction },
+vi.mock('../../../convex/marketDispatchWorkpool', () => ({
+  marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
 
 import { revokeOwner } from '../../../convex/capabilityProviderConnections'

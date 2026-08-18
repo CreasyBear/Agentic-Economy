@@ -27,7 +27,7 @@ import { isPublicOperationRef } from '@/modules/capability-supply/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import { assertAgentAccessRateAdmission } from './lib/rateLimit'
-import { customerRequestRouteWorkpool } from './customerRequestRouteWorkpool'
+import { marketDispatchWorkpool } from './marketDispatchWorkpool'
 import {
   jsonObject,
   operationResultValue,
@@ -715,7 +715,7 @@ async function enqueueInvocationDispatch(
     row.authority !== undefined
     && canonicalDigest(row.authority as never) !== canonicalDigest(authority as never)
   ) return { kind: 'refused' as const }
-  const workId = await customerRequestRouteWorkpool.enqueueAction(
+  const workId = await marketDispatchWorkpool.enqueueAction(
     ctx,
     internal.capabilityOperationInvocationWorker.run,
     { invocationRef: row.invocationRef },
