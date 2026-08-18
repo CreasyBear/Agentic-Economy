@@ -21,7 +21,7 @@ import {
   type WorkNode,
   validateWorkTreeRepeatUse,
 } from '@/modules/work-tree/public'
-import type { StandingRoutePorts } from '@/modules/customer-request/application/public'
+import type { StandingRoutePorts } from '@/modules/work-tree/internal/repeat-permission'
 import type { WorkTreeDecisionReceipt } from '@/modules/work-tree/work-tree.functions'
 
 const projectId = 'project:t49-memo'

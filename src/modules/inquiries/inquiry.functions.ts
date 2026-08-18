@@ -307,7 +307,7 @@ const markReadOwnerInquiryMutation = sourceMutation<OwnerMutationArgs, OwnerInqu
 
 export const submitPublicInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => publicInquirySubmitSchema.parse(data))
-  .handler(async () => quarantineWriteServerError('inquiry.submit'))
+  .handler(async (): Promise<PublicInquirySubmitServerResult> => quarantineWriteServerError('inquiry.submit'))
 
 export const readPublicTargetAdmissionServer = createServerFn()
   .validator((data) => publicTargetAdmissionSchema.parse(data))
@@ -333,15 +333,15 @@ export const readCurrentOwnerInquiryThreadServer = createServerFn()
 
 export const replyCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerReplySchema.parse(data))
-  .handler(async () => quarantineWriteServerError('inquiry.reply'))
+  .handler(async (): Promise<OwnerInquiryMutationServerResult> => quarantineWriteServerError('inquiry.reply'))
 
 export const markCurrentOwnerInquiryReadServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async () => quarantineWriteServerError('inquiry.markRead'))
+  .handler(async (): Promise<OwnerInquiryMutationServerResult> => quarantineWriteServerError('inquiry.markRead'))
 
 export const closeCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async () => quarantineWriteServerError('inquiry.close'))
+  .handler(async (): Promise<OwnerInquiryMutationServerResult> => quarantineWriteServerError('inquiry.close'))
 
 export type InquiryServerBackend = Readonly<{
   submitPublicInquiry: (

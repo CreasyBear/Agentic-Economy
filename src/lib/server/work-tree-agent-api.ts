@@ -10,7 +10,7 @@ import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessP
 import { resolveCanonicalBaseUrl } from './canonical-url'
 import { callPublicSourceMutation, callPublicSourceQuery, sourceMutation, sourceQuery } from './convex-source'
 import { createCustomerRequestServiceAssertion, toStableHashValue } from '@/modules/agent-access/service-auth-envelope'
-import { customerRequestScopeForMode, type CustomerRequestAuthorityMode } from '@/modules/customer-request/agent-contract'
+import { type AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
 import { findAction } from '@/modules/actions'
 import { workTreeApplyResultSchema, workTreeDecisionResultSchema, workTreeRawApplyReceiptSchema, type WorkTreeApplyResult } from '@/modules/work-tree/work-tree.functions'
 import {
@@ -175,7 +175,7 @@ function normalizeOperation(value: string): WorkTreeAgentOperation | undefined {
   const candidate = value.replace(/^workTree\./u, '')
   return (OPERATION_VALUES as readonly string[]).includes(candidate) ? candidate as WorkTreeAgentOperation : undefined
 }
-function requiredMode(operation: WorkTreeAgentOperation): CustomerRequestAuthorityMode {
+function requiredMode(operation: WorkTreeAgentOperation): AgentAccessAuthorityMode {
   return operation === 'inspect' || operation === 'inspectRepeatUse' ? 'inspect_only' : 'approve_each'
 }
 
@@ -218,7 +218,7 @@ function projectResult(
   value: unknown,
   operation: WorkTreeAgentOperation,
   request: Request,
-  mode: CustomerRequestAuthorityMode,
+  mode: AgentAccessAuthorityMode,
 ): Response {
   const refusalSchema = operation === 'inspect' || operation === 'inspectRepeatUse' ? inspectSourceRefusalSchema : sourceRefusalSchema
   const sourceRefusal = refusalSchema.safeParse(value)
@@ -255,7 +255,7 @@ function projectRepeatResult(
   value: unknown,
   operation: Extract<WorkTreeAgentOperation, 'reserveRepeatUse' | 'finalizeRepeatUse' | 'reconcileRepeatUse' | 'inspectRepeatUse'>,
   request: Request,
-  mode: CustomerRequestAuthorityMode,
+  mode: AgentAccessAuthorityMode,
 ): Response {
   const schema = operation === 'reserveRepeatUse'
     ? workTreeRepeatReserveResultSchema
@@ -277,7 +277,7 @@ function refusalResponse(
   request: Request,
   operation: WorkTreeAgentOperation,
   code: string,
-  mode: CustomerRequestAuthorityMode,
+  mode: AgentAccessAuthorityMode,
 ): Response {
   const status = refusalStatus(code)
   if (status === undefined) return unknownResponse(operation, code)
@@ -295,7 +295,7 @@ function refusalStatus(code: string): 400 | 401 | 403 | 404 | 409 | undefined {
   return deterministicConflictCodes[code] === true ? 409 : undefined
 }
 
-function authRefusal(request: Request, status: 401 | 403, reason: string, mode: CustomerRequestAuthorityMode): Response {
+function authRefusal(request: Request, status: 401 | 403, reason: string, mode: AgentAccessAuthorityMode): Response {
   const base = resolveCanonicalBaseUrl(request).baseUrl
   const challenge = status === 403 ? bearerModeChallenge(base, mode) : bearerChallenge(base)
   return problem({ status, kind: kindForStatus(status), code: reason, detail: reason }, { Vary: 'Authorization', 'WWW-Authenticate': challenge })

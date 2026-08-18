@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-import type { ConsumerDecisionRecord } from '@/modules/customer-request/application/public'
+import type { ConsumerDecisionRecord } from './consumer-plan'
 
 export type AeDecisionTrailProps = Readonly<{
   decisions: readonly ConsumerDecisionRecord[]

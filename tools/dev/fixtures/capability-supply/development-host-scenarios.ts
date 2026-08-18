@@ -22,12 +22,6 @@ import {
 import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  attachCompletedTaskReference,
-  type AttachCompletedTaskReferencePorts,
-} from '@/modules/customer-request/application/public'
-import { compileCustomerRequest } from '@/modules/customer-request/compiler'
-
-import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,
 } from './development-published-operation-evidence'
@@ -611,48 +605,28 @@ async function completedResultReuse(
   const before = { ...success.context.effects }
   const controlBefore = success.context.host.exportSnapshot()
   const actor = success.context.actor
-  const compiled = compileCustomerRequest({
-    requestId: 'request:host-parity-result-reuse',
-    expectedRevision: 0,
-    principalId: actor.principalRef,
-    delegatedAgentId: actor.callerRef,
-    intent: 'Continue from the completed quote.',
-    networkId: 'mock:network:development',
-    proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
-    interpreterId: 'mock:interpreter',
-    bindings: [],
-    models: [],
-    mappings: [],
-    now: success.context.now,
-  })
-  if (compiled.kind !== 'compiled') throw new Error('host_result_reuse_request_not_compiled')
-  const attachInput = {
-    principalRef: actor.principalRef,
-    callerRef: actor.callerRef,
-    invocationRef: success.outcome.invocationRef,
-    referencedAt: success.context.now,
-    candidateAggregate: compiled.aggregate,
-  }
-  const ports: AttachCompletedTaskReferencePorts = {
-    readCompletedResultIdentity: async ({ invocationRef, actor: requestedActor }) =>
-      success.context.adapter.readCompletedResult(invocationRef, requestedActor),
-  }
-  const attached = await attachCompletedTaskReference(attachInput, ports)
-  const replayed = attached.kind === 'attached'
-    ? await attachCompletedTaskReference({
-        ...attachInput,
-        candidateAggregate: attached.aggregate,
-      }, ports)
-    : attached
+  const first = await success.context.adapter.readCompletedResult(
+    success.outcome.invocationRef,
+    actor,
+  )
+  const replayed = await success.context.adapter.readCompletedResult(
+    success.outcome.invocationRef,
+    actor,
+  )
   const crossPrincipal = await success.context.adapter.readCompletedResult(success.outcome.invocationRef,
   { ...actor, principalRef: 'principal:other' },)
   const controlAfter = success.context.host.exportSnapshot()
-  const referencePayload = attached.kind === 'attached' ? attached.reference : undefined
+  const referencePayload = first.kind === 'refused' ? undefined : {
+    invocationRef: first.invocationRef,
+    actionId: first.actionId,
+    actionVersion: first.actionVersion,
+    sourceResultRef: first.sourceResultRef,
+    resultDigest: first.resultDigest,
+  }
   return {
-    firstKind: attached.kind === 'attached' ? 'attached' : 'not_applicable',
-    secondKind: replayed.kind === 'replayed' ? 'replayed' : 'not_applicable',
-    bothNoEffect: attached.kind === 'attached' && attached.noEffect
-      && replayed.kind === 'replayed' && replayed.noEffect,
+    firstKind: first.kind === 'refused' ? 'not_applicable' : 'attached',
+    secondKind: replayed.kind === 'refused' ? 'not_applicable' : 'replayed',
+    bothNoEffect: first.kind !== 'refused' && replayed.kind !== 'refused',
     referencePayloadAuthorityFree: referencePayload !== undefined
       && !/authority|attempt|lease|mandate|generation/iu.test(JSON.stringify(referencePayload)),
     controlSnapshotUnchanged: canonicalDigest(controlBefore)

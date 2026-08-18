@@ -11,7 +11,7 @@ import {
 } from '@/modules/agent-access/service-auth-envelope'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import { serviceAssertion } from './customerRequestRouteMandate'
+import { serviceAssertion } from './serviceAssertion'
 import { internal } from './_generated/api'
 import { env, internalMutation, internalQuery, mutation, query } from './_generated/server'
 

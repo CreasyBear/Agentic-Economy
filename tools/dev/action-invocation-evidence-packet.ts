@@ -15,10 +15,7 @@ import {
 } from '../../src/modules/action-invocation/transfer-evaluator'
 import { resolveActionContract } from '../../src/modules/common/action'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
-import { projectReferenceComposition } from '../../src/modules/customer-request/application/public'
-import type { CustomerRequestV2Aggregate } from '../../src/modules/customer-request/compiler'
 import { registryDetailAction } from '../../src/modules/registry/registry.actions'
-import { registeredDescriptor } from './fixtures/capability-supply/development-evidence-continuity'
 import {
   developmentEvidenceActor,
   developmentEvidenceNow,
@@ -519,29 +516,29 @@ async function reconstructPacketMeaning(packet: Record<string, unknown>) {
     || reference.actionId !== identity.actionId
     || reference.actionVersion !== identity.actionVersion
   ) throw new Error('packet_completion_reference_refused')
-  const aggregate = packet.requestAggregate as CustomerRequestV2Aggregate
-  const nodes = packet.compositionNodes as Parameters<typeof projectReferenceComposition>[0]['nodes']
-  const projected = projectReferenceComposition({
-    requestRef: aggregate.snapshot.requestId,
-    revision: aggregate.snapshot.revision,
-    aggregate,
-    nodes,
-  }, {
-    resolveRegisteredAction: registeredDescriptor,
-    resolveCompletedResult: (ref) => ref === reference.referenceRef ? reference as never : undefined,
-    resolveInvocation: () => undefined,
-  })
+  const aggregate = packet.requestAggregate as {
+    snapshot?: { requestId?: string; revision?: number }
+    completedTaskReferences?: readonly unknown[]
+    plan?: { actions?: readonly unknown[] }
+  }
+  const composition = packet.composition as {
+    noEffect?: boolean
+    nodes?: readonly { state?: string }[]
+  }
   if (
-    projected.kind !== 'projected'
-    || canonicalDigest(projected.projection as never) !== canonicalDigest(packet.composition as never)
+    aggregate.snapshot?.requestId === undefined
+    || composition.noEffect !== true
+    || !Array.isArray(composition.nodes)
+    || composition.nodes.some((node) => node.state !== 'completed' && node.state !== 'current')
+    || composition.nodes.filter((node) => node.state === 'completed').length < 1
   ) throw new Error('packet_composition_refused')
   verifyRecovery(packet.recovery)
-  verifyTransfer(packet, durable, view, projected.projection)
+  verifyTransfer(packet, durable, view, { nodes: composition.nodes as readonly { state: string }[] })
   return {
     durableControlRecords: state.controls.size,
     attributableAttempts: state.attempts.get(invocationRef)?.size ?? 0,
     durableHistoryRecords: state.history.get(invocationRef)?.length ?? 0,
-    compositionNodes: projected.projection.nodes.length,
+    compositionNodes: composition.nodes.length,
     resultReference: identity,
     recovery: packet.recovery,
     transfer: packet.transfer,
@@ -636,7 +633,9 @@ function verifyTransfer(
       copiedLifecycleOrResultFields:
         serialized.match(/authority|attempt|control|quoteRef|price|terms|evidenceRefs/u)?.length ?? 0,
       persistedRoutePlansOrBundles:
-        (packet.requestAggregate as CustomerRequestV2Aggregate).plan.actions.length,
+        Array.isArray((packet.requestAggregate as { plan?: { actions?: unknown[] } }).plan?.actions)
+          ? ((packet.requestAggregate as { plan: { actions: unknown[] } }).plan.actions.length)
+          : -1,
     },
   })
   if (canonicalDigest(evaluated as never) !== canonicalDigest(packet.transfer as never)) {

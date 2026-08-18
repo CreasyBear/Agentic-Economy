@@ -1,34 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import {
-  buildCustomerRequestContractSchema,
-  CUSTOMER_REQUEST_CONTRACT_SCHEMA_VERSION,
-} from '@/modules/customer-request/public-contract-schema'
-import { methodNotAllowed } from '@/lib/server/method-guard'
+import { retiredCustomerRequestResponse } from '@/lib/server/customer-request-gone'
+
+function schemaGone(): Response {
+  return retiredCustomerRequestResponse('customerRequest.planPreview')
+}
 
 export const Route = createFileRoute('/api/v1/requests/schema')({
   server: {
     handlers: {
-      GET: () => handleCustomerRequestContractSchemaGet(),
-      POST: () => methodNotAllowed(['GET']),
-      PUT: () => methodNotAllowed(['GET']),
-      PATCH: () => methodNotAllowed(['GET']),
-      DELETE: () => methodNotAllowed(['GET']),
-      HEAD: () => methodNotAllowed(['GET']),
-      OPTIONS: () => methodNotAllowed(['GET']),
-      TRACE: () => methodNotAllowed(['GET']),
-      CONNECT: () => methodNotAllowed(['GET']),
+      GET: () => schemaGone(),
+      POST: () => schemaGone(),
+      PUT: () => schemaGone(),
+      PATCH: () => schemaGone(),
+      DELETE: () => schemaGone(),
+      HEAD: () => schemaGone(),
+      OPTIONS: () => schemaGone(),
+      TRACE: () => schemaGone(),
+      CONNECT: () => schemaGone(),
     },
   },
 })
 
 export function handleCustomerRequestContractSchemaGet(): Response {
-  return Response.json(buildCustomerRequestContractSchema(), {
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
-      'X-AE-Customer-Request-Schema-Version': CUSTOMER_REQUEST_CONTRACT_SCHEMA_VERSION,
-      'X-Content-Type-Options': 'nosniff',
-    },
-  })
+  return schemaGone()
 }

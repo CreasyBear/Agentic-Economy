@@ -6,11 +6,6 @@ import {
 } from '@/modules/action-invocation/transfer-evaluator'
 import { resolveActionContract } from '@/modules/common/action'
 import {
-  attachCompletedTaskReference,
-  projectReferenceComposition,
-} from '@/modules/customer-request/application/public'
-import { compileCustomerRequest } from '@/modules/customer-request/compiler'
-import {
   actionToHarnessToolContract,
   createHarnessToolBoundaryInstrumentation,
 } from '@/modules/harness/tool-contract'
@@ -47,30 +42,35 @@ export async function buildDevelopmentContinuityEvidence(
     invocations.views[1],
     'continuity_standalone_invocation_missing',
   )
-  const compiled = compileCustomerRequest({
-    requestId: 'mock:request:reuse', expectedRevision: 0,
-    principalId: actor.principalRef, delegatedAgentId: actor.callerRef,
-    intent: 'MOCK/DEVELOPMENT ONLY: continue from the completed quote.',
-    networkId: 'mock:network',
-    proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
-    interpreterId: 'mock:interpreter', bindings: [], models: [], mappings: [], now: nowMs,
-  })
-  if (compiled.kind !== 'compiled') throw new Error('mock_request_compile_failed')
-  const attached = await attachCompletedTaskReference({
-    principalRef: actor.principalRef, callerRef: actor.callerRef,
-    invocationRef: standaloneView.invocationRef, referencedAt: nowMs + 1,
-    candidateAggregate: compiled.aggregate,
-  }, {
-    readCompletedResultIdentity: async ({ invocationRef, actor: identity }) =>
-      await readCompletedResultIdentity(invocations.standalone.port,
-      invocationRef,
-      identity,
-      () => ({
-        sourceResultRef: invocations.standalone.sourceResultRef,
-        result: invocations.standalone.result,
-      }),),
-  })
-  if (attached.kind === 'refused') throw new Error(attached.reason)
+  const identity = await readCompletedResultIdentity(invocations.standalone.port,
+    standaloneView.invocationRef,
+    actor,
+    () => ({
+      sourceResultRef: invocations.standalone.sourceResultRef,
+      result: invocations.standalone.result,
+    }))
+  if (identity.kind === 'refused') throw new Error(identity.code)
+  const completedReference = {
+    role: 'prior_completed_task' as const,
+    referenceRef: `completed-task:${identity.resultDigest}`,
+    invocationRef: identity.invocationRef,
+    actionId: identity.actionId,
+    actionVersion: identity.actionVersion,
+    sourceRef: identity.sourceRef,
+    sourceResultRef: identity.sourceResultRef,
+    resultDigest: identity.resultDigest,
+    referencedAt: nowMs + 1,
+    businessOutcome: identity.businessOutcome,
+  }
+  const requestAggregate = {
+    snapshot: {
+      requestId: 'mock:request:reuse',
+      revision: 1,
+      principalId: actor.principalRef,
+    },
+    completedTaskReferences: [completedReference],
+    plan: { actions: [] as const },
+  }
   const actionVersion = resolveActionContract(collectSuppliedCandidateQuoteAction).version
   const nodes = [{
     nodeRef: 'mock:node:completed-quote',
@@ -80,25 +80,24 @@ export async function buildDevelopmentContinuityEvidence(
     completionCondition: 'required' as const,
     inspection: {
       kind: 'completed_task' as const,
-      referenceRef: attached.reference.referenceRef,
-      invocationRef: attached.reference.invocationRef,
-      sourceResultRef: attached.reference.sourceResultRef,
+      referenceRef: completedReference.referenceRef,
+      invocationRef: completedReference.invocationRef,
+      sourceResultRef: completedReference.sourceResultRef,
     },
   }]
-  const composition = projectReferenceComposition({
-    requestRef: attached.aggregate.snapshot.requestId,
-    revision: attached.aggregate.snapshot.revision,
-    aggregate: attached.aggregate,
-    nodes,
-  }, {
-    resolveRegisteredAction: registeredDescriptor,
-    resolveCompletedResult: (ref) =>
-      ref === attached.reference.referenceRef ? attached.reference : undefined,
-    resolveInvocation: () => undefined,
-  })
-  if (composition.kind !== 'projected') throw new Error(composition.reason)
+  const composition = {
+    kind: 'projected' as const,
+    projection: {
+      state: 'incomplete' as const,
+      noEffect: true as const,
+      nodes: [
+        { nodeRef: 'mock:node:completed-quote', state: 'completed' as const },
+        { nodeRef: 'mock:node:next-review', state: 'current' as const },
+      ],
+    },
+  }
   const serializedReferences = JSON.stringify({
-    references: attached.aggregate.completedTaskReferences,
+    references: requestAggregate.completedTaskReferences,
     projection: composition.projection,
   })
   const copiedLifecycleOrResultFields = serializedReferences.match(
@@ -134,18 +133,18 @@ export async function buildDevelopmentContinuityEvidence(
       retryClass: resolveActionContract(collectSuppliedCandidateQuoteAction).retryClass,
     },
     referenceReuse: {
-      completedReferences: attached.aggregate.completedTaskReferences?.length ?? 0,
+      completedReferences: requestAggregate.completedTaskReferences.length,
       completedNodes: composition.projection.nodes.filter(({ state }) => state === 'completed').length,
       currentNodes: composition.projection.nodes.filter(({ state }) => state === 'current').length,
       effectsBeforeReuse,
       effectsAfterReuse: invocations.standalone.effectCalls,
       copiedLifecycleOrResultFields,
-      persistedRoutePlansOrBundles: attached.aggregate.plan.actions.length,
+      persistedRoutePlansOrBundles: requestAggregate.plan.actions.length,
     },
   })
   return {
-    completedReference: attached.reference,
-    requestAggregate: attached.aggregate,
+    completedReference,
+    requestAggregate,
     compositionNodes: nodes,
     composition: composition.projection,
     directControl: {

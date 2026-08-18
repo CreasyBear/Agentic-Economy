@@ -11,7 +11,7 @@ import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { issueAgentAccessKeyServer, revokeAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
-import { readAgentAccessConsoleServer, type AgentAccessConsoleReadback } from '@/modules/customer-request/agent-access-console'
+import { readAgentAccessConsoleServer, type AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
 import {
   decideOperationApprovalServer,
   listPendingOperationApprovalsServer,

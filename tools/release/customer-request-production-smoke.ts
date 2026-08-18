@@ -2,21 +2,8 @@ import { pathToFileURL } from 'node:url'
 
 import { isRecord } from '../../src/modules/common/is-record'
 import { trimTrailingSlashes } from '../../src/modules/common/trim-trailing-slashes'
-import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
-import {
-  freezeAgentJourneyCohort,
-  parseAgentJourneyCohortInput,
-  type AgentJourneyCohortInput,
-} from '../../src/modules/customer-request/agent-journey-cohort'
-import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
 import { exactAmountSchema, type ExactAmount } from '../../src/modules/money/public'
-import {
-  runHostedCustomerRequestJourney,
-  verifyHostedCustomerRequestFrontDoor,
-  type HostedCustomerRequestJourneyProof,
-} from '../../src/modules/customer-request/hosted-agent-journey'
 
-import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
 import { resolveVercelProtectionBypassSecret } from './vercel-protection-bypass'
 
 const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
@@ -26,7 +13,7 @@ type DirectBaselineConfig = Readonly<{
   credential: string
   predeclaredGain: 'recoverable_progress'
   maximumTotalCost: ExactAmount
-  cohort: AgentJourneyCohortInput
+  cohort: unknown
 }>
 
 type CustomerRequestJourneyFinish =
@@ -89,112 +76,9 @@ export function customerRequestProductionSmokeConfigFromEnvironment(
 }
 
 export async function runCustomerRequestProductionSmoke(
-  config: CustomerRequestProductionSmokeConfig,
-): Promise<HostedCustomerRequestJourneyProof | ReturnType<typeof compareAgentJourneys> | undefined> {
-  if (config.directBaseline !== undefined) assertDirectBaselineConfig(config.directBaseline)
-  if (!config.preflightOnly && config.directBaseline !== undefined && config.finish !== 'complete') {
-    throw new Error('Direct comparison requires a completed hosted journey')
-  }
-  const frontDoor = {
-    baseUrl: config.baseUrl, fetch: config.fetch,
-    ...(config.deploymentProtectionBypass === undefined
-      ? {} : { deploymentProtectionBypass: config.deploymentProtectionBypass }),
-  }
-  if (config.preflightOnly) {
-    await verifyHostedCustomerRequestFrontDoor(frontDoor)
-    process.stdout.write(`${JSON.stringify({ result: 'PASS', proof: 'front_door_only' })}\n`)
-    return undefined
-  }
-  const agentApiKey = required(config.agentApiKey, 'AE_CUSTOMER_REQUEST_API_KEY')
-  const expectedRevision = required(config.expectedRevision, 'AE_RELEASE_SOURCE_REVISION')
-  const expectedDeploymentId = required(config.expectedDeploymentId, 'AE_RELEASE_DEPLOYMENT_ID')
-  const verifyRelease = async () => {
-    const release = await verifyHostedCustomerRequestRelease({
-      baseUrl: config.baseUrl, apiKey: agentApiKey, expectedRevision, expectedDeploymentId,
-      fetchImpl: config.fetch,
-      ...(config.deploymentProtectionBypass === undefined
-        ? {} : { deploymentProtectionBypass: config.deploymentProtectionBypass }),
-    })
-    return {
-      kind: release.kind,
-      revision: release.sourceRevision,
-      deploymentId: release.vercelDeploymentId,
-    }
-  }
-  const proof = await runHostedCustomerRequestJourney({
-    ...frontDoor,
-    agentApiKey, expectedRevision, expectedDeploymentId, verifyRelease,
-    agent: { name: 'ae-hosted-cold-external-agent', version: '2' },
-    scenario: {
-      request: config.requestText, facts: config.facts, messages: config.messages,
-      finish: config.finish ?? 'cancel',
-      ...(config.expectedRoute === undefined ? {} : { expectedRoute: config.expectedRoute }),
-    },
-    sandbox: true,
-  })
-  if (config.directBaseline === undefined) {
-    process.stdout.write(`${JSON.stringify(proof)}\n`)
-    return proof
-  }
-  const direct = await runFrozenDirectAgentBaseline({
-    job: config.requestText,
-    providerOrigins: config.directBaseline.providerOrigins,
-    credential: config.directBaseline.credential,
-    predeclaredGain: config.directBaseline.predeclaredGain,
-    hardConstraints: { maximumTotalCost: config.directBaseline.maximumTotalCost },
-    cohort: config.directBaseline.cohort,
-    agent: { name: 'frozen-direct-provider-integrator', version: '1' },
-    fetch: config.fetch,
-  })
-  const directForComparison: Parameters<typeof compareAgentJourneys>[0]['direct'] =
-    'recovery' in direct ? direct : { ...direct, recovery: { state: 'unsupported' } }
-  if (proof.final.state === 'in_progress') {
-    throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
-  }
-  const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
-    structuredClone(config.directBaseline.cohort),
-  ))
-  const terminalProof: Parameters<typeof compareAgentJourneys>[0]['ae'] = {
-    ...proof,
-    final: {
-      ...proof.final,
-      state: terminalJourneyState(proof.final.state),
-      resumedState: terminalJourneyState(proof.final.resumedState),
-    },
-    measurements: {
-      ...proof.measurements,
-      hardConstraintAccuracy: { state: hardConstraintState(proof) },
-    },
-    cohortInputDigest: aeCohort.digest,
-  }
-  const comparison = compareAgentJourneys({
-    direct: directForComparison, ae: terminalProof, cohort: aeCohort,
-  })
-  process.stdout.write(`${JSON.stringify(comparison)}\n`)
-  if (comparison.verdict !== 'pass_for_declared_class') {
-    throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)
-  }
-  return comparison
-}
-
-type TerminalJourneyState = Exclude<HostedCustomerRequestJourneyProof['final']['state'], 'in_progress'>
-
-function terminalJourneyState(
-  value: HostedCustomerRequestJourneyProof['final']['state'],
-): TerminalJourneyState {
-  if (value === 'in_progress') throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
-  return value
-}
-
-function hardConstraintState(
-  proof: HostedCustomerRequestJourneyProof,
-): 'satisfied' | 'not_evaluated' {
-  const measurements: unknown = proof.measurements
-  const accuracy = isRecord(measurements) ? measurements.hardConstraintAccuracy : undefined
-  if (!isRecord(accuracy) || (accuracy.state !== 'satisfied' && accuracy.state !== 'not_evaluated')) {
-    throw new Error('customer_request_comparison_hard_constraint_accuracy_missing')
-  }
-  return accuracy.state
+  _config: CustomerRequestProductionSmokeConfig,
+): Promise<never> {
+  throw new Error('customer_request_module_deleted')
 }
 
 function parseDirectBaseline(
@@ -218,7 +102,7 @@ function parseDirectBaseline(
   }
   const origins: unknown = JSON.parse(required(raw.origins, 'AE_DIRECT_PROVIDER_ORIGINS_JSON'))
   const maximum: unknown = JSON.parse(required(raw.maximum, 'AE_DIRECT_MAXIMUM_TOTAL_COST_JSON'))
-  const cohort = parseAgentJourneyCohortInput(JSON.parse(required(raw.cohort, 'AE_AGENT_JOURNEY_COHORT_JSON')))
+  const cohort: unknown = JSON.parse(required(raw.cohort, 'AE_AGENT_JOURNEY_COHORT_JSON'))
   if (!Array.isArray(origins) || !origins.every((value) => typeof value === 'string')) {
     throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two provider origins')
   }

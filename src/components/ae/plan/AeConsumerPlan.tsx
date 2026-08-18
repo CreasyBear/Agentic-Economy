@@ -17,7 +17,7 @@ import type {
   ConsumerPlanOption,
   ConsumerPlanResult,
   ConsumerPlanStep,
-} from '@/modules/customer-request/application/public'
+} from './consumer-plan'
 
 import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
 import { useErrorShake } from '@/components/ae/magic/useErrorShake'

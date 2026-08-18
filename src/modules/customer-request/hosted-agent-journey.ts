@@ -1,8 +1,0 @@
-export {
-  hostedCustomerRequestJourneyProofSchema,
-  HOSTED_JOURNEY_CLAIM_BOUNDARY,
-  runHostedCustomerRequestJourney,
-  verifyHostedCustomerRequestFrontDoor,
-  type HostedCustomerRequestJourneyInput,
-  type HostedCustomerRequestJourneyProof,
-} from './hosted-agent-journey/index'

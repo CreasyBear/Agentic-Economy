@@ -1,13 +1,68 @@
 import { assessWorkTreeDecisionPolicy, type WorkTreeDecisionPolicy } from './decision-policy'
 import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
 import type { WorkNode } from './contract'
-import {
-  allowStandingRoute,
-  type AllowStandingRouteInput,
-  type RepeatPermissionReceipt,
-  type RepeatPermissionResult,
-  type StandingRoutePorts,
-} from '@/modules/customer-request/application/public'
+
+export type StandingRoutePorts = Readonly<Record<string, never>>
+
+export type RepeatPermissionReceipt = Readonly<{
+  kind: 'repeat_permission'
+  status: 'active' | 'withdrawn'
+  permissionRef: string
+  requestRef: string
+  revision: number
+  routeRef: string
+  delegatedCredentialId: string
+  limits: Readonly<{
+    perUseSpend: ExactAmount
+    cumulativeSpend: ExactAmount
+    perUseDataAllocations: number
+    cumulativeDataAllocations: number
+    occurrences: number
+  }>
+  fallback: 'ask_for_confirmation'
+  validFrom: number
+  validUntil: number
+  withdrawnAt?: number
+}>
+
+export type RepeatPermissionResult = Readonly<
+  | RepeatPermissionReceipt
+  | {
+      kind: 'conflict'
+      requestRef: string
+      reason: 'revision_changed' | 'options_changed' | 'identity_changed' | 'idempotency_key_reused'
+    }
+  | {
+      kind: 'refused'
+      reason:
+        | 'authentication_required'
+        | 'request_not_found'
+        | 'interpreter_unavailable'
+        | 'capabilities_unavailable'
+        | 'evidence_not_found'
+        | 'invalid_amendment'
+    }
+  | {
+      kind: 'unavailable'
+      reason:
+        | 'choice_not_current'
+        | 'credential_not_authorized'
+        | 'repeat_permission_not_available'
+      summary: string
+    }
+>
+
+export type AllowStandingRouteInput = Readonly<{
+  requestRef: string
+  revision: number
+  routeRef: string
+  delegatedCredentialId: string
+  occurrences: number
+  cumulativeSpend: ExactAmount
+  validUntil: number
+  idempotencyKey: string
+  principalId: string
+}>
 
 export type WorkTreeRepeatPermissionBinding = Readonly<{
   projectId: string
@@ -90,7 +145,7 @@ export async function allowWorkTreeRepeatPermission(
     proposalDigest: string
     node: WorkNode
   }>,
-  ports: StandingRoutePorts,
+  _ports: StandingRoutePorts,
 ): Promise<WorkTreeRepeatPermissionResult> {
   const policy = assessWorkTreeDecisionPolicy(input.node)
   if (input.node.kind !== 'decision' || input.node.status !== 'ready') {
@@ -107,7 +162,11 @@ export async function allowWorkTreeRepeatPermission(
       summary: 'Repeat permission is not available for this exact WorkTree decision.',
     }
   }
-  const result = await allowStandingRoute(input, ports)
+  const result: RepeatPermissionResult = {
+    kind: 'unavailable',
+    reason: 'repeat_permission_not_available',
+    summary: 'Repeat permission is not available for this exact WorkTree decision.',
+  }
   return composeWorkTreeRepeatPermission({
     projectId: input.projectId,
     nodeId: input.nodeId,

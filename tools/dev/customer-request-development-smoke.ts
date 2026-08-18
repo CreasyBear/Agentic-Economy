@@ -4,21 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { loadEnv } from 'vite'
 
-import { isRecord } from '../../src/modules/common/is-record'
 import { trimTrailingSlashes } from '../../src/modules/common/trim-trailing-slashes'
-import { compareAgentJourneys } from '../../src/modules/customer-request/agent-journey-comparison'
-import {
-  freezeAgentJourneyCohort,
-  parseAgentJourneyCohortInput,
-} from '../../src/modules/customer-request/agent-journey-cohort'
-import { runFrozenDirectAgentBaseline } from '../../src/modules/customer-request/direct-agent-baseline'
-import {
-  resolveCustomerRequestJourneyKeyring,
-  runSignedHostedCustomerRequestJourney,
-  verifyCustomerRequestJourneyProof,
-} from '../../src/modules/customer-request/journey-proof-attestation'
-import type { HostedCustomerRequestJourneyProof } from '../../src/modules/customer-request/hosted-agent-journey'
-import { withTemporaryClerkApiKey } from '../release/customer-request-production-credential'
 import {
   customerRequestProductionSmokeConfigFromEnvironment,
   type CustomerRequestProductionSmokeConfig,
@@ -84,7 +70,9 @@ export function customerRequestDevelopmentSmokeConfig(
   })
   const journeyKeyring = env.AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY === undefined
     ? undefined
-    : resolveCustomerRequestJourneyKeyring(env)
+    : (() => {
+      throw new Error('customer_request_module_deleted')
+    })()
   const trustedDevelopmentOrigin = resolveTrustedDevelopmentOrigin(
     baseUrl,
     env.AE_CUSTOMER_REQUEST_TRUSTED_DEVELOPMENT_ORIGIN,
@@ -135,137 +123,9 @@ export function customerRequestDevelopmentSmokeConfig(
 }
 
 export async function runCustomerRequestDevelopmentSmoke(
-  config: CustomerRequestDevelopmentSmokeConfig,
-) {
-  const journeySigningKey = config.journeySigningKey
-  const journeyTrustedKeys = config.journeyTrustedKeys
-  if (journeySigningKey === undefined || journeyTrustedKeys === undefined) {
-    throw new Error('AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY is required')
-  }
-  let signed: Awaited<ReturnType<typeof runSignedHostedCustomerRequestJourney>> | undefined
-  await withTemporaryClerkApiKey({
-    clerkSecretKey: config.clerkSecretKey,
-    expectedInstanceId: config.clerkInstanceId,
-    subject: config.clerkSubject,
-    ...(config.repeatPermission
-      ? { scopes: ['customer_requests:create', 'customer_requests:standing_authority'] }
-      : {}),
-    fetch: config.fetch,
-    keyNamePrefix: 'AE development cold-agent acceptance',
-    revocationReason: 'Temporary development acceptance completed',
-    run: async (agentApiKey, identity) => {
-      signed = await runSignedHostedCustomerRequestJourney({
-        environment: 'development',
-        baseUrl: config.baseUrl,
-        ...(config.trustedDevelopmentOrigin === undefined
-          ? {}
-          : { trustedDevelopmentOrigin: config.trustedDevelopmentOrigin }),
-        agentApiKey,
-        expectedRevision: config.sourceRevision,
-        expectedDeploymentId: config.convexDeployment,
-        verifyRelease: async () => ({
-          kind: 'verified', revision: config.sourceRevision, deploymentId: config.convexDeployment,
-        }),
-        agent: { name: 'ae-development-cold-external-agent', version: '1' },
-        scenario: {
-          request: config.request,
-          facts: config.facts,
-          messages: config.messages,
-          finish: config.finish,
-          ...(config.expiryRecovery === undefined ? {} : { expiryRecovery: config.expiryRecovery }),
-          ...(config.unsupportedRecovery === undefined
-            ? {}
-            : { unsupportedRecovery: config.unsupportedRecovery }),
-          expectedRoute: config.expectedRoute,
-          ...(config.repeatPermission
-            ? {
-                repeatPermission: {
-                  delegatedCredentialId: identity.credentialId,
-                  occurrences: 2,
-                },
-              }
-            : {}),
-        },
-        sandbox: true,
-        fetch: config.fetch,
-      }, journeySigningKey)
-    },
-  })
-  if (signed === undefined) throw new Error('customer_request_development_proof_missing')
-  const verification = verifyCustomerRequestJourneyProof(signed, journeyTrustedKeys)
-  if (verification.kind !== 'verified') {
-    throw new Error(`customer_request_journey_attestation_${verification.reason}`)
-  }
-  const proof = verification.proof
-  if (config.directBaseline === undefined) {
-    process.stdout.write(`${JSON.stringify(signed)}\n`)
-    return signed
-  }
-  const direct = await runFrozenDirectAgentBaseline({
-    job: config.request,
-    providerOrigins: config.directBaseline.providerOrigins,
-    credential: config.directBaseline.credential,
-    predeclaredGain: config.directBaseline.predeclaredGain,
-    hardConstraints: { maximumTotalCost: config.directBaseline.maximumTotalCost },
-    cohort: config.directBaseline.cohort,
-    agent: { name: 'frozen-direct-development-integrator', version: '1' },
-    fetch: config.fetch,
-  })
-  const directForComparison: Parameters<typeof compareAgentJourneys>[0]['direct'] =
-    'recovery' in direct ? direct : { ...direct, recovery: { state: 'unsupported' } }
-  if (proof.final.state === 'in_progress') {
-    throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
-  }
-  const aeCohort = freezeAgentJourneyCohort(parseAgentJourneyCohortInput(
-    structuredClone(config.directBaseline.cohort),
-  ))
-  const terminalProof: Parameters<typeof compareAgentJourneys>[0]['ae'] = {
-    ...proof,
-    final: {
-      ...proof.final,
-      state: terminalJourneyState(proof.final.state),
-      resumedState: terminalJourneyState(proof.final.resumedState),
-    },
-    measurements: {
-      ...proof.measurements,
-      hardConstraintAccuracy: { state: hardConstraintState(proof) },
-    },
-    cohortInputDigest: aeCohort.digest,
-  }
-  const comparison = compareAgentJourneys({
-    direct: directForComparison, ae: terminalProof, cohort: aeCohort,
-  })
-  const combined = {
-    kind: 'development_customer_request_comparison' as const,
-    release: { revision: config.sourceRevision, deploymentId: config.convexDeployment },
-    direct, ae: proof, attestation: signed.attestation, comparison,
-    claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
-  }
-  process.stdout.write(`${JSON.stringify(combined)}\n`)
-  if (comparison.verdict !== 'pass_for_declared_class') {
-    throw new Error(`customer_request_comparison_failed:${comparison.failures.join(',')}`)
-  }
-  return combined
-}
-
-type TerminalJourneyState = Exclude<HostedCustomerRequestJourneyProof['final']['state'], 'in_progress'>
-
-function terminalJourneyState(
-  value: HostedCustomerRequestJourneyProof['final']['state'],
-): TerminalJourneyState {
-  if (value === 'in_progress') throw new Error('customer_request_direct_comparison_requires_terminal_ae_result')
-  return value
-}
-
-function hardConstraintState(
-  proof: HostedCustomerRequestJourneyProof,
-): 'satisfied' | 'not_evaluated' {
-  const measurements: unknown = proof.measurements
-  const accuracy = isRecord(measurements) ? measurements.hardConstraintAccuracy : undefined
-  if (!isRecord(accuracy) || (accuracy.state !== 'satisfied' && accuracy.state !== 'not_evaluated')) {
-    throw new Error('customer_request_comparison_hard_constraint_accuracy_missing')
-  }
-  return accuracy.state
+  _config: CustomerRequestDevelopmentSmokeConfig,
+): Promise<never> {
+  throw new Error('customer_request_module_deleted')
 }
 
 function currentSourceRevision(): string {
