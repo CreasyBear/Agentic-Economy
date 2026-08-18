@@ -291,15 +291,7 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
       createdAt: now,
       updatedAt: now,
     })
-    await ctx.db.insert('claims', {
-      ownerId,
-      businessId,
-      slug: 'evidence-integrity',
-      status: 'published',
-      submittedFactsHash: 'sha256:evidence-integrity-claim',
-      createdAt: now,
-      updatedAt: now,
-    })
+    undefined
     await ctx.db.insert('businessOfferings', {
       offeringRef: 'offering:evidence-integrity',
       businessId,

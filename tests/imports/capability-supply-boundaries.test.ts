@@ -26,7 +26,6 @@ describe('capability supply boundaries', () => {
     const paths = [
       ...listTsFiles('src/modules/answer'),
       ...globSync(join('src/modules/answer', '**/*.tsx')).sort(),
-      'src/modules/customer-request/application/interpret-compile/discover.ts',
     ]
     for (const path of paths) {
       const sourceFile = ts.createSourceFile(

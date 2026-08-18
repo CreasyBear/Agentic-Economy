@@ -4,7 +4,6 @@ import { businessTables } from '../src/modules/business/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
 import { capabilityContractRegistryTables } from '../src/modules/capability-contract-registry/internal/convex-schema'
 import { capabilitySupplyTables } from '../src/modules/capability-supply/internal/convex-schema'
-import { customerRequestTables } from '../src/modules/customer-request/internal/convex-schema'
 import {
   agentAccessOAuthTables,
   agentAccessPolicyTables,
@@ -37,7 +36,6 @@ export default defineSchema({
   ...catalogTables,
   ...capabilityContractRegistryTables,
   ...capabilitySupplyTables,
-  ...customerRequestTables,
   ...agentAccessPrincipalTables,
   ...agentAccessOAuthTables,
   ...agentAccessPolicyTables,

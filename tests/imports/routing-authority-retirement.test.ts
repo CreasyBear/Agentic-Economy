@@ -75,9 +75,8 @@ describe('routing authority retirement', () => {
     const crons = readFileSync(join(root, 'convex/crons.ts'), 'utf8')
     const schema = readFileSync(join(root, 'src/modules/routing-kernel/internal/convex-schema.ts'), 'utf8')
     const currentRequest = [
-      'convex/customerRequestApplication.ts',
-      'convex/customerRequestV2.ts',
       'convex/capabilitySupply.ts',
+      'convex/capabilityOperationInvocationWorker.ts',
     ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n')
 
     expect(crons).not.toContain('routingKernel')

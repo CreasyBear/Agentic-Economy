@@ -46,12 +46,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
 import { pricingConfigDigest, type ExactAmount } from '@/modules/money/public'
 import {
-  attachCompletedTaskReference,
-} from '@/modules/customer-request/application/public'
-import {
-  compileCustomerRequest,
-} from '@/modules/customer-request/compiler'
-import {
   buildDevelopmentDynamicInvocationEvidence,
   verifyDevelopmentDynamicInvocationEvidence,
 } from '../../../tools/dev/fixtures/capability-supply/development-dynamic-invocation-evidence'
@@ -1187,38 +1181,11 @@ describe('dynamic PublishedOperation Action Invocation adapter', () => {
     })
     if (completed.kind !== 'accepted') throw new Error(completed.code)
     const before = { ...effects }
-    const compiled = compileCustomerRequest({
-      requestId: 'request:reuse',
-      expectedRevision: 0,
-      principalId: actor.principalRef,
-      delegatedAgentId: actor.callerRef,
-      intent: 'Continue from the completed quote.',
-      networkId: 'mock:network:development',
-      proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
-      interpreterId: 'mock:interpreter',
-      bindings: [],
-      models: [],
-      mappings: [],
-      now: clock,
-    })
-    if (compiled.kind !== 'compiled') throw new Error('request not compiled')
-    const attached = await attachCompletedTaskReference({
-      principalRef: actor.principalRef,
-      callerRef: actor.callerRef,
-      invocationRef: prepared.invocationRef,
-      referencedAt: clock,
-      candidateAggregate: compiled.aggregate,
-    }, {
-      readCompletedResultIdentity: async ({ invocationRef, actor: requestedActor }) =>
-        adapter.readCompletedResult(invocationRef, requestedActor),
-    })
+    const attached = await adapter.readCompletedResult(prepared.invocationRef, actor)
     expect(attached).toMatchObject({
-      kind: 'attached',
-      noEffect: true,
-      reference: {
-        invocationRef: prepared.invocationRef,
-        actionId: fixture.operation.operationId,
-      },
+      kind: 'completed_result',
+      invocationRef: prepared.invocationRef,
+      actionId: fixture.operation.operationId,
     })
     expect(JSON.stringify(attached)).not.toMatch(/authorityRef|acceptedAuthority|attemptRef|leaseOwner/u)
     expect(effects).toEqual(before)

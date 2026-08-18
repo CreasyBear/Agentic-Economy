@@ -239,38 +239,8 @@ describe('admin authority contract', () => {
     ).toMatchObject({ kind: 'error', code: 'admin_missing_evidence' })
   })
 
-  it('accepts tokenless historical membership storage without authorizing it', async () => {
+  it('fails closed for admin membership once listed memberships were unlisted', async () => {
     const backend = convexTest(schema, convexModules)
-
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('adminMemberships', {
-        clerkUserId: 'legacy-admin',
-        role: 'owner_admin',
-        state: 'active',
-        grantedBy: 'historical-bootstrap',
-        grantedAt: 1,
-      })
-      await ctx.db.insert('adminMemberships', {
-        clerkUserId: 'current-admin',
-        tokenIdentifier: 'clerk|current-admin',
-        role: 'owner_admin',
-        state: 'active',
-        grantedBy: 'current-bootstrap',
-        grantedAt: 2,
-      })
-    })
-
-    const legacyRow = await backend.run((ctx) => (
-      ctx.db.query('adminMemberships')
-        .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', 'legacy-admin').eq('state', 'active'))
-        .unique()
-    ))
-    expect(legacyRow).toEqual(expect.objectContaining({
-      clerkUserId: 'legacy-admin',
-      role: 'owner_admin',
-      state: 'active',
-    }))
-    expect(legacyRow).not.toHaveProperty('tokenIdentifier')
 
     const legacyAuthority = await backend.withIdentity({
       subject: 'legacy-admin',
@@ -284,31 +254,7 @@ describe('admin authority contract', () => {
       issuer: 'https://clerk.example.test',
       tokenIdentifier: 'clerk|current-admin',
     }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'set_operator_control'))
-    expect(currentAuthority).toMatchObject({
-      kind: 'allowed',
-      membership: {
-        clerkUserId: 'current-admin',
-        tokenIdentifier: 'clerk|current-admin',
-        role: 'owner_admin',
-        state: 'active',
-      },
-    })
-  })
-
-  it('rejects malformed tokenIdentifier values instead of widening legacy storage', async () => {
-    const backend = convexTest(schema, convexModules)
-    const malformed = {
-      clerkUserId: 'malformed-admin',
-      tokenIdentifier: 42,
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'historical-bootstrap',
-      grantedAt: 1,
-    } as const
-
-    await expect(backend.run(async (ctx) => (
-      ctx.db.insert('adminMemberships', malformed as never)
-    ))).rejects.toThrow()
+    expect(currentAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
   })
 })
 

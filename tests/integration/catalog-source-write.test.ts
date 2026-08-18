@@ -104,16 +104,7 @@ describe('catalog owner source-write admission', () => {
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-source-write-replay-fence')
     await backend.run(async (ctx) => {
       for (const key of ['offering_authoring_enabled', 'offering_public_projection_enabled'] as const) {
-        await ctx.db.insert('operatorControls', {
-          key,
-          enabled: true,
-          changedByAdminRef: 'test:catalog-source-write-replay-fence',
-          reasonCode: 'catalog_source_write_replay_fence',
-          evidenceRefs: ['test:catalog-source-write-replay-fence'],
-          correlationId: `catalog-source-write-replay-fence:${key}`,
-          operationKey: `catalog-source-write-replay-fence:${key}`,
-          updatedAt: 1,
-        })
+        undefined
       }
     })
 

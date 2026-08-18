@@ -18,36 +18,6 @@ describe('durable llms Offering parity', () => {
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:offering-engineering', createdAt: 1, updatedAt: 1,
       })
-      await ctx.db.insert('businessSupplyProjectionSnapshots', {
-        businessId: offeringBusinessId, sourceRevision: 2, sourceDigest: 'projection:engineering',
-        observedAt: 2, disposition: 'current', status: 'current', updatedAt: 2,
-        projection: {
-          business: {
-            businessId: offeringBusinessId, slug: 'offering-engineering', name: 'Offering Engineering',
-            category: 'Engineering', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
-            publicUrl: '/offering-engineering', trustTier: 'listed',
-          },
-          offerings: [{
-            offering: {
-              offeringRef: 'offering:current-design', revision: 2, name: 'Current Design Review',
-              category: 'Engineering', summary: 'Current public Offering.',
-            },
-            accessPaths: [{
-              accessPathRef: 'path:design',
-              offeringRevision: 2,
-              offeringSourceHash: 'sha256:offering-current-design',
-              sourceHash: 'sha256:path-design',
-              descriptor: {
-                kind: 'external_operation', name: 'Design API', summary: 'Declared access.',
-                url: 'https://engineering.example/api', provenance: 'business_declared',
-              },
-            }],
-            support: { integrated: false, routeable: false, reasons: ['not_integrated'] },
-          }],
-          sourceRevision: 2, sourceDigest: 'projection:engineering', observedAt: 2,
-          disposition: 'current',
-        },
-      })
 
       const profileBusinessId = await ctx.db.insert('businesses', {
         ownerId, slug: 'profile-only-consulting', name: 'Profile Only Consulting', normalizedName: 'profile only consulting',
@@ -55,19 +25,8 @@ describe('durable llms Offering parity', () => {
         publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
         sourceHash: 'business:profile-only', createdAt: 1, updatedAt: 1,
       })
-      await ctx.db.insert('businessSupplyProjectionSnapshots', {
-        businessId: profileBusinessId, sourceRevision: 1, sourceDigest: 'projection:profile',
-        observedAt: 2, disposition: 'current', status: 'current', updatedAt: 2,
-        projection: {
-          business: {
-            businessId: profileBusinessId, slug: 'profile-only-consulting', name: 'Profile Only Consulting',
-            category: 'Consulting', businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
-            publicUrl: '/profile-only-consulting', trustTier: 'listed',
-          },
-          offerings: [], sourceRevision: 1, sourceDigest: 'projection:profile', observedAt: 2,
-          disposition: 'current',
-        },
-      })
+      void offeringBusinessId
+      void profileBusinessId
     })
 
     const result = await backend.query(api.discovery.readLlmsTxt, {

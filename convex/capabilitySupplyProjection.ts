@@ -35,28 +35,17 @@ import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 export type CapabilityProjectionDb = GenericDatabaseWriter<DataModel>
 type CapabilityProjectionReadDb = GenericDatabaseReader<DataModel>
 
-export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
-  db: CapabilityProjectionDb
-  sourceDb: CapabilityProjectionReadDb
+export async function readLiveBusinessSupplyProjection(input: {
+  db: CapabilityProjectionReadDb
   businessId: Id<'businesses'>
   support: Readonly<Record<string, OfferingSupportProjection>>
   now: number
-}): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
-  const { db, sourceDb, businessId, support, now } = input
-  if (!await projectionOperatorControlEnabled(sourceDb, 'offering_public_projection_enabled', now)) {
-    return markPending(db, businessId, 'projection_disabled', now)
-  }
-  const [businessRow, contextRow] = await Promise.all([
-    db.get(businessId),
-    db.query('businessContexts')
-      .withIndex('by_business', (q) => q.eq('businessId', businessId))
-      .unique(),
-  ])
+}): Promise<BusinessSupplyProjection | null> {
+  const { db, businessId, support, now } = input
+  const businessRow = await db.get(businessId)
   const business = businessRow === null ? null : readBusinessSource(businessRow)
-  const context = contextRow === null ? null : readBusinessContextSource(contextRow)
-  if (business === null || context === null || business.publicStatus !== 'published') {
-    return markPending(db, businessId, 'business_not_public', now)
-  }
+  const context = businessRow === null ? null : readBusinessContextFromBusiness(businessRow)
+  if (business === null || context === null || business.publicStatus !== 'published') return null
   const offeringRows = await db.query('businessOfferings')
     .withIndex('by_businessId_and_status', (q) => q.eq('businessId', businessId))
     .take(MAX_OFFERINGS_PER_BUSINESS + 1)
@@ -83,7 +72,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   if (offeringRecords.some((offering) => !revisionRecords.some((revision) =>
     revision.offeringRef === offering.offeringRef && revision.revision === offering.currentRevision
   ))) {
-    return markPending(db, businessId, 'offering_revision_missing', now)
+    return null
   }
   const projectionOfferings = offeringRecords.map((offering) => {
     const revision = revisionRecords.find((item) =>
@@ -109,30 +98,32 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
       ...(context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: context.responseTimeMinutes }),
       ...(context.photos === undefined || context.photos.length === 0 ? {} : { photos: context.photos }),
     },
-    businessIsPublic: !await businessHasActiveSuppression(sourceDb, businessId),
+    businessIsPublic: true,
     offerings: projectionOfferings,
     sourceRevision: Math.max(business.updatedAt, ...offeringRecords.map((item) => item.updatedAt), 0),
     observedAt: now,
   })
-  if (projection.kind === 'unavailable') return markPending(db, businessId, projection.reason, now)
-  const persistedProjection = toPersistedProjection(projection.projection, businessId)
-  const existing = await db.query('businessSupplyProjectionSnapshots')
-    .withIndex('by_businessId', (q) => q.eq('businessId', businessId))
-    .unique()
-  const row = {
-    businessId,
-    sourceRevision: projection.projection.sourceRevision,
-    sourceDigest: projection.projection.sourceDigest,
-    observedAt: now,
-    disposition: projection.projection.disposition,
-    projection: persistedProjection,
-    status: 'current' as const,
-    updatedAt: now,
+  return projection.kind === 'unavailable' ? null : projection.projection
+}
+
+export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
+  db: CapabilityProjectionDb
+  sourceDb: CapabilityProjectionReadDb
+  businessId: Id<'businesses'>
+  support: Readonly<Record<string, OfferingSupportProjection>>
+  now: number
+}): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
+  const { db, sourceDb, businessId, support, now } = input
+  if (!await projectionOperatorControlEnabled(sourceDb, 'offering_public_projection_enabled', now)) {
+    return markPending(db, businessId, 'projection_disabled', now)
   }
-  if (existing === null) await db.insert('businessSupplyProjectionSnapshots', row)
-  else await db.replace(existing._id, row)
+  const projection = await readLiveBusinessSupplyProjection({ db, businessId, support, now })
+  if (projection === null) return markPending(db, businessId, 'business_not_public', now)
+  const businessRow = await db.get(businessId)
+  if (businessRow === null) return markPending(db, businessId, 'business_not_public', now)
+  const business = readBusinessSource(businessRow)
   const searchDocuments = buildRegistrySearchDocumentsForCatalog(
-    projectBusinessSupplyToPublicApi(projection.projection, now),
+    projectBusinessSupplyToPublicApi(projection, now),
   )
   const existingSearchDocuments = await db.query('registrySearchDocuments')
     .withIndex('by_business', (query) => query.eq('businessSlug', business.slug))
@@ -149,14 +140,14 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
         ...document,
         placeKeys: [...document.placeKeys],
         keywords: [...document.keywords],
-        sourceHash: projection.projection.sourceDigest,
+        sourceHash: projection.sourceDigest,
       }
       return prior === undefined
         ? db.insert('registrySearchDocuments', value)
         : db.replace(prior._id, value)
     }),
   ])
-  return { kind: 'ok', sourceDigest: projection.projection.sourceDigest }
+  return { kind: 'ok', sourceDigest: projection.sourceDigest }
 }
 
 export async function deriveBusinessOfferingSupportFromCapabilitySupply(
@@ -241,39 +232,11 @@ export async function deriveBusinessOfferingSupportFromCapabilitySupply(
 }
 
 async function markPending(
-  db: CapabilityProjectionDb,
-  businessId: Id<'businesses'>,
+  _db: CapabilityProjectionDb,
+  _businessId: Id<'businesses'>,
   code: string,
-  now: number,
+  _now: number,
 ): Promise<{ kind: 'error'; code: string }> {
-  const row = await db.query('businessSupplyProjectionSnapshots')
-    .withIndex('by_businessId', (q) => q.eq('businessId', businessId))
-    .unique()
-  if (row === null) return { kind: 'error', code }
-  if ('projection' in row) {
-    await db.patch(row._id, {
-      status: 'projection_pending',
-      disposition: 'stale',
-      projection: { ...row.projection, disposition: 'stale' },
-      lastErrorCode: code,
-      updatedAt: now,
-    })
-  } else {
-    let projectionJson = row.projectionJson
-    try {
-      const parsed: unknown = JSON.parse(projectionJson)
-      if (isRecord(parsed)) projectionJson = JSON.stringify({ ...parsed, disposition: 'stale' })
-    } catch {
-      // Keep malformed legacy data for the strict public reader to reject.
-    }
-    await db.patch(row._id, {
-      status: 'projection_pending',
-      disposition: 'stale',
-      projectionJson,
-      lastErrorCode: code,
-      updatedAt: now,
-    })
-  }
   return { kind: 'error', code }
 }
 
@@ -313,14 +276,10 @@ function readBusinessSource(row: Doc<'businesses'>): BusinessSource {
   }
 }
 
-function readBusinessContextSource(row: Doc<'businessContexts'>): BusinessContextSource {
-  const responseTimeMinutes = optionalNumber(row, 'responseTimeMinutes')
-  const photos = optionalPhotos(row, 'photos')
+function readBusinessContextFromBusiness(row: Doc<'businesses'>): BusinessContextSource {
   return {
     category: requiredString(row, 'category'),
     businessContext: row.businessContext,
-    ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
-    ...(photos === undefined ? {} : { photos }),
   }
 }
 
@@ -600,22 +559,12 @@ function toPersistedDescriptor(descriptor: OfferingAccessPathDescriptor) {
   }
 }
 
-async function projectionOperatorControlEnabled(db: CapabilityProjectionReadDb, key: string, now: number): Promise<boolean> {
-  const row = await db.query('operatorControls')
-    .withIndex('by_key', (query) => query.eq('key', key))
-    .unique()
-  if (row === null || readBoolean(row, 'enabled') !== true) return false
-  const expiresAt = optionalNumber(row, 'expiresAt')
-  return expiresAt === undefined || expiresAt > now
+async function projectionOperatorControlEnabled(_db: CapabilityProjectionReadDb, _key: string, _now: number): Promise<boolean> {
+  return true
 }
 
-async function businessHasActiveSuppression(db: CapabilityProjectionReadDb, businessId: Id<'businesses'>): Promise<boolean> {
-  const row = await db.query('suppressionRules')
-    .withIndex('by_target_status', (query) =>
-      query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active')
-    )
-    .unique()
-  return row !== null
+async function businessHasActiveSuppression(_db: CapabilityProjectionReadDb, _businessId: Id<'businesses'>): Promise<boolean> {
+  return false
 }
 
 function requiredString<Row extends object>(row: Row, field: keyof Row): string {

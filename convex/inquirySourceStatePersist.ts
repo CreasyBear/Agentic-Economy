@@ -9,7 +9,6 @@ import type {
   GovernedSendIntegrityCommitmentRecord,
   GovernedSendReceiptRecord,
   InquiryAuditRecord,
-  InquiryFunnelRecord,
   InquiryOperationRecord,
   InquirySourceState,
 } from '../src/modules/inquiries/public'
@@ -167,8 +166,6 @@ export async function persistInquirySourceState(db: GenericDatabaseWriter<DataMo
 
   const auditEventsByOperationKey = new Map(state.auditEvents.map((auditEvent) => [auditEvent.operationKey, auditEvent] as const))
   for (const operation of state.operations) await upsertInquiryOperation(db, operation, auditEventsByOperationKey.get(operation.operationKey))
-  for (const auditEvent of state.auditEvents) await upsertAuditEvent(db, auditEvent)
-  for (const funnelEvent of state.funnelEvents) await upsertFunnelEvent(db, funnelEvent)
 }
 
 async function upsertInquiryOperation(db: GenericDatabaseWriter<DataModel>, operation: InquiryOperationRecord, auditEvent: InquiryAuditRecord | undefined): Promise<void> {
@@ -300,22 +297,6 @@ async function persistGovernedSendIntegrityCommitment(db: GenericDatabaseWriter<
     return
   }
   if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) throw new Error('governed_send_commitment_conflict')
-}
-
-async function upsertAuditEvent(db: GenericDatabaseWriter<DataModel>, auditEvent: InquiryAuditRecord): Promise<void> {
-  const eventId = `audit:${canonicalDigest({ eventType: auditEvent.eventType, operationKey: auditEvent.operationKey, targetRef: auditEvent.targetRef })}`
-  const patch = { eventId, eventType: auditEvent.eventType, actorKind: auditEvent.actorKind, actorRef: auditEvent.actorRef, ...(auditEvent.businessId === undefined ? {} : { businessId: requireBusinessId(db, auditEvent.businessId) }), targetType: auditEvent.targetType, targetRef: auditEvent.targetRef, ...(auditEvent.beforeState === undefined ? {} : { beforeState: auditEvent.beforeState }), ...(auditEvent.afterState === undefined ? {} : { afterState: auditEvent.afterState }), idempotencyKey: auditEvent.operationKey, correlationId: auditEvent.correlationId, evidenceRefs: [], redactedPayloadJson: JSON.stringify(auditEvent.redactedPayload), payloadHash: auditEvent.payloadHash, createdAt: auditEvent.createdAt }
-  const existing = await db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
-  if (existing === null) await db.insert('auditEvents', patch)
-  else await db.patch(existing._id, patch)
-}
-
-async function upsertFunnelEvent(db: GenericDatabaseWriter<DataModel>, funnelEvent: InquiryFunnelRecord): Promise<void> {
-  const patch = { eventType: funnelEvent.eventType, source: 'inquiry', stage: 'published' as const, pseudonymousSessionId: funnelEvent.pseudonymousSessionId, ...(funnelEvent.businessId === undefined ? {} : { businessId: requireBusinessId(db, funnelEvent.businessId) }), redactedPayloadJson: JSON.stringify(funnelEvent.redactedPayload), consentFlag: true, correlationId: funnelEvent.correlationId, createdAt: funnelEvent.createdAt }
-  const existingRows = await db.query('funnelEvents').withIndex('by_eventType_business_correlation_createdAt', (query) => query.eq('eventType', patch.eventType).eq('businessId', patch.businessId).eq('correlationId', patch.correlationId).eq('createdAt', patch.createdAt)).take(1)
-  const existing = existingRows[0]
-  if (existing === undefined) await db.insert('funnelEvents', patch)
-  else await db.patch(existing._id, patch)
 }
 
 function requirePersistedLegacyThreadIdentity(

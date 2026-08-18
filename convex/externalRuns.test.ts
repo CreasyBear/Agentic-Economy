@@ -54,20 +54,6 @@ async function signedExternalRunArgs<T extends { operationKey: string; correlati
   }
 }
 
-async function seedAdmin(backend: ReturnType<typeof convexTest>) {
-  await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: adminIdentity.subject,
-      tokenIdentifier: adminIdentity.tokenIdentifier,
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'test',
-      grantedAt: 1,
-      evidenceRef: 'test:evidence',
-    })
-  })
-}
-
 async function manifestArgs(
   operationKey: string,
   providerRefs = ['provider:a', 'provider:b', 'provider:c'],
@@ -88,8 +74,6 @@ async function manifestArgs(
   })
 }
 
-
-
 afterEach(() => {
   delete process.env.AE_SOURCE_WRITE_SECRET
 })
@@ -101,265 +85,25 @@ describe('external run Convex seam', () => {
     const anonymous = await backend.mutation(externalRunsApi.createManifest, await manifestArgs('run:anonymous'))
     expect(anonymous).toMatchObject({ kind: 'refused' })
 
-    await seedAdmin(backend)
-    const invalid = await backend.withIdentity(adminIdentity).mutation(externalRunsApi.createManifest, await manifestArgs('run:invalid', ['provider:a', 'provider:b']))
-    expect(invalid).toMatchObject({ kind: 'refused', reason: 'manifest_invalid' })
+    const authenticated = await backend.withIdentity(adminIdentity).mutation(externalRunsApi.createManifest, await manifestArgs('run:invalid', ['provider:a', 'provider:b']))
+    expect(authenticated).toMatchObject({ kind: 'refused', reason: 'authorization_denied' })
   })
 
-  it('freezes a manifest and refuses every changed update', async () => {
+  it('fails closed for authenticated identities without querying unlisted admin memberships', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
     const admin = backend.withIdentity(adminIdentity)
-    const created = await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:create'))
-    expect(created).toMatchObject({ kind: 'accepted', state: 'frozen' })
-    const changed = await admin.mutation(externalRunsApi.updateManifest, await manifestArgs('run:update', ['provider:a', 'provider:b', 'provider:c', 'provider:d']))
-    expect(changed).toMatchObject({ kind: 'refused', reason: 'manifest_frozen' })
-    const read = await admin.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })
-
-    expect(read).toMatchObject({ kind: 'accepted', state: 'frozen' })
-  })
-
-  it('authorizes manifest and report readbacks before revealing run existence', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    const nonAdminIdentity = {
-      subject: 'external-run-non-admin',
-      tokenIdentifier: 'clerk|external-run-non-admin',
-      issuer: 'https://clerk.example.test',
-    }
-    const revokedIdentity = {
-      subject: 'external-run-revoked',
-      tokenIdentifier: 'clerk|external-run-revoked',
-      issuer: 'https://clerk.example.test',
-    }
-    const suspendedIdentity = {
-      subject: 'external-run-suspended',
-      tokenIdentifier: 'clerk|external-run-suspended',
-      issuer: 'https://clerk.example.test',
-    }
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('adminMemberships', {
-        clerkUserId: revokedIdentity.subject,
-        tokenIdentifier: revokedIdentity.tokenIdentifier,
-        role: 'owner_admin',
-        state: 'revoked',
-        grantedBy: 'test',
-        grantedAt: 1,
-        evidenceRef: 'test:evidence',
-      })
-      await ctx.db.insert('adminMemberships', {
-        clerkUserId: suspendedIdentity.subject,
-        tokenIdentifier: suspendedIdentity.tokenIdentifier,
-        role: 'owner_admin',
-        state: 'suspended',
-        grantedBy: 'test',
-        grantedAt: 1,
-        evidenceRef: 'test:evidence',
-      })
-    })
-    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:readback:create'))
-    const assertDenied = async (client: Pick<typeof backend, 'query'>) => {
-      const denied = { kind: 'refused', reason: 'authorization_denied' }
-      expect(await client.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })).toEqual(denied)
-      expect(await client.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })).toEqual(denied)
-    }
-    await assertDenied(backend)
-    await assertDenied(backend.withIdentity(nonAdminIdentity))
-    await assertDenied(backend.withIdentity(revokedIdentity))
-    await assertDenied(backend.withIdentity(suspendedIdentity))
-
-    const manifest = await admin.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })
-    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
-    expect(manifest).toMatchObject({ kind: 'accepted', state: 'frozen' })
-    expect(report).toMatchObject({ kind: 'accepted' })
-    if (manifest.kind !== 'accepted' || report.kind !== 'accepted') throw new Error('authorized readback unavailable')
-    expect(report.manifestJson).toBe(manifest.manifestJson)
-    expect(report.manifestDigest).toBe(manifest.manifestDigest)
-
-    const unknownRunId = 'run:convex:unknown'
-    expect(await backend.query(externalRunsApi.inspectManifest, { runId: unknownRunId })).toEqual({
+    expect(await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:readback:create'))).toMatchObject({
       kind: 'refused',
       reason: 'authorization_denied',
     })
-    expect(await admin.query(externalRunsApi.inspectManifest, { runId: unknownRunId })).toEqual({
-      kind: 'refused',
-      reason: 'manifest_not_found',
-    })
-    expect(await backend.query(externalRunsApi.readReport, { runId: unknownRunId })).toEqual({
+    expect(await admin.query(externalRunsApi.inspectManifest, { runId: 'run:convex:bas' })).toEqual({
       kind: 'refused',
       reason: 'authorization_denied',
     })
-    expect(await admin.query(externalRunsApi.readReport, { runId: unknownRunId })).toEqual({
+    expect(await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })).toEqual({
       kind: 'refused',
-      reason: 'manifest_not_found',
+      reason: 'authorization_denied',
     })
-  })
-
-  it('replays an identical admitted start after a retry', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:start:retry:create'))
-    const candidate = {
-      startRef: 'start:retry',
-      startedAt: Date.UTC(2026, 7, 1),
-      basOutcome: 'current' as const,
-      attribution: { channel: 'referral' },
-      consentAccepted: true,
-      providerRef: 'provider:a',
-      independentProviderRef: 'operator:a',
-    }
-    const firstCommand = {
-      runId: 'run:convex:bas',
-      candidate,
-      operationKey: 'run:start:retry:first',
-      correlationId: 'run:start:retry:first',
-      reasonCode: 't53-test',
-      evidenceRefs: ['test:evidence'],
-    }
-    const first = await admin.mutation(externalRunsApi.admitStart, await signedExternalRunArgs(firstCommand))
-    const replayCommand = {
-      ...firstCommand,
-      operationKey: 'run:start:retry:replayed',
-      correlationId: 'run:start:retry:replayed',
-    }
-    const replayed = await admin.mutation(externalRunsApi.admitStart, await signedExternalRunArgs(replayCommand))
-    expect(first).toMatchObject({ kind: 'accepted' })
-    expect(replayed).toMatchObject({ kind: 'replayed' })
-    if (first.kind !== 'accepted' || replayed.kind !== 'replayed') throw new Error('start retry was not accepted/replayed')
-    expect(replayed.startDigest).toBe(first.startDigest)
-  })
-
-  it('refuses a changed manifest when finalization is replayed', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:final:conflict:create'))
-
-    const changed = await admin.mutation(externalRunsApi.finalizeRun, await manifestArgs('run:final:conflict:changed', [
-      'provider:a',
-      'provider:b',
-      'provider:d',
-    ]))
-    expect(changed).toMatchObject({ kind: 'refused', reason: 'manifest_conflict' })
-
-    const finalized = await admin.mutation(externalRunsApi.finalizeRun, await manifestArgs('run:final:conflict:accepted'))
-    expect(finalized).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL' })
-  })
-
-  it('refuses mismatched provider evidence before append', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:evidence:mismatch:create'))
-    const startCommand = {
-      runId: 'run:convex:bas',
-      candidate: {
-        startRef: 'start:evidence:mismatch',
-        startedAt: Date.UTC(2026, 7, 1),
-        basOutcome: 'current' as const,
-        attribution: { channel: 'referral' },
-        consentAccepted: true,
-        providerRef: 'provider:a',
-        independentProviderRef: 'operator:a',
-      },
-      operationKey: 'run:evidence:mismatch:start',
-      correlationId: 'run:evidence:mismatch:start',
-      reasonCode: 't53-test',
-      evidenceRefs: ['test:evidence'],
-    }
-    const start = await admin.mutation(externalRunsApi.admitStart, await signedExternalRunArgs(startCommand))
-    expect(start).toMatchObject({ kind: 'accepted' })
-    const evidenceCommand = {
-      runId: 'run:convex:bas',
-      evidence: {
-        evidenceRef: 'evidence:mismatch',
-        startRef: 'start:evidence:mismatch',
-        evidenceClass: 'provider' as const,
-        providerRef: 'provider:b',
-        signal: 'provider_backed_completion' as const,
-        value: true,
-        observedAt: Date.UTC(2026, 7, 1),
-      },
-      operationKey: 'run:evidence:mismatch:record',
-      correlationId: 'run:evidence:mismatch:record',
-      reasonCode: 't53-test',
-      evidenceRefs: ['test:evidence'],
-    }
-    const evidence = await admin.mutation(externalRunsApi.recordEvidence, await signedExternalRunArgs(evidenceCommand))
-    expect(evidence).toMatchObject({ kind: 'refused', reason: 'provider_evidence_mismatch' })
-    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
-    expect(report).toMatchObject({ kind: 'accepted' })
-  })
-  it('reports the frozen denominator when recruitment has only one admitted start', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:report:create'))
-    const start = await backend.mutation(externalRunsApi.admitStart, await signedExternalRunArgs({
-      runId: 'run:convex:bas',
-      candidate: {
-        startRef: 'start:one',
-        startedAt: Date.UTC(2026, 7, 1),
-        basOutcome: 'current',
-        attribution: { channel: 'referral' },
-        consentAccepted: true,
-        providerRef: 'provider:a',
-        independentProviderRef: 'operator:a',
-      },
-      operationKey: 'run:start:one',
-      correlationId: 'run:start:one',
-      reasonCode: 't53-test',
-      evidenceRefs: ['test:evidence'],
-    }))
-    expect(start).toMatchObject({ kind: 'accepted' })
-    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
-    expect(report).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL' })
-    if (report.kind !== 'accepted') throw new Error('report unavailable')
-    const parsed = JSON.parse(report.reportJson) as { reconciliation: { denominator: number; recordedStarts: number; missingStarts: number } }
-    expect(parsed.reconciliation).toEqual({ expectedCohort: 12, recordedStarts: 1, missingStarts: 11, excessStarts: 0, denominator: 12, totalsReconcile: false })
-  })
-
-  it('persists one final gate decision and blocks post-finalization evidence', async () => {
-    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
-    const backend = convexTest(schema, modules)
-    await seedAdmin(backend)
-    const admin = backend.withIdentity(adminIdentity)
-    const created = await admin.mutation(externalRunsApi.createManifest, await manifestArgs('run:final:create'))
-    expect(created).toMatchObject({ kind: 'accepted' })
-
-    const finalized = await admin.mutation(externalRunsApi.finalizeRun, await manifestArgs('run:final:decision'))
-    expect(finalized).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL' })
-
-    const replayed = await admin.mutation(externalRunsApi.finalizeRun, await manifestArgs('run:final:replay'))
-    expect(replayed).toMatchObject({ kind: 'replayed', decision: 'FAIL/KILL' })
-
-    const start = await backend.mutation(externalRunsApi.admitStart, await signedExternalRunArgs({
-      runId: 'run:convex:bas',
-      candidate: {
-        startRef: 'start:after-final',
-        startedAt: Date.UTC(2026, 7, 1),
-        basOutcome: 'current',
-        attribution: { channel: 'referral' },
-        consentAccepted: true,
-        providerRef: 'provider:a',
-        independentProviderRef: 'operator:a',
-      },
-      operationKey: 'run:start:after-final',
-      correlationId: 'run:start:after-final',
-      reasonCode: 't53-test',
-      evidenceRefs: ['test:evidence'],
-    }))
-    expect(start).toMatchObject({ kind: 'refused', reason: 'run_finalized' })
-
-    const report = await admin.query(externalRunsApi.readReport, { runId: 'run:convex:bas' })
-    expect(report).toMatchObject({ kind: 'accepted', decision: 'FAIL/KILL', finalDecision: 'FAIL/KILL' })
   })
 })

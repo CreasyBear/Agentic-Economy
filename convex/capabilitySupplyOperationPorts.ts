@@ -1,7 +1,6 @@
 import type {
   OperationLedgerPorts,
   OperationKeyRecord,
-  SupplyAuditEventRow,
 } from '@/modules/capability-supply/public'
 
 import type { Doc, Id } from './_generated/dataModel'
@@ -51,30 +50,8 @@ export function capabilitySupplyOperationPorts(
       })
     },
 
-    findAuditByEventId: async (eventId) => {
-      const existing = await db.query('auditEvents')
-        .withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
-      return existing === null ? null : toAuditRow(existing)
-    },
-    insertAudit: async (row) => {
-      await db.insert('auditEvents', {
-        eventId: row.eventId,
-        eventType: row.eventType,
-        actorKind: row.actorKind,
-        actorRef: row.actorRef,
-        targetType: row.targetType,
-        targetRef: row.targetRef,
-        beforeState: row.beforeState,
-        afterState: row.afterState,
-        idempotencyKey: row.idempotencyKey,
-        correlationId: row.correlationId,
-        reasonCode: row.reasonCode,
-        evidenceRefs: [...row.evidenceRefs],
-        redactedPayloadJson: row.redactedPayloadJson,
-        payloadHash: row.payloadHash,
-        createdAt: row.createdAt,
-      })
-    },
+    findAuditByEventId: async () => null,
+    insertAudit: async () => undefined,
 
     registerOffering: writers.registerOffering,
     registerBinding: writers.registerBinding,
@@ -133,25 +110,4 @@ function toOperationKeyRecord(doc: Doc<'operationKeys'>): OperationKeyRecord {
     effectRefs: doc.effectRefs,
   }
 }
-
-function toAuditRow(doc: Doc<'auditEvents'>): SupplyAuditEventRow {
-  return {
-    eventId: doc.eventId,
-    eventType: doc.eventType,
-    actorKind: doc.actorKind,
-    actorRef: doc.actorRef,
-    targetType: doc.targetType,
-    targetRef: doc.targetRef,
-    ...(doc.beforeState === undefined ? {} : { beforeState: doc.beforeState }),
-    ...(doc.afterState === undefined ? {} : { afterState: doc.afterState }),
-    idempotencyKey: doc.idempotencyKey,
-    correlationId: doc.correlationId,
-    ...(doc.reasonCode === undefined ? {} : { reasonCode: doc.reasonCode }),
-    evidenceRefs: doc.evidenceRefs,
-    redactedPayloadJson: doc.redactedPayloadJson,
-    payloadHash: doc.payloadHash,
-    createdAt: doc.createdAt,
-  }
-}
-
 

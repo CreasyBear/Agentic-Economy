@@ -19,7 +19,16 @@ import type { TestConvex } from 'convex-test'
 
 import { decodeDurableCapabilityContract } from '@/modules/capability-contract-registry/public'
 import { openCapabilityDecisionModel, type CapabilityContract, type CapabilityDecisionModel } from '@/modules/capability-contract/public'
-import type { RequestFact } from '@/modules/customer-request/evaluation'
+
+type RequestFact = Readonly<{
+  contractRef: CapabilityDecisionModel['contractRef']
+  selectionKey: CapabilityDecisionModel['selectionKey']
+  inputKey: CapabilityDecisionModel['inputs'][number]['key']
+  inputPointer: string
+  schemaIdentity: CapabilityDecisionModel['inputs'][number]['schemaIdentity']
+  value: string
+  source: Readonly<{ kind: 'customer'; assertionRef: string }>
+}>
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { convexModules } from './convex-fixtures'

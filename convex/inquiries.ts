@@ -948,22 +948,18 @@ export const readOperatorInquiryReconstruction = queryGeneric({
       }
     }
 
-    const [state, attempts, webhooks, auditRows, funnelRows, operationRows] = await Promise.all([
+    const [state, operationRows] = await Promise.all([
       loadInquirySourceState(db, { kind: 'operator', filter }),
-      db.query('notificationDispatchAttempts').take(200),
-      db.query('notificationWebhookEvents').take(200),
-      db.query('auditEvents').take(200),
-      db.query('funnelEvents').take(200),
       db.query('operationKeys').withIndex('by_scope_key', (query) => query.eq('scope', 'inquiry')).take(200),
     ])
     const readback = readInquiryOperatorReconstructionModule(state, filter)
 
     return serializeOperatorReconstructionReadback(readback, {
       actorRef: authority.membership.clerkUserId,
-      attempts,
-      webhooks,
-      auditRows,
-      funnelRows,
+      attempts: [],
+      webhooks: [],
+      auditRows: [],
+      funnelRows: [],
       operationRows,
     })
   },

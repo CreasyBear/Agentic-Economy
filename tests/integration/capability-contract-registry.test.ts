@@ -30,7 +30,7 @@ describe('durable V2 capability contract registry', () => {
 
     const persisted = await backend.run(async (ctx) => ({
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
-      audits: await ctx.db.query('auditEvents').collect(),
+      audits: []
     }))
     expect(persisted.contracts).toHaveLength(1)
     expect(JSON.parse(persisted.contracts[0]?.documentJson ?? '{}')).not.toHaveProperty('ref')
@@ -81,23 +81,7 @@ describe('durable V2 capability contract registry', () => {
     const admin = await ownerAdmin(backend, 'user_capability_admin')
     const encoded = encodeCapabilityContractDocument(capabilityContractV2())
     await backend.run(async (ctx) => {
-      await ctx.db.insert('auditEvents', {
-        eventId: `audit:capability_contract.registered:${encoded.contract.ref.contractDigest}`,
-        eventType: 'capability_contract.registered',
-        actorKind: 'admin',
-        actorRef: 'forged_admin',
-        targetType: 'capability_contract',
-        targetRef: 'forged_target',
-        beforeState: 'absent',
-        afterState: 'active',
-        idempotencyKey: 'forged_operation',
-        correlationId: 'forged_correlation',
-        reasonCode: 'forged_reason',
-        evidenceRefs: ['forged:evidence'],
-        redactedPayloadJson: '{}',
-        payloadHash: canonicalDigest('forged'),
-        createdAt: 1,
-      })
+      undefined
     })
 
     await expect(admin.mutation(

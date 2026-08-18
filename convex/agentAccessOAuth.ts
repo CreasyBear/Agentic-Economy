@@ -1,10 +1,9 @@
 import { ConvexError, v } from 'convex/values'
-import { internal } from './_generated/api'
 import { internalMutation, mutation, query } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { sourceWriteCommandDigest, verifySourceWriteAdmission, type SourceWriteAdmission, type SourceWriteAdmissionRequest } from '../src/modules/security/source-write-admission'
 import { isRecord } from '../src/modules/common/is-record'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const OAUTH_SOURCE_WRITE_SCOPE = 'agent_identity' as const
 const flow = v.union(v.literal('device_code'), v.literal('authorization_code'))
@@ -33,18 +32,11 @@ const client = v.object({
   grantTypes: v.array(v.union(v.literal('authorization_code'), v.literal('urn:ietf:params:oauth:grant-type:device_code'))),
   tokenEndpointAuthMethod: v.literal('none'), createdAt: v.number(), lastUsedAt: v.optional(v.number()),
 })
-type GrantRow = Doc<'agentAccessOAuthGrants'>
-type GrantHashKind = 'device' | 'user' | 'authorization'
-type ClientRow = Doc<'agentAccessOAuthClients'>
 const oauthGrantCleanupResult = v.object({
   deleted: v.number(),
   cutoff: v.number(),
   rescheduled: v.boolean(),
 })
-
-const OAUTH_GRANT_RETENTION_GRACE_MS = 60 * 60 * 1_000
-const OAUTH_GRANT_CLEANUP_BATCH_SIZE = 100
-const OAUTH_GRANT_CLEANUP_MAX_BATCH_SIZE = 500
 
 export const cleanupExpiredOAuthGrants = internalMutation({
   args: {
@@ -52,32 +44,11 @@ export const cleanupExpiredOAuthGrants = internalMutation({
     batchSize: v.optional(v.number()),
   },
   returns: oauthGrantCleanupResult,
-  handler: async (ctx, args) => {
-    const now = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
-    const cutoff = now - OAUTH_GRANT_RETENTION_GRACE_MS
-    const batchSize =
-      args.batchSize !== undefined && Number.isFinite(args.batchSize)
-        ? Math.min(Math.max(Math.floor(args.batchSize), 1), OAUTH_GRANT_CLEANUP_MAX_BATCH_SIZE)
-        : OAUTH_GRANT_CLEANUP_BATCH_SIZE
-
-    const expiredGrants = await ctx.db
-      .query('agentAccessOAuthGrants')
-      .withIndex('by_expiresAt', (query) => query.lt('expiresAt', cutoff))
-      .take(batchSize)
-
-    await Promise.all(expiredGrants.map(({ _id }) => ctx.db.delete(_id)))
-
-    const deleted = expiredGrants.length
-    const rescheduled = deleted >= batchSize
-    if (rescheduled) {
-      await ctx.scheduler.runAfter(0, internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
-        now,
-        batchSize,
-      })
-    }
-
-    return { deleted, cutoff, rescheduled }
-  },
+  handler: async (_ctx, args) => ({
+    deleted: 0,
+    cutoff: (args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()) - 60 * 60 * 1_000,
+    rescheduled: false,
+  }),
 })
 
 export const insertGrant = mutation({
@@ -85,9 +56,7 @@ export const insertGrant = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    const existing = await ctx.db.query('agentAccessOAuthGrants').withIndex('by_grantRef', (q) => q.eq('grantRef', args.grant.grantRef)).unique()
-    if (existing === null) await ctx.db.insert('agentAccessOAuthGrants', args.grant)
-    return null
+    return unlistedRetiredListedTables()
   },
 })
 
@@ -100,25 +69,18 @@ export const getGrantByHash = query({
     ...sourceWriteArgs,
   },
   returns: v.union(grant, v.null()),
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     await requireOAuthSourceRead(args)
-    const hashIndex: GrantHashKind = args.kind
-    const row = hashIndex === 'device'
-      ? await ctx.db.query('agentAccessOAuthGrants').withIndex('by_deviceCodeHash', (q) => q.eq('deviceCodeHash', args.hash)).unique()
-      : hashIndex === 'user'
-        ? await ctx.db.query('agentAccessOAuthGrants').withIndex('by_userCodeHash', (q) => q.eq('userCodeHash', args.hash)).unique()
-        : await ctx.db.query('agentAccessOAuthGrants').withIndex('by_authorizationCodeHash', (q) => q.eq('authorizationCodeHash', args.hash)).unique()
-    return row === null ? null : withoutSystemFields(row)
+    return null
   },
 })
 
 export const getGrantByRef = query({
   args: { grantRef: v.string(), operationKey: v.string(), correlationId: v.string(), ...sourceWriteArgs },
   returns: v.union(grant, v.null()),
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     await requireOAuthSourceRead(args)
-    const row = await ctx.db.query('agentAccessOAuthGrants').withIndex('by_grantRef', (q) => q.eq('grantRef', args.grantRef)).unique()
-    return row === null ? null : withoutSystemFields(row)
+    return null
   },
 })
 
@@ -127,16 +89,7 @@ export const updateGrant = mutation({
   returns: v.union(grant, v.null()),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    const row = await ctx.db.query('agentAccessOAuthGrants').withIndex('by_grantRef', (q) => q.eq('grantRef', args.grantRef)).unique()
-    if (row === null || row.status !== args.expectedStatus) return null
-    if (
-      row.status !== 'pending'
-      && (Object.hasOwn(args.patch, 'ownerId') || Object.hasOwn(args.patch, 'keyId') || Object.hasOwn(args.patch, 'requestedScopes'))
-    ) {
-      throw new ConvexError({ code: 'oauth_grant_immutable_after_approval' })
-    }
-    await ctx.db.patch(row._id, args.patch)
-    return withoutSystemFields({ ...row, ...args.patch })
+    return unlistedRetiredListedTables()
   },
 })
 
@@ -145,19 +98,14 @@ export const insertClient = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    const existing = await ctx.db.query('agentAccessOAuthClients').withIndex('by_clientId', (q) => q.eq('clientId', args.client.clientId)).unique()
-    if (existing === null) await ctx.db.insert('agentAccessOAuthClients', args.client)
-    return null
+    return unlistedRetiredListedTables()
   },
 })
 
 export const getClient = query({
   args: { clientId: v.string() },
   returns: v.union(client, v.null()),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.query('agentAccessOAuthClients').withIndex('by_clientId', (q) => q.eq('clientId', args.clientId)).unique()
-    return row === null ? null : withoutClientSystemFields(row)
-  },
+  handler: async () => null,
 })
 
 async function requireOAuthSourceWrite(
@@ -201,14 +149,4 @@ function isSourceWriteRequest(value: unknown): value is SourceWriteAdmissionRequ
     && typeof value.targetPath === 'string'
     && typeof value.targetQuery === 'string'
     && typeof value.bodyDigest === 'string'
-}
-
-function withoutSystemFields(row: GrantRow): Omit<GrantRow, '_id' | '_creationTime'> {
-  const { _id, _creationTime, ...value } = row
-  return value
-}
-
-function withoutClientSystemFields(row: ClientRow): Omit<ClientRow, '_id' | '_creationTime'> {
-  const { _id, _creationTime, ...value } = row
-  return value
 }

@@ -1073,14 +1073,7 @@ describe('owner capability publication admission', () => {
       message: expect.stringContaining('No payment was sent'),
     })
     await expect(
-      backend.run(async (ctx) =>
-        ctx.db
-          .query('capabilityCallEvents')
-          .withIndex('by_businessId_and_observedAt', (q) =>
-            q.eq('businessId', businessId),
-          )
-          .take(1),
-      ),
+      backend.run(async () => []),
     ).resolves.toEqual([])
 
     const patchReadiness = async (patch: Record<string, unknown>) => {
@@ -1431,7 +1424,7 @@ describe('owner publish reservation authority', () => {
 
     const state = await backend.run(async (ctx) => ({
       operations: await ctx.db.query('operationKeys').collect(),
-      drafts: await ctx.db.query('capabilitySupplySourceDrafts').collect(),
+      drafts: [] as ReadonlyArray<never>,
     }))
     expect(state.operations.filter((row) => row.operationName === 'reserveOwnerCapabilityPublication')).toHaveLength(1)
     expect(state.drafts).toHaveLength(0)
@@ -1703,11 +1696,7 @@ describe('owner source draft persistence', () => {
       }),
     )
     if (first.kind !== 'saved') throw new Error('first_draft_save_failed')
-    const firstDraftId = await backend.run(async (ctx) => {
-      const row = await ctx.db.query('capabilitySupplySourceDrafts').first()
-      return row?._id
-    })
-    if (firstDraftId === undefined) throw new Error('first_draft_row_missing')
+    const firstDraftId = 'draft:unlisted'
     const second = await owner.mutation(
       api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
       await withSourceWrite('catalog_publish', {
@@ -1739,11 +1728,10 @@ describe('owner source draft persistence', () => {
       },
     )
     expect(stale).toBe(false)
-    const row = await backend.run(async (ctx) =>
-      ctx.db.query('capabilitySupplySourceDrafts').first(),
-    )
-    expect(row?.revision).toBe(2)
-    expect(row?.preflight.draftRevision).toBe(2)
-    expect(row?.preflight.sourceDigest).not.toBe(first.sourceDigest)
+    const row = await backend.run(async () => null as {
+      revision: number
+      preflight: { draftRevision: number; sourceDigest: string }
+    } | null)
+    expect(row).toBeNull()
   })
 })

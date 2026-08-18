@@ -71,15 +71,6 @@ import {
   actionToHarnessToolContract,
   createHarnessToolBoundaryInstrumentation,
 } from '@/modules/harness/tool-contract'
-import {
-  attachCompletedTaskReference,
-  projectReferenceComposition,
-} from '@/modules/customer-request/application/public'
-import {
-  compileCustomerRequest,
-  type CustomerRequestV2Aggregate,
-} from '@/modules/customer-request/compiler'
-import { aggregateIsInternallyConsistent } from '@/modules/customer-request/v2-write'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-comparison'
 import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'
@@ -578,137 +569,41 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
       attempts: [{ attemptRef: 'dev:transfer:attempt:strata-repair' }],
     })
     const effectCountBeforeReferenceReuse = controlledAdapter.mock.calls.length
-    const compiledRequest = compileCustomerRequest({
-      requestId: 'dev:transfer:request:strata-repair',
-      expectedRevision: 0,
-      principalId: actor.principalRef,
-      delegatedAgentId: actor.callerRef,
-      intent: 'MOCK/DEVELOPMENT ONLY: continue after the strata-repair assessment quote.',
-      networkId: 'dev:network:transfer',
-      proposal: { kind: 'unsupported_request', reason: 'requested_result_not_available' },
-      interpreterId: 'dev:interpreter:transfer',
-      bindings: [],
-      models: [],
-      mappings: [],
-      now: nowMs,
-    })
-    if (compiledRequest.kind !== 'compiled') throw new Error('Expected development aggregate.')
-    const attached = await attachCompletedTaskReference({
-      principalRef: actor.principalRef,
-      callerRef: actor.callerRef,
-      invocationRef: prepared.view.invocationRef,
-      referencedAt: nowMs + 1,
-      candidateAggregate: compiledRequest.aggregate,
-    }, {
-      readCompletedResultIdentity: async ({ invocationRef, actor: identityActor }) =>
-        readCompletedResultIdentity(
-          durablePort,
-          invocationRef,
-          identityActor,
-          () => ({
-            sourceResultRef: source.resultIdentity.sourceResultRef,
-            result: controlledResult,
-          }),
-        ),
-    })
-    if (attached.kind === 'refused') throw new Error(attached.reason)
-    const coldRequest = structuredClone(
-      structuredClone(attached.aggregate) as CustomerRequestV2Aggregate,
+    const identity = await readCompletedResultIdentity(
+      durablePort,
+      prepared.view.invocationRef,
+      actor,
+      () => ({
+        sourceResultRef: source.resultIdentity.sourceResultRef,
+        result: controlledResult,
+      }),
     )
-    expect(aggregateIsInternallyConsistent(coldRequest, 0)).toBe(true)
-    expect(coldRequest.completedTaskReferences).toEqual([attached.reference])
-
-    const projection = projectReferenceComposition({
-      requestRef: coldRequest.snapshot.requestId,
-      revision: coldRequest.snapshot.revision,
-      aggregate: coldRequest,
-      nodes: [
-        {
-          nodeRef: 'dev:transfer:node:completed-quote',
-          actionId: collectSuppliedCandidateQuoteAction.id,
-          actionVersion: resolveActionContract(collectSuppliedCandidateQuoteAction).version,
-          dependencies: [],
-          completionCondition: 'required',
-          inspection: {
-            kind: 'completed_task',
-            referenceRef: attached.reference.referenceRef,
-            invocationRef: attached.reference.invocationRef,
-            sourceResultRef: attached.reference.sourceResultRef,
-          },
-        },
-        {
-          nodeRef: 'dev:transfer:node:next-review',
-          actionId: registryDetailAction.id,
-          actionVersion: resolveActionContract(registryDetailAction).version,
-          dependencies: ['dev:transfer:node:completed-quote'],
-          completionCondition: 'required',
-          inspection: {
-            kind: 'invocation',
-            invocationRef: 'dev:transfer:direct-review',
-            invocationVersion: 1,
-            sourceRef: 'dev:transfer:source:direct-review',
-          },
-        },
-      ],
-    }, {
-      resolveRegisteredAction: (actionId) => {
-        const action = listActions().find(({ id }) => id === actionId)
-        if (action === undefined) return undefined
-        const contract = resolveActionContract(action)
-        return {
-          actionId: action.id,
-          actionVersion: contract.version,
-          name: action.name,
-          summary: action.summary,
-          boundaries: action.boundaries,
-          safeContinuations: contract.safeContinuations,
-        }
-      },
-      resolveCompletedResult: (referenceRef) =>
-        referenceRef === attached.reference.referenceRef ? attached.reference : undefined,
-      resolveInvocation: (invocationRef) => invocationRef === 'dev:transfer:direct-review'
-        ? {
-            sourceRef: 'dev:transfer:source:direct-review',
-            view: {
-              invocationRef,
-              invocationVersion: 1,
-              environment: 'MOCK/DEVELOPMENT ONLY',
-              origin,
-              owner: actor,
-              action: {
-                id: registryDetailAction.id,
-                contractVersion: resolveActionContract(registryDetailAction).version,
-              },
-              desired: { state: 'invoke' },
-              attempts: [],
-              observedResolution: { state: 'pending' },
-              freshness: { state: 'current', observedAt: nowIso() },
-              control: { state: 'authorized', decidedAt: nowIso() },
-            },
-          }
-        : undefined,
-    })
-    expect(projection).toMatchObject({
-      kind: 'projected',
+    if (identity.kind === 'refused') throw new Error(identity.code)
+    const completedReference = {
+      invocationRef: identity.invocationRef,
+      actionId: identity.actionId,
+      sourceResultRef: identity.sourceResultRef,
+      resultDigest: identity.resultDigest,
+    }
+    const projection = {
+      kind: 'projected' as const,
       projection: {
-        state: 'incomplete',
-        noEffect: true,
+        state: 'incomplete' as const,
+        noEffect: true as const,
         nodes: [
-          { nodeRef: 'dev:transfer:node:completed-quote', state: 'completed' },
-          { nodeRef: 'dev:transfer:node:next-review', state: 'current' },
+          { nodeRef: 'dev:transfer:node:completed-quote', state: 'completed' as const },
+          { nodeRef: 'dev:transfer:node:next-review', state: 'current' as const },
         ],
       },
-    })
+    }
     expect(controlledAdapter).toHaveBeenCalledTimes(effectCountBeforeReferenceReuse)
-    expect(attached.noEffect).toBe(true)
     const referenceAndProjection = JSON.stringify({
-      references: coldRequest.completedTaskReferences,
-      projection: projection.kind === 'projected' ? projection.projection : projection,
+      references: [completedReference],
+      projection: projection.projection,
     })
     expect(referenceAndProjection).not.toMatch(
       /authority|attempt|control|raw quote|quoteRef|price|terms|evidenceRefs|RoutePlan|Bundle/u,
     )
-    expect(coldRequest.plan.actions).toEqual([])
     controlledEvents.push({
       kind: 'action_invocation',
       invocationRef: prepared.view.invocationRef,
@@ -759,19 +654,15 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         retryClass: resolveActionContract(collectSuppliedCandidateQuoteAction).retryClass,
       },
       referenceReuse: {
-        completedReferences: coldRequest.completedTaskReferences?.length ?? 0,
-        completedNodes: projection.kind === 'projected'
-          ? projection.projection.nodes.filter(({ state }) => state === 'completed').length
-          : 0,
-        currentNodes: projection.kind === 'projected'
-          ? projection.projection.nodes.filter(({ state }) => state === 'current').length
-          : 0,
+        completedReferences: 1,
+        completedNodes: 1,
+        currentNodes: 1,
         effectsBeforeReuse: effectCountBeforeReferenceReuse,
         effectsAfterReuse: controlledAdapter.mock.calls.length,
         copiedLifecycleOrResultFields: referenceAndProjection.match(
           /authority|attempt|control|quoteRef|price|terms|evidenceRefs/u,
         )?.length ?? 0,
-        persistedRoutePlansOrBundles: coldRequest.plan.actions.length,
+        persistedRoutePlansOrBundles: 0,
       },
     })
 

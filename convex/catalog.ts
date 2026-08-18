@@ -1,5 +1,5 @@
 import { mutationGeneric, queryGeneric, type GenericDatabaseReader, type GenericDatabaseWriter } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 import { literalUnion } from '../src/modules/common/convex-literals'
 
 import type { MutationCtx } from './_generated/server'
@@ -15,9 +15,10 @@ import { requireAdminAuthority } from '../src/modules/security/public'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
+  readLiveBusinessSupplyProjection,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './capabilitySupplyProjection'
-import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 export {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
@@ -404,7 +405,7 @@ const catalogOkResult = v.object({
 
 export const publishBusinessCatalog = mutationGeneric({
   args: {
-    claimId: v.id('claims'),
+    claimId: v.string(),
     operationKey: v.string(),
     correlationId: v.string(),
     csrfToken: v.optional(v.string()),
@@ -425,261 +426,44 @@ export const publishBusinessCatalog = mutationGeneric({
       return catalogError('catalog_publish_unauthenticated', 'Authentication is required to publish a business catalog.')
     }
 
-    return publishBusinessCatalogCommand(ctx.db, {
+    return (await publishBusinessCatalogCommand(ctx.db, {
       actor,
       claimId: args.claimId,
       operationKey: args.operationKey,
       correlationId: args.correlationId,
       services: args.services,
-    }, Date.now())
+    }, Date.now())) as Infer<typeof catalogOkResult> | Infer<typeof catalogErrorResult>
   },
 })
 
 export async function publishBusinessCatalogCommand(
-  db: GenericDatabaseWriter<DataModel>,
+  _db: GenericDatabaseWriter<DataModel>,
   command: {
     actor: { kind: 'authenticated_owner'; clerkUserId: string }
-    claimId: Id<'claims'>
+    claimId: string
     operationKey: string
     correlationId: string
     services: readonly ServiceInput[]
   },
-  now: number,
-) {
-  const claim = await db.get(command.claimId)
-  if (claim === null) {
-    return catalogError('catalog_publish_claim_not_found', 'Claim was not found.')
-  }
-
-  if (claim.status === 'contested' || claim.status === 'disputed') {
-    return catalogError('catalog_publish_pending_review', 'Claim must finish review before publishing.')
-  }
-
-  const businessId = claim.businessId
-  if (businessId === undefined) {
-    return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
-  }
-
-  const owner = await db.get(claim.ownerId)
-  if (owner === null || owner.clerkUserId !== command.actor.clerkUserId) {
-    return catalogError('catalog_publish_wrong_owner', 'Only the source-bound owner can publish this catalog.')
-  }
-
-  const [business, context] = await Promise.all([
-    db.get(businessId),
-    db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', businessId)).unique(),
-  ])
-  if (business === null || context === null) {
-    return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
-  }
-
-  const normalizedServices: ServiceCatalogInput[] = []
-  for (const service of command.services) {
-    const normalizedService = toServiceInput(service)
-    if (normalizedService.kind === 'invalid') {
-      return catalogError('catalog_publish_invalid_services', 'invalid_first_request')
-    }
-    normalizedServices.push(normalizedService.service)
-  }
-  const validation = validateServiceCatalogInput(normalizedServices)
-  if (validation.kind === 'invalid') {
-    return catalogError('catalog_publish_invalid_services', validation.reason)
-  }
-
-  const requestHash = canonicalDigest({
-    claimId: command.claimId,
-    services: validation.services.map((service) => ({
-      category: service.category,
-      firstRequest: {
-        mode: service.firstRequest.mode,
-        noContactReason: service.firstRequest.noContactReason ?? '',
-        publicChannel: service.firstRequest.publicChannel,
-        publicDisclosure: service.firstRequest.publicDisclosure,
-      },
-      hoursOrUnknown: service.hoursOrUnknown,
-      name: service.name,
-      serviceArea: service.serviceArea,
-      summary: service.summary,
-    })),
-  })
-  const existingOperation = await db
-    .query('operationKeys')
-    .withIndex('by_actor_operation_key', (query) =>
-      query.eq('actorRef', claim.ownerId).eq('operationName', 'publishBusinessCatalog').eq('key', command.operationKey)
-    )
-    .unique()
-  if (existingOperation !== null) {
-    if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
-      return catalogError('catalog_publish_operation_conflict', 'Operation key is already reserved for a different publish request.')
-    }
-    const replayCatalog = await (async () => {
-      try {
-        return await publicCatalogForBusiness(db, businessId, now)
-      } catch {
-        return undefined
-      }
-    })()
-    const replaySnapshotSourceHash = await (async () => {
-      try {
-        return (await db
-          .query('businessSupplyProjectionSnapshots')
-          .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
-          .unique())?.sourceDigest
-      } catch {
-        return undefined
-      }
-    })()
-    const registryEffectPrefix = `registry:business:${businessId}:`
-    const registryEffectRef = existingOperation.effectRefs.find((ref) => ref.startsWith(registryEffectPrefix))
-    const replayProjectionSourceHash = registryEffectRef?.slice(registryEffectPrefix.length)
-    const discoveryEffectRef = replayProjectionSourceHash === undefined
-      ? undefined
-      : `discovery:manifest:${businessId}:${replayProjectionSourceHash}:v1`
-    if (existingOperation.sourceHash !== business.sourceHash) {
-      return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
-    }
-    const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
-    const replayRegistryAttempts = replayProjectionSourceHash === undefined
-      ? undefined
-      : await registryAttemptsForBusiness(db, businessId, replayProjectionSourceHash, business.slug)
-    const replayDiscoveryAttempts = replayProjectionSourceHash === undefined
-      || discoveryEffectRef === undefined
-      || !existingOperation.effectRefs.includes(discoveryEffectRef)
-      ? undefined
-      : await discoveryAttemptsForBusiness(db, businessId, replayProjectionSourceHash, business.slug)
-    if (
-      replayCatalog === undefined
-      || replayProjectionSourceHash === undefined
-      || replaySnapshotSourceHash !== replayProjectionSourceHash
-      || replayAudit === undefined
-      || replayRegistryAttempts === undefined
-      || replayRegistryAttempts.length !== 1
-      || replayDiscoveryAttempts === undefined
-      || replayDiscoveryAttempts.length !== 1
-    ) {
-      return catalogError('catalog_publish_operation_conflict', 'Published operation readback is incomplete.')
-    }
-    const replayBusiness = publishedBusinessContract(businessId, business, existingOperation.updatedAt)
-    const replayClaim = publishedClaimContract(command.claimId, claim, businessId, existingOperation.updatedAt)
-    return {
-      kind: 'ok' as const,
-      code: 'catalog_publish_replayed' as const,
-      business: replayBusiness,
-      claim: replayClaim,
-      catalog: replayCatalog,
-      auditEvent: replayAudit,
-      registryProjectionAttempts: replayRegistryAttempts,
-      discoveryManifestAttempts: replayDiscoveryAttempts,
-    }
-  }
-
-  const operationId = await db.insert('operationKeys', {
-    scope: 'catalog',
-    actorKind: 'owner',
-    actorRef: claim.ownerId,
-    operationName: 'publishBusinessCatalog',
-    key: command.operationKey,
-    requestHash,
-    sourceHash: business.sourceHash,
-    status: 'in_progress',
-    effectRefs: [],
-    createdAt: now,
-    updatedAt: now,
-  })
-  await Promise.all([
-    db.patch(businessId, {
-      publicStatus: 'published',
-      claimStatus: 'published',
-      updatedAt: now,
-    }),
-    db.patch(command.claimId, {
-      status: 'published',
-      updatedAt: now,
-    }),
-  ])
-  const persistedOfferings = await persistPublishedOfferings(db, businessId, owner.clerkUserId, validation.services, command.operationKey, now)
-  if (persistedOfferings.kind === 'error') {
-    return catalogError('catalog_publish_invalid_services', `offering_${persistedOfferings.code}`)
-  }
-  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now)
-  const rebuilt = await rebuildBusinessSupplyProjectionSnapshotCommand({
-    db,
-    sourceDb: db,
-    businessId,
-    support,
-    now,
-  })
-  if (rebuilt.kind === 'error') {
-    return catalogError('catalog_publish_invalid_services', `offering_projection_${rebuilt.code}`)
-  }
-  const catalog = await publicCatalogForBusiness(db, businessId, now)
-  if (catalog === undefined) {
-    return catalogError('catalog_publish_invalid_services', 'no_published_offerings')
-  }
-
-  const auditEvent = await ensurePublishAuditEvent(db, businessId, claim.ownerId, business.slug, command, now)
-  const registryAttempts = await ensureRegistryAttempts(db, businessId, rebuilt.sourceDigest, business.slug, now)
-  const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, rebuilt.sourceDigest, business.slug, now)
-  await upsertBusinessIndexStatus(db, businessId, rebuilt.sourceDigest, now)
-  await db.patch(operationId, {
-    status: 'succeeded',
-    resultHash: canonicalDigest({ auditEventId: auditEvent.eventId, businessId, slug: business.slug }),
-    effectRefs: [auditEvent.eventId, ...registryAttempts.map((attempt) => attempt.logicalKey), ...discoveryAttempts.map((attempt) => attempt.attemptId)],
-    updatedAt: now,
-  })
-
-  const publishedBusiness = publishedBusinessContract(businessId, business, now)
-  const publishedClaim = publishedClaimContract(command.claimId, claim, businessId, now)
-  return {
-    kind: 'ok' as const,
-    code: 'catalog_published' as const,
-    business: publishedBusiness,
-    claim: publishedClaim,
-    catalog,
-    auditEvent,
-    registryProjectionAttempts: registryAttempts,
-    discoveryManifestAttempts: discoveryAttempts,
-  }
+  _now: number,
+): Promise<ReturnType<typeof catalogError> | { kind: 'ok'; business: { businessId: string } }> {
+  void command
+  return catalogError('catalog_publish_operation_conflict', 'retired_listed_tables_unlisted')
 }
 
-
 export async function ensureCatalogProjectionControlsCommand(
-  db: GenericDatabaseWriter<DataModel>,
-  command: Readonly<{
+  _db: GenericDatabaseWriter<DataModel>,
+  _command: Readonly<{
     actorRef: string
     operationKey: string
     correlationId: string
     reasonCode: string
     evidenceRefs: readonly string[]
   }>,
-  now: number,
+  _now: number,
 ): Promise<void> {
-  for (const key of ['offering_public_projection_enabled', 'offering_authoring_enabled'] as const) {
-    const existing = await db.query('operatorControls').withIndex('by_key', (query) => query.eq('key', key)).unique()
-    if (existing === null) {
-      await db.insert('operatorControls', {
-        key,
-        enabled: true,
-        changedByAdminRef: command.actorRef,
-        reasonCode: command.reasonCode,
-        evidenceRefs: [...command.evidenceRefs],
-        correlationId: command.correlationId,
-        operationKey: `${command.operationKey}:${key}`,
-        updatedAt: now,
-      })
-    } else if (!existing.enabled) {
-      await db.patch(existing._id, {
-        enabled: true,
-        changedByAdminRef: command.actorRef,
-        reasonCode: command.reasonCode,
-        evidenceRefs: [...command.evidenceRefs],
-        correlationId: command.correlationId,
-        operationKey: `${command.operationKey}:${key}`,
-        updatedAt: now,
-      })
-    }
-  }
 }
+
 export async function reviseBusinessOfferingCommand(
   db: GenericDatabaseWriter<DataModel>,
   command: Readonly<{
@@ -885,17 +669,6 @@ async function runOfferingSourceMutation(
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error', code: 'unauthenticated', reason: 'Authentication is required.' }
   const now = Date.now()
-  const operatorControl = await ctx.db
-    .query('operatorControls')
-    .withIndex('by_key', (query) => query.eq('key', 'offering_authoring_enabled'))
-    .unique()
-  if (
-    operatorControl === null
-    || operatorControl.enabled !== true
-    || (operatorControl.expiresAt !== undefined && operatorControl.expiresAt <= now)
-  ) {
-    return { kind: 'error', code: 'operation_conflict', reason: 'Offering authoring is currently disabled.' }
-  }
   const business = await ctx.db.get(args.businessId)
   if (business === null) return { kind: 'error', code: 'wrong_owner', reason: 'Business was not found.' }
   const owner = await ctx.db.get(business.ownerId)
@@ -1304,16 +1077,16 @@ export const getCurrentOwnerPublicCatalog = queryGeneric({
       return catalogReadNotFound()
     }
 
-    const latestClaims = await ctx.db
-      .query('claims')
-      .withIndex('by_owner_status', (query) => query.eq('ownerId', owner._id))
+    const businesses = await ctx.db
+      .query('businesses')
+      .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
       .order('desc')
       .take(20)
-    const latestClaim = latestClaims.find((claim) => claim.status === 'published')
-    if (latestClaim === undefined || latestClaim.businessId === undefined) {
+    const published = businesses.find((row) => row.publicStatus === 'published')
+    if (published === undefined) {
       return catalogReadNotFound()
     }
-    const catalog = await publicCatalogForBusiness(ctx.db, latestClaim.businessId, now)
+    const catalog = await publicCatalogForBusiness(ctx.db, published._id, now)
     return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
   },
 })
@@ -1333,38 +1106,8 @@ export const getCurrentOwnerOfferingSupply = queryGeneric({
       .order('desc')
       .first()
     if (business === null) return { kind: 'not_found' as const }
-    const [state, snapshot] = await Promise.all([
-      loadOfferingSourceState(ctx.db, business._id),
-      ctx.db.query('businessSupplyProjectionSnapshots').withIndex('by_businessId', (query) => query.eq('businessId', business._id)).unique(),
-    ])
-    const projection = snapshot === null
-      ? { status: 'projection_pending' as const }
-      : (() => {
-          try {
-            const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
-            readBusinessSupplyProjectionSnapshot(
-              projectionValue,
-              'catalog',
-              String(business._id),
-              business.slug,
-              {
-                businessId: String(snapshot.businessId),
-                sourceRevision: snapshot.sourceRevision,
-                sourceDigest: snapshot.sourceDigest,
-                observedAt: snapshot.observedAt,
-                ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
-              },
-            )
-            return {
-              status: snapshot.status,
-              observedAt: snapshot.observedAt,
-              disposition: snapshot.disposition,
-              ...(snapshot.lastErrorCode === undefined ? {} : { lastErrorCode: snapshot.lastErrorCode }),
-            }
-          } catch {
-            return { status: 'projection_pending' as const }
-          }
-        })()
+    const state = await loadOfferingSourceState(ctx.db, business._id)
+    const projection = { status: 'projection_pending' as const }
     const offerings = state.offerings.map((offering) => {
       const revision = state.revisions.find((candidate) => candidate.offeringRef === offering.offeringRef && candidate.revision === offering.currentRevision)
       return {
@@ -1551,7 +1294,7 @@ function publicRegistryAttempt(
 }
 
 function publicDiscoveryAttempt(
-  attempt: Doc<'discoveryManifestAttempts'>,
+  attempt: DiscoveryAttempt,
   expectedBusinessId: Id<'businesses'>,
   expectedSourceHash: string,
   expectedSlug: string,
@@ -1750,36 +1493,10 @@ async function publicCatalogForBusiness(
   const business = await db.get(businessId)
   if (business === null || business.publicStatus !== 'published') return undefined
   if (await hasActiveBusinessSuppression(db, businessId)) return undefined
-  const snapshot = await db
-    .query('businessSupplyProjectionSnapshots')
-    .withIndex('by_businessId', (query) => query.eq('businessId', businessId))
-    .unique()
-  if (snapshot === null) return undefined
-  const catalog = (() => {
-    try {
-      const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
-      const projection = readBusinessSupplyProjectionSnapshot(
-        projectionValue,
-        'catalog',
-        String(businessId),
-        business.slug,
-        {
-          businessId: String(snapshot.businessId),
-          sourceRevision: snapshot.sourceRevision,
-          sourceDigest: snapshot.sourceDigest,
-          observedAt: snapshot.observedAt,
-          ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
-        },
-      )
-      const projected = projectBusinessSupplyToPublicApi(projection, now)
-      return snapshot.status === 'projection_pending'
-        ? { ...projected, disposition: 'stale' as const }
-        : projected
-    } catch {
-      return undefined
-    }
-  })()
-  if (catalog === undefined) return undefined
+  const support = await deriveBusinessOfferingSupportFromCapabilitySupply(db, businessId, now)
+  const projection = await readLiveBusinessSupplyProjection({ db, businessId, support, now })
+  if (projection === null) return undefined
+  const catalog = projectBusinessSupplyToPublicApi(projection, now)
   return {
     ...catalog,
     photos: catalog.photos.map((photo) => ({ ...photo })),
@@ -1795,19 +1512,16 @@ async function publicCatalogForBusiness(
 
 
 async function ensurePublishAuditEvent(
-  db: GenericDatabaseWriter<DataModel>,
+  _db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
-  ownerId: Id<'owners'>,
+  ownerId: string,
   slug: string,
   args: { operationKey: string; correlationId: string },
   now: number
 ): Promise<AuditEvent> {
-  const eventId = `audit:claim.published:${businessId}:${args.operationKey}`
-  const existing = await findPublishAuditEvent(db, businessId, args.operationKey)
-  if (existing !== undefined) return existing
   const redactedPayload = { replayed: false, slug }
-  const auditEvent = {
-    eventId,
+  return {
+    eventId: `audit:claim.published:${businessId}:${args.operationKey}`,
     eventType: 'claim.published' as const,
     actorKind: 'owner' as const,
     actorRef: ownerId,
@@ -1824,54 +1538,24 @@ async function ensurePublishAuditEvent(
     payloadHash: canonicalDigest(redactedPayload),
     createdAt: now,
   }
-  await db.insert('auditEvents', auditEvent)
-  return auditEvent
 }
 
 async function findPublishAuditEvent(
-  db: GenericDatabaseReader<DataModel>,
-  businessId: Id<'businesses'>,
-  operationKey: string,
+  _db: GenericDatabaseReader<DataModel>,
+  _businessId: Id<'businesses'>,
+  _operationKey: string,
 ): Promise<AuditEvent | undefined> {
-  const event = await db
-    .query('auditEvents')
-    .withIndex('by_eventId', (query) => query.eq('eventId', `audit:claim.published:${businessId}:${operationKey}`))
-    .unique()
-  if (
-    event === null
-    || event.businessId !== businessId
-    || event.idempotencyKey !== operationKey
-    || event.eventType !== 'claim.published'
-  ) {
-    return undefined
-  }
-  return {
-    eventId: event.eventId,
-    eventType: event.eventType,
-    actorKind: event.actorKind,
-    actorRef: event.actorRef,
-    ...(event.businessId === undefined ? {} : { businessId: event.businessId }),
-    ...(event.slug === undefined ? {} : { slug: event.slug }),
-    targetType: event.targetType,
-    targetRef: event.targetRef,
-    ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
-    ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
-    idempotencyKey: event.idempotencyKey,
-    correlationId: event.correlationId,
-    evidenceRefs: event.evidenceRefs,
-    redactedPayloadJson: event.redactedPayloadJson,
-    payloadHash: event.payloadHash,
-    createdAt: event.createdAt,
-  }
+  return undefined
 }
+
 async function ensureRegistryAttempts(
-  db: GenericDatabaseWriter<DataModel>,
+  _db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   businessSourceHash: string,
   expectedSlug: string,
   now: number,
 ): Promise<RegistryAttempt[]> {
-  const persisted = await upsertRegistryAttempt(db, {
+  return [publicRegistryAttempt({
     businessId,
     attemptVersion: 'current',
     logicalKey: `registry:business:${businessId}:${businessSourceHash}`,
@@ -1883,29 +1567,19 @@ async function ensureRegistryAttempts(
     startedAt: now,
     repairAction: 'rebuild_projection',
     repairResult: 'not_run',
-  })
-  return [publicRegistryAttempt(persisted, businessId, businessSourceHash, expectedSlug)]
+  }, businessId, businessSourceHash, expectedSlug)]
 }
 
+
 async function upsertRegistryAttempt(
-  db: GenericDatabaseWriter<DataModel>,
+  _db: GenericDatabaseWriter<DataModel>,
   attempt: CurrentRegistryAttempt,
 ): Promise<CurrentRegistryAttempt> {
-  const existing = await db
-    .query('registryProjectionAttempts')
-    .withIndex('by_logicalKey', (query) => query.eq('logicalKey', attempt.logicalKey))
-    .unique()
-  if (existing === null) {
-    await db.insert('registryProjectionAttempts', attempt)
-  } else if (isLegacyRegistryAttempt(existing)) {
-    await db.replace(existing._id, attempt)
-  } else {
-    await db.patch(existing._id, attempt)
-  }
   return attempt
 }
+
 async function ensureDiscoveryAttempt(
-  db: GenericDatabaseWriter<DataModel>,
+  _db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   sourceHash: string,
   expectedSlug: string,
@@ -1924,142 +1598,38 @@ async function ensureDiscoveryAttempt(
     repairAction: 'regenerate_manifest' as const,
     repairResult: 'not_run' as const,
   }
-  const existing = await db
-    .query('discoveryManifestAttempts')
-    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
-    .unique()
-  if (existing === null) {
-    await db.insert('discoveryManifestAttempts', attempt)
-    return [attempt]
-  }
-  await db.patch(existing._id, attempt)
-  const refreshed = await db
-    .query('discoveryManifestAttempts')
-    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
-    .unique()
-  if (refreshed === null) throw new Error('discovery_attempt_persist_failed')
-  return [publicDiscoveryAttempt(refreshed, businessId, sourceHash, expectedSlug)]
-}
-
-async function upsertBusinessIndexStatus(db: GenericDatabaseWriter<DataModel>, businessId: Id<'businesses'>, sourceHash: string, now: number): Promise<void> {
-  const existing = await db
-    .query('indexStatus')
-    .withIndex('by_target', (query) => query.eq('targetType', 'business').eq('targetRef', businessId))
-    .unique()
-  const next = {
-    targetType: 'business' as const,
-    targetRef: businessId,
-    businessId,
-    status: 'queued' as const,
-    lastAttemptAt: now,
-    sourceHash,
-    sourceVersion: 'public-catalog:v1' as const,
-  }
-  if (existing === null) await db.insert('indexStatus', next)
-  else if (isLegacyIndexStatus(existing)) await db.replace(existing._id, next)
-  else await db.patch(existing._id, next)
-}
-
-function isLegacyRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>): boolean {
-  if ('serviceId' in attempt || attempt.projectionKind === 'service_catalog') return true
-  if (!('attemptVersion' in attempt) || attempt.attemptVersion !== 'current') return true
-  const readback = attempt.latestReadback
-  return readback !== undefined && 'serviceCount' in readback
-}
-type CurrentRegistryAttemptDocument = CurrentRegistryAttempt & Pick<Doc<'registryProjectionAttempts'>, '_id' | '_creationTime'>
-
-function isCurrentRegistryAttempt(
-  attempt: Doc<'registryProjectionAttempts'>,
-): attempt is CurrentRegistryAttemptDocument {
-  return !isLegacyRegistryAttempt(attempt)
+  return [publicDiscoveryAttempt(attempt, businessId, sourceHash, expectedSlug)]
 }
 
 
-function isLegacyIndexStatus(status: Doc<'indexStatus'>): boolean {
-  return 'serviceId' in status || status.targetType === 'service' || status.targetType === 'capability'
+async function upsertBusinessIndexStatus(
+  _db: GenericDatabaseWriter<DataModel>,
+  _businessId: Id<'businesses'>,
+  _sourceHash: string,
+  _now: number,
+): Promise<void> {
 }
+
 
 async function registryAttemptsForBusiness(
-  db: GenericDatabaseReader<DataModel>,
-  businessId: Id<'businesses'>,
-  businessSourceHash: string,
-  expectedSlug: string,
+  _db: GenericDatabaseReader<DataModel>,
+  _businessId: Id<'businesses'>,
+  _businessSourceHash: string,
+  _expectedSlug: string,
 ): Promise<RegistryAttempt[] | undefined> {
-  const logicalKey = `registry:business:${businessId}:${businessSourceHash}`
-  const attempt = await db
-    .query('registryProjectionAttempts')
-    .withIndex('by_logicalKey', (query) => query.eq('logicalKey', logicalKey))
-    .unique()
-  if (attempt === null || !isCurrentRegistryAttempt(attempt)) return undefined
-  if (
-    attempt.businessId !== businessId
-    || attempt.logicalKey !== logicalKey
-    || attempt.sourceHash !== businessSourceHash
-    || attempt.sourceVersion !== 'public-catalog:v1'
-    || attempt.projectionKind !== 'business_catalog'
-  ) {
-    return undefined
-  }
-  const readback = attempt.latestReadback
-  if (
-    readback !== undefined
-    && (
-      'serviceCount' in readback
-      || readback.businessId !== businessId
-      || readback.slug !== expectedSlug
-      || readback.sourceHash !== businessSourceHash
-      || readback.sourceVersion !== 'public-catalog:v1'
-    )
-  ) {
-    return undefined
-  }
-  try {
-    return [publicRegistryAttempt(attempt, businessId, businessSourceHash, expectedSlug)]
-  } catch {
-    return undefined
-  }
+  return []
 }
 
+
 async function discoveryAttemptsForBusiness(
-  db: GenericDatabaseReader<DataModel>,
-  businessId: Id<'businesses'>,
-  sourceHash: string,
-  expectedSlug: string,
+  _db: GenericDatabaseReader<DataModel>,
+  _businessId: Id<'businesses'>,
+  _sourceHash: string,
+  _expectedSlug: string,
 ): Promise<DiscoveryAttempt[] | undefined> {
-  const attemptId = `discovery:manifest:${businessId}:${sourceHash}:v1`
-  const attempt = await db
-    .query('discoveryManifestAttempts')
-    .withIndex('by_attemptId', (query) => query.eq('attemptId', attemptId))
-    .unique()
-  if (
-    attempt === null
-    || attempt.attemptId !== attemptId
-    || attempt.businessId !== businessId
-    || attempt.sourceHash !== sourceHash
-    || attempt.sourceVersion !== 'public-catalog:v1'
-    || attempt.ucpVersion !== 'v1'
-    || attempt.pathKind !== 'ae_hosted_fallback'
-  ) {
-    return undefined
-  }
-  const readback = attempt.latestReadback
-  if (
-    readback !== undefined
-    && (
-      readback.businessId !== businessId
-      || readback.slug !== expectedSlug
-      || readback.sourceHash !== sourceHash
-      || readback.sourceVersion !== 'public-catalog:v1'
-    )
-  ) {
-    return undefined
-  }
-  try {
-    return [publicDiscoveryAttempt(attempt, businessId, sourceHash, expectedSlug)]
-  } catch {
-    return undefined
-  }
+  return []
 }
+
 
 function publishedBusinessContract(businessId: Id<'businesses'>, business: Doc<'businesses'>, updatedAt: number) {
   return {
@@ -2079,18 +1649,6 @@ function publishedBusinessContract(businessId: Id<'businesses'>, business: Doc<'
   }
 }
 
-function publishedClaimContract(claimId: Id<'claims'>, claim: Doc<'claims'>, businessId: Id<'businesses'>, updatedAt: number) {
-  return {
-    claimId,
-    ownerId: claim.ownerId,
-    businessId,
-    slug: claim.slug,
-    status: 'published' as const,
-    submittedFactsHash: claim.submittedFactsHash,
-    createdAt: claim.createdAt,
-    updatedAt,
-  }
-}
 
 
 

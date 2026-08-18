@@ -215,21 +215,6 @@ const legacyIndexStatus = v.object({
 })
 
 export const registryTables = {
-  registryProjectionItems: defineTable(
-    v.union(currentRegistryProjectionItem, legacyRegistryProjectionItem),
-  )
-    .index('by_logicalKey', ['logicalKey'])
-    .index('by_business', ['businessId'])
-    .index('by_offering', ['offeringRef']),
-
-  registryProjectionAttempts: defineTable(
-    v.union(currentRegistryProjectionAttempt, preVersionCurrentRegistryProjectionAttempt, legacyRegistryProjectionAttempt),
-  )
-    .index('by_business_status', ['businessId', 'status'])
-    .index('by_business_startedAt', ['businessId', 'startedAt'])
-    .index('by_logicalKey', ['logicalKey']),
-
-
   registrySearchDocuments: defineTable(
     v.union(currentRegistrySearchDocument, legacyRegistrySearchDocument),
   )
@@ -241,12 +226,4 @@ export const registryTables = {
       searchField: 'searchText',
       filterFields: ['publicStatus'],
     }),
-
-
-  indexStatus: defineTable(
-    v.union(currentIndexStatus, legacyIndexStatus),
-  )
-    .index('by_target', ['targetType', 'targetRef'])
-    .index('by_target_status', ['targetType', 'targetRef', 'status'])
-    .index('by_status_lastAttempt', ['status', 'lastAttemptAt']),
 } as const

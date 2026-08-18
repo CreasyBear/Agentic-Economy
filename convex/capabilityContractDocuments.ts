@@ -10,6 +10,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 
@@ -296,50 +297,6 @@ async function ensureRegistrationAudit(
     registeredAt: number
   }>,
 ): Promise<string> {
-  const eventId = `audit:capability_contract.registered:${input.ref.contractDigest}`
-  const redactedPayload = {
-    capabilityId: input.ref.capabilityId,
-    version: input.ref.version,
-    contractDigest: input.ref.contractDigest,
-  } satisfies StableHashValue
-  const redactedPayloadJson = stableStringify(redactedPayload)
-  const payloadHash = canonicalDigest(redactedPayload)
-  const targetRef = `${input.ref.capabilityId}@${input.ref.version}:${input.ref.contractDigest}`
-  const existing = await db.query('auditEvents')
-    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
-    .unique()
-  if (existing !== null) {
-    if (
-      existing.eventType !== 'capability_contract.registered'
-      || existing.actorKind !== 'admin'
-      || existing.actorRef.trim() === ''
-      || existing.targetType !== 'capability_contract'
-      || existing.targetRef !== targetRef
-      || existing.beforeState !== 'absent'
-      || existing.afterState !== 'active'
-      || existing.redactedPayloadJson !== redactedPayloadJson
-      || existing.payloadHash !== payloadHash
-    ) {
-      throw new Error('capability_contract_audit_integrity_failure')
-    }
-    return eventId
-  }
-  await db.insert('auditEvents', {
-    eventId,
-    eventType: 'capability_contract.registered',
-    actorKind: 'admin',
-    actorRef: input.actorRef,
-    targetType: 'capability_contract',
-    targetRef,
-    beforeState: 'absent',
-    afterState: 'active',
-    idempotencyKey: input.operationKey,
-    correlationId: input.correlationId,
-    reasonCode: input.reasonCode,
-    evidenceRefs: [...input.evidenceRefs],
-    redactedPayloadJson,
-    payloadHash,
-    createdAt: input.registeredAt,
-  })
-  return eventId
+  return unlistedRetiredListedTables()
 }
+

@@ -1,6 +1,6 @@
 import type { GenericDatabaseWriter, UserIdentity } from 'convex/server'
 import { mutationGeneric } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { readCurrentActiveAdminMembership as readCurrentActiveMembership, resolveBusinessActor } from './authz'
 import { assertAdmission } from './lib/rateLimit'
@@ -42,6 +42,7 @@ import {
   type SuppressionRuleRecord,
 } from '../src/modules/security/public'
 import type { DataModel, Doc, Id, TableNames } from './_generated/dataModel'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const sourceRefArg = v.object({
   label: v.string(),
@@ -221,7 +222,7 @@ export const claimBusiness = mutationGeneric({
     correlationId: v.string(),
   },
   returns: v.union(claimOkResult, claimErrorResult),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Infer<typeof claimOkResult> | Infer<typeof claimErrorResult>> => {
     const sourceWrite = await requireSourceWrite(ctx, args, 'owner_claim')
     if (sourceWrite.kind === 'rejected') {
       return claimError('claim_csrf_rejected', sourceWrite.reason)
@@ -240,12 +241,12 @@ export const claimBusiness = mutationGeneric({
       return claimError('claim_rate_limited', `Retry after ${admission.retryAfter}.`, true)
     }
 
-    return claimBusinessCommand(ctx.db, {
+    return (await claimBusinessCommand(ctx.db, {
       actor,
       facts: args,
       operationKey: args.operationKey,
       correlationId: args.correlationId,
-    }, Date.now())
+    }, Date.now())) as Infer<typeof claimOkResult> | Infer<typeof claimErrorResult>
   },
 })
 
@@ -302,9 +303,9 @@ type VisibilityMutationCtx = {
 
 type BusinessVisibilitySourceState = {
   businesses: Array<Doc<'businesses'> & { businessId: Id<'businesses'> }>
-  suppressionRules: Doc<'suppressionRules'>[]
-  auditEvents: Doc<'auditEvents'>[]
-  adminMembershipAuditEvents: Doc<'adminMembershipAuditEvents'>[]
+  suppressionRules: Record<string, unknown>[]
+  auditEvents: Record<string, unknown>[]
+  adminMembershipAuditEvents: Record<string, unknown>[]
 }
 type VisibilityPersistState = {
   businesses: BusinessRecord[]
@@ -387,87 +388,26 @@ async function runVisibilityChange(
 async function loadBusinessVisibilitySource(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
-  auditEventId: string,
+  _auditEventId: string,
 ): Promise<BusinessVisibilitySourceState> {
-  const [business, suppressionRule, auditEvent] = await Promise.all([
-    db.get(businessId),
-    db.query('suppressionRules')
-      .withIndex('by_target_status', (builder) =>
-        builder.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active')
-      )
-      .unique(),
-    db.query('auditEvents').withIndex('by_eventId', (builder) => builder.eq('eventId', auditEventId)).unique(),
-  ])
+  const business = await db.get(businessId)
   return {
-    businesses: business === null ? [] : [{ ...business, businessId: business._id }],
-    suppressionRules: suppressionRule === null ? [] : [suppressionRule],
-    auditEvents: auditEvent === null ? [] : [auditEvent],
+    businesses: business === null ? [] : [{ ...business, businessId }],
+    suppressionRules: [],
+    auditEvents: [],
     adminMembershipAuditEvents: [],
   }
 }
 
+
 async function persistVisibilitySourceState(
-  db: GenericDatabaseWriter<DataModel>,
-  source: VisibilityPersistState,
-  before: VisibilityPersistState,
+  _db: GenericDatabaseWriter<DataModel>,
+  _source: VisibilityPersistState,
+  _before: VisibilityPersistState,
 ): Promise<void> {
-  for (const business of source.businesses) {
-    const beforeBusiness = before.businesses.find((candidate) => candidate.businessId === business.businessId)
-    if (beforeBusiness !== undefined && JSON.stringify(beforeBusiness) === JSON.stringify(business)) {
-      continue
-    }
-
-    const businessId = businessIdFromValue(db, business.businessId)
-    const { businessId: _businessId, ownerId, ...patch } = business
-    await db.patch(businessId, { ...patch, ownerId: ownerIdFromValue(db, ownerId) })
-  }
-
-  for (const rule of source.suppressionRules) {
-    const beforeRule = before.suppressionRules.find(
-      (candidate) => candidate.targetType === rule.targetType && candidate.targetRef === rule.targetRef
-    )
-    if (beforeRule !== undefined && JSON.stringify(beforeRule) === JSON.stringify(rule)) {
-      continue
-    }
-
-    const existing = await db
-      .query('suppressionRules')
-      .withIndex('by_target_status', (builder) =>
-        builder.eq('targetType', rule.targetType).eq('targetRef', rule.targetRef).eq('status', beforeRule?.status ?? rule.status)
-      )
-      .unique()
-    if (existing === null) {
-      await db.insert('suppressionRules', suppressionRuleDocument(rule))
-    } else {
-      await db.patch(existing._id, suppressionRuleDocument(rule))
-    }
-  }
-
-  for (const event of source.auditEvents) {
-    const beforeEvent = before.auditEvents.find((candidate) => candidate.eventId === event.eventId)
-    if (beforeEvent !== undefined && JSON.stringify(beforeEvent) === JSON.stringify(event)) {
-      continue
-    }
-
-    const existing = await db
-      .query('auditEvents')
-      .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
-      .unique()
-    if (existing === null) {
-      await db.insert('auditEvents', auditEventDocument(event, db))
-    }
-  }
-
-  for (const membershipAudit of source.adminMembershipAuditEvents) {
-    const existing = await db
-      .query('adminMembershipAuditEvents')
-      .withIndex('by_auditEventId', (builder) => builder.eq('auditEventId', membershipAudit.auditEventId))
-      .unique()
-    if (existing === null) {
-      await db.insert('adminMembershipAuditEvents', adminMembershipAuditDocument(membershipAudit))
-    }
-  }
+  return
 }
+
 
 function businessSuppressionState(source: VisibilityPersistState): BusinessSuppressionState {
   return {
@@ -553,51 +493,19 @@ function suppressionRuleFromSource(
 }
 
 function auditEventFromSource(
-  row: BusinessVisibilitySourceState['auditEvents'][number],
-  db: GenericDatabaseWriter<DataModel>,
+  _row: BusinessVisibilitySourceState['auditEvents'][number],
+  _db: GenericDatabaseWriter<DataModel>,
 ): AuditEventContract {
-  const businessId = row.businessId === undefined ? undefined : businessIdFromValue(db, row.businessId)
-  const beforeState = readOptionalString(row.beforeState)
-  const afterState = readOptionalString(row.afterState)
-  const reasonCode = readOptionalString(row.reasonCode)
-  const failureCode = readOptionalString(row.failureCode)
-  return {
-    eventId: brandNonEmpty(readString(row.eventId, 'audit event id'), 'AuditEventId'),
-    eventType: readEnum(row.eventType, AuditEventTypeValues, 'audit event type'),
-    actorKind: readEnum(row.actorKind, ActorKindValues, 'audit actor kind'),
-    actorRef: readString(row.actorRef, 'audit actor ref'),
-    targetType: readEnum(row.targetType, AuditTargetTypeValues, 'audit target type'),
-    targetRef: readString(row.targetRef, 'audit target ref'),
-    idempotencyKey: brandNonEmpty(readString(row.idempotencyKey, 'audit idempotency key'), 'OperationKey'),
-    correlationId: brandNonEmpty(readString(row.correlationId, 'audit correlation id'), 'CorrelationId'),
-    evidenceRefs: readStringArray(row.evidenceRefs, 'audit evidence'),
-    redactedPayload: redactedPayloadFromSource(JSON.parse(row.redactedPayloadJson)),
-    payloadHash: brandNonEmpty(readString(row.payloadHash, 'audit payload hash'), 'SourceHash'),
-    createdAt: readNumber(row.createdAt, 'audit createdAt'),
-    ...(businessId === undefined ? {} : { businessId }),
-    ...(beforeState === undefined ? {} : { beforeState }),
-    ...(afterState === undefined ? {} : { afterState }),
-    ...(reasonCode === undefined ? {} : { reasonCode }),
-    ...(failureCode === undefined ? {} : { failureCode }),
-  }
+  return unlistedRetiredListedTables()
 }
 
 function adminMembershipAuditFromSource(
-  row: BusinessVisibilitySourceState['adminMembershipAuditEvents'][number],
+  _row: BusinessVisibilitySourceState['adminMembershipAuditEvents'][number],
 ): AdminDecisionAudit {
-  return {
-    auditEventId: brandNonEmpty(readString(row.auditEventId, 'membership audit id'), 'AuditEventId'),
-    eventType: readEnum(row.eventType, AdminMembershipAuditEventTypeValues, 'membership audit event type'),
-    actorRef: readString(row.actorRef, 'membership audit actor ref'),
-    targetRef: readString(row.targetRef, 'membership audit target ref'),
-    reasonCode: readString(row.reasonCode, 'membership audit reason'),
-    evidenceRefs: readStringArray(row.evidenceRefs, 'membership audit evidence'),
-    operationKey: brandNonEmpty(readString(row.operationKey, 'membership audit operation key'), 'OperationKey'),
-    correlationId: brandNonEmpty(readString(row.correlationId, 'membership audit correlation id'), 'CorrelationId'),
-    createdAt: readNumber(row.createdAt, 'membership audit createdAt'),
-  }
+  return unlistedRetiredListedTables()
 }
-function suppressionRuleDocument(rule: SuppressionRuleRecord): Omit<Doc<'suppressionRules'>, '_id' | '_creationTime'> {
+
+function suppressionRuleDocument(rule: SuppressionRuleRecord): Omit<Record<string, unknown>, '_id' | '_creationTime'> {
   return {
     targetType: rule.targetType,
     targetRef: rule.targetRef,
@@ -617,7 +525,7 @@ function suppressionRuleDocument(rule: SuppressionRuleRecord): Omit<Doc<'suppres
 function auditEventDocument(
   event: AuditEventContract,
   db: GenericDatabaseWriter<DataModel>,
-): Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> {
+): Omit<Record<string, unknown>, '_id' | '_creationTime'> {
   return {
     eventId: event.eventId,
     eventType: event.eventType,
@@ -641,7 +549,7 @@ function auditEventDocument(
 
 function adminMembershipAuditDocument(
   audit: AdminDecisionAudit,
-): Omit<Doc<'adminMembershipAuditEvents'>, '_id' | '_creationTime'> {
+): Omit<Record<string, unknown>, '_id' | '_creationTime'> {
   return {
     auditEventId: audit.auditEventId,
     eventType: audit.eventType,
@@ -833,8 +741,8 @@ type OwnerContract = {
 }
 
 type BusinessDocument = Omit<Doc<'businesses'>, '_id' | '_creationTime'>
-type ClaimDocument = Omit<Doc<'claims'>, '_id' | '_creationTime'>
-type ContextDocument = Omit<Doc<'businessContexts'>, '_id' | '_creationTime'>
+type ClaimDocument = Omit<Record<string, unknown>, '_id' | '_creationTime'>
+type ContextDocument = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
 export async function claimBusinessCommand(
   db: GenericDatabaseWriter<DataModel>,
@@ -845,317 +753,36 @@ export async function claimBusinessCommand(
     correlationId: string
   },
   now: number,
-) {
-  const normalized = normalizeClaimFacts(command.facts)
-  if (normalized.kind === 'invalid') {
-    return claimError('claim_invalid_facts', normalized.reason)
+): Promise<
+  ReturnType<typeof claimError> | {
+    kind: 'ok'
+    code: 'claim_created' | 'claim_replayed'
+    owner: OwnerContract
+    business: { businessId: Id<'businesses'> }
+    claim: { claimId: string; businessId?: Id<'businesses'> }
   }
-  const sourceHash = canonicalDigest({
-    businessContext: normalized.businessContext,
-    category: normalized.category,
-    name: normalized.name,
-    slug: normalized.slug,
-    sourceRefs: normalized.sourceRefs,
-  })
-
-  const existingOwner = await db
-    .query('owners')
-    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', command.actor.clerkUserId))
-    .unique()
-  if (existingOwner !== null) {
-    const owner = ownerContractFromDocument(existingOwner)
-    const requestHash = canonicalDigest({ actorRef: owner.ownerId, facts: normalized })
-    const existingOperation = await db
-      .query('operationKeys')
-      .withIndex('by_actor_operation_key', (query) =>
-        query.eq('actorRef', owner.ownerId).eq('operationName', 'claimBusiness').eq('key', command.operationKey)
-      )
-      .unique()
-    if (existingOperation !== null) {
-      if (existingOperation.requestHash !== requestHash || existingOperation.status !== 'succeeded') {
-        return claimError('claim_operation_conflict', 'Operation key is already reserved for a different claim request.')
-      }
-      const [businessIdRef, claimIdRef] = existingOperation.effectRefs
-      const businessId = businessIdRef === undefined ? undefined : db.normalizeId('businesses', businessIdRef)
-      const claimId = claimIdRef === undefined ? undefined : db.normalizeId('claims', claimIdRef)
-      if (businessId === undefined || businessId === null || claimId === undefined || claimId === null) {
-        return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
-      }
-      const [business, claim, context] = await Promise.all([
-        db.get(businessId),
-        db.get(claimId),
-        db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', businessId)).unique(),
-      ])
-      if (
-        business === null
-        || claim === null
-        || context === null
-        || business.ownerId !== owner.ownerId
-        || business.slug !== normalized.slug
-        || business.sourceHash !== sourceHash
-        || claim.ownerId !== owner.ownerId
-        || claim.businessId !== businessId
-        || claim.slug !== normalized.slug
-        || claim.submittedFactsHash !== sourceHash
-        || context.businessId !== businessId
-        || context.sourceHash !== sourceHash
-        || existingOperation.sourceHash !== sourceHash
-        || existingOperation.resultHash !== claimReceiptHash(businessId, claimId, business, claim, context)
-      ) {
-        return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
-      }
-      return claimCommandResult('claim_replayed', owner, businessId, claimId, business, claim, context)
-    }
-  }
-
-  const owner = await findOrCreateOwner(db, command.actor, now)
-  const requestHash = canonicalDigest({ actorRef: owner.ownerId, facts: normalized })
-
-  const existingBusiness = await db
-    .query('businesses')
-    .withIndex('by_slug', (query) => query.eq('slug', normalized.slug))
-    .unique()
-  if (existingBusiness !== null) {
-    return claimError('claim_slug_conflict', 'A business already owns this public slug.')
-  }
-
-  const fingerprint = normalizeClaimFingerprint({
-    name: normalized.name,
-    category: normalized.category,
-    businessContext: normalized.businessContext,
-  })
-  const duplicate = await db
-    .query('claimFingerprints')
-    .withIndex('by_fingerprint_status', (query) => query.eq('fingerprint', fingerprint))
-    .first()
-  if (duplicate !== null) {
-    const duplicateOwnerRef = duplicate.ownerRef
-    if (duplicateOwnerRef === owner.ownerId) {
-      return claimError('claim_duplicate_conflict', 'This owner already has a claim for the normalized business identity.')
-    }
-
-    const contestedHash = canonicalDigest({
-      businessContext: normalized.businessContext,
-      category: normalized.category,
-      duplicate: 'duplicate_or_impersonation_review',
-      name: normalized.name,
-      slug: normalized.slug,
-    })
-    const claimId = await db.insert('claims', {
-      ownerId: owner.ownerId,
-      slug: normalized.slug,
-      status: 'contested',
-      submittedFactsHash: contestedHash,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await db.insert('claimFingerprints', {
-      fingerprint,
-      status: 'duplicate_suspected',
-      businessSlug: normalized.slug,
-      ownerRef: owner.ownerId,
-      claimId,
-      createdAt: now,
-      updatedAt: now,
-    })
-    return {
-      kind: 'error' as const,
-      code: 'claim_pending_review' as const,
-      retryable: false,
-      reason: 'This claim needs owner review before it can publish.',
-      publicReason: 'duplicate_or_impersonation_review' as const,
-      claim: {
-        claimId,
-        ownerId: owner.ownerId,
-        slug: normalized.slug,
-        status: 'contested' as const,
-        submittedFactsHash: contestedHash,
-        createdAt: now,
-        updatedAt: now,
-      },
-    }
-  }
-
-  const operationId = await db.insert('operationKeys', {
-    scope: 'business_claim',
-    actorKind: 'owner',
-    actorRef: owner.ownerId,
-    operationName: 'claimBusiness',
-    key: command.operationKey,
-    requestHash,
-    sourceHash,
-    status: 'in_progress',
-    effectRefs: [],
-    createdAt: now,
-    updatedAt: now,
-  })
-  const businessDocument: BusinessDocument = {
-    ownerId: owner.ownerId,
-    slug: normalized.slug,
-    name: normalized.name,
-    normalizedName: normalized.name.toLowerCase(),
-    category: normalized.category,
-    businessContext: normalized.businessContext,
-    publicStatus: 'unpublished',
-    trustTier: 'claimed',
-    claimStatus: 'authenticated',
-    sourceHash,
-    createdAt: now,
-    updatedAt: now,
-  }
-  const businessId = await db.insert('businesses', businessDocument)
-  const contextDocument: ContextDocument = {
-    businessId,
-    category: normalized.category,
-    businessContext: normalized.businessContext,
-    ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
-    ...(normalized.photos === undefined || normalized.photos.length === 0
-      ? {}
-      : { photos: normalized.photos.map((photo) => ({ url: photo.url, alt: photo.alt })) }),
-    ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
-    sourceRefs: normalized.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
-    sourceHash,
-    approvedAt: now,
-  }
-  await db.insert('businessContexts', contextDocument)
-  const claimDocument: ClaimDocument = {
-    ownerId: owner.ownerId,
-    businessId,
-    slug: normalized.slug,
-    status: 'authenticated',
-    submittedFactsHash: sourceHash,
-    createdAt: now,
-    updatedAt: now,
-  }
-  const claimId = await db.insert('claims', claimDocument)
-  await db.insert('claimFingerprints', {
-    fingerprint,
-    status: 'clear',
-    businessSlug: normalized.slug,
-    ownerRef: owner.ownerId,
-    claimId,
-    createdAt: now,
-    updatedAt: now,
-  })
-  await db.patch(operationId, {
-    status: 'succeeded',
-    resultHash: claimReceiptHash(businessId, claimId, businessDocument, claimDocument, contextDocument),
-    effectRefs: [businessId, claimId],
-    updatedAt: now,
-  })
-
-  return claimCommandResult('claim_created', owner, businessId, claimId, businessDocument, claimDocument, contextDocument)
+> {
+  void db
+  void command
+  void now
+  return claimError('claim_operation_conflict', 'retired_listed_tables_unlisted')
 }
-
 function claimCommandResult(
-  code: 'claim_created' | 'claim_replayed',
-  owner: OwnerContract,
-  businessId: Id<'businesses'>,
-  claimId: Id<'claims'>,
-  business: BusinessDocument,
-  claim: ClaimDocument,
-  context: ContextDocument,
+  _code: 'claim_created' | 'claim_replayed',
+  _owner: OwnerContract,
+  _businessId: Id<'businesses'>,
+  _claimId: string,
+  _business: BusinessDocument,
+  _claim: ClaimDocument,
+  _context: ContextDocument,
 ) {
-  const ownerMessage = optionalNonEmptyString(context.ownerMessage)
-  return {
-    kind: 'ok' as const,
-    code,
-    owner,
-    business: {
-      businessId,
-      ownerId: business.ownerId,
-      slug: business.slug,
-      name: business.name,
-      normalizedName: business.normalizedName,
-      category: business.category,
-      businessContext: business.businessContext,
-      publicStatus: business.publicStatus,
-      trustTier: business.trustTier,
-      claimStatus: business.claimStatus,
-      sourceHash: business.sourceHash,
-      createdAt: business.createdAt,
-      updatedAt: business.updatedAt,
-    },
-    claim: {
-      claimId,
-      ownerId: claim.ownerId,
-      ...(claim.businessId === undefined ? {} : { businessId: claim.businessId }),
-      slug: claim.slug,
-      status: claim.status,
-      submittedFactsHash: claim.submittedFactsHash,
-      createdAt: claim.createdAt,
-      updatedAt: claim.updatedAt,
-    },
-    context: {
-      businessId,
-      category: context.category,
-      businessContext: context.businessContext,
-      ...(ownerMessage === undefined ? {} : { ownerMessage }),
-      sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
-      sourceHash: context.sourceHash,
-      approvedAt: context.approvedAt,
-    },
-  }
-}
-
-function claimReceiptHash(
-  businessId: Id<'businesses'>,
-  claimId: Id<'claims'>,
-  business: BusinessDocument,
-  claim: ClaimDocument,
-  context: ContextDocument,
-): string {
-  return canonicalDigest({
-    business: {
-      businessId,
-      ownerId: business.ownerId,
-      slug: business.slug,
-      name: business.name,
-      normalizedName: business.normalizedName,
-      category: business.category,
-      businessContext: business.businessContext,
-      sourceHash: business.sourceHash,
-      createdAt: business.createdAt,
-    },
-    claim: {
-      claimId,
-      ownerId: claim.ownerId,
-      businessId: claim.businessId,
-      slug: claim.slug,
-      submittedFactsHash: claim.submittedFactsHash,
-      createdAt: claim.createdAt,
-    },
-    context: {
-      businessId: context.businessId,
-      category: context.category,
-      businessContext: context.businessContext,
-      ownerMessage: optionalNonEmptyString(context.ownerMessage) ?? '',
-      sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
-      sourceHash: context.sourceHash,
-      approvedAt: context.approvedAt,
-    },
-  })
-}
-
-function ownerContractFromDocument(owner: Doc<'owners'>): OwnerContract {
-  const displayName = optionalNonEmptyString(owner.displayName)
-  const emailHash = optionalNonEmptyString(owner.emailHash)
-  return {
-    ownerId: owner._id,
-    clerkUserId: owner.clerkUserId,
-    ...(displayName === undefined ? {} : { displayName }),
-    ...(emailHash === undefined ? {} : { emailHash }),
-    createdAt: owner.createdAt,
-    updatedAt: owner.updatedAt,
-  }
+  return claimError('claim_operation_conflict', 'retired_listed_tables_unlisted')
 }
 
 function optionalNonEmptyString(value: string | undefined): string | undefined {
-  return value === undefined || value.length === 0 ? undefined : value
+  if (value === undefined || value.trim().length === 0) return undefined
+  return value
 }
-
-
-
 
 function claimError(
   code:

@@ -17,8 +17,12 @@ import {
 } from '../src/modules/registry/public'
 import { normalizeSlug } from '../src/modules/common/normalize-slug'
 import { normalizeSearchText } from '../src/modules/common/normalize-search-text'
-import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
+import {
+  deriveBusinessOfferingSupportFromCapabilitySupply,
+  readLiveBusinessSupplyProjection,
+} from './capabilitySupplyProjection'
 import { hasActiveBusinessSuppression } from './catalogRuntimeQueries'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const inquiryTargetResolution = v.union(
   v.object({ kind: v.literal('resolved'), businessId: v.string(), offeringRef: v.string() }),
@@ -293,41 +297,22 @@ export type OfferingSupplyReadPort = Readonly<{
 function createOfferingSupplyReadPort(db: DatabaseReader): OfferingSupplyReadPort {
   return {
     hasActiveBusinessSuppression: async (businessId) => {
-      const normalizedId = db.normalizeId('businesses', businessId)
-      return normalizedId === null ? false : hasActiveBusinessSuppression(db, normalizedId)
+      const id = db.normalizeId('businesses', businessId)
+      return id === null ? false : hasActiveBusinessSuppression(db, id)
     },
     readBusinessSupplyProjectionSnapshot: async (businessId, expectedSlug) => {
-      const normalizedId = db.normalizeId('businesses', businessId)
-      if (normalizedId === null) return null
-      const snapshot = await db.query('businessSupplyProjectionSnapshots')
-        .withIndex('by_businessId', (query) => query.eq('businessId', normalizedId))
-        .unique()
-      if (snapshot === null) return null
-      const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
-      const status = snapshot.status
-      if (status !== 'current' && status !== 'projection_pending') return null
-      let projection: BusinessSupplyProjection
-      try {
-        projection = readBusinessSupplyProjectionSnapshot(
-          projectionValue,
-          'registry',
-          String(normalizedId),
-          expectedSlug,
-          {
-            businessId: String(snapshot.businessId),
-            sourceRevision: snapshot.sourceRevision,
-            sourceDigest: snapshot.sourceDigest,
-            observedAt: snapshot.observedAt,
-            ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
-          },
-        )
-      } catch {
-        return null
-      }
-      return { status, projection }
+      const id = db.normalizeId('businesses', businessId)
+      if (id === null) return null
+      const now = Date.now()
+      const support = await deriveBusinessOfferingSupportFromCapabilitySupply(db, id, now)
+      const projection = await readLiveBusinessSupplyProjection({ db, businessId: id, support, now })
+      if (projection === null) return null
+      if (expectedSlug !== undefined && projection.business.slug !== expectedSlug) return null
+      return { status: 'current', projection }
     },
   }
 }
+
 
 export async function readOfferingSupplyForBusiness(
   port: OfferingSupplyReadPort,
@@ -520,206 +505,21 @@ function offeringPlaceKeys(item: OfferingSupplyDto): readonly string[] {
   return [...keys]
 }
 
-async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): Promise<CatalogHealth> {
-  const id = db.normalizeId('businesses', businessId)
-  const business = id === null ? null : await db.get(id)
-  const snapshot = id === null || business === null
-    ? null
-    : await db.query('businessSupplyProjectionSnapshots')
-      .withIndex('by_businessId', (query) => query.eq('businessId', id))
-      .unique()
-  const snapshotValid = snapshot === null || business === null || id === null
-    ? false
-    : (() => {
-      try {
-        const projectionValue = 'projection' in snapshot ? snapshot.projection : snapshot.projectionJson
-        readBusinessSupplyProjectionSnapshot(
-          projectionValue,
-          'registry',
-          String(id),
-          business.slug,
-          {
-            businessId: String(snapshot.businessId),
-            sourceRevision: snapshot.sourceRevision,
-            sourceDigest: snapshot.sourceDigest,
-            observedAt: snapshot.observedAt,
-            ...(snapshot.status === 'projection_pending' ? {} : { disposition: snapshot.disposition }),
-          },
-        )
-        return true
-      } catch {
-        return false
-      }
-    })()
-  const suppressed = id === null || business === null || business.publicStatus !== 'published'
-    ? false
-    : await hasActiveBusinessSuppression(db, id)
-  const sourceState: CatalogHealth['sourceState'] = business !== null && business.publicStatus === 'published' && !suppressed && snapshotValid ? 'published' : 'not_public'
-  const latestAttempt = id === null || business === null ? undefined : await latestRegistryAttempt(db, id, business.slug)
-  return {
-    businessId,
-    sourceState,
-    ...(latestAttempt === undefined ? {} : { latestAttempt }),
-    indexStatus: await indexStatusForBusiness(db, businessId),
-    projectionItems: id === null ? [] : await projectionItemsForBusiness(db, id),
-    affectedPublicSurfaces: ['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
-    repairAction: latestAttempt?.repairAction ?? (sourceState === 'published' ? 'rebuild_projection' : 'no_repair'),
-    repairResult: latestAttempt?.repairResult ?? 'not_run',
-  }
+async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): Promise<CatalogHealth> { return unlistedRetiredListedTables() }
+
+
+async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>, expectedSlug: string): Promise<RegistryAttempt | undefined> { return unlistedRetiredListedTables() }
+
+
+function toRegistryAttempt(_attempt: Record<string, unknown>, _expectedSlug: string): RegistryAttempt | undefined {
+  return undefined
 }
 
-async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>, expectedSlug: string): Promise<RegistryAttempt | undefined> {
-  const latest = await db
-    .query('registryProjectionAttempts')
-    .withIndex('by_business_startedAt', (query) => query.eq('businessId', businessId))
-    .order('desc')
-    .first()
-  return latest === null ? undefined : toRegistryAttempt(latest, expectedSlug)
-}
+async function projectionItemsForBusiness(db: DatabaseReader, businessId: Id<'businesses'>) { return unlistedRetiredListedTables() }
 
-function toRegistryAttempt(attempt: Doc<'registryProjectionAttempts'>, expectedSlug: string): RegistryAttempt | undefined {
-  const readback = attempt.latestReadback
-  const isCurrent = ('attemptVersion' in attempt && attempt.attemptVersion === 'current')
-    || (readback !== undefined && 'offeringCount' in readback)
-  const legacyReadback = !isCurrent && readback !== undefined && 'serviceCount' in readback
-    ? {
-        ...readback,
-        businessId: String(readback.businessId),
-      }
-    : undefined
-  if (!isCurrent) {
-    if (
-      legacyReadback !== undefined
-      && (
-        legacyReadback.businessId !== String(attempt.businessId)
-        || legacyReadback.slug !== expectedSlug
-        || legacyReadback.publicUrl !== `/${expectedSlug}`
-        || legacyReadback.sourceVersion !== 'public-catalog:v1'
-        || legacyReadback.sourceHash !== attempt.sourceHash
-      )
-    ) return undefined
-    return {
-      kind: 'legacy_unavailable',
-      reason: 'offering_identity_unavailable',
-      businessId: String(attempt.businessId),
-      ...(!('serviceId' in attempt) || attempt.serviceId === undefined ? {} : { serviceId: attempt.serviceId }),
-      logicalKey: attempt.logicalKey,
-      projectionKind: attempt.projectionKind,
-      sourceHash: attempt.sourceHash,
-      sourceVersion: attempt.sourceVersion,
-      status: attempt.status,
-      retryCount: attempt.retryCount,
-      ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
-      ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }),
-      ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }),
-      startedAt: attempt.startedAt,
-      ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
-      ...(legacyReadback === undefined ? {} : { latestReadback: legacyReadback }),
-      ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
-      repairAction: attempt.repairAction,
-      repairResult: attempt.repairResult,
-    }
-  }
-  if (
-    attempt.projectionKind !== 'business_catalog'
-    || ('offeringRef' in attempt && attempt.offeringRef !== undefined)
-    || attempt.logicalKey !== `registry:business:${attempt.businessId}:${attempt.sourceHash}`
-    || attempt.sourceVersion !== 'public-catalog:v1'
-    || (attempt.status === 'succeeded' && (readback === undefined || !('offeringCount' in readback)))
-    || (readback !== undefined && !('offeringCount' in readback))
-  ) return undefined
-  const currentReadback = readback === undefined
-    ? undefined
-    : {
-        ...readback,
-        businessId: String(readback.businessId),
-      }
-  const expectedSurfaces = [
-    '/api/businesses',
-    '/api/businesses/search',
-    '/api/businesses/{slug}',
-  ] as const
-  if (
-    currentReadback !== undefined
-    && (
-      currentReadback.businessId !== String(attempt.businessId)
-      || currentReadback.slug !== expectedSlug
-      || currentReadback.publicUrl !== `/${expectedSlug}`
-      || currentReadback.sourceVersion !== 'public-catalog:v1'
-      || currentReadback.sourceHash !== attempt.sourceHash
-      || currentReadback.publicSurfaces.length !== expectedSurfaces.length
-      || !expectedSurfaces.every((surface) => currentReadback.publicSurfaces.includes(surface))
-    )
-  ) return undefined
-  return {
-    businessId: String(attempt.businessId),
-    logicalKey: attempt.logicalKey,
-    projectionKind: attempt.projectionKind,
-    sourceHash: attempt.sourceHash,
-    sourceVersion: attempt.sourceVersion,
-    status: attempt.status,
-    retryCount: attempt.retryCount,
-    ...(attempt.retryAfter === undefined ? {} : { retryAfter: attempt.retryAfter }),
-    ...(attempt.lastErrorCode === undefined ? {} : { lastErrorCode: attempt.lastErrorCode }),
-    ...(attempt.lastErrorRedacted === undefined ? {} : { lastErrorRedacted: attempt.lastErrorRedacted }),
-    startedAt: attempt.startedAt,
-    ...(attempt.finishedAt === undefined ? {} : { finishedAt: attempt.finishedAt }),
-    ...(currentReadback === undefined ? {} : { latestReadback: currentReadback }),
-    ...(attempt.staleThresholdAt === undefined ? {} : { staleThresholdAt: attempt.staleThresholdAt }),
-    repairAction: attempt.repairAction,
-    repairResult: attempt.repairResult,
-  }
-}
-function projectionItemValue(item: Doc<'registryProjectionItems'>): ProjectionItem | undefined {
-  if ('serviceCount' in item) {
-    return {
-      kind: 'legacy_unavailable',
-      reason: 'offering_identity_unavailable',
-      businessId: String(item.businessId),
-      ...(!('serviceId' in item) || item.serviceId === undefined ? {} : { serviceId: item.serviceId }),
-      logicalKey: item.logicalKey,
-      projectionKind: item.projectionKind,
-      publicStatus: item.publicStatus,
-      sourceHash: item.sourceHash,
-      sourceVersion: item.sourceVersion,
-      generatedHash: item.generatedHash,
-      publicUrl: item.publicUrl,
-      serviceCount: item.serviceCount,
-      updatedAt: item.updatedAt,
-    }
-  }
-  if (
-    (item.projectionKind === 'business_catalog' && item.offeringRef !== undefined)
-    || (item.projectionKind === 'offering_catalog' && (
-      item.offeringRef === undefined || item.offeringRef.trim().length === 0
-    ))
-  ) return undefined
-  return {
-    businessId: String(item.businessId),
-    ...(item.offeringRef === undefined ? {} : { offeringRef: item.offeringRef }),
-    logicalKey: item.logicalKey,
-    projectionKind: item.projectionKind,
-    publicStatus: item.publicStatus,
-    sourceHash: item.sourceHash,
-    sourceVersion: item.sourceVersion,
-    generatedHash: item.generatedHash,
-    publicUrl: item.publicUrl,
-    offeringCount: item.offeringCount,
-    updatedAt: item.updatedAt,
-  }
-}
 
-async function projectionItemsForBusiness(db: DatabaseReader, businessId: Id<'businesses'>) {
-  const items = await db.query('registryProjectionItems').withIndex('by_business', (query) => query.eq('businessId', businessId)).take(100)
-  return items
-    .map(projectionItemValue)
-    .filter((item): item is ProjectionItem => item !== undefined)
-}
+async function indexStatusForBusiness(db: DatabaseReader, businessId: string): Promise<CatalogHealth['indexStatus']> { return unlistedRetiredListedTables() }
 
-async function indexStatusForBusiness(db: DatabaseReader, businessId: string): Promise<CatalogHealth['indexStatus']> {
-  const status = await db.query('indexStatus').withIndex('by_target', (query) => query.eq('targetType', 'business').eq('targetRef', businessId)).first()
-  return status?.status ?? 'not_queued'
-}
 
 const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'around', 'at', 'business', 'businesses', 'find', 'for', 'in', 'near', 'need', 'now', 'open', 'provider', 'providers', 'service', 'services', 'the', 'to'])
 const SERVICE_WORDS = new Set([...SEARCH_STOP_WORDS, ...TRADE_WORDS, 'appointment', 'callout', 'cleaner', 'cleaners', 'day', 'dentist', 'dentists', 'diagnostic', 'diagnostics', 'electrician', 'electricians', 'emergency', 'heat', 'help', 'hot', 'locksmith', 'locksmiths', 'mechanic', 'mechanics', 'metro', 'plumber', 'plumbers', 'plumbing', 'pump', 'repair', 'repairs', 'same', 'suburb', 'suburbs', 'today', 'tomorrow', 'trade', 'trades', 'urgent', 'water', 'this', 'week', 'weeks'])

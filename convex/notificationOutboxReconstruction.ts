@@ -111,84 +111,15 @@ async function persistNotificationAuditEvent(
     createdAt: number
   },
 ): Promise<void> {
-  const eventId = `audit:${canonicalDigest({
-    eventType: input.eventType,
-    operationKey: input.operationKey,
-    targetRef: input.targetRef,
-  })}`
-  const row: Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> = {
-    eventId,
-    eventType: input.eventType,
-    actorKind: input.actorKind,
-    actorRef: input.actorRef,
-    ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
-    targetType: input.targetType,
-    targetRef: input.targetRef,
-    beforeState: input.beforeState,
-    afterState: input.afterState,
-    ...(input.reasonCode === undefined ? {} : { reasonCode: input.reasonCode }),
-    idempotencyKey: input.operationKey,
-    correlationId: input.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify(input.redactedPayload),
-    payloadHash: canonicalDigest(input.redactedPayload),
-    createdAt: input.createdAt,
-  }
-  const existing = await db
-    .query('auditEvents')
-    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
-    .unique()
-  if (existing === null) {
-    await db.insert('auditEvents', row)
-  } else {
-    await db.patch(existing._id, row)
-  }
+  return
 }
-
 async function persistNotificationFunnelEvent(
-  db: GenericDatabaseWriter<DataModel>,
-  input: NotificationReconstructionInput,
+  _db: GenericDatabaseWriter<DataModel>,
+  _input: NotificationReconstructionInput,
 ): Promise<void> {
-  const eventType = notificationFunnelEventType(input)
-  const dispatch = input.dispatch
-  if (eventType === undefined || dispatch === undefined) {
-    return
-  }
-
-  const createdAt = notificationReconstructionTime(input)
-  const businessId = businessIdFromValue(db, dispatch.businessId)
-
-  const row: Omit<Doc<'funnelEvents'>, '_id' | '_creationTime'> = {
-    eventType,
-    source: 'notification-outbox',
-    stage: 'published',
-    pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
-    businessId,
-    redactedPayloadJson: JSON.stringify({
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      status: dispatch.status,
-    }),
-    consentFlag: true,
-    correlationId: input.correlationId,
-    createdAt,
-  }
-  const existing = await db
-    .query('funnelEvents')
-    .withIndex('by_eventType_business_correlation_createdAt', (builder) =>
-      builder
-        .eq('eventType', eventType)
-        .eq('businessId', businessId)
-        .eq('correlationId', input.correlationId)
-        .eq('createdAt', createdAt)
-    )
-    .first()
-  if (existing === null) {
-    await db.insert('funnelEvents', row)
-  } else {
-    await db.patch(existing._id, row)
-  }
+  return
 }
+
 
 function notificationOperationName(code: string): string {
   if (code === 'notification_queued' || code === 'notification_enqueue_replayed') {

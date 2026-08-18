@@ -55,42 +55,8 @@ describe('Convex authz helpers', () => {
     expect(actor).not.toMatchObject({ clerkUserId: 'browser_supplied' })
   })
 
-  it('requires active source-owned admin membership and the role/action matrix', async () => {
+  it('fails closed for admin membership once listed memberships were unlisted', async () => {
     const db = new FakeDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:owner',
-      _creationTime: 1,
-      clerkUserId: 'user_sam',
-      tokenIdentifier: 'clerk|user_sam',
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'bootstrap:user_sam',
-      grantedAt: 1,
-      evidenceRef: 'evidence:bootstrap',
-    })
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:support',
-      _creationTime: 2,
-      clerkUserId: 'user_support',
-      tokenIdentifier: 'clerk|user_support',
-      role: 'support',
-      state: 'active',
-      grantedBy: 'user_sam',
-      grantedAt: 2,
-      evidenceRef: 'evidence:support',
-    })
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:revoked',
-      _creationTime: 3,
-      clerkUserId: 'user_revoked',
-      tokenIdentifier: 'clerk|user_revoked',
-      role: 'owner_admin',
-      state: 'revoked',
-      grantedBy: 'user_sam',
-      grantedAt: 2,
-      revokedBy: 'user_sam',
-      revokedAt: 3,
-    })
 
     await expect(resolveAdminAuthority(authCtx(db, null), 'set_operator_control')).resolves.toEqual({
       kind: 'denied',
@@ -104,64 +70,17 @@ describe('Convex authz helpers', () => {
 
     await expect(resolveAdminAuthority(authCtx(db, support()), 'set_operator_control')).resolves.toEqual({
       kind: 'denied',
-      reason: 'action_not_allowed',
-    })
-
-    await expect(resolveAdminAuthority(authCtx(db, revoked()), 'set_operator_control')).resolves.toEqual({
-      kind: 'denied',
       reason: 'missing_membership',
     })
 
-    const allowed = await resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')
-    expect(allowed).toMatchObject({
-      kind: 'allowed',
-      membership: {
-        clerkUserId: 'user_sam',
-        tokenIdentifier: 'clerk|user_sam',
-        role: 'owner_admin',
-        state: 'active',
-      },
-    })
-  })
-
-  it('resolves only the canonical tokenIdentifier-keyed admin membership', async () => {
-    const db = new FakeDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:token',
-      _creationTime: 1,
-      clerkUserId: 'user_sam',
-      tokenIdentifier: 'clerk|user_sam',
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'bootstrap:user_sam',
-      grantedAt: 1,
-    })
-
-    const allowed = await resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')
-
-    expect(allowed).toMatchObject({
-      kind: 'allowed',
-      membership: {
-        clerkUserId: 'user_sam',
-        tokenIdentifier: 'clerk|user_sam',
-        role: 'owner_admin',
-      },
+    await expect(resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')).resolves.toEqual({
+      kind: 'denied',
+      reason: 'missing_membership',
     })
   })
 
   it('treats a missing canonical identity as unauthorized', async () => {
     const db = new FakeDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:token',
-      _creationTime: 1,
-      clerkUserId: 'user_sam',
-      tokenIdentifier: 'clerk|user_sam',
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'bootstrap:user_sam',
-      grantedAt: 1,
-    })
-
     const missingTokenIdentity = {
       subject: 'user_sam',
       issuer: 'https://clerk.example.test',
@@ -171,7 +90,6 @@ describe('Convex authz helpers', () => {
       reason: 'missing_membership',
     })
   })
-
 })
 
 class FakeIndexBuilder implements IndexBuilder {

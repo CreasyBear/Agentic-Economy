@@ -17,12 +17,9 @@ import {
 } from '@/modules/capability-execution/operation-recovery-contracts'
 import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import {
-  CUSTOMER_REQUEST_AGENT_ENTRYPOINT,
-  CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES,
-  CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES,
-  CUSTOMER_REQUEST_STATE_VALUES,
-} from '@/modules/customer-request/agent-contract'
-import { CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES } from '@/modules/customer-request/public-comprehension'
+  AGENT_ACCESS_AUTHORITY_MODE_VALUES,
+  CUSTOMER_REQUEST_AGENT_SCOPE,
+} from '@/modules/agent-access/contract'
 import { BUSINESS_TOOL_AGENT_SCOPE } from '@/modules/business-tools/public'
 import { AGENT_ACCESS_OAUTH_SCOPES } from '@/lib/http/oauth-challenge'
 import {
@@ -49,6 +46,31 @@ import {
 import type { DeveloperDiscoveryUnsupportedCapability } from '../developer-discovery'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { describeActionForAgent, findAction, type ActionInvocationContract } from '@/modules/actions'
+
+const CUSTOMER_REQUEST_AGENT_ENTRYPOINT = Object.freeze({
+  contract: 'Customer Request V2' as const,
+  method: 'POST' as const,
+  path: '/api/v1/requests' as const,
+  schemaPath: '/api/v1/requests/schema' as const,
+  authentication: 'clerk_api_key' as const,
+  requiredScope: CUSTOMER_REQUEST_AGENT_SCOPE,
+})
+const CUSTOMER_REQUEST_AUTHORITY_MODE_VALUES = AGENT_ACCESS_AUTHORITY_MODE_VALUES
+const CUSTOMER_REQUEST_NAVIGATION_RELATION_VALUES = [
+  'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
+  'inspect_progress', 'inspect_evidence', 'cancel', 'stop_after_current', 'report_problem',
+] as const
+const CUSTOMER_REQUEST_STATE_VALUES = [
+  'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress', 'preparing_options', 'options_ready', 'no_options',
+  'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
+] as const
+export const CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES = Object.freeze([
+  'AE accepts a natural-language outcome request, compares published options from registered businesses, and can progress an approved option through its declared completion steps.',
+  'Examples include trade, itinerary, procurement, recovery paths.',
+  'The public catalogue contains published current claims from registered businesses.',
+  'Published listings are evidence for comparison; they do not by themselves prove booking, payment, dispatch, or fulfilment.',
+  'A customer selects and separately approves an exact option before AE can start it.',
+])
 
 export const SiteDiscoveryManifestSchemaVersion = 'ae-site-discovery:v2' as const
 

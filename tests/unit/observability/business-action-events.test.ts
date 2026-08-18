@@ -31,7 +31,8 @@ import type { AdminMembership } from '@/modules/security/public'
 
 describe('business action observability contracts', () => {
   it('registers Phase 6 audit targets in the shared observability schema', () => {
-    expect(observabilityTables.auditEvents).toBeDefined()
+    expect(observabilityTables.operationKeys).toBeDefined()
+    expect('auditEvents' in observabilityTables).toBe(false)
     expect(AuditTargetTypeValues).toEqual(
       expect.arrayContaining([
         'business_action_card',

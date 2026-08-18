@@ -9,13 +9,6 @@ import {
   businessContext,
 } from '@/modules/business/public'
 
-
-const sourceRef = v.object({
-  label: v.string(),
-  evidenceRef: v.string(),
-  sourceHash: v.string(),
-})
-
 export const businessTables = {
   owners: defineTable({
     clerkUserId: v.string(),
@@ -43,35 +36,4 @@ export const businessTables = {
     .index('by_slug', ['slug'])
     .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
     .index('by_publicStatus_slug', ['publicStatus', 'slug']),
-
-  businessContexts: defineTable({
-    businessId: v.id('businesses'),
-    category: v.string(),
-    businessContext,
-    ownerMessage: v.optional(v.string()),
-    photos: v.optional(
-      v.array(
-        v.object({
-          url: v.string(),
-          alt: v.string(),
-        }),
-      ),
-    ),
-    responseTimeMinutes: v.optional(v.number()),
-    sourceRefs: v.array(sourceRef),
-    sourceHash: v.string(),
-    approvedAt: v.number(),
-  }).index('by_business', ['businessId']),
-
-  claims: defineTable({
-    ownerId: v.id('owners'),
-    businessId: v.optional(v.id('businesses')),
-    slug: v.string(),
-    status: literalUnion(ClaimStatusValues),
-    submittedFactsHash: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_owner_status', ['ownerId', 'status'])
-    .index('by_business_status', ['businessId', 'status']),
 } as const

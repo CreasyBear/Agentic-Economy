@@ -3,6 +3,7 @@ import type { DataModel, Id } from './_generated/dataModel'
 import type { BusinessRecord } from '../src/modules/business/public'
 import type { DevSeedCatalogBundle } from '../src/modules/dev/public'
 import type { CapabilityLaunchSupportRecord } from '../src/modules/inquiries/public'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 export type DevSeedPersistResult = {
   seededSlugs: readonly string[]
   ownerClerkUserId: string
@@ -158,86 +159,25 @@ async function upsertBusinessContext(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
   context: DevSeedCatalogBundle['state']['businessContexts'][number],
-): Promise<void> {
-  const existing = await db
-    .query('businessContexts')
-    .withIndex('by_business', (query) => query.eq('businessId', businessId))
-    .unique()
-  const patch = {
-    businessId,
-    category: context.category,
-    businessContext: context.businessContext,
-    ...(context.ownerMessage === undefined ? {} : { ownerMessage: context.ownerMessage }),
-    ...(context.photos === undefined ? {} : { photos: [...context.photos] }),
-    ...(context.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: context.responseTimeMinutes }),
-    sourceRefs: context.sourceRefs.map((sourceRef) => ({ ...sourceRef })),
-    sourceHash: context.sourceHash,
-    approvedAt: context.approvedAt,
-  }
-  if (existing === null) {
-    await db.insert('businessContexts', patch)
-    return
-  }
+): Promise<void> { return unlistedRetiredListedTables() }
 
-  await db.patch(existing._id, patch)
-}
 
 async function upsertClaim(
   db: GenericDatabaseWriter<DataModel>,
   ownerId: Id<'owners'>,
   businessId: Id<'businesses'>,
   claim: DevSeedCatalogBundle['state']['claims'][number],
-): Promise<Id<'claims'>> {
-  const existing = await db
-    .query('claims')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', claim.status))
-    .unique()
-  const patch = {
-    ownerId,
-    businessId,
-    slug: claim.slug,
-    status: claim.status,
-    submittedFactsHash: claim.submittedFactsHash,
-    updatedAt: claim.updatedAt,
-  }
+): Promise<string> { return unlistedRetiredListedTables() }
 
-  if (existing === null) {
-    return db.insert('claims', { ...patch, createdAt: claim.createdAt })
-  }
-
-  await db.patch(existing._id, patch)
-  return existing._id
-}
 
 async function upsertClaimFingerprint(
   db: GenericDatabaseWriter<DataModel>,
   ownerId: Id<'owners'>,
   businessId: Id<'businesses'>,
-  claimId: Id<'claims'>,
+  claimId: string,
   fingerprint: DevSeedCatalogBundle['state']['claimFingerprints'][number],
-): Promise<void> {
-  const existing = await db
-    .query('claimFingerprints')
-    .withIndex('by_fingerprint_status', (query) =>
-      query.eq('fingerprint', fingerprint.fingerprint).eq('status', fingerprint.status),
-    )
-    .unique()
-  const patch = {
-    fingerprint: fingerprint.fingerprint,
-    status: fingerprint.status,
-    businessSlug: fingerprint.businessSlug,
-    ownerRef: ownerId,
-    claimId,
-    updatedAt: fingerprint.updatedAt,
-  }
+): Promise<void> { return unlistedRetiredListedTables() }
 
-  if (existing === null) {
-    await db.insert('claimFingerprints', { ...patch, createdAt: fingerprint.createdAt })
-    return
-  }
-
-  await db.patch(existing._id, patch)
-}
 
 async function upsertBusinessOffering(
   db: GenericDatabaseWriter<DataModel>,

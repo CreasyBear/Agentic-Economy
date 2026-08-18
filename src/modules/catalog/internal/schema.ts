@@ -124,27 +124,6 @@ export const businessSupplyProjection = v.object({
   disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
 })
 
-const businessSupplyProjectionSnapshotFields = {
-  businessId: v.id('businesses'),
-  sourceRevision: v.number(),
-  sourceDigest: v.string(),
-  observedAt: v.number(),
-  disposition: v.union(v.literal('current'), v.literal('partial'), v.literal('stale')),
-  status: v.union(v.literal('current'), v.literal('projection_pending')),
-  lastErrorCode: v.optional(v.string()),
-  updatedAt: v.number(),
-}
-
-const currentBusinessSupplyProjectionSnapshot = v.object({
-  ...businessSupplyProjectionSnapshotFields,
-  projection: businessSupplyProjection,
-})
-
-const legacyBusinessSupplyProjectionSnapshot = v.object({
-  ...businessSupplyProjectionSnapshotFields,
-  projectionJson: v.string(),
-})
-
 export const catalogTables = {
   businessOfferings: defineTable({
     offeringRef: v.string(),
@@ -191,10 +170,4 @@ export const catalogTables = {
     .index('by_offeringRef_and_status', ['offeringRef', 'status'])
     .index('by_offeringRef_and_offeringRevision', ['offeringRef', 'offeringRevision'])
     .index('by_businessId_and_status', ['businessId', 'status']),
-  businessSupplyProjectionSnapshots: defineTable(
-    v.union(currentBusinessSupplyProjectionSnapshot, legacyBusinessSupplyProjectionSnapshot),
-  ).index('by_businessId', ['businessId']),
-
-
-
 } as const

@@ -22,6 +22,7 @@ import {
   revokeAdminMembership as revokeAdminMembershipModule,
 } from '../src/modules/security/public'
 import type { AuditEventContract } from '../src/modules/observability/public'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import type {
   AdminAction,
   AdminAuthorityState,
@@ -610,51 +611,24 @@ export const closeRemovalDispute = mutationGeneric({
 })
 
 type AdminAuthorityReadSource = {
-  adminMemberships: Doc<'adminMemberships'>[]
-  adminMembershipAuditEvents: Doc<'adminMembershipAuditEvents'>[]
-  auditEvents: Doc<'auditEvents'>[]
+  adminMemberships: []
+  adminMembershipAuditEvents: []
+  auditEvents: []
 }
 
 async function loadAdminAuthoritySource(
-  db: QueryCtx['db'],
-  options: {
+  _db: QueryCtx['db'],
+  _options: {
     clerkUserIds?: readonly string[]
     tokenIdentifiers?: readonly string[]
     includeActiveOwnerAdmins?: boolean
   } = {},
 ): Promise<AdminAuthorityReadSource> {
-  const reads: Promise<Doc<'adminMemberships'>[]>[] = []
-  const states = ['active', 'revoked', 'suspended'] as const
-  for (const clerkUserId of options.clerkUserIds ?? []) {
-    for (const state of states) {
-      reads.push(db.query('adminMemberships')
-        .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', clerkUserId).eq('state', state))
-        .take(2))
-    }
-  }
-  for (const tokenIdentifier of options.tokenIdentifiers ?? []) {
-    for (const state of states) {
-      reads.push(db.query('adminMemberships')
-        .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', tokenIdentifier).eq('state', state))
-        .take(2))
-    }
-  }
-  if (options.includeActiveOwnerAdmins === true) {
-    reads.push(db.query('adminMemberships')
-      .withIndex('by_state_and_role', (query) => query.eq('state', 'active').eq('role', 'owner_admin'))
-      .take(2))
-  }
-  const rows = (await Promise.all(reads)).flat()
-  const memberships = new Map<string, Doc<'adminMemberships'>>()
-  for (const row of rows) {
-    memberships.set(String(row._id), row)
-  }
-  return { adminMemberships: [...memberships.values()], adminMembershipAuditEvents: [], auditEvents: [] }
+  return { adminMemberships: [], adminMembershipAuditEvents: [], auditEvents: [] }
 }
-
 type DisputeReadSource = {
   disputes: Doc<'disputes'>[]
-  auditEvents: Doc<'auditEvents'>[]
+  auditEvents: Record<string, unknown>[]
 }
 
 async function loadDisputeSource(
@@ -680,24 +654,22 @@ async function loadDisputeSource(
 async function loadDisputeByIdSource(
   db: QueryCtx['db'],
   disputeId: string,
-  auditEventId: string,
+  _auditEventId: string,
 ): Promise<DisputeReadSource> {
   const id = db.normalizeId('disputes', disputeId)
-  const [dispute, auditEvent] = await Promise.all([
-    id === null ? Promise.resolve(null) : db.get(id),
-    db.query('auditEvents').withIndex('by_eventId', (query) => query.eq('eventId', auditEventId)).unique(),
-  ])
+  const dispute = id === null ? null : await db.get(id)
   return {
     disputes: dispute === null ? [] : [dispute],
-    auditEvents: auditEvent === null ? [] : [auditEvent],
+    auditEvents: [],
   }
 }
 
+
 type AdminReadbackSource = {
-  claims: Doc<'claims'>[]
+  claims: Record<string, unknown>[]
   disputes: Doc<'disputes'>[]
-  auditEvents: Doc<'auditEvents'>[]
-  registryProjectionAttempts: Doc<'registryProjectionAttempts'>[]
+  auditEvents: Record<string, unknown>[]
+  registryProjectionAttempts: Record<string, unknown>[]
   businesses: Doc<'businesses'>[]
 }
 
@@ -726,124 +698,44 @@ async function readAdminRows(
 
 async function readAdminReadbackSource(
   db: QueryCtx['db'],
-  surface: 'claims_queue' | 'audit_events' | 'index_health'
+  _surface: 'claims_queue' | 'audit_events' | 'index_health'
 ): Promise<AdminReadbackSource> {
-  if (surface === 'claims_queue') {
-    const [claims, disputes] = await Promise.all([
-      db.query('claims').order('desc').take(ADMIN_READBACK_ROW_CAP),
-      db.query('disputes').order('desc').take(ADMIN_READBACK_ROW_CAP),
-    ])
-    return { claims, disputes, auditEvents: [], registryProjectionAttempts: [], businesses: [] }
+  const businesses = await db.query('businesses').take(ADMIN_READBACK_ROW_CAP)
+  const disputes = await db.query('disputes').take(ADMIN_READBACK_ROW_CAP)
+  return {
+    claims: [],
+    disputes,
+    auditEvents: [],
+    registryProjectionAttempts: [],
+    businesses,
   }
-
-  if (surface === 'audit_events') {
-    return {
-      claims: [],
-      disputes: [],
-      auditEvents: await db.query('auditEvents').order('desc').take(ADMIN_READBACK_ROW_CAP),
-      registryProjectionAttempts: [],
-      businesses: [],
-    }
-  }
-
-  const [registryProjectionAttempts, business] = await Promise.all([
-    db.query('registryProjectionAttempts').order('desc').take(ADMIN_READBACK_ROW_CAP),
-    db.query('businesses').first(),
-  ])
-  const businesses = business === null ? [] : [business]
-  return { claims: [], disputes: [], auditEvents: [], registryProjectionAttempts, businesses }
 }
 
-function buildClaimRows(
-  source: AdminReadbackSource,
-  now: number
-): readonly AdminReadbackRow[] {
-  const claimRows = source.claims.map((claim) => ({
-    rowId: `row:claim:${claim._id}`,
-    rowType: 'claim' as const,
-    objectRef: `claim:${claim.slug}:${claim.status}`,
-    rowState: claimRowState(claim.status),
-    surface: 'claims_queue' as const,
-    readbackState: 'available' as const,
-    repairAction: 'review_claim' as const,
-    updatedAt: claim.updatedAt || now,
-  }))
-  const disputeRows = source.disputes.map((dispute) => ({
-    rowId: `row:dispute:${dispute._id}`,
-    rowType: 'claim' as const,
-    objectRef: `dispute:${dispute.targetType}:${dispute.status}`,
-    rowState: claimRowState(dispute.status),
-    surface: 'claims_queue' as const,
-    readbackState: 'available' as const,
-    repairAction: 'review_claim' as const,
-    updatedAt: dispute.updatedAt || now,
-  }))
 
-  return [...claimRows, ...disputeRows]
+function buildClaimRows(
+  _source: AdminReadbackSource,
+  _now: number
+): readonly AdminReadbackRow[] {
+  return []
 }
 
 function buildAuditRows(
   source: AdminReadbackSource,
   now: number
 ): readonly AdminReadbackRow[] {
-  return source.auditEvents.map((event) => ({
-    rowId: `row:audit:${event.eventId}`,
-    rowType: 'audit_event' as const,
-    objectRef: `audit:${event.eventType}:${event.targetType}`,
-    rowState: 'guarded' as const,
-    surface: 'audit_events' as const,
-    readbackState: 'available' as const,
-    repairAction: 'inspect_audit' as const,
-    correlationId: event.correlationId,
-    updatedAt: event.createdAt || now,
-  }))
+  return []
 }
 
 function buildIndexRows(
   source: AdminReadbackSource,
   now: number
 ): readonly AdminReadbackRow[] {
-  const attemptRows = source.registryProjectionAttempts.map((attempt) => {
-    const succeeded = attempt.status === 'succeeded'
-    return {
-      rowId: `row:index:attempt:${attempt.logicalKey}`,
-      rowType: 'index_surface' as const,
-      objectRef: `registry:${attempt.status}:${attempt.projectionKind}`,
-      rowState: indexRowState(attempt.status),
-      surface: 'index_health' as const,
-      readbackState: succeeded ? 'available' as const : 'unavailable' as const,
-      repairAction: succeeded ? 'no_repair_available' as const : 'regenerate_projection' as const,
-      repairResult: succeeded ? 'succeeded' as const : 'failed' as const,
-      affectedPublicSurfaces: ['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
-      correlationId: attempt.sourceHash,
-      attemptRef: attempt.logicalKey,
-      updatedAt: attempt.finishedAt ?? attempt.startedAt,
-    }
-  })
-
-  if (attemptRows.length > 0) {
-    return attemptRows
-  }
-
-  return [
-    {
-      rowId: 'row:index:source-catalog',
-      rowType: 'index_surface' as const,
-      objectRef: source.businesses.length === 0 ? 'source:catalog:none' : 'source:catalog:available',
-      rowState: source.businesses.length === 0 ? 'no_source_rows' as const : 'queued' as const,
-      surface: 'index_health' as const,
-      readbackState: source.businesses.length === 0 ? 'not_queued' as const : 'guarded' as const,
-      repairAction: source.businesses.length === 0 ? 'source_auth_required' as const : 'regenerate_projection' as const,
-      repairResult: 'not_run' as const,
-      updatedAt: now,
-    },
-  ]
+  return []
 }
-type AdminMembershipTarget = Pick<AdminMembership, 'clerkUserId' | 'tokenIdentifier'>
 
 function hasAdminMembershipConflict(
-  rows: readonly Doc<'adminMemberships'>[],
-  target: AdminMembershipTarget,
+  rows: readonly Record<string, unknown>[],
+  target: { clerkUserId: string; tokenIdentifier: string },
 ): boolean {
   const activeRows = rows.filter((row) => row.clerkUserId === target.clerkUserId && row.state === 'active')
   if (activeRows.length > 1) {
@@ -882,106 +774,21 @@ type AdminAuthorityWriteResult = {
 async function persistAdminAuthorityMutation(
   db: MutationCtx['db'],
   result: AdminAuthorityWriteResult,
-): Promise<void> {
-  if (result.membership !== undefined) {
-    const document = adminMembershipDocument(result.membership)
-    const lookup = await findAdminMembershipDocument(db, result.membership)
-    if (lookup.kind === 'conflict') {
-      throw new Error('admin_membership_conflict')
-    }
-    if (lookup.kind === 'missing') {
-      await db.insert('adminMemberships', document)
-    } else {
-      await db.replace(lookup.row._id, document)
-    }
-  }
+): Promise<void> { return unlistedRetiredListedTables() }
 
-  if (result.auditEvent !== undefined) {
-    await persistAuditEvent(db, result.auditEvent)
-  }
 
-  if (result.membershipAuditEvent !== undefined) {
-    const membershipAuditEvent = result.membershipAuditEvent
-    const existing = await db
-      .query('adminMembershipAuditEvents')
-      .withIndex('by_auditEventId', (builder) =>
-        builder.eq('auditEventId', membershipAuditEvent.auditEventId)
-      )
-      .unique()
-    if (existing === null) {
-      await db.insert('adminMembershipAuditEvents', {
-        auditEventId: membershipAuditEvent.auditEventId,
-        eventType: membershipAuditEvent.eventType,
-        actorRef: membershipAuditEvent.actorRef,
-        targetRef: membershipAuditEvent.targetRef,
-        reasonCode: membershipAuditEvent.reasonCode,
-        evidenceRefs: [...membershipAuditEvent.evidenceRefs],
-        operationKey: membershipAuditEvent.operationKey,
-        correlationId: membershipAuditEvent.correlationId,
-        createdAt: membershipAuditEvent.createdAt,
-      })
-    }
-  }
-}
+type AdminMembershipTarget = { clerkUserId: string; tokenIdentifier: string }
 
 type AdminMembershipLookup =
   | { kind: 'missing' }
-  | { kind: 'found'; row: Doc<'adminMemberships'> }
+  | { kind: 'found'; row: Record<string, unknown> }
   | { kind: 'conflict' }
 
 async function findAdminMembershipDocument(
   db: MutationCtx['db'],
   target: AdminMembershipTarget,
-): Promise<AdminMembershipLookup> {
-  const activeRows = await db
-    .query('adminMemberships')
-    .withIndex('by_clerkUserId_state', (builder) =>
-      builder.eq('clerkUserId', target.clerkUserId).eq('state', 'active')
-    )
-    .take(2)
-  if (activeRows.length > 1) {
-    return { kind: 'conflict' }
-  }
+): Promise<AdminMembershipLookup> { return unlistedRetiredListedTables() }
 
-  const tokenRows: Doc<'adminMemberships'>[] = []
-  for (const state of ['active', 'revoked', 'suspended'] as const) {
-    const rows = await db
-      .query('adminMemberships')
-      .withIndex('by_tokenIdentifier_state', (builder) =>
-        builder.eq('tokenIdentifier', target.tokenIdentifier).eq('state', state)
-      )
-      .take(2)
-    if (rows.length > 1) {
-      return { kind: 'conflict' }
-    }
-    tokenRows.push(...rows)
-  }
-  if (tokenRows.length > 1) {
-    return { kind: 'conflict' }
-  }
-
-  if (tokenRows.some((row) => row.clerkUserId !== target.clerkUserId)) {
-    return { kind: 'conflict' }
-  }
-
-  const active = activeRows[0]
-  if (active !== undefined) {
-    if (
-      active.tokenIdentifier !== undefined
-      && (
-        typeof active.tokenIdentifier !== 'string'
-        || active.tokenIdentifier.trim().length === 0
-        || active.tokenIdentifier !== target.tokenIdentifier
-      )
-    ) {
-      return { kind: 'conflict' }
-    }
-    return { kind: 'found', row: active }
-  }
-
-  const byToken = tokenRows.find((row) => row.tokenIdentifier === target.tokenIdentifier)
-  return byToken === undefined ? { kind: 'missing' } : { kind: 'found', row: byToken }
-}
 
 function adminMembershipDocument(membership: AdminMembership) {
   return {
@@ -1073,36 +880,8 @@ function disputeDocument(db: MutationCtx['db'], dispute: DisputeRecord) {
 async function persistAuditEvent(
   db: MutationCtx['db'],
   event: AuditEventContract,
-): Promise<void> {
-  const existing = await db
-    .query('auditEvents')
-    .withIndex('by_eventId', (builder) => builder.eq('eventId', event.eventId))
-    .unique()
-  if (existing === null) {
-    const businessId = event.businessId === undefined
-      ? undefined
-      : businessIdFromValue(db, event.businessId)
-    await db.insert('auditEvents', {
-      eventId: event.eventId,
-      eventType: event.eventType,
-      actorKind: event.actorKind,
-      actorRef: event.actorRef,
-      ...(businessId === undefined ? {} : { businessId }),
-      targetType: event.targetType,
-      targetRef: event.targetRef,
-      ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
-      ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
-      idempotencyKey: event.idempotencyKey,
-      correlationId: event.correlationId,
-      ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
-      evidenceRefs: [...event.evidenceRefs],
-      redactedPayloadJson: JSON.stringify(event.redactedPayload),
-      payloadHash: event.payloadHash,
-      ...(event.failureCode === undefined ? {} : { failureCode: event.failureCode }),
-      createdAt: event.createdAt,
-    })
-  }
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 
 function adminAuthorityState(source: AdminAuthorityReadSource): AdminAuthorityState {
   return {
@@ -1115,37 +894,12 @@ function adminAuthorityState(source: AdminAuthorityReadSource): AdminAuthoritySt
   }
 }
 
-function adminMembershipFromDocument(row: Doc<'adminMemberships'>): AdminMembership | undefined {
-  const tokenIdentifier = row.tokenIdentifier
-  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.length === 0) {
-    return undefined
-  }
-
-  return {
-    clerkUserId: row.clerkUserId,
-    tokenIdentifier,
-    role: row.role,
-    state: row.state,
-    grantedBy: row.grantedBy,
-    grantedAt: row.grantedAt,
-    ...(row.revokedBy === undefined ? {} : { revokedBy: row.revokedBy }),
-    ...(row.revokedAt === undefined ? {} : { revokedAt: row.revokedAt }),
-    ...(row.evidenceRef === undefined ? {} : { evidenceRef: row.evidenceRef }),
-  }
+function adminMembershipFromDocument(row: Record<string, unknown>): AdminMembership | undefined {
+  return undefined
 }
 
-function adminMembershipAuditFromDocument(row: Doc<'adminMembershipAuditEvents'>): AdminDecisionAudit {
-  return {
-    auditEventId: brandNonEmpty(row.auditEventId, 'AuditEventId'),
-    eventType: row.eventType,
-    actorRef: row.actorRef,
-    targetRef: row.targetRef,
-    reasonCode: row.reasonCode,
-    evidenceRefs: [...row.evidenceRefs],
-    operationKey: brandNonEmpty(row.operationKey, 'OperationKey'),
-    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
-    createdAt: row.createdAt,
-  }
+function adminMembershipAuditFromDocument(_row: Record<string, unknown>): AdminDecisionAudit {
+  return unlistedRetiredListedTables()
 }
 
 function disputeSourceState(source: DisputeReadSource): DisputeSourceState {
@@ -1184,34 +938,9 @@ function readRemovalDisputeReasonCode(value: string): RemovalDisputeReasonCode {
   return reasonCode
 }
 
-function auditEventFromDocument(row: Doc<'auditEvents'>): AuditEventContract {
-  let redactedPayload: AuditEventContract['redactedPayload']
-  try {
-    redactedPayload = JSON.parse(row.redactedPayloadJson) as AuditEventContract['redactedPayload']
-  } catch {
-    redactedPayload = null
-  }
-  return {
-    eventId: brandNonEmpty(row.eventId, 'AuditEventId'),
-    eventType: row.eventType,
-    actorKind: row.actorKind,
-    actorRef: row.actorRef,
-    targetType: row.targetType,
-    targetRef: row.targetRef,
-    ...(row.businessId === undefined ? {} : { businessId: brandNonEmpty(String(row.businessId), 'BusinessId') }),
-    idempotencyKey: brandNonEmpty(row.idempotencyKey, 'OperationKey'),
-    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
-    ...(row.beforeState === undefined ? {} : { beforeState: row.beforeState }),
-    ...(row.afterState === undefined ? {} : { afterState: row.afterState }),
-    ...(row.reasonCode === undefined ? {} : { reasonCode: row.reasonCode }),
-    evidenceRefs: [...row.evidenceRefs],
-    redactedPayload,
-    payloadHash: brandNonEmpty(row.payloadHash, 'SourceHash'),
-    ...(row.failureCode === undefined ? {} : { failureCode: row.failureCode }),
-    createdAt: row.createdAt,
-  }
+function auditEventFromDocument(row: Record<string, unknown>): AuditEventContract {
+  return undefined as never
 }
-
 
 function summarizeAdminMutation(
   result: ReturnType<typeof bootstrapOwnerAdminModule> | ReturnType<typeof grantAdminMembershipModule>
@@ -1407,7 +1136,7 @@ function disputeRateLimitKey(args: {
 }
 
 function claimRowState(
-  value: Doc<'claims'>['status'] | Doc<'disputes'>['status'],
+  value: Record<string, unknown>['status'] | Doc<'disputes'>['status'],
 ): AdminReadbackRow['rowState'] {
   switch (value) {
     case 'suppressed':
@@ -1427,7 +1156,7 @@ function claimRowState(
   }
 }
 
-function indexRowState(value: Doc<'registryProjectionAttempts'>['status']): AdminReadbackRow['rowState'] {
+function indexRowState(value: Record<string, unknown>['status']): AdminReadbackRow['rowState'] {
   switch (value) {
     case 'succeeded':
       return 'indexed'

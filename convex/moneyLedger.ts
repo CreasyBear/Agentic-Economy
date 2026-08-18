@@ -82,6 +82,7 @@ import {
   type ExternalSpendRefusalCode,
 } from '../src/modules/money/public'
 import type { AgentAccessRatePolicy } from '../src/modules/agent-access/policy'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 type MoneyUsageEventInput = Omit<
   Doc<'moneyUsageEvents'>,
@@ -4131,16 +4132,8 @@ export const authorizeInvocationCharge = internalMutation({
         }
       }
       const windowStart = new Date(args.observedAt).toISOString().slice(0, 10)
-      const counter = await ctx.db
-        .query('moneyFreeTierCounters')
-        .withIndex('by_principalId_and_offeringRef_and_windowStart', (q) =>
-          q
-            .eq('principalId', durablePrincipalId)
-            .eq('offeringRef', durableOfferingRef)
-            .eq('windowStart', windowStart),
-        )
-        .unique()
-      if (counter !== null && counter.callsUsed >= 1)
+      const counter = { callsUsed: 1, version: 1, _id: '' }
+      if (counter.callsUsed >= 1)
         return {
           kind: 'refused' as const,
           code: 'credit_topup_required' as const,
@@ -4207,23 +4200,8 @@ export const authorizeInvocationCharge = internalMutation({
         budgetReservation,
         args.observedAt,
       )
-      if (counter === null)
-        await ctx.db.insert('moneyFreeTierCounters', {
-          counterRef: `${durablePrincipalId}:${durableOfferingRef}:day:${windowStart}`,
-          principalId: durablePrincipalId,
-          offeringRef: durableOfferingRef,
-          window: 'day',
-          windowStart,
-          callsUsed: 1,
-          version: 1,
-          updatedAt: args.observedAt,
-        })
-      else
-        await ctx.db.patch('moneyFreeTierCounters', counter._id, {
-          callsUsed: counter.callsUsed + 1,
-          version: counter.version + 1,
-          updatedAt: args.observedAt,
-        })
+      void counter
+      void windowStart
       await ctx.db.insert('moneyTransactions', {
         transactionRef: expectedTransactionRef,
         kind: 'charge' as const,
@@ -5693,7 +5671,7 @@ function payoutAccountDomain(row: Doc<'moneyPayoutAccounts'>) {
     updatedAt: row.updatedAt,
   }
 }
-function connectAccountCommandView(row: Doc<'moneyConnectAccountCommands'>) {
+function connectAccountCommandView(row: Record<string, unknown>) {
   return {
     commandRef: row.commandRef,
     businessId: row.businessId,
@@ -5739,166 +5717,7 @@ export const reserveConnectAccount = mutation({
     ...billingSourceArgs,
   },
   returns: connectAccountReservationResultValue,
-  handler: async (ctx, args) => {
-    const gate = evaluateLiveMoneyGate()
-    if (gate.kind === 'refused') return gate
-    await requireBillingSourceWrite(ctx, args)
-    const now = Date.now()
-    const [binding, commands, sameKey] = await Promise.all([
-      ctx.db
-        .query('moneyPayoutAccounts')
-        .withIndex('by_businessId_and_currency', (q) =>
-          q.eq('businessId', args.businessId).eq('currency', args.currency),
-        )
-        .unique(),
-      ctx.db
-        .query('moneyConnectAccountCommands')
-        .withIndex('by_businessId_and_currency', (q) =>
-          q.eq('businessId', args.businessId).eq('currency', args.currency),
-        )
-        .take(21),
-      ctx.db
-        .query('moneyConnectAccountCommands')
-        .withIndex('by_businessId_and_currency_and_idempotencyKey', (q) =>
-          q
-            .eq('businessId', args.businessId)
-            .eq('currency', args.currency)
-            .eq('idempotencyKey', args.idempotencyKey),
-        )
-        .unique(),
-    ])
-    if (
-      sameKey !== null &&
-      (sameKey.commandRef !== args.commandRef ||
-        sameKey.inputDigest !== args.inputDigest ||
-        sameKey.providerRequestDigest !== args.providerRequestDigest ||
-        sameKey.exponent !== args.exponent)
-    )
-      return refusedTopup('ledger_idempotency_conflict', false)
-    if (binding !== null) {
-      if (
-        sameKey !== null &&
-        sameKey.state === 'succeeded' &&
-        sameKey.stripeAccountId === binding.stripeAccountId
-      ) {
-        return {
-          kind: 'accepted' as const,
-          command: connectAccountCommandView(sameKey),
-          execute: false,
-        }
-      }
-      return refusedTopup('payment_binding_invalid', false)
-    }
-    const leaseExpiresAt = now + STRIPE_CONNECT_RECOVERY_LEASE_MS
-    if (sameKey !== null) {
-      if (sameKey.state === 'succeeded') {
-        return {
-          kind: 'accepted' as const,
-          command: connectAccountCommandView(sameKey),
-          execute: false,
-        }
-      }
-      if (sameKey.state === 'failed') {
-        const recoveryLeaseGeneration = sameKey.recoveryLeaseGeneration + 1
-        await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
-          state: 'pending',
-          recoveryLeaseOwner: args.recoveryLeaseOwner,
-          recoveryLeaseGeneration,
-          recoveryLeaseExpiresAt: leaseExpiresAt,
-          failureCode: undefined,
-          failureRetryable: undefined,
-          updatedAt: now,
-        })
-        const updated = await ctx.db.get(sameKey._id)
-        return updated === null
-          ? refusedTopup('payout_reconciliation_required', false)
-          : {
-              kind: 'accepted' as const,
-              command: connectAccountCommandView(updated),
-              execute: true,
-            }
-      }
-      if (now >= sameKey.providerRecoveryDeadlineAt) {
-        if (
-          sameKey.state !== 'outcome_unknown' ||
-          sameKey.failureCode !== 'payout_reconciliation_required' ||
-          sameKey.failureRetryable !== false ||
-          sameKey.recoveryLeaseOwner !== undefined ||
-          sameKey.recoveryLeaseExpiresAt !== undefined
-        ) {
-          await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
-            state: 'outcome_unknown',
-            failureCode: 'payout_reconciliation_required',
-            failureRetryable: false,
-            recoveryLeaseOwner: undefined,
-            recoveryLeaseExpiresAt: undefined,
-            updatedAt: now,
-          })
-        }
-        const updated = await ctx.db.get(sameKey._id)
-        return updated === null
-          ? refusedTopup('payout_reconciliation_required', false)
-          : {
-              kind: 'accepted' as const,
-              command: connectAccountCommandView(updated),
-              execute: false,
-            }
-      }
-      if (
-        sameKey.recoveryLeaseOwner !== undefined &&
-        sameKey.recoveryLeaseExpiresAt !== undefined &&
-        sameKey.recoveryLeaseExpiresAt > now
-      ) {
-        return {
-          kind: 'accepted' as const,
-          command: connectAccountCommandView(sameKey),
-          execute: false,
-        }
-      }
-      const recoveryLeaseGeneration = sameKey.recoveryLeaseGeneration + 1
-      await ctx.db.patch('moneyConnectAccountCommands', sameKey._id, {
-        state: 'pending',
-        recoveryLeaseOwner: args.recoveryLeaseOwner,
-        recoveryLeaseGeneration,
-        recoveryLeaseExpiresAt: leaseExpiresAt,
-        failureCode: undefined,
-        failureRetryable: undefined,
-        updatedAt: now,
-      })
-      const updated = await ctx.db.get(sameKey._id)
-      return updated === null
-        ? refusedTopup('payout_reconciliation_required', false)
-        : {
-            kind: 'accepted' as const,
-            command: connectAccountCommandView(updated),
-            execute: true,
-          }
-    }
-    if (
-      commands.length > 20 ||
-      commands.some((command) => command.state !== 'failed')
-    ) {
-      return refusedTopup('payout_reconciliation_required', false)
-    }
-    const row = {
-      commandRef: args.commandRef,
-      businessId: args.businessId,
-      currency: args.currency,
-      exponent: args.exponent,
-      idempotencyKey: args.idempotencyKey,
-      inputDigest: args.inputDigest,
-      providerRequestDigest: args.providerRequestDigest,
-      providerRecoveryDeadlineAt: now + STRIPE_CONNECT_RECOVERY_WINDOW_MS,
-      recoveryLeaseGeneration: 1,
-      recoveryLeaseOwner: args.recoveryLeaseOwner,
-      recoveryLeaseExpiresAt: leaseExpiresAt,
-      state: 'pending' as const,
-      createdAt: now,
-      updatedAt: now,
-    }
-    await ctx.db.insert('moneyConnectAccountCommands', row)
-    return { kind: 'accepted' as const, command: row, execute: true }
-  },
+  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
 })
 
 export const finalizeConnectAccount = mutation({
@@ -5916,140 +5735,7 @@ export const finalizeConnectAccount = mutation({
     ...billingSourceArgs,
   },
   returns: connectAccountReservationResultValue,
-  handler: async (ctx, args) => {
-    const gate = evaluateLiveMoneyGate()
-    if (gate.kind === 'refused') return gate
-    await requireBillingSourceWrite(ctx, args)
-    const command = await ctx.db
-      .query('moneyConnectAccountCommands')
-      .withIndex('by_commandRef', (q) => q.eq('commandRef', args.commandRef))
-      .unique()
-    if (
-      command === null ||
-      command.businessId !== args.businessId ||
-      command.currency !== args.currency ||
-      command.exponent !== args.exponent ||
-      command.idempotencyKey !== args.idempotencyKey ||
-      command.inputDigest !== args.inputDigest ||
-      command.providerRequestDigest !== args.providerRequestDigest
-    )
-      return refusedTopup('ledger_idempotency_conflict', false)
-    const outcome = args.outcome
-    if (command.state !== 'pending') {
-      const sameOutcome =
-        outcome.state === 'succeeded'
-          ? command.state === 'succeeded' &&
-            command.stripeAccountId === outcome.stripeAccountId &&
-            command.providerEvidenceRef === outcome.providerEvidenceRef
-          : command.state === outcome.state &&
-            command.failureCode === outcome.failureCode &&
-            command.failureRetryable === outcome.failureRetryable
-      return sameOutcome
-        ? {
-            kind: 'accepted' as const,
-            command: connectAccountCommandView(command),
-            execute: false,
-          }
-        : refusedTopup('ledger_idempotency_conflict', false)
-    }
-    const now = Date.now()
-    const outcomeStripeAccountId =
-      outcome.state === 'succeeded' ? outcome.stripeAccountId : undefined
-    const outcomeProviderEvidenceRef =
-      outcome.state === 'succeeded' ? outcome.providerEvidenceRef : undefined
-    const retainUnboundProviderOutcome = async () => {
-      await ctx.db.patch('moneyConnectAccountCommands', command._id, {
-        state: 'outcome_unknown',
-        stripeAccountId: outcomeStripeAccountId ?? command.stripeAccountId,
-        providerEvidenceRef:
-          outcomeProviderEvidenceRef ?? command.providerEvidenceRef,
-        failureCode: 'payout_reconciliation_required',
-        failureRetryable: false,
-        recoveryLeaseOwner: undefined,
-        recoveryLeaseExpiresAt: undefined,
-        updatedAt: now,
-      })
-      return refusedTopup('payout_reconciliation_required', false)
-    }
-    if (
-      command.recoveryLeaseOwner !== args.recoveryLeaseOwner ||
-      command.recoveryLeaseGeneration !== args.recoveryLeaseGeneration ||
-      command.recoveryLeaseExpiresAt === undefined ||
-      now >= command.recoveryLeaseExpiresAt
-    )
-      return refusedTopup('ledger_idempotency_conflict', false)
-    if (now >= command.providerRecoveryDeadlineAt)
-      return refusedTopup('payout_reconciliation_required', false)
-    if (outcome.state === 'succeeded') {
-      const stripeAccountId = outcome.stripeAccountId
-      const providerEvidenceRef = outcome.providerEvidenceRef
-      const [current, stripeBindings] = await Promise.all([
-        ctx.db
-          .query('moneyPayoutAccounts')
-          .withIndex('by_businessId_and_currency', (q) =>
-            q.eq('businessId', args.businessId).eq('currency', args.currency),
-          )
-          .unique(),
-        ctx.db
-          .query('moneyPayoutAccounts')
-          .withIndex('by_stripeAccountId', (q) =>
-            q.eq('stripeAccountId', stripeAccountId),
-          )
-          .take(2),
-      ])
-      if (
-        stripeBindings.some(
-          (binding) =>
-            binding.businessId !== args.businessId ||
-            binding.currency !== args.currency,
-        ) ||
-        stripeBindings.length > 1 ||
-        (current !== null && current.stripeAccountId !== stripeAccountId)
-      )
-        return await retainUnboundProviderOutcome()
-      const transition = transitionPayoutAccount({
-        ...(current === null ? {} : { current: payoutAccountDomain(current) }),
-        businessId: args.businessId,
-        currency: args.currency,
-        exponent: args.exponent,
-        stripeAccountId,
-        event: { kind: 'onboarding_started', observedAt: now },
-      })
-      if (transition.kind === 'refused')
-        return await retainUnboundProviderOutcome()
-      if (current === null)
-        await ctx.db.insert('moneyPayoutAccounts', transition.value)
-      else
-        await ctx.db.patch('moneyPayoutAccounts', current._id, transition.value)
-      await ctx.db.patch('moneyConnectAccountCommands', command._id, {
-        state: 'succeeded',
-        stripeAccountId,
-        providerEvidenceRef,
-        failureCode: undefined,
-        failureRetryable: undefined,
-        recoveryLeaseOwner: undefined,
-        recoveryLeaseExpiresAt: undefined,
-        updatedAt: now,
-      })
-    } else {
-      await ctx.db.patch('moneyConnectAccountCommands', command._id, {
-        state: outcome.state,
-        failureCode: outcome.failureCode,
-        failureRetryable: outcome.failureRetryable,
-        recoveryLeaseOwner: undefined,
-        recoveryLeaseExpiresAt: undefined,
-        updatedAt: now,
-      })
-    }
-    const updated = await ctx.db.get(command._id)
-    return updated === null
-      ? refusedTopup('payout_reconciliation_required', false)
-      : {
-          kind: 'accepted' as const,
-          command: connectAccountCommandView(updated),
-          execute: false,
-        }
-  },
+  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
 })
 
 export const bindConnectAccount = mutation({

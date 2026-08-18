@@ -35,10 +35,9 @@ describe('capability contract boundaries', () => {
   it('keeps capability schema traversal and commitment materialization out of downstream decision modules', () => {
     const forbiddenReimplementation = /(?:from\s+['"](?:ajv|@cfworker\/json-schema)|CapabilityContractDocument|resolvePointedSchema|materializeInputFacts|setJsonPointer|semantic\.dataUse)/
 
-    for (const root of ['src/modules/customer-request', 'src/modules/routing-kernel']) {
+    for (const root of ['src/modules/routing-kernel']) {
       for (const source of sourcesUnder(root)) expect(source).not.toMatch(forbiddenReimplementation)
     }
-    expect(readFileSync('src/modules/customer-request/evaluation.ts', 'utf8')).toMatch(/\.projectPreparation\(/)
   })
 })
 

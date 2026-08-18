@@ -84,7 +84,6 @@ export const ANSWER_OPERATION_EFFECT_TOOL_IDS = [
 export const ANSWER_READ_TOOL_IDS = [
   'registry.search',
   'registry.detail',
-  'web.discover',
   'registry.operations.search',
   'registry.operations.detail',
   'registry.operations.compare',

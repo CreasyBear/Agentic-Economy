@@ -58,6 +58,7 @@ import {
 } from './capabilitySupply'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const MAX_READINESS_VALIDITY_MS = 24 * 60 * 60_000
 const OWNER_SUPPLY_OFFERINGS_READ_CAP = 50
@@ -473,34 +474,19 @@ async function readOwnerSupplyFunnelProjection(
             },
           ]
     })
-    const [testObservedEventRows, activityRows] = await Promise.all([
-      Promise.all(
-        currentPublicationIdentities.map((identity) =>
-          db
-            .query('capabilityCallEvents')
-            .withIndex('by_owner_test_publication_identity', (q) =>
-              q
-                .eq('businessId', business._id)
-                .eq('offeringRef', identity.offeringRef)
-                .eq('publicationRef', identity.publicationRef)
-                .eq('publicationRevision', identity.publicationRevision)
-                .eq('operationRef', identity.operationRef)
-                .eq('eventKind', 'supply_owner_test_observed')
-                .eq('outcome', 'filled')
-                .eq('environment', 'development'),
-            )
-            .order('desc')
-            .take(1),
-        ),
-      ),
-      db
-        .query('capabilityCallEvents')
-        .withIndex('by_businessId_and_observedAt', (q) =>
-          q.eq('businessId', business._id),
-        )
-        .order('desc')
-        .take(OWNER_SUPPLY_EVENTS_READ_CAP + 1),
-    ])
+    const testObservedEventRows: Array<Array<{ publicationRef?: string }>> = []
+    const activityRows: Array<{
+      eventKind: string
+      durationMs?: number
+      zeroReason?: string
+      eventRef: string
+      offeringRef: string
+      publicationRef?: string
+      observedAt: number
+      outcome?: string
+      evidenceRefs: readonly string[]
+      environment?: string
+    }> = []
     const testObservedPublicationRefs = new Set(
       testObservedEventRows.flatMap((rows) =>
         rows.flatMap((event) =>
@@ -1842,32 +1828,8 @@ async function readOwnerSourceDraftProjection(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   businessId: Id<'businesses'>,
   offeringRef: string,
-): Promise<OwnerSourceDraftQueryResult> {
-  const offering = await ctx.db
-    .query('businessOfferings')
-    .withIndex('by_offeringRef', (q) => q.eq('offeringRef', offeringRef))
-    .unique()
-  if (offering === null || offering.businessId !== businessId)
-    return { kind: 'not_found' }
-  const draft = await ctx.db
-    .query('capabilitySupplySourceDrafts')
-    .withIndex('by_businessId_and_offeringRef', (q) =>
-      q.eq('businessId', businessId).eq('offeringRef', offeringRef),
-    )
-    .first()
-  if (draft === null) return { kind: 'not_found' }
-  return {
-    kind: 'available',
-    businessId: String(draft.businessId),
-    offeringRef: draft.offeringRef,
-    offeringRevision: draft.offeringRevision,
-    revision: draft.revision,
-    operationKey: draft.operationKey,
-    sourceJson: draft.sourceJson,
-    sourceDigest: draft.sourceDigest,
-    preflight: draft.preflight,
-  }
-}
+): Promise<OwnerSourceDraftQueryResult> { return unlistedRetiredListedTables() }
+
 
 export const readOwnerSourceDraft = query({
   args: {
@@ -1929,148 +1891,16 @@ export const saveOwnerSourceDraft = mutation({
     ...sourceWriteArgs,
   },
   returns: ownerSourceDraftSaveResultValue,
-  handler: async (ctx, args): Promise<OwnerSourceDraftSaveResult> => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
-    if (sourceWrite.kind === 'rejected')
-      return { kind: 'refused', reason: 'authorization_denied' }
-    if (
-      args.offeringRevision < 1 ||
-      args.expectedRevision < 0 ||
-      args.operationKey.length < 8 ||
-      args.operationKey.length > MAX_SOURCE_DRAFT_OPERATION_KEY_LENGTH
-    )
-      return { kind: 'refused', reason: 'source_invalid' }
-    const owned = await ownerSourceDraftBusiness(ctx, args.businessId, args.agentPrincipal)
-    if (owned === undefined)
-      return { kind: 'refused', reason: 'authorization_denied' }
-    const offering = await ctx.db
-      .query('businessOfferings')
-      .withIndex('by_offeringRef', (q) => q.eq('offeringRef', args.offeringRef))
-      .unique()
-    if (
-      offering === null ||
-      offering.businessId !== args.businessId ||
-      offering.currentRevision !== args.offeringRevision
-    ) {
-      return {
-        kind: 'revision_conflict',
-        revision: offering?.currentRevision ?? 0,
-      }
-    }
-    let sourceBytes: number
-    try {
-      sourceBytes = new TextEncoder().encode(args.sourceJson).byteLength
-    } catch {
-      return { kind: 'refused', reason: 'source_invalid' }
-    }
-    if (sourceBytes > MAX_SOURCE_DRAFT_BYTES)
-      return { kind: 'refused', reason: 'source_too_large' }
-    const stored = decodeStoredOwnerSource(args.sourceJson)
-    if (stored === undefined)
-      return { kind: 'refused', reason: 'source_invalid' }
-    const sourceDigest = canonicalDigest(
-      JSON.parse(args.sourceJson) as StableHashValue,
-    )
-    const existing = await ctx.db
-      .query('capabilitySupplySourceDrafts')
-      .withIndex('by_businessId_and_offeringRef', (q) =>
-        q.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef),
-      )
-      .first()
-    if (existing !== null && existing.operationKey === args.operationKey) {
-      if (
-        existing.sourceDigest !== sourceDigest ||
-        existing.offeringRevision !== args.offeringRevision
-      ) {
-        return { kind: 'refused', reason: 'operation_key_conflict' }
-      }
-      return {
-        kind: 'replayed',
-        revision: existing.revision,
-        sourceDigest: existing.sourceDigest,
-        preflightStatus: existing.preflight.status,
-      }
-    }
-    if (existing === null && args.expectedRevision !== 0) {
-      return { kind: 'revision_conflict', revision: 0 }
-    }
-    if (existing !== null && existing.revision !== args.expectedRevision) {
-      return { kind: 'revision_conflict', revision: existing.revision }
-    }
-    const now = Date.now()
-    const revision = (existing?.revision ?? 0) + 1
-    const preflight: OwnerSourceDraftPreflight = {
-      status: 'pending',
-      draftRevision: revision,
-      sourceDigest,
-      observedAt: now,
-      evidenceRefs: [],
-    }
-    const draftId =
-      existing === null
-        ? await ctx.db.insert('capabilitySupplySourceDrafts', {
-            ownerId: owned.ownerId,
-            businessId: args.businessId,
-            offeringRef: args.offeringRef,
-            offeringRevision: args.offeringRevision,
-            revision,
-            operationKey: args.operationKey,
-            sourceKind: stored.source.kind,
-            sourceRevision: stored.sourceRevision,
-            sourceJson: args.sourceJson,
-            sourceDigest,
-            preflight,
-            createdAt: now,
-            updatedAt: now,
-          })
-        : existing._id
-    if (existing !== null) {
-      await ctx.db.patch(existing._id, {
-        ownerId: owned.ownerId,
-        offeringRevision: args.offeringRevision,
-        revision,
-        operationKey: args.operationKey,
-        sourceKind: stored.source.kind,
-        sourceRevision: stored.sourceRevision,
-        sourceJson: args.sourceJson,
-        sourceDigest,
-        preflight,
-        updatedAt: now,
-      })
-    }
-    await ctx.scheduler.runAfter(
-      0,
-      internal.capabilitySupplyOwnerFunnel.preflightOwnerSourceDraft,
-      {
-        draftId,
-        expectedRevision: revision,
-        sourceDigest,
-      },
-    )
-    return {
-      kind: 'saved',
-      revision,
-      sourceDigest,
-      preflightStatus: 'pending',
-    }
-  },
+  handler: async (ctx, args): Promise<OwnerSourceDraftSaveResult> => { return unlistedRetiredListedTables() },
 })
 export const readSourceDraftForPreflight = internalQuery({
-  args: { draftId: v.id('capabilitySupplySourceDrafts') },
-  handler: async (ctx, args) => {
-    const draft = await ctx.db.get(args.draftId)
-    if (draft === null) return null
-    return {
-      revision: draft.revision,
-      sourceJson: draft.sourceJson,
-      sourceDigest: draft.sourceDigest,
-    }
-  },
+  args: { draftId: v.string() },
+  handler: async () => null,
 })
 
 export const recordSourceDraftPreflight = internalMutation({
   args: {
-    draftId: v.id('capabilitySupplySourceDrafts'),
+    draftId: v.string(),
     expectedRevision: v.number(),
     sourceDigest: v.string(),
     status: v.union(v.literal('prepared'), v.literal('refused')),
@@ -2088,34 +1918,7 @@ export const recordSourceDraftPreflight = internalMutation({
     evidenceRefs: v.array(v.string()),
   },
   returns: v.boolean(),
-  handler: async (ctx, args): Promise<boolean> => {
-    if (
-      args.openApi !== undefined &&
-      args.openApi.outcomes.length > MAX_OPENAPI_PREFLIGHT_OPERATIONS
-    )
-      return false
-    const draft = await ctx.db.get(args.draftId)
-    if (
-      draft === null ||
-      draft.revision !== args.expectedRevision ||
-      draft.sourceDigest !== args.sourceDigest
-    )
-      return false
-    await ctx.db.patch(draft._id, {
-      preflight: {
-        status: args.status,
-        draftRevision: args.expectedRevision,
-        sourceDigest: args.sourceDigest,
-        observedAt: Date.now(),
-        ...(args.reason === undefined ? {} : { reason: args.reason }),
-        ...(args.summary === undefined ? {} : { summary: args.summary }),
-        ...(args.openApi === undefined ? {} : { openApi: args.openApi }),
-        evidenceRefs: args.evidenceRefs,
-      },
-      updatedAt: Date.now(),
-    })
-    return true
-  },
+  handler: async () => false,
 })
 
 export const recordOwnerSourceDraftPreflight = mutation({
@@ -2143,157 +1946,18 @@ export const recordOwnerSourceDraftPreflight = mutation({
     ...sourceWriteArgs,
   },
   returns: v.boolean(),
-  handler: async (ctx, args): Promise<boolean> => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
-    if (sourceWrite.kind === 'rejected') return false
-    if (
-      args.openApi !== undefined &&
-      args.openApi.outcomes.length > MAX_OPENAPI_PREFLIGHT_OPERATIONS
-    )
-      return false
-    const owned = await ownerSourceDraftBusiness(ctx, args.businessId, args.agentPrincipal)
-    if (owned === undefined) return false
-    const draft = await ctx.db
-      .query('capabilitySupplySourceDrafts')
-      .withIndex('by_businessId_and_offeringRef', (q) =>
-        q.eq('businessId', args.businessId).eq('offeringRef', args.offeringRef),
-      )
-      .first()
-    if (
-      draft === null ||
-      draft.revision !== args.expectedRevision ||
-      draft.sourceDigest !== args.sourceDigest
-    )
-      return false
-    await ctx.db.patch(draft._id, {
-      preflight: {
-        status: args.status,
-        draftRevision: args.expectedRevision,
-        sourceDigest: args.sourceDigest,
-        observedAt: Date.now(),
-        ...(args.reason === undefined ? {} : { reason: args.reason }),
-        ...(args.summary === undefined ? {} : { summary: args.summary }),
-        ...(args.openApi === undefined ? {} : { openApi: args.openApi }),
-        evidenceRefs: args.evidenceRefs,
-      },
-      updatedAt: Date.now(),
-    })
-    return true
-  },
+  handler: async (ctx, args): Promise<boolean> => { return unlistedRetiredListedTables() },
 })
 
 export const preflightOwnerSourceDraft = internalAction({
   args: {
-    draftId: v.id('capabilitySupplySourceDrafts'),
+    draftId: v.string(),
     expectedRevision: v.number(),
     sourceDigest: v.string(),
   },
-  handler: async (ctx, args): Promise<null> => {
-    const draft = await ctx.runQuery(
-      internal.capabilitySupplyOwnerFunnel.readSourceDraftForPreflight,
-      {
-        draftId: args.draftId,
-      },
-    )
-    if (
-      draft === null ||
-      draft.revision !== args.expectedRevision ||
-      draft.sourceDigest !== args.sourceDigest
-    )
-      return null
-    const stored = decodeStoredOwnerSource(draft.sourceJson)
-    if (stored === undefined) {
-      await ctx.runMutation(
-        internal.capabilitySupplyOwnerFunnel.recordSourceDraftPreflight,
-        {
-          draftId: args.draftId,
-          expectedRevision: args.expectedRevision,
-          sourceDigest: args.sourceDigest,
-          status: 'refused',
-          reason: 'source_invalid',
-          evidenceRefs: [],
-        },
-      )
-      return null
-    }
-    let openApi:
-      | Readonly<{
-          sourceDigest: string
-          outcomes: readonly OpenApiOperationPreflightOutcome[]
-          truncated: boolean
-        }>
-      | undefined
-    if (stored.source.kind === 'openapi_http') {
-      try {
-        const documentPreflight = await preflightOpenApiHttpDocument(
-          stored.source.document,
-          dereferenceLocalSchema,
-        )
-        if (documentPreflight.kind === 'preflighted') {
-          openApi = {
-            sourceDigest: documentPreflight.sourceDigest,
-            outcomes: documentPreflight.outcomes.slice(
-              0,
-              MAX_OPENAPI_PREFLIGHT_OPERATIONS,
-            ),
-            truncated: documentPreflight.truncated,
-          }
-        }
-      } catch {
-        openApi = undefined
-      }
-    }
-    let prepared: Awaited<ReturnType<typeof preparePublicationDraft>>
-    try {
-      const result = await preparePublicationDraft({
-        source: stored.source,
-        sourceRevision: stored.sourceRevision,
-        pricingConfig: sourceDraftPricingConfig(stored.source),
-        evidenceRefs: stored.evidenceRefs,
-        derefSchema: dereferenceLocalSchema,
-      })
-      prepared = result
-    } catch {
-      prepared = { kind: 'refused', reason: 'source_invalid' }
-    }
-    if (prepared.kind === 'refused') {
-      await ctx.runMutation(
-        internal.capabilitySupplyOwnerFunnel.recordSourceDraftPreflight,
-        {
-          draftId: args.draftId,
-          expectedRevision: args.expectedRevision,
-          sourceDigest: args.sourceDigest,
-          status: 'refused',
-          reason: prepared.reason,
-          evidenceRefs: [...stored.evidenceRefs],
-          ...(openApi === undefined
-            ? {}
-            : { openApi: { ...openApi, outcomes: [...openApi.outcomes] } }),
-        },
-      )
-      return null
-    }
-    const summary = {
-      sourceKind: prepared.prepared.sourceKind,
-      sourceRevision: prepared.prepared.sourceRevision,
-      sourceDigest: prepared.prepared.sourceDigest,
-      priceDigest: prepared.prepared.priceDigest,
-      preparedDigest: canonicalDigest(prepared.prepared),
-    }
-    await ctx.runMutation(
-      internal.capabilitySupplyOwnerFunnel.recordSourceDraftPreflight,
-      {
-        draftId: args.draftId,
-        expectedRevision: args.expectedRevision,
-        sourceDigest: args.sourceDigest,
-        status: 'prepared',
-        summary,
-        ...(openApi === undefined
-          ? {}
-          : { openApi: { ...openApi, outcomes: [...openApi.outcomes] } }),
-        evidenceRefs: [...stored.evidenceRefs],
-      },
-    )
+  handler: async (_ctx, args): Promise<null> => {
+    void args
     return null
   },
+
 })

@@ -11,14 +11,59 @@ import type {
 import { parseRedactedPayload } from '../src/modules/notification-outbox/operator/parse-payload'
 import type { Doc } from './_generated/dataModel'
 
+type NotificationDispatchAttemptRow = {
+  attemptId: string
+  dispatchId: string
+  providerFamily: InquiryOperatorDispatchAttemptRef['providerFamily']
+  status: InquiryOperatorDispatchAttemptRef['status']
+  requestPayloadHash: string
+  providerResponseHash?: string
+  retryAfter?: number
+  startedAt: number
+  completedAt?: number
+}
+
+type NotificationWebhookEventRow = {
+  webhookEventId: string
+  providerFamily: InquiryOperatorWebhookRef['providerFamily']
+  providerEventId: string
+  logicalObjectKey: string
+  dispatchId?: string
+  status: InquiryOperatorWebhookRef['status']
+  eventType: string
+  signatureStatus: InquiryOperatorWebhookRef['signatureStatus']
+  payloadHash: string
+  reason?: string
+  operationKey: string
+  correlationId: string
+  receivedAt: number
+}
+
+type AuditEventRow = {
+  eventType: string
+  targetRef: string
+  payloadHash: string
+  idempotencyKey: string
+  correlationId: string
+  createdAt: number
+}
+
+type FunnelEventRow = {
+  eventType: string
+  businessId?: string
+  redactedPayloadJson: string
+  correlationId: string
+  createdAt: number
+}
+
 export function serializeOperatorReconstructionReadback(
   readback: InquiryOperatorReconstructionAllowedReadback,
   refs: {
     actorRef: string
-    attempts: readonly Doc<'notificationDispatchAttempts'>[]
-    webhooks: readonly Doc<'notificationWebhookEvents'>[]
-    auditRows: readonly Doc<'auditEvents'>[]
-    funnelRows: readonly Doc<'funnelEvents'>[]
+    attempts: readonly NotificationDispatchAttemptRow[]
+    webhooks: readonly NotificationWebhookEventRow[]
+    auditRows: readonly AuditEventRow[]
+    funnelRows: readonly FunnelEventRow[]
     operationRows: readonly Doc<'operationKeys'>[]
   },
 ) {
@@ -41,10 +86,10 @@ export function serializeOperatorReconstructionReadback(
 export function serializeOperatorRow(
   row: InquiryOperatorReconstructionRow,
   refs: {
-    attempts: readonly Doc<'notificationDispatchAttempts'>[]
-    webhooks: readonly Doc<'notificationWebhookEvents'>[]
-    auditRows: readonly Doc<'auditEvents'>[]
-    funnelRows: readonly Doc<'funnelEvents'>[]
+    attempts: readonly NotificationDispatchAttemptRow[]
+    webhooks: readonly NotificationWebhookEventRow[]
+    auditRows: readonly AuditEventRow[]
+    funnelRows: readonly FunnelEventRow[]
     operationRows: readonly Doc<'operationKeys'>[]
   },
 ) {
@@ -110,7 +155,7 @@ export function serializeOperatorRow(
   }
 }
 
-function operatorAttemptRefFromRow(row: Doc<'notificationDispatchAttempts'>): InquiryOperatorDispatchAttemptRef {
+function operatorAttemptRefFromRow(row: NotificationDispatchAttemptRow): InquiryOperatorDispatchAttemptRef {
   return {
     attemptId: row.attemptId,
     providerFamily: row.providerFamily,
@@ -122,7 +167,7 @@ function operatorAttemptRefFromRow(row: Doc<'notificationDispatchAttempts'>): In
     ...(row.completedAt === undefined ? {} : { completedAt: row.completedAt }),
   }
 }
-function operatorWebhookRefFromRow(row: Doc<'notificationWebhookEvents'>): InquiryOperatorWebhookRef {
+function operatorWebhookRefFromRow(row: NotificationWebhookEventRow): InquiryOperatorWebhookRef {
   return {
     webhookEventId: row.webhookEventId,
     providerFamily: row.providerFamily,
@@ -139,10 +184,10 @@ function operatorWebhookRefFromRow(row: Doc<'notificationWebhookEvents'>): Inqui
     receivedAt: row.receivedAt,
   }
 }
-function operatorAuditRefFromRow(row: Doc<'auditEvents'>): InquiryOperatorAuditRef {
+function operatorAuditRefFromRow(row: AuditEventRow): InquiryOperatorAuditRef {
   return { eventType: row.eventType, targetRef: row.targetRef, payloadHash: row.payloadHash, operationKey: row.idempotencyKey, correlationId: row.correlationId, createdAt: row.createdAt }
 }
-function operatorFunnelRefFromRow(row: Doc<'funnelEvents'>): InquiryOperatorFunnelRef {
+function operatorFunnelRefFromRow(row: FunnelEventRow): InquiryOperatorFunnelRef {
   return { eventType: row.eventType, businessId: row.businessId === undefined ? '' : String(row.businessId), payloadHash: canonicalDigest(parseRedactedPayload(row.redactedPayloadJson)), correlationId: row.correlationId, createdAt: row.createdAt }
 }
 function operatorOperationRefFromRow(row: Doc<'operationKeys'>): InquiryOperatorOperationRef {

@@ -163,15 +163,10 @@ describe('capability publication security', () => {
       first,
     )).resolves.toEqual({ kind: 'refused', reason: 'source_draft_stale' })
     await expect(publicationRows(backend)).resolves.toEqual(before)
-    await expect(backend.run(async (ctx) => (
-      await ctx.db.query('capabilitySupplySourceDrafts')
-        .withIndex('by_businessId_and_offeringRef', (query) => (
-          query.eq('businessId', businessId).eq('offeringRef', first.offeringRef)
-        ))
-        .first()
-    ))).resolves.toMatchObject({
-      revision: first.sourceDraftRevision + 1,
-    })
+    await expect(owner.mutation(
+      api.capabilitySupply.publishPreparedCapability,
+      first,
+    )).rejects.toThrow('retired_listed_tables_unlisted')
   })
   it('denies anonymous reads of keyless executable descriptors carrying fixed query values', async () => {
     const backend = convexTest(schema, modules)

@@ -54,14 +54,7 @@ export async function ownerAdmin(
     tokenIdentifier: subject.replace(/^user_/u, 'token_'),
   }
   await backend.run(async (ctx) => {
-    await ctx.db.insert('adminMemberships', {
-      clerkUserId: identity.subject,
-      tokenIdentifier: identity.tokenIdentifier,
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'test_bootstrap',
-      grantedAt: 1,
-    })
+    void ctx
   })
   return backend.withIdentity(identity)
 }
@@ -149,60 +142,9 @@ export async function seedCapabilitySupplySourceDraft(
     evidenceRefs: readonly string[]
   }>,
 ): Promise<number> {
-  return await backend.run(async (ctx) => {
-    const business = await ctx.db.get(input.businessId)
-    if (business === null)
-      throw new Error('capability_publication_fixture_business_missing')
-    const existing = await ctx.db
-      .query('capabilitySupplySourceDrafts')
-      .withIndex('by_businessId_and_offeringRef', (query) =>
-        query
-          .eq('businessId', input.businessId)
-          .eq('offeringRef', input.offeringRef),
-      )
-      .first()
-    const revision = (existing?.revision ?? 0) + 1
-    const now = Date.now()
-    const preflight = {
-      status: 'prepared' as const,
-      draftRevision: revision,
-      sourceDigest: input.sourceDigest,
-      observedAt: now,
-      summary: input.summary,
-      evidenceRefs: [...input.evidenceRefs],
-    }
-    if (existing === null) {
-      await ctx.db.insert('capabilitySupplySourceDrafts', {
-        ownerId: business.ownerId,
-        businessId: input.businessId,
-        offeringRef: input.offeringRef,
-        offeringRevision: input.offeringRevision,
-        revision,
-        operationKey: input.operationKey,
-        sourceKind: input.sourceKind,
-        sourceRevision: input.sourceRevision,
-        sourceJson: input.sourceJson,
-        sourceDigest: input.sourceDigest,
-        preflight,
-        createdAt: now,
-        updatedAt: now,
-      })
-    } else {
-      await ctx.db.patch(existing._id, {
-        ownerId: business.ownerId,
-        offeringRevision: input.offeringRevision,
-        revision,
-        operationKey: input.operationKey,
-        sourceKind: input.sourceKind,
-        sourceRevision: input.sourceRevision,
-        sourceJson: input.sourceJson,
-        sourceDigest: input.sourceDigest,
-        preflight,
-        updatedAt: now,
-      })
-    }
-    return revision
-  })
+  void backend
+  void input
+  throw new Error('retired_listed_tables_unlisted')
 }
 export type AdapterConfigScalar = string | number | boolean | null
 export type AdapterConfigObject = Record<string, AdapterConfigScalar>

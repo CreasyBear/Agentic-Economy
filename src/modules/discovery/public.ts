@@ -33,6 +33,7 @@ export type {
   OfferingDiscoveryManifestContract,
 } from './internal/offering-manifest'
 export {
+  CUSTOMER_REQUEST_MACHINE_COMPREHENSION_LINES,
   SiteDiscoveryEndpointKindValues,
   SiteDiscoveryManifestSchemaVersion,
   buildSiteDiscoveryManifest,

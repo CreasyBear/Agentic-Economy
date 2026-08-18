@@ -9,89 +9,35 @@ import type {
   NotificationWebhookEventRecord,
 } from '../src/modules/notification-outbox/public'
 import type { DataModel, Doc, Id } from './_generated/dataModel'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
-type NotificationDispatchRow = Omit<Doc<'notificationDispatches'>, '_id' | '_creationTime'>
+type NotificationDispatchRow = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
-type NotificationDispatchAttemptRow = Omit<Doc<'notificationDispatchAttempts'>, '_id' | '_creationTime'>
+type NotificationDispatchAttemptRow = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
-type NotificationWebhookEventRow = Omit<Doc<'notificationWebhookEvents'>, '_id' | '_creationTime'>
+type NotificationWebhookEventRow = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
-export function toDispatchRecord(row: Doc<'notificationDispatches'>): NotificationDispatchRecord {
-  return {
-    dispatchId: brandNonEmpty(row.dispatchId, 'NotificationDispatchId'),
-    businessId: brandNonEmpty(row.businessId, 'BusinessId'),
-    inquiryThreadId: row.inquiryThreadId,
-    inquiryMessageId: row.inquiryMessageId,
-    recipientRole: row.recipientRole,
-    providerFamily: row.providerFamily,
-    status: row.status,
-    providerIdempotencyKey: row.providerIdempotencyKey,
-    redactedPayload: parseRedactedPayload(row.redactedPayloadJson),
-    payloadHash: brandNonEmpty(row.payloadHash, 'SourceHash'),
-    ...(row.resendMessageId === undefined ? {} : { resendMessageId: row.resendMessageId }),
-    ...(row.novuTransactionId === undefined ? {} : { novuTransactionId: row.novuTransactionId }),
-    ...(row.novuWorkflowId === undefined ? {} : { novuWorkflowId: row.novuWorkflowId }),
-    ...(row.novuMessageId === undefined ? {} : { novuMessageId: row.novuMessageId }),
-    ...(row.novuSubscriberId === undefined ? {} : { novuSubscriberId: row.novuSubscriberId }),
-    providerMissing: row.providerMissing,
-    orchestratorMissing: row.orchestratorMissing,
-    retryCount: row.retryCount,
-    ...(row.retryAfter === undefined ? {} : { retryAfter: row.retryAfter }),
-    ...(row.lastRedactedError === undefined ? {} : { lastRedactedError: row.lastRedactedError }),
-    operationKey: brandNonEmpty(row.operationKey, 'OperationKey'),
-    correlationId: brandNonEmpty(row.correlationId, 'CorrelationId'),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }
+export function toDispatchRecord(_row: Record<string, unknown>): NotificationDispatchRecord {
+  return unlistedRetiredListedTables()
 }
 
 export async function persistNotificationDispatch(
   db: GenericDatabaseWriter<DataModel>,
   dispatch: NotificationDispatchRecord,
-): Promise<void> {
-  const row = notificationDispatchRow(db, dispatch)
-  const existing = await db
-    .query('notificationDispatches')
-    .withIndex('by_dispatchId', (query) => query.eq('dispatchId', dispatch.dispatchId))
-    .unique()
-  if (existing === null) {
-    await db.insert('notificationDispatches', row)
-    return
-  }
-  await db.patch(existing._id, row)
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 
 export async function persistNotificationDispatchAttempt(
   db: GenericDatabaseWriter<DataModel>,
   attempt: NotificationDispatchAttemptRecord,
-): Promise<void> {
-  const row = notificationDispatchAttemptRow(attempt)
-  const existing = await db
-    .query('notificationDispatchAttempts')
-    .withIndex('by_attemptId', (query) => query.eq('attemptId', attempt.attemptId))
-    .unique()
-  if (existing === null) {
-    await db.insert('notificationDispatchAttempts', row)
-    return
-  }
-  await db.patch(existing._id, row)
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 
 export async function persistNotificationWebhookEvent(
   db: GenericDatabaseWriter<DataModel>,
   webhookEvent: NotificationWebhookEventRecord,
-): Promise<void> {
-  const row = notificationWebhookEventRow(webhookEvent)
-  const existing = await db
-    .query('notificationWebhookEvents')
-    .withIndex('by_webhookEventId', (query) => query.eq('webhookEventId', webhookEvent.webhookEventId))
-    .unique()
-  if (existing === null) {
-    await db.insert('notificationWebhookEvents', row)
-    return
-  }
-  await db.patch(existing._id, row)
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 
 /** Enqueue-path reconstruction used by the inquiry notification bridge. */
 export async function persistNotificationDispatchEnqueueReconstruction(
@@ -142,88 +88,13 @@ async function persistNotificationOperationKey(
 async function persistNotificationQueuedAuditEvent(
   db: GenericDatabaseWriter<DataModel>,
   dispatch: NotificationDispatchRecord,
-): Promise<void> {
-  const eventId = `audit:${canonicalDigest({
-    eventType: 'notification.queued',
-    operationKey: dispatch.operationKey,
-    targetRef: dispatch.dispatchId,
-  })}`
-  const businessId = businessIdFromValue(db, dispatch.businessId)
-  const row: Omit<Doc<'auditEvents'>, '_id' | '_creationTime'> = {
-    eventId,
-    eventType: 'notification.queued',
-    actorKind: 'system',
-    actorRef: 'system:notification-outbox',
-    businessId,
-    targetType: 'notification',
-    targetRef: dispatch.dispatchId,
-    beforeState: 'none',
-    afterState: dispatch.status,
-    idempotencyKey: dispatch.operationKey,
-    correlationId: dispatch.correlationId,
-    evidenceRefs: [],
-    redactedPayloadJson: JSON.stringify({
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      inquiryThreadId: dispatch.inquiryThreadId,
-      inquiryMessageId: dispatch.inquiryMessageId,
-      payloadHash: dispatch.payloadHash,
-    }),
-    payloadHash: canonicalDigest({
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      inquiryThreadId: dispatch.inquiryThreadId,
-      inquiryMessageId: dispatch.inquiryMessageId,
-      payloadHash: dispatch.payloadHash,
-    }),
-    createdAt: dispatch.createdAt,
-  }
-  const existing = await db
-    .query('auditEvents')
-    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
-    .unique()
-  if (existing === null) {
-    await db.insert('auditEvents', row)
-    return
-  }
-  await db.patch(existing._id, row)
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 async function persistNotificationQueuedFunnelEvent(
   db: GenericDatabaseWriter<DataModel>,
   dispatch: NotificationDispatchRecord,
-): Promise<void> {
-  const businessId = businessIdFromValue(db, dispatch.businessId)
-  const row: Omit<Doc<'funnelEvents'>, '_id' | '_creationTime'> = {
-    eventType: 'notification_queued',
-    source: 'notification-outbox',
-    stage: 'published',
-    pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
-    businessId,
-    redactedPayloadJson: JSON.stringify({
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      status: dispatch.status,
-    }),
-    consentFlag: true,
-    correlationId: dispatch.correlationId,
-    createdAt: dispatch.createdAt,
-  }
-  const existing = await db
-    .query('funnelEvents')
-    .withIndex('by_eventType_business_correlation_createdAt', (builder) =>
-      builder
-        .eq('eventType', 'notification_queued')
-        .eq('businessId', businessId)
-        .eq('correlationId', dispatch.correlationId)
-        .eq('createdAt', dispatch.createdAt)
-    )
-    .first()
-  if (existing === null) {
-    await db.insert('funnelEvents', row)
-    return
-  }
-  await db.patch(existing._id, row)
-}
+): Promise<void> { return unlistedRetiredListedTables() }
+
 function notificationDispatchRow(
   db: GenericDatabaseWriter<DataModel>,
   dispatch: NotificationDispatchRecord,

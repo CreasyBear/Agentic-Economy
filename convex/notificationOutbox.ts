@@ -55,6 +55,7 @@ import {
   persistNotificationOutboxSourceState,
 } from './notificationOutboxSourceState'
 import { toDispatchRecord } from './notificationOutboxPersistence'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const notificationProviderFamily = literalUnion(NotificationProviderFamilyValues)
 const notificationRecipientRole = literalUnion(NotificationRecipientRoleValues)
@@ -321,46 +322,7 @@ export const enqueueInquiryNotificationDispatch = mutationGeneric({
     correlationId: v.string(),
   },
   returns: enqueueNotificationResult,
-  handler: async (ctx, args) => {
-    const access = requireNotificationSystemAccess(args.systemKey)
-    if (access.kind === 'denied') {
-      return notificationRuntimeError('notification_system_denied', access.reason)
-    }
-
-    const db = ctx.db
-    const state = await loadNotificationOutboxSourceStateForThread(db, args.inquiryThreadId, [args.operationKey])
-    const result = enqueueInquiryNotificationModule(state, {
-      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
-      inquiryThreadId: args.inquiryThreadId,
-      inquiryMessageId: args.inquiryMessageId,
-      recipientRole: args.recipientRole,
-      providerFamily: args.providerFamily,
-      redactedPayload: parseRedactedPayload(args.redactedPayloadJson),
-      ...(args.providerIdempotencyKey === undefined ? {} : { providerIdempotencyKey: args.providerIdempotencyKey }),
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      now: Date.now(),
-    })
-
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    await persistNotificationOutboxSourceState(db, state, result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      dispatch: result.dispatch,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      dispatch: serializeDispatch(result.dispatch),
-    }
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const dispatchNotificationOutbox = mutationGeneric({
@@ -372,43 +334,7 @@ export const dispatchNotificationOutbox = mutationGeneric({
     correlationId: v.string(),
   },
   returns: dispatchNotificationResult,
-  handler: async (ctx, args) => {
-    const access = requireNotificationSystemAccess(args.systemKey)
-    if (access.kind === 'denied') {
-      return notificationRuntimeError('notification_system_denied', access.reason)
-    }
-
-    const db = ctx.db
-    const state = await loadNotificationOutboxSourceStateForDispatch(db, args.dispatchId)
-    const provider = args.providerResult === undefined ? undefined : providerAdapterForResult(state, args.dispatchId, args.providerResult)
-    const result = dispatchNotificationOutboxModule(state, {
-      dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      now: Date.now(),
-    }, provider)
-
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    await persistNotificationOutboxSourceState(db, state, result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      dispatch: result.dispatch,
-      attempt: result.attempt,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'system',
-      actorRef: 'system:notification-outbox',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      dispatch: serializeDispatch(result.dispatch),
-      attempt: serializeAttempt(result.attempt),
-    }
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const ingestNotificationWebhookEvent = mutationGeneric({
@@ -426,55 +352,7 @@ export const ingestNotificationWebhookEvent = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationWebhookResult,
-  handler: async (ctx, args) => {
-    const access = requireNotificationSystemAccess(args.systemKey)
-    if (access.kind === 'denied') {
-      return notificationRuntimeError('notification_system_denied', access.reason)
-    }
-    const db = ctx.db
-    const state = await loadNotificationOutboxSourceStateForWebhook(db, {
-      kind: 'webhook',
-      providerFamily: args.providerFamily,
-      providerEventId: args.providerEventId,
-      logicalObjectKey: args.logicalObjectKey,
-      ...(args.dispatchId === undefined ? {} : { dispatchId: args.dispatchId }),
-    })
-    const resolvedDispatchId = args.dispatchId ?? resolveWebhookDispatchId(state, args)
-    const result = ingestNotificationWebhook(state, {
-      providerFamily: args.providerFamily,
-      providerEventId: args.providerEventId,
-      logicalObjectKey: args.logicalObjectKey,
-      eventType: args.eventType,
-      signatureStatus: args.signatureStatus,
-      payloadHash: brandNonEmpty(args.payloadHash, 'SourceHash'),
-      redactedPayload: parseRedactedPayload(args.redactedPayloadJson),
-      ...(resolvedDispatchId === undefined
-        ? {}
-        : { dispatchId: brandNonEmpty(resolvedDispatchId, 'NotificationDispatchId') }),
-      operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      receivedAt: Date.now(),
-    })
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-    await persistNotificationOutboxSourceState(db, state, result.state)
-    await recordNotificationOperationReconstruction(db, {
-      code: result.code,
-      webhookEvent: result.webhookEvent,
-      ...(result.dispatch === undefined ? {} : { dispatch: result.dispatch }),
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      actorKind: 'system',
-      actorRef: 'system:notification-webhook',
-    })
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      webhookEvent: serializeWebhookEvent(result.webhookEvent),
-      ...(result.dispatch === undefined ? {} : { dispatch: serializeDispatch(result.dispatch) }),
-    }
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const readNotificationDispatchForSystemSend = queryGeneric({
@@ -483,55 +361,7 @@ export const readNotificationDispatchForSystemSend = queryGeneric({
     systemKey: v.string(),
   },
   returns: notificationSystemSendReadResult,
-  handler: async (ctx, args) => {
-    const access = requireNotificationSystemAccess(args.systemKey)
-    if (access.kind === 'denied') {
-      return notificationRuntimeError('notification_system_denied', access.reason)
-    }
-
-    const db = ctx.db
-    const dispatch = await readDispatchDocument(db, args.dispatchId)
-    if (dispatch === null) {
-      return notificationRuntimeError('notification_not_found')
-    }
-
-    const business = await db.get(dispatch.businessId)
-    if (business === null) {
-      return notificationRuntimeError('notification_not_found')
-    }
-
-    const owner = await db.get(business.ownerId)
-    if (owner === null) {
-      return notificationRuntimeError('owner_not_found')
-    }
-
-    if (dispatch.recipientRole === 'owner' && !(await readOwnerNewInquiryEmailEnabled(db, owner._id))) {
-      return notificationRuntimeError(
-        'notification_owner_email_disabled',
-        'Owner new-inquiry email notifications are turned off.'
-      )
-    }
-
-    const inquiry = await readInquiryForDispatch(db, dispatch)
-
-    return {
-      kind: 'ok' as const,
-      code: 'notification_dispatch_send_read' as const,
-      send: {
-        dispatch: serializeDispatch(toDispatchRecord(dispatch)),
-        owner: {
-          ownerId: owner._id,
-          clerkUserId: owner.clerkUserId,
-        },
-        business: {
-          businessId: business._id,
-          slug: business.slug,
-          name: business.name,
-        },
-        ...(inquiry === undefined ? {} : { inquiry }),
-      },
-    }
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const readCurrentOwnerNotificationDispatchReadback = queryGeneric({
@@ -539,30 +369,7 @@ export const readCurrentOwnerNotificationDispatchReadback = queryGeneric({
     dispatchId: v.string(),
   },
   returns: notificationReadbackResult,
-  handler: async (ctx, args) => {
-    const owner = await readCurrentOwner(ctx)
-    if (owner.kind === 'denied') {
-      return notificationRuntimeError(owner.reason)
-    }
-
-    const db = ctx.db
-    const dispatch = await readDispatchDocument(db, args.dispatchId)
-    if (dispatch === null || !(await ownerOwnsDispatchBusiness(db, owner.ownerId, dispatch))) {
-      return notificationRuntimeError('notification_not_found')
-    }
-
-    const state = await loadNotificationOutboxSourceStateForDispatch(db, args.dispatchId)
-    const result = readNotificationDispatchReadbackModule(state, brandNonEmpty(args.dispatchId, 'NotificationDispatchId'))
-    if (result.kind === 'error') {
-      return notificationError(result)
-    }
-
-    return {
-      kind: 'ok' as const,
-      code: result.code,
-      readback: serializeReadback(result.readback),
-    }
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const retryNotificationDispatchAsOperator = mutationGeneric({
@@ -574,28 +381,7 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationRepairResult,
-  handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'notification_repair')
-    if (sourceWrite.kind === 'rejected') {
-      return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
-    }
-    return await runNotificationRepair(
-      ctx,
-      {
-        dispatchId: args.dispatchId,
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-      },
-      (state, authority, now) => retryNotificationDispatch(state, {
-        ...(authority === undefined ? {} : { authority }),
-        dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
-        operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-        correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-        retryAfter: args.retryAfter,
-        now,
-      }),
-    )
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
@@ -607,28 +393,7 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationRepairResult,
-  handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'notification_repair')
-    if (sourceWrite.kind === 'rejected') {
-      return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
-    }
-    return await runNotificationRepair(
-      ctx,
-      {
-        dispatchId: args.dispatchId,
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-      },
-      (state, authority, now) => markNotificationNoRepair(state, {
-        ...(authority === undefined ? {} : { authority }),
-        dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
-        reason: args.reason,
-        operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
-        correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-        now,
-      }),
-    )
-  },
+  handler: async () => unlistedRetiredListedTables(),
 })
 
 async function readCurrentOwner(ctx: RuntimeCtx): Promise<
@@ -649,23 +414,18 @@ async function readCurrentOwner(ctx: RuntimeCtx): Promise<
 }
 
 async function ownerOwnsDispatchBusiness(
-  db: GenericDatabaseReader<DataModel>,
-  ownerId: Id<'owners'>,
-  dispatch: Doc<'notificationDispatches'>,
+  _db: GenericDatabaseReader<DataModel>,
+  _ownerId: Id<'owners'>,
+  _dispatch: Record<string, unknown>,
 ): Promise<boolean> {
-  const business = await db.get(dispatch.businessId)
-  return business !== null && business.ownerId === ownerId
+  return false
 }
 
 async function readDispatchDocument(
   db: GenericDatabaseReader<DataModel>,
   dispatchId: string,
-): Promise<Doc<'notificationDispatches'> | null> {
-  return await db
-    .query('notificationDispatches')
-    .withIndex('by_dispatchId', (query) => query.eq('dispatchId', dispatchId))
-    .unique()
-}
+): Promise<Record<string, unknown> | null> { return unlistedRetiredListedTables() }
+
 type NotificationRepairCommandResult = RetryNotificationDispatchResult | MarkNotificationNoRepairResult
 type NotificationWriterCtx = {
   db: GenericDatabaseWriter<DataModel>
@@ -788,74 +548,11 @@ type DispatchInquiryEmailContext = {
 }
 
 async function readInquiryForDispatch(
-  db: GenericDatabaseReader<DataModel>,
-  dispatch: Doc<'notificationDispatches'>,
+  _db: GenericDatabaseReader<DataModel>,
+  _dispatch: Record<string, unknown>,
 ): Promise<DispatchInquiryEmailContext | undefined> {
-  const { inquiryThreadId: threadId, inquiryMessageId: messageId, businessId } = dispatch
-  const thread = await db
-    .query('inquiryThreads')
-    .withIndex('by_threadId', (query) => query.eq('threadId', threadId))
-    .unique()
-  if (thread === null) {
-    return undefined
-  }
-
-  const offeringPromise = 'offeringRef' in thread
-    ? db
-      .query('businessOfferings')
-      .withIndex('by_offeringRef', (query) => query.eq('offeringRef', thread.offeringRef))
-      .unique()
-    : Promise.resolve(null)
-  const [offering, message, businessThreads, accessGrantRow] = await Promise.all([
-    offeringPromise,
-    db
-      .query('inquiryMessages')
-      .withIndex('by_messageId', (query) => query.eq('messageId', messageId))
-      .unique(),
-    db
-      .query('inquiryThreads')
-      .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
-      .take(2),
-    db
-      .query('inquiryCustomerAccessGrants')
-      .withIndex('by_thread_status', (query) => query.eq('threadId', threadId).eq('status', 'active'))
-      .unique(),
-  ])
-  const revision = offering === null || offering.businessId !== businessId
-    ? null
-    : await db
-      .query('businessOfferingRevisions')
-      .withIndex('by_offeringRef_and_revision', (query) =>
-        query.eq('offeringRef', offering.offeringRef).eq('revision', offering.currentRevision)
-      )
-      .unique()
-  const offeringName = 'offeringRef' in thread ? revision?.name : 'Service'
-  const customerMessageFirstLine = message === null ? undefined : firstNonEmptyLine(message.body)
-  const customerAccessToken = accessGrantRow === null || accessGrantRow.expiresAt <= Date.now()
-    ? undefined
-    : mintInquiryCustomerAccessKey(
-        {
-          accessId: accessGrantRow.accessId,
-          threadId: brandNonEmpty(accessGrantRow.threadId, 'InquiryThreadId'),
-          scope: 'customer_record',
-          version: 'inquiry-customer-access:v1',
-          verifier: accessGrantRow.verifier as `hmac-sha256:${string}`,
-          keyId: accessGrantRow.keyId,
-          status: 'active',
-          createdAt: accessGrantRow.createdAt,
-          expiresAt: accessGrantRow.expiresAt,
-        } satisfies InquiryCustomerAccessGrant,
-        resolveInquiryCustomerAccessKeyring(process.env),
-      )
-
-  return {
-    ...(offeringName === undefined || offeringName.length === 0 ? {} : { offeringName }),
-    ...(customerMessageFirstLine === undefined ? {} : { customerMessageFirstLine }),
-    ...(customerAccessToken === undefined ? {} : { customerAccessToken }),
-    isFirstInquiryForBusiness: businessThreads.length === 1,
-  }
+  return undefined
 }
-
 
 function firstNonEmptyLine(value: string): string | undefined {
   const line = value.split(/\r?\n/).find((candidate) => candidate.trim().length > 0)?.replace(/\s+/g, ' ').trim()
@@ -884,14 +581,8 @@ function notificationRuntimeError(
 async function readOwnerNewInquiryEmailEnabled(
   db: GenericDatabaseReader<DataModel>,
   ownerId: Id<'owners'>,
-): Promise<boolean> {
-  const preferences = await db
-    .query('ownerNotificationPreferences')
-    .withIndex('by_ownerId', (query) => query.eq('ownerId', ownerId))
-    .unique()
+): Promise<boolean> { return unlistedRetiredListedTables() }
 
-  return preferences === null ? true : preferences.newInquiryEmailEnabled
-}
 function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' } | { kind: 'denied'; reason: string } {
   const expected = process.env.AE_NOTIFICATION_OUTBOX_SECRET?.trim()
   if (expected === undefined || expected.length === 0) {

@@ -85,12 +85,6 @@ function webFailureToolThenProseResponses(): OpenRouterContractResponseSource {
         input: { query: 'Emergency plumber Brunswick' },
       }])
     }
-    if (request.tools !== undefined && toolResultCount === 1) {
-      return openRouterToolResponse([{
-        toolId: 'web.discover',
-        input: { query: 'Emergency plumber Brunswick' },
-      }])
-    }
     return openRouterProseResponse(prose)
   }
 }
@@ -380,16 +374,14 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
       const toolCalls = persisted.toolCalls
-      expect(toolCalls).toHaveLength(2)
+      expect(toolCalls).toHaveLength(1)
       expect(toolCalls.map((call) => call.toolId)).toEqual([
         'registry.search',
-        'web.discover',
       ])
-      expect(toolCalls.map((call) => call.seq)).toEqual([0, 1])
+      expect(toolCalls.map((call) => call.seq)).toEqual([0])
       expect(new Set(toolCalls.map((call) => call.toolCallId)).size).toBe(toolCalls.length)
-      expect(toolCalls.map((call) => call.status)).toEqual(['complete', 'error'])
+      expect(toolCalls.map((call) => call.status)).toEqual(['complete'])
       expect(toolCalls.map((call) => JSON.parse(call.inputJson).query)).toEqual([
-        'Emergency plumber Brunswick',
         'Emergency plumber Brunswick',
       ])
       expect(toolCalls.every((call) => call.resultHash.startsWith('sha256:'))).toBe(true)

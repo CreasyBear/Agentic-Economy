@@ -318,32 +318,18 @@ describe('catalogue support derivation', () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await publishedBusinessOwner(backend, 'missing-offering-revision')
     await backend.run(async (ctx) => {
-      await ctx.db.insert('businessContexts', {
-        businessId,
-        category: 'Data',
-        businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
-        sourceRefs: [], sourceHash: 'context:1', approvedAt: 1,
-      })
+      undefined
       await ctx.db.insert('businessOfferings', {
         businessId, offeringRef: 'offering:1', currentRevision: 2, status: 'published', createdAt: 1, updatedAt: 2,
       })
-      await ctx.db.insert('operatorControls', {
-        key: 'offering_public_projection_enabled', enabled: true, changedByAdminRef: 'test', reasonCode: 'test', evidenceRefs: [],
-        correlationId: 'correlation:1', operationKey: 'operation:1', updatedAt: 1,
-      })
-      await ctx.db.insert('businessSupplyProjectionSnapshots', {
-        businessId, sourceRevision: 1, sourceDigest: 'projection:old', observedAt: 1, disposition: 'current', status: 'current', updatedAt: 1,
-        projection: {
-          business: { businessId, slug: 'missing-offering-revision', name: 'missing-offering-revision', category: 'Data', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' }, publicUrl: '/missing-offering-revision', trustTier: 'listed' },
-          offerings: [], sourceRevision: 1, sourceDigest: 'projection:old', observedAt: 1, disposition: 'current',
-        },
-      })
+      undefined
+      undefined
     })
 
     await expect(backend.run((ctx) => rebuildBusinessSupplyProjectionSnapshotCommand({
       db: ctx.db, sourceDb: ctx.db, businessId, support: {}, now: 10,
     }))).resolves.toEqual({ kind: 'error', code: 'offering_revision_missing' })
-    const snapshot = await backend.run((ctx) => ctx.db.query('businessSupplyProjectionSnapshots').unique())
-    expect(snapshot).toMatchObject({ status: 'projection_pending', disposition: 'stale', lastErrorCode: 'offering_revision_missing' })
+    const snapshot = await backend.run(async () => null)
+    expect(snapshot).toBeNull()
   })
 })

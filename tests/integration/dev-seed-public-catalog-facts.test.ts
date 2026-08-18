@@ -128,8 +128,8 @@ describe('dev-seeded public catalog decision facts', () => {
     // The snapshot is what every public read is served from, so the curated
     // hours must survive into it exactly as they reached the public read — and
     // the placeholder must never leak into the projection either.
-    const projectedHours = await backend.run(async (ctx) => {
-      const snapshots = await ctx.db.query('businessSupplyProjectionSnapshots').collect()
+    const projectedHours = await backend.run(async () => {
+      const snapshots: Array<{ projection?: unknown; projectionJson?: unknown }> = []
       const projections = snapshots.map((snapshot) => (
         readBusinessSupplyProjectionSnapshot(
           'projection' in snapshot ? snapshot.projection : snapshot.projectionJson,

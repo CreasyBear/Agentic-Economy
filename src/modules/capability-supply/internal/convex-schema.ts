@@ -341,59 +341,6 @@ export const capabilitySupplyTables = {
       'admission',
       'conformance',
     ]),
-  capabilitySupplySourceDrafts: defineTable({
-    ownerId: v.id('owners'),
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    revision: v.number(),
-    operationKey: v.string(),
-    sourceKind: v.union(
-      v.literal('ae_envelope'),
-      v.literal('openapi_http'),
-      v.literal('mcp'),
-      v.literal('agent_plugin_mcp'),
-      v.literal('x402'),
-    ),
-    sourceRevision: v.string(),
-    sourceJson: v.string(),
-    sourceDigest: v.string(),
-    preflight: v.object({
-      status: v.union(
-        v.literal('pending'),
-        v.literal('prepared'),
-        v.literal('refused'),
-      ),
-      draftRevision: v.number(),
-      sourceDigest: v.string(),
-      observedAt: v.number(),
-      reason: v.optional(v.string()),
-      summary: v.optional(
-        v.object({
-          sourceKind: v.string(),
-          sourceRevision: v.string(),
-          sourceDigest: v.string(),
-          priceDigest: v.string(),
-          preparedDigest: v.string(),
-        }),
-      ),
-      openApi: v.optional(capabilitySupplyOpenApiPreflightValue),
-      evidenceRefs: v.array(v.string()),
-    }),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index('by_businessId_and_offeringRef', ['businessId', 'offeringRef'])
-    .index('by_ownerId_and_businessId_and_offeringRef', [
-      'ownerId',
-      'businessId',
-      'offeringRef',
-    ])
-    .index('by_businessId_and_offeringRef_and_operationKey', [
-      'businessId',
-      'offeringRef',
-      'operationKey',
-    ]),
   capabilityProviderConnections: defineTable({
     connectionRef: v.string(),
     businessId: v.id('businesses'),
@@ -521,59 +468,5 @@ export const capabilitySupplyTables = {
     registrationEvidenceRefs: v.array(v.string()),
     registeredAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_networkId_and_mappingRef', ['networkId', 'mappingRef']),
-  capabilityCallEvents: defineTable({
-    eventRef: v.string(),
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    publicationRef: v.optional(v.string()),
-    publicationRevision: v.optional(v.number()),
-    operationRef: v.optional(v.string()),
-    taskDigest: v.string(),
-    eventKind: v.union(
-      v.literal('supply_liquidity_fill_observed'),
-      v.literal('supply_liquidity_first_success_observed'),
-      v.literal('supply_liquidity_depth_observed'),
-      v.literal('supply_owner_test_observed'),
-    ),
-    outcome: v.union(v.literal('filled'), v.literal('zero')),
-    zeroReason: v.optional(
-      v.union(
-        v.literal('no_routeable_supply'),
-        v.literal('readiness_unavailable'),
-        v.literal('provider_refused'),
-        v.literal('credential_unavailable'),
-        v.literal('price_unavailable'),
-        v.literal('insufficient_credit'),
-        v.literal('input_invalid'),
-        v.literal('outcome_unknown'),
-      ),
-    ),
-    taskStartedAt: v.optional(v.number()),
-    successfulAt: v.optional(v.number()),
-    durationMs: v.optional(v.number()),
-    eligibleDepth: v.optional(v.number()),
-    observedAt: v.number(),
-    evidenceRefs: v.array(v.string()),
-    environment: v.union(
-      v.literal('local'),
-      v.literal('development'),
-      v.literal('sandbox'),
-      v.literal('production'),
-    ),
-  })
-    .index('by_owner_test_publication_identity', [
-      'businessId',
-      'offeringRef',
-      'publicationRef',
-      'publicationRevision',
-      'operationRef',
-      'eventKind',
-      'outcome',
-      'environment',
-      'observedAt',
-    ])
-    .index('by_businessId_and_observedAt', ['businessId', 'observedAt'])
-    .index('by_taskDigest_and_observedAt', ['taskDigest', 'observedAt'])
-    .index('by_eventRef', ['eventRef']),
+  }).index('by_networkId_and_mappingRef', ['networkId', 'mappingRef'])
 } as const

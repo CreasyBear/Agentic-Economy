@@ -7,7 +7,7 @@ import { listTsFiles } from '../../helpers/source-files'
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
 const ownerSupply = readFileSync('convex/capabilitySupplyOwnerSupply.ts', 'utf8')
 const readinessAction = readFileSync('convex/capabilitySupplyReadiness.ts', 'utf8')
-const routeWorker = readFileSync('convex/customerRequestRouteTransportWorker.ts', 'utf8')
+const invokeWorker = readFileSync('convex/capabilityOperationInvocationWorker.ts', 'utf8')
 const moduleRoot = 'src/modules/capability-supply/internal/graph'
 
 describe('capability-supply graph/probe thinness', () => {
@@ -42,13 +42,13 @@ describe('capability-supply graph/probe thinness', () => {
   })
   it('shares the server-only credential locator resolver without duplicating environment reads', () => {
     expect(readinessAction).toMatch(/from\s+['"]@\/modules\/capability-supply\/server['"]/)
-    expect(routeWorker).toMatch(/from\s+['"]@\/modules\/capability-supply\/server['"]/)
+    expect(invokeWorker).toMatch(/from\s+['"]@\/modules\/capability-supply\/server['"]/)
     expect(readinessAction).toContain('credentialFromEnvironment')
-    expect(routeWorker).toContain('credentialFromEnvironment')
+    expect(invokeWorker).toContain('credentialFromEnvironment')
     expect(readinessAction).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
-    expect(routeWorker).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
+    expect(invokeWorker).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     expect(readinessAction).not.toContain('readTrimmedEnv')
-    expect(routeWorker).not.toContain('readTrimmedEnv')
+    expect(invokeWorker).not.toContain('readTrimmedEnv')
   })
 
   it('keeps authorization for includeInactive in the host', () => {

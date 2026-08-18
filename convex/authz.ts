@@ -4,7 +4,7 @@ import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AdminAction, AdminAuthorityMutationResult, AdminAuthorityResult, AdminMembership } from '../src/modules/security/public'
-import type { DataModel, Doc } from './_generated/dataModel'
+import type { DataModel } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 type IgnoredBrowserAuthorityPayload = Readonly<Record<string, unknown>>
 type AdminIdentityLookup = Pick<UserIdentity, 'tokenIdentifier'>
@@ -53,18 +53,13 @@ export async function readCurrentActiveAdminMembership(
 }
 
 export async function readActiveAdminMembership(
-  db: GenericDatabaseReader<DataModel>,
+  _db: GenericDatabaseReader<DataModel>,
   identity: AdminIdentityLookup,
 ): Promise<AdminMembership | undefined> {
   if (typeof identity.tokenIdentifier !== 'string' || identity.tokenIdentifier.length === 0) {
     return undefined
   }
-
-  const row = await db
-    .query('adminMemberships')
-    .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', identity.tokenIdentifier).eq('state', 'active'))
-    .unique()
-  return row === null ? undefined : adminMembershipFromDoc(row)
+  return undefined
 }
 
 export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor {
@@ -76,25 +71,6 @@ export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor
     ...(displayName === undefined ? {} : { displayName }),
     ...(emailHash === undefined ? {} : { emailHash }),
     sessionRef: identity.tokenIdentifier,
-  }
-}
-
-function adminMembershipFromDoc(document: Doc<'adminMemberships'>): AdminMembership | undefined {
-  const tokenIdentifier = document.tokenIdentifier
-  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.length === 0) {
-    return undefined
-  }
-
-  return {
-    clerkUserId: document.clerkUserId,
-    tokenIdentifier,
-    role: document.role,
-    state: document.state,
-    grantedBy: document.grantedBy,
-    grantedAt: document.grantedAt,
-    ...(document.revokedBy === undefined ? {} : { revokedBy: document.revokedBy }),
-    ...(document.revokedAt === undefined ? {} : { revokedAt: document.revokedAt }),
-    ...(document.evidenceRef === undefined ? {} : { evidenceRef: document.evidenceRef }),
   }
 }
 

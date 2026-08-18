@@ -87,6 +87,7 @@ import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
@@ -757,148 +758,7 @@ export const publishPreparedCapability = mutation({
   handler: async (
     ctx,
     args,
-  ): Promise<Infer<typeof preparedPublicationResultValue>> => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
-    if (sourceWrite.kind === 'rejected') {
-      return {
-        kind: 'refused' as const,
-        reason: 'authorization_denied' as const,
-      }
-    }
-    const agentAdmission = args.agentPrincipal === undefined
-      ? undefined
-      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
-    const businessAuthorized = args.agentPrincipal === undefined
-      ? await ownsPublishedBusiness(ctx, args.businessId)
-      : agentAdmission?.kind === 'allowed'
-        && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
-    if (!validRegistrationContext(args) || !businessAuthorized) {
-      return {
-        kind: 'refused' as const,
-        reason: 'authorization_denied' as const,
-      }
-    }
-    const business = await publishedBusiness(ctx.db, args.businessId)
-    const sourceDraft = await ctx.db
-      .query('capabilitySupplySourceDrafts')
-      .withIndex('by_businessId_and_offeringRef', (query) =>
-        query
-          .eq('businessId', args.businessId)
-          .eq('offeringRef', args.offeringRef),
-      )
-      .first()
-    if (sourceDraft === null) {
-      return {
-        kind: 'refused' as const,
-        reason: 'source_draft_missing' as const,
-      }
-    }
-    if (
-      business === null ||
-      sourceDraft.ownerId !== business.ownerId ||
-      sourceDraft.businessId !== args.businessId ||
-      sourceDraft.offeringRef !== args.offeringRef ||
-      sourceDraft.offeringRevision !== args.revision ||
-      sourceDraft.revision !== args.sourceDraftRevision ||
-      sourceDraft.sourceDigest !== args.sourceDigest ||
-      sourceDraft.preflight.draftRevision !== args.sourceDraftRevision ||
-      sourceDraft.preflight.sourceDigest !== args.sourceDigest
-    ) {
-      return {
-        kind: 'refused' as const,
-        reason: 'source_draft_stale' as const,
-      }
-    }
-    if (
-      sourceDraft.preflight.status !== 'prepared' ||
-      sourceDraft.preflight.summary === undefined
-    ) {
-      return {
-        kind: 'refused' as const,
-        reason: 'source_draft_unprepared' as const,
-      }
-    }
-    const preparedDigest = canonicalDigest(args.prepared)
-    if (
-      sourceDraft.preflight.summary.sourceKind !== args.prepared.sourceKind ||
-      sourceDraft.preflight.summary.sourceRevision !==
-        args.prepared.sourceRevision ||
-      sourceDraft.preflight.summary.sourceDigest !==
-        args.prepared.sourceDigest ||
-      sourceDraft.preflight.summary.priceDigest !== args.prepared.priceDigest ||
-      sourceDraft.preflight.summary.preparedDigest !== preparedDigest
-    ) {
-      return {
-        kind: 'refused' as const,
-        reason: 'source_draft_stale' as const,
-      }
-    }
-    const [catalogOffering, catalogRevision] = await Promise.all([
-      ctx.db
-        .query('businessOfferings')
-        .withIndex('by_offeringRef', (query) =>
-          query.eq('offeringRef', args.offeringRef),
-        )
-        .unique(),
-      ctx.db
-        .query('businessOfferingRevisions')
-        .withIndex('by_offeringRef_and_revision', (query) =>
-          query
-            .eq('offeringRef', args.offeringRef)
-            .eq('revision', args.revision),
-        )
-        .unique(),
-    ])
-    const origin = args.prepared.offering.origin
-    if (
-      catalogOffering === null ||
-      catalogRevision === null ||
-      catalogOffering.businessId !== args.businessId ||
-      catalogRevision.businessId !== args.businessId ||
-      catalogOffering.currentRevision !== args.revision ||
-      args.sourceHash !== catalogRevision.sourceHash ||
-      origin?.kind !== 'catalog_offering' ||
-      origin.offeringRef !== args.offeringRef ||
-      origin.offeringRevision !== args.revision ||
-      origin.offeringSourceHash !== args.sourceHash
-    ) {
-      return {
-        kind: 'refused' as const,
-        reason: 'catalog_offering_origin_changed' as const,
-      }
-    }
-    const identity = args.agentPrincipal === undefined
-      ? await ctx.auth.getUserIdentity()
-      : null
-    if (args.agentPrincipal === undefined && identity === null)
-      return {
-        kind: 'refused' as const,
-        reason: 'authorization_denied' as const,
-      }
-    const result = await publishPreparedCapabilityCommand(
-      {
-        businessId: String(args.businessId),
-        runtimeEnvironment: args.runtimeEnvironment,
-        prepared: args.prepared,
-        actor: { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
-        origin,
-        operationKey: args.operationKey,
-        correlationId: args.correlationId,
-        reasonCode: args.reasonCode,
-        evidenceRefs: args.evidenceRefs,
-        now: Date.now(),
-      },
-      publicationPorts(ctx),
-    )
-    if (result.kind === 'refused')
-      return convexPreparedPublicationResult(result)
-    await rebuildCapabilityOriginSupplyProjection(
-      ctx,
-      args.businessId,
-      Date.now(),
-    )
-    return convexPreparedPublicationResult(result)
-  },
+  ): Promise<Infer<typeof preparedPublicationResultValue>> => { return unlistedRetiredListedTables() },
 })
 
 type ContractRef = Infer<typeof contractRefValue>
@@ -2131,40 +1991,5 @@ export const recordCapabilityCallEvent = internalMutation({
     v.object({ kind: v.literal('recorded') }),
     v.object({ kind: v.literal('replayed') }),
   ),
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query('capabilityCallEvents')
-      .withIndex('by_eventRef', (index) => index.eq('eventRef', args.eventRef))
-      .unique()
-    if (existing !== null) return { kind: 'replayed' as const }
-    if (args.eventKind === 'supply_owner_test_observed') {
-      if (
-        args.publicationRef === undefined ||
-        args.publicationRevision === undefined ||
-        args.operationRef === undefined
-      ) {
-        throw new Error('owner_test_event_identity_required')
-      }
-      const publicationRef = args.publicationRef
-      const publicationRevision = args.publicationRevision
-      const publication = await ctx.db
-        .query('capabilityPublications')
-        .withIndex('by_publicationRef_and_revision', (index) =>
-          index
-            .eq('publicationRef', publicationRef)
-            .eq('revision', publicationRevision),
-        )
-        .unique()
-      if (
-        publication === null ||
-        publication.businessId !== args.businessId ||
-        publication.disposition !== 'current' ||
-        publication.operationRef !== args.operationRef
-      ) {
-        throw new Error('owner_test_event_identity_changed')
-      }
-    }
-    await ctx.db.insert('capabilityCallEvents', args)
-    return { kind: 'recorded' as const }
-  },
+  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
 })

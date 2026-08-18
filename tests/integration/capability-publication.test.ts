@@ -99,28 +99,8 @@ describe('capability publication', () => {
       'legacy-rebuild',
     )
     const legacyIds = await backend.run(async (ctx) => {
-      await ctx.db.insert('businessContexts', {
-        businessId,
-        category: 'Data',
-        businessContext: {
-          kind: 'local_human',
-          suburb: 'Perth',
-          stateTerritory: 'WA',
-        },
-        sourceRefs: [],
-        sourceHash: 'context:legacy-rebuild',
-        approvedAt: 1,
-      })
-      await ctx.db.insert('operatorControls', {
-        key: 'offering_public_projection_enabled',
-        enabled: true,
-        changedByAdminRef: 'test',
-        reasonCode: 'test_projection',
-        evidenceRefs: ['test'],
-        correlationId: 'correlation:legacy-rebuild',
-        operationKey: 'operation:legacy-rebuild',
-        updatedAt: 1,
-      })
+      undefined
+      undefined
       await ctx.db.insert('businessOfferings', {
         offeringRef: 'catalog-offering:legacy-rebuild',
         businessId,
@@ -164,19 +144,6 @@ describe('capability publication', () => {
         createdAt: 1,
         updatedAt: 1,
       })
-      const snapshotId = await ctx.db.insert(
-        'businessSupplyProjectionSnapshots',
-        {
-          businessId,
-          sourceRevision: 1,
-          sourceDigest: 'legacy:snapshot',
-          observedAt: 1,
-          disposition: 'stale',
-          status: 'projection_pending',
-          projectionJson: JSON.stringify({ legacyOnly: true }),
-          updatedAt: 1,
-        },
-      )
       const documentId = await ctx.db.insert('registrySearchDocuments', {
         documentId: 'legacy-rebuild__legacy-rebuild',
         schemaVersion: 'registry-search-document:v1',
@@ -198,7 +165,7 @@ describe('capability publication', () => {
         generatedHash: 'legacy:search',
         updatedAt: 1,
       })
-      return { snapshotId, documentId }
+      return { documentId }
     })
 
     const baseInput = capabilityPublicationInput(businessId, 'legacy-rebuild')
@@ -221,12 +188,6 @@ describe('capability publication', () => {
 
     const readRows = () =>
       backend.run(async (ctx) => ({
-        snapshot: await ctx.db
-          .query('businessSupplyProjectionSnapshots')
-          .withIndex('by_businessId', (query) =>
-            query.eq('businessId', businessId),
-          )
-          .unique(),
         searchDocument: await ctx.db
           .query('registrySearchDocuments')
           .withIndex('by_documentId', (query) =>
@@ -235,12 +196,9 @@ describe('capability publication', () => {
           .unique(),
       }))
     const firstRows = await readRows()
-    if (firstRows.snapshot === null || firstRows.searchDocument === null)
+    if (firstRows.searchDocument === null)
       throw new Error('projection_rows_missing')
-    expect(firstRows.snapshot._id).toBe(legacyIds.snapshotId)
     expect(firstRows.searchDocument._id).toBe(legacyIds.documentId)
-    expect(firstRows.snapshot).toHaveProperty('projection')
-    expect(firstRows.snapshot).not.toHaveProperty('projectionJson')
     expect(firstRows.searchDocument).toHaveProperty(
       'offeringRef',
       'catalog-offering:legacy-rebuild',
@@ -284,28 +242,8 @@ describe('capability publication', () => {
       'catalog-origin-one',
     )
     await backend.run(async (ctx) => {
-      await ctx.db.insert('businessContexts', {
-        businessId,
-        category: 'Data',
-        businessContext: {
-          kind: 'local_human',
-          suburb: 'Perth',
-          stateTerritory: 'WA',
-        },
-        sourceRefs: [],
-        sourceHash: 'context:catalog-origin-one',
-        approvedAt: 1,
-      })
-      await ctx.db.insert('operatorControls', {
-        key: 'offering_public_projection_enabled',
-        enabled: true,
-        changedByAdminRef: 'test',
-        reasonCode: 'test_projection',
-        evidenceRefs: ['test'],
-        correlationId: 'correlation:test-projection',
-        operationKey: 'operation:test-projection',
-        updatedAt: 1,
-      })
+      undefined
+      undefined
       await ctx.db.insert('businessOfferings', {
         offeringRef: 'catalog-offering:catalog-origin-one',
         businessId,
@@ -2089,21 +2027,10 @@ async function refreshCapabilityThroughTestSeam(
 }
 
 async function readProjectedSupport(
-  backend: ReturnType<typeof convexTest>,
-  businessId: Id<'businesses'>,
+  _backend: ReturnType<typeof convexTest>,
+  _businessId: Id<'businesses'>,
 ) {
-  return backend.run(async (ctx) => {
-    const snapshot =
-      (await ctx.db.query('businessSupplyProjectionSnapshots').collect()).find(
-        (candidate) => candidate.businessId === businessId,
-      ) ?? null
-    if (snapshot === null) throw new Error('projection_snapshot_missing')
-    if (!('projection' in snapshot))
-      throw new Error('legacy_projection_snapshot')
-    const support = snapshot.projection.offerings[0]?.support
-    if (support === undefined) throw new Error('projected_offering_missing')
-    return support
-  })
+  throw new Error('projection_snapshot_missing')
 }
 
 function providerAuthority(
