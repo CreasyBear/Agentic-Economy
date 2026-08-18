@@ -102,7 +102,14 @@ One table-family card at a time, separate deployments only.
 | P6-freeze-gaps | RFC 9457 403 at missed UI/server-fn writers; Convex mutations stay writable | P6-workpool-own | committed |
 | P6-export-tool | Checksummed per-table export toolchain; hash-only for governedSendReceiptKeys wrap fields | P6-freeze-gaps | committed |
 | P6-export-live | Live/dev Convex zip hashed for 131 closeout tables; wrap fields omitted; zip gitignored | P6-export-tool | committed |
-| P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 | later |
+| P6-read-tombstone | RFC 9457 410 remaining family reads (CR evidence/inspect, WorkTree inspect, study.inspect); never `/call` or `inquiry.readCustomerRecord` | P6-export-live | committed |
+| P6-x402-orphan-unplug | Stop remaining queries of `customerRequestX402PaymentAttempts` | P6-read-tombstone | pending |
+| P6-x402-orphan-schema | Unlist only the x402 orphan CR table | P6-x402-orphan-unplug | pending |
+| P6-study | Unlist `studies`, `studyEvents` after hashed export | P6-x402-orphan-schema | pending |
+| P6-project-spine | Unplug Workflow then unlist 3 spine tables; successor is consuming agents | P6-study | pending |
+| P6-work-tree | Unlist 6 WorkTree tables; keep Workpool | P6-project-spine | pending |
+| P6-rk-tables | Unlist 44 RK tables; keep HTTP 410 handlers | P6-work-tree | pending |
+| P6-customer-request | Unlist remaining 63 CR tables; stop CR workpool enqueue; module stays | P6-rk-tables | pending |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.
 Routing-kernel HTTP tombstones are permanent; historical tables drop only after approved checksummed export.

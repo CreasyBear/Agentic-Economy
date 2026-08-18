@@ -24,18 +24,16 @@ describe('quarantine family HTTP write freeze', () => {
     await expectRetiredWrite(response, 'customerRequest.run')
   })
 
-  it('keeps Customer Request evidence GET off the freeze path', async () => {
+  it('refuses Customer Request evidence GET as RFC 9457 410', async () => {
     const response = await handleCustomerRequestEvidenceGet(
       new Request('https://ae.example/api/requests/request:1/evidence'),
       'request:1',
       { inspect: async () => ({ kind: 'refused', reason: 'request_not_found' }) },
     )
-    expect(response.status).toBe(404)
-    expect(response.status).not.toBe(403)
-    expect(response.status).not.toBe(410)
+    await expectRetiredWrite(response, 'customerRequest.inspectEvidence')
   })
 
-  it('refuses WorkTree mutating POSTs and leaves inspect off the freeze', async () => {
+  it('refuses WorkTree mutating POSTs and inspect as RFC 9457 410', async () => {
     const create = await handleWorkTreeAgentAction(
       postJsonRequest('https://ae.example/api/v1/work-tree/create', {}),
       'create',
@@ -45,8 +43,7 @@ describe('quarantine family HTTP write freeze', () => {
       postJsonRequest('https://ae.example/api/v1/work-tree/inspect', { projectId: 'project:1' }),
       'inspect',
     )
-    expect(inspect.status).not.toBe(403)
-    expect(inspect.status).not.toBe(410)
+    await expectRetiredWrite(inspect, 'workTree.inspect')
   })
 
   it('refuses inquiry submit invoke as RFC 9457', async () => {

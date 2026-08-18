@@ -15,7 +15,7 @@ Core loop: `publish → admit → search/get/compare → execute-or-invoke → v
 - Chat is a bounded AI SDK tool loop over the same market actions — no deterministic intent router.
 - Organization/account owns funds and aggregate budget; API keys receive narrower grants.
 - V1 money is AE-brokered only. x402 stays as import/discovery metadata, refused as a live lane.
-- Customer Request, WorkTree, Study: quarantine (freeze writes, preserve evidence). No data drops.
+- Customer Request, WorkTree, Study: quarantined; family HTTP including inspect is 410 after hashed-export closeout. Inquiry customer-record stays readable. Inquiry tables never drop. Other quarantined tables unlist after hashed export.
 
 ## Roles
 

@@ -3,15 +3,18 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
+  isQuarantineSurfaceRetired,
   isQuarantineWrite,
   QUARANTINE_FAMILY_ACTION_PREFIXES,
+  QUARANTINE_READ_KEEP_ACTION_ID,
+  QUARANTINE_SURFACE_RETIRED_CODE,
+  QUARANTINE_WRITES_FROZEN_CODE,
   quarantineSurfaceRetiredProblemInput,
   quarantineWriteProblemInput,
   quarantineWriteServerError,
 } from '@/modules/product-frontier/quarantine-write-admission'
 import { findAction, listActions } from '@/modules/actions'
 import { actionToToolContract } from '@/modules/actions/tool-contract'
-import { QUARANTINE_WRITES_FROZEN_CODE } from '@/modules/product-frontier/quarantine-write-admission'
 
 const productFrontierManifest = JSON.parse(
   readFileSync(
@@ -52,15 +55,20 @@ describe('quarantine write admission', () => {
     expect(findAction('customerRequest.run')).toBeDefined()
   })
 
-  it('freezes Study write execution through the tool contract without HTTP 410', async () => {
+  it('tombstones Study inspect execution through the tool contract and keeps inquiry customer-record', async () => {
     const start = findAction('study.start')
     const inspect = findAction('study.inspect')
     if (start === undefined || inspect === undefined) throw new Error('study_actions_missing')
     const frozen = actionToToolContract(start)
     await expect(frozen.execute({ input: {}, context: { request: new Request('https://ae.test') } }))
-      .rejects.toThrow(QUARANTINE_WRITES_FROZEN_CODE)
+      .rejects.toThrow(QUARANTINE_SURFACE_RETIRED_CODE)
+    const inspectContract = actionToToolContract(inspect)
+    await expect(inspectContract.execute({ input: {}, context: { request: new Request('https://ae.test') } }))
+      .rejects.toThrow(QUARANTINE_SURFACE_RETIRED_CODE)
     expect(inspect.readOnly).toBe(true)
     expect(isQuarantineWrite(inspect.id, inspect.readOnly)).toBe(false)
+    expect(isQuarantineSurfaceRetired(inspect.id)).toBe(true)
+    expect(isQuarantineSurfaceRetired(QUARANTINE_READ_KEEP_ACTION_ID)).toBe(false)
   })
 
   it('projects HTTP/MCP tombstones as RFC 9457 410 without a GONE kind', () => {
@@ -79,7 +87,7 @@ describe('quarantine write admission', () => {
       code: QUARANTINE_WRITES_FROZEN_CODE,
       retryable: false,
       reason:
-        'This quarantined surface no longer accepts writes. Evidence remains readable. Use /api/v1/operations/call for paid market work.',
+        'This quarantined surface no longer accepts writes. Use /api/v1/operations/call for paid market work.',
     })
     expect(quarantineWriteProblemInput('inquiry.submit').status).toBe(403)
   })

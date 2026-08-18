@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; table_drops_not_started
-stopped_at: 2026-08-18 P6-export-live — 131-table census listed; Convex deployment unavailable, no unlist yet
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_x402_rehomed; p6_freeze_gaps; p6_export_tool; p6_wave_2_exited; p6_export_live; p6_read_tombstone; table_drops_not_started
+stopped_at: 2026-08-18 P6-read-tombstone — family inspect/evidence HTTP 410; no unlist yet
 last_updated: "2026-08-18"
 progress:
   total_phases: 7
@@ -34,8 +34,9 @@ advertises RFC 9745/8594 notice then deregisters those ids from the public
 action inventory. P5-d pulls Sunset to 18 Aug 2026 and 410s mutating family
 HTTP plus `/execute` (`quarantine_surface_retired`, never `/call`). P5-e
 implements `businessServicesPolicy`: expansion frozen,
-measured businesses/services URLs retained and instrumented. Reads and evidence
-stay. Live money stays fail-closed.
+measured businesses/services URLs retained and instrumented. Family HTTP
+including inspect is 410 after hashed-export closeout; inquiry customer-record
+stays. Live money stays fail-closed.
 
 **Remainder exit:** after P5-e. No P5-d 410 in that remainder.
 Wave 1 P6 closed: x402 attempt persist lives in `moneyX402PaymentAttempts`; paid invoke uses `marketDispatchWorkpool` (same Workpool component). P6-freeze-gaps froze missed UI/server-fn writers (inquiry submit, owner inbox, human-root writes) as RFC 9457 403; Convex mutations stay writable. P6-export-tool landed: `canonicalDigest` over Convex export jsonl, wrap fields omitted, live counts unmeasured until a gitignored zip exists.

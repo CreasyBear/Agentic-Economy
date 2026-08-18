@@ -1146,3 +1146,18 @@ Wave 2 closed. STATE: `p6_wave_2_exited; table_drops_not_started`. `/call` is no
 - `npm run check:product-frontier` — `{ok:true,errors:[]}`
 
 No table drops. Wrap fields still omitted. Inquiry 12 stay on the census. Hold still covers unpushed `main`. Unlist cards need an observed zip or empty-file digest from `--input`; this card does not unlist.
+
+## P6-read-tombstone — committed
+
+**AUTHORITY:** RFC 9457 410. Wave 2 helper `quarantineSurfaceRetiredProblemInput`. Founder lock: remaining family reads 410; never `/call`; never `inquiry.readCustomerRecord`.
+
+**LOCAL_CANDIDATE:** `quarantine-write.ts` skipped `readOnly`; deprecation-notice tests asserted evidence GET was not 410.
+
+**FIT:** diverge-fix toward closeout. HTTP/MCP family doors including CR evidence GET, CR inspect GET, WorkTree inspect / inspectRepeatUse, and `study.inspect` return `quarantine_surface_retired` 410 with notice headers. MCP inspect ids tombstone in-tool, not host-410. Server-fns stay 403 freeze. Inquiry customer-record stays. `/call` still has no Deprecation/Sunset/410. RK retirement paths unchanged. Frontier constitution: study / work-tree / customer-request `evidenceDisposition: exported-then-unlisted`; golden journeys demoted; Study/WorkTree removed from `activeFrontierTables` and `protectedVisionPrimitives`; verifier requires `external-run-kill-gate` only. OPERATING-MODEL allows unlist after hashed export. No table drops.
+
+**COMMANDS:**
+- scoped unit tests (15 files / 90 tests) plus mcp/business-tool/tool-contract/study (5 files / 36 tests) passed
+- `npm run check:product-frontier` — `{ok:true,errors:[]}`
+- `/call` still 405 GET without Deprecation (deprecation-notice test)
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Live counts remain `unmeasured` / deployment unavailable. 89 tables remaining and cap 60 are not claimed. Hold still covers unpushed `main`.

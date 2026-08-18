@@ -1,14 +1,14 @@
 import { problem } from '@/lib/server/problem'
 import {
-  isQuarantineWrite,
+  isQuarantineSurfaceRetired,
   quarantineSurfaceRetiredProblemInput,
 } from '@/modules/product-frontier/quarantine-write-admission'
 
 export function quarantineWriteResponse(
   actionId: string,
-  readOnly = false,
+  _readOnly = false,
 ): Response | undefined {
-  if (!isQuarantineWrite(actionId, readOnly)) return undefined
+  if (!isQuarantineSurfaceRetired(actionId)) return undefined
   return problem(quarantineSurfaceRetiredProblemInput(actionId))
 }
 

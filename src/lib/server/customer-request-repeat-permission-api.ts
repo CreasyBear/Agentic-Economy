@@ -23,6 +23,7 @@ import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
+import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
 
 type AllowOptions = Readonly<{
   allow?: (args: Record<string, unknown>) => Promise<CustomerRequestRepeatPermissionResult>
@@ -65,6 +66,8 @@ export async function handleCustomerRequestConnectedAssistantsGet(
   requestRef: string,
   options: ListOptions = {},
 ): Promise<Response> {
+  const retired = quarantineWriteResponse('customerRequest.listConnectedAssistants')
+  if (retired !== undefined) return withRfc9745DeprecationNotice(retired)
   return withRfc9745DeprecationNotice(await listConnectedAssistants(request, requestRef, options))
 }
 
@@ -124,6 +127,8 @@ export async function handleCustomerRequestRepeatPermissionGet(
   permissionRef: string,
   options: InspectOptions = {},
 ): Promise<Response> {
+  const retired = quarantineWriteResponse('customerRequest.inspectRepeatPermission')
+  if (retired !== undefined) return withRfc9745DeprecationNotice(retired)
   return withRfc9745DeprecationNotice(
     await inspectRepeatPermission(request, requestRef, permissionRef, options),
   )

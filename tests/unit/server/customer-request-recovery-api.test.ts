@@ -11,7 +11,6 @@ import {
   handleCustomerRequestProblemPost,
   handleCustomerRequestProblemReplyPost,
 } from '@/lib/server/customer-request-recovery-api'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { expectQuarantineWriteFrozen } from '../../helpers/http'
 import type {
   CustomerRequestEvidenceExport,
@@ -64,47 +63,23 @@ describe('Customer Request recovery surface', () => {
     expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('exports only customer-safe observed evidence through the same signed read', async () => {
-    const exported = {
-      kind: 'evidence' as const, requestRef, state: 'outcome_unknown' as const, generatedAt: 1_000,
-      steps: [{
-        step: 1, state: 'outcome_unknown' as const, observedAt: 900,
-        evidence: [{ receiptRef: 'evidence:opaque', label: 'Result evidence 1' }],
-      }],
-      problems: [{
-        reportRef: 'problem:opaque', version: 0, state: 'received' as const,
-        category: 'incorrect_result' as const, summary: 'The result is wrong.',
-        claimSource: 'customer' as const, causality: 'unknown' as const,
-        resolution: 'not_adjudicated' as const, nextAction: 'await_status_update' as const,
-        nextActor: 'ae' as const, nextUpdateDueAt: 86_400_100,
-        decisionAuthority: 'not_assigned' as const,
-        visibility: 'customer_and_ae_only' as const, evidence: [],
-        reportedAt: 950, affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
-        claims: [],
-        history: [{
-          version: 0, state: 'received' as const, source: 'customer' as const,
-          message: 'The result is wrong.', recordedAt: 950,
-        }],
-      }],
-    }
+  it('tombstones evidence GET as RFC 9457 410 on both human and agent HTTP entrypoints', async () => {
+    const inspect = vi.fn()
+    const callAction = vi.fn()
     const human = await handleCustomerRequestEvidenceGet(new Request('https://ae.test/evidence'), requestRef, {
-      inspect: async () => exported,
+      inspect,
     })
-    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => exported)
     const agent = await handleAgentCustomerRequestEvidenceGet(
       new Request('https://ae.test/api/v1/evidence', { headers: { Authorization: 'Bearer ak_secret' } }),
       requestRef,
       agentOptions(callAction),
     )
 
-    expect(await agent.json()).toEqual(await human.json())
-    expect(JSON.stringify(exported)).not.toMatch(/transport|mandate|capability|binding/i)
-    const [name, calledArgs] = callAction.mock.calls[0] ?? []
-    expect(name).toBe('customerRequestApplication:exportRouteEvidence')
-    const { serviceAuth, ...command } = calledArgs ?? {}
-    await expect(verifyCustomerRequestServiceAssertion({
-      key, operation: 'evidence', command: command as never, assertion: serviceAuth as never, now: 1_001,
-    })).resolves.toBe(true)
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.inspectEvidence')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.inspectEvidence')
+    expect(agentBody).toEqual(humanBody)
+    expect(inspect).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('freezes problem replies as RFC 9457 on both human and agent HTTP entrypoints', async () => {

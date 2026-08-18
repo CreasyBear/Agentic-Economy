@@ -16,7 +16,6 @@ import {
   handleCustomerRequestRepeatPermissionWithdrawPost,
 } from '@/lib/server/customer-request-repeat-permission-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'repeat-permission-http-key-with-at-least-32-bytes'
@@ -35,54 +34,20 @@ const principal = {
 const resolvePrincipal = async (value: AgentAccessPrincipal): Promise<AgentAccessPrincipal> => value
 
 describe('Customer Request repeat-permission HTTP surface', () => {
-  it('returns customer-safe connected assistant choices without credential language', async () => {
-    const result = {
-      kind: 'connected_assistants' as const,
-      requestRef,
-      assistants: [{
-        assistantRef: 'credential:repeat',
-        label: 'Connected assistant 1',
-        lastUsedAt: 1_000,
-      }],
-      permissions: [repeatPermissionReceipt()],
-    }
-    const response = await handleCustomerRequestConnectedAssistantsGet(
-      get({}),
-      requestRef,
-      {
-        list: async () => result,
-      },
-    )
-
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body).toMatchObject({
-      kind: 'connected_assistants',
-      assistants: [{ label: 'Connected assistant 1' }],
-      permissions: [{ status: 'active' }],
-    })
-    expect(JSON.stringify(body)).not.toMatch(/credentialId|scope|principal|policy|mandate/u)
-    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-      expect(await verifyCustomerRequestServiceAssertion({
-        key,
-        operation: 'inspect_repeat',
-        command: { requestRef },
-        assertion: args.serviceAuth as never,
-        now: 1_001,
-      })).toBe(true)
-      return result
-    })
+  it('tombstones connected-assistant GET as RFC 9457 410', async () => {
+    const list = vi.fn()
+    const response = await handleCustomerRequestConnectedAssistantsGet(get({}), requestRef, { list })
+    const callAction = vi.fn()
     const agent = await handleAgentCustomerRequestRepeatPermissionsGet(
       get({}),
       requestRef,
       agentOptions(callAction),
     )
-    expect(agent.status).toBe(200)
-    expect(await agent.json()).toEqual(body)
-    expect(callAction).toHaveBeenCalledWith(
-      'customerRequestApplication:listRepeatPermissionAssistants',
-      expect.any(Object),
-    )
+    const humanBody = await expectQuarantineWriteFrozen(response, 'customerRequest.listConnectedAssistants')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.listConnectedAssistants')
+    expect(agentBody).toEqual(humanBody)
+    expect(list).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('refuses an external credential without the bounded-mandate scope before the application call', async () => {
@@ -163,38 +128,22 @@ describe('Customer Request repeat-permission HTTP surface', () => {
     expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('binds inspection to the opaque permission and returns the same receipt', async () => {
-    const receipt = repeatPermissionReceipt()
-    let humanCommand: Record<string, unknown> | undefined
+  it('tombstones repeat-permission inspect GET as RFC 9457 410', async () => {
+    const inspect = vi.fn()
     const request = get({ routeRef })
-    const human = await handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, {
-      inspect: async (command) => {
-        humanCommand = command
-        return receipt
-      },
-    })
-    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => {
-      expect(await verifyCustomerRequestServiceAssertion({
-        key,
-        operation: 'inspect_repeat',
-        command: humanCommand as never,
-        assertion: args.serviceAuth as never,
-        now: 1_001,
-      })).toBe(true)
-      const { serviceAuth: _serviceAuth, ...command } = args
-      expect(command).toEqual(humanCommand)
-      return receipt
-    })
+    const human = await handleCustomerRequestRepeatPermissionGet(request, requestRef, permissionRef, { inspect })
+    const callAction = vi.fn()
     const agent = await handleAgentCustomerRequestRepeatPermissionGet(
       request,
       requestRef,
       permissionRef,
       agentOptions(callAction),
     )
-
-    expect(agent.status).toBe(200)
-    expect(await agent.json()).toEqual(await human.json())
-    expect(callAction).toHaveBeenCalledWith('customerRequestApplication:inspectRepeatRoute', expect.any(Object))
+    const humanBody = await expectQuarantineWriteFrozen(human, 'customerRequest.inspectRepeatPermission')
+    const agentBody = await expectQuarantineWriteFrozen(agent, 'customerRequest.inspectRepeatPermission')
+    expect(agentBody).toEqual(humanBody)
+    expect(inspect).not.toHaveBeenCalled()
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it('freezes withdrawal writes on both human and agent HTTP entrypoints', async () => {

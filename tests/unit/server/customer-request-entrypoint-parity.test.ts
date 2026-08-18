@@ -22,7 +22,6 @@ import {
   handleCustomerRequestRunPost,
 } from '@/lib/server/customer-request-route-action-api'
 import { customerRequestScopeForMode } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'entrypoint-parity-key-with-at-least-32-bytes'
@@ -242,7 +241,7 @@ describe('human and external-agent Request entrypoint parity', () => {
     expect(agentBody).toEqual(humanBody)
   })
 
-  it.each(cases.filter((entrypoint) => entrypoint.operation !== 'resume'))(
+  it.each(cases)(
     'freezes $operation on both human and agent HTTP entrypoints',
     async (entrypoint) => {
       const humanResponse = await entrypoint.human(async () => {
@@ -256,55 +255,10 @@ describe('human and external-agent Request entrypoint parity', () => {
       expect(agentBody).toEqual(humanBody)
     },
   )
-
-  it('keeps resume GET available on both entrypoints', async () => {
-    const entrypoint = cases.find((candidate) => candidate.operation === 'resume')
-    if (entrypoint === undefined) throw new Error('resume_case_missing')
-    let humanCommand: Record<string, unknown> | undefined
-    let agentCommand: Record<string, unknown> | undefined
-    let calledAction: string | undefined
-    const humanResponse = await entrypoint.human(async (args) => {
-      humanCommand = args
-      return projection
-    })
-    const agentResponse = await entrypoint.agent(async (name, args) => {
-      calledAction = name
-      agentCommand = args
-      return projection
-    })
-
-    expect(calledAction).toBe(entrypoint.actionName)
-    expect(agentResponse.status).toBe(humanResponse.status)
-    const agentBody = await agentResponse.json() as Record<string, unknown>
-    const { navigation, ...agentProjection } = agentBody
-    expect(agentProjection).toEqual(await humanResponse.json())
-    expect(navigation).toMatchObject({
-      current: `/api/v1/requests/${encodeURIComponent(requestRef)}`,
-      actions: [
-        { relation: 'change_request', href: `/api/v1/requests/${encodeURIComponent(requestRef)}/messages` },
-        { relation: 'confirm_option', href: `/api/v1/requests/${encodeURIComponent(requestRef)}/confirmation` },
-      ],
-    })
-    if (humanCommand === undefined || agentCommand === undefined) throw new Error('entrypoint command missing')
-    const { serviceAuth, ...unsignedAgentCommand } = agentCommand
-    expect(withoutDelegatedPrincipal(unsignedAgentCommand)).toEqual(withoutDelegatedPrincipal(humanCommand))
-    await expect(verifyCustomerRequestServiceAssertion({
-      key,
-      operation: entrypoint.operation,
-      command: unsignedAgentCommand as never,
-      assertion: serviceAuth as never,
-      now: 1_001,
-    })).resolves.toBe(true)
-  })
 })
 
 function agentOptions(callAction: AgentCall) {
   return { authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
-}
-
-function withoutDelegatedPrincipal(command: Record<string, unknown>): Record<string, unknown> {
-  const { delegatedAgentId: _delegatedAgentId, ...semanticCommand } = command
-  return semanticCommand
 }
 
 function get(path: string): Request {

@@ -39,8 +39,8 @@ export function verifyProductFrontier(root = process.cwd()) {
   const expectedQuarantineFamilies = [
     {
       id: 'customer-request',
-      status: 'approved-pending-deprecation',
-      evidenceDisposition: 'retain-read-only',
+      status: 'tombstoned-pending-unlist',
+      evidenceDisposition: 'exported-then-unlisted',
       successor: 'registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration',
       actionIds: [
         'customerRequest.confirm',
@@ -66,15 +66,15 @@ export function verifyProductFrontier(root = process.cwd()) {
     },
     {
       id: 'study',
-      status: 'approved-pending-deprecation',
-      evidenceDisposition: 'retain-read-only',
+      status: 'tombstoned-pending-unlist',
+      evidenceDisposition: 'exported-then-unlisted',
       successor: 'consuming-agent planning and orchestration',
       actionIds: ['study.start', 'study.inspect'],
     },
     {
       id: 'work-tree',
-      status: 'approved-pending-deprecation',
-      evidenceDisposition: 'retain-read-only',
+      status: 'tombstoned-pending-unlist',
+      evidenceDisposition: 'exported-then-unlisted',
       successor: 'consuming-agent planning and orchestration',
       actionIds: [
         'workTree.create',
@@ -166,7 +166,7 @@ export function verifyProductFrontier(root = process.cwd()) {
   if (requiredConformancePaths.length < 10) {
     errors.push(`conformance_floor_too_low:${requiredConformancePaths.length}`)
   }
-  for (const primitive of ['Study', 'WorkTree', 'external-run-kill-gate']) {
+  for (const primitive of ['external-run-kill-gate']) {
     if (!protectedVisionPrimitives.includes(primitive)) {
       errors.push(`protected_vision_missing:${primitive}`)
     }
@@ -258,7 +258,7 @@ export function verifyProductFrontier(root = process.cwd()) {
     const machine = Reflect.get(golden, 'machine')
     const person = Reflect.get(golden, 'person')
     if (!Array.isArray(machine) || machine.length < 5) errors.push('golden_machine_floor_too_low')
-    if (!Array.isArray(person) || person.length < 5) errors.push('golden_person_floor_too_low')
+    if (!Array.isArray(person) || person.length < 4) errors.push('golden_person_floor_too_low')
   }
 
   return { ok: errors.length === 0, errors: [...new Set(errors)].sort() }

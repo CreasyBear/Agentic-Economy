@@ -79,30 +79,22 @@ describe('browser Customer Request API', () => {
     expect(response.headers.get('set-cookie')).toBeNull()
   })
 
-  it('keeps resume GET and evidence GET off the freeze path', async () => {
+  it('tombstones resume GET and evidence GET as RFC 9457 410', async () => {
+    const inspect = vi.fn()
     const resume = await handleCustomerRequestGet('request:guest:lifecycle', {
-      inspect: async () => ({
-        kind: 'request' as const, requestRef: 'request:guest:lifecycle', revision: 1,
-        state: 'ready_to_compare' as const, summary: 'Find a suitable service',
-        nextAction: 'prepare_options' as const, missingFields: [], options: [],
-      }),
+      inspect,
     })
-    expect(resume.status).toBe(200)
-    expect(resume.status).not.toBe(403)
+    await expectQuarantineWriteFrozen(resume, 'customerRequest.run')
+    expect(inspect).not.toHaveBeenCalled()
 
+    const evidenceInspect = vi.fn()
     const evidence = await handleCustomerRequestEvidenceGet(
       new Request('https://ae.example/api/requests/request:guest:lifecycle/evidence'),
       'request:guest:lifecycle',
-      {
-        inspect: async () => ({
-          kind: 'evidence' as const, requestRef: 'request:guest:lifecycle',
-          state: 'outcome_unknown' as const, generatedAt: 1_000, steps: [], problems: [],
-        }),
-      },
+      { inspect: evidenceInspect },
     )
-    expect(evidence.status).toBe(200)
-    expect(evidence.status).not.toBe(403)
-    expect(evidence.status).not.toBe(410)
+    await expectQuarantineWriteFrozen(evidence, 'customerRequest.inspectEvidence')
+    expect(evidenceInspect).not.toHaveBeenCalled()
   })
 
   it('fails a tampered browser session closed without reaching the Request action', async () => {

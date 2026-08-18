@@ -180,11 +180,6 @@
     "capability-tool-execution"
   ],
   "activeFrontierTables": [
-    "studies",
-    "studyEvents",
-    "workTrees",
-    "workTreeEvents",
-    "workTreeDecisionReceipts",
     "externalRunManifests",
     "externalRunStarts",
     "externalRunEvidence",
@@ -209,8 +204,6 @@
     "src/modules/answer-thread"
   ],
   "protectedVisionPrimitives": [
-    "Study",
-    "WorkTree",
     "external-run-kill-gate",
     "operation.invoke",
     "money-ledger",
@@ -223,17 +216,13 @@
       "http-market-operations-anonymous",
       "http-operation-lifecycle-authenticated",
       "mcp-tools-list",
-      "customer-request-dev-smoke",
-      "work-tree-dev-smoke-with-study",
       "action-invocation-development-evidence"
     ],
     "person": [
       "landing-ask-to-cited-answer",
       "discovery-compare-listing-inquiry",
-      "customer-request-decision-review",
       "protected-owner-action",
-      "developer-discovery",
-      "worktree-create-study-propose-inbox-reload"
+      "developer-discovery"
     ]
   },
   "parkedCapabilities": {
@@ -299,8 +288,8 @@
   "quarantineFamilies": [
     {
       "id": "customer-request",
-      "status": "approved-pending-deprecation",
-      "evidenceDisposition": "retain-read-only",
+      "status": "tombstoned-pending-unlist",
+      "evidenceDisposition": "exported-then-unlisted",
       "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration",
       "actionIds": [
         "customerRequest.confirm",
@@ -329,8 +318,8 @@
     },
     {
       "id": "study",
-      "status": "approved-pending-deprecation",
-      "evidenceDisposition": "retain-read-only",
+      "status": "tombstoned-pending-unlist",
+      "evidenceDisposition": "exported-then-unlisted",
       "successor": "consuming-agent planning and orchestration",
       "actionIds": [
         "study.start",
@@ -339,8 +328,8 @@
     },
     {
       "id": "work-tree",
-      "status": "approved-pending-deprecation",
-      "evidenceDisposition": "retain-read-only",
+      "status": "tombstoned-pending-unlist",
+      "evidenceDisposition": "exported-then-unlisted",
       "successor": "consuming-agent planning and orchestration",
       "actionIds": [
         "workTree.create",

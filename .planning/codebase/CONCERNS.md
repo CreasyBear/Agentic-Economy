@@ -14,7 +14,7 @@
 **Action inventory vs end-state guardrail:**
 - Issue: Product-frontier v2 now pins 23 required public actions after P5-c deregister; the operating model still targets ≤14 active actions after remaining catalog/settings/storefront/web/demand cleanup.
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
-- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; mutating HTTP/MCP doors are 410 after P5-d. Reads/evidence stay.
+- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; family HTTP/MCP doors including inspect are 410 after P6-read-tombstone except `inquiry.readCustomerRecord`.
 - Impact: New public actions still require manifest surgery.
 - Fix approach: Do not add net-new public actions without a manifest update and a retirement plan.
 

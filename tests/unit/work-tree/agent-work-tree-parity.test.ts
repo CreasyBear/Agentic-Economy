@@ -29,7 +29,6 @@ import {
   gardenerVerbSchema,
   type GardenerVerb,
 } from '@/modules/work-tree/public'
-import type { WorkTreeDecisionReceipt } from '@/modules/work-tree/work-tree.functions'
 import { createFakeWorkTreeSource, type FakeWorkTreeSource } from '../routes/home-work-tree-loop.fixtures'
 
 const sourceMocks = vi.hoisted(() => {
@@ -280,8 +279,8 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       { resolvePrincipal: async () => null, callOperation },
     )
 
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ code: 'scope_required' })
+    expect(response.status).toBe(410)
+    await expect(response.json()).resolves.toMatchObject({ code: 'quarantine_surface_retired', instance: 'workTree.inspect' })
     expect(callOperation).not.toHaveBeenCalled()
   })
   it('projects typed source refusals and keeps malformed or transport outcomes unknown', async () => {
@@ -297,38 +296,19 @@ describe('T47 registered WorkTree action and human readback parity', () => {
       })
 
     const authentication = await invoke(async () => ({ kind: 'refused', code: 'authentication_required' }))
-    expect(authentication.status).toBe(401)
-    await expect(authentication.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Unauthenticated',
-      status: 401,
-      kind: 'UNAUTHENTICATED',
-      code: 'authentication_required',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(authentication, 'workTree.inspect')
 
     const forbidden = await invoke(async () => ({ kind: 'refused', code: 'forbidden' }))
-    expect(forbidden.status).toBe(403)
-    await expect(forbidden.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Permission denied',
-      status: 403,
-      kind: 'PERMISSION_DENIED',
-      code: 'forbidden',
-      replayed: false,
-    })
+    await expectQuarantineWriteFrozen(forbidden, 'workTree.inspect')
 
     const malformed = await invoke(async () => ({ kind: 'refused', code: 'forbidden', replayed: true }))
-    expect(malformed.status).toBe(200)
-    await expect(malformed.json()).resolves.toMatchObject({ kind: 'unknown' })
+    await expectQuarantineWriteFrozen(malformed, 'workTree.inspect')
 
     const unrecognized = await invoke(async () => ({ kind: 'refused', code: 'unrecognized_source_code' }))
-    expect(unrecognized.status).toBe(200)
-    await expect(unrecognized.json()).resolves.toEqual({ kind: 'unknown', reason: 'unrecognized_source_code' })
+    await expectQuarantineWriteFrozen(unrecognized, 'workTree.inspect')
 
     const transport = await invoke(async () => { throw new Error('transport_down') })
-    expect(transport.status).toBe(200)
-    await expect(transport.json()).resolves.toEqual({ kind: 'unknown', reason: 'transport_down' })
+    await expectQuarantineWriteFrozen(transport, 'workTree.inspect')
     const decideUnknown = await handleWorkTreeAgentAction(
       new Request('https://ae.test/api/v1/work-tree/decide', {
         method: 'POST',
@@ -449,14 +429,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
     expect(humanDecision.receipt.kind).toBe('accepted')
 
     const response = await handleAgentWorkTree('inspect', { projectId: started.projectId })
-    expect(response.status).toBe(200)
-    const agentInspect = await response.json() as {
-      kind: string
-      readback?: { receipts: readonly WorkTreeDecisionReceipt[]; tree: { nodes: readonly { nodeId: string; status: string }[] } }
-    }
-    expect(agentInspect.kind).toBe('accepted')
-    expect(agentInspect.readback?.receipts).toContainEqual(humanDecision.receipt)
-    expect(agentInspect.readback?.tree.nodes).toContainEqual(expect.objectContaining({ nodeId: item.nodeId, status: 'locked' }))
+    await expectQuarantineWriteFrozen(response, 'workTree.inspect')
   })
 
   it('replays identical idempotency keys byte-stably and refuses changed payloads without state change', async () => {
@@ -533,16 +506,7 @@ describe('T47 registered WorkTree action and human readback parity', () => {
 
     authScopes.delete('work_trees:inspect')
     const missingScope = await handleAgentWorkTree('inspect', { projectId: started.projectId })
-    expect(missingScope.status).toBe(403)
-    expect(missingScope.headers.get('content-type')).toBe('application/problem+json')
-    await expect(missingScope.json()).resolves.toMatchObject({
-      type: 'about:blank',
-      title: 'Permission denied',
-      status: 403,
-      kind: 'PERMISSION_DENIED',
-      code: 'scope_required',
-      detail: 'scope_required',
-    })
+    await expectQuarantineWriteFrozen(missingScope, 'workTree.inspect')
 
     authScopes.add('work_trees:inspect')
     authenticatedPrincipal = Object.freeze({ ...PRINCIPAL, principalId: 'clerk_api_key:other' })

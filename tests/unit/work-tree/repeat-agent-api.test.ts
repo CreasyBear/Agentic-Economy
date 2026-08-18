@@ -129,12 +129,8 @@ describe('WorkTree repeat agent HTTP seam', () => {
       'inspectRepeatUse',
       { resolvePrincipal, callOperation },
     )
-    expect(inspect.status).toBe(200)
-    expect(calls.map((call) => call.operation)).toEqual(['inspectRepeatUse'])
-    expect(mocks.authenticate).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      requiredScope: 'work_trees:repeat_inspect',
-      requiredMode: 'inspect_only',
-    }))
+    await expectQuarantineWriteFrozen(inspect, 'workTree.inspectRepeatUse')
+    expect(calls).toEqual([])
   })
 
   it('refuses malformed and unauthorized repeat requests before source dispatch', async () => {

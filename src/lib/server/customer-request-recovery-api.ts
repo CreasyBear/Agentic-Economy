@@ -21,6 +21,7 @@ import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
+import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
 
 export async function handleCustomerRequestProblemPost(
   request: Request,
@@ -73,6 +74,8 @@ export async function handleCustomerRequestEvidenceGet(
   requestRef: string,
   options: Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<CustomerRequestEvidenceResult> }> = {},
 ): Promise<Response> {
+  const retired = quarantineWriteResponse('customerRequest.inspectEvidence')
+  if (retired !== undefined) return withRfc9745DeprecationNotice(retired)
   return withRfc9745DeprecationNotice(await inspectCustomerRequestEvidence(request, requestRef, options))
 }
 

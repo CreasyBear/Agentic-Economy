@@ -8,8 +8,6 @@ import {
   handleAgentCustomerRequestPost,
 } from '@/lib/server/customer-request-agent-api'
 import type { AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
-import { customerRequestAgentResultSchema } from '@/modules/customer-request/agent-contract'
-import { verifyCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { expectQuarantineWriteFrozen } from '../../helpers/http'
 
 const key = 'agent-source-gateway-key-with-at-least-32-bytes'
@@ -65,17 +63,14 @@ describe('agent-native customer Request API', () => {
     const resumedResponse = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:agent:1'), 'request:agent:1', {
       authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })
-    expect(resumedResponse.status).toBe(200)
-    await expect(resumedResponse.json()).resolves.toMatchObject({
-      recovery: { state: 'restored', restoredAt: 1_000, workRestarted: false },
-    })
+    await expectQuarantineWriteFrozen(resumedResponse, 'customerRequest.run')
     const optionsResponse = await handleAgentCustomerOptionsPost(request('/options', {
       revision: 1, idempotencyKey: 'prepare:1',
     }), 'request:agent:1', {
       authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })
     await expectQuarantineWriteFrozen(optionsResponse, 'customerRequest.run')
-    expect(calls.map(({ name }) => name)).toEqual(['customerRequestApplication:resume'])
+    expect(calls.map(({ name }) => name)).toEqual([])
   })
 
   it('signs a natural-language clarification as a refinement of the same Request', async () => {
@@ -151,57 +146,13 @@ describe('agent-native customer Request API', () => {
     expect(callAction).not.toHaveBeenCalled()
   })
 
-  it('gives a cold agent the same partial progress and no-retry recovery state as the human view', async () => {
-    const callAction = vi.fn(async () => ({
-      kind: 'request' as const, requestRef: 'request:agent:partial', revision: 1,
-      state: 'outcome_unknown' as const,
-      summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
-      nextAction: 'wait' as const, missingFields: [], criteria: [], options: [],
-      businesses: [
-        { businessRef: 'business:resolver', name: 'Route Resolver' },
-        { businessRef: 'business:quoter', name: 'Route Quoter' },
-      ],
-      progress: {
-        completed: 1, total: 2, current: { step: 2, state: 'needs_attention' as const },
-        dependencies: {
-          completed: [{ step: 1, business: 'Route Resolver' }],
-          blocked: [],
-        },
-      },
-      action: {
-        state: 'unknown' as const, resolution: 'awaiting_evidence' as const,
-        automaticRetry: false as const, observedAt: 1_000,
-      },
-      activity: {
-        actor: 'ae' as const, certainty: 'unknown' as const, updatedAt: 1_000,
-        nextCheckAt: 31_000, retry: 'blocked_until_reconciled' as const,
-        cancellation: 'too_late_or_unsupported' as const, safeNextAction: 'wait_for_evidence' as const,
-      },
-    }))
-
+  it('tombstones agent resume GET as RFC 9457 410', async () => {
+    const callAction = vi.fn()
     const response = await handleAgentCustomerRequestGet(getRequest('/api/v1/requests/request:agent:partial'), 'request:agent:partial', {
       authenticate, resolvePrincipal, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })
-    expect(response.status).toBe(200)
-    expect(customerRequestAgentResultSchema.parse(await response.json())).toMatchObject({
-      state: 'outcome_unknown',
-      progress: {
-        completed: 1, total: 2, current: { step: 2, state: 'needs_attention' },
-        dependencies: {
-          completed: [{ step: 1, business: 'Route Resolver' }],
-          blocked: [],
-        },
-      },
-      action: { state: 'unknown', automaticRetry: false },
-      activity: {
-        actor: 'ae', retry: 'blocked_until_reconciled', safeNextAction: 'wait_for_evidence',
-      },
-      navigation: { actions: [
-        { relation: 'inspect_progress', method: 'GET' },
-        { relation: 'inspect_evidence', method: 'GET' },
-        { relation: 'report_problem', method: 'POST' },
-      ] },
-    })
+    await expectQuarantineWriteFrozen(response, 'customerRequest.run')
+    expect(callAction).not.toHaveBeenCalled()
   })
 
   it.each(['missing', 'revoked', 'stale_generation'] as const)(

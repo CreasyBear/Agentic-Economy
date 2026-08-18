@@ -5,12 +5,15 @@ import { response } from '@/lib/server/no-store-response'
 import { kindForStatus } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
 import { withRfc9745DeprecationNotice } from '@/modules/product-frontier/deprecation-notice'
+import { quarantineWriteResponse } from '@/lib/server/quarantine-write'
 
 export type InspectResult = CustomerRequestView | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
 const inspectAction = sourceAction<Record<string, unknown>, InspectResult>('customerRequestApplication:resume')
 type HandlerOptions = Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<InspectResult> }>
 
 export async function handleCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
+  const retired = quarantineWriteResponse('customerRequest.run')
+  if (retired !== undefined) return withRfc9745DeprecationNotice(retired)
   return withRfc9745DeprecationNotice(await inspectCustomerRequest(requestRef, options))
 }
 

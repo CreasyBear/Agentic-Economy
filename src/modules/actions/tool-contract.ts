@@ -16,7 +16,7 @@ import {
   findStrictToolSchemaViolation,
   type StrictSchemaViolation,
 } from './strict-schema'
-import { isQuarantineWrite, QUARANTINE_WRITES_FROZEN_CODE } from '@/modules/product-frontier/quarantine-write-admission'
+import { isQuarantineSurfaceRetired, QUARANTINE_SURFACE_RETIRED_CODE } from '@/modules/product-frontier/quarantine-write-admission'
 
 export type ActionToolSchemaDiagnostic = StrictSchemaViolation & {
   schema: 'input' | 'output'
@@ -94,8 +94,8 @@ export function actionToToolContract(
     surfaces: action.surfaces,
     schemas,
     execute: async ({ input, context }) => {
-      if (isQuarantineWrite(action.id, action.readOnly)) {
-        throw new Error(QUARANTINE_WRITES_FROZEN_CODE)
+      if (isQuarantineSurfaceRetired(action.id)) {
+        throw new Error(QUARANTINE_SURFACE_RETIRED_CODE)
       }
       return await action.run({ data: input, context })
     },

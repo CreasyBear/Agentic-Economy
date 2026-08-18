@@ -99,8 +99,8 @@ describe('product frontier manifest', () => {
     expect(productFrontierManifest.quarantineFamilies).toEqual([
       {
         id: 'customer-request',
-        status: 'approved-pending-deprecation',
-        evidenceDisposition: 'retain-read-only',
+        status: 'tombstoned-pending-unlist',
+        evidenceDisposition: 'exported-then-unlisted',
         successor: 'registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration',
         actionIds: [
           'customerRequest.confirm',
@@ -126,15 +126,15 @@ describe('product frontier manifest', () => {
       },
       {
         id: 'study',
-        status: 'approved-pending-deprecation',
-        evidenceDisposition: 'retain-read-only',
+        status: 'tombstoned-pending-unlist',
+        evidenceDisposition: 'exported-then-unlisted',
         successor: 'consuming-agent planning and orchestration',
         actionIds: ['study.start', 'study.inspect'],
       },
       {
         id: 'work-tree',
-        status: 'approved-pending-deprecation',
-        evidenceDisposition: 'retain-read-only',
+        status: 'tombstoned-pending-unlist',
+        evidenceDisposition: 'exported-then-unlisted',
         successor: 'consuming-agent planning and orchestration',
         actionIds: [
           'workTree.create',

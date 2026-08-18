@@ -88,12 +88,13 @@ describe('RFC 9745/8594 deprecation notice', () => {
       { inspect: async () => ({ kind: 'refused', reason: 'request_not_found' }) },
     )
     expectRfc9745Notice(evidence)
-    expect(evidence.status).not.toBe(410)
+    expect(evidence.status).toBe(410)
 
     const inspect = await handleWorkTreeAgentAction(
       postJsonRequest('https://ae.example/api/v1/work-tree/inspect', { projectId: 'project:1' }),
       'inspect',
     )
     expectRfc9745Notice(inspect)
+    expect(inspect.status).toBe(410)
   })
 })
