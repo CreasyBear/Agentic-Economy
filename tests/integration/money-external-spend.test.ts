@@ -9,7 +9,7 @@ const reserve = anyApi.moneyLedger?.reserveExternalInvocationSpend
 const finalize = anyApi.moneyLedger?.finalizeExternalInvocationSpend
 const reconcile = anyApi.moneyLedger?.reconcileExternalInvocationSpend
 const reverse = anyApi.moneyLedger?.reverseExternalInvocationSpend
-const reconcilePaymentAttempt = anyApi.customerRequestRouteExecution
+const reconcilePaymentAttempt = anyApi.moneyX402PaymentAttempts
   ?.reconcileX402PaymentAttempt
 if (
   reserve === undefined
@@ -257,7 +257,7 @@ describe('provider-direct external spend reservations', () => {
       evidenceRefs: [],
     }
     await backend.run(async (ctx) => {
-      await ctx.db.insert('customerRequestX402PaymentAttempts', paymentAttempt)
+      await ctx.db.insert('moneyX402PaymentAttempts', paymentAttempt)
     })
 
     await expect(backend.mutation(reconcilePaymentAttempt, {
@@ -283,7 +283,7 @@ describe('provider-direct external spend reservations', () => {
     })).resolves.toEqual({ kind: 'settled', settlementStatus: 'settled' })
 
     const stored = await backend.run(async (ctx) => await ctx.db
-      .query('customerRequestX402PaymentAttempts')
+      .query('moneyX402PaymentAttempts')
       .withIndex('by_attemptRef_and_effectGeneration', (query) => query
         .eq('attemptRef', paymentAttempt.attemptRef)
         .eq('effectGeneration', paymentAttempt.effectGeneration))
@@ -293,5 +293,44 @@ describe('provider-direct external spend reservations', () => {
       settlementStatus: 'settled',
       reconciliationEvidenceDigest: 'evidence-digest:external-one',
     })
+  })
+
+  it('replays the same payment-identifier payload and refuses a conflicting one', async () => {
+    const prepare = anyApi.moneyX402PaymentAttempts?.prepareX402PaymentAuthorization
+    if (prepare === undefined) throw new Error('prepare mutation missing')
+    const backend = await seeded()
+    const payload = {
+      dispatchRef: baseIdentity.invocationRef,
+      attemptRef: baseIdentity.attemptRef,
+      effectGeneration: baseIdentity.effectGeneration,
+      operationRef: baseIdentity.operationRef,
+      inputDigest: 'input:external-one',
+      paymentIdentifier: 'ae_payment_id_one',
+      operationKeyDigest: 'operation-key:external-one',
+      challengeDigest: baseIdentity.challengeDigest,
+      challengeJson: '{"x402Version":2}',
+      selectedRequirementJson: '{"scheme":"exact"}',
+      providerEndpoint: 'https://provider.example/paid',
+      credentialRef: 'env:AE_TEST_PAYMENT_CREDENTIAL',
+      scheme: 'exact',
+      network: 'eip155:84532',
+      asset: 'asset:usdc',
+      payTo: 'payee:external-one',
+      amountUnits: amount.units,
+      currency: amount.currency,
+      exponent: amount.exponent,
+      reservationRef: baseIdentity.reservationRef,
+    }
+    const first = await backend.mutation(prepare, payload)
+    await expect(backend.mutation(prepare, payload)).resolves.toEqual(first)
+    await expect(backend.mutation(prepare, {
+      ...payload,
+      selectedRequirementJson: '{"scheme":"exact","amount":"1"}',
+    })).rejects.toThrow('x402_payment_attempt_attribution_invalid')
+    await expect(backend.mutation(prepare, {
+      ...payload,
+      attemptRef: 'attempt:external-two',
+      effectGeneration: 2,
+    })).rejects.toThrow('x402_payment_attempt_attribution_invalid')
   })
 })

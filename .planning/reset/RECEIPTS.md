@@ -1057,3 +1057,18 @@ Notice SHA `0585f988`. Deregister SHA `025d559b`. P5-b product SHA `f6d3aac8`. L
 - no full `test:conformance`
 
 Remainder exits after this card. No P5-d 410. No P6. `/call` is not deprecated. Live-money gate untouched.
+
+## P6-x402-rehome — committed
+
+**AUTHORITY:** docs.x402.org HTTP 402 headers (`PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE`), facilitator `POST /verify` then `POST /settle`, exact atomic amounts, payment-identifier idempotency (same id + same payload replay; same id + different payload conflict). EVM `settlement_pending` is non-terminal → AE `possibly_submitted` / `reconciliation_required`. Installed `@x402/*@2.18.0`. ADR-034 disjoint lanes; production still refuses `provider_direct_x402`.
+
+**LOCAL_CANDIDATE:** `customerRequestX402PaymentAttempts` via `prepareX402PaymentAuthorization` in `convex/customerRequestRouteExecution.ts`. `moneyExternalSpendReservations` is a different state machine (`reserved|settled|released`) and does not hold challenge/signature/custody fields.
+
+**FIT:** diverge-fix-toward-authority on storage ownership. New `moneyX402PaymentAttempts` keeps `paymentIdentifier`, `custodyRef`, `authorizationDigest`, exact `amountUnits`, and states `prepared` → `possibly_submitted` → `observed` / `reconciliation_required`. Index `by_paymentIdentifier` is `.withIndex`, not uniqueness-tightened. Old CR table remains; `backfillMoneyX402PaymentAttempts` copies rows. Invoke worker reads/writes `internal.moneyX402PaymentAttempts.*`. CR wrappers delegate so quarantined transport still hits the money table. Codecs stay in `x402-payment-signer.ts`. No 2.20 bump, no Express/`awal`/`@metamask/x402`.
+
+**COMMANDS:**
+- scoped persist/schema/signer/policy/worker tests — 8 files / 64 tests passed
+- `npm run test:conformance` — 27 files / 426 tests passed
+- `npx tsc --noEmit` — no new Convex errors (two pre-existing unrelated diagnostics remain)
+
+`/call` is not deprecated. Production x402 remains refused. CR table not dropped. Hold still covers unpushed `main`.

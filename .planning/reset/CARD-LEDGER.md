@@ -95,9 +95,11 @@ Hard gate: no quarantine card runs until every P3 validator is green and each po
 
 One table-family card at a time, separate deployments only.
 
-| Card | Concern | Depends on |
-| --- | --- | --- |
-| P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 |
+| Card | Concern | Depends on | Status |
+| --- | --- | --- | --- |
+| P6-x402-rehome | Move invoke x402 attempt persist off `customerRequestX402PaymentAttempts` onto money-owned storage; production x402 stays refused | P5-e | committed |
+| P6-workpool-own | Own the existing Workpool mount as market dispatch; keep invoke enqueue; do not delete the pool | P6-x402-rehome | pending |
+| P6-* | Per family: freeze writes → drain → export with per-table SHA-256 manifest → retention approval → schema narrow | P5 | later |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage.
 Routing-kernel HTTP tombstones are permanent; historical tables drop only after approved checksummed export.

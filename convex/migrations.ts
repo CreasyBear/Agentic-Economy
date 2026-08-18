@@ -106,3 +106,73 @@ export const backfillMoneyAccountRecoveryDueUnits = internalMutation({
     }
   },
 })
+
+/**
+ * Copy Customer Request x402 attempt rows onto money-owned persist.
+ * Safe to replay: existing money rows with the same attempt identity are skipped.
+ * Does not drop or stop writes on the source table.
+ */
+export const backfillMoneyX402PaymentAttempts = internalMutation({
+  args: { cursor: v.optional(v.string()), batchSize: v.optional(v.number()) },
+  returns: batchResult,
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query('customerRequestX402PaymentAttempts').paginate({
+      cursor: args.cursor ?? null,
+      numItems: Math.min(Math.max(args.batchSize ?? 100, 1), 250),
+    })
+    let updated = 0
+    for (const source of page.page) {
+      const existing = await ctx.db.query('moneyX402PaymentAttempts')
+        .withIndex('by_attemptRef_and_effectGeneration', (query) => (
+          query.eq('attemptRef', source.attemptRef).eq('effectGeneration', source.effectGeneration)
+        ))
+        .unique()
+      if (existing !== null) continue
+      await ctx.db.insert('moneyX402PaymentAttempts', {
+        dispatchRef: source.dispatchRef,
+        attemptRef: source.attemptRef,
+        effectGeneration: source.effectGeneration,
+        ...(source.operationRef === undefined ? {} : { operationRef: source.operationRef }),
+        ...(source.inputDigest === undefined ? {} : { inputDigest: source.inputDigest }),
+        paymentIdentifier: source.paymentIdentifier,
+        operationKeyDigest: source.operationKeyDigest,
+        challengeDigest: source.challengeDigest,
+        challengeJson: source.challengeJson,
+        selectedRequirementJson: source.selectedRequirementJson,
+        providerEndpoint: source.providerEndpoint,
+        credentialRef: source.credentialRef,
+        scheme: source.scheme,
+        network: source.network,
+        asset: source.asset,
+        payTo: source.payTo,
+        amountUnits: source.amountUnits,
+        currency: source.currency,
+        exponent: source.exponent,
+        custodyRef: source.custodyRef,
+        authorizationDigest: source.authorizationDigest,
+        ...(source.reservationRef === undefined ? {} : { reservationRef: source.reservationRef }),
+        ...(source.paymentIdentityDigest === undefined ? {} : { paymentIdentityDigest: source.paymentIdentityDigest }),
+        ...(source.paymentSignatureDigest === undefined ? {} : { paymentSignatureDigest: source.paymentSignatureDigest }),
+        state: source.state,
+        preparedAt: source.preparedAt,
+        ...(source.submissionStartedAt === undefined ? {} : { submissionStartedAt: source.submissionStartedAt }),
+        ...(source.observedAt === undefined ? {} : { observedAt: source.observedAt }),
+        ...(source.transportObservationDigest === undefined ? {} : { transportObservationDigest: source.transportObservationDigest }),
+        ...(source.transportRequestDigest === undefined ? {} : { transportRequestDigest: source.transportRequestDigest }),
+        ...(source.paymentObservationDigest === undefined ? {} : { paymentObservationDigest: source.paymentObservationDigest }),
+        ...(source.settlementStatus === undefined ? {} : { settlementStatus: source.settlementStatus }),
+        ...(source.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: source.paymentResponseDigest }),
+        ...(source.reconciliationEvidenceRef === undefined ? {} : { reconciliationEvidenceRef: source.reconciliationEvidenceRef }),
+        ...(source.reconciliationEvidenceDigest === undefined ? {} : { reconciliationEvidenceDigest: source.reconciliationEvidenceDigest }),
+        evidenceRefs: source.evidenceRefs,
+      })
+      updated += 1
+    }
+    return {
+      done: page.isDone,
+      cursor: page.continueCursor,
+      scanned: page.page.length,
+      updated,
+    }
+  },
+})

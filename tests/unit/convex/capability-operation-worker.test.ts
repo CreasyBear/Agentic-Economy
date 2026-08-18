@@ -546,10 +546,10 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
         case 'actionInvocationControl:readControl': return canonicalClaimed ? canonicalControl : undefined
         case 'actionInvocationControl:readAttempt': return canonicalClaimed ? canonicalAttempt : undefined
         case 'capabilityProviderConnections:resolveLeaseCredentialRef': return { kind: 'resolved', credentialRef: providerCredentialRef }
-        case 'customerRequestRouteExecution:readX402PaymentAuthorizationByDigest':
-        case 'customerRequestRouteExecution:readX402PaymentAuthorization': return persistedPaymentMaterial()
+        case 'moneyX402PaymentAttempts:readX402PaymentAuthorizationByDigest':
+        case 'moneyX402PaymentAttempts:readX402PaymentAuthorization': return persistedPaymentMaterial()
         case 'capabilityProviderConnections:validateLeaseAuthority': return { kind: 'valid' }
-        case 'customerRequestRouteExecution:readX402PaymentAttempt':
+        case 'moneyX402PaymentAttempts:readX402PaymentAttempt':
           return state.payment.prepare === undefined
             ? null
             : {
@@ -632,22 +632,22 @@ function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Rec
                 status: args.settlementStatus === 'settled' ? 'settled' : 'released',
                 replayed: false,
               }
-        case 'customerRequestRouteExecution:prepareX402PaymentAuthorization':
+        case 'moneyX402PaymentAttempts:prepareX402PaymentAuthorization':
           state.payment.prepare = args
           if (options.preparePaymentErrorState !== undefined) {
             throw new Error('x402_payment_attempt_reconciliation_required')
           }
           return { custodyRef: 'custody:test-worker', authorizationDigest: digest('p') }
-        case 'customerRequestRouteExecution:markX402PaymentPossiblySubmitted':
+        case 'moneyX402PaymentAttempts:markX402PaymentPossiblySubmitted':
           state.payment.mark = args
           return null
-        case 'customerRequestRouteExecution:observeX402PaymentAttempt':
+        case 'moneyX402PaymentAttempts:observeX402PaymentAttempt':
           state.payment.observe = args
           return null
-        case 'customerRequestRouteExecution:recordX402PaymentObservation':
+        case 'moneyX402PaymentAttempts:recordX402PaymentObservation':
           if (options.failPaymentObservation) throw new Error('payment_observation_unavailable')
           return null
-        case 'customerRequestRouteExecution:recordX402PaymentSignature':
+        case 'moneyX402PaymentAttempts:recordX402PaymentSignature':
           return null
         case 'qualifiedUse:recordQualifiedUse':
           state.qualifiedUse.push(args)

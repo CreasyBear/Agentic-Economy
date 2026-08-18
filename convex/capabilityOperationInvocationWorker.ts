@@ -774,11 +774,11 @@ export const run = internalAction({
       const credentialRef = x402PaymentCredentialRefFromEnvironment()
       const material = byDigest
         ? await ctx.runQuery(
-            internal.customerRequestRouteExecution.readX402PaymentAuthorizationByDigest,
+            internal.moneyX402PaymentAttempts.readX402PaymentAuthorizationByDigest,
             prepared,
           )
         : await ctx.runQuery(
-            internal.customerRequestRouteExecution.readX402PaymentAuthorization,
+            internal.moneyX402PaymentAttempts.readX402PaymentAuthorization,
             prepared,
           )
       const expected = material === null
@@ -853,7 +853,7 @@ export const run = internalAction({
         return undefined
       }
       try {
-        await ctx.runMutation(internal.customerRequestRouteExecution.recordX402PaymentSignature, {
+        await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignature, {
           custodyRef: prepared.custodyRef,
           authorizationDigest: prepared.authorizationDigest,
           paymentSignatureDigest: canonicalDigest(signature),
@@ -921,7 +921,7 @@ export const run = internalAction({
             if (reserved.kind !== 'accepted') return undefined
             try {
               const prepared = await ctx.runMutation(
-                internal.customerRequestRouteExecution.prepareX402PaymentAuthorization,
+                internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
                 {
                   dispatchRef: dispatch.invocationRef,
                   operationRef: dispatch.operationRef,
@@ -948,7 +948,7 @@ export const run = internalAction({
               return prepared
             } catch (error) {
               const attempt = await ctx.runQuery(
-                internal.customerRequestRouteExecution.readX402PaymentAttempt,
+                internal.moneyX402PaymentAttempts.readX402PaymentAttempt,
                 {
                   dispatchRef: dispatch.invocationRef,
                   attemptRef: request.attemptRef,
@@ -975,7 +975,7 @@ export const run = internalAction({
               settlementEvidence: _settlementEvidence,
               ...paymentEvent
             } = event
-            await ctx.runMutation(internal.customerRequestRouteExecution.markX402PaymentPossiblySubmitted, {
+            await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, {
               dispatchRef: dispatch.invocationRef,
               effectGeneration: claimed.attempt.effectGeneration,
               ...paymentEvent,
@@ -986,7 +986,7 @@ export const run = internalAction({
           },
           observeX402PaymentAttempt: async (event) => {
             const { amount, settlementEvidence, ...paymentEvent } = event
-            await ctx.runMutation(internal.customerRequestRouteExecution.observeX402PaymentAttempt, {
+            await ctx.runMutation(internal.moneyX402PaymentAttempts.observeX402PaymentAttempt, {
               dispatchRef: dispatch.invocationRef,
               effectGeneration: claimed.attempt.effectGeneration,
               ...paymentEvent,
@@ -1108,7 +1108,7 @@ export const run = internalAction({
                 ? observation.settlementEvidence.digest
                 : undefined
             const attempt = await ctx.runQuery(
-              internal.customerRequestRouteExecution.readX402PaymentAttempt,
+              internal.moneyX402PaymentAttempts.readX402PaymentAttempt,
               {
                 dispatchRef: dispatch.invocationRef,
                 attemptRef: durableAttemptRef,
@@ -1132,7 +1132,7 @@ export const run = internalAction({
               ?? (x402SettlementStatus === 'unknown'
                 ? 'unknown'
                 : 'observed')
-            await ctx.runMutation(internal.customerRequestRouteExecution.recordX402PaymentObservation, {
+            await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentObservation, {
               dispatchRef: dispatch.invocationRef,
               attemptRef: durableAttemptRef,
               effectGeneration: durableEffectGeneration,
@@ -1477,7 +1477,7 @@ export const recover = internalAction({
     const x402Attempt = operation.identity.adapterId === 'x402-fetch:v2'
       && control.currentAttemptRef !== undefined
       && control.currentEffectGeneration !== undefined
-      ? await ctx.runQuery(internal.customerRequestRouteExecution.readX402PaymentAttempt, {
+      ? await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAttempt, {
           dispatchRef: row.invocationRef,
           attemptRef: control.currentAttemptRef,
           effectGeneration: control.currentEffectGeneration,
@@ -1729,7 +1729,7 @@ export const recover = internalAction({
         return required
       }
       const payment = await ctx.runMutation(
-        internal.customerRequestRouteExecution.reconcileX402PaymentAttempt,
+        internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt,
         {
           dispatchRef: row.invocationRef,
           attemptRef: submittedEvidence.attemptRef,
@@ -2707,11 +2707,11 @@ async function readX402Authorization(
 ): Promise<string | undefined> {
   const material = byDigest
     ? await ctx.runQuery(
-        internal.customerRequestRouteExecution.readX402PaymentAuthorizationByDigest,
+        internal.moneyX402PaymentAttempts.readX402PaymentAuthorizationByDigest,
         prepared,
       )
     : await ctx.runQuery(
-        internal.customerRequestRouteExecution.readX402PaymentAuthorization,
+        internal.moneyX402PaymentAttempts.readX402PaymentAuthorization,
         prepared,
       )
   if (

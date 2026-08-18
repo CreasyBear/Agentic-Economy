@@ -93,6 +93,7 @@ import type * as inquirySourceStatePersist from "../inquirySourceStatePersist.js
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as migrations from "../migrations.js";
 import type * as moneyLedger from "../moneyLedger.js";
+import type * as moneyX402PaymentAttempts from "../moneyX402PaymentAttempts.js";
 import type * as notificationOutbox from "../notificationOutbox.js";
 import type * as notificationOutboxPersistence from "../notificationOutboxPersistence.js";
 import type * as notificationOutboxReconstruction from "../notificationOutboxReconstruction.js";
@@ -204,6 +205,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimit": typeof lib_rateLimit;
   migrations: typeof migrations;
   moneyLedger: typeof moneyLedger;
+  moneyX402PaymentAttempts: typeof moneyX402PaymentAttempts;
   notificationOutbox: typeof notificationOutbox;
   notificationOutboxPersistence: typeof notificationOutboxPersistence;
   notificationOutboxReconstruction: typeof notificationOutboxReconstruction;

@@ -190,7 +190,7 @@ function workerRecoveryContext(
     const path = functionPath(reference)
     if (path === 'capabilityOperationInvocations:readRecovery') return currentRow
     if (path.endsWith(':readControl')) return control
-    if (path === 'customerRequestRouteExecution:readX402PaymentAttempt') {
+    if (path === 'moneyX402PaymentAttempts:readX402PaymentAttempt') {
       return {
         state: 'observed',
         paymentIdentifier: 'payment:recovery',
@@ -247,6 +247,9 @@ function workerRecoveryContext(
       return { kind: 'cancelled' }
     }
     if (path === 'moneyLedger:reconcileInvocationCharge') return moneyResult
+    if (path === 'moneyX402PaymentAttempts:reconcileX402PaymentAttempt') {
+      return { kind: 'settled', settlementStatus: 'settled' }
+    }
     if (
       path === 'capabilityOperationInvocations:projectRecovery'
       && typeof args === 'object'
