@@ -17,11 +17,120 @@ export function verifyProductFrontier(root = process.cwd()) {
   const errors = []
   const manifest = productFrontierManifest
 
+  const requiredActionIds = asStringArray(manifest.requiredActionIds, 'requiredActionIds', errors)
+
+  const expectedTargetProduct = {
+    marketAuthority: [
+      'operation-contract',
+      'authorization',
+      'durable-invocation',
+      'delivery-evidence',
+      'brokered-money',
+    ],
+    agentAuthority: ['planning', 'orchestration'],
+    answerLoop: 'bounded-shared-market-tool-loop',
+    livePaymentLane: 'ae-brokered',
+    providerDirectX402: 'discovery-metadata-only',
+  }
+  if (JSON.stringify(manifest.targetProduct) !== JSON.stringify(expectedTargetProduct)) {
+    errors.push('target_product_mismatch')
+  }
+
+  const expectedQuarantineFamilies = [
+    {
+      id: 'customer-request',
+      status: 'approved-pending-deprecation',
+      evidenceDisposition: 'retain-read-only',
+      successor: 'registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration',
+      actionIds: [
+        'customerRequest.confirm',
+        'customerRequest.run',
+        'customerRequest.cancel',
+        'customerRequest.reportProblem',
+        'customerRequest.replyProblem',
+        'customerRequest.inspectEvidence',
+        'customerRequest.allowRepeatPermission',
+        'customerRequest.useRepeatPermission',
+        'customerRequest.inspectRepeatPermission',
+        'customerRequest.planPreview',
+        'customerRequest.listConnectedAssistants',
+        'customerRequest.withdrawRepeatPermission',
+      ],
+    },
+    {
+      id: 'inquiries',
+      status: 'approved-pending-deprecation',
+      evidenceDisposition: 'retain-read-only',
+      successor: 'published provider contact channels',
+      actionIds: ['inquiry.submit', 'inquiry.readCustomerRecord'],
+    },
+    {
+      id: 'study',
+      status: 'approved-pending-deprecation',
+      evidenceDisposition: 'retain-read-only',
+      successor: 'consuming-agent planning and orchestration',
+      actionIds: ['study.start', 'study.inspect'],
+    },
+    {
+      id: 'work-tree',
+      status: 'approved-pending-deprecation',
+      evidenceDisposition: 'retain-read-only',
+      successor: 'consuming-agent planning and orchestration',
+      actionIds: [
+        'workTree.create',
+        'workTree.inspect',
+        'workTree.apply',
+        'workTree.decide',
+        'workTree.reserveRepeatUse',
+        'workTree.finalizeRepeatUse',
+        'workTree.reconcileRepeatUse',
+        'workTree.inspectRepeatUse',
+      ],
+    },
+  ]
+  const quarantineFamilies = Array.isArray(manifest.quarantineFamilies)
+    ? manifest.quarantineFamilies
+    : []
+  if (JSON.stringify(quarantineFamilies) !== JSON.stringify(expectedQuarantineFamilies)) {
+    errors.push('quarantine_family_contract_mismatch')
+  }
+  const familyIds = quarantineFamilies.map((family) =>
+    typeof family === 'object' && family !== null ? Reflect.get(family, 'id') : undefined,
+  )
+  const quarantineActionIds = quarantineFamilies.flatMap((family) =>
+    typeof family === 'object' && family !== null && Array.isArray(Reflect.get(family, 'actionIds'))
+      ? Reflect.get(family, 'actionIds')
+      : [],
+  )
+  if (familyIds.length !== 4 || new Set(familyIds).size !== 4) {
+    errors.push('quarantine_family_ids_invalid')
+  }
+  if (new Set(quarantineActionIds).size !== quarantineActionIds.length) {
+    errors.push('quarantine_action_ids_not_unique')
+  }
+  for (const actionId of quarantineActionIds) {
+    if (typeof actionId !== 'string' || !requiredActionIds.includes(actionId)) {
+      errors.push(`quarantine_action_not_required:${String(actionId)}`)
+    }
+  }
+
+  const expectedBusinessServicesPolicy = {
+    expansion: 'freeze-approved-pending-implementation',
+    publicUrls: 'retain-measured',
+    trafficInstrumentation: 'retain',
+  }
+  if (
+    JSON.stringify(manifest.businessServicesPolicy) !==
+    JSON.stringify(expectedBusinessServicesPolicy)
+  ) {
+    errors.push('business_services_policy_mismatch')
+  }
+
   if (manifest.schemaVersion !== PRODUCT_FRONTIER_MANIFEST_VERSION) {
     errors.push(`schema_version_mismatch:${String(manifest.schemaVersion)}`)
   }
 
-  const requiredActionIds = asStringArray(manifest.requiredActionIds, 'requiredActionIds', errors)
+
   const protectedActionIds = asStringArray(manifest.protectedActionIds, 'protectedActionIds', errors)
   const protectedModules = asStringArray(manifest.protectedModules, 'protectedModules', errors)
   const requiredE2eSpecs = asStringArray(manifest.requiredE2eSpecs, 'requiredE2eSpecs', errors)

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "ae-product-frontier:v1",
-  "capturedAt": "2026-08-16",
+  "schemaVersion": "ae-product-frontier:v2",
+  "capturedAt": "2026-08-17",
   "evidenceClass": "source-local",
   "requiredActionIds": [
     "supply.collectDevelopmentQuote",
@@ -312,5 +312,84 @@
       "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#3-shipping-provider-integration-batch-2"
     }
   ],
-  "dirtyTreePathCount": 279
+  "dirtyTreePathCount": 0,
+  "targetProduct": {
+    "marketAuthority": [
+      "operation-contract",
+      "authorization",
+      "durable-invocation",
+      "delivery-evidence",
+      "brokered-money"
+    ],
+    "agentAuthority": [
+      "planning",
+      "orchestration"
+    ],
+    "answerLoop": "bounded-shared-market-tool-loop",
+    "livePaymentLane": "ae-brokered",
+    "providerDirectX402": "discovery-metadata-only"
+  },
+  "quarantineFamilies": [
+    {
+      "id": "customer-request",
+      "status": "approved-pending-deprecation",
+      "evidenceDisposition": "retain-read-only",
+      "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration",
+      "actionIds": [
+        "customerRequest.confirm",
+        "customerRequest.run",
+        "customerRequest.cancel",
+        "customerRequest.reportProblem",
+        "customerRequest.replyProblem",
+        "customerRequest.inspectEvidence",
+        "customerRequest.allowRepeatPermission",
+        "customerRequest.useRepeatPermission",
+        "customerRequest.inspectRepeatPermission",
+        "customerRequest.planPreview",
+        "customerRequest.listConnectedAssistants",
+        "customerRequest.withdrawRepeatPermission"
+      ]
+    },
+    {
+      "id": "inquiries",
+      "status": "approved-pending-deprecation",
+      "evidenceDisposition": "retain-read-only",
+      "successor": "published provider contact channels",
+      "actionIds": [
+        "inquiry.submit",
+        "inquiry.readCustomerRecord"
+      ]
+    },
+    {
+      "id": "study",
+      "status": "approved-pending-deprecation",
+      "evidenceDisposition": "retain-read-only",
+      "successor": "consuming-agent planning and orchestration",
+      "actionIds": [
+        "study.start",
+        "study.inspect"
+      ]
+    },
+    {
+      "id": "work-tree",
+      "status": "approved-pending-deprecation",
+      "evidenceDisposition": "retain-read-only",
+      "successor": "consuming-agent planning and orchestration",
+      "actionIds": [
+        "workTree.create",
+        "workTree.inspect",
+        "workTree.apply",
+        "workTree.decide",
+        "workTree.reserveRepeatUse",
+        "workTree.finalizeRepeatUse",
+        "workTree.reconcileRepeatUse",
+        "workTree.inspectRepeatUse"
+      ]
+    }
+  ],
+  "businessServicesPolicy": {
+    "expansion": "freeze-approved-pending-implementation",
+    "publicUrls": "retain-measured",
+    "trafficInstrumentation": "retain"
+  }
 }

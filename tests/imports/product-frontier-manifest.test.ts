@@ -31,8 +31,27 @@ type ProductFrontierManifest = Readonly<{
     readOnly: boolean
   }>[]
   evalCoverageTags: readonly string[]
+  targetProduct: Readonly<{
+    marketAuthority: readonly string[]
+    agentAuthority: readonly string[]
+    answerLoop: string
+    livePaymentLane: string
+    providerDirectX402: string
+  }>
+  quarantineFamilies: readonly Readonly<{
+    id: string
+    status: string
+    evidenceDisposition: string
+    successor: string
+    actionIds: readonly string[]
+  }>[]
+  businessServicesPolicy: Readonly<{
+    expansion: string
+    publicUrls: string
+    trafficInstrumentation: string
+  }>
 }>
-const PRODUCT_FRONTIER_MANIFEST_VERSION = 'ae-product-frontier:v1'
+const PRODUCT_FRONTIER_MANIFEST_VERSION = 'ae-product-frontier:v2'
 
 const operationMarketCliCommands = [
   { actionId: 'registry.operations.search', command: 'search', path: '/api/v1/market-operations/search' },
@@ -62,6 +81,79 @@ describe('product frontier manifest', () => {
     expect(JSON.parse(output)).toEqual({ ok: true, errors: [] })
   })
 
+  it('pins the founder-approved v2 target and quarantine receipt', () => {
+    expect(productFrontierManifest.targetProduct).toEqual({
+      marketAuthority: [
+        'operation-contract',
+        'authorization',
+        'durable-invocation',
+        'delivery-evidence',
+        'brokered-money',
+      ],
+      agentAuthority: ['planning', 'orchestration'],
+      answerLoop: 'bounded-shared-market-tool-loop',
+      livePaymentLane: 'ae-brokered',
+      providerDirectX402: 'discovery-metadata-only',
+    })
+    expect(productFrontierManifest.quarantineFamilies).toEqual([
+      {
+        id: 'customer-request',
+        status: 'approved-pending-deprecation',
+        evidenceDisposition: 'retain-read-only',
+        successor: 'registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration',
+        actionIds: [
+          'customerRequest.confirm',
+          'customerRequest.run',
+          'customerRequest.cancel',
+          'customerRequest.reportProblem',
+          'customerRequest.replyProblem',
+          'customerRequest.inspectEvidence',
+          'customerRequest.allowRepeatPermission',
+          'customerRequest.useRepeatPermission',
+          'customerRequest.inspectRepeatPermission',
+          'customerRequest.planPreview',
+          'customerRequest.listConnectedAssistants',
+          'customerRequest.withdrawRepeatPermission',
+        ],
+      },
+      {
+        id: 'inquiries',
+        status: 'approved-pending-deprecation',
+        evidenceDisposition: 'retain-read-only',
+        successor: 'published provider contact channels',
+        actionIds: ['inquiry.submit', 'inquiry.readCustomerRecord'],
+      },
+      {
+        id: 'study',
+        status: 'approved-pending-deprecation',
+        evidenceDisposition: 'retain-read-only',
+        successor: 'consuming-agent planning and orchestration',
+        actionIds: ['study.start', 'study.inspect'],
+      },
+      {
+        id: 'work-tree',
+        status: 'approved-pending-deprecation',
+        evidenceDisposition: 'retain-read-only',
+        successor: 'consuming-agent planning and orchestration',
+        actionIds: [
+          'workTree.create',
+          'workTree.inspect',
+          'workTree.apply',
+          'workTree.decide',
+          'workTree.reserveRepeatUse',
+          'workTree.finalizeRepeatUse',
+          'workTree.reconcileRepeatUse',
+          'workTree.inspectRepeatUse',
+        ],
+      },
+    ])
+    expect(productFrontierManifest.businessServicesPolicy).toEqual({
+      expansion: 'freeze-approved-pending-implementation',
+      publicUrls: 'retain-measured',
+      trafficInstrumentation: 'retain',
+    })
+  })
+
   it('keeps the live action registry at or above the frozen frontier floor', () => {
     expect(productFrontierManifest.schemaVersion).toBe(PRODUCT_FRONTIER_MANIFEST_VERSION)
     const liveIds = listActions().map((action) => action.id)
@@ -86,11 +178,13 @@ describe('product frontier manifest', () => {
     )
   })
 
-  it('refuses hollow green by requiring Study and WorkTree remain registered', () => {
-    expect(findActionId('study.start')).toBe('study.start')
-    expect(findActionId('study.inspect')).toBe('study.inspect')
-    expect(findActionId('workTree.create')).toBe('workTree.create')
-    expect(findActionId(ANSWER_OPERATION_EFFECT_TOOL_IDS[1])).toBe(ANSWER_OPERATION_EFFECT_TOOL_IDS[1])
+  it('keeps every quarantine action live until P5-c notice then P5-b freeze', () => {
+    const liveIds = listActions().map((action) => action.id)
+    for (const family of productFrontierManifest.quarantineFamilies) {
+      for (const actionId of family.actionIds) {
+        expect(liveIds).toContain(actionId)
+      }
+    }
   })
   it('keeps operation-read descriptors on the canonical Market Operation frontier', () => {
     const marketEntryIds = OPERATION_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId)

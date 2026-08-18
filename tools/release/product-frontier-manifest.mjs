@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PRODUCT_FRONTIER_MANIFEST_VERSION = 'ae-product-frontier:v1'
+export const PRODUCT_FRONTIER_MANIFEST_VERSION = 'ae-product-frontier:v2'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const manifestPath = join(root, '.planning/evidence/product-frontier-baseline/product-frontier-manifest.json')
