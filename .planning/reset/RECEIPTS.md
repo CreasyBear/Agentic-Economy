@@ -962,3 +962,13 @@ Leftover executor worktrees were clean. Unique SHAs were not ancestors of `main`
 Merged worktrees `p1-e-2-canonical-call-route` and `p1a-core-owner-account` removed without extra tags (ancestors of `main`). Stash list empty. Original Cursor plan YAML: P2–P4 `completed`; P1 remains `in_progress` because P1-d3 is still open. STATE.md and PROJECT.md phase list match that.
 
 HK-lockfile-drift ledger row: committed (stale). No product-row rewrites.
+
+## HK-push-or-hold — remainder 2026-08-18
+
+**Verdict: hold written. Origin not updated.**
+
+Local `main` is 69 commits ahead of `origin/main` (was 68 at remainder start; HK-hygiene added one docs commit). OPERATING-MODEL caps 3 unpushed product commits without a written reason.
+
+**Hold:** do not push this remainder until the founder explicitly asks to push `main`. Product remainder continues on local `main`. Hosted proof, CI on origin, and other clones still cannot see Phases 1–4. That is accepted for this remainder so 69 commits are not force-landed on origin without a push command.
+
+This receipt satisfies the remainder card: push **or** write the hold. Further product cards may proceed against this hold. Unpushed count remains above 3 until a later founder push.

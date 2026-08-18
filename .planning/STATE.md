@@ -36,6 +36,8 @@ cron (skip when live-money gate is open), then founder freeze go/no-go, P5-b/c/e
 No P5-d 410 and no P6 in this remainder. Local `main` is 68 commits ahead of
 `origin/main` pending push-or-hold.
 
+**Hold (2026-08-18):** founder has not asked to push. Remainder continues locally. See RECEIPTS HK-push-or-hold.
+
 ## Atomic Operation Market Reset — 2026-08-16
 
 The program is now the reset described in
