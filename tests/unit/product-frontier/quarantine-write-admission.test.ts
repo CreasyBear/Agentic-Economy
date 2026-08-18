@@ -46,7 +46,8 @@ describe('quarantine write admission', () => {
     expect(problem.code).toBe('quarantine_writes_frozen')
     expect(problem.kind).toBe('FAILED_PRECONDITION')
     expect(problem.retryable).toBe(false)
-    expect(listActions().some((action) => action.id === 'customerRequest.run')).toBe(true)
+    expect(listActions().some((action) => action.id === 'customerRequest.run')).toBe(false)
+    expect(findAction('customerRequest.run')).toBeDefined()
   })
 
   it('freezes Study write execution through the tool contract without HTTP 410', async () => {

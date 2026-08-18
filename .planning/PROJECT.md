@@ -44,7 +44,7 @@ Phase 1 — Close the category additively                committed
 Phase 2 — Decouple without changing behavior           complete
 Phase 3 — Port proof before quarantine                 complete
 Phase 4 — Replace chat orchestration                   complete
-Phase 5 — Quarantine and deprecate                     P5-a/b landed; P5-c notice remainder
+Phase 5 — Quarantine and deprecate                     P5-a/b/c landed; P5-e remainder
 Phase 6 — Retire data separately                       pending (not this remainder)
 ```
 

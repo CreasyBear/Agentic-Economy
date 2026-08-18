@@ -67,8 +67,9 @@ import {
   workTreeReconcileRepeatUseAction,
   workTreeReserveRepeatUseAction,
 } from '@/modules/work-tree/work-tree-repeat.actions'
+import { isQuarantineFamilyActionId } from '@/modules/product-frontier/quarantine-write-admission'
 
-const actions: readonly AnyAction[] = [
+const registeredActions: readonly AnyAction[] = [
   collectSuppliedCandidateQuoteAction,
   customerRequestConfirmAction,
   customerRequestRunAction,
@@ -119,14 +120,18 @@ const actions: readonly AnyAction[] = [
   supplyEarningsAction,
 ]
 
-assertUniqueActionIds(actions)
+assertUniqueActionIds(registeredActions)
+
+const actions: readonly AnyAction[] = registeredActions.filter(
+  (action) => !isQuarantineFamilyActionId(action.id),
+)
 
 export function listActions(): readonly AnyAction[] {
   return actions
 }
 
 export function findAction(id: string): AnyAction | undefined {
-  return actions.find((action) => action.id === id)
+  return registeredActions.find((action) => action.id === id)
 }
 
 /** Actions exposed on the anonymous MCP host; the adapter enforces read-only admission. */

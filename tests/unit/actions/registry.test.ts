@@ -10,9 +10,10 @@ import {
 import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 
 describe('action registry', () => {
-  it('registers only the public inquiry action', () => {
+  it('does not list the quarantined public inquiry action', () => {
     const ids = listActions().map((action) => action.id)
-    expect(ids).toContain('inquiry.submit')
+    expect(ids).not.toContain('inquiry.submit')
+    expect(findAction('inquiry.submit')).toBeDefined()
     expect(ids).not.toContain('inquiry.readOwnerInbox')
     expect(ids).not.toContain('inquiry.readOwnerThread')
     expect(ids).not.toContain('inquiry.reply')

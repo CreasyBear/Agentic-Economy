@@ -178,11 +178,12 @@ describe('product frontier manifest', () => {
     )
   })
 
-  it('keeps every quarantine action live until P5-c notice then P5-b freeze', () => {
+  it('deregisters quarantine actions from the public inventory after notice', () => {
     const liveIds = listActions().map((action) => action.id)
     for (const family of productFrontierManifest.quarantineFamilies) {
       for (const actionId of family.actionIds) {
-        expect(liveIds).toContain(actionId)
+        expect(liveIds).not.toContain(actionId)
+        expect(findAction(actionId), `HTTP door implementation for ${actionId} must remain findable`).toBeDefined()
       }
     }
   })

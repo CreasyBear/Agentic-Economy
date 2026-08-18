@@ -23,9 +23,10 @@ const validStart = {
 }
 
 describe('Study registered action seams', () => {
-  it('registers start and inspect as distinct public actions', () => {
+  it('keeps start and inspect findable after public deregister', () => {
     const ids = listActions().map((action) => action.id)
-    expect(ids).toEqual(expect.arrayContaining(['study.start', 'study.inspect']))
+    expect(ids).not.toContain('study.start')
+    expect(ids).not.toContain('study.inspect')
 
     const start = findAction('study.start')
     const inspect = findAction('study.inspect')

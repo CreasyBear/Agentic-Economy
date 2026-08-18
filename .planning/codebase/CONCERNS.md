@@ -12,11 +12,11 @@
 - Fix approach: Measure one concrete seam at a time and card any remaining module split separately; preserve runtime authorities and boundary tests.
 
 **Action inventory vs end-state guardrail:**
-- Issue: Product-frontier v2 pins 47 required actions; the operating model targets ≤14 active actions after quarantine.
-- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts` (47 registered), `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
-- Why: `quarantineFamilies` in the v2 manifest mark Customer Request, WorkTree, Study, and inquiries as `approved-pending-deprecation`. P5-b freezes writes as RFC 9457; the actions remain registered until P5-c notice then deregister.
-- Impact: Every new action requires manifest surgery; agents still discover quarantined surfaces as first-class until P5-c.
-- Fix approach: Run P5-c deprecation notice then drop those `actionIds` from `actions` + `requiredActionIds` — do not add net-new actions without a manifest update and a retirement plan.
+- Issue: Product-frontier v2 now pins 23 required public actions after P5-c deregister; the operating model still targets ≤14 active actions after remaining catalog/settings/storefront/web/demand cleanup.
+- Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` (`schemaVersion: ae-product-frontier:v2`), `src/modules/actions/index.ts`, `tests/imports/product-frontier-manifest.test.ts`, `tools/release/verify-product-frontier.mjs`
+- Why: `quarantineFamilies` remain the membership list. P5-c dropped those `actionIds` from `listActions()` and `requiredActionIds`; HTTP implementations stay findable for freeze/notice until P5-d.
+- Impact: New public actions still require manifest surgery.
+- Fix approach: Do not add net-new public actions without a manifest update and a retirement plan. P5-d later 410s the doors.
 
 **Dual paid HTTP invoke paths:**
 - Issue: `/api/v1/operations/call` and `/api/v1/operations/execute` both delegate to `handleOperationInvokePost` but route literals are hardcoded in TanStack route files rather than read from `OPERATION_INVOKE_ROUTE_CONTRACT`.
@@ -262,11 +262,11 @@
 - Implementation complexity: High — deployment identity, signing keys, Convex hosted ID, Stripe/x402 production values.
 - Files: `tools/release/verify-deployment-manifest.ts`, `tools/release/operation-gateway-production-smoke.ts`, `.planning/adr/ADR-035-single-key-capability-gateway.md`
 
-**Phase 5 quarantine (writes frozen; still registered):**
-- Problem: P5-b freezes Customer Request / WorkTree / Study / inquiry writes as RFC 9457 `application/problem+json` (`quarantine_writes_frozen`, HTTP 403, never 410). Those action ids remain registered until P5-c notice then deregister.
-- Current workaround: Reads and evidence stay. business/services policy is still `freeze-approved-pending-implementation` until P5-e.
-- Blocks: Action inventory reduction to ≤14; P5-c deprecation headers; P6 table retirement.
-- Implementation complexity: High — deprecation notice, then later HTTP 410 (P5-d).
+**Phase 5 quarantine (writes frozen; public inventory deregistered):**
+- Problem: P5-c advertised RFC 9745/8594 notice on quarantined doors and `/execute` (never `/call`), then dropped family ids from `listActions()` / `requiredActionIds`. HTTP freeze + notice remain until P5-d 410.
+- Current workaround: business/services policy is still `freeze-approved-pending-implementation` until P5-e.
+- Blocks: P5-e URL retention policy; P6 table retirement.
+- Implementation complexity: Medium — implement measured URL freeze, then later HTTP 410 (P5-d).
 - Files: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`, `src/modules/customer-request/`, `src/modules/work-tree/`, `src/modules/study/`, `.planning/reset/CARD-LEDGER.md`
 
 **Legal / counsel signoffs for live money (T52):**

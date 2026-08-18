@@ -29,11 +29,11 @@ planning and orchestration. MCP, CLI, and chat are thin adapters over one market
 kernel. `/api/v1/operations/call` is the paid door and is not deprecated.
 
 **Landed on local `main`:** Phases 0, 1, 2, 3, and 4. P5-a frontier v2 files
-exist (`1aaf4aa5`). P5-b freezes quarantined family writes as RFC 9457; reads
-and evidence stay. Live money stays fail-closed. Daily settlement cron exists
-and skips while the live-money gate is open.
+exist (`1aaf4aa5`). P5-b freezes quarantined family writes as RFC 9457; P5-c
+advertises RFC 9745/8594 notice then deregisters those ids from the public
+action inventory. Reads and evidence stay. Live money stays fail-closed.
 
-**Open (remainder):** P5-c notice + deregister, then P5-e. No P5-d 410 and no P6.
+**Open (remainder):** P5-e. No P5-d 410 and no P6.
 Local `main` remains unpushed under the written hold.
 
 **Hold (2026-08-18):** founder has not asked to push. Remainder continues locally. See RECEIPTS HK-push-or-hold.

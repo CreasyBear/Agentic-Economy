@@ -109,8 +109,8 @@ export function verifyProductFrontier(root = process.cwd()) {
     errors.push('quarantine_action_ids_not_unique')
   }
   for (const actionId of quarantineActionIds) {
-    if (typeof actionId !== 'string' || !requiredActionIds.includes(actionId)) {
-      errors.push(`quarantine_action_not_required:${String(actionId)}`)
+    if (typeof actionId !== 'string' || requiredActionIds.includes(actionId)) {
+      errors.push(`quarantine_action_still_required:${String(actionId)}`)
     }
   }
 
@@ -151,7 +151,7 @@ export function verifyProductFrontier(root = process.cwd()) {
     errors,
   )
 
-  if (requiredActionIds.length < 40) {
+  if (requiredActionIds.length < 20) {
     errors.push(`required_action_floor_too_low:${requiredActionIds.length}`)
   }
   if (protectedActionIds.length < 10) {
