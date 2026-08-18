@@ -690,15 +690,15 @@
     },
     {
       "table": "studies",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:97b9190fcbed5f485e0b208c9058883718f96de0ae8cf1c898a282fc1435ea20",
+      "classification": "full-digest"
     },
     {
       "table": "studyEvents",
-      "count": "unmeasured",
-      "sha256": null,
-      "classification": "unmeasured"
+      "count": 0,
+      "sha256": "sha256:3a5c9c0b9c51f23a75fb049d8af9bf70feea852903da4d2ec26d94c4ef0b6111",
+      "classification": "full-digest"
     },
     {
       "table": "projectSpine",

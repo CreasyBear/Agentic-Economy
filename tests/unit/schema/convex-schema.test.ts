@@ -141,8 +141,6 @@ const durableTables = [
   'claims',
   'operationKeys',
   'sourceWriteNonces',
-  'studies',
-  'studyEvents',
   'registryProjectionItems',
   'registryProjectionAttempts',
   'registrySearchDocuments',

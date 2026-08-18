@@ -266,6 +266,13 @@
       "successor": "capability-supply + operation.invoke (no shipping-specific integration)",
       "evidenceDisposition": "deleted; scenario vocabulary may remain in Customer Request fixtures",
       "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#3-shipping-provider-integration-batch-2"
+    },
+    {
+      "id": "study-tables",
+      "retiredAt": "2026-08-18",
+      "paths": [],
+      "successor": "consuming-agent planning and orchestration",
+      "evidenceDisposition": "exported-then-unlisted; studies and studyEvents unlisted from schema, module retained"
     }
   ],
   "dirtyTreePathCount": 0,

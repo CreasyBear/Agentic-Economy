@@ -1185,3 +1185,15 @@ No table drops. Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 sta
 - `npm run check:product-frontier` — `{ok:true,errors:[]}`
 
 Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema tables 207 (was 208). 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.
+
+## P6-study — committed
+
+**AUTHORITY:** Convex 1.42 unlist. Empty digests of zero rows. `activeFrontierTables` already omitted Study in P6-read-tombstone.
+
+**FIT:** unlisted `studies` and `studyEvents`. `convex/studies.ts` writers return `study_tables_unlisted` / inspect `not_found` without querying. Characterization `studies.test.ts` rewritten. Study TypeScript module retained (`protectedModules`). Intentional retirement row `study-tables` with empty paths (module kept).
+
+**COMMANDS:**
+- empty digests: studies `sha256:97b9190fcbed5f485e0b208c9058883718f96de0ae8cf1c898a282fc1435ea20`; studyEvents `sha256:3a5c9c0b9c51f23a75fb049d8af9bf70feea852903da4d2ec26d94c4ef0b6111`
+- scoped tests (6 files / 28) passed; `npm run check:product-frontier` `{ok:true,errors:[]}`
+
+Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema 205. 89 remaining / cap 60 not claimed. Hold still covers unpushed `main`.

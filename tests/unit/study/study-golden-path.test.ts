@@ -32,9 +32,8 @@ describe('WorkTree Study golden path characterization', () => {
     expect(parsed.success).toBe(false)
 
     const studiesSource = readFileSync('convex/studies.ts', 'utf8')
-    expect(studiesSource).toContain('journalEventJson')
-    expect(studiesSource).toContain('readJournalEvents')
-    expect(studiesSource).toContain('studyEvents')
+    expect(studiesSource).toContain('study_tables_unlisted')
+    expect(studiesSource).not.toContain('studyEvents')
   })
 
   it('keeps xstate as the Study RFx machine dependency (no bespoke DAG replacement)', () => {

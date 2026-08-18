@@ -105,7 +105,7 @@ One table-family card at a time, separate deployments only.
 | P6-read-tombstone | RFC 9457 410 remaining family reads (CR evidence/inspect, WorkTree inspect, study.inspect); never `/call` or `inquiry.readCustomerRecord` | P6-export-live | committed |
 | P6-x402-orphan-unplug | Stop remaining queries of `customerRequestX402PaymentAttempts` | P6-read-tombstone | committed |
 | P6-x402-orphan-schema | Unlist only the x402 orphan CR table | P6-x402-orphan-unplug | committed |
-| P6-study | Unlist `studies`, `studyEvents` after hashed export | P6-x402-orphan-schema | pending |
+| P6-study | Unlist `studies`, `studyEvents` after hashed export | P6-x402-orphan-schema | committed |
 | P6-project-spine | Unplug Workflow then unlist 3 spine tables; successor is consuming agents | P6-study | pending |
 | P6-work-tree | Unlist 6 WorkTree tables; keep Workpool | P6-project-spine | pending |
 | P6-rk-tables | Unlist 44 RK tables; keep HTTP 410 handlers | P6-work-tree | pending |
