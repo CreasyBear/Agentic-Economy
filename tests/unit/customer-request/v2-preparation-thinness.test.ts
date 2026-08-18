@@ -43,7 +43,7 @@ describe('customer-request v2-preparation thinness', () => {
     for (const symbol of hostPreparationMachines) {
       expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(hostSource).toContain('customerRequestV2PreparationPorts(ctx)')
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(hostSource).toContain('prepareActionPreparationMachine')
     expect(hostSource).toContain('resumeActionPreparationMachine')
     expect(hostSource).toContain("from './customerRequestV2PreparationPorts'")
@@ -56,7 +56,7 @@ describe('customer-request v2-preparation thinness', () => {
       const end = hostSource.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = hostSource.slice(start, end)
-      expect(body).toContain('customerRequestV2PreparationPorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestV2PreparationCommands')")
       expect(body).not.toContain("query('customerRequestV2ActionPreparations')")

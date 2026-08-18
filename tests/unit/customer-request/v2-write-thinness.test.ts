@@ -45,7 +45,7 @@ describe('customer-request v2-write thinness', () => {
     for (const symbol of hostWriteMachines) {
       expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(hostSource).toContain('customerRequestV2WritePorts(ctx)')
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(hostSource).toContain('commitAggregateMachine')
     expect(hostSource).toContain('refreshRoutePlanGenerationMachine')
     expect(hostSource).toContain('recordRoutePlanGenerationRetryMachine')
@@ -58,7 +58,7 @@ describe('customer-request v2-write thinness', () => {
       const end = hostSource.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = hostSource.slice(start, end)
-      expect(body).toContain('customerRequestV2WritePorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestV2Commands')")
       expect(body).not.toContain("query('customerRequestV2RoutePlanGenerationCommands')")

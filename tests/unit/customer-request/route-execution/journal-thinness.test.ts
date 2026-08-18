@@ -56,7 +56,7 @@ describe('customer-request route-execution journal thinness', () => {
     for (const symbol of hostMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(convexHost).toContain('journalMutationPorts(ctx)')
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost).toContain('startOrResumeMachine')
     expect(convexHost).toContain('recordOutcomeMachine')
     expect(convexHost).toContain("from './customerRequestRouteExecutionJournalPorts'")
@@ -68,7 +68,7 @@ describe('customer-request route-execution journal thinness', () => {
       const end = convexHost.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = convexHost.slice(start, end)
-      expect(body).toContain('journalMutationPorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestRouteRuns')")
       expect(body).not.toContain("query('customerRequestRouteDispatchOutbox')")
@@ -81,8 +81,8 @@ describe('customer-request route-execution journal thinness', () => {
     for (const symbol of hostCancelMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(convexHost).toContain('cancelMutationPorts(ctx)')
-    expect(convexHost).toContain('cancelOpenPorts(ctx)')
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost).toContain('cancelCurrentMachine')
     expect(convexHost).toContain('openCancellationAttemptMachine')
     expect(convexHost).toContain('resolveCancellationAttemptMachine')
@@ -107,19 +107,19 @@ describe('customer-request route-execution journal thinness', () => {
       expect(body).not.toContain('ctx.scheduler')
     }
     expect(convexHost.slice(cancelCurrentStart, convexHost.indexOf('\n})', cancelCurrentStart)))
-      .toContain('cancelMutationPorts(ctx)')
+      .toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost.slice(openStart, convexHost.indexOf('\n})', openStart)))
-      .toContain('cancelOpenPorts(ctx)')
+      .toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost.slice(resolveStart, convexHost.indexOf('\n})', resolveStart)))
-      .toContain('cancelMutationPorts(ctx)')
+      .toContain("throw new Error('customer_request_tables_unlisted')")
   })
 
   it('keeps host dispatch lifecycle exports as thin ports-wired shells', () => {
     for (const symbol of hostDispatchMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(convexHost).toContain('dispatchLifecyclePorts(ctx)')
-    expect(convexHost).toContain('dispatchLifecycleOpenPorts(ctx)')
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost).toContain('openDispatchFromJournal')
     expect(convexHost).toContain('markDispatchedMachine')
     expect(convexHost).toContain('recordNotReleasedMachine')
@@ -146,7 +146,7 @@ describe('customer-request route-execution journal thinness', () => {
       expect(body).not.toContain('ctx.scheduler')
     }
     expect(convexHost.slice(openStart, convexHost.indexOf('\n})', openStart)))
-      .toContain('dispatchLifecycleOpenPorts(ctx)')
+      .toContain("throw new Error('customer_request_tables_unlisted')")
   })
 
   it('does not invent Convex Start/Lease/Outcome/Cancel/Problem/Dispatch sibling hosts', () => {

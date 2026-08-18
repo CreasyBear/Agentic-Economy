@@ -47,9 +47,7 @@ describe('customer-request route-execution evidence-load thinness', () => {
     const exportEnd = convexHost.indexOf('\n})', exportStart)
     expect(exportEnd).toBeGreaterThan(exportStart)
     const exportBody = convexHost.slice(exportStart, exportEnd)
-    expect(exportBody).toContain(
-      'assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))',
-    )
+    expect(exportBody).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(exportBody).not.toContain("query('customerRequestRouteRunHeads')")
     expect(exportBody).not.toContain("query('capabilityTransportBindings')")
     expect(exportBody.split('\n').length).toBeLessThanOrEqual(120)
@@ -62,8 +60,7 @@ describe('customer-request route-execution evidence-load thinness', () => {
     const listEnd = convexHost.indexOf('const supportProblemExport = v.object({', listStart)
     expect(listEnd).toBeGreaterThan(listStart)
     const listBody = convexHost.slice(listStart, listEnd)
-    expect(listBody).toContain('assembleSupportProblemList')
-    expect(listBody).toContain('evidenceLoadPorts(ctx)')
+    expect(listBody).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(listBody).not.toContain('projectSupportProblemList')
     expect(listBody).not.toContain("query('customerRequestRouteProblemReports')")
   })

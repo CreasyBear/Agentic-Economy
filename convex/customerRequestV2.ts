@@ -38,6 +38,7 @@ import type { Id } from './_generated/dataModel'
 import { listRouteableCapabilitySupply } from './capabilitySupply'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { customerRequestV2WritePorts } from './customerRequestV2WritePorts'
+import { unlistedCustomerRequestTables } from './customerRequestUnlisted'
 import {
   customerRequestV2ReadPorts,
   readExactRoutePlanGeneration,
@@ -159,36 +160,6 @@ export const reserveSubmission = internalMutation({
   returns: reserveSubmissionResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const priorCommand = await ctx.db.query('customerRequestV2SubmissionShells')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-    if (priorCommand !== null) {
-      return priorCommand.commandDigest === args.commandDigest
-        && priorCommand.requestId === args.requestId
-        && priorCommand.principalId === args.principalId
-        && priorCommand.delegatedAgentId === args.delegatedAgentId
-        && priorCommand.intent === args.intent
-        && priorCommand.networkId === args.networkId
-        ? { kind: 'replayed' as const, requestId: args.requestId }
-        : { kind: 'command_conflict' as const }
-    }
-    const priorRequest = await ctx.db.query('customerRequestV2SubmissionShells')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (priorRequest !== null) {
-      return priorRequest.principalId === args.principalId
-        && priorRequest.delegatedAgentId === args.delegatedAgentId
-        ? { kind: 'command_conflict' as const }
-        : { kind: 'identity_conflict' as const }
-    }
-    const head = await ctx.db.query('customerRequestV2Heads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head !== null) {
-      return head.principalId === args.principalId && head.delegatedAgentId === args.delegatedAgentId
-        ? { kind: 'command_conflict' as const }
-        : { kind: 'identity_conflict' as const }
-    }
-    await ctx.db.insert('customerRequestV2SubmissionShells', args)
-    return { kind: 'stored' as const, requestId: args.requestId }
   },
 })
 
@@ -197,19 +168,6 @@ export const getSubmissionShell = internalQuery({
   returns: submissionShellResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const shell = await ctx.db.query('customerRequestV2SubmissionShells')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (shell === null || shell.principalId !== args.principalId) return { kind: 'not_found' as const }
-    return {
-      kind: 'found' as const,
-      shell: {
-        commandKey: shell.commandKey, commandDigest: shell.commandDigest,
-        requestId: shell.requestId, principalId: shell.principalId,
-        delegatedAgentId: shell.delegatedAgentId, intent: shell.intent,
-        networkId: shell.networkId, createdAt: shell.createdAt,
-      },
-    }
   },
 })
 
@@ -222,15 +180,6 @@ export const commitAggregate = internalMutation({
   returns: commitResult,
   handler: async (ctx, args): Promise<Infer<typeof commitResult>> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const { aggregate, routeGeneration, ...command } = args
-    return await commitAggregateMachine({
-      ...command,
-      aggregate: domainAggregate(aggregate),
-      ...(routeGeneration === undefined
-        ? {}
-        : { routeGeneration: domainRouteGeneration(routeGeneration) }),
-    }, customerRequestV2WritePorts(ctx))
   },
 })
 
@@ -243,47 +192,6 @@ export const recordNoopCommand = internalMutation({
   returns: noopCommitResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const prior = await ctx.db.query('customerRequestV2Commands')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-    if (prior !== null) {
-      return prior.commandDigest === args.commandDigest
-        && prior.principalId === args.principalId
-        && prior.requestId === args.requestId
-        && prior.expectedRevision === args.expectedRevision
-        && prior.resultingRevision === args.expectedRevision
-        && prior.aggregateDigest === args.aggregateDigest
-        && prior.expectedRouteGeneration === args.expectedRouteGeneration
-        && prior.resultingRouteGenerationRef === args.routeGenerationRef
-        && prior.noEffect === true
-        ? { kind: 'replayed' as const }
-        : { kind: 'command_conflict' as const }
-    }
-    const head = await ctx.db.query('customerRequestV2Heads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null || head.currentRevision !== args.expectedRevision
-      || head.currentAggregateDigest !== args.aggregateDigest) return { kind: 'revision_conflict' as const }
-    if (head.principalId !== args.principalId) return { kind: 'identity_conflict' as const }
-    const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if ((routeHead?.currentGeneration ?? 0) !== args.expectedRouteGeneration
-      || routeHead?.currentGenerationRef !== args.routeGenerationRef) {
-      return { kind: 'route_generation_conflict' as const }
-    }
-    await ctx.db.insert('customerRequestV2Commands', {
-      commandKey: args.commandKey,
-      commandDigest: args.commandDigest,
-      principalId: args.principalId,
-      requestId: args.requestId,
-      expectedRevision: args.expectedRevision,
-      resultingRevision: args.expectedRevision,
-      aggregateDigest: args.aggregateDigest,
-      expectedRouteGeneration: args.expectedRouteGeneration,
-      ...(args.routeGenerationRef === undefined ? {} : { resultingRouteGenerationRef: args.routeGenerationRef }),
-      noEffect: true,
-      committedAt: args.committedAt,
-    })
-    return { kind: 'stored' as const }
   },
 })
 
@@ -298,15 +206,6 @@ export const refreshRoutePlanGeneration = internalMutation({
   returns: generationRefreshResult,
   handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const { candidateAggregate, candidateRouteGeneration, ...command } = args
-    return writableGenerationRefreshResult(await refreshRoutePlanGenerationMachine({
-      ...command,
-      candidateAggregate: domainAggregate(candidateAggregate),
-      ...(candidateRouteGeneration === undefined
-        ? {}
-        : { candidateRouteGeneration: domainRouteGeneration(candidateRouteGeneration) }),
-    }, customerRequestV2WritePorts(ctx)))
   },
 })
 
@@ -326,12 +225,6 @@ export const recordRoutePlanGenerationRetry = internalMutation({
   returns: generationRefreshResult,
   handler: async (ctx, args): Promise<Infer<typeof generationRefreshResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    writableGenerationRefreshResult(await recordRoutePlanGenerationRetryMachine(
-      args,
-      customerRequestV2WritePorts(ctx),
-    ))
-  )
   },
 })
 
@@ -342,12 +235,6 @@ export const getRoutePlanGenerationRefreshReplay = internalQuery({
   returns: generationRefreshReplayResult,
   handler: async (ctx, args): Promise<Infer<typeof generationRefreshReplayResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await getRoutePlanGenerationRefreshReplayMachine(
-      args,
-      customerRequestV2ReadPorts(ctx),
-    ) as Infer<typeof generationRefreshReplayResult>
-  )
   },
 })
 
@@ -379,12 +266,6 @@ export const getCurrentAggregate = internalQuery({
   returns: currentAggregateResult,
   handler: async (ctx, args): Promise<Infer<typeof currentAggregateResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await getCurrentAggregateMachine(
-      args,
-      customerRequestV2ReadPorts(ctx),
-    ) as Infer<typeof currentAggregateResult>
-  )
   },
 })
 
@@ -393,17 +274,6 @@ export const getCurrentRoutePlanGeneration = internalQuery({
   returns: routePlanGenerationResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const head = await ctx.db.query('customerRequestV2RoutePlanHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
-    const result = await readExactRoutePlanGeneration(ctx.db, args.requestId, head.currentGenerationRef)
-    if (result.kind !== 'found'
-      || result.routeGeneration.generation !== head.currentGeneration
-      || result.routeGeneration.generationDigest !== head.currentGenerationDigest) {
-      throw new Error('customer_request_route_plan_head_integrity_failure')
-    }
-    return result
   },
 })
 
@@ -412,12 +282,6 @@ export const getRoutePlanGeneration = internalQuery({
   returns: routePlanGenerationResult,
   handler: async (ctx, args): Promise<Infer<typeof routePlanGenerationResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await getRoutePlanGenerationMachine(
-      args,
-      customerRequestV2ReadPorts(ctx),
-    ) as Infer<typeof routePlanGenerationResult>
-  )
   },
 })
 
@@ -426,78 +290,6 @@ export const getCurrentRoutePlanProjectionMaterial = internalQuery({
   returns: routePlanProjectionMaterialResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const current = await ctx.db.query('customerRequestV2RoutePlanHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (current?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
-    const currentReadback = await readExactRoutePlanGeneration(
-      ctx.db, args.requestId, current.currentGenerationRef,
-    )
-    if (currentReadback.kind !== 'found'
-      || currentReadback.routeGeneration.generation !== current.currentGeneration
-      || currentReadback.routeGeneration.generationDigest !== current.currentGenerationDigest) {
-      throw new Error('customer_request_route_plan_projection_head_integrity_failure')
-    }
-    const previousRow = current.currentGeneration <= 1
-      ? null
-      : await ctx.db.query('customerRequestV2RoutePlanGenerations')
-          .withIndex('by_requestId_and_generation', (query) => (
-            query.eq('requestId', args.requestId).eq('generation', current.currentGeneration - 1)
-          )).unique()
-    if (current.currentGeneration > 1 && previousRow === null) {
-      throw new Error('customer_request_route_plan_projection_history_integrity_failure')
-    }
-    const previous = previousRow?.routeGeneration
-    if (previous !== undefined && !routePlanGenerationIsInternallyConsistent(
-      domainRouteGeneration(previous), previous.generation - 1,
-    )) throw new Error('customer_request_route_plan_projection_history_integrity_failure')
-
-    const businessIds = uniqueSorted([
-      ...currentReadback.routeGeneration.routes,
-      ...(previous?.routes ?? []),
-    ].flatMap((route) => route.steps.map(({ businessId }) => businessId)))
-    if (businessIds.length > 512) {
-      throw new Error('customer_request_route_plan_projection_business_limit_exceeded')
-    }
-    const businesses = await Promise.all(businessIds.map(async (businessId) => {
-      const business = await ctx.db.get(businessId as Id<'businesses'>)
-      if (business === null) throw new Error('customer_request_route_plan_projection_business_integrity_failure')
-      return { businessId, name: business.name }
-    }))
-    const contractRefs = [...new Map([
-      ...currentReadback.routeGeneration.routes,
-      ...(previous?.routes ?? []),
-    ].flatMap((route) => route.steps.map(({ contractRef }) => [
-      `${contractRef.capabilityId}@${contractRef.version}:${contractRef.contractDigest}`,
-      contractRef,
-    ] as const))).values()]
-    if (contractRefs.length > 512) {
-      throw new Error('customer_request_route_plan_projection_capability_limit_exceeded')
-    }
-    const capabilities = await Promise.all(contractRefs.map(async (ref) => {
-      const exact = await getExactRegisteredCapabilityContract(ctx.db, ref)
-      if (exact.kind !== 'found') {
-        throw new Error('customer_request_route_plan_projection_capability_integrity_failure')
-      }
-      return {
-        capabilityId: exact.contract.ref.capabilityId,
-        version: exact.contract.ref.version,
-        contractDigest: exact.contract.ref.contractDigest,
-        name: exact.contract.name,
-        description: exact.contract.description,
-        resultLabels: exact.contract.customerAnnotations
-          .filter(({ document, role }) => document === 'output'
-            && (role === 'result' || role === 'completion_evidence'))
-          .map(({ label }) => label),
-      }
-    }))
-    return {
-      kind: 'found' as const,
-      current: currentReadback.routeGeneration,
-      ...(previous === undefined ? {} : { previous }),
-      businesses,
-      capabilities,
-    }
   },
 })
 
@@ -508,94 +300,16 @@ export const getCommandReplay = internalQuery({
   returns: commandReplayResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = await ctx.db.query('customerRequestV2Commands')
-      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-    if (command === null) return { kind: 'not_found' as const }
-    if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
-      || command.requestId !== args.requestId) return { kind: 'conflict' as const }
-    const revision = await ctx.db.query('customerRequestV2Revisions')
-      .withIndex('by_requestId_and_requestRevision', (query) => (
-        query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
-      )).unique()
-    if (revision !== null && hasLegacyEmbeddedRoute(revision.aggregate)) {
-      if (command.aggregateDigest !== revision.aggregate.aggregateDigest) {
-        throw new Error('customer_request_v2_command_integrity_failure')
-      }
-      return {
-        kind: 'resubmit_required' as const,
-        requestId: command.requestId,
-        revision: command.resultingRevision,
-        reason: 'legacy_embedded_route' as const,
-      }
-    }
-    const verified = await readVerifiedCommandReplay(ctx.db, command)
-    return {
-      kind: 'replayed' as const,
-      aggregate: verified.aggregate,
-      noEffect: command.noEffect === true,
-      ...(command.resultingRouteGenerationRef === undefined
-        ? {}
-        : { routeGenerationRef: command.resultingRouteGenerationRef }),
-    }
   },
 })
 
 export async function currentRoutePlanGenerationGraphStatus(
-  db: QueryCtx['db'],
-  requestId: string,
-  generationRef: string,
-  now = Date.now(),
+  _db: QueryCtx['db'],
+  _requestId: string,
+  _generationRef: string,
+  _now = Date.now(),
 ): Promise<'current' | 'stale' | 'invalid'> {
-  const head = await db.query('customerRequestV2Heads')
-    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
-  if (head === null) return 'invalid'
-  const revision = await db.query('customerRequestV2Revisions')
-    .withIndex('by_requestId_and_requestRevision', (query) => (
-      query.eq('requestId', requestId).eq('requestRevision', head.currentRevision)
-    )).unique()
-  if (revision === null
-    || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
-    || !aggregateIsInternallyConsistent(
-      domainAggregate(revision.aggregate),
-      head.currentRevision - 1,
-    )) return 'invalid'
-  const generation = await readExactRoutePlanGeneration(db, requestId, generationRef)
-  if (generation.kind !== 'found'
-    || generation.routeGeneration.requestRevision !== head.currentRevision) return 'invalid'
-  const currentSupply = await listRouteableCapabilitySupply(db, {
-    networkId: revision.aggregate.snapshot.networkId,
-    limit: 64,
-    now,
-  })
-  if (currentSupply.kind !== 'available') return 'stale'
-  const bindings = registeredEvaluationBindingsFromEligibleSupply(currentSupply)
-  if (requestRegistrySnapshotDigest(bindings) !== generation.routeGeneration.registrySnapshotDigest) return 'invalid'
-  const routesAreCurrent = generation.routeGeneration.routes.every((route) => (
-    route.expiresAt > now
-    && route.steps.every((step) => bindings.some((binding) => (
-      binding.businessId === step.businessId
-      && binding.offeringId === step.offeringId
-      && binding.bindingId === step.bindingId
-      && sameCapabilityContractRef(binding.contractRef, step.contractRef)
-      && binding.offeringRegistrationHash === step.offeringRegistrationHash
-      && binding.bindingRegistrationHash === step.bindingRegistrationHash
-      && binding.publicationRef === step.publicationRef
-      && binding.publicationRevision === step.publicationRevision
-      && binding.readinessValidUntil !== undefined
-      && binding.readinessValidUntil >= route.expiresAt
-      && binding.price !== undefined
-      && canonicalDigest(binding.price) === canonicalDigest(step.price)
-      && binding.priceDigest !== undefined
-      && binding.priceDigest === step.priceDigest
-      && step.commercialRelationship !== undefined
-      && binding.commercialRelationship !== undefined
-      && canonicalDigest(binding.commercialRelationship) === canonicalDigest(step.commercialRelationship)
-      && step.cancellation !== undefined
-      && canonicalDigest(binding.cancellation) === canonicalDigest(step.cancellation)
-    )))
-  ))
-  return routesAreCurrent ? 'current' : 'stale'
+  return unlistedCustomerRequestTables()
 }
 
 type AvailableEligibleCapabilitySupply = Extract<

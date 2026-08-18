@@ -53,12 +53,6 @@ export const run = internalAction({
   returns: runResultValue,
   handler: async (ctx, args): Promise<Infer<typeof runResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await runEgressMachine(
-      args,
-      customerRequestV2PreparationEgressActionPorts(ctx),
-    ) as Infer<typeof runResultValue>
-  )
   },
 })
 
@@ -67,12 +61,6 @@ export const resume = internalAction({
   returns: resumeResultValue,
   handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await resumeEgressMachine(
-      args,
-      customerRequestV2PreparationEgressActionPorts(ctx),
-    ) as Infer<typeof resumeResultValue>
-  )
   },
 })
 
@@ -81,12 +69,6 @@ export const resumeRequest = internalAction({
   returns: resumeRequestResultValue,
   handler: async (ctx, args): Promise<Infer<typeof resumeRequestResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await resumeRequestEgressMachine(
-      args,
-      customerRequestV2PreparationEgressActionPorts(ctx),
-    ) as Infer<typeof resumeRequestResultValue>
-  )
   },
 })
 
@@ -95,11 +77,5 @@ export const reconcile = internalAction({
   returns: reconcileResultValue,
   handler: async (ctx, args): Promise<Infer<typeof reconcileResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await reconcileEgressMachine(
-      args,
-      customerRequestV2PreparationEgressActionPorts(ctx),
-    ) as Infer<typeof reconcileResultValue>
-  )
   },
 })

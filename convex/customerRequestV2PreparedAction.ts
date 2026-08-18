@@ -28,9 +28,6 @@ export const preparationMaterialDigest = internalQuery({
   returns: v.string(),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await preparationMaterialDigestMachine(args, customerRequestV2PreparedActionPorts(ctx))
-  )
   },
 })
 
@@ -42,11 +39,5 @@ export const prepare = internalMutation({
   returns: resultValue,
   handler: async (ctx, args): Promise<Result> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await preparePreparedActionMachine(
-      args,
-      customerRequestV2PreparedActionPorts(ctx),
-    ) as Result
-  )
   },
 })

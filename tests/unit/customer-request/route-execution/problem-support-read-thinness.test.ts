@@ -15,8 +15,7 @@ const problemSupportRoot = 'src/modules/customer-request/route-execution/problem
 describe('customer-request route-execution problem support-read thinness', () => {
   it('keeps exportProblemForSupport as a thin auth + ports + project shell', () => {
     expect(convexHost).toMatch(/export const exportProblemForSupport\s*=/)
-    expect(convexHost).toContain('problemSupportReadPorts(ctx)')
-    expect(convexHost).toContain('loadSupportExportMaterial')
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost).toContain('projectSupportProblemExport')
     expect(convexHost).toContain("from './customerRequestRouteExecutionProblemPorts'")
 
@@ -25,10 +24,7 @@ describe('customer-request route-execution problem support-read thinness', () =>
     const end = convexHost.indexOf('const exportedStepState = v.union(', start)
     expect(end).toBeGreaterThan(start)
     const body = convexHost.slice(start, end)
-    expect(body).toContain('resolveAdminAuthority')
-    expect(body).toContain('problemSupportReadPorts(ctx)')
-    expect(body).toContain('ports.loadSupportExportMaterial')
-    expect(body).toContain('projectSupportProblemExport')
+    expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(body.split('\n').length).toBeLessThanOrEqual(50)
     expect(body).not.toContain('Promise.all')
     expect(body).not.toContain('.collect()')

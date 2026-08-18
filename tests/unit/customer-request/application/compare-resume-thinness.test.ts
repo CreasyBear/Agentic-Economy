@@ -36,10 +36,10 @@ describe('customer-request compare-resume thinness', () => {
     expect(convexHost).toMatch(/export const resume\s*=/)
     expect(convexHost).toMatch(/export const compare\s*=/)
 
-    const resumeStart = convexHost.indexOf('async function resumeRequest(')
+    const resumeStart = convexHost.indexOf('export const resume = action({')
     expect(resumeStart).toBeGreaterThanOrEqual(0)
     const resumeBody = convexHost.slice(resumeStart, resumeStart + 500)
-    expect(resumeBody).toContain('resumeCustomerRequest')
+    expect(resumeBody).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(resumeBody).not.toContain('getCurrentRoutePlanGeneration')
     expect(resumeBody).not.toContain('recoverUnresolvedEgressApplication')
   })

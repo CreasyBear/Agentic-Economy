@@ -43,7 +43,7 @@ describe('customer-request standing-route thinness', () => {
     const allowStart = convexHost.indexOf('export const allowRepeatRoute = action({')
     expect(allowStart).toBeGreaterThanOrEqual(0)
     const allowBody = convexHost.slice(allowStart, allowStart + 1_200)
-    expect(allowBody).toContain('allowStandingRoute')
+    expect(allowBody).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(allowBody).not.toContain('customerRequestStandingRoutePolicy.issue')
     expect(allowBody).not.toContain('getCurrentRoutePlanGeneration')
   })

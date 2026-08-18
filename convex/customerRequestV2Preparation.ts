@@ -51,12 +51,6 @@ export const prepare = internalMutation({
   returns: prepareResultValue,
   handler: async (ctx, args): Promise<Infer<typeof prepareResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await prepareActionPreparationMachine(
-      args,
-      customerRequestV2PreparationPorts(ctx),
-    ) as Infer<typeof prepareResultValue>
-  )
   },
 })
 
@@ -68,11 +62,5 @@ export const resume = internalQuery({
   returns: resumeResultValue,
   handler: async (ctx, args): Promise<Infer<typeof resumeResultValue>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await resumeActionPreparationMachine(
-      args,
-      customerRequestV2PreparationPorts(ctx),
-    ) as Infer<typeof resumeResultValue>
-  )
   },
 })

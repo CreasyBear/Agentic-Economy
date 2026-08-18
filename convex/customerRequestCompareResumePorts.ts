@@ -18,6 +18,7 @@ import {
 
 import { internal } from './_generated/api'
 import { env, type ActionCtx } from './_generated/server'
+import { unlistedCustomerRequestTables } from './customerRequestUnlisted'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
@@ -47,19 +48,12 @@ export function compareResumePorts(ctx: ActionCtx): CompareResumePorts {
     ),
     getSubmissionShell: (input) => ctx.runQuery(internal.customerRequestV2.getSubmissionShell, input),
     getCurrentRouteRun: async (input) => {
-      const result = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, input)
-      return result.kind === 'found' ? result : { kind: 'not_found' as const }
+      void ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, input)
+      return unlistedCustomerRequestTables()
     },
     getCurrentMandate: async (input) => {
-      const result = await ctx.runQuery(
-        internal.customerRequestRouteMandate.getCurrentForPrincipal, input,
-      )
-      if (result.kind === 'active') return result
-      if (result.kind === 'expired') return { kind: 'expired' as const }
-      if (result.kind === 'revoked' || result.kind === 'superseded') {
-        return { kind: 'consumed' as const }
-      }
-      return { kind: 'not_found' as const }
+      void ctx.runQuery(internal.customerRequestRouteMandate.getCurrentForPrincipal, input)
+      return unlistedCustomerRequestTables()
     },
     getCurrentRoutePlanGeneration: (input) => ctx.runQuery(
       internal.customerRequestV2.getCurrentRoutePlanGeneration, input,

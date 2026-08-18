@@ -43,7 +43,7 @@ describe('customer-request route-mandate-mutation thinness', () => {
   })
 
   it('keeps host issue/revoke/getHistory as thin ports-wired shells', () => {
-    expect(hostSource).toContain('routeMandateMutationPorts(ctx)')
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(hostSource).toContain('issueMachine')
     expect(hostSource).toContain('revokeMachine')
     expect(hostSource).toContain('getHistoryMachine')
@@ -57,7 +57,7 @@ describe('customer-request route-mandate-mutation thinness', () => {
       const end = hostSource.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = hostSource.slice(start, end)
-      expect(body).toContain('routeMandateMutationPorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestRouteMandateCommands')")
       expect(body).not.toContain("query('customerRequestRouteMandateIssues')")

@@ -45,7 +45,7 @@ describe('customer-request problem-route thinness', () => {
     const reportStart = convexHost.indexOf('export const reportRouteProblem = action({')
     expect(reportStart).toBeGreaterThanOrEqual(0)
     const reportBody = convexHost.slice(reportStart, reportStart + 2_000)
-    expect(reportBody).toContain('reportRouteProblemApplication')
+    expect(reportBody).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(reportBody).not.toContain('customerRequestRouteExecution.reportProblem')
     expect(reportBody).not.toContain('projectCustomerRequestProblemTracking')
   })

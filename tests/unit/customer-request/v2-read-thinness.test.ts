@@ -45,7 +45,7 @@ describe('customer-request v2-read thinness', () => {
     for (const symbol of hostReadMachines) {
       expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(hostSource).toContain('customerRequestV2ReadPorts(ctx)')
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(hostSource).toContain('getCurrentAggregateMachine')
     expect(hostSource).toContain('getRoutePlanGenerationMachine')
     expect(hostSource).toContain('getRoutePlanGenerationRefreshReplayMachine')
@@ -58,7 +58,7 @@ describe('customer-request v2-read thinness', () => {
       const end = hostSource.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = hostSource.slice(start, end)
-      expect(body).toContain('customerRequestV2ReadPorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestV2Heads')")
       expect(body).not.toContain("query('customerRequestV2Revisions')")

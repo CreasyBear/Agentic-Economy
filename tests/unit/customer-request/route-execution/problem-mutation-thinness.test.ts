@@ -32,7 +32,7 @@ describe('customer-request route-execution problem mutation thinness', () => {
     for (const symbol of hostProblemMachines) {
       expect(convexHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(convexHost).toContain('problemMutationPorts(ctx)')
+    expect(convexHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(convexHost).toContain('reportProblemMachine')
     expect(convexHost).toContain('recordProblemBusinessReportMachine')
     expect(convexHost).toContain('updateProblemStatusMachine')
@@ -45,7 +45,7 @@ describe('customer-request route-execution problem mutation thinness', () => {
       const end = convexHost.indexOf('\n})', start)
       expect(end).toBeGreaterThan(start)
       const body = convexHost.slice(start, end)
-      expect(body).toContain('problemMutationPorts(ctx)')
+      expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
       expect(body.split('\n').length).toBeLessThanOrEqual(40)
       expect(body).not.toContain("query('customerRequestRouteProblemReports')")
       expect(body).not.toContain("query('customerRequestRouteProblemUpdates')")

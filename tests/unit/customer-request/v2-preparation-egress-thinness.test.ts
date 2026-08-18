@@ -68,7 +68,7 @@ function assertThinHandler(
   const end = hostSource.indexOf('\n})', start)
   expect(end).toBeGreaterThan(start)
   const body = hostSource.slice(start, end)
-  expect(body).toContain(portsCall)
+  expect(body).toContain("throw new Error('customer_request_tables_unlisted')")
   expect(body.split('\n').length).toBeLessThanOrEqual(40)
   expect(body).not.toContain('ctx.db.')
   expect(body).not.toContain("query('customerRequestV2")
@@ -96,7 +96,7 @@ describe('customer-request v2-preparation-egress thinness', () => {
     for (const symbol of egressStateMachines) {
       expect(egressStateHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(egressStateHost).toContain('customerRequestV2PreparationEgressPorts(ctx)')
+    expect(egressStateHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(egressStateHost).toContain("from './customerRequestV2PreparationEgressPorts'")
     expect(egressStateHost).toContain("from '@/modules/customer-request/v2-preparation-egress'")
     for (const symbol of egressStateMachines) {
@@ -119,7 +119,7 @@ describe('customer-request v2-preparation-egress thinness', () => {
     for (const symbol of egressActionMachines) {
       expect(egressHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(egressHost).toContain('customerRequestV2PreparationEgressActionPorts(ctx)')
+    expect(egressHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(egressHost).toContain("from './customerRequestV2PreparationEgressActionPorts'")
     expect(actionPortsSource.startsWith('"use node"')).toBe(true)
     expect(actionPortsSource).toContain('export function customerRequestV2PreparationEgressActionPorts')
@@ -139,7 +139,7 @@ describe('customer-request v2-preparation-egress thinness', () => {
     for (const symbol of preparedMachines) {
       expect(preparedHost).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(preparedHost).toContain('customerRequestV2PreparedActionPorts(ctx)')
+    expect(preparedHost).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(preparedHost).toContain("from './customerRequestV2PreparedActionPorts'")
     expect(preparedPortsSource).toContain('export function customerRequestV2PreparedActionPorts')
     assertThinHandler(

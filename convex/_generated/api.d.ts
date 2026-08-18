@@ -63,9 +63,9 @@ import type * as customerRequestRouteMandateIntegrity from "../customerRequestRo
 import type * as customerRequestRouteMandateLifecycle from "../customerRequestRouteMandateLifecycle.js";
 import type * as customerRequestRouteMandatePorts from "../customerRequestRouteMandatePorts.js";
 import type * as customerRequestRouteTransportWorker from "../customerRequestRouteTransportWorker.js";
-import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as customerRequestStandingRoutePolicy from "../customerRequestStandingRoutePolicy.js";
 import type * as customerRequestStandingRoutePorts from "../customerRequestStandingRoutePorts.js";
+import type * as customerRequestUnlisted from "../customerRequestUnlisted.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
 import type * as customerRequestV2Preparation from "../customerRequestV2Preparation.js";
 import type * as customerRequestV2PreparationEgress from "../customerRequestV2PreparationEgress.js";
@@ -91,6 +91,7 @@ import type * as inquirySourceStateLoad from "../inquirySourceStateLoad.js";
 import type * as inquirySourceStateMappers from "../inquirySourceStateMappers.js";
 import type * as inquirySourceStatePersist from "../inquirySourceStatePersist.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as migrations from "../migrations.js";
 import type * as moneyLedger from "../moneyLedger.js";
 import type * as moneyX402PaymentAttempts from "../moneyX402PaymentAttempts.js";
@@ -175,9 +176,9 @@ declare const fullApi: ApiFromModules<{
   customerRequestRouteMandateLifecycle: typeof customerRequestRouteMandateLifecycle;
   customerRequestRouteMandatePorts: typeof customerRequestRouteMandatePorts;
   customerRequestRouteTransportWorker: typeof customerRequestRouteTransportWorker;
-  marketDispatchWorkpool: typeof marketDispatchWorkpool;
   customerRequestStandingRoutePolicy: typeof customerRequestStandingRoutePolicy;
   customerRequestStandingRoutePorts: typeof customerRequestStandingRoutePorts;
+  customerRequestUnlisted: typeof customerRequestUnlisted;
   customerRequestV2: typeof customerRequestV2;
   customerRequestV2Preparation: typeof customerRequestV2Preparation;
   customerRequestV2PreparationEgress: typeof customerRequestV2PreparationEgress;
@@ -203,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   inquirySourceStateMappers: typeof inquirySourceStateMappers;
   inquirySourceStatePersist: typeof inquirySourceStatePersist;
   "lib/rateLimit": typeof lib_rateLimit;
+  marketDispatchWorkpool: typeof marketDispatchWorkpool;
   migrations: typeof migrations;
   moneyLedger: typeof moneyLedger;
   moneyX402PaymentAttempts: typeof moneyX402PaymentAttempts;

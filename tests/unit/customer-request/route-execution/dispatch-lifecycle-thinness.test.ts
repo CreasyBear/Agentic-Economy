@@ -56,8 +56,8 @@ describe('customer-request route-execution dispatch lifecycle thinness', () => {
     for (const symbol of hostDispatchMachines) {
       expect(hostSource).toMatch(new RegExp(`export const ${symbol}\\s*=`))
     }
-    expect(hostSource).toContain('dispatchLifecyclePorts(ctx)')
-    expect(hostSource).toContain('dispatchLifecycleOpenPorts(ctx)')
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
+    expect(hostSource).toContain("throw new Error('customer_request_tables_unlisted')")
     expect(hostSource).toContain('markDispatchedMachine')
     expect(hostSource).toContain('recordNotReleasedMachine')
     expect(hostSource).toContain('reconcileRouteTransportWorkCompletion')

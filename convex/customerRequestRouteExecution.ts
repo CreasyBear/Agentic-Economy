@@ -326,9 +326,6 @@ export const startOrResume = internalMutation({
   returns: startResult,
   handler: async (ctx, args): Promise<Infer<typeof startResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await startOrResumeMachine(args, journalMutationPorts(ctx)) as Infer<typeof startResult>
-  )
   },
 })
 
@@ -349,9 +346,6 @@ export const cancelCurrent = internalMutation({
   returns: cancelCurrentResult,
   handler: async (ctx, args): Promise<Infer<typeof cancelCurrentResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await cancelCurrentMachine(args, cancelMutationPorts(ctx)) as Infer<typeof cancelCurrentResult>
-  )
   },
 })
 
@@ -389,9 +383,6 @@ export const openDispatch = internalQuery({
   returns: openDispatchResult,
   handler: async (ctx, args): Promise<Infer<typeof openDispatchResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await openDispatchFromJournal(args, dispatchLifecycleOpenPorts(ctx)) as Infer<typeof openDispatchResult>
-  )
   },
 })
 
@@ -426,11 +417,6 @@ export const openCancellationAttempt = internalQuery({
   returns: openCancellationAttemptResult,
   handler: async (ctx, args): Promise<Infer<typeof openCancellationAttemptResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await openCancellationAttemptMachine(args, cancelOpenPorts(ctx)) as Infer<
-      typeof openCancellationAttemptResult
-    >
-  )
   },
 })
 
@@ -458,11 +444,6 @@ export const resolveCancellationAttempt = internalMutation({
   returns: resolveCancellationAttemptResult,
   handler: async (ctx, args): Promise<Infer<typeof resolveCancellationAttemptResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await resolveCancellationAttemptMachine(args, cancelMutationPorts(ctx)) as Infer<
-      typeof resolveCancellationAttemptResult
-    >
-  )
   },
 })
 
@@ -471,16 +452,6 @@ export const completeRouteCancellationWork = internalMutation({
   returns: v.null(),
   handler: async (ctx, { context }) => {
     throw new Error('customer_request_tables_unlisted')
-
-    await resolveCancellationAttemptMachine({
-      cancellationRef: context.cancellationRef,
-      observation: {
-        disposition: 'unknown',
-        requestDigest: context.cancellationRef,
-        failureCode: 'route_cancellation_work_incomplete',
-      },
-    }, cancelMutationPorts(ctx))
-    return null
   },
 })
 
@@ -496,11 +467,6 @@ export const markDispatched = internalMutation({
   returns: markDispatchedResult,
   handler: async (ctx, args): Promise<Infer<typeof markDispatchedResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await markDispatchedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
-      typeof markDispatchedResult
-    >
-  )
   },
 })
 
@@ -518,11 +484,6 @@ export const recordNotReleased = internalMutation({
   returns: recordNotReleasedResult,
   handler: async (ctx, args): Promise<Infer<typeof recordNotReleasedResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await recordNotReleasedMachine(args, dispatchLifecyclePorts(ctx)) as Infer<
-      typeof recordNotReleasedResult
-    >
-  )
   },
 })
 
@@ -531,18 +492,6 @@ export const completeRouteTransportWork = internalMutation({
   returns: v.null(),
   handler: async (ctx, { context }) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const dispatchPorts = dispatchLifecyclePorts(ctx)
-    const journalPorts = journalMutationPorts(ctx)
-    await reconcileRouteTransportWorkCompletion(context.dispatchRef, {
-      loadDispatchByRef: dispatchPorts.loadDispatchByRef,
-      loadAttemptByRef: dispatchPorts.loadAttemptByRef,
-      recordNotReleased: async (command) => (
-        await recordNotReleasedMachine(command, dispatchPorts)
-      ),
-      recordOutcome: async (command) => await recordOutcomeMachine(command, journalPorts),
-    })
-    return null
   },
 })
 
@@ -576,9 +525,6 @@ export const recordOutcome = internalMutation({
   returns: outcomeResult,
   handler: async (ctx, args): Promise<Infer<typeof outcomeResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await recordOutcomeMachine(args, journalMutationPorts(ctx)) as Infer<typeof outcomeResult>
-  )
   },
 })
 export const prepareX402PaymentAuthorization = internalMutation({
@@ -589,12 +535,6 @@ export const prepareX402PaymentAuthorization = internalMutation({
   }),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const result: { custodyRef: string; authorizationDigest: string } = await ctx.runMutation(
-      internal.moneyX402PaymentAttempts.prepareX402PaymentAuthorization,
-      args,
-    )
-    return result
   },
 })
 
@@ -607,9 +547,6 @@ export const recordX402PaymentSignature = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignature, args)
-    return null
   },
 })
 
@@ -618,9 +555,6 @@ export const readX402PaymentAuthorization = internalQuery({
   returns: v.union(x402PaymentAuthorizationMaterial, v.null()),
   handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAuthorization, args)
-  )
   },
 })
 
@@ -629,9 +563,6 @@ export const readX402PaymentAuthorizationByDigest = internalQuery({
   returns: v.union(x402PaymentAuthorizationMaterial, v.null()),
   handler: async (ctx, args): Promise<Infer<typeof x402PaymentAuthorizationMaterial> | null> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAuthorizationByDigest, args)
-  )
   },
 })
 
@@ -640,9 +571,6 @@ export const markX402PaymentPossiblySubmitted = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.markX402PaymentPossiblySubmitted, args)
-    return null
   },
 })
 
@@ -651,9 +579,6 @@ export const observeX402PaymentAttempt = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.observeX402PaymentAttempt, args)
-    return null
   },
 })
 export const readX402PaymentAttempt = internalQuery({
@@ -665,9 +590,6 @@ export const readX402PaymentAttempt = internalQuery({
   returns: v.union(x402PaymentAttemptReadValue, v.null()),
   handler: async (ctx, args): Promise<Infer<typeof x402PaymentAttemptReadValue> | null> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await ctx.runQuery(internal.moneyX402PaymentAttempts.readX402PaymentAttempt, args)
-  )
   },
 })
 export const recordX402PaymentObservation = internalMutation({
@@ -688,9 +610,6 @@ export const recordX402PaymentObservation = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentObservation, args)
-    return null
   },
 })
 export const reconcileX402PaymentAttempt = internalMutation({
@@ -698,9 +617,6 @@ export const reconcileX402PaymentAttempt = internalMutation({
   returns: x402PaymentObservationReconciliationResult,
   handler: async (ctx, args): Promise<Infer<typeof x402PaymentObservationReconciliationResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.reconcileX402PaymentAttempt, args)
-  )
   },
 })
 
@@ -709,19 +625,6 @@ export const getCurrent = internalQuery({
   returns: v.union(v.object({ kind: v.literal('found'), run: runProjection }), v.object({ kind: v.literal('none') })),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const head = await ctx.db.query('customerRequestRouteRunHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null) return { kind: 'none' as const }
-    const storedRun = await ctx.db.query('customerRequestRouteRuns')
-      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
-    if (storedRun === null || storedRun.mandateRef !== head.currentMandateRef
-      || storedRun.principalId !== head.principalId) {
-      throw new Error('customer_request_route_run_head_integrity_failure')
-    }
-    const run = await readRunProjection(ctx, head.currentRunRef)
-    if (run === null) throw new Error('customer_request_route_run_integrity_failure')
-    return { kind: 'found' as const, run }
   },
 })
 
@@ -760,12 +663,6 @@ export const reportProblem = internalMutation({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const result = await reportProblemMachine(args, problemMutationPorts(ctx))
-    // The machine returns a readonly evidence list; the return validator declares a mutable array.
-    return 'evidence' in result
-      ? { ...result, evidence: result.evidence.map((item) => ({ receiptRef: item.receiptRef, label: item.label })) }
-      : result
   },
 })
 
@@ -843,58 +740,6 @@ export const readProblemForBusiness = internalQuery({
   returns: businessProblemViewResult,
   handler: async (ctx, args): Promise<Infer<typeof businessProblemViewResult>> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.reportRef.trim().length === 0 || args.reportRef.length > 300) {
-      return { kind: 'refused', reason: 'report_not_found' }
-    }
-    const report = await ctx.db.query('customerRequestRouteProblemReports')
-      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
-    if (report === null || report.attemptRef === undefined) {
-      return { kind: 'refused', reason: 'report_not_found' }
-    }
-    const attemptRef = report.attemptRef
-    if ((report.visibility ?? 'customer_and_ae_only') !== 'share_with_affected_business') {
-      return { kind: 'refused', reason: 'sharing_not_authorized' }
-    }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', attemptRef)).unique()
-    if (attempt === null || attempt.requestId !== report.requestId || attempt.position !== report.step
-      || !routeAttemptIntegrityValid(attempt)) {
-      throw new Error('customer_request_route_problem_attempt_integrity_failure')
-    }
-    const business = await ctx.db.get(attempt.grant.step.businessId as Id<'businesses'>)
-    const owner = business === null ? null : await ctx.db.get(business.ownerId)
-    if (business === null || owner === null || owner.clerkUserId !== identity.subject) {
-      return { kind: 'refused', reason: 'authority_denied' }
-    }
-    const businessReports = await loadProblemBusinessReports(evidenceLoadPorts(ctx), report.reportRef)
-    const projected = projectBusinessProblem({
-      report,
-      attempt,
-      businessName: business.name,
-      businessId: String(business._id),
-      businessReports,
-    })
-    return {
-      ...projected,
-      evidence: projected.evidence.map((item) => ({
-        receiptRef: item.receiptRef,
-        label: item.label,
-      })),
-      availableEvidence: projected.availableEvidence.map((item) => ({
-        receiptRef: item.receiptRef,
-        label: item.label,
-      })),
-      businessClaims: projected.businessClaims.map((claim) => ({
-        ...claim,
-        evidence: claim.evidence.map((item) => ({
-          receiptRef: item.receiptRef,
-          label: item.label,
-        })),
-      })),
-    }
   },
 })
 
@@ -909,11 +754,6 @@ export const recordProblemBusinessReport = internalMutation({
   returns: businessProblemReportResult,
   handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await recordProblemBusinessReportMachine(args, problemMutationPorts(ctx)) as Infer<
-      typeof businessProblemReportResult
-    >
-  )
   },
 })
 
@@ -954,11 +794,6 @@ export const updateProblemStatus = internalMutation({
   returns: problemUpdateResult,
   handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await updateProblemStatusMachine(args, problemMutationPorts(ctx)) as Infer<
-      typeof problemUpdateResult
-    >
-  )
   },
 })
 
@@ -974,9 +809,6 @@ export const replyProblem = internalMutation({
   returns: problemUpdateResult,
   handler: async (ctx, args): Promise<Infer<typeof problemUpdateResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await replyProblemMachine(args, problemMutationPorts(ctx)) as Infer<typeof problemUpdateResult>
-  )
   },
 })
 
@@ -1033,19 +865,6 @@ export const listProblemsForSupport = internalQuery({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const authority = await resolveAdminAuthority(
-      { db: ctx.db, auth: ctx.auth },
-      'read_admin_readbacks',
-    )
-    if (authority.kind === 'denied') {
-      return { kind: 'denied' as const, reason: authority.reason, rows: [] }
-    }
-    const limit = Number.isSafeInteger(args.limit) ? Math.min(Math.max(args.limit, 1), 100) : 50
-    return {
-      kind: 'allowed' as const,
-      rows: await assembleSupportProblemList({ limit }, evidenceLoadPorts(ctx)),
-    }
   },
 })
 
@@ -1187,21 +1006,6 @@ export const exportProblemForSupport = internalQuery({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const authority = await resolveAdminAuthority(
-      { db: ctx.db, auth: ctx.auth },
-      'read_admin_readbacks',
-    )
-    if (authority.kind === 'denied') {
-      return { kind: 'denied' as const, reason: authority.reason }
-    }
-    const ports = problemSupportReadPorts(ctx)
-    const material = await ports.loadSupportExportMaterial(args.reportRef)
-    if (material === null) return { kind: 'not_found' as const }
-    return projectSupportProblemExport({
-      ...material,
-      observedAt: ports.now(),
-    })
   },
 })
 
@@ -1284,7 +1088,6 @@ export const exportCustomerEvidence = internalQuery({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return await assembleCustomerEvidenceExport(args, evidenceLoadPorts(ctx))
   },
 })
 

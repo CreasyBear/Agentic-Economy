@@ -35,9 +35,6 @@ export const allocate = internalMutation({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await allocateEgressMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  )
   },
 })
 
@@ -61,16 +58,6 @@ export const beginDispatch = internalMutation({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const result = await beginDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-    if (result.kind !== 'dispatch') return result
-    const { connectionAuthority, ...dispatch } = result
-    return {
-      ...dispatch,
-      ...(connectionAuthority === undefined
-        ? {}
-        : { connectionAuthority: mutableAuthority(connectionAuthority) }),
-    }
   },
 })
 
@@ -85,9 +72,6 @@ export const resolveDispatch = internalMutation({
   returns: terminalState,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await resolveDispatchMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  )
   },
 })
 
@@ -100,9 +84,6 @@ export const reconcileUncertain = internalMutation({
   returns: terminalState,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await reconcileUncertainMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  )
   },
 })
 
@@ -116,15 +97,6 @@ export const status = internalQuery({
   })) }),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await egressStatusMachine(args, customerRequestV2PreparationEgressPorts(ctx)) as {
-      operationCount: number
-      states: Array<{
-        operationRef: string
-        state: 'allocated' | 'dispatching' | 'released' | 'not_released' | 'uncertain'
-      }>
-    }
-  )
   },
 })
 
@@ -133,9 +105,6 @@ export const unresolvedForRequest = internalQuery({
   returns: v.array(v.object({ operationRef: v.string(), requestRevision: v.number() })),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await unresolvedForRequestMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-  )
   },
 })
 
@@ -155,16 +124,6 @@ export const openReconciliation = internalQuery({
   ),
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const result = await openReconciliationMachine(args, customerRequestV2PreparationEgressPorts(ctx))
-    if (result.kind !== 'available') return result
-    const { connectionAuthority, ...reconciliation } = result
-    return {
-      ...reconciliation,
-      ...(connectionAuthority === undefined
-        ? {}
-        : { connectionAuthority: mutableAuthority(connectionAuthority) }),
-    }
   },
 })
 

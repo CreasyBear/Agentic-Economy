@@ -674,34 +674,6 @@ export const preview = action({
   returns: previewResult,
   handler: async (ctx, args) => {
     throw new Error('customer_request_tables_unlisted')
-
-    const admission = await ctx.runMutation(internal.rateLimit.admit, {
-      name: 'public-read',
-      key: await admissionKey(ctx, 'customer-request-preview'),
-    })
-    if (!admission.ok) {
-      const destinationText = args.customerJob.trim().slice(0, 200)
-      return writablePreviewResult({
-        kind: 'unavailable',
-        reason: 'rate_limited',
-        destination: { label: destinationText, request: destinationText },
-      })
-    }
-    const now = Date.now()
-    const result = await previewCustomerRequestApplication(
-      { customerJob: args.customerJob, network: args.network },
-      {
-        loadRequestGraph: (network) => loadRequestGraph(ctx, network, now),
-        discoverCapabilities: discoverCapabilitiesPort(ctx),
-      },
-      {
-        maximumDescriptorBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
-        ...(env.OPENROUTER_API_KEY === undefined ? {} : { openRouterApiKey: env.OPENROUTER_API_KEY }),
-        ...(env.AE_CUSTOMER_REQUEST_MODEL === undefined ? {} : { modelName: env.AE_CUSTOMER_REQUEST_MODEL }),
-        ...(env.AE_SITE_URL === undefined ? {} : { siteUrl: env.AE_SITE_URL }),
-      },
-    )
-    return writablePreviewResult(result)
   },
 })
 
@@ -719,64 +691,6 @@ export const submit = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const admission = await ctx.runMutation(internal.rateLimit.admit, {
-      name: 'public-mutation',
-      key: await admissionKey(ctx, 'customer-request-submit'),
-    })
-    if (!admission.ok) return { kind: 'refused', reason: 'rate_limited' }
-    if (args.expectedRevision !== undefined && args.expectedRevision !== 0) return {
-      kind: 'conflict', requestRef: args.requestId, reason: 'revision_changed',
-    }
-    const command = {
-      compilationKey: args.compilationKey,
-      requestId: args.requestId,
-      ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
-      delegatedAgentId: args.delegatedAgentId,
-      customerJob: args.customerJob,
-      routing: args.routing,
-    }
-    const caller = await resolveRequestCaller(ctx, 'submit', command, args.serviceAuth, args.delegatedAgentId)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const commandKey = namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey)
-    const commandDigest = canonicalDigest(command)
-    const committedReplay = await replayCommittedCommand(ctx, {
-      commandKey,
-      commandDigest,
-      requestId: args.requestId,
-      principalId: caller.principalId,
-    })
-    if (committedReplay !== undefined) return committedReplay
-    const reservation = await ctx.runMutation(internal.customerRequestV2.reserveSubmission, {
-      commandKey,
-      commandDigest,
-      requestId: args.requestId,
-      principalId: caller.principalId,
-      delegatedAgentId: caller.delegatedAgentId,
-      intent: args.customerJob,
-      networkId: args.routing.networkId,
-      createdAt: Date.now(),
-    })
-    if (reservation.kind === 'identity_conflict') return {
-      kind: 'conflict', requestRef: args.requestId, reason: 'identity_changed',
-    }
-    if (reservation.kind === 'command_conflict') return {
-      kind: 'conflict', requestRef: args.requestId, reason: 'idempotency_key_reused',
-    }
-    return await interpretCompileCommit(ctx, {
-      commandKey,
-      commandDigest,
-      requestId: args.requestId,
-      expectedRevision: args.expectedRevision ?? 0,
-      expectedRouteGeneration: 0,
-      principalId: caller.principalId,
-      delegatedAgentId: caller.delegatedAgentId,
-      intent: args.customerJob,
-      networkId: args.routing.networkId,
-      priorFacts: [],
-      durableShell: true,
-      now: Date.now(),
-    })
   },
 })
 
@@ -791,24 +705,6 @@ export const refine = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-      idempotencyKey: args.idempotencyKey, message: args.message,
-      ...(args.mode === undefined ? {} : { mode: args.mode }),
-      ...(args.replacesPriorStatement === undefined ? {} : {
-        replacesPriorStatement: args.replacesPriorStatement,
-      }),
-      ...(args.reportedRouteRef === undefined ? {} : { reportedRouteRef: args.reportedRouteRef }),
-    }
-    const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await refineCustomerRequest({
-      ...command,
-      commandKey: namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest(command),
-      principalId: caller.principalId,
-    }, refinePorts(ctx))) as ActionResult
   },
 })
 
@@ -821,20 +717,6 @@ export const provideFacts = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const value = customerRequestJsonValueSchema.parse(args.value)
-    const command = {
-      requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-      idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value,
-    }
-    const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await provideCustomerRequestFacts({
-      ...command,
-      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest(command),
-      principalId: caller.principalId,
-    }, provideFactsPorts(ctx))) as ActionResult
   },
 })
 
@@ -843,12 +725,6 @@ export const resume = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    withRestoredRequest(
-      await resumeRequest(ctx, args) as CustomerRequestActionResult,
-      Date.now(),
-    ) as ActionResult
-  )
   },
 })
 
@@ -874,23 +750,6 @@ export const compare = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      revision: args.revision,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await prepareCompare({
-      requestRef: args.requestRef,
-      revision: args.revision,
-      idempotencyKey: args.idempotencyKey,
-      principalId: caller.principalId,
-      compareCommandKey: namespacedKey(caller.principalId, 'compare', args.requestRef, args.idempotencyKey),
-      egressCommandKey: namespacedKey(caller.principalId, 'egress', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest(command),
-    }, compareResumePorts(ctx))) as ActionResult
   },
 })
 
@@ -902,20 +761,6 @@ export const confirmRoute = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef, revision: args.revision,
-      routeRef: args.routeRef, idempotencyKey: args.idempotencyKey,
-    }
-    const caller = await resolveRequestCaller(ctx, 'confirm', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await confirmCustomerRoute({
-      ...command,
-      principalId: caller.principalId,
-      ...(args.serviceAuth === undefined ? {} : {
-        serviceAuthorization: { command, assertion: args.serviceAuth },
-      }),
-    }, confirmRoutePorts(ctx))) as ActionResult
   },
 })
 
@@ -924,15 +769,6 @@ export const listRepeatPermissionAssistants = action({
   returns: repeatPermissionAssistantsResult,
   handler: async (ctx, args): Promise<RepeatPermissionAssistantsResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = { requestRef: args.requestRef }
-    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return await listStandingRouteAssistants({
-      requestRef: args.requestRef,
-      principalId: caller.principalId,
-      ownerId: caller.ownerId,
-    }, standingRoutePorts(ctx)) as RepeatPermissionAssistantsResult
   },
 })
 
@@ -951,30 +787,6 @@ export const allowRepeatRoute = action({
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      revision: args.revision,
-      routeRef: args.routeRef,
-      delegatedCredentialId: args.delegatedCredentialId,
-      occurrences: args.occurrences,
-      cumulativeSpend: args.cumulativeSpend,
-      validUntil: args.validUntil,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const caller = await resolveRequestCaller(ctx, 'allow_repeat', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return await allowStandingRoute({
-      ...command,
-      principalId: caller.principalId,
-      ...(args.serviceAuth === undefined ? {} : {
-        serviceAuthorization: {
-          operation: 'allow_repeat' as const,
-          command,
-          assertion: args.serviceAuth,
-        },
-      }),
-    }, standingRoutePorts(ctx)) as RepeatPermissionResult
   },
 })
 
@@ -991,28 +803,6 @@ export const useRepeatRoute = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      revision: args.revision,
-      routeRef: args.routeRef,
-      permissionRef: args.permissionRef,
-      delegatedCredentialId: args.delegatedCredentialId,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const caller = await resolveRequestCaller(ctx, 'use_repeat', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return toActionResult(await applyStandingRoute({
-      ...command,
-      principalId: caller.principalId,
-      ...(args.serviceAuth === undefined ? {} : {
-        serviceAuthorization: {
-          operation: 'use_repeat' as const,
-          command,
-          assertion: args.serviceAuth,
-        },
-      }),
-    }, standingRoutePorts(ctx))) as ActionResult
   },
 })
 
@@ -1026,18 +816,6 @@ export const inspectRepeatRoute = action({
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      permissionRef: args.permissionRef,
-      routeRef: args.routeRef,
-    }
-    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return await inspectStandingRoute({
-      ...command,
-      principalId: caller.principalId,
-    }, standingRoutePorts(ctx)) as RepeatPermissionResult
   },
 })
 
@@ -1052,26 +830,6 @@ export const revokeRepeatRoute = action({
   returns: repeatPermissionResult,
   handler: async (ctx, args): Promise<RepeatPermissionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      permissionRef: args.permissionRef,
-      routeRef: args.routeRef,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const caller = await resolveRequestCaller(ctx, 'revoke_repeat', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return await revokeStandingRoute({
-      ...command,
-      principalId: caller.principalId,
-      ...(args.serviceAuth === undefined ? {} : {
-        serviceAuthorization: {
-          operation: 'revoke_repeat' as const,
-          command,
-          assertion: args.serviceAuth,
-        },
-      }),
-    }, standingRoutePorts(ctx)) as RepeatPermissionResult
   },
 })
 
@@ -1083,31 +841,6 @@ export const runRoute = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey }
-    const caller = await resolveRequestCaller(ctx, 'run', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    const result = await ctx.runMutation(internal.customerRequestRouteExecution.startOrResume, {
-      requestId: args.requestRef,
-      principalId: caller.principalId,
-      idempotencyKey: args.idempotencyKey,
-    })
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
-    }
-    if (result.kind === 'refused') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef,
-      revision: current.aggregate.snapshot.revision,
-      summary: result.reason === 'confirmation_expired'
-        ? 'This choice expired before it could start. Review the current options.'
-        : 'This choice cannot start yet. Review the current request.',
-      criteria: projectCustomerCriteria(current.aggregate.evaluation.criteria),
-    })) as ActionResult
-    return toActionResult(projectStoredRouteRunApplication(current.aggregate, result.run)) as ActionResult
   },
 })
 
@@ -1120,30 +853,6 @@ export const cancelRoute = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const mode = args.mode ?? 'current_and_downstream'
-    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey, mode }
-    const caller = await resolveRequestCaller(ctx, 'cancel', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    const result = await ctx.runMutation(internal.customerRequestRouteExecution.cancelCurrent, {
-      requestId: args.requestRef,
-      principalId: caller.principalId,
-      idempotencyKey: args.idempotencyKey,
-      mode,
-    })
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
-    }
-    if (result.kind === 'refused') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef,
-      revision: current.aggregate.snapshot.revision,
-      summary: 'There is no active request to stop.',
-    })) as ActionResult
-    return toActionResult(projectStoredRouteRunApplication(current.aggregate, result.run)) as ActionResult
   },
 })
 
@@ -1227,20 +936,6 @@ export const reportRouteProblem = action({
   returns: problemActionResult,
   handler: async (ctx, args): Promise<ProblemActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef, idempotencyKey: args.idempotencyKey,
-      category: args.category, summary: args.summary,
-      ...(args.affectedStep === undefined ? {} : { affectedStep: args.affectedStep }),
-      evidenceReceiptRefs: args.evidenceReceiptRefs ?? [],
-      visibility: args.visibility ?? 'customer_and_ae_only',
-    }
-    const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    return await reportRouteProblemApplication({
-      ...command,
-      principalId: caller.principalId,
-    }, problemRoutePorts(ctx)) as ProblemActionResult
   },
 })
 
@@ -1326,9 +1021,6 @@ export const readRouteProblemForBusiness = action({
   returns: businessProblemViewActionResult,
   handler: async (ctx, args): Promise<BusinessProblemViewActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await readRouteProblemForBusinessApplication(args, problemRoutePorts(ctx)) as BusinessProblemViewActionResult
-  )
   },
 })
 
@@ -1347,9 +1039,6 @@ export const recordRouteProblemBusinessReport = action({
   returns: businessProblemReportActionResult,
   handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await recordRouteProblemBusinessReportApplication(args, problemRoutePorts(ctx)) as BusinessProblemReportActionResult
-  )
   },
 })
 
@@ -1364,9 +1053,6 @@ export const updateRouteProblemStatus = action({
   returns: problemStatusChangeResult,
   handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await updateRouteProblemStatusApplication(args, problemRoutePorts(ctx)) as ProblemStatusChangeResult
-  )
   },
 })
 
@@ -1382,20 +1068,6 @@ export const replyRouteProblem = action({
   returns: problemStatusChangeResult,
   handler: async (ctx, args): Promise<ProblemStatusChangeResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = {
-      requestRef: args.requestRef,
-      reportRef: args.reportRef,
-      expectedVersion: args.expectedVersion,
-      idempotencyKey: args.idempotencyKey,
-      message: args.message,
-    }
-    const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-    return await replyRouteProblemApplication({
-      ...command,
-      principalId: caller.principalId,
-    }, problemRoutePorts(ctx)) as ProblemStatusChangeResult
   },
 })
 
@@ -1469,11 +1141,6 @@ export const listRouteProblemsForSupport = action({
   returns: supportProblemListResult,
   handler: async (ctx, args): Promise<SupportProblemListResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await listRouteProblemsForSupportApplication({
-      limit: args.limit ?? 50,
-    }, problemRoutePorts(ctx)) as SupportProblemListResult
-  )
   },
 })
 
@@ -1628,9 +1295,6 @@ export const exportRouteProblemForSupport = action({
   returns: supportProblemExportResult,
   handler: async (ctx, args): Promise<SupportProblemExportResult> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await exportRouteProblemForSupportApplication(args, problemRoutePorts(ctx)) as SupportProblemExportResult
-  )
   },
 })
 
@@ -1722,14 +1386,6 @@ export const exportRouteEvidence = action({
   returns: evidenceActionResult,
   handler: async (ctx, args): Promise<EvidenceActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const command = { requestRef: args.requestRef }
-    const caller = await resolveRequestCaller(ctx, 'evidence', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    return await exportRouteEvidenceApplication({
-      requestRef: args.requestRef,
-      principalId: caller.principalId,
-    }, problemRoutePorts(ctx)) as EvidenceActionResult
   },
 })
 
@@ -1740,26 +1396,6 @@ export const authorizePreparation = action({
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    const command = {
-      requestRef: args.requestRef, revision: args.revision,
-      preparationRef: args.preparationRef, idempotencyKey: args.idempotencyKey,
-    }
-    return toActionResult(await authorizePreparationApplication({
-      ...command,
-      commandDigest: canonicalDigest(command),
-      commandKey: (principalId) => namespacedKey(principalId, 'authorize', args.requestRef, args.idempotencyKey),
-      egressCommandKey: (principalId) => namespacedKey(principalId, 'egress', args.requestRef, args.idempotencyKey),
-      tokenIdentifier: identity.tokenIdentifier,
-      ownerId: identity.subject,
-      credentialId: identity.tokenIdentifier,
-      authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
-        issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-      })}`,
-      now: Date.now(),
-    }, authorizePreparationPorts(ctx))) as ActionResult
   },
 })
 

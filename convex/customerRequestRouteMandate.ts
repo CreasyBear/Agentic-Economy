@@ -132,12 +132,6 @@ export const issue = internalMutation({
   returns: issueResult,
   handler: async (ctx, args): Promise<Infer<typeof issueResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await issueMachine(
-      args,
-      routeMandateMutationPorts(ctx),
-    ) as Infer<typeof issueResult>
-  )
   },
 })
 
@@ -146,12 +140,6 @@ export const revoke = internalMutation({
   returns: revokeResult,
   handler: async (ctx, args): Promise<Infer<typeof revokeResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await revokeMachine(
-      args,
-      routeMandateMutationPorts(ctx),
-    ) as Infer<typeof revokeResult>
-  )
   },
 })
 
@@ -160,11 +148,6 @@ export const getCurrent = internalQuery({
   returns: currentResult,
   handler: async (ctx, args): Promise<Infer<typeof currentResult>> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const current = await readCurrentRouteMandateState(ctx, args.requestId)
-    return (current.kind === 'active'
-      ? { kind: 'active' as const, mandate: writableMandate(current.mandate) }
-      : current) as Infer<typeof currentResult>
   },
 })
 
@@ -173,13 +156,6 @@ export const getCurrentForPrincipal = internalQuery({
   returns: currentResult,
   handler: async (ctx, args): Promise<Infer<typeof currentResult>> => {
     throw new Error('customer_request_tables_unlisted')
-
-    const current = await readCurrentRouteMandateStateForPrincipal(
-      ctx, args.requestId, args.principalId,
-    )
-    return (current.kind === 'active'
-      ? { kind: 'active' as const, mandate: writableMandate(current.mandate) }
-      : current) as Infer<typeof currentResult>
   },
 })
 
@@ -188,12 +164,6 @@ export const getHistory = internalQuery({
   returns: historyResult,
   handler: async (ctx, args): Promise<Infer<typeof historyResult>> => {
     throw new Error('customer_request_tables_unlisted')
-    return (
-    await getHistoryMachine(
-      args,
-      routeMandateMutationPorts(ctx),
-    ) as Infer<typeof historyResult>
-  )
   },
 })
 
