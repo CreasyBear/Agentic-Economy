@@ -3,7 +3,6 @@ import type { DataModel, Id } from './_generated/dataModel'
 import type { BusinessRecord } from '../src/modules/business/public'
 import type { DevSeedCatalogBundle } from '../src/modules/dev/public'
 import type { CapabilityLaunchSupportRecord } from '../src/modules/inquiries/public'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 export type DevSeedPersistResult = {
   seededSlugs: readonly string[]
   ownerClerkUserId: string
@@ -30,28 +29,10 @@ export async function persistDevSeedCatalogState(
 
   const ownerId = await upsertOwner(db, owner)
   const businessIdsBySlug: Record<string, Id<'businesses'>> = {}
-  const contextByBusinessId = new Map(bundle.state.businessContexts.map((context) => [context.businessId, context] as const))
-  const claimByBusinessId = new Map(bundle.state.claims.map((claim) => [claim.businessId, claim] as const))
 
   for (const business of bundle.state.businesses) {
     const convexBusinessId = await upsertBusiness(db, ownerId, business)
     businessIdsBySlug[business.slug] = convexBusinessId
-
-    const context = contextByBusinessId.get(business.businessId)
-    if (context === undefined) {
-      throw new Error(`Dev seed context missing for ${business.slug}.`)
-    }
-    await upsertBusinessContext(db, convexBusinessId, context)
-
-    const claim = claimByBusinessId.get(business.businessId)
-    if (claim === undefined) {
-      throw new Error(`Dev seed claim missing for ${business.slug}.`)
-    }
-    const convexClaimId = await upsertClaim(db, ownerId, convexBusinessId, claim)
-
-    for (const fingerprint of bundle.state.claimFingerprints.filter((candidate) => candidate.claimId === claim.claimId)) {
-      await upsertClaimFingerprint(db, ownerId, convexBusinessId, convexClaimId, fingerprint)
-    }
 
     for (const offering of bundle.state.offerings.filter((candidate) => candidate.businessId === business.businessId)) {
       await upsertBusinessOffering(db, convexBusinessId, offering)
@@ -154,30 +135,6 @@ async function upsertBusiness(
   await db.patch(existing._id, patch)
   return existing._id
 }
-
-async function upsertBusinessContext(
-  db: GenericDatabaseWriter<DataModel>,
-  businessId: Id<'businesses'>,
-  context: DevSeedCatalogBundle['state']['businessContexts'][number],
-): Promise<void> { return unlistedRetiredListedTables() }
-
-
-async function upsertClaim(
-  db: GenericDatabaseWriter<DataModel>,
-  ownerId: Id<'owners'>,
-  businessId: Id<'businesses'>,
-  claim: DevSeedCatalogBundle['state']['claims'][number],
-): Promise<string> { return unlistedRetiredListedTables() }
-
-
-async function upsertClaimFingerprint(
-  db: GenericDatabaseWriter<DataModel>,
-  ownerId: Id<'owners'>,
-  businessId: Id<'businesses'>,
-  claimId: string,
-  fingerprint: DevSeedCatalogBundle['state']['claimFingerprints'][number],
-): Promise<void> { return unlistedRetiredListedTables() }
-
 
 async function upsertBusinessOffering(
   db: GenericDatabaseWriter<DataModel>,
