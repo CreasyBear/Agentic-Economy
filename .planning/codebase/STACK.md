@@ -99,7 +99,7 @@ Bound to working tree at remap commit `7e067dfb`. Product inventory: **14 public
 
 **Businesses/services HTTP:** expansion frozen, URLs retained and instrumented (`src/modules/product-frontier/business-services-policy.ts`). Paths: `/api/v1/services`, `/api/v1/services/search`, `/api/v1/services/$serviceId`, `/api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`. Route files listed in `MEASURED_BUSINESS_SERVICES_ROUTE_FILES`.
 
-**Listed Convex tables (60):** `durableTables` in `tests/unit/schema/convex-schema.test.ts`. Inquiry 12 stay (`INQUIRY_EXPORT_TABLES` in `src/modules/product-frontier/table-export-tables.ts`). 29 leftover listed names in `src/modules/product-frontier/retired-listed-tables.ts` are unlisted (writers throw `retired_listed_tables_unlisted`). Schema still composes additional module table maps in `convex/schema.ts` (routing-kernel, work-tree, study, project-spine, notification-outbox, observability, demand, discovery, settings, agent-access OAuth); those families are unlisted leftover, not the keep-60 set.
+**Listed Convex tables (60):** `durableTables` in `tests/unit/schema/convex-schema.test.ts`. Inquiry 12 stay (`INQUIRY_EXPORT_TABLES` in `src/modules/product-frontier/table-export-tables.ts`). The leftover 29 were a cut, not a restore target; they are pruned and the throw layer is gone. Schema still composes additional module table maps in `convex/schema.ts` (routing-kernel, work-tree, study, project-spine, notification-outbox, observability, demand, discovery, settings, agent-access OAuth); those families stay unlisted leftover, not the keep-60 set.
 
 ## Configuration
 

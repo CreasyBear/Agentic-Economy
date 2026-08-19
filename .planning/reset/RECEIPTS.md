@@ -1329,3 +1329,25 @@ Wrap fields omitted. Inspect 410d. `/call` clean. Inquiry 12 stay. Listed schema
 **AUTHORITY:** founder, this session: origin push. No force-push. No `--no-verify`.
 
 **FIT:** Hold lifted. Product closeout commits on `main` then `git push origin main`. SHAs recorded after the push lands.
+
+## Green-close-prune-leftovers — 2026-08-19
+
+**AUTHORITY:** founder plan `green_close_prune_leftovers`: prune leftover 29, do not restore them.
+
+**FIT:** 60 was a cut, not a restore target. Leftover 29 pruned. `publishPreparedCapability` is `requireSourceWrite` + catalog origin + `publishPreparedCapabilityCommand`; no `sourceDraftRevision` / `sourceDigest`. Seed persist ignores context/claim/fingerprint arrays. Throw layer gone (`convex/retiredListedUnlisted.ts` and `retired-listed-tables.ts` deleted). Leftover surfaces copy a sibling fail-closed in that file. `$0` invoke persists via listed `moneyUsageEvents` / `moneyTransactions` without `moneyFreeTierCounters`. x402 validator re-exported from `src/modules/action-invocation/public.ts`. `test:imports` fails if a listed vitest path is missing. Inquiry 12 stay. `marketDispatchWorkpool` stays. `/api/v1/operations/call` is not 410. Production x402 refused. Live money fail-closed. `durableTables` length 60.
+
+**COMMANDS:**
+- `npm run typecheck` green
+- `npm run lint` green
+- `npm run check:product-frontier` `{ok:true,errors:[]}`
+- `npm run check:kernel-retirement` `{kind:kernel_retirement_verified}`
+- `npx vitest run tests/unit/capability-supply/publication-commands-thinness.test.ts` (6 passed)
+- `npm run test:conformance` 422 passed
+- `npm run test:imports` 53 passed
+
+**SHAs:**
+- GC-publish-off-drafts `74003fb9`
+- GC-seed-off-claims `c6ebf155`
+- GC-delete-29-layer `bfa49d4a`
+- GC-lint-seams `d294220d`
+- GC-hygiene this commit

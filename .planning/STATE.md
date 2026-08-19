@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: atomic-operation-market-reset
 milestone_name: Atomic operation market reset
-status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_complete; closeout_actions_14; closeout_tables_60; closeout_cr_module; closeout_dashboard_delete; origin_push
-stopped_at: 2026-08-19 founder closeout — 14 public actions; 60 listed tables; CR module deleted; leftover local tables deleted; origin push authorized
+status: phases_0_1_2_3_4_committed; p5_a_b_c_d_e_landed; p6_complete; closeout_actions_14; closeout_tables_60; closeout_cr_module; closeout_dashboard_delete; origin_push; green_close_prune_leftovers
+stopped_at: 2026-08-19 green close — leftover 29 pruned; throw layer gone; publish is command + catalog origin
 last_updated: "2026-08-19"
 progress:
   total_phases: 7
@@ -18,10 +18,12 @@ current_phase_name: p6_complete
 
 ## Atomic Operation Market Reset — 2026-08-19
 
-Founder-authorized closeout on local `main`, then origin push:
+Founder-authorized closeout on local `main`, then origin push, then green close:
 
 - Public action inventory **23→14**. HTTP businesses/services URLs stay (P5-e retain-measured). `/api/v1/operations/call` stays. `inquiry.readCustomerRecord` stays.
-- Listed Convex tables **89→60**. The 29 leftover listed names are frozen unlisted; writers throw `retired_listed_tables_unlisted`. Inquiry 12 stay. `marketDispatchWorkpool` stays.
+- Listed Convex tables **89→60**. The 29 leftover listed names were a cut, not a restore target; they are pruned. Inquiry 12 stay. `marketDispatchWorkpool` stays.
+- Publish is in-memory prepare + `publishPreparedCapabilityCommand` with catalog origin on `businessOfferings` / `businessOfferingRevisions`. No `capabilitySupplySourceDrafts`, no `sourceDraftRevision` / `sourceDigest` on the public mutation.
+- Throw layer `convex/retiredListedUnlisted.ts` is gone. Leftover surfaces copy a sibling fail-closed in that file. Do not add a shared throw or no-op helper.
 - Customer Request **TypeScript module deleted**. Tombstone `customerRequest.*` actions remain for HTTP 410. Study and WorkTree modules stay.
 - Local Dashboard Delete Table analog: snapshot export, strip 148 leftover table dirs, `npx convex import --replace-all` (never `--prod`). `npx convex data` is exactly the keep-60 set. Workpool component tables remain.
 - Hold lifted: founder asked to push `origin/main`. No force-push. No production dashboard delete.

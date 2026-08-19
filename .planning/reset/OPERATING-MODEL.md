@@ -15,7 +15,7 @@ Core loop: `publish → admit → search/get/compare → execute-or-invoke → v
 - Chat is a bounded AI SDK tool loop over the same market actions — no deterministic intent router.
 - Organization/account owns funds and aggregate budget; API keys receive narrower grants.
 - V1 money is AE-brokered only. x402 stays as import/discovery metadata, refused as a live lane.
-- Customer Request TypeScript module is deleted; `customerRequest.*` tombstone actions remain so family HTTP stays 410. WorkTree and Study modules stay quarantined. Inquiry customer-record stays readable. Inquiry tables never drop. Other quarantined tables are unlisted; leftover local empty tables were deleted after hashed export.
+- Customer Request TypeScript module is deleted; `customerRequest.*` tombstone actions remain so family HTTP stays 410. WorkTree and Study modules stay quarantined. Inquiry customer-record stays readable. Inquiry tables never drop. Other quarantined tables are unlisted; leftover 29 listed names were pruned (callers rewritten, throw layer deleted), not restored. Leftover local empty tables were deleted after hashed export.
 
 ## Roles
 

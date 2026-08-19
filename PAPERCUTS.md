@@ -1477,3 +1477,13 @@ workstreams, duplicate observations, and explicit remediation status.
 215. cursor-grok-4.6: Empty-import --replace of leftover Convex tables left the names listed (208 still). Dashboard Delete Table has no CLI; local analog is export, strip unlisted dirs from the zip, then import --replace-all (never --prod). After that, npx convex data is exactly the keep-60 set.
 
 216. cursor-grok-4.6: Background npx convex dev on Node 22 got stuck collecting TypeScript errors with stale 1332 line numbers (settings.ts:130 after the file shrank to 80). Filesystem-changed-during-push retry loop; a later npx convex codegen on Node 22 still uploaded. Restart the watcher after a large schema unlist instead of trusting the looping typecheck.
+
+217. cursor-grok-4.6: Mapping quality docs: package.json test:imports still lists tests/imports/customer-request-boundaries.test.ts and customer-request-source-completeness.test.ts after the CR TypeScript module was deleted, so those paths 404 when you try to read the current import-gate set.
+
+218. cursor-grok-4.6: Guessed capability-supply/internal/route-transport-runtime.ts; the file is src/modules/capability-supply/route-transport-runtime.ts (no internal/ prefix).
+
+219. cursor-grok-4.6: Full reset validation: npm run test:imports still lists two deleted CR import tests; Vitest skipped the missing files (13 of 15 ran) so the gate stayed green on that hole. Also private-imports now fails on convex/capabilityOperationInvocationWorker.ts importing action-invocation/internal/x402-convex-values after the CR rehome.
+
+220. cursor-grok-4.6: Green-close prune: leftover moneyFreeTierCounters stub was hardcoded { callsUsed: 1 } so every $0 invoke refused credit_topup_required. Drop the missing-table counter check and persist $0 via moneyUsageEvents + moneyTransactions.
+
+221. cursor-grok-4.6: Every shell in this workspace prints .zshenv: no such file .cargo/env before the command. Harmless noise; the zshenv sources a missing cargo env file.

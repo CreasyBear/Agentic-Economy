@@ -115,6 +115,12 @@ One table-family card at a time, separate deployments only.
 | Closeout-cr-module | Delete CR TypeScript module; tombstone actions for HTTP 410; x402 validators rehomed | Closeout-tables-60 | committed |
 | Closeout-dashboard-delete | Local leftover table delete via keep-60 `--replace-all`; never `--prod` | Closeout-cr-module | committed |
 | Closeout-origin-push | Founder-authorized `git push origin main`; no force-push | Closeout-dashboard-delete | committed |
+| GC-publish-off-drafts | In-memory prepare + `publishPreparedCapability`; drop draft table args | Closeout-origin-push | committed |
+| GC-seed-off-claims | Seed persist writes listed catalog tables only | GC-publish-off-drafts | committed |
+| GC-delete-29-layer | Delete throw layer; leftover stubs copy local fail-closed; durableTables stays 60 | GC-seed-off-claims | committed |
+| GC-lint-seams | Lint wreckage; x402 validator on action-invocation public; test:imports fail-closed | GC-delete-29-layer | committed |
+| GC-verify | Serialized typecheck, lint, frontier, kernel-retirement, thinness, conformance, imports | GC-lint-seams | committed |
+| GC-hygiene | STATE/ledger/receipts; commit by concern; push origin main | GC-verify | committed |
 
 Never dropped: money, invocation, Delivery, dispute, privacy-erasure, governed-send lineage, inquiry 12, Answer, catalog/supply, external-run, RK HTTP 410, `marketDispatchWorkpool`.
 Routing-kernel HTTP tombstones are permanent. Named P6 families are unlisted after hashed empty digest. Local leftover empty tables were then deleted with a keep-60 `--replace-all` import (CLI analog of Dashboard Delete Table). Production dashboard delete was not authorized.

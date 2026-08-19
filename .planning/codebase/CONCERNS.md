@@ -54,7 +54,7 @@
 
 **Schema still spreads empty quarantined table objects:**
 - Issue: `convex/schema.ts` still imports `routingKernelTables`, `workTreeTables`, `studyTables`, and `projectSpineTables`, each now `{} as const`. Listed schema is the keep-60 `durableTables` set. Inquiry 12 stay. `marketDispatchWorkpool` stays as a Workpool component, not a listed app table.
-- Files: `convex/schema.ts`, `src/modules/routing-kernel/internal/convex-schema.ts`, `src/modules/work-tree/internal/convex-schema.ts`, `src/modules/study/internal/convex-schema.ts`, `src/modules/project-spine/internal/convex-schema.ts`, `tests/unit/schema/convex-schema.test.ts` (`durableTables` length 60), `src/modules/product-frontier/retired-listed-tables.ts` (29 names)
+- Files: `convex/schema.ts`, `src/modules/routing-kernel/internal/convex-schema.ts`, `src/modules/work-tree/internal/convex-schema.ts`, `src/modules/study/internal/convex-schema.ts`, `src/modules/project-spine/internal/convex-schema.ts`, `tests/unit/schema/convex-schema.test.ts` (`durableTables` length 60)
 - Impact: Empty spreads hide whether a future table definition silently re-lists a retired family. `v.id('businessServices')` remains in `src/modules/inquiries/internal/convex-schema.ts` and `src/modules/registry/internal/schema.ts` with no `businessServices` `defineTable`.
 - Fix approach: Keep listed names pinned to `durableTables`. Do not re-`defineTable` unlisted families. Replace leftover `v.id('businessServices')` with a string/legacy field that does not name an unlisted table, in a schema card with inventory tests.
 
@@ -136,8 +136,8 @@
 
 **Production leftover tables (Dashboard Delete Table unauthorized):**
 - Risk: Local keep-60 `--replace-all` deleted leftover empty tables on `joel-chan:agentic-economy-ea30d local` only. Production Dashboard Delete Table is not authorized. Hosted deployments may still list leftover unlisted names.
-- Files: `.planning/reset/RECEIPTS.md` (Closeout-dashboard-delete, Closeout-origin-push), `src/modules/product-frontier/retired-listed-tables.ts`, `tools/release/p6-table-export.ts`
-- Current mitigation: Convex writers throw `retired_listed_tables_unlisted` via `convex/retiredListedUnlisted.ts`. Inquiry 12 stay. Workpool component tables stay. RK HTTP 410 stays.
+- Files: `.planning/reset/RECEIPTS.md` (Closeout-dashboard-delete, Closeout-origin-push, Green-close-prune-leftovers), `tools/release/p6-table-export.ts`
+- Current mitigation: Leftover 29 are pruned; writers copy a sibling fail-closed in that Convex file. Do not restore a shared throw helper. Inquiry 12 stay. Workpool component tables stay. RK HTTP 410 stays.
 - Recommendations: Do not run `npx convex import --replace-all` with `--prod`. Do not Dashboard-delete production tables without a founder card and a hashed export receipt. Treat production leftover names as a separate ops card.
 
 ## Performance Bottlenecks
@@ -199,9 +199,9 @@
 - Test coverage: Schema inventory and hasher length; hosted inquiry traffic unmeasured.
 
 **Unlisted leftover writers:**
-- Files: `convex/retiredListedUnlisted.ts`, `src/modules/product-frontier/retired-listed-tables.ts`, `convex/notificationOutbox.ts`, `convex/settings.ts`, `convex/agentAccessOAuth.ts`, `convex/crons.ts`
-- Why fragile: 29 leftover listed names throw `retired_listed_tables_unlisted` on write. `cleanupExpiredOAuthGrants` is a no-op stub (`deleted: 0`) so the hourly cron does not throw; other OAuth mutations throw. Notification-outbox and settings mutations throw.
-- Safe modification: Keep writers throwing. Do not re-query unlisted names to “clean up” production leftovers. Do not paginate-delete production rows without founder authority.
+- Files: `convex/notificationOutbox.ts`, `convex/settings.ts`, `convex/agentAccessOAuth.ts`, `convex/crons.ts`
+- Why fragile: Leftover 29 are pruned. Surfaces copy a sibling fail-closed in that file (OAuth `return null`, cron `deleted: 0`, notification error unions, settings `owner_not_found`). Do not add a shared throw or no-op helper. Do not restore leftover listed names.
+- Safe modification: Keep leftover families unlisted. Do not re-query unlisted names to “clean up” production leftovers. Do not paginate-delete production rows without founder authority.
 - Test coverage: Schema inventory 60; production leftover names unmeasured.
 
 ## Scaling Limits
@@ -276,9 +276,9 @@
 - Files: `.planning/wayfinder/tickets/T52-compliance-and-first-dollar-gate.md`, `src/modules/money/internal/live-money-gate.ts`, `convex/crons.ts`, `convex/moneyLedger.ts` (`runDailySupplierSettlement`)
 
 **Production leftover table delete:**
-- Problem: Local leftover empty tables are gone via keep-60 `--replace-all`. Production Dashboard Delete Table is not authorized. Hosted leftover unlisted names (CR/RK/WorkTree/Study/spine plus the 29 `RETIRED_LISTED_TABLES`) may still exist.
+- Problem: Local leftover empty tables are gone via keep-60 `--replace-all`. Production Dashboard Delete Table is not authorized. Hosted leftover unlisted names (CR/RK/WorkTree/Study/spine plus the pruned leftover 29) may still exist.
 - Blocks: Hosted schema matching local `npx convex data` count 60.
-- Files: `.planning/reset/RECEIPTS.md` (Closeout-dashboard-delete), `src/modules/product-frontier/retired-listed-tables.ts`, `src/modules/product-frontier/table-export-tables.ts`
+- Files: `.planning/reset/RECEIPTS.md` (Closeout-dashboard-delete), `src/modules/product-frontier/table-export-tables.ts`
 
 **Public businesses/services expansion:**
 - Problem: `businessServicesPolicy.expansion` is `frozen`. Measured businesses/services URLs stay. No further public URL dies without RFC 8594 notice.
