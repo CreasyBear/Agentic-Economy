@@ -10,3 +10,4 @@ export {
   invocationControlValue,
   invocationFreshnessValue,
 } from './internal/convex-schema'
+export { x402PaymentReconciliationEvidenceValue } from './internal/x402-convex-values'

@@ -88,7 +88,7 @@ import {
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   x402PaymentReconciliationEvidenceValue,
-} from '@/modules/action-invocation/internal/x402-convex-values'
+} from '@/modules/action-invocation/public'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import {
