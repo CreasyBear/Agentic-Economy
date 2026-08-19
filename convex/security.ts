@@ -22,7 +22,6 @@ import {
   revokeAdminMembership as revokeAdminMembershipModule,
 } from '../src/modules/security/public'
 import type { AuditEventContract } from '../src/modules/observability/public'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import type {
   AdminAction,
   AdminAuthorityState,
@@ -772,9 +771,9 @@ type AdminAuthorityWriteResult = {
 }
 
 async function persistAdminAuthorityMutation(
-  db: MutationCtx['db'],
-  result: AdminAuthorityWriteResult,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: MutationCtx['db'],
+  _result: AdminAuthorityWriteResult,
+): Promise<void> { return }
 
 
 type AdminMembershipTarget = { clerkUserId: string; tokenIdentifier: string }
@@ -785,9 +784,9 @@ type AdminMembershipLookup =
   | { kind: 'conflict' }
 
 async function findAdminMembershipDocument(
-  db: MutationCtx['db'],
-  target: AdminMembershipTarget,
-): Promise<AdminMembershipLookup> { return unlistedRetiredListedTables() }
+  _db: MutationCtx['db'],
+  _target: AdminMembershipTarget,
+): Promise<AdminMembershipLookup> { return { kind: 'missing' } }
 
 
 function adminMembershipDocument(membership: AdminMembership) {
@@ -878,9 +877,9 @@ function disputeDocument(db: MutationCtx['db'], dispute: DisputeRecord) {
 
 
 async function persistAuditEvent(
-  db: MutationCtx['db'],
-  event: AuditEventContract,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: MutationCtx['db'],
+  _event: AuditEventContract,
+): Promise<void> { return }
 
 
 function adminAuthorityState(source: AdminAuthorityReadSource): AdminAuthorityState {
@@ -899,7 +898,7 @@ function adminMembershipFromDocument(row: Record<string, unknown>): AdminMembers
 }
 
 function adminMembershipAuditFromDocument(_row: Record<string, unknown>): AdminDecisionAudit {
-  return unlistedRetiredListedTables()
+  return undefined as never
 }
 
 function disputeSourceState(source: DisputeReadSource): DisputeSourceState {

@@ -1,6 +1,5 @@
 import { v } from 'convex/values'
 
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import { env, mutation, query } from './_generated/server'
 
 const releaseIdentityResult = v.union(
@@ -66,7 +65,7 @@ const ownerNotificationPreferencesMutationResult = v.union(
 export const readCurrentOwnerNotificationPreferences = query({
   args: {},
   returns: ownerNotificationPreferencesReadResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ kind: 'error' as const, code: 'owner_not_found' as const, retryable: false, reason: 'Owner notification preferences are retired.' }),
 })
 
 export const setCurrentOwnerNotificationPreferences = mutation({
@@ -74,7 +73,7 @@ export const setCurrentOwnerNotificationPreferences = mutation({
     newInquiryEmailEnabled: v.boolean(),
   },
   returns: ownerNotificationPreferencesMutationResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ kind: 'error' as const, code: 'owner_not_found' as const, retryable: false, reason: 'Owner notification preferences are retired.' }),
 })
 
 

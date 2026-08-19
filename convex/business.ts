@@ -42,7 +42,6 @@ import {
   type SuppressionRuleRecord,
 } from '../src/modules/security/public'
 import type { DataModel, Doc, Id, TableNames } from './_generated/dataModel'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const sourceRefArg = v.object({
   label: v.string(),
@@ -439,8 +438,8 @@ function visibilityPersistStateFromSource(
   return {
     businesses: source.businesses.map((row) => businessRecordFromSource(row, db)),
     suppressionRules: source.suppressionRules.map((row) => suppressionRuleFromSource(row)),
-    auditEvents: source.auditEvents.map((row) => auditEventFromSource(row, db)),
-    adminMembershipAuditEvents: source.adminMembershipAuditEvents.map((row) => adminMembershipAuditFromSource(row)),
+    auditEvents: [],
+    adminMembershipAuditEvents: [],
   }
 }
 
@@ -490,19 +489,6 @@ function suppressionRuleFromSource(
     ...(liftedEvidenceRefs === undefined ? {} : { liftedEvidenceRefs }),
     ...(liftedAt === undefined ? {} : { liftedAt }),
   }
-}
-
-function auditEventFromSource(
-  _row: BusinessVisibilitySourceState['auditEvents'][number],
-  _db: GenericDatabaseWriter<DataModel>,
-): AuditEventContract {
-  return unlistedRetiredListedTables()
-}
-
-function adminMembershipAuditFromSource(
-  _row: BusinessVisibilitySourceState['adminMembershipAuditEvents'][number],
-): AdminDecisionAudit {
-  return unlistedRetiredListedTables()
 }
 
 function suppressionRuleDocument(rule: SuppressionRuleRecord): Omit<Record<string, unknown>, '_id' | '_creationTime'> {
@@ -765,7 +751,7 @@ export async function claimBusinessCommand(
   void db
   void command
   void now
-  return claimError('claim_operation_conflict', 'retired_listed_tables_unlisted')
+  return claimError('claim_operation_conflict', 'Business claiming is retired.')
 }
 function claimCommandResult(
   _code: 'claim_created' | 'claim_replayed',
@@ -776,7 +762,7 @@ function claimCommandResult(
   _claim: ClaimDocument,
   _context: ContextDocument,
 ) {
-  return claimError('claim_operation_conflict', 'retired_listed_tables_unlisted')
+  return claimError('claim_operation_conflict', 'Business claiming is retired.')
 }
 
 function optionalNonEmptyString(value: string | undefined): string | undefined {

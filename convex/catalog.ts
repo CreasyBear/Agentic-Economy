@@ -18,7 +18,6 @@ import {
   readLiveBusinessSupplyProjection,
   rebuildBusinessSupplyProjectionSnapshotCommand,
 } from './capabilitySupplyProjection'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 export {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
@@ -448,7 +447,7 @@ export async function publishBusinessCatalogCommand(
   _now: number,
 ): Promise<ReturnType<typeof catalogError> | { kind: 'ok'; business: { businessId: string } }> {
   void command
-  return catalogError('catalog_publish_operation_conflict', 'retired_listed_tables_unlisted')
+  return catalogError('catalog_publish_operation_conflict', 'Catalog publish from claim is retired.')
 }
 
 export async function ensureCatalogProjectionControlsCommand(

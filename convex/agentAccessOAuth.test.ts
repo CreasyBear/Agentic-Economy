@@ -91,10 +91,11 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       operationKey: 'oauth:test:insert',
       correlationId: 'oauth:test:insert',
     }
-    await expect(backend.mutation(api.agentAccessOAuth.insertGrant, {
+    const insertResult = await backend.mutation(api.agentAccessOAuth.insertGrant, {
       ...insertCommand,
       ...(await sourceArgs(insertCommand)),
-    })).rejects.toThrow('retired_listed_tables_unlisted')
+    })
+    expect(insertResult).toBeNull()
     const readCommand = {
       grantRef: grant.grantRef,
       operationKey: 'oauth:test:read',

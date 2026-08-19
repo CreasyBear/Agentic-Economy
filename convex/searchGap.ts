@@ -6,7 +6,6 @@ import {
   SearchGapSurfaceValues,
 } from '@/modules/demand/public'
 import { resolveBusinessActor } from './authz'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const factValidator = literalUnion(SearchGapFactValues)
 const surfaceValidator = literalUnion(SearchGapSurfaceValues)
@@ -35,7 +34,7 @@ export const recordSearchGaps = mutationGeneric({
       ),
     }),
   ),
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ kind: 'refused' as const, code: 'empty_query' as const }),
 })
 
 export const readOwnerSearchGaps = queryGeneric({

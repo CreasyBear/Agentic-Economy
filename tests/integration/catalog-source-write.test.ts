@@ -102,11 +102,6 @@ describe('catalog owner source-write admission', () => {
   it('fences a response-lost details replay after a newer revision and leaves later steps untouched', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'catalog-source-write-replay-fence')
-    await backend.run(async (ctx) => {
-      for (const key of ['offering_authoring_enabled', 'offering_public_projection_enabled'] as const) {
-        undefined
-      }
-    })
 
     const offeringRef = 'offering:catalog-source-write-replay-fence'
     const baseline = await owner.mutation(api.catalog.createBusinessOffering, await withSourceWrite('catalog_publish', {

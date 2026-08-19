@@ -29,7 +29,6 @@ import {
   recordAdminActionDenied,
   requireAdminAuthority,
 } from '../src/modules/security/public'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import type {
   AdminDecisionAudit,
   AdminMembership,
@@ -227,13 +226,13 @@ export const setOperatorControl = mutationGeneric({
     correlationId: v.string(),
   },
   returns: setOperatorControlResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ kind: 'error' as const, code: 'operator_control_admin_denied' as const, retryable: false, reason: 'Operator controls are retired.' }),
 })
 
 export const readOperatorControls = queryGeneric({
   args: {},
   returns: readOperatorControlsResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ kind: 'denied' as const, reason: 'missing_membership' as const, controls: [] }),
 })
 
 export const recordOwnerActivationEvent = mutationGeneric({
@@ -253,31 +252,31 @@ export const recordOwnerActivationEvent = mutationGeneric({
     payload: v.optional(v.record(v.string(), v.union(v.string(), v.number(), v.boolean(), v.null()))),
   },
   returns: v.object({ ok: v.literal(true) }),
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ ok: true as const }),
 })
 
 async function readOwnerActivationByBusiness(
-  db: GenericDatabaseReader<DataModel>,
-  businessId: OwnerActivationState['businessId']
-): Promise<Map<string, OwnerActivationState>> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseReader<DataModel>,
+  _businessId: OwnerActivationState['businessId']
+): Promise<Map<string, OwnerActivationState>> { return new Map() }
 
 
 async function upsertFunnelEventRow(
-  db: GenericDatabaseWriter<DataModel>,
-  event: FunnelEventPersistenceRow,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _event: FunnelEventPersistenceRow,
+): Promise<void> { return }
 
 
 async function readFirstFunnelEventByCorrelationId(
-  db: GenericDatabaseReader<DataModel>,
-  correlationId: FunnelEventPersistenceRow['correlationId'],
-): Promise<Record<string, unknown> | null> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseReader<DataModel>,
+  _correlationId: FunnelEventPersistenceRow['correlationId'],
+): Promise<Record<string, unknown> | null> { return null }
 
 
 async function upsertOwnerActivationStateRow(
-  ctx: MutationCtx,
-  state: OwnerActivationState,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _ctx: MutationCtx,
+  _state: OwnerActivationState,
+): Promise<void> { return }
 
 export const readAdminOwnerActivationSummary = queryGeneric({
   args: {},
@@ -285,7 +284,7 @@ export const readAdminOwnerActivationSummary = queryGeneric({
     byStage: v.array(ownerActivationSummaryRow),
     totalTracked: v.number(),
   }),
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ byStage: [], totalTracked: 0 }),
 })
 
 export type {

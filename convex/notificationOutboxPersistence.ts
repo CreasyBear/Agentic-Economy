@@ -9,7 +9,6 @@ import type {
   NotificationWebhookEventRecord,
 } from '../src/modules/notification-outbox/public'
 import type { DataModel, Doc, Id } from './_generated/dataModel'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 type NotificationDispatchRow = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
@@ -17,26 +16,22 @@ type NotificationDispatchAttemptRow = Omit<Record<string, unknown>, '_id' | '_cr
 
 type NotificationWebhookEventRow = Omit<Record<string, unknown>, '_id' | '_creationTime'>
 
-export function toDispatchRecord(_row: Record<string, unknown>): NotificationDispatchRecord {
-  return unlistedRetiredListedTables()
-}
-
 export async function persistNotificationDispatch(
-  db: GenericDatabaseWriter<DataModel>,
-  dispatch: NotificationDispatchRecord,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _dispatch: NotificationDispatchRecord,
+): Promise<void> { return }
 
 
 export async function persistNotificationDispatchAttempt(
-  db: GenericDatabaseWriter<DataModel>,
-  attempt: NotificationDispatchAttemptRecord,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _attempt: NotificationDispatchAttemptRecord,
+): Promise<void> { return }
 
 
 export async function persistNotificationWebhookEvent(
-  db: GenericDatabaseWriter<DataModel>,
-  webhookEvent: NotificationWebhookEventRecord,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _webhookEvent: NotificationWebhookEventRecord,
+): Promise<void> { return }
 
 
 /** Enqueue-path reconstruction used by the inquiry notification bridge. */
@@ -86,14 +81,14 @@ async function persistNotificationOperationKey(
 }
 
 async function persistNotificationQueuedAuditEvent(
-  db: GenericDatabaseWriter<DataModel>,
-  dispatch: NotificationDispatchRecord,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _dispatch: NotificationDispatchRecord,
+): Promise<void> { return }
 
 async function persistNotificationQueuedFunnelEvent(
-  db: GenericDatabaseWriter<DataModel>,
-  dispatch: NotificationDispatchRecord,
-): Promise<void> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseWriter<DataModel>,
+  _dispatch: NotificationDispatchRecord,
+): Promise<void> { return }
 
 function notificationDispatchRow(
   db: GenericDatabaseWriter<DataModel>,

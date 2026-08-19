@@ -67,7 +67,6 @@ import type * as projectSpine from "../projectSpine.js";
 import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as registry from "../registry.js";
-import type * as retiredListedUnlisted from "../retiredListedUnlisted.js";
 import type * as routingKernelV1History from "../routingKernelV1History.js";
 import type * as searchGap from "../searchGap.js";
 import type * as security from "../security.js";
@@ -145,7 +144,6 @@ declare const fullApi: ApiFromModules<{
   qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
   registry: typeof registry;
-  retiredListedUnlisted: typeof retiredListedUnlisted;
   routingKernelV1History: typeof routingKernelV1History;
   searchGap: typeof searchGap;
   security: typeof security;

@@ -99,8 +99,6 @@ describe('capability publication', () => {
       'legacy-rebuild',
     )
     const legacyIds = await backend.run(async (ctx) => {
-      undefined
-      undefined
       await ctx.db.insert('businessOfferings', {
         offeringRef: 'catalog-offering:legacy-rebuild',
         businessId,
@@ -242,8 +240,6 @@ describe('capability publication', () => {
       'catalog-origin-one',
     )
     await backend.run(async (ctx) => {
-      undefined
-      undefined
       await ctx.db.insert('businessOfferings', {
         offeringRef: 'catalog-offering:catalog-origin-one',
         businessId,

@@ -89,7 +89,7 @@ AE is the market and controlled-transaction layer for authorized agents to disco
 | CR tombstones | Findable `customerRequest.*` actions that throw; HTTP 410 | `src/modules/product-frontier/quarantine-family-actions.ts` |
 | RK retirement | Convex HTTP 410 for routing-kernel v1 paths | `src/modules/routing-kernel/retirement.ts` |
 | Schema composition | Spreads module table maps into one Convex schema | `convex/schema.ts` |
-| Listed-table freeze | Writers for the 29 unlisted names throw `retired_listed_tables_unlisted` | `convex/retiredListedUnlisted.ts` |
+| Listed-table freeze | Keep-60 `durableTables`; leftover 29 pruned; no shared throw layer | `tests/unit/schema/convex-schema.test.ts` |
 
 ## Pattern Overview
 
@@ -262,7 +262,7 @@ Paid invoke (the paid door):
 - **Circular imports:** Registry operation actions currently dynamic-import `capability-supply/operation-source` inside `run` (`src/modules/registry/operations.actions.ts`). Prefer top-level imports. Do not add new inline imports to break cycles; extract a leaf module under `internal/` instead.
 - **Import boundaries:** Routes import module `public.ts` / `convex.ts` / documented server helpers, not `internal/`. Guard: `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, `src/lib/ui/contract-scans.ts`. `convex/schema.ts` is the allowed composer of `internal/*schema*`.
 - **Public inventory cap:** `listActions()` is the 14-id set. Adding a public action requires registry entry plus frontier manifest update (`.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`) and tests in `tests/imports/product-frontier-manifest.test.ts`.
-- **Listed tables cap:** 60 names in `durableTables` (`tests/unit/schema/convex-schema.test.ts`). Study/WorkTree/RK/project-spine table maps are empty objects. Unlisted leftover names throw from `convex/retiredListedUnlisted.ts`.
+- **Listed tables cap:** 60 names in `durableTables` (`tests/unit/schema/convex-schema.test.ts`). Study/WorkTree/RK/project-spine table maps are empty objects. Leftover unlisted writers copy a sibling fail-closed in that file — do not add a shared throw or no-op helper.
 - **No second kernel:** Do not add a second token verifier, registry, ledger, transport, or execution state machine. Reuse `agent-access`, `action-invocation`, `capability-execution`, `money`, `convex/lib/rateLimit.ts`.
 - **Planning/orchestration:** Consuming agents own multi-step plans. AE does not grow a Customer Request planner. Chat is a tool loop over market actions, not an intent router.
 
@@ -313,8 +313,8 @@ Paid invoke (the paid door):
 ### Listing a Convex table without the inventory pin
 
 **What happens:** A table is spread into `convex/schema.ts` but omitted from `durableTables`.
-**Why it's wrong:** `tests/unit/schema/convex-schema.test.ts` pins exactly 60 listed names. Unlisted writers must throw `retired_listed_tables_unlisted`.
-**Do this instead:** Add the table to the module schema, `convex/schema.ts`, and `durableTables` only when the listed cap is intentionally raised. Prefer unlisted + `convex/retiredListedUnlisted.ts` for retired families.
+**Why it's wrong:** `tests/unit/schema/convex-schema.test.ts` pins exactly 60 listed names. Do not re-list leftover families or restore a shared throw helper.
+**Do this instead:** Add the table to the module schema, `convex/schema.ts`, and `durableTables` only when the listed cap is intentionally raised. For leftover unlisted surfaces, copy an existing local fail-closed in that file or delete the unused export.
 
 ## Error Handling
 

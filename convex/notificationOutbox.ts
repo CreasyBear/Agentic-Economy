@@ -54,8 +54,6 @@ import {
   loadNotificationOutboxSourceStateForWebhook,
   persistNotificationOutboxSourceState,
 } from './notificationOutboxSourceState'
-import { toDispatchRecord } from './notificationOutboxPersistence'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const notificationProviderFamily = literalUnion(NotificationProviderFamilyValues)
 const notificationRecipientRole = literalUnion(NotificationRecipientRoleValues)
@@ -322,7 +320,12 @@ export const enqueueInquiryNotificationDispatch = mutationGeneric({
     correlationId: v.string(),
   },
   returns: enqueueNotificationResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_dispatch_disabled' as const,
+    retryable: false,
+    reason: 'Notification dispatch is retired.',
+  }),
 })
 
 export const dispatchNotificationOutbox = mutationGeneric({
@@ -334,7 +337,12 @@ export const dispatchNotificationOutbox = mutationGeneric({
     correlationId: v.string(),
   },
   returns: dispatchNotificationResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_dispatch_disabled' as const,
+    retryable: false,
+    reason: 'Notification dispatch is retired.',
+  }),
 })
 
 export const ingestNotificationWebhookEvent = mutationGeneric({
@@ -352,7 +360,12 @@ export const ingestNotificationWebhookEvent = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationWebhookResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_webhooks_disabled' as const,
+    retryable: false,
+    reason: 'Notification webhooks are retired.',
+  }),
 })
 
 export const readNotificationDispatchForSystemSend = queryGeneric({
@@ -361,7 +374,12 @@ export const readNotificationDispatchForSystemSend = queryGeneric({
     systemKey: v.string(),
   },
   returns: notificationSystemSendReadResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_system_denied' as const,
+    retryable: false,
+    reason: 'Notification send-read is retired.',
+  }),
 })
 
 export const readCurrentOwnerNotificationDispatchReadback = queryGeneric({
@@ -369,7 +387,12 @@ export const readCurrentOwnerNotificationDispatchReadback = queryGeneric({
     dispatchId: v.string(),
   },
   returns: notificationReadbackResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'missing_auth' as const,
+    retryable: false,
+    reason: 'Notification readback is retired.',
+  }),
 })
 
 export const retryNotificationDispatchAsOperator = mutationGeneric({
@@ -381,7 +404,12 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationRepairResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_operator_denied' as const,
+    retryable: false,
+    reason: 'Notification repair is retired.',
+  }),
 })
 
 export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
@@ -393,7 +421,12 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
     correlationId: v.string(),
   },
   returns: notificationRepairResult,
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'notification_operator_denied' as const,
+    retryable: false,
+    reason: 'Notification repair is retired.',
+  }),
 })
 
 async function readCurrentOwner(ctx: RuntimeCtx): Promise<
@@ -424,7 +457,7 @@ async function ownerOwnsDispatchBusiness(
 async function readDispatchDocument(
   db: GenericDatabaseReader<DataModel>,
   dispatchId: string,
-): Promise<Record<string, unknown> | null> { return unlistedRetiredListedTables() }
+): Promise<Record<string, unknown> | null> { return null }
 
 type NotificationRepairCommandResult = RetryNotificationDispatchResult | MarkNotificationNoRepairResult
 type NotificationWriterCtx = {
@@ -581,7 +614,7 @@ function notificationRuntimeError(
 async function readOwnerNewInquiryEmailEnabled(
   db: GenericDatabaseReader<DataModel>,
   ownerId: Id<'owners'>,
-): Promise<boolean> { return unlistedRetiredListedTables() }
+): Promise<boolean> { return false }
 
 function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' } | { kind: 'denied'; reason: string } {
   const expected = process.env.AE_NOTIFICATION_OUTBOX_SECRET?.trim()

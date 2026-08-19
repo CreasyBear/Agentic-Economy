@@ -22,7 +22,6 @@ import {
   readLiveBusinessSupplyProjection,
 } from './capabilitySupplyProjection'
 import { hasActiveBusinessSuppression } from './catalogRuntimeQueries'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const inquiryTargetResolution = v.union(
   v.object({ kind: v.literal('resolved'), businessId: v.string(), offeringRef: v.string() }),
@@ -505,20 +504,30 @@ function offeringPlaceKeys(item: OfferingSupplyDto): readonly string[] {
   return [...keys]
 }
 
-async function readCatalogHealthFromDb(db: DatabaseReader, businessId: string): Promise<CatalogHealth> { return unlistedRetiredListedTables() }
+async function readCatalogHealthFromDb(_db: DatabaseReader, businessId: string): Promise<CatalogHealth> {
+  return {
+    businessId,
+    sourceState: 'not_public',
+    indexStatus: 'not_queued',
+    projectionItems: [],
+    affectedPublicSurfaces: [],
+    repairAction: 'no_repair',
+    repairResult: 'not_run',
+  }
+}
 
 
-async function latestRegistryAttempt(db: DatabaseReader, businessId: Id<'businesses'>, expectedSlug: string): Promise<RegistryAttempt | undefined> { return unlistedRetiredListedTables() }
+async function latestRegistryAttempt(_db: DatabaseReader, _businessId: Id<'businesses'>, _expectedSlug: string): Promise<RegistryAttempt | undefined> { return undefined }
 
 
 function toRegistryAttempt(_attempt: Record<string, unknown>, _expectedSlug: string): RegistryAttempt | undefined {
   return undefined
 }
 
-async function projectionItemsForBusiness(db: DatabaseReader, businessId: Id<'businesses'>) { return unlistedRetiredListedTables() }
+async function projectionItemsForBusiness(_db: DatabaseReader, _businessId: Id<'businesses'>): Promise<ProjectionItem[]> { return [] }
 
 
-async function indexStatusForBusiness(db: DatabaseReader, businessId: string): Promise<CatalogHealth['indexStatus']> { return unlistedRetiredListedTables() }
+async function indexStatusForBusiness(_db: DatabaseReader, _businessId: string): Promise<CatalogHealth['indexStatus']> { return 'not_queued' }
 
 
 const SEARCH_STOP_WORDS = new Set(['a', 'an', 'and', 'around', 'at', 'business', 'businesses', 'find', 'for', 'in', 'near', 'need', 'now', 'open', 'provider', 'providers', 'service', 'services', 'the', 'to'])

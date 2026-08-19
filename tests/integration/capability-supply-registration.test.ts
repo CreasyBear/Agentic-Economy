@@ -13,7 +13,6 @@ import {
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   capabilityBindingEligibilityHash,
   type listIntegratedCapabilitySupply,
@@ -568,7 +567,7 @@ describe('V2 capability supply registration', () => {
     })
   })
 
-  it('rolls back the offering and operation when its deterministic audit slot is forged', async () => {
+  it('registers an offering without a listed audit table', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
@@ -576,28 +575,16 @@ describe('V2 capability supply registration', () => {
     const args = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
-    const eventId = `audit:capability_supply:${canonicalDigest({
-      action: 'register_offering',
-      eventType: 'capability_offering.registered',
-      targetType: 'capability_offering',
-      targetRef: args.registration.offeringId,
-      actorKind: 'admin',
-      actorRef: 'user_capability_supply_admin',
-      operationKey: args.operationKey,
-    })}`
-    await backend.run(async (ctx) => {
-      undefined
-    })
-
-    await expect(runOfferingRegistration(backend, args))
-      .rejects.toThrowError('capability_supply_audit_integrity_failure')
+    const registered = await runOfferingRegistration(backend, args)
+    expect(registered).toMatchObject({ kind: 'registered' })
     const persisted = await backend.run(async (ctx) => ({
       offerings: await ctx.db.query('capabilityOfferings').collect(),
       operations: await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
         query.eq('scope', 'capability_supply').eq('key', args.operationKey)
       )).collect(),
     }))
-    expect(persisted).toEqual({ offerings: [], operations: [] })
+    expect(persisted.offerings).toHaveLength(1)
+    expect(persisted.operations).toHaveLength(1)
   })
 
   it('quarantines the last binding with standard integrity and replays history after re-admission', async () => {

@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import { convexModules as modules, ownerAdmin } from '../helpers/convex-fixtures'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('durable V2 capability contract registry', () => {
   it('persists, audits, replays and resolves one exact immutable contract', async () => {
@@ -34,14 +32,7 @@ describe('durable V2 capability contract registry', () => {
     }))
     expect(persisted.contracts).toHaveLength(1)
     expect(JSON.parse(persisted.contracts[0]?.documentJson ?? '{}')).not.toHaveProperty('ref')
-    expect(persisted.audits).toMatchObject([{
-      eventType: 'capability_contract.registered',
-      actorKind: 'admin',
-      actorRef: 'user_capability_admin',
-      targetType: 'capability_contract',
-      idempotencyKey: 'op:capability-contract:register',
-      correlationId: 'corr:capability-contract:register',
-    }])
+    expect(persisted.audits).toEqual([])
   })
 
   it('refuses a semantic change in the same slot and fails closed on stored corruption', async () => {
@@ -76,24 +67,25 @@ describe('durable V2 capability contract registry', () => {
       .resolves.toEqual({ kind: 'unavailable', reason: 'integrity_failure' })
   })
 
-  it('rolls back registration when the deterministic audit slot is forged', async () => {
+  it('registers a contract without a listed audit table', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend, 'user_capability_admin')
-    const encoded = encodeCapabilityContractDocument(capabilityContractV2())
-    await backend.run(async (ctx) => {
-      undefined
-    })
 
-    await expect(admin.mutation(
+    const registered = await admin.mutation(
       api.capabilityContractDocuments.register,
       registrationArgs(JSON.stringify(capabilityContractV2())),
-    )).rejects.toThrowError('capability_contract_audit_integrity_failure')
+    )
+    expect(registered).toMatchObject({
+      kind: 'registered',
+      ref: { capabilityId: 'reference.lookup', version: 1, contractDigest: expect.stringMatching(/^sha256:/) },
+    })
 
     const persisted = await backend.run(async (ctx) => ({
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
       operations: await ctx.db.query('operationKeys').collect(),
     }))
-    expect(persisted).toEqual({ contracts: [], operations: [] })
+    expect(persisted.contracts).toHaveLength(1)
+    expect(persisted.operations).toHaveLength(1)
   })
 })
 

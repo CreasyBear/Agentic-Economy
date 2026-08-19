@@ -3,7 +3,6 @@ import { internalMutation, mutation, query } from './_generated/server'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { sourceWriteCommandDigest, verifySourceWriteAdmission, type SourceWriteAdmission, type SourceWriteAdmissionRequest } from '../src/modules/security/source-write-admission'
 import { isRecord } from '../src/modules/common/is-record'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const OAUTH_SOURCE_WRITE_SCOPE = 'agent_identity' as const
 const flow = v.union(v.literal('device_code'), v.literal('authorization_code'))
@@ -56,7 +55,7 @@ export const insertGrant = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    return unlistedRetiredListedTables()
+    return null
   },
 })
 
@@ -89,7 +88,7 @@ export const updateGrant = mutation({
   returns: v.union(grant, v.null()),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    return unlistedRetiredListedTables()
+    return null
   },
 })
 
@@ -98,7 +97,7 @@ export const insertClient = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireOAuthSourceWrite(ctx, args)
-    return unlistedRetiredListedTables()
+    return null
   },
 })
 

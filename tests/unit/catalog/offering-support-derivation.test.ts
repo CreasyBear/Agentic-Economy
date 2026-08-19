@@ -318,12 +318,9 @@ describe('catalogue support derivation', () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await publishedBusinessOwner(backend, 'missing-offering-revision')
     await backend.run(async (ctx) => {
-      undefined
       await ctx.db.insert('businessOfferings', {
-        businessId, offeringRef: 'offering:1', currentRevision: 2, status: 'published', createdAt: 1, updatedAt: 2,
+        businessId, offeringRef: 'offering:1', currentRevision: 2, status: 'published',         createdAt: 1, updatedAt: 2,
       })
-      undefined
-      undefined
     })
 
     await expect(backend.run((ctx) => rebuildBusinessSupplyProjectionSnapshotCommand({

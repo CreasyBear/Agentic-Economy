@@ -72,7 +72,7 @@ Agentic-Economy/
 **`convex/`:**
 - Purpose: Durable queries/mutations/actions. Call into `src/modules`; do not invent a second domain layer.
 - Contains: One file (or family) per table/context; `schema.ts` composition; RK 410 HTTP; workpool.
-- Key files: `convex/schema.ts`, `convex/capabilityOperationInvocations.ts`, `convex/marketDispatchWorkpool.ts`, `convex/http.ts`, `convex/authz.ts`, `convex/retiredListedUnlisted.ts`
+- Key files: `convex/schema.ts`, `convex/capabilityOperationInvocations.ts`, `convex/marketDispatchWorkpool.ts`, `convex/http.ts`, `convex/authz.ts`
 
 **`tools/ae/`:**
 - Purpose: CLI that exercises AE the way an external agent would — same public HTTP actions.
@@ -180,7 +180,7 @@ Agentic-Economy/
 - Compose: spread into `convex/schema.ts`
 - Inventory: add the name to `durableTables` in `tests/unit/schema/convex-schema.test.ts` (current listed cap is 60)
 - Source functions: `convex/<context>.ts` calling module functions; require `sourceWriteAdmission` for writes
-- Unlisted/retired names: add to `src/modules/product-frontier/retired-listed-tables.ts` and throw via `convex/retiredListedUnlisted.ts` — do not re-list Study/WorkTree/RK/project-spine tables (those maps are `{}`)
+- Leftover unlisted families: copy an existing local fail-closed already in that Convex file, or delete the unused export. Do not add a shared throw or no-op helper. Do not re-list Study/WorkTree/RK/project-spine tables (those maps are `{}`)
 
 **New UI surface:**
 - Page: `src/routes/<path>.tsx` or `src/routes/_operator/<path>.tsx`

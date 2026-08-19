@@ -9,7 +9,7 @@ describe('money schema ownership', () => {
     const tables = JSON.parse(String(exported.call(schema))).tables as readonly { tableName: string; indexes: readonly { indexDescriptor: string; fields: readonly string[] }[] }[]
     const byName = new Map(tables.map((table) => [table.tableName, table]))
     expect([...byName.keys()].filter((name) => name.startsWith('money'))).toEqual(expect.arrayContaining([
-      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyExternalSpendReservations', 'moneyX402PaymentAttempts', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyFreeTierCounters', 'moneyTopupCommands', 'moneyConnectAccountCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
+      'moneyAccounts', 'moneyLedgerEntries', 'moneyTransactions', 'moneyCredentialBudgetStates', 'moneyExternalSpendReservations', 'moneyX402PaymentAttempts', 'moneyUsageEvents', 'moneyCredentialUsageSummaries', 'moneyTopupCommands', 'moneyStripeEvents', 'moneyPayoutAccounts', 'moneyPayouts',
     ]))
     expect(byName.get('moneyExternalSpendReservations')?.indexes).toEqual(expect.arrayContaining([
       expect.objectContaining({ indexDescriptor: 'by_reservationRef', fields: ['reservationRef'] }),
@@ -38,10 +38,8 @@ describe('money schema ownership', () => {
       expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency', fields: ['businessId', 'currency'] }),
       expect.objectContaining({ indexDescriptor: 'by_stripeAccountId', fields: ['stripeAccountId'] }),
     ]))
-    expect(byName.get('moneyConnectAccountCommands')?.indexes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency', fields: ['businessId', 'currency'] }),
-      expect.objectContaining({ indexDescriptor: 'by_businessId_and_currency_and_idempotencyKey', fields: ['businessId', 'currency', 'idempotencyKey'] }),
-    ]))
+    expect(byName.has('moneyFreeTierCounters')).toBe(false)
+    expect(byName.has('moneyConnectAccountCommands')).toBe(false)
     const serialized = JSON.stringify(tables.filter((table) => table.tableName.startsWith('money')))
     expect(serialized).not.toMatch(/secret|paymentMethod|clientSecret/i)
   })

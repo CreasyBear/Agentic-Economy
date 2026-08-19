@@ -82,8 +82,6 @@ import {
   type ExternalSpendRefusalCode,
 } from '../src/modules/money/public'
 import type { AgentAccessRatePolicy } from '../src/modules/agent-access/policy'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
-
 type MoneyUsageEventInput = Omit<
   Doc<'moneyUsageEvents'>,
   '_id' | '_creationTime'
@@ -4131,15 +4129,6 @@ export const authorizeInvocationCharge = internalMutation({
           ...usageIdentity(existingUsage),
         }
       }
-      const windowStart = new Date(args.observedAt).toISOString().slice(0, 10)
-      const counter = { callsUsed: 1, version: 1, _id: '' }
-      if (counter.callsUsed >= 1)
-        return {
-          kind: 'refused' as const,
-          code: 'credit_topup_required' as const,
-          retryable: false,
-          nextAction: 'credit_topup_required' as const,
-        }
       const budgetReservation = await prepareCredentialBudgetReservation(ctx, {
         principalId: durablePrincipalId,
         accountId: ownerAccountId,
@@ -4200,8 +4189,6 @@ export const authorizeInvocationCharge = internalMutation({
         budgetReservation,
         args.observedAt,
       )
-      void counter
-      void windowStart
       await ctx.db.insert('moneyTransactions', {
         transactionRef: expectedTransactionRef,
         kind: 'charge' as const,
@@ -5717,7 +5704,7 @@ export const reserveConnectAccount = mutation({
     ...billingSourceArgs,
   },
   returns: connectAccountReservationResultValue,
-  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
+  handler: async () => ({ kind: 'refused' as const, code: 'connect_account_unlisted', retryable: false }),
 })
 
 export const finalizeConnectAccount = mutation({
@@ -5735,7 +5722,7 @@ export const finalizeConnectAccount = mutation({
     ...billingSourceArgs,
   },
   returns: connectAccountReservationResultValue,
-  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
+  handler: async () => ({ kind: 'refused' as const, code: 'connect_account_unlisted', retryable: false }),
 })
 
 export const bindConnectAccount = mutation({

@@ -1,50 +1,42 @@
 import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
 
+import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
 import {
   createEmptyNotificationOutboxSourceState,
-  MAX_NOTIFICATION_ATTEMPTS_PER_DISPATCH,
-  MAX_NOTIFICATION_THREAD_DISPATCH_READBACK,
-  MAX_NOTIFICATION_WEBHOOK_EVENT_READBACK,
 } from '../src/modules/notification-outbox/public'
 import type {
-  NotificationDispatchAttemptRecord,
   NotificationOutboxSourceState,
-  NotificationWebhookEventRecord,
   NotificationOutboxSourceStateLoadScope,
 } from '../src/modules/notification-outbox/public'
-type NotificationWebhookLoadScope = Extract<
-  NotificationOutboxSourceStateLoadScope,
-  { kind: 'webhook' }
->
-import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableStringify, type StableHashValue } from '../src/modules/common/stable-hash'
-import { parseRedactedPayload } from '../src/modules/notification-outbox/operator/parse-payload'
-import type { DataModel, Doc } from './_generated/dataModel'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
+import type { DataModel } from './_generated/dataModel'
 import {
   persistNotificationDispatch,
   persistNotificationDispatchAttempt,
   persistNotificationWebhookEvent,
-  toDispatchRecord,
 } from './notificationOutboxPersistence'
 
+type NotificationWebhookLoadScope = Extract<
+  NotificationOutboxSourceStateLoadScope,
+  { kind: 'webhook' }
+>
+
 export async function loadNotificationOutboxSourceStateForThread(
-  db: GenericDatabaseReader<DataModel>,
-  inquiryThreadId: string,
-  operationKeys: readonly string[] = [],
-): Promise<NotificationOutboxSourceState> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseReader<DataModel>,
+  _inquiryThreadId: string,
+  _operationKeys: readonly string[] = [],
+): Promise<NotificationOutboxSourceState> { return createEmptyNotificationOutboxSourceState() }
 
 
 export async function loadNotificationOutboxSourceStateForDispatch(
-  db: GenericDatabaseReader<DataModel>,
-  dispatchId: string,
-): Promise<NotificationOutboxSourceState> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseReader<DataModel>,
+  _dispatchId: string,
+): Promise<NotificationOutboxSourceState> { return createEmptyNotificationOutboxSourceState() }
 
 
 export async function loadNotificationOutboxSourceStateForWebhook(
-  db: GenericDatabaseReader<DataModel>,
-  scope: NotificationWebhookLoadScope,
-): Promise<NotificationOutboxSourceState> { return unlistedRetiredListedTables() }
+  _db: GenericDatabaseReader<DataModel>,
+  _scope: NotificationWebhookLoadScope,
+): Promise<NotificationOutboxSourceState> { return createEmptyNotificationOutboxSourceState() }
 
 
 export async function persistNotificationOutboxSourceState(
@@ -74,34 +66,6 @@ export async function persistNotificationOutboxSourceState(
       await persistNotificationWebhookEvent(db, webhookEvent)
     }
   }
-}
-
-async function loadNotificationDispatchAttempts(
-  db: GenericDatabaseReader<DataModel>,
-  dispatchId: string,
-): Promise<Record<string, unknown>[]> { return unlistedRetiredListedTables() }
-
-
-function compareDispatchRecords(
-  left: NotificationOutboxSourceState['dispatches'][number],
-  right: NotificationOutboxSourceState['dispatches'][number],
-): number {
-  return left.createdAt - right.createdAt || String(left.dispatchId).localeCompare(String(right.dispatchId))
-}
-
-async function loadNotificationOperatorControls(db: GenericDatabaseReader<DataModel>) { return unlistedRetiredListedTables() }
-
-
-function controlEnabled(_row: Record<string, unknown> | null, _now: number): boolean {
-  return true
-}
-
-function toAttemptRecord(_row: Record<string, unknown>): NotificationDispatchAttemptRecord {
-  return unlistedRetiredListedTables()
-}
-
-function toWebhookEventRecord(_row: Record<string, unknown>): NotificationWebhookEventRecord {
-  return unlistedRetiredListedTables()
 }
 
 function sameRecord(left: object, right: object): boolean {

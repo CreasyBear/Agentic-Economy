@@ -10,7 +10,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 
@@ -286,7 +285,7 @@ function invalidContractResult(error: unknown) {
 }
 
 async function ensureRegistrationAudit(
-  db: MutationCtx['db'],
+  _db: MutationCtx['db'],
   input: Readonly<{
     ref: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
     actorRef: string
@@ -297,6 +296,6 @@ async function ensureRegistrationAudit(
     registeredAt: number
   }>,
 ): Promise<string> {
-  return unlistedRetiredListedTables()
+  return input.operationKey
 }
 

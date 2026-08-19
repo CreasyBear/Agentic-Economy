@@ -28,8 +28,6 @@ import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjection
 import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { businessContext as businessContextResult } from '../src/modules/business/public'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
-
 
 const routeResult = v.object({
   kind: v.union(v.literal('business_page'), v.literal('ucp_manifest'), v.literal('api_detail')),
@@ -348,7 +346,12 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: regenerateResult,
-  handler: async (): Promise<Infer<typeof regenerateResult>> => unlistedRetiredListedTables(),
+  handler: async (): Promise<Infer<typeof regenerateResult>> => ({
+    kind: 'error',
+    code: 'discovery_manifest_failed',
+    retryable: false,
+    reason: 'Discovery manifests are retired.',
+  }),
 })
 
 /** System-callable (no owner gate) discovery-manifest generation for dev seeding. */
@@ -371,7 +374,12 @@ export const invalidateDiscoveryManifest = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: invalidateResult,
-  handler: async (): Promise<Infer<typeof invalidateResult>> => unlistedRetiredListedTables(),
+  handler: async (): Promise<Infer<typeof invalidateResult>> => ({
+    kind: 'error',
+    code: 'discovery_manifest_not_public',
+    retryable: false,
+    reason: 'Discovery manifests are retired.',
+  }),
 })
 
 export const invalidateDiscoveryManifestAttemptsBatch = internalMutation({
@@ -386,7 +394,7 @@ export const invalidateDiscoveryManifestAttemptsBatch = internalMutation({
     isDone: v.boolean(),
     continueCursor: v.union(v.string(), v.null()),
   }),
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ attempts: [], isDone: true, continueCursor: null }),
 })
 
 export const continueInvalidateDiscoveryManifest = internalMutation({
@@ -401,7 +409,7 @@ export const continueInvalidateDiscoveryManifest = internalMutation({
     processed: v.number(),
     done: v.boolean(),
   }),
-  handler: async () => unlistedRetiredListedTables(),
+  handler: async () => ({ processed: 0, done: true }),
 })
 
 export const readDiscoveryHealth = queryGeneric({
@@ -409,7 +417,14 @@ export const readDiscoveryHealth = queryGeneric({
     businessId: v.id('businesses'),
   },
   returns: healthResult,
-  handler: async (): Promise<Infer<typeof healthResult>> => unlistedRetiredListedTables(),
+  handler: async (_ctx, args): Promise<Infer<typeof healthResult>> => ({
+    businessId: String(args.businessId),
+    sourceState: 'not_public',
+    discoveryStatus: 'unavailable',
+    affectedPublicSurfaces: [],
+    repairAction: 'no_repair',
+    repairResult: 'not_run',
+  }),
 })
 
 export const readLlmsTxt = queryGeneric({
@@ -420,7 +435,7 @@ export const readLlmsTxt = queryGeneric({
     totalBusinesses: v.optional(v.number()),
   },
   returns: discoveryFileResult,
-  handler: async (): Promise<Infer<typeof discoveryFileResult>> => unlistedRetiredListedTables(),
+  handler: async (): Promise<Infer<typeof discoveryFileResult>> => ({ body: '', urls: [] }),
 })
 
 export const readDiscoveryBusinessSlugPage = queryGeneric({
@@ -429,7 +444,7 @@ export const readDiscoveryBusinessSlugPage = queryGeneric({
     paginationOpts: paginationOptsValidator,
   },
   returns: discoverySlugPageResult,
-  handler: async (): Promise<Infer<typeof discoverySlugPageResult>> => unlistedRetiredListedTables(),
+  handler: async (): Promise<Infer<typeof discoverySlugPageResult>> => ({ page: [], isDone: true, continueCursor: '' }),
 })
 
 export type {

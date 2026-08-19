@@ -291,7 +291,6 @@ async function seedAdmittedTarget(backend: Backend): Promise<SeededTarget> {
       createdAt: now,
       updatedAt: now,
     })
-    undefined
     await ctx.db.insert('businessOfferings', {
       offeringRef: 'offering:evidence-integrity',
       businessId,
