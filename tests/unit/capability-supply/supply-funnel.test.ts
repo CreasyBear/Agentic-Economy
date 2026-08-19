@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withSourceWrite } from "../../helpers/source-write-admission";
-import { canonicalDigest } from "@/modules/common/canonical-digest";
 import type * as ConvexSourceModule from "@/lib/server/convex-source";
 import type * as PublicationModule from "@/modules/capability-supply/internal/publication";
 import type * as SourceWriteAdmissionModule from "@/lib/server/source-write-admission";
@@ -186,7 +185,6 @@ describe("owner supply source read failures", () => {
 const OWNER_BUSINESS_ID = "business:owner";
 const OWNER_OFFERING_REF = "catalog-offering:owner";
 const OWNER_OFFERING_SOURCE_HASH = `sha256:${"b".repeat(64)}`;
-const OWNER_DRAFT_REVISION = 7;
 const OWNER_SOURCE = {
   kind: "openapi_http",
   sourceRevision: "owner-api/2026-08-09",
@@ -251,7 +249,6 @@ const OWNER_SOURCE = {
   },
   evidenceRefs: ["source:owner"],
 };
-const OWNER_SOURCE_DIGEST = canonicalDigest(OWNER_SOURCE);
 const OWNER_PREPARED_SOURCE_DIGEST = `sha256:${"b".repeat(64)}`;
 const OWNER_PRICE_DIGEST = `sha256:${"c".repeat(64)}`;
 const OWNER_PREPARED = {
@@ -262,7 +259,6 @@ const OWNER_PREPARED = {
   sourceSelector: { path: "/lookup", method: "post" },
   evidenceRefs: ["source:owner"],
 };
-const OWNER_PREPARED_DIGEST = canonicalDigest(OWNER_PREPARED);
 const OWNER_SUPPLY = {
   kind: "available",
   businessId: OWNER_BUSINESS_ID,
@@ -302,47 +298,19 @@ const OWNER_PUBLISHED = {
   publicationRevision: 1,
   operationRef: "operation:owner",
 };
-function ownerDraft(overrides: Record<string, unknown> = {}) {
-  return {
-    kind: "available",
-    businessId: OWNER_BUSINESS_ID,
-    offeringRef: OWNER_OFFERING_REF,
-    offeringRevision: 1,
-    revision: OWNER_DRAFT_REVISION,
-    operationKey: "owner-source-draft",
-    sourceJson: JSON.stringify(OWNER_SOURCE),
-    sourceDigest: OWNER_SOURCE_DIGEST,
-    preflight: {
-      status: "prepared",
-      draftRevision: OWNER_DRAFT_REVISION,
-      sourceDigest: OWNER_SOURCE_DIGEST,
-      observedAt: 1,
-      summary: {
-        sourceKind: OWNER_PREPARED.sourceKind,
-        sourceRevision: OWNER_PREPARED.sourceRevision,
-        sourceDigest: OWNER_PREPARED_SOURCE_DIGEST,
-        priceDigest: OWNER_PRICE_DIGEST,
-        preparedDigest: OWNER_PREPARED_DIGEST,
-      },
-      evidenceRefs: ["source:owner"],
-    },
-    ...overrides,
-  };
-}
 const ownerAdmissionData = {
   businessId: OWNER_BUSINESS_ID,
   offeringRef: OWNER_OFFERING_REF,
   offeringRevision: 1,
   offeringSourceHash: OWNER_OFFERING_SOURCE_HASH,
-  sourceDraftRevision: OWNER_DRAFT_REVISION,
-  sourceDigest: OWNER_SOURCE_DIGEST,
+  source: OWNER_SOURCE,
   operationKey: "owner-admission",
   correlationId: "owner-correlation",
   reasonCode: "owner_supply_admission",
   evidenceRefs: ["owner-supply:funnel"],
 };
 
-describe("owner admission durable source proof", () => {
+describe("owner admission in-memory source proof", () => {
   beforeEach(() => {
     sourceMocks.callSourceQuery.mockReset();
     sourceMocks.callSourceMutation.mockReset();
@@ -362,10 +330,8 @@ describe("owner admission durable source proof", () => {
     });
   });
 
-  it("publishes only when the saved revision and raw source digest match", async () => {
-    sourceMocks.callSourceQuery
-      .mockResolvedValueOnce(ownerDraft())
-      .mockResolvedValueOnce(OWNER_SUPPLY);
+  it("publishes prepared material from the in-memory source", async () => {
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(OWNER_SUPPLY);
     await expect(
       admitOwnerCapabilityServer({ data: ownerAdmissionData }),
     ).resolves.toEqual(OWNER_PUBLISHED);
@@ -388,80 +354,31 @@ describe("owner admission durable source proof", () => {
     );
     expect(
       sourceMocks.callSourceMutation.mock.calls[0]?.[1],
-    ).not.toHaveProperty("source");
+    ).not.toHaveProperty("sourceDraftRevision");
+    expect(
+      sourceMocks.callSourceMutation.mock.calls[0]?.[1],
+    ).not.toHaveProperty("sourceDigest");
   });
 
-  it("refuses prepared output when the durable draft is replaced before preflight recording", async () => {
-    sourceMocks.callSourceQuery
-      .mockResolvedValueOnce(ownerDraft())
-      .mockResolvedValueOnce(OWNER_SUPPLY);
-    sourceMocks.callSourceMutation.mockResolvedValueOnce(false);
-
+  it("preflights the in-memory source without recording a draft", async () => {
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(OWNER_SUPPLY);
     await expect(
       preflightOwnerCapabilityServer({
         data: {
           businessId: OWNER_BUSINESS_ID,
           offeringRef: OWNER_OFFERING_REF,
           offeringRevision: 1,
-          sourceDraftRevision: OWNER_DRAFT_REVISION,
-          sourceDigest: OWNER_SOURCE_DIGEST,
+          source: OWNER_SOURCE,
           evidenceRefs: ["owner-supply:funnel"],
         },
       }),
-    ).resolves.toEqual({
-      kind: "refused",
-      reason: "source_draft_stale",
-    });
-    expect(sourceMocks.callSourceMutation).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        expectedRevision: OWNER_DRAFT_REVISION,
-        sourceDigest: OWNER_SOURCE_DIGEST,
-        status: "prepared",
-      }),
-    );
-  });
-
-  it.each([
-    ["revision", { revision: OWNER_DRAFT_REVISION + 1 }],
-    ["digest", { sourceDigest: `sha256:${"d".repeat(64)}` }],
-  ])(
-    "refuses a stale saved draft %s before publish",
-    async (_label, override) => {
-      sourceMocks.callSourceQuery.mockResolvedValueOnce(ownerDraft(override));
-      await expect(
-        admitOwnerCapabilityServer({ data: ownerAdmissionData }),
-      ).resolves.toEqual({
-        kind: "refused",
-        reason: "source_draft_stale",
-      });
-      expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled();
-    },
-  );
-
-  it("refuses a draft whose durable preflight is still pending", async () => {
-    sourceMocks.callSourceQuery.mockResolvedValueOnce(
-      ownerDraft({
-        preflight: {
-          ...ownerDraft().preflight,
-          status: "pending",
-        },
-      }),
-    );
-    await expect(
-      admitOwnerCapabilityServer({ data: ownerAdmissionData }),
-    ).resolves.toEqual({
-      kind: "refused",
-      reason: "source_draft_unprepared",
-    });
+    ).resolves.toMatchObject({ kind: "prepared", prepared: OWNER_PREPARED });
     expect(sourceMocks.callSourceMutation).not.toHaveBeenCalled();
   });
 
   it("propagates a publish backend failure instead of relabelling it authorization_denied", async () => {
     const backendFailure = new Error("convex publish unavailable");
-    sourceMocks.callSourceQuery
-      .mockResolvedValueOnce(ownerDraft())
-      .mockResolvedValueOnce(OWNER_SUPPLY);
+    sourceMocks.callSourceQuery.mockResolvedValueOnce(OWNER_SUPPLY);
     sourceMocks.callSourceMutation.mockRejectedValueOnce(backendFailure);
     await expect(
       admitOwnerCapabilityServer({ data: ownerAdmissionData }),

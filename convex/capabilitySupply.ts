@@ -87,7 +87,6 @@ import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   rebuildBusinessSupplyProjectionSnapshotCommand,
@@ -602,9 +601,6 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('price_unavailable'),
   v.literal('source_revision_invalid'),
   v.literal('pricing_config_invalid'),
-  v.literal('source_draft_missing'),
-  v.literal('source_draft_stale'),
-  v.literal('source_draft_unprepared'),
   v.literal('catalog_offering_origin_changed'),
   v.literal('contract_identity_conflict'),
   v.literal('contract_integrity_failure'),
@@ -746,8 +742,6 @@ export const publishPreparedCapability = mutation({
     offeringRef: v.string(),
     revision: v.number(),
     sourceHash: v.string(),
-    sourceDraftRevision: v.number(),
-    sourceDigest: v.string(),
     runtimeEnvironment: v.literal('production'),
     prepared: preparedPublicationMaterialValue,
     ...contextFields,
@@ -758,7 +752,93 @@ export const publishPreparedCapability = mutation({
   handler: async (
     ctx,
     args,
-  ): Promise<Infer<typeof preparedPublicationResultValue>> => { return unlistedRetiredListedTables() },
+  ): Promise<Infer<typeof preparedPublicationResultValue>> => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        kind: 'refused' as const,
+        reason: 'authorization_denied' as const,
+      }
+    }
+    const agentAdmission = args.agentPrincipal === undefined
+      ? undefined
+      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    const businessAuthorized = args.agentPrincipal === undefined
+      ? await ownsPublishedBusiness(ctx, args.businessId)
+      : agentAdmission?.kind === 'allowed'
+        && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
+    if (!validRegistrationContext(args) || !businessAuthorized) {
+      return {
+        kind: 'refused' as const,
+        reason: 'authorization_denied' as const,
+      }
+    }
+    const [catalogOffering, catalogRevision] = await Promise.all([
+      ctx.db
+        .query('businessOfferings')
+        .withIndex('by_offeringRef', (query) =>
+          query.eq('offeringRef', args.offeringRef),
+        )
+        .unique(),
+      ctx.db
+        .query('businessOfferingRevisions')
+        .withIndex('by_offeringRef_and_revision', (query) =>
+          query
+            .eq('offeringRef', args.offeringRef)
+            .eq('revision', args.revision),
+        )
+        .unique(),
+    ])
+    const origin = args.prepared.offering.origin
+    if (
+      catalogOffering === null ||
+      catalogRevision === null ||
+      catalogOffering.businessId !== args.businessId ||
+      catalogRevision.businessId !== args.businessId ||
+      catalogOffering.currentRevision !== args.revision ||
+      args.sourceHash !== catalogRevision.sourceHash ||
+      origin?.kind !== 'catalog_offering' ||
+      origin.offeringRef !== args.offeringRef ||
+      origin.offeringRevision !== args.revision ||
+      origin.offeringSourceHash !== args.sourceHash
+    ) {
+      return {
+        kind: 'refused' as const,
+        reason: 'catalog_offering_origin_changed' as const,
+      }
+    }
+    const identity = args.agentPrincipal === undefined
+      ? await ctx.auth.getUserIdentity()
+      : null
+    if (args.agentPrincipal === undefined && identity === null)
+      return {
+        kind: 'refused' as const,
+        reason: 'authorization_denied' as const,
+      }
+    const result = await publishPreparedCapabilityCommand(
+      {
+        businessId: String(args.businessId),
+        runtimeEnvironment: args.runtimeEnvironment,
+        prepared: args.prepared,
+        actor: { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
+        origin,
+        operationKey: args.operationKey,
+        correlationId: args.correlationId,
+        reasonCode: args.reasonCode,
+        evidenceRefs: args.evidenceRefs,
+        now: Date.now(),
+      },
+      publicationPorts(ctx),
+    )
+    if (result.kind === 'refused')
+      return convexPreparedPublicationResult(result)
+    await rebuildCapabilityOriginSupplyProjection(
+      ctx,
+      args.businessId,
+      Date.now(),
+    )
+    return convexPreparedPublicationResult(result)
+  },
 })
 
 type ContractRef = Infer<typeof contractRefValue>
@@ -1991,5 +2071,5 @@ export const recordCapabilityCallEvent = internalMutation({
     v.object({ kind: v.literal('recorded') }),
     v.object({ kind: v.literal('replayed') }),
   ),
-  handler: async (ctx, args) => { return unlistedRetiredListedTables() },
+  handler: async () => ({ kind: 'replayed' as const }),
 })

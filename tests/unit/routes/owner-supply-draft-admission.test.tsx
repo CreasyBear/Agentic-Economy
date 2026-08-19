@@ -52,12 +52,10 @@ vi.mock('@/components/ae/offerings/owner-offering.functions', () => ({
 }))
 vi.mock('@/modules/capability-supply/supply-funnel.functions', () => ({
   admitOwnerCapabilityServer: routeMocks.admitRef,
-  readOwnerSourceDraftServer: routeMocks.preflightRef,
   readOwnerSupplyFunnelServer: routeMocks.preflightRef,
   readOwnerProviderConnectionsServer: routeMocks.preflightRef,
   preflightOwnerOpenApiDocumentServer: routeMocks.preflightDocumentRef,
   preflightOwnerCapabilityServer: routeMocks.preflightRef,
-  saveOwnerSourceDraftServer: routeMocks.saveRef,
   recheckOwnerCapabilityServer: routeMocks.recheckRef,
   republishOwnerCapabilityServer: routeMocks.republishRef,
   runOwnerSupplyReadinessServer: routeMocks.readinessRef,
@@ -76,7 +74,6 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const RAW_DIGEST = `sha256:${'a'.repeat(64)}`
 const PREPARED_DIGEST = `sha256:${'b'.repeat(64)}`
 const SOURCE = {
   kind: 'openapi_http',
@@ -142,41 +139,11 @@ function loadedData() {
       accessPaths: [],
     },
     authorityOptions: [],
-    sourceDraft: {
-      kind: 'available',
-      businessId: 'business:owner',
-      offeringRef: offering.offeringRef,
-      offeringRevision: 1,
-      revision: 2,
-      operationKey: 'owner-source-draft',
-      sourceJson: JSON.stringify(SOURCE),
-      sourceDigest: RAW_DIGEST,
-      preflight: {
-        status: 'prepared',
-        draftRevision: 2,
-        sourceDigest: RAW_DIGEST,
-        observedAt: 1,
-        summary: {
-          sourceKind: 'openapi_http',
-          sourceRevision: SOURCE.sourceRevision,
-          sourceDigest: RAW_DIGEST,
-          priceDigest: PREPARED_DIGEST,
-          preparedDigest: PREPARED_DIGEST,
-        },
-        evidenceRefs: ['source:owner'],
-      },
-    },
   }
 }
 
-describe('owner supply route durable draft admission', () => {
-  it('passes the saved raw digest after preflight instead of the prepared-material digest', async () => {
-    const save = vi.fn(async () => ({
-      kind: 'saved',
-      revision: 3,
-      sourceDigest: RAW_DIGEST,
-      preflightStatus: 'pending',
-    }))
+describe('owner supply route in-memory admission', () => {
+  it('admits with the current source instead of a stored draft digest', async () => {
     const preflight = vi.fn(async () => ({
       kind: 'prepared',
       prepared: { sourceDigest: PREPARED_DIGEST },
@@ -187,7 +154,6 @@ describe('owner supply route durable draft admission', () => {
       operationRef: 'operation:owner',
     }))
     routeMocks.loaderData = loadedData()
-    routeMocks.serverFnResults.set(routeMocks.saveRef, save)
     routeMocks.serverFnResults.set(routeMocks.preflightRef, preflight)
     routeMocks.serverFnResults.set(routeMocks.admitRef, admit)
 
@@ -195,21 +161,19 @@ describe('owner supply route durable draft admission', () => {
     if (Component === undefined) throw new Error('route_component_missing')
     render(createElement(Component))
     const callbacks = routeMocks.funnelProps?.callbacks
-    if (
-      callbacks?.saveSourceDraft === undefined ||
-      callbacks.preflight === undefined ||
-      callbacks.admit === undefined
-    )
+    if (callbacks?.preflight === undefined || callbacks.admit === undefined)
       throw new Error('funnel_callbacks_missing')
-    await callbacks.saveSourceDraft(SOURCE as never)
     await callbacks.preflight(SOURCE as never)
-    await callbacks.admit()
+    await callbacks.admit(SOURCE as never)
 
     expect(admit).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        sourceDraftRevision: 3,
-        sourceDigest: RAW_DIGEST,
+        source: SOURCE,
       }),
     })
+    const admitPayload = admit.mock.calls.at(0)?.at(0) as { data?: Record<string, unknown> } | undefined
+    if (admitPayload?.data === undefined) throw new Error('admit_payload_missing')
+    expect(admitPayload.data).not.toHaveProperty('sourceDraftRevision')
+    expect(admitPayload.data).not.toHaveProperty('sourceDigest')
   })
 })

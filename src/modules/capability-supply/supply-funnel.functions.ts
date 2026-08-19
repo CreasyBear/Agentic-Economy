@@ -38,7 +38,6 @@ import { realPricingConfigPort } from "./internal/supply-funnel/pricing-port";
 import {
   preflightOpenApiHttpDocument,
   type OpenApiDocumentPreflightResult,
-  type OpenApiOperationPreflightOutcome,
 } from "./public";
 import {
   preparePublicationDraft,
@@ -162,9 +161,6 @@ export type SupplyFunnelRefusal =
   | "source_too_deep"
   | "source_version_unsupported"
   | "selector_invalid"
-  | "source_draft_missing"
-  | "source_draft_stale"
-  | "source_draft_unprepared"
   | "operation_not_found"
   | "operation_not_keyless"
   | "operation_not_executable"
@@ -425,55 +421,6 @@ export type OwnerSupplyOfferingReadback = Readonly<{
     descriptor: OfferingAccessPathDescriptor;
   }>[];
 }>;
-export type OwnerSourceDraftPreflight = Readonly<{
-  status: "pending" | "prepared" | "refused";
-  draftRevision: number;
-  sourceDigest: string;
-  observedAt: number;
-  reason?: string;
-  summary?: Readonly<{
-    sourceKind: string;
-    sourceRevision: string;
-    sourceDigest: string;
-    priceDigest: string;
-    preparedDigest: string;
-  }>;
-  openApi?: Readonly<{
-    sourceDigest: string;
-    outcomes: readonly OpenApiOperationPreflightOutcome[];
-    truncated: boolean;
-  }>;
-  evidenceRefs: readonly string[];
-}>;
-export type OwnerSourceDraftReadback = Readonly<
-  | {
-      kind: "available";
-      businessId: string;
-      offeringRef: string;
-      offeringRevision: number;
-      revision: number;
-      operationKey: string;
-      sourceJson: string;
-      sourceDigest: string;
-      preflight: OwnerSourceDraftPreflight;
-    }
-  | { kind: "not_found" }
-  | {
-      kind: "error";
-      code: "unauthenticated" | "source_unavailable";
-      reason?: string;
-    }
->;
-export type OwnerSourceDraftSaveResult = Readonly<
-  | {
-      kind: "saved" | "replayed";
-      revision: number;
-      sourceDigest: string;
-      preflightStatus: OwnerSourceDraftPreflight["status"];
-    }
-  | { kind: "revision_conflict"; revision: number }
-  | { kind: "refused"; reason: string }
->;
 
 export function filterOwnerSupplyAuthorityOptions<
   T extends Pick<
@@ -555,8 +502,6 @@ type OwnerSupplyPreparedCommand = Readonly<{
   offeringRef: string;
   revision: number;
   sourceHash: string;
-  sourceDraftRevision: number;
-  sourceDigest: string;
   runtimeEnvironment: "production";
   prepared: PreparedPublicationMaterial;
   operationKey: string;
@@ -639,63 +584,6 @@ const republishMutation = sourceMutation<
   OwnerSupplyMaintenanceSourceInput,
   OwnerSupplyCommandResult
 >("capabilitySupplyOwnerFunnel:republishOwnerCapability");
-type OwnerSourceDraftQueryResult = Readonly<
-  | {
-      kind: "available";
-      businessId: string;
-      offeringRef: string;
-      offeringRevision: number;
-      revision: number;
-      operationKey: string;
-      sourceJson: string;
-      sourceDigest: string;
-      preflight: OwnerSourceDraftPreflight;
-    }
-  | { kind: "not_found" }
-  | {
-      kind: "error";
-      code: "unauthenticated" | "source_unavailable";
-      reason?: string;
-    }
->;
-type OwnerSourceDraftMutationCommand = Readonly<{
-  businessId: string;
-  offeringRef: string;
-  offeringRevision: number;
-  expectedRevision: number;
-  operationKey: string;
-  correlationId: string;
-  sourceJson: string;
-}>;
-type OwnerSourceDraftMutationInput = OwnerSourceDraftMutationCommand &
-  SourceWriteFields;
-const readOwnerSourceDraftQuery = sourceQuery<
-  { businessId: string; offeringRef: string },
-  OwnerSourceDraftQueryResult
->("capabilitySupplyOwnerFunnel:readOwnerSourceDraft");
-const saveOwnerSourceDraftMutation = sourceMutation<
-  OwnerSourceDraftMutationInput,
-  OwnerSourceDraftSaveResult
->("capabilitySupplyOwnerFunnel:saveOwnerSourceDraft");
-type OwnerSourceDraftPreflightMutationCommand = Readonly<{
-  businessId: string;
-  offeringRef: string;
-  expectedRevision: number;
-  sourceDigest: string;
-  status: "prepared" | "refused";
-  reason?: string;
-  summary?: OwnerSourceDraftPreflight["summary"];
-  openApi?: OwnerSourceDraftPreflight["openApi"];
-  evidenceRefs: readonly string[];
-  operationKey: string;
-  correlationId: string;
-}>;
-type OwnerSourceDraftPreflightMutationInput =
-  OwnerSourceDraftPreflightMutationCommand & SourceWriteFields;
-const recordOwnerSourceDraftPreflightMutation = sourceMutation<
-  OwnerSourceDraftPreflightMutationInput,
-  boolean
->("capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight");
 
 function boundedSourceText(
   value: unknown,
@@ -1047,53 +935,6 @@ export const readOwnerSupplyFunnelServer = createServerFn()
       };
     }
   });
-const ownerSourceDraftReadInputSchema = z.strictObject({
-  businessId: z.string().min(1),
-  offeringRef: z.string().min(1),
-});
-export const readOwnerSourceDraftServer = createServerFn()
-  .validator((data) => ownerSourceDraftReadInputSchema.parse(data))
-  .handler(async ({ data }): Promise<OwnerSourceDraftReadback> => {
-    const parsed = ownerSourceDraftReadInputSchema.parse(data);
-    try {
-      const result = await callSourceQuery(readOwnerSourceDraftQuery, parsed);
-      if (result.kind !== "available") return result;
-      let sourceValue: unknown;
-      try {
-        sourceValue = JSON.parse(result.sourceJson);
-      } catch {
-        return {
-          kind: "error",
-          code: "source_unavailable",
-          reason: OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
-        };
-      }
-      if (!isRecord(sourceValue))
-        return {
-          kind: "error",
-          code: "source_unavailable",
-          reason: OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
-        };
-      const imported = ownerPublicationImport(sourceValue);
-      if (
-        imported === undefined ||
-        publicationMaterialContainsCredential(imported.source)
-      ) {
-        return {
-          kind: "error",
-          code: "source_unavailable",
-          reason: OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
-        };
-      }
-      return result;
-    } catch {
-      return {
-        kind: "error",
-        code: "source_unavailable",
-        reason: OWNER_SUPPLY_UNAVAILABLE_MESSAGE,
-      };
-    }
-  });
 export const readOwnerProviderConnectionsServer = createServerFn().handler(
   async (): Promise<readonly ProviderConnectionOwnerProjection[]> => {
     try {
@@ -1192,20 +1033,11 @@ const ownerSupplyActionInputSchema = z.strictObject({
   operationKey: z.string().min(8).max(200),
 });
 const ownerSourceSchema = z.record(z.string(), jsonValueSchema);
-const ownerSourceDraftSaveInputSchema = z.strictObject({
-  businessId: z.string().min(1),
-  offeringRef: z.string().min(1),
-  offeringRevision: z.number().int().positive(),
-  expectedRevision: z.number().int().nonnegative(),
-  operationKey: z.string().min(8).max(200),
-  source: ownerSourceSchema,
-});
 const preflightOwnerCapabilityInputSchema = z.strictObject({
   businessId: z.string().min(1),
   offeringRef: z.string().min(1),
   offeringRevision: z.number().int().positive(),
-  sourceDraftRevision: z.number().int().positive(),
-  sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  source: ownerSourceSchema,
   evidenceRefs: z.array(z.string().min(1)).max(64),
 });
 const ownerOpenApiDocumentPreflightInputSchema = z.strictObject({
@@ -1219,8 +1051,7 @@ const ownerSupplyAdmissionInputSchema = z.strictObject({
   offeringRef: z.string().min(1),
   offeringRevision: z.number().int().positive(),
   offeringSourceHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-  sourceDraftRevision: z.number().int().positive(),
-  sourceDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  source: ownerSourceSchema,
   operationKey: z.string().min(8).max(200),
   correlationId: z.string().min(1).max(200),
   reasonCode: z.string().min(1).max(200),
@@ -1238,51 +1069,6 @@ const ownerSupplyMaintenanceInputSchema = z.strictObject({
   reasonCode: z.string().min(1).max(200),
   evidenceRefs: z.array(z.string().min(1)).max(64),
 });
-export const saveOwnerSourceDraftServer = createServerFn({ method: "POST" })
-  .validator((data) => ownerSourceDraftSaveInputSchema.parse(data))
-  .handler(async ({ data, context }): Promise<OwnerSourceDraftSaveResult> => {
-    const imported = ownerPublicationImport(data.source);
-    if (
-      imported === undefined ||
-      publicationMaterialContainsCredential(imported.source)
-    ) {
-      return { kind: "refused", reason: "source_invalid" };
-    }
-    let sourceJson: string;
-    try {
-      sourceJson = JSON.stringify(data.source);
-      if (new TextEncoder().encode(sourceJson).byteLength > 262_144) {
-        return { kind: "refused", reason: "source_too_large" };
-      }
-    } catch {
-      return { kind: "refused", reason: "source_invalid" };
-    }
-    try {
-      const command: OwnerSourceDraftMutationCommand = {
-        businessId: data.businessId,
-        offeringRef: data.offeringRef,
-        offeringRevision: data.offeringRevision,
-        expectedRevision: data.expectedRevision,
-        operationKey: data.operationKey,
-        correlationId: `owner-supply:source-draft:${data.businessId}:${data.offeringRef}`,
-        sourceJson,
-      };
-      const sourceWrite = await sourceWriteAdmissionFromContext({
-        context,
-        command,
-        scope: "catalog_publish",
-        operationKey: command.operationKey,
-        correlationId: command.correlationId,
-      });
-      return await callSourceMutation(saveOwnerSourceDraftMutation, {
-        ...command,
-        sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-        sourceWrite,
-      });
-    } catch {
-      return { kind: "refused", reason: "source_unavailable" };
-    }
-  });
 export const preflightOwnerOpenApiDocumentServer = createServerFn({
   method: "POST",
 })
@@ -1344,10 +1130,7 @@ export type OwnerSupplyPreflightResult = Readonly<
         | PreparePublicationDraftRefusal
         | "catalog_offering_invalid"
         | "source_unavailable"
-        | "authorization_denied"
-        | "source_draft_missing"
-        | "source_draft_stale"
-        | "source_draft_unprepared";
+        | "authorization_denied";
     }
 >;
 function ownerPublicationEndpoint(
@@ -1511,191 +1294,35 @@ async function prepareOwnerPublicationSource(
     },
   };
 }
-async function prepareOwnerStoredSourceDraft(
-  data: Readonly<{
-    businessId: string;
-    offeringRef: string;
-    offeringRevision: number;
-    sourceDraftRevision: number;
-    sourceDigest: string;
-  }>,
-): Promise<OwnerSupplyPreflightResult> {
-  const draft = await callSourceQuery(readOwnerSourceDraftQuery, {
-    businessId: data.businessId,
-    offeringRef: data.offeringRef,
-  });
-  if (draft.kind === "not_found")
-    return { kind: "refused", reason: "source_draft_missing" };
-  if (draft.kind === "error") {
-    return {
-      kind: "refused",
-      reason:
-        draft.code === "unauthenticated"
-          ? "authorization_denied"
-          : "source_unavailable",
-    };
-  }
-  if (
-    draft.offeringRevision !== data.offeringRevision ||
-    draft.revision !== data.sourceDraftRevision ||
-    draft.sourceDigest !== data.sourceDigest ||
-    draft.preflight.draftRevision !== data.sourceDraftRevision ||
-    draft.preflight.sourceDigest !== data.sourceDigest
-  )
-    return { kind: "refused", reason: "source_draft_stale" };
-  if (
-    draft.preflight.status !== "prepared" ||
-    draft.preflight.summary === undefined
-  ) {
-    return { kind: "refused", reason: "source_draft_unprepared" };
-  }
-  let source: unknown;
-  try {
-    source = JSON.parse(draft.sourceJson);
-  } catch {
-    return { kind: "refused", reason: "source_draft_unprepared" };
-  }
-  if (!isRecord(source))
-    return { kind: "refused", reason: "source_draft_unprepared" };
-  const prepared = await prepareOwnerPublicationSource({
-    businessId: data.businessId,
-    offeringRef: data.offeringRef,
-    offeringRevision: data.offeringRevision,
-    source,
-    evidenceRefs: draft.preflight.evidenceRefs,
-  });
-  if (prepared.kind === "refused") return prepared;
-  if (
-    prepared.summary.sourceKind !== draft.preflight.summary.sourceKind ||
-    prepared.summary.sourceRevision !==
-      draft.preflight.summary.sourceRevision ||
-    prepared.summary.sourceDigest !== draft.preflight.summary.sourceDigest ||
-    prepared.summary.priceDigest !== draft.preflight.summary.priceDigest ||
-    prepared.summary.preparedDigest !== draft.preflight.summary.preparedDigest
-  )
-    return { kind: "refused", reason: "source_draft_stale" };
-  return prepared;
-}
-async function prepareOwnerSourceDraftPreflight(
-  data: Readonly<{
-    businessId: string;
-    offeringRef: string;
-    offeringRevision: number;
-    sourceDraftRevision: number;
-    sourceDigest: string;
-    evidenceRefs: readonly string[];
-  }>,
-): Promise<
-  | Readonly<{ kind: "loaded"; checked: OwnerSupplyPreflightResult }>
-  | Extract<OwnerSupplyPreflightResult, { kind: "refused" }>
-> {
-  const draft = await callSourceQuery(readOwnerSourceDraftQuery, {
-    businessId: data.businessId,
-    offeringRef: data.offeringRef,
-  });
-  if (draft.kind === "not_found")
-    return { kind: "refused", reason: "source_draft_missing" };
-  if (draft.kind === "error") {
-    return {
-      kind: "refused",
-      reason:
-        draft.code === "unauthenticated"
-          ? "authorization_denied"
-          : "source_unavailable",
-    };
-  }
-  if (
-    draft.offeringRevision !== data.offeringRevision ||
-    draft.revision !== data.sourceDraftRevision ||
-    draft.sourceDigest !== data.sourceDigest
-  ) {
-    return { kind: "refused", reason: "source_draft_stale" };
-  }
-  let source: unknown;
-  try {
-    source = JSON.parse(draft.sourceJson);
-  } catch {
-    return { kind: "refused", reason: "source_draft_unprepared" };
-  }
-  if (!isRecord(source))
-    return { kind: "refused", reason: "source_draft_unprepared" };
-  return {
-    kind: "loaded",
-    checked: await prepareOwnerPublicationSource({
-      businessId: data.businessId,
-      offeringRef: data.offeringRef,
-      offeringRevision: data.offeringRevision,
-      source,
-      evidenceRefs: data.evidenceRefs,
-    }),
-  };
-}
-
-async function recordOwnerSourcePreflight(
-  data: Readonly<{
-    businessId: string;
-    offeringRef: string;
-    sourceDraftRevision: number;
-    sourceDigest: string;
-  }>,
-  checked: OwnerSupplyPreflightResult,
-  context: unknown,
-): Promise<boolean> {
-  const command: OwnerSourceDraftPreflightMutationCommand = {
-    businessId: data.businessId,
-    offeringRef: data.offeringRef,
-    expectedRevision: data.sourceDraftRevision,
-    sourceDigest: data.sourceDigest,
-    status: checked.kind === "prepared" ? "prepared" : "refused",
-    ...(checked.kind === "prepared"
-      ? { summary: checked.summary }
-      : { reason: checked.reason }),
-    evidenceRefs:
-      checked.kind === "prepared" ? checked.prepared.evidenceRefs : [],
-    operationKey: `owner-supply:preflight:${data.businessId}:${data.offeringRef}:${data.sourceDraftRevision}:${data.sourceDigest}`,
-    correlationId: `owner-supply:preflight:${data.businessId}:${data.offeringRef}`,
-  };
-  const sourceWrite = await sourceWriteAdmissionFromContext({
-    context,
-    command,
-    scope: "catalog_publish",
-    operationKey: command.operationKey,
-    correlationId: command.correlationId,
-  });
-  return callSourceMutation(recordOwnerSourceDraftPreflightMutation, {
-    ...command,
-    sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
-    sourceWrite,
-  });
-}
 
 export const preflightOwnerCapabilityServer = createServerFn({ method: "POST" })
   .validator((data) => preflightOwnerCapabilityInputSchema.parse(data))
-  .handler(async ({ data, context }): Promise<OwnerSupplyPreflightResult> => {
-    const loaded = await prepareOwnerSourceDraftPreflight(data);
-    if (loaded.kind === "refused") return loaded;
-    const recorded = await recordOwnerSourcePreflight(
-      data,
-      loaded.checked,
-      context,
-    );
-    return recorded
-      ? loaded.checked
-      : { kind: "refused", reason: "source_draft_stale" };
+  .handler(async ({ data }): Promise<OwnerSupplyPreflightResult> => {
+    return await prepareOwnerPublicationSource({
+      businessId: data.businessId,
+      offeringRef: data.offeringRef,
+      offeringRevision: data.offeringRevision,
+      source: data.source,
+      evidenceRefs: data.evidenceRefs,
+    });
   });
 
 export const admitOwnerCapabilityServer = createServerFn({ method: "POST" })
   .validator((data) => ownerSupplyAdmissionInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<OwnerSupplyAdmissionResult> => {
-    const prepared = await prepareOwnerStoredSourceDraft(data);
+    const prepared = await prepareOwnerPublicationSource({
+      businessId: data.businessId,
+      offeringRef: data.offeringRef,
+      offeringRevision: data.offeringRevision,
+      source: data.source,
+      evidenceRefs: data.evidenceRefs,
+    });
     if (prepared.kind === "refused") return prepared;
     const command: OwnerSupplyPreparedCommand = {
       businessId: data.businessId,
       offeringRef: data.offeringRef,
       revision: data.offeringRevision,
       sourceHash: data.offeringSourceHash,
-      sourceDraftRevision: data.sourceDraftRevision,
-      sourceDigest: data.sourceDigest,
       runtimeEnvironment: "production",
       prepared: prepared.prepared,
       operationKey: data.operationKey,

@@ -1,36 +1,27 @@
 import { v, type Infer } from 'convex/values'
 
-import { dereferenceLocalSchema } from '@/modules/capability-supply/convex'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   stableStringify,
   type StableHashValue,
 } from '@/modules/common/stable-hash'
-import { isRecord } from '@/modules/common/is-record'
 import {
   beginOperation,
   capabilityPublicationSourceSelectorValue,
-  decodeConvexPublicationSource,
   failOperation,
   offeringRegistrationFromRow,
-  preflightOpenApiHttpDocument,
-  preparePublicationDraft,
   probeRequestDigest,
   publicationLifecycle,
-  publicationMaterialContainsCredential,
   qualifySuppliedCandidate,
   readCapabilityProbeTarget,
   readinessOutcomeValue,
   replayOperationResult,
   republishPreparedCapabilityCommand,
   succeedOperation,
-  validCapabilityPublicationSourceRevision,
   withdrawCapabilityCommand,
   pricingConfigValue,
   type CapabilityOfferingRegistration,
   type CapabilityPublicationBindingDraft,
-  type CapabilityPublicationImport,
-  type OpenApiOperationPreflightOutcome,
   type OperationBeginResult,
   type PreparedPublicationMaterial,
   type PublicationCommandRow,
@@ -40,9 +31,6 @@ import { normalizePricingConfig } from '@/modules/money/public'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import { internal } from './_generated/api'
 import {
-  internalAction,
-  internalMutation,
-  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -58,7 +46,6 @@ import {
 } from './capabilitySupply'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
-import { unlistedRetiredListedTables } from './retiredListedUnlisted'
 
 const MAX_READINESS_VALIDITY_MS = 24 * 60 * 60_000
 const OWNER_SUPPLY_OFFERINGS_READ_CAP = 50
@@ -1594,370 +1581,4 @@ export const refreshOwnerCapability = mutation({
     )
     return expected
   },
-})
-const ownerOpenApiOperationPreflightOutcomeValue = v.union(
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.literal('executable'),
-  }),
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.literal('credential_required'),
-    credential: v.object({
-      kind: v.union(v.literal('api_key'), v.literal('http_bearer')),
-      location: v.optional(v.union(v.literal('query'), v.literal('header'))),
-      name: v.optional(v.string()),
-    }),
-  }),
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.union(v.literal('unsupported_shape'), v.literal('unsafe')),
-    reason: v.string(),
-  }),
-)
-const ownerSourceDraftOpenApiPreflightValue = v.object({
-  sourceDigest: v.string(),
-  outcomes: v.array(ownerOpenApiOperationPreflightOutcomeValue),
-  truncated: v.boolean(),
-})
-const ownerSourceDraftPreflightValue = v.object({
-  status: v.union(
-    v.literal('pending'),
-    v.literal('prepared'),
-    v.literal('refused'),
-  ),
-  draftRevision: v.number(),
-  sourceDigest: v.string(),
-  observedAt: v.number(),
-  reason: v.optional(v.string()),
-  summary: v.optional(
-    v.object({
-      sourceKind: v.string(),
-      sourceRevision: v.string(),
-      sourceDigest: v.string(),
-      priceDigest: v.string(),
-      preparedDigest: v.string(),
-    }),
-  ),
-  openApi: v.optional(ownerSourceDraftOpenApiPreflightValue),
-  evidenceRefs: v.array(v.string()),
-})
-const ownerSourceDraftQueryResultValue = v.union(
-  v.object({
-    kind: v.literal('available'),
-    businessId: v.string(),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    revision: v.number(),
-    operationKey: v.string(),
-    sourceJson: v.string(),
-    sourceDigest: v.string(),
-    preflight: ownerSourceDraftPreflightValue,
-  }),
-  v.object({ kind: v.literal('not_found') }),
-  v.object({ kind: v.literal('error'), code: v.literal('unauthenticated') }),
-)
-const ownerSourceDraftSaveResultValue = v.union(
-  v.object({
-    kind: v.union(v.literal('saved'), v.literal('replayed')),
-    revision: v.number(),
-    sourceDigest: v.string(),
-    preflightStatus: v.union(
-      v.literal('pending'),
-      v.literal('prepared'),
-      v.literal('refused'),
-    ),
-  }),
-  v.object({ kind: v.literal('revision_conflict'), revision: v.number() }),
-  v.object({ kind: v.literal('refused'), reason: v.string() }),
-)
-const MAX_OPENAPI_PREFLIGHT_OPERATIONS = 128
-type OwnerSourceDraftQueryResult = Infer<
-  typeof ownerSourceDraftQueryResultValue
->
-type OwnerSourceDraftSaveResult = Infer<typeof ownerSourceDraftSaveResultValue>
-type OwnerSourceDraftPreflight = Infer<typeof ownerSourceDraftPreflightValue>
-type StoredOwnerSource = Readonly<{
-  source: CapabilityPublicationImport
-  sourceRevision: string
-  evidenceRefs: readonly string[]
-}>
-type OwnerSourceDraftPreparation = Readonly<
-  | { kind: 'prepared'; prepared: PreparedPublicationMaterial }
-  | { kind: 'refused'; reason: string }
->
-const MAX_SOURCE_DRAFT_BYTES = 262_144
-const MAX_SOURCE_DRAFT_OPERATION_KEY_LENGTH = 200
-async function ownerSourceDraftBusiness(
-  ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
-  businessId: Id<'businesses'>,
-  agentPrincipal?: Infer<typeof agentAccessPrincipalValue>,
-): Promise<Readonly<{ ownerId: Id<'owners'> }> | undefined> {
-  const business = await ctx.db.get(businessId)
-  if (business === null) return undefined
-  if (agentPrincipal !== undefined) {
-    const admission = await verifySupplyAgentPrincipal(ctx, agentPrincipal, true)
-    if (admission.kind !== 'allowed') return undefined
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
-      .unique()
-    return owner !== null && business.ownerId === owner._id
-      ? { ownerId: owner._id }
-      : undefined
-  }
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return undefined
-  const owner = await ctx.db.get(business.ownerId)
-  return owner?.clerkUserId === identity.subject
-    ? { ownerId: business.ownerId }
-    : undefined
-}
-
-function decodeStoredOwnerSource(
-  sourceJson: string,
-): StoredOwnerSource | undefined {
-  let raw: unknown
-  try {
-    raw = JSON.parse(sourceJson)
-  } catch {
-    return undefined
-  }
-  if (!isRecord(raw)) return undefined
-  const decoded = decodeConvexPublicationSource(raw)
-  if (!isRecord(decoded) || typeof decoded.kind !== 'string') return undefined
-  const sourceRevision = decoded.sourceRevision
-  const evidenceRefs = decoded.evidenceRefs
-  if (
-    typeof sourceRevision !== 'string' ||
-    !validCapabilityPublicationSourceRevision(sourceRevision) ||
-    !Array.isArray(evidenceRefs) ||
-    evidenceRefs.length > 64 ||
-    evidenceRefs.some(
-      (entry) =>
-        typeof entry !== 'string' || entry.length === 0 || entry.length > 400,
-    )
-  )
-    return undefined
-  const {
-    sourceRevision: _sourceRevision,
-    evidenceRefs: _evidenceRefs,
-    ...source
-  } = decoded
-  if (publicationMaterialContainsCredential(source)) return undefined
-  switch (source.kind) {
-    case 'ae_envelope': {
-      if (
-        typeof source.documentJson !== 'string' ||
-        !isRecord(source.offering) ||
-        !isRecord(source.binding)
-      )
-        return undefined
-      let document: unknown
-      try {
-        document = JSON.parse(source.documentJson)
-      } catch {
-        return undefined
-      }
-      if (publicationMaterialContainsCredential(document)) return undefined
-      break
-    }
-    case 'openapi_http':
-      if (
-        !isRecord(source.document) ||
-        !isRecord(source.operation) ||
-        typeof source.operation.path !== 'string' ||
-        (source.operation.method !== 'get' &&
-          source.operation.method !== 'post') ||
-        !isRecord(source.contract) ||
-        !isRecord(source.commercial)
-      )
-        return undefined
-      break
-    case 'mcp':
-      if (
-        typeof source.serverUrl !== 'string' ||
-        !isRecord(source.tool) ||
-        typeof source.protocolVersion !== 'string' ||
-        !isRecord(source.contract) ||
-        !isRecord(source.commercial)
-      )
-        return undefined
-      break
-    case 'agent_plugin_mcp':
-      if (
-        !isRecord(source.manifest) ||
-        typeof source.serverName !== 'string' ||
-        !isRecord(source.tool) ||
-        typeof source.protocolVersion !== 'string' ||
-        !isRecord(source.contract) ||
-        !isRecord(source.commercial)
-      )
-        return undefined
-      break
-    case 'x402':
-      if (
-        !isRecord(source.resource) ||
-        !isRecord(source.contract) ||
-        !isRecord(source.commercial)
-      )
-        return undefined
-      break
-    default:
-      return undefined
-  }
-  return {
-    source: source as CapabilityPublicationImport,
-    sourceRevision,
-    evidenceRefs: evidenceRefs as readonly string[],
-  }
-}
-
-function sourceDraftPricingConfig(
-  source: CapabilityPublicationImport,
-): unknown | undefined {
-  const offering =
-    source.kind === 'ae_envelope' ? source.offering : source.commercial.offering
-  const price = offering.presentation.price
-  return price.kind === 'fixed'
-    ? { version: 'pricing:v2', unit: 'call', paidAmount: price.amount }
-    : undefined
-}
-
-async function readOwnerSourceDraftProjection(
-  ctx: Pick<MutationCtx | QueryCtx, 'db'>,
-  businessId: Id<'businesses'>,
-  offeringRef: string,
-): Promise<OwnerSourceDraftQueryResult> { return unlistedRetiredListedTables() }
-
-
-export const readOwnerSourceDraft = query({
-  args: {
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-  },
-  returns: ownerSourceDraftQueryResultValue,
-  handler: async (ctx, args): Promise<OwnerSourceDraftQueryResult> => {
-    const actor = await resolveBusinessActor(ctx)
-    if (actor.kind !== 'authenticated_owner')
-      return { kind: 'error', code: 'unauthenticated' }
-    const owned = await ownerSourceDraftBusiness(ctx, args.businessId)
-    if (owned === undefined) return { kind: 'not_found' }
-    return await readOwnerSourceDraftProjection(ctx, args.businessId, args.offeringRef)
-  },
-})
-
-const agentOwnerSourceDraftReadArgs = {
-  businessId: v.id('businesses'),
-  offeringRef: v.string(),
-  agentPrincipal: agentAccessPrincipalValue,
-  operationKey: v.string(),
-  correlationId: v.string(),
-  ...sourceWriteArgs,
-} as const
-
-export const readAgentOwnerSourceDraft = mutation({
-  args: agentOwnerSourceDraftReadArgs,
-  returns: ownerSourceDraftQueryResultValue,
-  handler: async (ctx, args): Promise<OwnerSourceDraftQueryResult> => {
-    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
-    if (sourceWrite.kind === 'rejected')
-      return { kind: 'error', code: 'unauthenticated' }
-    const admission = await verifySupplyAgentPrincipal(ctx, args.agentPrincipal)
-    if (admission.kind !== 'allowed')
-      return { kind: 'error', code: 'unauthenticated' }
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
-      .unique()
-    if (owner === null) return { kind: 'not_found' }
-    const business = await ctx.db.get(args.businessId)
-    if (business === null || business.ownerId !== owner._id)
-      return { kind: 'not_found' }
-    return await readOwnerSourceDraftProjection(ctx, args.businessId, args.offeringRef)
-  },
-})
-
-export const saveOwnerSourceDraft = mutation({
-  args: {
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    offeringRevision: v.number(),
-    expectedRevision: v.number(),
-    operationKey: v.string(),
-    correlationId: v.string(),
-    sourceJson: v.string(),
-    agentPrincipal: v.optional(agentAccessPrincipalValue),
-    ...sourceWriteArgs,
-  },
-  returns: ownerSourceDraftSaveResultValue,
-  handler: async (ctx, args): Promise<OwnerSourceDraftSaveResult> => { return unlistedRetiredListedTables() },
-})
-export const readSourceDraftForPreflight = internalQuery({
-  args: { draftId: v.string() },
-  handler: async () => null,
-})
-
-export const recordSourceDraftPreflight = internalMutation({
-  args: {
-    draftId: v.string(),
-    expectedRevision: v.number(),
-    sourceDigest: v.string(),
-    status: v.union(v.literal('prepared'), v.literal('refused')),
-    reason: v.optional(v.string()),
-    summary: v.optional(
-      v.object({
-        sourceKind: v.string(),
-        sourceRevision: v.string(),
-        sourceDigest: v.string(),
-        priceDigest: v.string(),
-        preparedDigest: v.string(),
-      }),
-    ),
-    openApi: v.optional(ownerSourceDraftOpenApiPreflightValue),
-    evidenceRefs: v.array(v.string()),
-  },
-  returns: v.boolean(),
-  handler: async () => false,
-})
-
-export const recordOwnerSourceDraftPreflight = mutation({
-  args: {
-    businessId: v.id('businesses'),
-    offeringRef: v.string(),
-    expectedRevision: v.number(),
-    sourceDigest: v.string(),
-    status: v.union(v.literal('prepared'), v.literal('refused')),
-    reason: v.optional(v.string()),
-    summary: v.optional(
-      v.object({
-        sourceKind: v.string(),
-        sourceRevision: v.string(),
-        sourceDigest: v.string(),
-        priceDigest: v.string(),
-        preparedDigest: v.string(),
-      }),
-    ),
-    openApi: v.optional(ownerSourceDraftOpenApiPreflightValue),
-    evidenceRefs: v.array(v.string()),
-    operationKey: v.string(),
-    correlationId: v.string(),
-    agentPrincipal: v.optional(agentAccessPrincipalValue),
-    ...sourceWriteArgs,
-  },
-  returns: v.boolean(),
-  handler: async (ctx, args): Promise<boolean> => { return unlistedRetiredListedTables() },
-})
-
-export const preflightOwnerSourceDraft = internalAction({
-  args: {
-    draftId: v.string(),
-    expectedRevision: v.number(),
-    sourceDigest: v.string(),
-  },
-  handler: async (_ctx, args): Promise<null> => {
-    void args
-    return null
-  },
-
 })

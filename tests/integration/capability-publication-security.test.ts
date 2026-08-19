@@ -129,45 +129,6 @@ describe('capability publication security', () => {
 
     await expect(publicationRows(backend)).resolves.toEqual(before)
   })
-  it('refuses a prepared publication after the durable source draft advances', async () => {
-    const backend = convexTest(schema, modules)
-    const { businessId, owner } = await publishedBusinessOwner(backend, 'security-draft-race')
-    await seedCatalogOffering(backend, businessId, 'draft-race')
-    await registerProviderConnection(backend, businessId)
-
-    const first = await preparedPublicationArgs(backend, publicationArgs(businessId, 'draft-race'))
-    const before = await publicationRows(backend)
-    const changedSourceJson = JSON.stringify({
-      kind: 'ae_envelope',
-      documentJson: first.prepared.documentJson,
-      offering: first.prepared.offering,
-      binding: first.prepared.binding,
-      sourceRevision: 'owner-api/2026-08-10',
-      evidenceRefs: first.prepared.evidenceRefs,
-    })
-    await expect(owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', {
-        businessId,
-        offeringRef: first.offeringRef,
-        offeringRevision: first.revision,
-        expectedRevision: first.sourceDraftRevision,
-        operationKey: 'owner-source-draft:security-race:r2',
-        correlationId: 'owner-source-draft:security-race:r2',
-        sourceJson: changedSourceJson,
-      }),
-    )).resolves.toMatchObject({ kind: 'saved', revision: first.sourceDraftRevision + 1 })
-
-    await expect(owner.mutation(
-      api.capabilitySupply.publishPreparedCapability,
-      first,
-    )).resolves.toEqual({ kind: 'refused', reason: 'source_draft_stale' })
-    await expect(publicationRows(backend)).resolves.toEqual(before)
-    await expect(owner.mutation(
-      api.capabilitySupply.publishPreparedCapability,
-      first,
-    )).rejects.toThrow('retired_listed_tables_unlisted')
-  })
   it('denies anonymous reads of keyless executable descriptors carrying fixed query values', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'security-fixed-query')

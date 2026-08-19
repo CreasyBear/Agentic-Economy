@@ -3197,96 +3197,32 @@ function ownerSourceForRun(
     },
   };
 }
-async function prepareOwnerSourceFromDurableDraft(
+async function prepareOwnerPublicationMaterial(
   options: Readonly<{
-    sourceJson: string;
-    sourceDigest: string;
-    draftRevision: number;
-    preflight: unknown;
+    source: CapabilityPublicationImport;
+    sourceRevision: string;
+    evidenceRefs: readonly string[];
   }>,
 ): Promise<PreparedPublicationMaterial> {
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(options.sourceJson) as unknown;
-  } catch {
-    throw new GatewaySmokeError("gateway_smoke_owner_source_draft_invalid");
-  }
-  const sourceRecord = z.record(z.string(), jsonValueSchema).safeParse(decoded);
-  if (!sourceRecord.success)
-    throw new GatewaySmokeError("gateway_smoke_owner_source_draft_invalid");
-  if (canonicalDigest(sourceRecord.data) !== options.sourceDigest)
-    throw new GatewaySmokeError("gateway_smoke_owner_source_draft_changed");
-  const sourceRevision = sourceRecord.data.sourceRevision;
-  const evidenceRefs = sourceRecord.data.evidenceRefs;
-  if (
-    typeof sourceRevision !== "string" ||
-    !Array.isArray(evidenceRefs) ||
-    evidenceRefs.some(
-      (value) => typeof value !== "string" || value.length === 0,
-    )
-  )
-    throw new GatewaySmokeError("gateway_smoke_owner_source_draft_invalid");
-  const sourceValue = { ...sourceRecord.data };
-  delete sourceValue.sourceRevision;
-  delete sourceValue.evidenceRefs;
-  const source = sourceValue as CapabilityPublicationImport;
   const offering =
-    source.kind === "ae_envelope"
-      ? source.offering
-      : source.commercial.offering;
+    options.source.kind === "ae_envelope"
+      ? options.source.offering
+      : options.source.commercial.offering;
   if (offering.presentation.price.kind !== "fixed")
     throw new GatewaySmokeError("gateway_smoke_owner_source_price_invalid");
-  const preflight = z
-    .strictObject({
-      status: z.enum(["pending", "prepared", "refused"]),
-      draftRevision: z.number().int().positive(),
-      sourceDigest: digestSchema,
-      summary: z
-        .strictObject({
-          sourceKind: z.string().min(1),
-          sourceRevision: z.string().min(1),
-          sourceDigest: digestSchema,
-          priceDigest: digestSchema,
-          preparedDigest: digestSchema,
-        })
-        .optional(),
-      evidenceRefs: z.array(z.string().min(1)).max(64),
-    })
-    .parse(options.preflight);
-  if (
-    preflight.status !== "prepared" ||
-    preflight.summary === undefined ||
-    preflight.draftRevision !== options.draftRevision ||
-    preflight.sourceDigest !== options.sourceDigest ||
-    canonicalDigest(preflight.evidenceRefs) !== canonicalDigest(evidenceRefs)
-  )
-    throw new GatewaySmokeError(
-      "gateway_smoke_owner_source_preflight_mismatch",
-    );
   const prepared = await preparePublicationDraft({
-    source,
-    sourceRevision,
+    source: options.source,
+    sourceRevision: options.sourceRevision,
     pricingConfig: {
       version: "pricing:v2",
       unit: "call",
       paidAmount: offering.presentation.price.amount,
     },
-    evidenceRefs,
+    evidenceRefs: options.evidenceRefs,
   });
   if (prepared.kind === "refused")
     throw new GatewaySmokeError(
       `gateway_smoke_owner_publication_prepare_${prepared.reason}`,
-    );
-  const summary = preflight.summary;
-  if (
-    summary.sourceKind !== prepared.prepared.sourceKind ||
-    summary.sourceRevision !== prepared.prepared.sourceRevision ||
-    summary.sourceDigest !== prepared.prepared.sourceDigest ||
-    summary.priceDigest !== prepared.prepared.priceDigest ||
-    summary.preparedDigest !== canonicalDigest(prepared.prepared)
-  )
-    throw new GatewaySmokeError(
-      "gateway_smoke_owner_source_preflight_mismatch",
     );
   return prepared.prepared;
 }
@@ -3476,13 +3412,6 @@ function createHostedRuntimeFromEnvironment(
   const ownerSupplyQuery = sourceQuery<Record<string, unknown>, unknown>(
     "capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel",
   );
-  const saveOwnerSourceDraftMutation = sourceMutation<
-    Record<string, unknown>,
-    unknown
-  >("capabilitySupplyOwnerFunnel:saveOwnerSourceDraft");
-  const ownerSourceDraftQuery = sourceQuery<Record<string, unknown>, unknown>(
-    "capabilitySupplyOwnerFunnel:readOwnerSourceDraft",
-  );
   const record = (value: unknown): Record<string, unknown> | undefined =>
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value))
@@ -3503,33 +3432,6 @@ function createHostedRuntimeFromEnvironment(
     )
       throw new GatewaySmokeError("gateway_smoke_owner_supply_unavailable");
     return { ...result, offerings };
-  };
-  const ownerSourceDraftReadback = async (
-    businessId: string,
-    offeringRef: string,
-  ): Promise<Readonly<Record<string, unknown>>> => {
-    const result = record(
-      await (
-        await transport()
-      ).query(ownerSourceDraftQuery, {
-        businessId,
-        offeringRef,
-      }),
-    );
-    if (
-      result?.kind !== "available" ||
-      result.businessId !== businessId ||
-      result.offeringRef !== offeringRef ||
-      typeof result.sourceJson !== "string" ||
-      typeof result.sourceDigest !== "string" ||
-      typeof result.revision !== "number" ||
-      !Number.isSafeInteger(result.revision) ||
-      result.revision < 1
-    )
-      throw new GatewaySmokeError(
-        "gateway_smoke_owner_source_draft_unavailable",
-      );
-    return result;
   };
   let fixture: GatewayOwnerFixtureIdentity | undefined;
   let partialOffering:
@@ -3807,71 +3709,10 @@ function createHostedRuntimeFromEnvironment(
           offeringSourceHash,
         },
       });
-      const sourceDraftOperationKey = `ae-release-smoke:${options.runId}:source-draft`;
-      const sourceDraftCommand = {
-        businessId,
-        offeringRef,
-        offeringRevision,
-        expectedRevision: 0,
-        operationKey: sourceDraftOperationKey,
-        correlationId: sourceDraftOperationKey,
-        sourceJson: JSON.stringify({
-          ...durableMaterial.source,
-          sourceRevision: durableMaterial.ids.sourceRevision,
-          evidenceRefs: [durableMaterial.ids.evidenceRef],
-        }),
-      };
-      const sourceDraftWrite = await sourceWriteAdmissionFromContext({
-        context,
-        command: sourceDraftCommand,
-        scope: "catalog_publish",
-        operationKey: sourceDraftOperationKey,
-        correlationId: sourceDraftOperationKey,
-        env: options.env,
-      });
-      const sourceDraft = record(
-        await (
-          await transport()
-        ).mutation(saveOwnerSourceDraftMutation, {
-          ...sourceDraftCommand,
-          sourceWriteRequest: sourceWriteRequestFromAdmission(sourceDraftWrite),
-          sourceWrite: sourceDraftWrite,
-        }),
-      );
-      if (
-        sourceDraft === undefined ||
-        (sourceDraft.kind !== "saved" && sourceDraft.kind !== "replayed") ||
-        typeof sourceDraft.revision !== "number" ||
-        !Number.isSafeInteger(sourceDraft.revision) ||
-        sourceDraft.revision < 1 ||
-        typeof sourceDraft.sourceDigest !== "string" ||
-        !digestSchema.safeParse(sourceDraft.sourceDigest).success
-      )
-        throw new GatewaySmokeError("gateway_smoke_owner_source_draft_refused");
-      const sourceDraftRevision = z
-        .number()
-        .int()
-        .positive()
-        .parse(sourceDraft.revision);
-      const sourceDigest = digestSchema.parse(sourceDraft.sourceDigest);
-      let sourceDraftReadback = await ownerSourceDraftReadback(
-        businessId,
-        offeringRef,
-      );
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const preflight = record(sourceDraftReadback.preflight);
-        if (preflight?.status !== "pending") break;
-        await new Promise<void>((resolve) => setTimeout(resolve, 250));
-        sourceDraftReadback = await ownerSourceDraftReadback(
-          businessId,
-          offeringRef,
-        );
-      }
-      const prepared = await prepareOwnerSourceFromDurableDraft({
-        sourceJson: String(sourceDraftReadback.sourceJson),
-        sourceDigest,
-        draftRevision: sourceDraftRevision,
-        preflight: sourceDraftReadback.preflight,
+      const prepared = await prepareOwnerPublicationMaterial({
+        source: durableMaterial.source,
+        sourceRevision: durableMaterial.ids.sourceRevision,
+        evidenceRefs: [durableMaterial.ids.evidenceRef],
       });
       const publicationOperationKey = `ae-release-smoke:${options.runId}:publication`;
       const publicationCommand = {
@@ -3879,8 +3720,6 @@ function createHostedRuntimeFromEnvironment(
         offeringRef,
         revision: offeringRevision,
         sourceHash: offeringSourceHash,
-        sourceDraftRevision,
-        sourceDigest,
         runtimeEnvironment: "production" as const,
         prepared,
         operationKey: publicationOperationKey,

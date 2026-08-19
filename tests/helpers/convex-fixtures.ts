@@ -11,8 +11,6 @@ import {
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
 } from '@/modules/capability-supply/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-
 export type ConvexFixtureBackend = TestConvex<typeof schema>
 export type ConvexFixtureAdmin = Pick<
   ConvexFixtureBackend,
@@ -121,31 +119,7 @@ export type CapabilityPublicationMutationFixture = Readonly<{
   reasonCode: string
   evidenceRefs: readonly string[]
 }>
-export async function seedCapabilitySupplySourceDraft(
-  backend: ConvexFixtureBackend,
-  input: Readonly<{
-    businessId: Id<'businesses'>
-    offeringRef: string
-    offeringRevision: number
-    operationKey: string
-    sourceKind: CapabilityPublicationImport['kind']
-    sourceRevision: string
-    sourceJson: string
-    sourceDigest: string
-    summary: Readonly<{
-      sourceKind: string
-      sourceRevision: string
-      sourceDigest: string
-      priceDigest: string
-      preparedDigest: string
-    }>
-    evidenceRefs: readonly string[]
-  }>,
-): Promise<number> {
-  void backend
-  void input
-  throw new Error('retired_listed_tables_unlisted')
-}
+
 export type AdapterConfigScalar = string | number | boolean | null
 export type AdapterConfigObject = Record<string, AdapterConfigScalar>
 export type AdapterConfig = Record<
@@ -386,38 +360,11 @@ export async function prepareCapabilityPublicationMutation(
     },
     evidenceRefs: [...prepared.prepared.evidenceRefs],
   }
-  const rawSource = {
-    ...source,
-    sourceRevision,
-    evidenceRefs: [...input.evidenceRefs],
-  }
-  const rawSourceJson = JSON.stringify(rawSource)
-  const rawSourceDigest = canonicalDigest(rawSource)
-  const sourceDraftRevision = await seedCapabilitySupplySourceDraft(backend, {
-    businessId: input.businessId,
-    offeringRef: catalog.offeringRef,
-    offeringRevision: catalog.revision,
-    operationKey: input.operationKey,
-    sourceKind: preparedMaterial.sourceKind,
-    sourceRevision,
-    sourceJson: rawSourceJson,
-    sourceDigest: rawSourceDigest,
-    summary: {
-      sourceKind: preparedMaterial.sourceKind,
-      sourceRevision: preparedMaterial.sourceRevision,
-      sourceDigest: preparedMaterial.sourceDigest,
-      priceDigest: preparedMaterial.priceDigest,
-      preparedDigest: canonicalDigest(preparedMaterial),
-    },
-    evidenceRefs: input.evidenceRefs,
-  })
   return {
     businessId: input.businessId,
     offeringRef: catalog.offeringRef,
     revision: catalog.revision,
     sourceHash: catalog.sourceHash,
-    sourceDraftRevision,
-    sourceDigest: rawSourceDigest,
     runtimeEnvironment: 'production' as const,
     prepared: preparedMaterial,
     operationKey: input.operationKey,

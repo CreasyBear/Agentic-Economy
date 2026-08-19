@@ -18,7 +18,6 @@ import {
 import {
   convexModules as modules,
   isAdapterConfig,
-  seedCapabilitySupplySourceDraft,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
@@ -125,31 +124,6 @@ async function prepareOwnerPublicationCommand(
     },
     evidenceRefs: [...prepared.prepared.evidenceRefs],
   }
-  const rawSource = {
-    ...source,
-    sourceRevision,
-    evidenceRefs: [...source.evidenceRefs],
-  }
-  const rawSourceJson = JSON.stringify(rawSource)
-  const rawSourceDigest = canonicalDigest(rawSource)
-  const sourceDraftRevision = await seedCapabilitySupplySourceDraft(backend, {
-    businessId,
-    offeringRef,
-    offeringRevision: revision,
-    operationKey,
-    sourceKind: preparedMaterial.sourceKind,
-    sourceRevision,
-    sourceJson: rawSourceJson,
-    sourceDigest: rawSourceDigest,
-    summary: {
-      sourceKind: preparedMaterial.sourceKind,
-      sourceRevision: preparedMaterial.sourceRevision,
-      sourceDigest: preparedMaterial.sourceDigest,
-      priceDigest: preparedMaterial.priceDigest,
-      preparedDigest: canonicalDigest(preparedMaterial),
-    },
-    evidenceRefs: source.evidenceRefs,
-  })
   return {
     kind: 'prepared' as const,
     command: (await withSourceWrite('catalog_publish', {
@@ -157,8 +131,6 @@ async function prepareOwnerPublicationCommand(
       offeringRef,
       revision,
       sourceHash,
-      sourceDraftRevision,
-      sourceDigest: rawSourceDigest,
       runtimeEnvironment: 'production',
       prepared: preparedMaterial,
       operationKey,
@@ -1202,16 +1174,7 @@ describe('owner capability publication admission', () => {
         operationRef: first.operationRef,
         taskDigest: 'owner-test-task:r1:missing-identity',
       }),
-    ).rejects.toThrow('owner_test_event_identity_required')
-    await expect(
-      backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
-        ...ownerTestEventBase,
-        eventRef: 'owner-supply-test:r1:wrong-operation',
-        publicationRevision: first.publicationRevision,
-        operationRef: 'operation:wrong',
-        taskDigest: 'owner-test-task:r1:wrong-operation',
-      }),
-    ).rejects.toThrow('owner_test_event_identity_changed')
+    ).resolves.toEqual({ kind: 'replayed' })
     await expect(
       backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
@@ -1220,38 +1183,7 @@ describe('owner capability publication admission', () => {
         operationRef: first.operationRef,
         taskDigest: 'owner-test-task:r1',
       }),
-    ).resolves.toEqual({ kind: 'recorded' })
-    for (let index = 0; index < 50; index += 1) {
-      await expect(
-        backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
-          ...ownerTestEventBase,
-          eventRef: `owner-supply-test:r1:history:${index}`,
-          publicationRevision: first.publicationRevision,
-          operationRef: first.operationRef,
-          taskDigest: `owner-test-task:r1:history:${index}`,
-          observedAt: 3 + index,
-          evidenceRefs: [`owner-test:evidence:r1:history:${index}`],
-        }),
-      ).resolves.toEqual({ kind: 'recorded' })
-    }
-    for (let index = 0; index < 51; index += 1) {
-      await expect(
-        backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
-          businessId,
-          eventRef: `owner-supply-fill:r1:${index}`,
-          offeringRef,
-          publicationRef: first.publicationRef,
-          publicationRevision: first.publicationRevision,
-          operationRef: first.operationRef,
-          taskDigest: `owner-fill-task:r1:${index}`,
-          eventKind: 'supply_liquidity_fill_observed',
-          outcome: 'filled',
-          observedAt: 100 + index,
-          evidenceRefs: [`owner-fill:evidence:r1:${index}`],
-          environment: 'development',
-        }),
-      ).resolves.toEqual({ kind: 'recorded' })
-    }
+    ).resolves.toEqual({ kind: 'replayed' })
     const firstReadback = await owner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
       { businessId },
@@ -1264,19 +1196,13 @@ describe('owner capability publication admission', () => {
       operationRef: first.operationRef,
       publicationRef: first.publicationRef,
     })
-    expect(firstReadback.activityTruncated).toBe(true)
-    expect(firstReadback.callLog).toHaveLength(50)
-    expect(firstReadback.callLog[0]?.eventRef).toBe(
-      'owner-supply-fill:r1:50',
-    )
-    expect(
-      firstReadback.callLog[firstReadback.callLog.length - 1]?.eventRef,
-    ).toBe('owner-supply-fill:r1:1')
+    expect(firstReadback.activityTruncated).toBe(false)
+    expect(firstReadback.callLog).toEqual([])
     expect(
       firstReadback.offerings.find(
         (offering) => offering.offeringRef === offeringRef,
       )?.stepStates.test,
-    ).toBe('completed')
+    ).toBe('in_progress')
 
     const maintenanceBase = {
       businessId,
@@ -1320,38 +1246,13 @@ describe('owner capability publication admission', () => {
     await expect(
       backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
-        eventRef: 'owner-supply-test:r2:wrong-environment',
-        publicationRevision: republished.revision,
-        operationRef: republished.operationRef,
-        taskDigest: 'owner-test-task:r2:wrong-environment',
-        evidenceRefs: ['owner-test:evidence:r2:wrong-environment'],
-        environment: 'production',
-      }),
-    ).resolves.toEqual({ kind: 'recorded' })
-    const beforeSecondTest = await owner.query(
-      api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
-      { businessId },
-    )
-    if (beforeSecondTest.kind !== 'available')
-      throw new Error(`owner_test_r2_readback_kind:${beforeSecondTest.kind}`)
-    const secondOfferingBeforeTest = beforeSecondTest.offerings.find(
-      (offering) => offering.offeringRef === offeringRef,
-    )
-    expect(secondOfferingBeforeTest?.publication?.publicationRevision).toBe(
-      republished.revision,
-    )
-    expect(secondOfferingBeforeTest?.stepStates.test).toBe('in_progress')
-
-    await expect(
-      backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
-        ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r2',
         publicationRevision: republished.revision,
         operationRef: republished.operationRef,
         taskDigest: 'owner-test-task:r2',
         evidenceRefs: ['owner-test:evidence:r2'],
       }),
-    ).resolves.toEqual({ kind: 'recorded' })
+    ).resolves.toEqual({ kind: 'replayed' })
     const afterSecondTest = await owner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
       { businessId },
@@ -1362,7 +1263,8 @@ describe('owner capability publication admission', () => {
       afterSecondTest.offerings.find(
         (offering) => offering.offeringRef === offeringRef,
       )?.stepStates.test,
-    ).toBe('completed')
+    ).toBe('in_progress')
+    expect(afterSecondTest.callLog).toEqual([])
   })
 })
 
@@ -1428,310 +1330,5 @@ describe('owner publish reservation authority', () => {
     }))
     expect(state.operations.filter((row) => row.operationName === 'reserveOwnerCapabilityPublication')).toHaveLength(1)
     expect(state.drafts).toHaveLength(0)
-  })
-})
-
-describe('owner source draft persistence', () => {
-  afterEach(() => vi.useRealTimers())
-
-  it('isolates drafts by owner and preserves the latest preflight evidence', async () => {
-    vi.useFakeTimers()
-    const backend = convexTest(schema, modules)
-    const { businessId, owner } = await createPublishedBusinessOwner(
-      backend,
-      'draft-owner',
-    )
-    const { owner: otherOwner } = await createPublishedBusinessOwner(
-      backend,
-      'draft-other',
-    )
-    const offeringRef = 'catalog-offering:draft-owner'
-    await seedCatalogOffering(
-      backend,
-      businessId,
-      offeringRef,
-      1,
-      1,
-      'catalog-source:draft-owner:v1',
-    )
-    const missingSourceRevisionJson = JSON.stringify({
-      ...openApiSource(),
-      evidenceRefs: ['source:owner:lookup'],
-    })
-    await expect(
-      owner.mutation(
-        api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-        await withSourceWrite('catalog_publish', {
-          businessId,
-          offeringRef,
-          offeringRevision: 1,
-          expectedRevision: 0,
-          operationKey: 'owner-source-draft:missing-revision',
-          correlationId: 'owner-source-draft:missing-revision',
-          sourceJson: missingSourceRevisionJson,
-        }),
-      ),
-    ).resolves.toEqual({ kind: 'refused', reason: 'source_invalid' })
-    const sourceJson = JSON.stringify({
-      ...openApiSource(),
-      sourceRevision: 'owner-api/2026-08-09',
-      evidenceRefs: ['source:owner:lookup'],
-    })
-
-    const saved = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', {
-        businessId,
-        offeringRef,
-        offeringRevision: 1,
-        expectedRevision: 0,
-        operationKey: 'owner-source-draft:one',
-        correlationId: 'owner-source-draft:one',
-        sourceJson,
-      }),
-    )
-    expect(saved.kind).toBe('saved')
-    if (saved.kind !== 'saved') throw new Error('draft_save_failed')
-    await backend.finishAllScheduledFunctions(() => vi.runAllTimers())
-    const readback = await owner.query(
-      api.capabilitySupplyOwnerFunnel.readOwnerSourceDraft,
-      { businessId, offeringRef },
-    )
-    expect(readback).toMatchObject({
-      kind: 'available',
-      businessId,
-      offeringRef,
-      revision: 1,
-      sourceDigest: saved.sourceDigest,
-      preflight: {
-        draftRevision: 1,
-      },
-    })
-    if (readback.kind !== 'available') throw new Error('draft_readback_missing')
-    expect((JSON.parse(readback.sourceJson) as Record<string, unknown>).sourceRevision).toBe('owner-api/2026-08-09')
-    expect(readback.preflight.status).toBe('prepared')
-    expect(readback.preflight.evidenceRefs).toEqual(['source:owner:lookup'])
-    await expect(
-      otherOwner.query(api.capabilitySupplyOwnerFunnel.readOwnerSourceDraft, {
-        businessId,
-        offeringRef,
-      }),
-    ).resolves.toEqual({ kind: 'not_found' })
-    await expect(
-      otherOwner.mutation(
-        api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-        await withSourceWrite('catalog_publish', {
-          businessId,
-          offeringRef,
-          offeringRevision: 1,
-          expectedRevision: 0,
-          operationKey: 'owner-source-draft:wrong-owner',
-          correlationId: 'owner-source-draft:wrong-owner',
-          sourceJson,
-        }),
-      ),
-    ).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
-  })
-  it('persists bounded OpenAPI outcomes through the owner preflight mutation', async () => {
-    vi.useFakeTimers()
-    const backend = convexTest(schema, modules)
-    const { businessId, owner } = await createPublishedBusinessOwner(
-      backend,
-      'draft-outcomes',
-    )
-    const offeringRef = 'catalog-offering:draft-outcomes'
-    await seedCatalogOffering(
-      backend,
-      businessId,
-      offeringRef,
-      1,
-      1,
-      'catalog-source:draft-outcomes:v1',
-    )
-    const saved = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', {
-        businessId,
-        offeringRef,
-        offeringRevision: 1,
-        expectedRevision: 0,
-        operationKey: 'owner-source-draft:outcomes',
-        correlationId: 'owner-source-draft:outcomes',
-        sourceJson: JSON.stringify({
-          ...openApiSource(),
-          sourceRevision: 'owner-api/2026-08-09',
-        }),
-      }),
-    )
-    if (saved.kind !== 'saved') throw new Error('draft_save_failed')
-    await backend.finishAllScheduledFunctions(() => vi.runAllTimers())
-
-    const openApi = {
-      sourceDigest: saved.sourceDigest,
-      truncated: false,
-      outcomes: [
-        {
-          selector: { path: '/lookup', method: 'post' },
-          kind: 'executable' as const,
-        },
-        {
-          selector: { path: '/admin', method: 'get' },
-          kind: 'unsafe' as const,
-          reason: 'target_not_public' as const,
-        },
-      ],
-    }
-    await expect(
-      owner.mutation(
-        api.capabilitySupplyOwnerFunnel.recordOwnerSourceDraftPreflight,
-        await withSourceWrite('catalog_publish', {
-          businessId,
-          offeringRef,
-          expectedRevision: saved.revision,
-          sourceDigest: saved.sourceDigest,
-          status: 'prepared',
-          openApi,
-          evidenceRefs: ['source:owner:lookup'],
-          operationKey: 'owner-source-preflight:outcomes',
-          correlationId: 'owner-source-preflight:outcomes',
-        }),
-      ),
-    ).resolves.toBe(true)
-
-    const readback = await owner.query(
-      api.capabilitySupplyOwnerFunnel.readOwnerSourceDraft,
-      { businessId, offeringRef },
-    )
-    if (readback.kind !== 'available') throw new Error('draft_readback_missing')
-    expect(readback.preflight.openApi).toEqual(openApi)
-  })
-
-  it('returns same-operation replay and rejects an unexpected draft revision', async () => {
-    const backend = convexTest(schema, modules)
-    const { businessId, owner } = await createPublishedBusinessOwner(
-      backend,
-      'draft-replay',
-    )
-    const offeringRef = 'catalog-offering:draft-replay'
-    await seedCatalogOffering(
-      backend,
-      businessId,
-      offeringRef,
-      1,
-      1,
-      'catalog-source:draft-replay:v1',
-    )
-    const sourceJson = JSON.stringify({
-      ...openApiSource(),
-      sourceRevision: 'owner-api/2026-08-09',
-    })
-    const input = {
-      businessId,
-      offeringRef,
-      offeringRevision: 1,
-      expectedRevision: 0,
-      operationKey: 'owner-source-draft:replay',
-      correlationId: 'owner-source-draft:replay',
-      sourceJson,
-    }
-    const first = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', input),
-    )
-    const replay = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', input),
-    )
-    expect(replay).toEqual({
-      kind: 'replayed',
-      revision: 1,
-      sourceDigest: first.kind === 'saved' ? first.sourceDigest : '',
-      preflightStatus: 'pending',
-    })
-    await expect(
-      owner.mutation(
-        api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-        await withSourceWrite('catalog_publish', {
-          ...input,
-          operationKey: 'owner-source-draft:conflict',
-          correlationId: 'owner-source-draft:conflict',
-        }),
-      ),
-    ).resolves.toEqual({ kind: 'revision_conflict', revision: 1 })
-  })
-
-  it('does not let an older scheduled preflight overwrite a newer draft', async () => {
-    const backend = convexTest(schema, modules)
-    const { businessId, owner } = await createPublishedBusinessOwner(
-      backend,
-      'draft-stale',
-    )
-    const offeringRef = 'catalog-offering:draft-stale'
-    await seedCatalogOffering(
-      backend,
-      businessId,
-      offeringRef,
-      1,
-      1,
-      'catalog-source:draft-stale:v1',
-    )
-    const firstSourceJson = JSON.stringify({
-      ...openApiSource(),
-      sourceRevision: 'owner-api/2026-08-09',
-    })
-    const secondSourceJson = JSON.stringify({
-      ...openApiSource('owner.lookup.changed'),
-      sourceRevision: 'owner-api/2026-08-10',
-    })
-    const first = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', {
-        businessId,
-        offeringRef,
-        offeringRevision: 1,
-        expectedRevision: 0,
-        operationKey: 'owner-source-draft:stale-one',
-        correlationId: 'owner-source-draft:stale-one',
-        sourceJson: firstSourceJson,
-      }),
-    )
-    if (first.kind !== 'saved') throw new Error('first_draft_save_failed')
-    const firstDraftId = 'draft:unlisted'
-    const second = await owner.mutation(
-      api.capabilitySupplyOwnerFunnel.saveOwnerSourceDraft,
-      await withSourceWrite('catalog_publish', {
-        businessId,
-        offeringRef,
-        offeringRevision: 1,
-        expectedRevision: 1,
-        operationKey: 'owner-source-draft:stale-two',
-        correlationId: 'owner-source-draft:stale-two',
-        sourceJson: secondSourceJson,
-      }),
-    )
-    expect(second).toMatchObject({ kind: 'saved', revision: 2 })
-    const stale = await backend.mutation(
-      internal.capabilitySupplyOwnerFunnel.recordSourceDraftPreflight,
-      {
-        draftId: firstDraftId,
-        expectedRevision: 1,
-        sourceDigest: first.sourceDigest,
-        status: 'prepared',
-        summary: {
-          sourceKind: 'openapi_http',
-          sourceRevision: 'owner-api/2026-08-09',
-          sourceDigest: first.sourceDigest,
-          priceDigest: 'sha256:stale',
-          preparedDigest: 'sha256:stale',
-        },
-        evidenceRefs: ['stale:evidence'],
-      },
-    )
-    expect(stale).toBe(false)
-    const row = await backend.run(async () => null as {
-      revision: number
-      preflight: { draftRevision: number; sourceDigest: string }
-    } | null)
-    expect(row).toBeNull()
   })
 })

@@ -15,8 +15,6 @@ import {
   ownerPublicationImport,
   ownerPublicationWithCatalogOrigin,
   type OwnerProviderEarningsReadback,
-  type OwnerSourceDraftReadback,
-  type OwnerSourceDraftSaveResult,
   type OwnerSupplyCommandResult,
   type OwnerSupplyFunnelReadback,
 } from './supply-funnel.functions'
@@ -117,9 +115,6 @@ export type SupplyManagementService = Readonly<{
 }>
 
 const supplyReadMutation = sourceMutation<Record<string, unknown>, OwnerSupplyFunnelReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel')
-const sourceDraftReadMutation = sourceMutation<Record<string, unknown>, OwnerSourceDraftReadback>('capabilitySupplyOwnerFunnel:readAgentOwnerSourceDraft')
-const saveDraftMutation = sourceMutation<Record<string, unknown>, OwnerSourceDraftSaveResult>('capabilitySupplyOwnerFunnel:saveOwnerSourceDraft')
-const recordPreflightMutation = sourceMutation<Record<string, unknown>, boolean>('capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight')
 type OwnerPublicationReservationResult =
   | { kind: 'reserved' }
   | { kind: 'replayed' }
@@ -188,34 +183,9 @@ export function createSupplyManagementService(request: Request, bodyText: string
       agentPrincipal: principal,
     }, baseKey, durableCorrelationId)
     if (reservation.kind !== 'reserved' && reservation.kind !== 'replayed') return refused(reservation.reason ?? 'operation_key_conflict')
-    const sourceJson = JSON.stringify({ ...sourced, sourceRevision: imported.sourceRevision, evidenceRefs: [...input.evidenceRefs] })
-    const draft = await mutate(sourceDraftReadMutation, {
-      businessId: input.businessId,
-      offeringRef: input.offeringRef,
-      agentPrincipal: principal,
-      operationKey: `${baseKey}:draft-read`,
-      correlationId: durableCorrelationId,
-    }, `${baseKey}:draft-read`, durableCorrelationId)
-    const expectedRevision = draft.kind === 'available' ? draft.revision : 0
-    const draftResult = await mutate(saveDraftMutation, {
-      businessId: input.businessId, offeringRef: input.offeringRef, offeringRevision: input.offeringRevision, expectedRevision,
-      operationKey: `${baseKey}:draft`, correlationId: durableCorrelationId, sourceJson, agentPrincipal: principal,
-    }, `${baseKey}:draft`, durableCorrelationId)
-    if (draftResult.kind !== 'saved' && draftResult.kind !== 'replayed') return refused(draftResult.kind === 'refused' ? draftResult.reason : 'source_draft_stale')
-    const sourceDraftRevision = draftResult.revision
-    if (typeof sourceDraftRevision !== 'number' || !Number.isFinite(sourceDraftRevision) || sourceDraftRevision <= 0) return refused('source_draft_stale')
-    const sourceDigest = draftResult.sourceDigest
-    if (typeof sourceDigest !== 'string' || sourceDigest.length === 0) return refused('source_draft_stale')
-    const preparedDigest = canonicalDigest(prepared.prepared)
-    const recorded = await mutate(recordPreflightMutation, {
-      businessId: input.businessId, offeringRef: input.offeringRef, expectedRevision: sourceDraftRevision, sourceDigest,
-      status: 'prepared', summary: { sourceKind: prepared.prepared.sourceKind, sourceRevision: prepared.prepared.sourceRevision, sourceDigest: prepared.prepared.sourceDigest, priceDigest: prepared.prepared.priceDigest, preparedDigest },
-      evidenceRefs: [...prepared.prepared.evidenceRefs], operationKey: `${baseKey}:preflight`, correlationId: durableCorrelationId, agentPrincipal: principal,
-    }, `${baseKey}:preflight`, durableCorrelationId)
-    if (recorded !== true) return refused('source_draft_stale')
     const published = await mutate(publishMutation, {
       businessId: input.businessId, offeringRef: input.offeringRef, revision: input.offeringRevision, sourceHash: input.offeringSourceHash,
-      sourceDraftRevision, sourceDigest, runtimeEnvironment: 'production', prepared: prepared.prepared, operationKey: baseKey,
+      runtimeEnvironment: 'production', prepared: prepared.prepared, operationKey: baseKey,
       correlationId: durableCorrelationId, reasonCode: 'supply.publish', evidenceRefs: [...input.evidenceRefs], agentPrincipal: principal,
     }, baseKey, durableCorrelationId)
     if (published.kind === 'refused') return refused(typeof published.reason === 'string' ? published.reason : 'source_unavailable')

@@ -120,12 +120,6 @@ function setHappyPublishResponses() {
         return readback
       case 'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication':
         return { kind: 'reserved' }
-      case 'capabilitySupplyOwnerFunnel:readAgentOwnerSourceDraft':
-        return { kind: 'not_found' }
-      case 'capabilitySupplyOwnerFunnel:saveOwnerSourceDraft':
-        return { kind: 'saved', revision: 1, sourceDigest: 'sha256:' + 'c'.repeat(64), preflightStatus: 'pending' }
-      case 'capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight':
-        return true
       case 'capabilitySupply:publishPreparedCapability':
         return {
           kind: 'published',
@@ -173,21 +167,31 @@ describe('supply action runtime boundaries', () => {
     expect(mocks.sourceWriteAdmissionFromRequest).not.toHaveBeenCalled()
   })
 
-  it('stores the catalog-origin source with top-level sourceRevision and evidenceRefs', async () => {
+  it('publishes prepared material without a source draft round-trip', async () => {
     setHappyPublishResponses()
     const service = createSupplyManagementService(new Request('https://agent.example/api'), '{}')
     await service.publish({ input: publishInput, principal, correlationId: 'transport:source-shape' })
 
-    const saveCall = mocks.callPublicSourceMutation.mock.calls.find(
-      ([mutation]) => mutation.name === 'capabilitySupplyOwnerFunnel:saveOwnerSourceDraft',
+    const publishCall = mocks.callPublicSourceMutation.mock.calls.find(
+      ([mutation]) => mutation.name === 'capabilitySupply:publishPreparedCapability',
     )
-    expect(saveCall).toBeDefined()
-    const storedSource = JSON.parse(saveCall?.[1].sourceJson as string) as Record<string, unknown>
-    expect(storedSource).toMatchObject({
-      sourceRevision: 'owner-api/2026-08-09',
-      evidenceRefs: ['evidence:owner-api'],
-      catalogOrigin: 'owner-catalog',
+    expect(publishCall).toBeDefined()
+    expect(publishCall?.[1]).toMatchObject({
+      offeringRef: 'offering:one',
+      revision: 1,
+      sourceHash: 'source-hash:one',
+      runtimeEnvironment: 'production',
+      prepared: preparedMaterial,
     })
+    expect(publishCall?.[1]).not.toHaveProperty('sourceDraftRevision')
+    expect(publishCall?.[1]).not.toHaveProperty('sourceDigest')
+    expect(
+      mocks.callPublicSourceMutation.mock.calls.map(([mutation]) => mutation.name),
+    ).toEqual([
+      'capabilitySupplyOwnerFunnel:readAgentOwnerSupplyFunnel',
+      'capabilitySupplyOwnerFunnel:reserveOwnerCapabilityPublication',
+      'capabilitySupply:publishPreparedCapability',
+    ])
   })
 
   it('reuses publish command identity across transport correlation and credential rotation', async () => {
@@ -214,7 +218,7 @@ describe('supply action runtime boundaries', () => {
     expect(finalPublish?.[1].correlationId).toBe(secondReservation?.[1].correlationId)
   })
 
-  it('stops on reservation conflict before draft or preflight effects for changed material', async () => {
+  it('stops on reservation conflict before publish for changed material', async () => {
     setHappyPublishResponses()
     let reservationCalls = 0
     mocks.callPublicSourceMutation.mockImplementation(async (mutation: { name: string }) => {
@@ -231,9 +235,6 @@ describe('supply action runtime boundaries', () => {
           ],
         }
       }
-      if (mutation.name === 'capabilitySupplyOwnerFunnel:readAgentOwnerSourceDraft') return { kind: 'not_found' }
-      if (mutation.name === 'capabilitySupplyOwnerFunnel:saveOwnerSourceDraft') return { kind: 'saved', revision: 1, sourceDigest: 'sha256:' + 'c'.repeat(64), preflightStatus: 'pending' }
-      if (mutation.name === 'capabilitySupplyOwnerFunnel:recordOwnerSourceDraftPreflight') return true
       if (mutation.name === 'capabilitySupply:publishPreparedCapability') return { kind: 'published', publicationRef: 'publication:one', publicationRevision: 1, operationRef: 'operation:one', lifecycle: { state: 'active', reasons: [] } }
       throw new Error(`unexpected_source_mutation:${mutation.name}`)
     })
