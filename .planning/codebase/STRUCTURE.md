@@ -6,248 +6,338 @@
 
 ```
 Agentic-Economy/
-├── src/                      # App host (TanStack Start + React)
-│   ├── routes/               # File routes: HTTP adapters + pages
-│   ├── modules/              # Domain kernel (public.ts / internal/)
-│   ├── lib/                  # Host helpers (server, http, errors, observability)
-│   ├── components/           # UI: ae/ (product), ui/ (primitives), ai-elements/
-│   ├── content/              # Brand copy
-│   ├── hooks/                # Shared React hooks
-│   ├── styles/               # globals.css
-│   ├── start.ts              # Middleware + Start entry
-│   ├── router.tsx            # Router factory
-│   └── routeTree.gen.ts      # Generated route tree
-├── convex/                   # Durable source functions + schema compose
-│   ├── schema.ts             # Spreads module table maps (60 listed)
-│   ├── http.ts               # Routing-kernel HTTP 410 only
-│   ├── convex.config.ts      # Workpool / workflow / rate limiter / aggregate
-│   ├── authz.ts              # Clerk → actor
-│   ├── marketDispatchWorkpool.ts
-│   └── _generated/           # Convex codegen
-├── tests/                    # Vitest + Playwright suites
-│   ├── unit/                 # Mirrors modules / server / convex
-│   ├── integration/
-│   ├── imports/              # Boundary + frontier + kernel-retirement
-│   ├── e2e/
-│   ├── deploy-smoke/
-│   └── helpers/
+├── src/
+│   ├── start.ts                 # TanStack Start middleware + createStart
+│   ├── router.tsx               # Router factory over generated route tree
+│   ├── routeTree.gen.ts         # Generated — do not edit
+│   ├── routes/                  # File-based UI + HTTP adapters
+│   │   ├── __root.tsx
+│   │   ├── index.tsx            # /  (q → /t/new)
+│   │   ├── t.new.tsx            # /t/new Answer composer
+│   │   ├── t.$threadId.tsx      # Durable thread
+│   │   ├── s.$shareToken.tsx    # Read-only share
+│   │   ├── $slug.tsx            # Public business
+│   │   ├── claim*.tsx
+│   │   ├── operations.$operationRef.tsx
+│   │   ├── mcp.ts               # POST|DELETE /mcp
+│   │   ├── api.v1.operations.call.ts
+│   │   ├── api.v1.market-operations.*.ts
+│   │   ├── api.answer.*.ts
+│   │   ├── _operator/           # Owner + admin + agent-access UI
+│   │   └── [.]well-known/       # UCP, OAuth resource, HTTP signatures
+│   ├── modules/                 # Domain kernel + proving ground
+│   ├── components/
+│   │   ├── ae/                  # Product UI
+│   │   ├── ui/                  # Primitives (shadcn-style)
+│   │   └── ai-elements/         # Chat suggestion/shimmer/code-block
+│   ├── lib/
+│   │   ├── server/              # Host-only seams
+│   │   ├── http/                # Headers, cookies, agent negotiation
+│   │   ├── observability/
+│   │   ├── operator/
+│   │   ├── client/
+│   │   ├── claim/
+│   │   └── errors.ts            # RFC 9457 model
+│   ├── content/brand-copy.ts
+│   ├── hooks/
+│   └── styles/globals.css
+├── convex/                      # Durable functions + schema composition
+│   ├── schema.ts
+│   ├── convex.config.ts
+│   ├── http.ts                  # routing-v1 410s
+│   ├── crons.ts
+│   ├── _generated/              # Codegen — do not edit
+│   └── *.ts                     # Per-area functions
 ├── tools/
-│   ├── ae/                   # Public-surface CLI adapter
-│   ├── dev/                  # Local smokes, papercut, fixtures
-│   └── release/              # Manifest, frontier, hosted smoke
-├── eval/                     # Answer evals / quality gate
-├── scripts/                  # Audit scripts (e.g. action surfaces)
-├── public/                   # Static assets
-├── docs/                     # Ancillary docs (codemap)
-├── .planning/                # GSD state, ADRs, evidence, this codebase map
-├── package.json              # Scripts and dependencies
-├── vite.config.ts            # Vite + TanStack Start + Nitro
+│   ├── ae/                      # Market CLI adapter
+│   ├── dev/                     # Local smokes, evidence packets, papercut
+│   └── release/                 # Frontier/kernel manifests, hosted smokes
+├── tests/
+│   ├── unit/ integration/ e2e/ seo/ imports/ types/ ui-contract/
+│   ├── eval/ deploy-smoke/ helpers/ fixtures/ setup/
+├── eval/                        # Promptfoo / quality / braintrust cases
+├── public/                      # Brand + illustrations
+├── .planning/                   # GSD docs (not imported by runtime)
+├── .agents/skills/              # Project skills
+├── .env.example                 # Env names only
+├── package.json
+├── tsconfig.json                # @/* → src/*
+├── vite.config.ts
 ├── vitest.config.ts
-├── tsconfig.json             # `@/*` → `src/*`
-└── AGENTS.md                 # Convex + papercut operating notes
+└── playwright.config.ts
 ```
 
 ## Directory Purposes
 
 **`src/routes/`:**
-- Purpose: Thin TanStack file-route adapters and pages. Own URLs, methods, and handler wiring only.
-- Contains: `api.v1.operations.call.ts` (paid door), `api.v1.operations.execute.ts` (410), `mcp.ts`, `api.answer.turn.ts`, `api.v1.market-operations.*.ts`, measured businesses/services URLs, operator pages under `_operator/`, OAuth well-known, retired CR/WorkTree HTTP.
-- Key files: `src/routes/api.v1.operations.call.ts`, `src/routes/mcp.ts`, `src/routes/__root.tsx`, `src/routes/_operator.tsx`
+- Purpose: TanStack file routes. Pages render React; APIs expose `server.handlers`.
+- Contains: One module per URL. Dots in filenames become path segments (`api.v1.operations.call.ts` → `/api/v1/operations/call`).
+- Key files: `src/start.ts` (not under routes) owns middleware. `src/routes/api.$.ts` is the `/api/**` 404 catch-all.
 
 **`src/modules/`:**
-- Purpose: Domain kernel. One folder per bounded context. Public seam is `public.ts` (and `convex.ts` when Convex must not import Node barrels).
-- Contains: Action defs (`*.actions.ts`), TanStack server fns (`*.functions.ts`), Convex table maps (`internal/convex-schema.ts` or `internal/schema.ts`), domain logic under `internal/`.
-- Key files: `src/modules/actions/index.ts` (14 public actions), `src/modules/common/action.ts`, `src/modules/capability-execution/operation-invoke.ts`, `src/modules/capability-supply/`, `src/modules/money/`, `src/modules/product-frontier/`
+- Purpose: Bounded contexts. Kernel, demand proving ground, owner tooling, shared `common` / `actions`.
+- Contains: `public.ts`, optional `server.ts` / `convex.ts` / `testing.ts`, `*.actions.ts`, `*.functions.ts`, private `internal/`.
+- Key files: `src/modules/actions/index.ts` (registry), `src/modules/common/action.ts` (contract).
 
-**`src/lib/`:**
-- Purpose: App-host concerns shared by routes: Convex client wrappers, auth, problems, rate limits, MCP/HTTP adapters.
-- Contains: `server/` (gateway adapters), `http/`, `observability/`, `errors.ts`.
-- Key files: `src/lib/server/operation-invoke-api.ts`, `src/lib/server/mcp-api.ts`, `src/lib/server/convex-source.ts`, `src/lib/server/agent-access-auth.ts`, `src/lib/errors.ts`, `src/lib/ui/contract-scans.ts`
+**`src/lib/server/`:**
+- Purpose: Node-only HTTP/Convex/MCP/auth adapters. Never import from client components.
+- Contains: `convex-source.ts`, `operation-invoke-api.ts`, `mcp-api.ts`, `source-write-admission.ts`, `agent-access-auth.ts`, `rate-limit.ts`, `problem.ts`, notification/stripe helpers, retired Customer Request `customer-request-gone.ts`.
+- Key files: `operation-invoke-api.ts` is the paid gateway implementation behind `/call`.
 
-**`src/components/`:**
-- Purpose: React UI. Product components under `ae/`; primitives under `ui/`.
-- Contains: Chat/answer, operator shells, supply funnel, inquiries, paid-operation card.
-- Key files: `src/components/ae/chat/`, `src/components/ae/action-invocation/AePaidOperationCard.tsx`, `src/components/ae/layout/AeOperatorShell.tsx`
+**`src/components/ae/`:**
+- Purpose: Product UI grouped by surface (`chat/`, `claim/`, `supply/`, `inquiries/`, `offerings/`, `layout/`, `operator/`, `console/`, `work-tree/`, `artifacts/`).
+- Contains: `Ae*.tsx` plus colocated view-models (`answer-stream.ts`, `answer-turn-state.ts`).
+- Key files: `src/components/ae/chat/AeChat.tsx`, `AeAnswerPromptInput.tsx`, `AeSuggestionChips.tsx`.
 
 **`convex/`:**
-- Purpose: Durable queries/mutations/actions. Call into `src/modules`; do not invent a second domain layer.
-- Contains: One file (or family) per table/context; `schema.ts` composition; RK 410 HTTP; workpool.
-- Key files: `convex/schema.ts`, `convex/capabilityOperationInvocations.ts`, `convex/marketDispatchWorkpool.ts`, `convex/http.ts`, `convex/authz.ts`
+- Purpose: Source of truth. Schema spreads module table bundles. Functions enforce source-write and authz.
+- Contains: Area files (`capabilityOperationInvocations.ts`, `answerThreads.ts`, `registry.ts`, `moneyLedger.ts`, `business.ts`, `discovery.ts`, …). Node worker: `capabilityOperationInvocationWorker.ts`.
+- Key files: `schema.ts`, `sourceWriteAdmission.ts`, `authz.ts`, `marketDispatchWorkpool.ts`.
 
 **`tools/ae/`:**
-- Purpose: CLI that exercises AE the way an external agent would — same public HTTP actions.
-- Contains: `cli.ts`, `commands/invoke.ts`, `commands/search.ts`, `commands/manifest.ts`.
-- Key files: `tools/ae/cli.ts`, `tools/ae/commands/invoke.ts`
+- Purpose: External-agent-shaped CLI over public HTTP.
+- Contains: `cli.ts`, `commands/*.ts`, `lib/args.ts` / `output.ts`.
+- Key files: `commands/invoke.ts`, `commands/search.ts`, `commands/ask.ts`, `commands/manifest.ts`.
 
 **`tests/`:**
-- Purpose: Pin architecture: 14 actions, 60 tables, import seams, invoke conformance.
-- Contains: `unit/`, `integration/`, `imports/`, `e2e/`, `helpers/`.
-- Key files: `tests/unit/schema/convex-schema.test.ts`, `tests/imports/product-frontier-manifest.test.ts`, `tests/unit/actions/registry.test.ts`
+- Purpose: Vitest + Playwright. Import scanners live in `tests/imports/`.
+- Contains: Mirror of domain names under `tests/unit/<area>/`.
+- Key files: `tests/imports/private-imports.test.ts`, `route-boundary.test.ts`, `capability-supply-boundaries.test.ts`.
 
-**`.planning/`:**
-- Purpose: Operating model, ADRs, evidence. Codebase maps for planners live in `.planning/codebase/`.
-- Contains: `STATE.md`, `reset/OPERATING-MODEL.md`, `codebase/ARCHITECTURE.md`, `codebase/STRUCTURE.md`.
-- Key files: `.planning/codebase/ARCHITECTURE.md` (do not overwrite `CAPABILITY-MAP.md`, `IA-DATA-FLOW.md`, `PROMPT-DATA-FLOW.md`, or `DATA-FLOW-DELTA-*.md` from this mapper)
+**`eval/`:**
+- Purpose: Answer/toolcall/quality eval cases. Not production runtime.
+- Contains: `eval/answer/promptfooconfig.yaml`, `eval/answer/lib/{cases,evaluators,coverage,scoring}.ts`.
+- Key files: `eval/answer/lib/cases.ts` is the source contract for expected tools/routes.
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/start.ts`: TanStack Start middleware (Clerk, CSRF, source-write, security headers, correlation)
-- `src/router.tsx`: `createRouter` over `src/routeTree.gen.ts`
-- `src/routes/api.v1.operations.call.ts`: Paid invoke HTTP door (`POST /api/v1/operations/call`)
-- `src/routes/mcp.ts`: MCP host
-- `tools/ae/cli.ts`: CLI adapter (`npm run ae`)
-- `src/routes/api.answer.turn.ts`: Chat turn stream
-- `convex/schema.ts`: Listed table composition
-- `src/modules/actions/index.ts`: Public action inventory (`listActions` = 14 ids)
+- `src/start.ts`: Host middleware (correlation, API boundary, Sentry/PostHog, CSP, agent markdown, CSRF, source-write, Clerk).
+- `src/router.tsx`: `createRouter({ routeTree })`.
+- `src/routes/mcp.ts`: MCP HTTP door.
+- `src/routes/api.v1.operations.call.ts`: Paid invoke door → `src/lib/server/operation-invoke-api.ts`.
+- `src/routes/api.answer.turn.ts`: Answer SSE/UI-stream door → `src/modules/answer-thread/server.ts`.
+- `tools/ae/cli.ts`: CLI entry (`npm run ae`).
+- `convex/schema.ts`: Table composition.
+- `convex/http.ts`: Retired routing-v1 + Convex `/mcp` 410s (live MCP is Start `/mcp`).
 
 **Configuration:**
-- `package.json`: Scripts (`test:release:source`, `check:product-frontier`, `ae`)
-- `vite.config.ts`: Dev server, TanStack Start, Nitro, Sentry plugin
-- `tsconfig.json`: Path alias `@/*` → `src/*`
-- `convex/convex.config.ts`: Workpool, workflow, rate limiter, aggregate
-- `convex/auth.config.ts`: Clerk JWT issuer
-- `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json`: Required 14 action ids and MCP tool names
-- Env files may exist for local/hosted config — note existence only; never commit or quote secrets
+- `package.json`: Scripts (`dev`, `ae`, `test:*`, `seed:dev`).
+- `tsconfig.json`: Paths `@/*` and `~/*` → `src/*`; operator aliases `@/routes/owner.*` → `src/routes/_operator/owner.*`.
+- `vite.config.ts`: `tanstackStart()` + `nitro()` (Vercel Node).
+- `convex/convex.config.ts`: workflow, workpool, rateLimiter, aggregate; optional Convex env names.
+- `convex/auth.config.ts`: Clerk JWT issuer.
+- `.env.example`: Environment variable names. `.env` / `.env.*` secret files: note existence only if present locally; never commit or quote values.
 
-**Core Logic:**
-- `src/modules/common/action.ts`: `defineAction`
-- `src/modules/capability-execution/operation-invoke.ts`: Paid invoke domain service
-- `src/modules/capability-execution/operation-invoke-entry.ts`: Route contract (`/call` paid, `/execute` legacy)
-- `src/modules/action-invocation/application-service.ts`: Durable invocation host
-- `src/modules/capability-supply/`: Admission, bindings, transport, x402 policy
-- `src/modules/registry/`: Discovery projections and actions
-- `src/modules/money/`: Brokered ledger + `internal/live-money-gate.ts`
-- `src/modules/agent-access/`: Principals, grants, scopes
-- `src/modules/answer-thread/`: Chat persistence and tool loop
-- `src/modules/product-frontier/`: Quarantine, deprecation notice, table retirement, businesses/services policy
-- `convex/capabilityOperationInvocations.ts`: Durable invoke/status/cancel/reconcile source
+**Core Logic — market kernel:**
+- `src/modules/capability-contract/public.ts`: Contract format `ae.capability-contract:v2`.
+- `src/modules/capability-supply/public.ts`: Operation refs, eligibility, publication types.
+- `src/modules/capability-supply/operation-source.ts`: Search/detail/compare/inspect-plan readers.
+- `src/modules/registry/operations.actions.ts` + `operation-action-contracts.ts`: Discovery actions.
+- `src/modules/capability-execution/operation-invoke.ts`: Invoke application service.
+- `src/modules/capability-execution/operation-invoke-entry.ts`: Path/method/scope constants (`/api/v1/operations/call`).
+- `src/modules/capability-execution/operation-execute.functions.ts`: Keyless executor.
+- `src/modules/capability-execution/operation-execute.server.ts`: Guarded fetch wrapper.
+- `src/modules/action-invocation/`: Durable claim/lease/reconcile.
+- `src/modules/money/public.ts` + `server.ts`: Ledger + Stripe host fns.
+- `src/modules/agent-access/contract.ts`: `MARKET_OPERATIONS_INVOKE_SCOPE`.
+- `src/modules/network-guard/public.ts`: SSRF allowlist.
+- `src/modules/harness/public.ts`: Run loop.
+- `src/modules/model-gateway/public.ts`: OpenRouter.
+
+**Core Logic — Answer proving ground:**
+- `src/modules/answer/public.ts`: Gate, preflight, presentation, artifacts.
+- `src/modules/answer/server.ts`: `runAnswerToolUseAgent` only (Node/LLM).
+- `src/modules/answer/catalog-example-asks.ts`: Landing example queries.
+- `src/modules/answer/internal/answer-tool-use-agent.ts`: Bounded AI SDK tool loop.
+- `src/modules/answer/internal/answer-navigation-policy.ts`: Forced search → detail; effect budget.
+- `src/modules/answer-thread/public.ts`: Session, share, projections, `classifyFollowUpIntent`.
+- `src/modules/answer-thread/server.ts`: `streamAnswerTurn`, reserve/stop, digests.
+- `src/modules/answer-thread/internal/turn-orchestrator.ts`: Lease-bound phases.
+- `src/modules/answer-thread/internal/answer-tool-registry.ts`: Read-tool allowlist.
+- `src/modules/answer-thread/answer-thread.schema.ts`: `ANSWER_READ_TOOL_IDS`.
+- `src/modules/answer-thread/client.ts`: Empty placeholder (`export {}`) — browser code lives in `src/components/ae/chat/`.
+
+**Core Logic — catalog / owner / inquiries:**
+- `src/modules/catalog/public.ts`, `owner-claim.functions.ts`, `claim-draft.ts`
+- `src/modules/business/public.ts`, `src/modules/business/internal/claim.ts`
+- `src/modules/storefront/storefront.functions.ts`, `server.ts` (SSRF-safe HTML import)
+- `src/modules/inquiries/public.ts`, `inquiry.actions.ts`, `inquiry.functions.ts`
+- `src/modules/discovery/public.ts`, `developer-discovery-route.ts`
+- `src/modules/work-tree/public.ts`, `work-tree.functions.ts`, `human-root.functions.ts`
+- `src/modules/study/public.ts`
+- `src/modules/product-frontier/quarantine-write-admission.ts`
 
 **Testing:**
-- `tests/unit/<module>/`: Unit tests beside domain names
-- `tests/unit/server/`: HTTP/MCP adapter tests (`mcp-api.test.ts`, `operation-invoke-api.test.ts`)
-- `tests/unit/convex/`: Convex runtime tests
-- `tests/unit/schema/convex-schema.test.ts`: 60 `durableTables`
-- `tests/imports/`: Private imports, route boundary, product-frontier, kernel-retirement
-- `tests/integration/`: Workpool, supply funnel, answer-thread source-write
-- `tests/e2e/`: Playwright product journeys
-- `tests/helpers/`: Convex fixtures, lineage helpers
+- `tests/unit/<module>/`: Deterministic module tests.
+- `tests/integration/`: Convex-test / route / Answer turn.
+- `tests/e2e/`: Playwright (`tests/e2e/landing-answer.spec.ts`, `thread-first.spec.ts`, …).
+- `tests/imports/`: Architectural scanners.
+- `tests/eval/answer-pipeline.test.ts`: Eval case/coverage wiring.
+- `tests/helpers/`: OpenRouter contract server, Answer thread test port, fixtures.
 
 ## Naming Conventions
 
 **Files:**
-- Domain module folder: kebab-case (`capability-execution`, `answer-thread`)
-- Public seam: `public.ts`; Convex-safe seam: `convex.ts`; server-only barrel: `server.ts`
-- Actions: `<area>.actions.ts` (e.g. `operation-invoke.actions.ts`, `registry.actions.ts`)
-- TanStack server fns: `<area>.functions.ts`
-- Table maps: `internal/convex-schema.ts` or `internal/schema.ts`
-- Routes: TanStack dotted files (`api.v1.operations.call.ts` → `/api/v1/operations/call`)
-- Tests: `tests/unit/<area>/<name>.test.ts` or `.test.tsx`
-- Product UI: `Ae<Name>.tsx` under `src/components/ae/<area>/`
+- Domain module folder: kebab-case matching the bounded context (`capability-supply`, `answer-thread`).
+- Public seam: `public.ts`. Host-only extras: `server.ts`. Convex helpers: `convex.ts`. Test-only ports: `testing.ts`.
+- Machine contracts: `<area>.actions.ts` (`registry.operations.actions.ts` pattern as `operations.actions.ts`).
+- TanStack server functions: `<area>.functions.ts` using `createServerFn`.
+- Schema values: `internal/schema.ts` or `internal/convex-schema.ts`; re-exported via `public.ts` when needed.
+- Routes: TanStack file-route names — `api.v1.operations.call.ts`, `$slug.tsx`, `_operator/owner.supply.tsx`, `[.]well-known/ucp.ts`.
+- Product components: `Ae` prefix (`AeChat.tsx`). Primitives under `src/components/ui/` stay unprefixed.
+- Tests: `*.test.ts` / `*.test.tsx` (Vitest), `*.spec.ts` (Playwright).
 
 **Directories:**
-- `src/modules/<context>/internal/`: private; other modules and routes must not import
-- `src/routes/_operator/`: authenticated owner/admin UI
-- `convex/lib/`: Convex-local helpers (e.g. `convex/lib/rateLimit.ts`)
-- Quarantined modules that stay in tree: `src/modules/study/`, `src/modules/work-tree/` (actions filtered from `listActions`; tables empty)
+- `internal/` is private to that module. Routes and sibling modules import `public.ts` or documented root files, never `internal/`.
+- `_operator/` is a pathless layout (`src/routes/_operator.tsx`) wrapping owner/admin/developer/agent-access pages.
+- `src/lib/server/` vs `src/lib/client/` vs `src/lib/http/`: runtime split is the name.
+
+**Symbols:**
+- Actions: dotted ids (`operation.invoke`, `registry.operations.search`).
+- MCP tools: `ae_` + dots to underscores (`ae_operation_invoke`).
+- Public operation refs: `operation:v1:` + 64 hex.
+- Source-write version: `source-write:v2`.
+- Path alias: `@/modules/...` (prefer `@/` over `~/`).
 
 ## Where to Add New Code
 
-**New public Market Operation / supply / registry action:**
-- Primary code: `src/modules/<owning-module>/<name>.actions.ts` using `defineAction` from `src/modules/common/action.ts`
-- Register: explicit import + array entry in `src/modules/actions/index.ts` (not a side-effect import)
-- Frontier pin: `.planning/evidence/product-frontier-baseline/product-frontier-manifest.json` `requiredActionIds` / `requiredMcpTools` if it is a live public id
-- Tests: `tests/unit/actions/registry.test.ts`, `tests/imports/product-frontier-manifest.test.ts`, plus module unit tests under `tests/unit/<module>/`
-- Do not add quarantined-family ids (`customerRequest.`, `inquiry.`, `study.`, `workTree.`) to `listActions()`. `inquiry.readCustomerRecord` stays `findAction`-able and not HTTP-410ed; it is not one of the 14 public ids.
+**New Market Operation contract / supply behavior:**
+- Primary code: `src/modules/capability-contract/` (schema/effects) and `src/modules/capability-supply/internal/{publication,binding,eligibility}/`.
+- Public types: export from `src/modules/capability-supply/public.ts`.
+- Convex tables: add to `src/modules/capability-supply/internal/convex-schema.ts` and spread in `convex/schema.ts`.
+- Convex functions: `convex/capabilitySupply*.ts` — keep writers thin; commands live in the module.
+- Tests: `tests/unit/capability-supply/`, `tests/integration/capability-publication*.test.ts`.
 
-**New paid invoke behavior:**
-- Domain: `src/modules/capability-execution/operation-invoke.ts` and contracts in `operation-invoke-contracts.ts`
-- Durable host: `convex/capabilityOperationInvocations.ts` + worker `convex/capabilityOperationInvocationWorker.ts`
-- HTTP: keep `src/routes/api.v1.operations.call.ts` as the only paid door; extend `src/lib/server/operation-invoke-api.ts` only as a thin adapter
-- MCP/CLI inherit via the same action id `operation.invoke`
-- Tests: `tests/unit/capability-execution/`, `tests/unit/server/operation-invoke-api.test.ts`, `tests/integration/capability-operation-workpool.test.ts`
+**New discoverable machine API (search/detail/invoke-style):**
+- Define `defineAction` in `src/modules/<area>/<area>.actions.ts`.
+- Register in the array in `src/modules/actions/index.ts` (explicit import; unique id).
+- HTTP: add `src/routes/api.v1.<path>.ts` that bounds JSON, rate-limits, and calls `action.run`. Reuse `src/lib/server/problem.ts`.
+- MCP: set `surfaces` to include `'mcp'` if the tool should appear; adapter picks it up via `listMcpActions()`.
+- CLI: add `tools/ae/commands/<name>.ts` and wire `COMMANDS` in `tools/ae/cli.ts`.
+- Tests: `tests/unit/actions/`, `tests/unit/server/`, `tests/unit/market-terminal/`.
 
-**New HTTP adapter (not a new kernel):**
-- Route file: `src/routes/api.v1.<resource>.ts` calling `src/lib/server/<adapter>.ts`
-- Import module `public.ts` / documented actions only
-- Errors: `src/lib/server/problem.ts`
-- Tests: `tests/unit/server/` or `tests/unit/routes/`
-- Do not add `/api/v1/services*` or `/api/businesses*` siblings (`src/modules/product-frontier/business-services-policy.ts` expansion frozen)
-- Do not revive `/api/v1/operations/execute` as a live paid path (`src/routes/api.v1.operations.execute.ts` is 410)
+**Paid invoke / recovery change:**
+- Kernel: `src/modules/capability-execution/operation-invoke.ts` + `operation-invoke-contracts.ts`.
+- Durability: `src/modules/action-invocation/` + `convex/capabilityOperationInvocations.ts` + worker.
+- HTTP: keep `/api/v1/operations/call` as the only paid path (`operation-invoke-entry.ts`). Do not revive `/execute`.
+- Host adapter: `src/lib/server/operation-invoke-api.ts` (HTTP, MCP, and Answer authenticated context share `createOperationInvokeService`).
+- Tests: `tests/unit/capability-execution/`, `tests/unit/action-invocation/`, `tests/unit/server/operation-invoke-api.test.ts`.
 
-**New Convex table (listed):**
-- Table map: `src/modules/<module>/internal/convex-schema.ts` (or `internal/schema.ts`)
-- Compose: spread into `convex/schema.ts`
-- Inventory: add the name to `durableTables` in `tests/unit/schema/convex-schema.test.ts` (current listed cap is 60)
-- Source functions: `convex/<context>.ts` calling module functions; require `sourceWriteAdmission` for writes
-- Leftover unlisted families: copy an existing local fail-closed already in that Convex file, or delete the unused export. Do not add a shared throw or no-op helper. Do not re-list Study/WorkTree/RK/project-spine tables (those maps are `{}`)
+**New Answer behavior (proving ground only):**
+- Tool loop / prompts / gate: `src/modules/answer/internal/` and export via `public.ts` or `server.ts`.
+- Turn lifecycle / persistence: `src/modules/answer-thread/internal/` + `convex/answerThreads.ts`.
+- UI: `src/components/ae/chat/`. Landing examples: `src/modules/answer/catalog-example-asks.ts`.
+- Do not import `capability-supply` from `answer`. Use registry actions + `capability-execution`.
+- Tests: `tests/unit/answer/`, `tests/unit/answer-thread/`, `tests/unit/chat/`, `eval/answer/lib/cases.ts`.
 
-**New UI surface:**
-- Page: `src/routes/<path>.tsx` or `src/routes/_operator/<path>.tsx`
-- Components: `src/components/ae/<area>/Ae<Name>.tsx`
-- Copy: `src/content/brand-copy.ts` when it is public prose
-- Tests: `tests/unit/ui/` or `tests/unit/chat/` / `tests/e2e/`
+**New public page:**
+- Route: `src/routes/<path>.tsx` with `createFileRoute`.
+- Loader data: a `*.functions.ts` server fn that uses `convex-source`.
+- UI: `src/components/ae/<surface>/Ae*.tsx` inside `AePublicShell` or `AeOperatorShell`.
+- Copy: `src/content/brand-copy.ts`.
+- SEO: `src/modules/seo/public.ts` + discovery files if crawlable.
 
-**New CLI command:**
-- Implementation: `tools/ae/commands/<command>.ts` calling existing HTTP action paths
-- Wire: `tools/ae/commands/manifest.ts` + `tools/ae/cli.ts`
-- Tests: `tests/unit/market-terminal/`
+**New owner/admin screen:**
+- Route under `src/routes/_operator/` (`owner.*` or `admin.*`).
+- Authz: `convex/authz.ts` + `src/modules/security/public.ts`.
+- Tests: `tests/unit/routes/`, `tests/e2e/public-owner-ui.spec.ts`.
 
-**Chat/answer change:**
-- Orchestration: `src/modules/answer-thread/internal/turn-orchestrator.ts`
-- Read tools: register the action with `surfaces` including `answerThread` and add the id to answer tool id lists (`src/modules/answer-thread/answer-thread.schema.ts` / tooling)
-- Runner: `src/modules/answer-thread/internal/tool-runner.ts` (read-only only)
-- HTTP: `src/routes/api.answer.turn.ts`
-- Prompt traces: update `.planning/codebase/PROMPT-DATA-FLOW.md` via the docs owner — this mapper does not overwrite it
+**New Convex function:**
+- Implementation file in `convex/` matching the area (`inquiries.ts`, `moneyLedger.ts`, …).
+- Validators exact; use `requireSourceWrite` for mutations (`convex/sourceWriteAdmission.ts`).
+- Domain logic in `src/modules/**`; Convex file admits, transacts, and calls module helpers (`convex.ts` barrels).
+- Read `convex/_generated/ai/guidelines.md` before writing Convex APIs.
+
+**New shared helper:**
+- Cross-module pure utils: `src/modules/common/` (canonical digest, bounded JSON, ids).
+- HTTP-only: `src/lib/server/` or `src/lib/http/`.
+- UI-only: `src/lib/ui/` or colocated next to the component.
+- Do not put kernel policy in `src/lib/`.
 
 **Utilities:**
-- Shared helpers: `src/modules/common/` (`canonical-digest.ts`, `result.ts`, `runtime-id.ts`)
-- Host-only helpers: `src/lib/server/`
-- Do not put market policy in `src/lib/`
+- Shared helpers: `src/modules/common/` (prefer) or `src/lib/utils.ts` (cn/classnames only).
+- Errors: extend `src/lib/errors.ts` kinds/codes; do not invent a parallel envelope.
 
-**Quarantined families (do not grow public surface):**
-- Customer Request: no `src/modules/customer-request/` (module absent). Tombstones: `src/modules/product-frontier/quarantine-family-actions.ts`. HTTP 410: `src/lib/server/customer-request-gone.ts`
-- Study: domain types stay in `src/modules/study/`; `studyTables = {}` in `src/modules/study/internal/convex-schema.ts`; actions filtered from `listActions`
-- WorkTree: domain stays in `src/modules/work-tree/`; `workTreeTables = {}`; HTTP 410 via `src/lib/server/quarantine-write.ts`
-- Routing kernel: empty `src/modules/routing-kernel/internal/convex-schema.ts`; HTTP 410 stays in `convex/http.ts`
+**Quarantined / parked — do not grow as live HTTP:**
+- Customer Request routes under `src/routes/api.v1.requests.*` and `api.requests.*` (410).
+- `src/modules/routing-kernel/` (v1 retired).
+- `src/modules/project-spine/` (WorkTree is the successor surface).
+- `src/lib/server/customer-request-*.ts` exist as tombstone/parity adapters — do not add new CR planners.
+
+## Module public / internal / server split
+
+Use this layout for every domain module:
+
+```
+src/modules/<name>/
+├── public.ts              # Types + functions safe for routes and siblings
+├── server.ts              # Optional: Node fetch, Stripe, x402, LLM agent
+├── convex.ts              # Optional: helpers Convex function files import
+├── testing.ts             # Optional: eval/test ports only
+├── <name>.actions.ts      # defineAction exports
+├── <name>.functions.ts    # createServerFn loaders/commands
+└── internal/              # Private. Import scanners forbid crossing this.
+```
+
+**Rules:**
+- Routes import `@/modules/<name>/public` or a documented root module file (`operation-invoke-entry.ts`, `catalog-example-asks.ts`). Never `@/modules/<name>/internal/...`.
+- `server.ts` is for host/Node. Client components import `public.ts` and chat-local files only.
+- `answer-thread/testing.ts` is the in-memory port for eval — not production Convex.
+- Re-export internals from `public.ts` when another module needs them; do not poke through.
+
+**Convex vs app-server boundary:**
+- **Convex** owns durable rows, CAS, leases, Workpool, crons. Function names are `anyApi` strings like `capabilityOperationInvocations:invoke` (`src/lib/server/operation-invoke-api.ts`).
+- **App-server** (TanStack Start on Nitro Node) owns HTTP, Clerk, MCP transport, SSE, cookies, RFC 9457, minting source-write admissions, calling Convex via `ConvexHttpClient` (`src/lib/server/convex-source.ts`).
+- **Do not** open a second Convex client in a route file. **Do not** put provider fetch in a Convex mutation (use `"use node"` actions / Workpool worker).
+- Schema tables are **defined in modules** (`internal/convex-schema.ts`) and **composed** in `convex/schema.ts`. That composition import is an allowed exception to the private-import scanner.
 
 ## Special Directories
 
-**`convex/_generated/`:**
-- Purpose: Convex API, DataModel, server stubs, AI guidelines (`convex/_generated/ai/guidelines.md`)
-- Generated: Yes (`npx convex codegen`)
-- Committed: Yes
-
 **`src/routeTree.gen.ts`:**
-- Purpose: TanStack generated route tree
-- Generated: Yes (Start/Vite plugin)
+- Purpose: Generated file-route tree.
+- Generated: Yes (TanStack Router)
+- Committed: Yes — regenerate via dev/build, do not hand-edit.
+
+**`convex/_generated/`:**
+- Purpose: Convex API/dataModel/server types and `ai/guidelines.md`.
+- Generated: Yes (`npx convex codegen`)
+- Committed: Yes. `tsconfig.json` excludes it from app `tsc` include overlap; Convex has `convex/tsconfig.json`.
+
+**`.planning/`:**
+- Purpose: GSD architecture notes, STATE, research. Runtime must not import it (`planning-runtime-import` scan).
+- Generated: No
 - Committed: Yes
 
-**`.planning/codebase/`:**
-- Purpose: Planner/executor maps (`ARCHITECTURE.md`, `STRUCTURE.md`, plus existing flow maps)
-- Generated: No (hand-written by mappers)
+**`.agents/skills/`:**
+- Purpose: Project agent skills (Convex, UI, ponytail).
+- Generated: Mixed
 - Committed: Yes
-- Constraint: Do not overwrite `CAPABILITY-MAP.md`, `IA-DATA-FLOW.md`, `PROMPT-DATA-FLOW.md`, or `DATA-FLOW-DELTA-*.md` from an arch remap
 
-**`output/` and `outputs/`:**
-- Purpose: Release/eval receipts and local artifacts
-- Generated: Yes (test/release scripts)
-- Committed: Treat as evidence/artifacts; do not place secrets here
+**`public/`:**
+- Purpose: Static brand assets and category illustrations.
+- Generated: No
+- Committed: Yes
 
-**`node_modules/`, `convex_local_storage/`:**
-- Purpose: Dependencies and local Convex data
+**`eval/` / `output/`:**
+- Purpose: Eval configs vs generated reports. Missing `output/eval/answer-suite-report.json` is not source evidence.
+- Generated: reports under `output/`
+- Committed: eval sources yes; treat `output/` as artifacts
+
+**`tools/dev/` / `tools/release/`:**
+- Purpose: Local evidence, smokes, product-frontier/kernel-retirement manifests.
+- Generated: No (except packets they write)
+- Committed: Yes
+
+**`node_modules/`, `dist/`, `.output/`:**
+- Purpose: Dependencies and build output.
 - Generated: Yes
 - Committed: No
 
-**`eval/`:**
-- Purpose: Answer evaluation cases and quality gate
+**`.env.example`:**
+- Purpose: Required variable names for local/hosted config.
 - Generated: No
-- Committed: Yes
-
-**`.env*`:**
-- Purpose: Environment configuration for local/hosted runs
-- Generated: No
-- Committed: No — never read or quote contents in codebase maps
+- Committed: Yes. Secret `.env` files are not documentation — do not read or quote them.
 
 ---
 
