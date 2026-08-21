@@ -14,13 +14,17 @@ export {
 } from "./internal/pricing-contract";
 export {
   addExactAmounts,
+  amountAtScale,
+  amountFromParts,
   compareExactAmounts,
   formatCurrencyAmount,
   formatExactAmount,
   multiplyExactAmountByBps,
   parseDecimalExactAmount,
+  readExactAmount,
   rescaleExactAmount,
   subtractExactAmounts,
+  zeroExactAmount,
 } from "./internal/exact-amount";
 export type { ExactAmount } from "./internal/exact-amount";
 export type {
@@ -49,6 +53,7 @@ export type PricingResolution =
 export type MoneyRefusalCode =
   | "billing_identity_missing"
   | "billing_identity_mismatch"
+  | "price_unavailable"
   | "pricing_config_invalid"
   | "currency_mismatch"
   | "price_changed"
@@ -66,7 +71,6 @@ export type MoneyRefusalCode =
   | "payout_below_threshold"
   | "payout_outcome_unknown"
   | "payout_reconciliation_required"
-  | "live_money_gate_open"
   | "payment_binding_invalid"
   | "payment_approval_expired"
   | "fresh_approval_required"
@@ -78,9 +82,9 @@ export type MoneyRefusalCode =
   | "budget_concurrency_exhausted"
   | "budget_reconciliation_required";
 export type EntryType =
-  "topup" | "charge" | "refund" | "payout_accrual" | "rake";
+  "topup" | "charge" | "refund" | "payout_accrual" | "rake" | "external_loss";
 export type EntryDirection = "credit" | "debit";
-export type AccountKind = "operator_credit" | "provider_earnings" | "ae_rake";
+export type AccountKind = "operator_credit" | "provider_earnings" | "ae_rake" | "ae_external_loss";
 export type AccountState = "active" | "locked";
 export type TransactionState =
   "pending" | "applied" | "outcome_unknown" | "reversed";
@@ -140,6 +144,9 @@ export type MoneyTransaction = Readonly<{
   exponent: number;
   state: TransactionState;
   expectedAccountVersion: number;
+  amount?: ExactAmount;
+  budgetState?: "reserved" | "settled" | "released" | "unknown";
+  settledAt?: number;
   externalRef?: string;
   reversalOf?: string;
   createdAt: number;
@@ -589,25 +596,37 @@ export async function readPayoutStatus(
 }
 
 export {
+  computeProviderFeeBreakdown,
   computeRakeSplit,
   normalizePricingConfig,
   pricingConfigDigest,
   resolveInvocationPrice,
 } from "./internal/pricing-config";
+export type { ProviderFeeBreakdown } from "./internal/pricing-config";
 export {
   createLedgerState,
   beginIdempotentTransaction,
   validateChargeAccounts,
   applyTopup,
   authorizePaidCharge,
+  planPaidCharge,
+  applyChargePlan,
+  paidChargeContractInput,
   appendRefundReversal,
   applyProviderAccountCredit,
   applyProviderAccountDebit,
   markOutcomeUnknown,
+  decideChargeOutcomeUnknown,
+  payoutAccrualFromChargeAmounts,
   reconcileCharge,
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
+  accountRefForExternalLoss,
+  sameEvidenceRefs,
+  selectChargeEntries,
+  recoveryExceedsProvider,
+  validateChargeContract,
 } from "./internal/ledger";
 export type {
   LedgerState,
@@ -615,10 +634,24 @@ export type {
   BeginTransactionInput,
   TopupInput,
   PaidChargeInput,
+  ChargePlan,
+  ChargePlanAccounts,
+  PlanPaidChargeInput,
   RefundInput,
   OutcomeUnknownInput,
   ReconcileChargeInput,
   ProviderAccountCreditApplication,
+  ChargeBudgetState,
+  ChargeOutcomeUnknownDecision,
+  PayoutAccrualAmounts,
+  SelectedChargeEntries,
+  ChargeEntryLeg,
+  ChargeContractAccount,
+  ChargeContractEntry,
+  ChargeContractOriginal,
+  ChargeContractUsage,
+  ValidateChargeContractInput,
+  ValidatedChargeContract,
 } from "./internal/ledger";
 export {
   transitionPayoutAccount,
@@ -633,16 +666,19 @@ export type {
   PayoutAccountTransitionInput,
   PayoutTransitionInput,
 } from "./internal/payout-policy";
-export {
-  evaluateLiveMoneyGate,
-  LIVE_MONEY_GATE_POLICY,
-  validatePaymentBinding,
-} from "./internal/live-money-gate";
+export { payoutTransferCommand } from "./internal/payout-transfer-command";
 export type {
-  LiveMoneyGatePolicy,
-  LiveMoneyGateResult,
+  PayoutTransferCommand,
+  PayoutTransferCommandInput,
+} from "./internal/payout-transfer-command";
+export {
+  paymentBindingSchema,
+  validatePaymentBinding,
+} from "./internal/payment-binding";
+export type {
   PaymentBinding,
-} from "./internal/live-money-gate";
+  PaymentBindingValidation,
+} from "./internal/payment-binding";
 export type {
   CreditPaymentPort,
   CreditPaymentRequest,
@@ -685,6 +721,8 @@ export {
   settleCredentialBudget,
   releaseCredentialBudget,
   credentialBudgetReservationDigest,
+  credentialBudgetDayWindowStart,
+  credentialBudgetMonthWindowStart,
 } from "./internal/credential-budget";
 export type {
   CredentialBudgetPolicy,
@@ -702,18 +740,23 @@ export {
   decideExternalSpendReversal,
   externalSpendFinalizationCommandRefusal,
   externalSpendIdentityDigest,
+  externalSpendIdentityFromReservation,
+  externalSpendIdentityMatchingReservationRef,
   externalSpendIdentityMaterialValid,
   externalSpendFinalizationDigest,
+  externalSpendPaymentFactsValid,
   externalSpendReconciliationCommandRefusal,
   externalSpendReconciliationDigest,
   externalSpendReversalCommandRefusal,
   externalSpendReversalDigest,
+  mintExternalSpendIdentity,
   sameExternalSpendIdentity,
   externalSpendStateForSettlement,
 } from "./internal/external-spend";
 export type {
   ExternalSpendFinalizationCommand,
   ExternalSpendIdentity,
+  ExternalSpendPaymentFacts,
   ExternalSpendReservation,
   ExternalSpendReservationState,
   ExternalSpendSettlementStatus,
@@ -721,7 +764,11 @@ export type {
   ExternalSpendRefusalCode,
   ExternalSpendMutationResult,
 } from "./internal/external-spend";
-export { createInMemoryMoneyQueryPort } from "./internal/query-projections";
+export {
+  createInMemoryMoneyQueryPort,
+  projectProviderEarnings,
+} from "./internal/query-projections";
+export type { ProviderEarningsProjectionResult } from "./internal/query-projections";
 export {
   buildQualifiedUseReceipt,
   decideQualifiedUseWrite,

@@ -11,11 +11,56 @@ import type {
   MoneyTransaction,
   MoneyUsageEvent,
   RakeConfig,
+  RakeSplit,
 } from '../public'
 export type { MoneyAccount } from '../public'
-import { addExactAmounts, compareExactAmounts, exactAmountSchema, rescaleExactAmount, subtractExactAmounts } from './exact-amount'
-import { validatePaymentBinding, type PaymentBinding } from './live-money-gate'
-import { computeRakeSplit } from './pricing-config'
+import {
+  addExactAmounts,
+  amountAtScale,
+  compareExactAmounts,
+  exactAmountSchema,
+  rescaleExactAmount,
+  subtractExactAmounts,
+} from './exact-amount'
+import {
+  accountRefForOwner,
+  accountRefForProvider,
+  accountRefForRake,
+  accountRefForExternalLoss,
+} from './account-ref'
+import {
+  sameEvidenceRefs,
+  selectChargeEntries,
+  validateChargeContract,
+  type ChargeContractEntry,
+  type SelectedChargeEntries,
+  type ValidateChargeContractInput,
+} from './charge-contract'
+import { validatePaymentBinding, type PaymentBinding } from './payment-binding'
+import { computeProviderFeeBreakdown, computeRakeSplit } from './pricing-config'
+
+export {
+  accountRefForOwner,
+  accountRefForProvider,
+  accountRefForRake,
+  accountRefForExternalLoss,
+} from './account-ref'
+export {
+  recoveryExceedsProvider,
+  sameEvidenceRefs,
+  selectChargeEntries,
+  validateChargeContract,
+} from './charge-contract'
+export type {
+  ChargeContractAccount,
+  ChargeContractEntry,
+  ChargeContractOriginal,
+  ChargeContractUsage,
+  ChargeEntryLeg,
+  SelectedChargeEntries,
+  ValidateChargeContractInput,
+  ValidatedChargeContract,
+} from './charge-contract'
 
 export type MoneyCredentialUsageSummary = Readonly<KeyUsageView & {
   principalId: string
@@ -69,6 +114,8 @@ export type PaidChargeInput = Readonly<{
   providerAccountRef: string
   rakeAccountRef: string
   grossAmount: ExactAmount
+  providerAmount?: ExactAmount
+  platformFee?: ExactAmount
   rakeConfig: RakeConfig
   priceDigest: string
   principalId: string
@@ -86,6 +133,29 @@ export type PaidChargeInput = Readonly<{
   freeTier?: boolean
   actionVersion?: string
   paymentBinding?: Readonly<{ approved: PaymentBinding; requested: PaymentBinding }>
+}>
+
+export type ChargePlanAccounts = Readonly<{
+  operator: MoneyAccount
+  provider: MoneyAccount
+  rake: MoneyAccount
+}>
+
+export type ChargePlan = Readonly<{
+  result: ChargeAuthorizationResult
+  usage?: MoneyUsageEvent
+  transaction?: MoneyTransaction
+  entries: readonly MoneyLedgerEntry[]
+  accounts?: ChargePlanAccounts
+}>
+
+export type PlanPaidChargeInput = PaidChargeInput & Readonly<{
+  operator?: MoneyAccount
+  provider?: MoneyAccount
+  rake?: MoneyAccount
+  priorTransaction?: MoneyTransaction
+  priorUsage?: MoneyUsageEvent
+  priorEntries?: readonly MoneyLedgerEntry[]
 }>
 
 export type RefundInput = Readonly<{
@@ -125,18 +195,6 @@ export function usageSummaryKey(principalId: string, credentialId: string, curre
   return `${principalId}\u0000${credentialId}\u0000${currency}`
 }
 
-export function accountRefForOwner(ownerId: string, currency: string): string {
-  return `owner:${ownerId}:${currency}`
-}
-
-export function accountRefForProvider(businessId: string, currency: string): string {
-  return `business:${businessId}:${currency}`
-}
-
-export function accountRefForRake(currency: string): string {
-  return `ae:rake:${currency}`
-}
-
 export function validateChargeAccounts(input: Readonly<{
   operator: MoneyAccount | undefined
   provider: MoneyAccount | undefined
@@ -170,9 +228,6 @@ export function validateChargeAccounts(input: Readonly<{
   if (operator.balance.currency !== input.currency || provider.balance.currency !== input.currency || rake.balance.currency !== input.currency) return refusalResult('currency_mismatch', false)
   if (provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) return refusalResult('currency_mismatch', false)
 }
-function sameEvidenceRefs(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((ref, index) => ref === right[index])
-}
 type SelectedRefundEntries = Readonly<{
   operator: MoneyLedgerEntry
   provider: MoneyLedgerEntry
@@ -190,32 +245,10 @@ function selectRefundEntries(entries: readonly MoneyLedgerEntry[], transactionRe
   return { operator, provider, rake }
 }
 
-
-type SelectedChargeEntries = Readonly<{
-  charge: MoneyLedgerEntry
-  provider: MoneyLedgerEntry
-  rake: MoneyLedgerEntry
-  recovery?: MoneyLedgerEntry
-}>
-
-function selectChargeEntries(entries: readonly MoneyLedgerEntry[]): SelectedChargeEntries | undefined {
-  if (entries.length !== 3 && entries.length !== 4) return undefined
-  const charges = entries.filter((entry) => entry.entryType === 'charge' && entry.direction === 'debit')
-  const providers = entries.filter((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'credit')
-  const rakes = entries.filter((entry) => entry.entryType === 'rake' && entry.direction === 'credit')
-  const recoveries = entries.filter((entry) => entry.entryType === 'payout_accrual' && entry.direction === 'debit')
-  if (charges.length !== 1 || providers.length !== 1 || rakes.length !== 1 || recoveries.length > 1 || entries.length !== 3 + recoveries.length) return undefined
-  const charge = charges[0]
-  const provider = providers[0]
-  const rake = rakes[0]
-  if (charge === undefined || provider === undefined || rake === undefined) return undefined
-  return { charge, provider, rake, ...(recoveries[0] === undefined ? {} : { recovery: recoveries[0] }) }
-}
-
-type ValidatedChargeContract = Readonly<{
+type HydratedChargeContract = Readonly<{
   original: MoneyTransaction
   usage: MoneyUsageEvent
-  entries: SelectedChargeEntries
+  entries: SelectedChargeEntries<ChargeContractEntry>
   operator: MoneyAccount
   provider: MoneyAccount
   rake: MoneyAccount
@@ -224,94 +257,61 @@ type ValidatedChargeContract = Readonly<{
   rakeAmount: ExactAmount
 }>
 
-function validateChargeContract(state: LedgerState, original: MoneyTransaction, usage: MoneyUsageEvent): ValidatedChargeContract | undefined {
-  if (
-    original.kind !== 'charge'
-    || original.idempotencyKey !== original.transactionRef
-    || usage.chargeState !== 'paid'
-    || original.currency !== usage.amount.currency
-    || original.accountId === undefined
-    || usage.accountId === undefined
-    || original.accountId !== usage.accountId
-    || original.principalId !== usage.principalId
-    || original.exponent !== usage.amount.exponent
-    || usage.observedAt !== original.createdAt
-    || !validAmount(usage.amount)
-  ) return undefined
-  const selected = selectChargeEntries(state.entries.filter((entry) => entry.transactionRef === original.transactionRef))
-  if (selected === undefined) return undefined
-  const chargeAmount = selected.charge.amount
-  const providerAmount = selected.provider.amount
-  const rakeAmount = selected.rake.amount
-  if (
-    selected.charge.entryRef !== `${original.transactionRef}:charge`
-    || selected.provider.entryRef !== `${original.transactionRef}:provider`
-    || selected.rake.entryRef !== `${original.transactionRef}:rake`
-    || selected.charge.accountRef !== accountRefForOwner(original.accountId, original.currency)
-    || selected.provider.accountRef !== accountRefForProvider(usage.businessId, original.currency)
-    || selected.rake.accountRef !== accountRefForRake(original.currency)
-    || selected.charge.transactionRef !== original.transactionRef
-    || selected.provider.transactionRef !== original.transactionRef
-    || selected.rake.transactionRef !== original.transactionRef
-    || selected.charge.idempotencyKey !== original.idempotencyKey
-    || selected.provider.idempotencyKey !== original.idempotencyKey
-    || selected.rake.idempotencyKey !== original.idempotencyKey
-    || selected.charge.sourceDigest !== selected.provider.sourceDigest
-    || selected.charge.sourceDigest !== selected.rake.sourceDigest
-    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.provider.evidenceRefs)
-    || !sameEvidenceRefs(selected.charge.evidenceRefs, selected.rake.evidenceRefs)
-    || selected.charge.createdAt !== original.createdAt
-    || selected.provider.createdAt !== original.createdAt
-    || selected.rake.createdAt !== original.createdAt
-    || selected.charge.principalId !== original.principalId
-    || selected.charge.businessId !== undefined
-    || selected.charge.reversalOf !== undefined
-    || selected.charge.invocationRef !== usage.invocationRef
-    || selected.charge.attemptRef !== usage.attemptRef
-    || selected.provider.businessId !== usage.businessId
-    || selected.provider.principalId !== undefined
-    || selected.provider.reversalOf !== undefined
-    || selected.provider.invocationRef !== usage.invocationRef
-    || selected.provider.attemptRef !== usage.attemptRef
-    || selected.rake.businessId !== usage.businessId
-    || selected.rake.principalId !== undefined
-    || selected.rake.invocationRef !== undefined
-    || selected.rake.attemptRef !== undefined
-    || selected.rake.reversalOf !== undefined
-    || compareExactAmounts(chargeAmount, usage.amount) !== 0
-    || chargeAmount.currency !== original.currency
-    || providerAmount.currency !== original.currency
-    || rakeAmount.currency !== original.currency
-    || chargeAmount.exponent !== original.exponent
-    || providerAmount.exponent !== original.exponent
-    || rakeAmount.exponent !== original.exponent
-    || compareExactAmounts(providerAmount, rakeAmount) === undefined
-    || compareExactAmounts(addExactAmounts(providerAmount, rakeAmount), chargeAmount) !== 0
-  ) return undefined
-  if (selected.recovery !== undefined) {
-    if (
-      selected.recovery.entryRef !== `${original.transactionRef}:provider-recovery`
-      || selected.recovery.accountRef !== selected.provider.accountRef
-      || selected.recovery.entryType !== 'payout_accrual'
-      || selected.recovery.direction !== 'debit'
-      || selected.recovery.businessId !== usage.businessId
-      || selected.recovery.principalId !== undefined
-      || selected.recovery.invocationRef !== usage.invocationRef
-      || selected.recovery.attemptRef !== usage.attemptRef
-      || selected.recovery.reversalOf !== undefined
-      || selected.recovery.transactionRef !== original.transactionRef
-      || selected.recovery.idempotencyKey !== original.idempotencyKey
-      || selected.recovery.sourceDigest !== selected.charge.sourceDigest
-      || !sameEvidenceRefs(selected.recovery.evidenceRefs, selected.charge.evidenceRefs)
-      || selected.recovery.createdAt !== original.createdAt
-      || selected.recovery.amount.currency !== providerAmount.currency
-      || selected.recovery.amount.exponent !== providerAmount.exponent
-      || compareExactAmounts(selected.recovery.amount, providerAmount) === 1
-    ) return undefined
+export function paidChargeContractInput(input: Readonly<{
+  transaction: MoneyTransaction
+  usage: MoneyUsageEvent
+  entries: readonly MoneyLedgerEntry[]
+  operatorAccountRef: string
+  providerAccountRef: string
+  rakeAccountRef: string
+}>): ValidateChargeContractInput<MoneyLedgerEntry> {
+  return {
+    original: {
+      transactionRef: input.transaction.transactionRef,
+      kind: input.transaction.kind,
+      idempotencyKey: input.transaction.idempotencyKey,
+      principalId: input.transaction.principalId,
+      ...(input.transaction.accountId === undefined ? {} : { accountId: input.transaction.accountId }),
+      credentialId: input.usage.credentialId,
+      currency: input.transaction.currency,
+      exponent: input.transaction.exponent,
+      amount: input.usage.amount,
+      createdAt: input.transaction.createdAt,
+    },
+    usage: {
+      principalId: input.usage.principalId,
+      credentialId: input.usage.credentialId,
+      ...(input.usage.accountId === undefined ? {} : { accountId: input.usage.accountId }),
+      businessId: input.usage.businessId,
+      ...(input.usage.transactionRef === undefined ? {} : { transactionRef: input.usage.transactionRef }),
+      chargeState: input.usage.chargeState,
+      amount: input.usage.amount,
+      observedAt: input.usage.observedAt,
+      invocationRef: input.usage.invocationRef,
+      attemptRef: input.usage.attemptRef,
+    },
+    selected: selectChargeEntries(input.entries),
+    operator: { accountRef: input.operatorAccountRef },
+    provider: { accountRef: input.providerAccountRef },
+    rake: { accountRef: input.rakeAccountRef },
   }
-  const operator = state.accounts.get(selected.charge.accountRef)
-  const provider = state.accounts.get(selected.provider.accountRef)
-  const rake = state.accounts.get(selected.rake.accountRef)
+}
+
+function loadChargeContract(state: LedgerState, original: MoneyTransaction, usage: MoneyUsageEvent): HydratedChargeContract | undefined {
+  const accountId = original.accountId
+  if (accountId === undefined) return undefined
+  const contract = validateChargeContract(paidChargeContractInput({
+    transaction: original,
+    usage,
+    entries: state.entries.filter((entry) => entry.transactionRef === original.transactionRef),
+    operatorAccountRef: accountRefForOwner(accountId, original.currency),
+    providerAccountRef: accountRefForProvider(usage.businessId, original.currency),
+    rakeAccountRef: accountRefForRake(original.currency),
+  }))
+  if (contract === undefined) return undefined
+  const operator = state.accounts.get(contract.operator.accountRef)
+  const provider = state.accounts.get(contract.provider.accountRef)
+  const rake = state.accounts.get(contract.rake.accountRef)
   if (
     operator === undefined
     || provider === undefined
@@ -326,15 +326,25 @@ function validateChargeContract(state: LedgerState, original: MoneyTransaction, 
       operator,
       provider,
       rake,
-      operatorAccountRef: accountRefForOwner(original.accountId, original.currency),
-      providerAccountRef: accountRefForProvider(usage.businessId, original.currency),
-      rakeAccountRef: accountRefForRake(original.currency),
-      accountId: original.accountId,
+      operatorAccountRef: contract.operator.accountRef,
+      providerAccountRef: contract.provider.accountRef,
+      rakeAccountRef: contract.rake.accountRef,
+      accountId,
       businessId: usage.businessId,
       currency: original.currency,
     }) !== undefined
   ) return undefined
-  return { original, usage, entries: selected, operator, provider, rake, chargeAmount, providerAmount, rakeAmount }
+  return {
+    original,
+    usage,
+    entries: contract.selected,
+    operator,
+    provider,
+    rake,
+    chargeAmount: contract.chargeAmount,
+    providerAmount: contract.providerAmount,
+    rakeAmount: contract.rakeAmount,
+  }
 }
 
 export function applyProviderAccountCredit(account: MoneyAccount, amount: ExactAmount, now: number): ProviderAccountCreditApplication | undefined {
@@ -398,9 +408,55 @@ export function applyTopup(input: TopupInput & Readonly<{ state: LedgerState }>)
   return { state: nextState, result: acceptedCharge(amount, input.transaction.inputDigest, input.transaction.transactionRef) }
 }
 
-export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
-  if (input.principalId !== input.transaction.principalId) return { state: input.state, result: refusalResult('billing_identity_mismatch', false) }
-  if (!validAmount(input.grossAmount)) return { state: input.state, result: refusalResult('rake_not_configured', false) }
+function refusedChargePlan(result: MoneyRefusal, usage?: MoneyUsageEvent): ChargePlan {
+  return {
+    result,
+    entries: [],
+    ...(usage === undefined ? {} : { usage }),
+  }
+}
+
+function acceptedChargePlan(
+  result: ChargeAuthorizationResult,
+  extra: Omit<ChargePlan, 'result' | 'entries'> & Readonly<{ entries?: readonly MoneyLedgerEntry[] }> = {},
+): ChargePlan {
+  const { entries, ...rest } = extra
+  return { result, entries: entries ?? [], ...rest }
+}
+
+function beginFromPrior(
+  prior: MoneyTransaction | undefined,
+  transaction: BeginTransactionInput,
+): Readonly<{ kind: 'new' } | { kind: 'replay'; transaction: MoneyTransaction } | { kind: 'refused'; refusal: MoneyRefusal }> {
+  if (prior === undefined) return { kind: 'new' }
+  if (prior.inputDigest !== transaction.inputDigest || prior.principalId !== transaction.principalId || prior.kind !== transaction.kind) {
+    return { kind: 'refused', refusal: refusal('ledger_idempotency_conflict', false) }
+  }
+  return { kind: 'replay', transaction: prior }
+}
+
+function freeTierAccepted(usage: MoneyUsageEvent): ChargeAuthorizationResult {
+  return {
+    kind: 'accepted',
+    chargeState: 'free_tier',
+    amount: usage.amount,
+    priceDigest: usage.priceDigest,
+    usageRef: usage.usageRef,
+    observedAt: usage.observedAt,
+    ...(usage.transactionRef === undefined ? {} : { transactionRef: usage.transactionRef }),
+  }
+}
+
+export function planPaidCharge(input: PlanPaidChargeInput): ChargePlan {
+  if (input.principalId !== input.transaction.principalId) return refusedChargePlan(refusalResult('billing_identity_mismatch', false))
+  if (!validAmount(input.grossAmount)) return refusedChargePlan(refusalResult('rake_not_configured', false))
+  const hasProviderAmount = input.providerAmount !== undefined
+  const hasPlatformFee = input.platformFee !== undefined
+  if (hasProviderAmount !== hasPlatformFee) return refusedChargePlan(refusalResult('rake_not_configured', false))
+  if (
+    (input.providerAmount !== undefined && !validAmount(input.providerAmount))
+    || (input.platformFee !== undefined && !validAmount(input.platformFee))
+  ) return refusedChargePlan(refusalResult('rake_not_configured', false))
   if (input.paymentBinding !== undefined) {
     const requestedBinding: PaymentBinding = {
       ...input.paymentBinding.requested,
@@ -410,11 +466,11 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
       ...(input.actionVersion === undefined ? {} : { actionVersion: input.actionVersion }),
     }
     const binding = validatePaymentBinding({ approved: input.paymentBinding.approved, requested: requestedBinding, now: input.observedAt })
-    if (binding.kind === 'refused') return { state: input.state, result: binding }
+    if (binding.kind === 'refused') return refusedChargePlan(binding)
   }
-  const operator = input.state.accounts.get(input.operatorAccountRef)
-  const provider = input.state.accounts.get(input.providerAccountRef)
-  const rake = input.state.accounts.get(input.rakeAccountRef)
+  const operator = input.operator
+  const provider = input.provider
+  const rake = input.rake
   const accountRefusal = validateChargeAccounts({
     operator,
     provider,
@@ -426,105 +482,116 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
     businessId: input.businessId,
     currency: input.transaction.currency,
   })
-  if (accountRefusal !== undefined) return { state: input.state, result: accountRefusal }
+  if (accountRefusal !== undefined) return refusedChargePlan(accountRefusal)
   if (operator === undefined || provider === undefined || rake === undefined) {
-    return { state: input.state, result: refusalResult('billing_identity_missing', false) }
+    return refusedChargePlan(refusalResult('billing_identity_missing', false))
   }
   if (input.grossAmount.currency !== input.transaction.currency || provider.balance.exponent !== operator.balance.exponent || rake.balance.exponent !== operator.balance.exponent) {
-    return { state: input.state, result: refusalResult('currency_mismatch', false) }
+    return refusedChargePlan(refusalResult('currency_mismatch', false))
   }
   const grossAmount = rescaleExactAmount(input.grossAmount, operator.balance.exponent)
-  if (grossAmount === undefined) return { state: input.state, result: refusalResult('currency_mismatch', false) }
-  const usageRef = `${input.invocationRef}:${input.attemptRef}:${input.operationKey}`
-  const begun = beginIdempotentTransaction({ state: input.state, transaction: input.transaction })
-  if (begun.result.kind === 'refused') return { state: input.state, result: begun.result.refusal }
+  if (grossAmount === undefined) return refusedChargePlan(refusalResult('currency_mismatch', false))
+  const begun = beginFromPrior(input.priorTransaction, input.transaction)
+  if (begun.kind === 'refused') return refusedChargePlan(begun.refusal)
+  let split: RakeSplit | undefined
+  if (hasProviderAmount && hasPlatformFee) {
+    if (input.rakeConfig.rakeBps !== 1_000 || input.providerAmount === undefined || input.platformFee === undefined) {
+      return refusedChargePlan(refusalResult('rake_not_configured', false))
+    }
+    const breakdown = computeProviderFeeBreakdown(input.providerAmount)
+    if (
+      'kind' in breakdown
+      || input.providerAmount.currency !== input.grossAmount.currency
+      || input.providerAmount.exponent !== input.grossAmount.exponent
+      || input.platformFee.currency !== input.grossAmount.currency
+      || input.platformFee.exponent !== input.grossAmount.exponent
+      || compareExactAmounts(breakdown.totalAmount, input.grossAmount) !== 0
+      || compareExactAmounts(breakdown.platformFee, input.platformFee) !== 0
+    ) return refusedChargePlan(refusalResult('rake_not_configured', false))
+    const providerAmount = rescaleExactAmount(input.providerAmount, operator.balance.exponent)
+    const platformFee = rescaleExactAmount(input.platformFee, operator.balance.exponent)
+    if (providerAmount === undefined || platformFee === undefined) return refusedChargePlan(refusalResult('currency_mismatch', false))
+    split = { grossAmount, rakeBps: 1_000, rake: platformFee, providerNet: providerAmount }
+  }
   if (input.freeTier === true || grossAmount.units === '0') {
-    const priorUsage = input.state.usageEvents.find((usage) => usage.usageRef === usageRef)
+    const priorUsage = input.priorUsage
     if (priorUsage !== undefined) {
       if (priorUsage.chargeState !== 'free_tier' || compareExactAmounts(priorUsage.amount, zeroAmountLike(grossAmount)) !== 0 || priorUsage.priceDigest !== input.priceDigest) {
-        return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+        return refusedChargePlan(refusalResult('charge_reconciliation_required', false))
       }
-      return {
-        state: input.state,
-        result: {
-          kind: 'accepted',
-          chargeState: 'free_tier',
-          amount: priorUsage.amount,
-          priceDigest: priorUsage.priceDigest,
-          usageRef: priorUsage.usageRef,
-          observedAt: priorUsage.observedAt,
-          ...(priorUsage.transactionRef === undefined ? {} : { transactionRef: priorUsage.transactionRef }),
-        },
-      }
+      return acceptedChargePlan(freeTierAccepted(priorUsage))
     }
     const usage = createUsage(input, 'free_tier', zeroAmountLike(grossAmount))
-    const nextState = appendUsage(input.state, usage)
-    const persistedUsage = nextState.usageEvents.find((item) => item.usageRef === usageRef)
-    if (persistedUsage === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-    return {
-      state: nextState,
-      result: {
-        kind: 'accepted',
-        chargeState: 'free_tier',
-        amount: persistedUsage.amount,
-        priceDigest: persistedUsage.priceDigest,
-        usageRef: persistedUsage.usageRef,
-        observedAt: persistedUsage.observedAt,
-        ...(persistedUsage.transactionRef === undefined ? {} : { transactionRef: persistedUsage.transactionRef }),
-      },
-    }
+    return acceptedChargePlan(freeTierAccepted(usage), { usage })
   }
-  const split = computeRakeSplit(grossAmount, input.rakeConfig)
-  if ('kind' in split) return { state: input.state, result: refusalResult(split.code, false) }
-  if (begun.result.kind === 'replay') {
-    const priorUsage = input.state.usageEvents.find((usage) => usage.usageRef === usageRef)
+  if (split === undefined) {
+    const configuredSplit = computeRakeSplit(grossAmount, input.rakeConfig)
+    if ('kind' in configuredSplit) return refusedChargePlan(refusalResult(configuredSplit.code, false))
+    split = configuredSplit
+  }
+  if (begun.kind === 'replay') {
+    const priorUsage = input.priorUsage
+    const priorEntries = input.priorEntries ?? []
     if (
       priorUsage === undefined
       || priorUsage.chargeState !== 'paid'
       || priorUsage.accountId !== input.accountId
       || compareExactAmounts(priorUsage.amount, grossAmount) !== 0
       || priorUsage.priceDigest !== input.priceDigest
-      || priorUsage.transactionRef !== begun.result.transaction.transactionRef
-      || begun.result.transaction.accountId !== input.accountId
-      || begun.result.transaction.currency !== input.transaction.currency
-      || begun.result.transaction.exponent !== priorUsage.amount.exponent
+      || priorUsage.transactionRef !== begun.transaction.transactionRef
+      || begun.transaction.accountId !== input.accountId
+      || begun.transaction.currency !== input.transaction.currency
+      || begun.transaction.exponent !== priorUsage.amount.exponent
+      || priorUsage.serviceRef !== input.serviceRef
+      || priorUsage.offeringRef !== input.offeringRef
+      || priorUsage.operationKey !== input.operationKey
+      || priorUsage.businessId !== input.businessId
     ) {
-      return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+      return refusedChargePlan(refusalResult('charge_reconciliation_required', false))
     }
-    return {
-      state: input.state,
-      result: {
-        kind: 'accepted',
-        chargeState: 'paid',
-        amount: priorUsage.amount,
-        priceDigest: priorUsage.priceDigest,
-        usageRef: priorUsage.usageRef,
-        observedAt: priorUsage.observedAt,
-        ...(priorUsage.transactionRef === undefined ? {} : { transactionRef: priorUsage.transactionRef }),
-        providerNet: split.providerNet,
-        rake: split.rake,
-      },
-    }
+    const contract = validateChargeContract(paidChargeContractInput({
+      transaction: begun.transaction,
+      usage: priorUsage,
+      entries: priorEntries,
+      operatorAccountRef: input.operatorAccountRef,
+      providerAccountRef: input.providerAccountRef,
+      rakeAccountRef: input.rakeAccountRef,
+    }))
+    if (
+      contract === undefined
+      || split === undefined
+      || (hasProviderAmount && compareExactAmounts(contract.providerAmount, split.providerNet) !== 0)
+      || (hasPlatformFee && compareExactAmounts(contract.rakeAmount, split.rake) !== 0)
+    ) return refusedChargePlan(refusalResult('charge_reconciliation_required', false))
+    return acceptedChargePlan({
+      kind: 'accepted',
+      chargeState: 'paid',
+      amount: priorUsage.amount,
+      priceDigest: priorUsage.priceDigest,
+      usageRef: priorUsage.usageRef,
+      observedAt: priorUsage.observedAt,
+      ...(priorUsage.transactionRef === undefined ? {} : { transactionRef: priorUsage.transactionRef }),
+      providerNet: contract.providerAmount,
+      rake: contract.rakeAmount,
+    })
   }
+  if (input.priorUsage !== undefined) return refusedChargePlan(refusalResult('charge_reconciliation_required', false))
   if (operator.state !== 'active' || compareExactAmounts(operator.balance, grossAmount) === -1) {
     const usage = createUsage(input, 'insufficient_credit', grossAmount)
-    return {
-      state: appendUsage(input.state, usage),
-      result: refusalResult('insufficient_credit', false, {
-        requiredAmount: grossAmount,
-        availableAmount: operator.balance,
-        nextAction: 'credit_topup_required',
-      }),
-    }
+    return refusedChargePlan(refusalResult('insufficient_credit', false, {
+      requiredAmount: grossAmount,
+      availableAmount: operator.balance,
+      nextAction: 'credit_topup_required',
+    }), usage)
   }
   if (input.transaction.expectedAccountVersion !== operator.version) {
-    return { state: input.state, result: refusalResult('ledger_cas_conflict', true) }
+    return refusedChargePlan(refusalResult('ledger_cas_conflict', true))
   }
   const transaction = transactionFrom({ ...input.transaction, accountId: input.accountId, now: input.observedAt }, 'charge', 'applied', grossAmount.exponent)
   const nextOperator = updateBalance(operator, grossAmount, 'debit', input.observedAt)
   const providerCredit = applyProviderAccountCredit(provider, split.providerNet, input.observedAt)
   const nextRake = updateBalance(rake, split.rake, 'credit', input.observedAt)
-  if (providerCredit === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
+  if (providerCredit === undefined) return refusedChargePlan(refusalResult('charge_reconciliation_required', false))
   const entries = [
     createEntry({ entryRef: `${transaction.transactionRef}:charge`, accountRef: operator.accountRef, entryType: 'charge', direction: 'debit', amount: grossAmount, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, principalId: input.principalId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
     createEntry({ entryRef: `${transaction.transactionRef}:provider`, accountRef: provider.accountRef, entryType: 'payout_accrual', direction: 'credit', amount: split.providerNet, transactionRef: transaction.transactionRef, idempotencyKey: transaction.idempotencyKey, businessId: input.businessId, invocationRef: input.invocationRef, attemptRef: input.attemptRef, sourceDigest: input.sourceDigest, evidenceRefs: input.evidenceRefs, createdAt: transaction.createdAt }),
@@ -534,21 +601,84 @@ export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: L
     ]),
   ]
   const usage = createUsage(input, 'paid', grossAmount, transaction.transactionRef)
-  const nextState = withChanges(input.state, nextOperator, entries, transaction, [providerCredit.account, nextRake], usage)
-  return {
-    state: nextState,
-    result: {
-      kind: 'accepted',
-      chargeState: 'paid',
-      amount: usage.amount,
-      priceDigest: usage.priceDigest,
-      usageRef: usage.usageRef,
-      observedAt: usage.observedAt,
-      transactionRef: transaction.transactionRef,
-      providerNet: split.providerNet,
-      rake: split.rake,
-    },
+  return acceptedChargePlan({
+    kind: 'accepted',
+    chargeState: 'paid',
+    amount: usage.amount,
+    priceDigest: usage.priceDigest,
+    usageRef: usage.usageRef,
+    observedAt: usage.observedAt,
+    transactionRef: transaction.transactionRef,
+    providerNet: split.providerNet,
+    rake: split.rake,
+  }, {
+    usage,
+    transaction,
+    entries,
+    accounts: { operator: nextOperator, provider: providerCredit.account, rake: nextRake },
+  })
+}
+
+export function applyChargePlan(state: LedgerState, plan: ChargePlan): LedgerOperationResult<ChargeAuthorizationResult> {
+  switch (plan.result.kind) {
+    case 'refused': {
+      const next = plan.usage === undefined ? state : appendUsage(state, plan.usage)
+      return { state: next, result: plan.result }
+    }
+    case 'accepted': {
+      switch (plan.result.chargeState) {
+        case 'free_tier': {
+          const next = plan.usage === undefined ? state : appendUsage(state, plan.usage)
+          return { state: next, result: plan.result }
+        }
+        case 'paid': {
+          if (plan.transaction === undefined || plan.accounts === undefined) {
+            return { state, result: plan.result }
+          }
+          return {
+            state: withChanges(
+              state,
+              plan.accounts.operator,
+              plan.entries,
+              plan.transaction,
+              [plan.accounts.provider, plan.accounts.rake],
+              plan.usage,
+            ),
+            result: plan.result,
+          }
+        }
+        default: {
+          const _exhaustive: never = plan.result.chargeState
+          return _exhaustive
+        }
+      }
+    }
+    default: {
+      const _exhaustive: never = plan.result
+      return _exhaustive
+    }
   }
+}
+
+export function authorizePaidCharge(input: PaidChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<ChargeAuthorizationResult> {
+  const operator = input.state.accounts.get(input.operatorAccountRef)
+  const provider = input.state.accounts.get(input.providerAccountRef)
+  const rake = input.state.accounts.get(input.rakeAccountRef)
+  const priorTransaction = input.state.transactions.find((transaction) => transaction.idempotencyKey === input.transaction.idempotencyKey)
+  const usageRef = `${input.invocationRef}:${input.attemptRef}:${input.operationKey}`
+  const priorUsage = input.state.usageEvents.find((usage) => usage.usageRef === usageRef)
+  const priorEntries = priorTransaction === undefined
+    ? []
+    : input.state.entries.filter((entry) => entry.transactionRef === priorTransaction.transactionRef)
+  return applyChargePlan(input.state, planPaidCharge({
+    ...input,
+    ...(operator === undefined ? {} : { operator }),
+    ...(provider === undefined ? {} : { provider }),
+    ...(rake === undefined ? {} : { rake }),
+    ...(priorTransaction === undefined ? {} : { priorTransaction }),
+    ...(priorUsage === undefined ? {} : { priorUsage }),
+    priorEntries,
+  }))
 }
 
 export function appendRefundReversal(input: RefundInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<GenericChargeResult> {
@@ -559,7 +689,7 @@ export function appendRefundReversal(input: RefundInput & Readonly<{ state: Ledg
   }
   const usage = usages[0]
   if (usage === undefined) return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
-  const contract = validateChargeContract(input.state, original, usage)
+  const contract = loadChargeContract(input.state, original, usage)
   if (contract === undefined || input.transaction.currency !== original.currency || input.transaction.principalId !== original.principalId) {
     return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   }
@@ -666,6 +796,105 @@ export function markOutcomeUnknown(input: OutcomeUnknownInput & Readonly<{ state
   if (transaction.state !== 'applied') return { state: input.state, result: refusalResult('charge_reconciliation_required', false) }
   const updated = { ...transaction, state: 'outcome_unknown' as const, updatedAt: input.updatedAt }
   return { state: replaceTransaction(input.state, updated), result: { kind: 'outcome_unknown', transactionRef: transaction.transactionRef } }
+}
+
+export type ChargeBudgetState = 'reserved' | 'settled' | 'released' | 'unknown'
+
+export type ChargeOutcomeUnknownDecision =
+  | Readonly<{ kind: 'already_unknown'; transactionRef: string }>
+  | Readonly<{ kind: 'mark_unknown'; transactionRef: string }>
+  | Readonly<{ kind: 'refused'; code: 'charge_reconciliation_required' }>
+
+export function decideChargeOutcomeUnknown(input: Readonly<{
+  transaction: Readonly<{
+    transactionRef: string
+    principalId: string
+    kind: string
+    state: string
+    budgetState?: ChargeBudgetState
+    settledAt?: number
+  }> | null
+  principalId: string
+}>): ChargeOutcomeUnknownDecision {
+  const transaction = input.transaction
+  if (
+    transaction === null
+    || transaction.principalId !== input.principalId
+    || transaction.kind !== 'charge'
+  ) {
+    return { kind: 'refused', code: 'charge_reconciliation_required' }
+  }
+  if (transaction.state === 'outcome_unknown') {
+    if (
+      transaction.budgetState === 'released'
+      || transaction.budgetState === 'settled'
+      || transaction.settledAt !== undefined
+    ) {
+      return { kind: 'refused', code: 'charge_reconciliation_required' }
+    }
+    return { kind: 'already_unknown', transactionRef: transaction.transactionRef }
+  }
+  if (
+    transaction.state === 'reversed'
+    || transaction.budgetState === 'released'
+    || transaction.budgetState === 'settled'
+    || transaction.settledAt !== undefined
+    || transaction.state !== 'applied'
+    || transaction.budgetState !== 'reserved'
+  ) {
+    return { kind: 'refused', code: 'charge_reconciliation_required' }
+  }
+  return { kind: 'mark_unknown', transactionRef: transaction.transactionRef }
+}
+
+export type PayoutAccrualAmounts = Readonly<{
+  transactionRef: string
+  businessId: string
+  currency: string
+  exponent: number
+  grossAccrual: ExactAmount
+  rake: ExactAmount
+  providerNet: ExactAmount
+}>
+
+export function payoutAccrualFromChargeAmounts(input: Readonly<{
+  transactionRef: string
+  businessId: string
+  chargeAmount: ExactAmount
+  providerAmount: ExactAmount
+  rakeAmount: ExactAmount
+  recoveryAmount: ExactAmount
+  accountCurrency: string
+  accountExponent: number
+}>): PayoutAccrualAmounts | undefined {
+  const fullGross = amountAtScale(input.chargeAmount, input.accountCurrency, input.accountExponent)
+  const fullRake = amountAtScale(input.rakeAmount, input.accountCurrency, input.accountExponent)
+  const fullProvider = amountAtScale(input.providerAmount, input.accountCurrency, input.accountExponent)
+  const recoveryAtScale = amountAtScale(input.recoveryAmount, input.accountCurrency, input.accountExponent)
+  if (
+    fullGross === undefined
+    || fullRake === undefined
+    || fullProvider === undefined
+    || recoveryAtScale === undefined
+  ) {
+    return undefined
+  }
+  const grossAccrual = subtractExactAmounts(fullGross, recoveryAtScale)
+  const providerNet = subtractExactAmounts(fullProvider, recoveryAtScale)
+  if (grossAccrual === undefined || providerNet === undefined) return undefined
+  const expectedGross = addExactAmounts(providerNet, fullRake)
+  if (expectedGross === undefined || compareExactAmounts(expectedGross, grossAccrual) !== 0) {
+    return undefined
+  }
+  return {
+    transactionRef: input.transactionRef,
+    businessId: input.businessId,
+    currency: input.accountCurrency,
+    exponent: input.accountExponent,
+    grossAccrual,
+    rake: fullRake,
+    providerNet,
+  }
 }
 
 export function reconcileCharge(input: ReconcileChargeInput & Readonly<{ state: LedgerState }>): LedgerOperationResult<GenericChargeResult> {
