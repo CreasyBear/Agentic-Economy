@@ -26,6 +26,7 @@ import {
   reconciliationEvidenceValue,
   recoveryResultValue,
 } from '@/modules/capability-execution/convex'
+import { reconciliationValue } from '@/modules/capability-execution/internal/convex-schema'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   verifyExactEvmX402Settlement,
@@ -65,21 +66,42 @@ export const recoveryArgs = {
   invocationRef: v.string(),
   principalId: v.string(),
   credentialId: v.string(),
-  mode: v.union(v.literal('status'), v.literal('cancel'), v.literal('reconcile')),
+  mode: v.union(v.literal('status'), v.literal('cancel'), v.literal('reconcile'), v.literal('expire_authorization')),
   idempotencyKey: v.optional(v.string()),
   evidence: v.optional(v.union(reconciliationEvidenceValue, x402PaymentReconciliationEvidenceValue)),
 } as const
-
 type RecoveredInvocation = RecoveryRow & Readonly<{ grantRef: string }>
+type RecoveryResult = Infer<typeof recoveryResultValue>
+type ExpiryRecoveryResult = Extract<RecoveryResult, { kind: 'reconciliation_required' }>
+type ExpiryQueueResult =
+  | Readonly<{
+      kind: 'queued'
+      disposition: 'automatic'
+      invocationRef: string
+      operationRef: string
+      evidence: Infer<typeof reconciliationValue>
+    }>
+  | Readonly<{
+      kind: 'manual_review'
+      disposition: 'manual_review'
+      invocationRef: string
+      operationRef: string
+      evidence: Infer<typeof reconciliationValue>
+    }>
+  | Readonly<{ kind: 'not_queued' }>
+type InternalRecoveryResult = RecoveryResult | (ExpiryRecoveryResult & Readonly<{
+  expiryDisposition: 'automatic' | 'manual_review'
+}>)
 
 export async function recoverCapabilityOperationInvocation(
   ctx: ActionCtx,
   args: ObjectType<typeof recoveryArgs>,
-): Promise<Infer<typeof recoveryResultValue>> {
+): Promise<InternalRecoveryResult> {
   if (
     (args.mode === 'status' && (args.idempotencyKey !== undefined || args.evidence !== undefined))
     || (args.mode === 'cancel' && (args.idempotencyKey === undefined || args.evidence !== undefined))
     || (args.mode === 'reconcile' && (args.idempotencyKey !== undefined || args.evidence === undefined))
+    || (args.mode === 'expire_authorization' && (args.idempotencyKey !== undefined || args.evidence !== undefined))
   ) return recoveryNotFound(args.invocationRef)
   const row = await ctx.runQuery(internal.capabilityOperationInvocations.readRecovery, {
     invocationRef: args.invocationRef,
@@ -223,6 +245,7 @@ export async function recoverCapabilityOperationInvocation(
       })
     : null
   const brokeredReservation = operation.identity.adapterId === 'x402-fetch:v2'
+    && args.mode !== 'expire_authorization'
     && recovered.environment === 'production'
     ? await brokeredChargeReservationForRecovery(ctx, {
         operation,
@@ -299,6 +322,78 @@ export async function recoverCapabilityOperationInvocation(
           && history.observation?.evidenceDigest === evidence.digest)
     },
   }, initialSnapshot)
+  if (args.mode === 'expire_authorization') {
+    if (operation.identity.adapterId !== 'x402-fetch:v2' || x402Attempt === null) {
+      return recoveryNotFound(args.invocationRef)
+    }
+    const canonicalControl = control.control.control
+    const attemptRef = control.currentAttemptRef
+    const effectGeneration = control.currentEffectGeneration
+    const observedControlState = canonicalControl.state
+    let controlInvocationVersion = control.control.invocationVersion
+    let nativeTransition: 'applied' | 'replayable' | 'manual_review' = 'manual_review'
+    if (
+      attemptRef !== undefined
+      && effectGeneration !== undefined
+      && canonicalControl.state === 'reconciliation_required'
+    ) {
+      nativeTransition = 'replayable'
+    } else if (
+      attemptRef !== undefined
+      && effectGeneration !== undefined
+      && canonicalControl.state === 'leased'
+      && canonicalControl.attemptRef === attemptRef
+      && canonicalControl.effectGeneration === effectGeneration
+      && canonicalControl.leaseOwner !== undefined
+    ) {
+      try {
+        const observation = await tracer.publishObservation({
+          invocationRef: recovered.invocationRef,
+          expectedInvocationVersion: control.control.invocationVersion,
+          attemptRef,
+          leaseOwner: canonicalControl.leaseOwner,
+          effectGeneration,
+          release: 'possibly_released',
+        })
+        if (observation.kind === 'accepted') {
+          nativeTransition = 'applied'
+          controlInvocationVersion = observation.view.invocationVersion
+        }
+      } catch {
+        nativeTransition = 'manual_review'
+      }
+    }
+    if (attemptRef === undefined || effectGeneration === undefined) {
+      return recoveryNotFound(args.invocationRef)
+    }
+    let queued: ExpiryQueueResult
+    try {
+      queued = await ctx.runMutation(internal.capabilityOperationX402AuthorizationExpiry.queueExpiredX402Authorization, {
+        invocationRef: recovered.invocationRef,
+        principalId: recovered.principalId,
+        credentialId: recovered.credentialId,
+        attemptRef,
+        effectGeneration,
+        custodyRef: x402Attempt.custodyRef,
+        authorizationDigest: x402Attempt.authorizationDigest,
+        ...(x402Attempt.reservationRef === undefined ? {} : { reservationRef: x402Attempt.reservationRef }),
+        nativeTransition,
+        controlInvocationVersion,
+        observedControlState,
+        now: Date.now(),
+      })
+    } catch {
+      return recoveryNotFound(args.invocationRef)
+    }
+    if (queued.kind === 'not_queued' || queued.disposition === undefined) return recoveryNotFound(args.invocationRef)
+    return {
+      kind: 'reconciliation_required',
+      invocationRef: queued.invocationRef,
+      operationRef: queued.operationRef,
+      evidence: queued.evidence,
+      expiryDisposition: queued.disposition,
+    }
+  }
   const actor = { callerRef: recovered.credentialId, principalRef: recovered.principalId }
   const origin = { kind: 'standalone' as const, callerRef: recovered.credentialId, principalRef: recovered.principalId }
   const reconcileMoney = async (

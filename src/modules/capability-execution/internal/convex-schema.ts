@@ -161,6 +161,7 @@ export const invocationReconciliationValue = v.object({
     v.literal('refund_pending'),
     v.literal('custody_cap'),
     v.literal('recovery_failed'),
+    v.literal('authorization_expired'),
   ),
 })
 

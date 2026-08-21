@@ -21,7 +21,7 @@ type Reconciliation = {
   leaseOwner?: string
   leaseExpiresAt?: number
   disposition: 'automatic' | 'manual_review'
-  reason: 'unknown_settlement' | 'pending_accounting' | 'refund_pending' | 'custody_cap' | 'recovery_failed'
+  reason: 'unknown_settlement' | 'pending_accounting' | 'refund_pending' | 'custody_cap' | 'recovery_failed' | 'authorization_expired'
 }
 type Row = {
   _id: string
@@ -295,7 +295,9 @@ describe('scheduled capability invocation reconciliation worker', () => {
       return { kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation', state: 'terminal' }
     })
     const ctx = {
-      runQuery: vi.fn(async () => candidates),
+      runQuery: vi.fn(async (reference: unknown) => (
+        functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
+      )),
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         const path = functionPath(reference)
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
@@ -311,6 +313,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
 
     await expect(scheduledHandler(ctx as never, {})).resolves.toEqual({
       selected: 3, claimed: 3, completed: 2, retried: 1, manualReview: 0,
+      expiredSelected: 0, expiredQueued: 0, expiredManualReview: 0,
     })
     expect(order).toEqual(['first', 'second', 'third'])
     expect(finished).toEqual(['first', 'second', 'third'])
@@ -331,7 +334,9 @@ describe('scheduled capability invocation reconciliation worker', () => {
       return { kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation', state: 'terminal' }
     })
     const ctx = {
-      runQuery: vi.fn(async () => candidates),
+      runQuery: vi.fn(async (reference: unknown) => (
+        functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
+      )),
       runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
         const path = functionPath(reference)
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
@@ -344,5 +349,68 @@ describe('scheduled capability invocation reconciliation worker', () => {
 
     await expect(scheduledHandler(ctx as never, {})).resolves.toMatchObject({ selected: 2, claimed: 1, completed: 1 })
     expect(claimed).toEqual(['first'])
+  })
+
+  it('runs expiry first and spends only the remaining combined capacity on due candidates', async () => {
+    const expired = [
+      {
+        dispatchRef: 'expired:automatic', attemptRef: 'attempt:automatic', effectGeneration: 1,
+        custodyRef: 'custody:automatic', authorizationDigest: 'authorization:automatic',
+        paymentAuthorizationExpiresAt: 999,
+      },
+      {
+        dispatchRef: 'expired:manual', attemptRef: 'attempt:manual', effectGeneration: 1,
+        custodyRef: 'custody:manual', authorizationDigest: 'authorization:manual',
+        paymentAuthorizationExpiresAt: 999,
+      },
+    ]
+    const due = Array.from({ length: 30 }, (_, index) => ({
+      invocationRef: `due:${index}`, attemptCount: 0, nextAttemptAt: 1_000,
+    }))
+    const recovered: string[] = []
+    recoverMock.mockImplementation(async (_ctx: unknown, args: { invocationRef: string; mode: string }) => {
+      recovered.push(`${args.mode}:${args.invocationRef}`)
+      if (args.mode === 'expire_authorization') {
+        return { kind: 'reconciliation_required', invocationRef: args.invocationRef, operationRef: 'operation', evidence: {
+          attemptRef: 'attempt', effectGeneration: 1, requiredAt: new Date(0).toISOString(),
+          retry: 'reconcile_before_retry', evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+        }, expiryDisposition: args.invocationRef === 'expired:manual' ? 'manual_review' : 'automatic' }
+      }
+      return { kind: 'found', invocationRef: args.invocationRef, operationRef: 'operation', state: 'terminal' }
+    })
+    const ctx = {
+      runQuery: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = functionPath(reference)
+        if (path.endsWith(':listExpiredPreparedX402PaymentAttempts')) return expired
+        if (path.endsWith(':readOwnerRecovery')) return {
+          principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}`,
+        }
+        if (path.endsWith(':listDueAutomaticReconciliationCandidates')) {
+          expect(args.limit).toBe(23)
+          return due.slice(0, Number(args.limit))
+        }
+        throw new Error(`unexpected_query:${path}`)
+      }),
+      runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = functionPath(reference)
+        if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
+          return { kind: 'claimed', principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}` }
+        }
+        if (path.endsWith(':finishAutomaticReconciliation')) return { kind: 'completed' }
+        throw new Error(`unexpected_mutation:${path}`)
+      }),
+    }
+
+    await expect(scheduledHandler(ctx as never, {})).resolves.toMatchObject({
+      selected: 23,
+      expiredSelected: 2,
+      expiredQueued: 1,
+      expiredManualReview: 1,
+    })
+    expect(recovered.slice(0, 2)).toEqual([
+      'expire_authorization:expired:automatic',
+      'expire_authorization:expired:manual',
+    ])
+    expect(recovered).toHaveLength(25)
   })
 })

@@ -19,6 +19,7 @@ import type * as businessSupplyProjectionSnapshot from "../businessSupplyProject
 import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
 import type * as capabilityOperationInvocationWorker from "../capabilityOperationInvocationWorker.js";
 import type * as capabilityOperationInvocations from "../capabilityOperationInvocations.js";
+import type * as capabilityOperationX402AuthorizationExpiry from "../capabilityOperationX402AuthorizationExpiry.js";
 import type * as capabilityProviderApprovals from "../capabilityProviderApprovals.js";
 import type * as capabilityProviderConnectionCleanup from "../capabilityProviderConnectionCleanup.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   capabilityContractDocuments: typeof capabilityContractDocuments;
   capabilityOperationInvocationWorker: typeof capabilityOperationInvocationWorker;
   capabilityOperationInvocations: typeof capabilityOperationInvocations;
+  capabilityOperationX402AuthorizationExpiry: typeof capabilityOperationX402AuthorizationExpiry;
   capabilityProviderApprovals: typeof capabilityProviderApprovals;
   capabilityProviderConnectionCleanup: typeof capabilityProviderConnectionCleanup;
   capabilityProviderConnections: typeof capabilityProviderConnections;

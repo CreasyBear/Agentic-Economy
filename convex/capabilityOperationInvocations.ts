@@ -1,7 +1,6 @@
 import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { v, type Infer } from 'convex/values'
 import { action, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { actionInvocationTransactArgs } from './actionInvocationControl'
 import { invocationReconciliationValue } from '@/modules/capability-execution/internal/convex-schema'
@@ -50,10 +49,8 @@ const RECONCILIATION_LEASE_MS = 60_000
 const RECONCILIATION_MAX_ATTEMPTS = 5
 const RECONCILIATION_LEASE_OWNER_MAX_LENGTH = 200
 const RECONCILIATION_BACKOFF_MS = [60_000, 300_000, 900_000, 3_600_000] as const
-
 type InvocationReconciliation = Infer<typeof invocationReconciliationValue>
 type ReconciliationReason = InvocationReconciliation['reason']
-type OperationInvocationRow = Doc<'capabilityOperationInvocations'>
 
 const reconciliationReason = v.union(
   v.literal('unknown_settlement'),
@@ -61,6 +58,7 @@ const reconciliationReason = v.union(
   v.literal('refund_pending'),
   v.literal('custody_cap'),
   v.literal('recovery_failed'),
+  v.literal('authorization_expired'),
 )
 const reconciliationCandidateValue = v.object({
   invocationRef: v.string(),
@@ -83,7 +81,6 @@ const reconciliationFinishOutcome = v.union(
   v.literal('reconciliation_required'),
   v.literal('error'),
 )
-
 function isFiniteNonNegative(value: number): boolean {
   return Number.isFinite(value) && value >= 0
 }
@@ -106,6 +103,7 @@ function isValidInvocationReconciliation(value: InvocationReconciliation | undef
       || value.reason === 'refund_pending'
       || value.reason === 'custody_cap'
       || value.reason === 'recovery_failed'
+      || value.reason === 'authorization_expired'
     )
 }
 

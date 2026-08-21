@@ -33,6 +33,9 @@ const reconciliationScheduledResult = v.object({
   completed: v.number(),
   retried: v.number(),
   manualReview: v.number(),
+  expiredSelected: v.number(),
+  expiredQueued: v.number(),
+  expiredManualReview: v.number(),
 })
 
 const RECONCILIATION_SWEEP_LIMIT = 25
@@ -59,7 +62,18 @@ export const run = internalAction({
 export const recover = internalAction({
   args: recoveryArgs,
   returns: recoveryResultValue,
-  handler: recoverCapabilityOperationInvocation,
+  handler: async (ctx, args): Promise<RecoveryResult> => {
+    const result = await recoverCapabilityOperationInvocation(ctx, args)
+    if ('expiryDisposition' in result) {
+      return {
+        kind: 'reconciliation_required',
+        invocationRef: result.invocationRef,
+        operationRef: result.operationRef,
+        evidence: result.evidence,
+      }
+    }
+    return result
+  },
 })
 
 export const reconcileScheduled = internalAction({
@@ -69,10 +83,59 @@ export const reconcileScheduled = internalAction({
     const startedAt = Date.now()
     const deadlineAt = startedAt + RECONCILIATION_SWEEP_DEADLINE_MS
     const leaseOwner = `reconciliation-sweep:${crypto.randomUUID()}`
-    const candidates = await ctx.runQuery(
-      internal.capabilityOperationInvocations.listDueAutomaticReconciliationCandidates,
-      { now: startedAt, limit: RECONCILIATION_SWEEP_LIMIT },
-    )
+    let expiredCandidates: Array<{
+      dispatchRef: string
+      attemptRef: string
+      effectGeneration: number
+      custodyRef: string
+      authorizationDigest: string
+      reservationRef?: string
+      paymentAuthorizationExpiresAt: number
+    }> = []
+    try {
+      expiredCandidates = await ctx.runQuery(
+        internal.moneyX402PaymentAttempts.listExpiredPreparedX402PaymentAttempts,
+        { now: startedAt, limit: RECONCILIATION_SWEEP_LIMIT },
+      )
+    } catch {
+      expiredCandidates = []
+    }
+    const expiredSelected = Math.min(expiredCandidates.length, RECONCILIATION_SWEEP_LIMIT)
+    let expiredQueued = 0
+    let expiredManualReview = 0
+    for (const candidate of expiredCandidates) {
+      if (Date.now() >= deadlineAt) break
+      let ownerRecovery: { principalId: string; credentialId: string } | null
+      try {
+        ownerRecovery = await ctx.runQuery(
+          internal.capabilityOperationInvocations.readOwnerRecovery,
+          { invocationRef: candidate.dispatchRef },
+        )
+      } catch {
+        continue
+      }
+      if (ownerRecovery === null) continue
+      try {
+        const result = await recoverCapabilityOperationInvocation(ctx, {
+          invocationRef: candidate.dispatchRef,
+          principalId: ownerRecovery.principalId,
+          credentialId: ownerRecovery.credentialId,
+          mode: 'expire_authorization',
+        })
+        if (result.kind !== 'reconciliation_required' || !('expiryDisposition' in result)) continue
+        if (result.expiryDisposition === 'manual_review') expiredManualReview += 1
+        else expiredQueued += 1
+      } catch {
+        // A failed expiry candidate must not prevent the remaining candidates from running.
+      }
+    }
+    const remainingCapacity = Math.max(0, RECONCILIATION_SWEEP_LIMIT - expiredSelected)
+    const candidates = remainingCapacity === 0 || Date.now() >= deadlineAt
+      ? []
+      : await ctx.runQuery(
+          internal.capabilityOperationInvocations.listDueAutomaticReconciliationCandidates,
+          { now: startedAt, limit: remainingCapacity },
+        )
     let claimed = 0
     let completed = 0
     let retried = 0
@@ -128,11 +191,14 @@ export const reconcileScheduled = internalAction({
       }
     }
     return {
-      selected: Math.min(candidates.length, RECONCILIATION_SWEEP_LIMIT),
-      claimed: Math.min(claimed, RECONCILIATION_SWEEP_LIMIT),
-      completed: Math.min(completed, RECONCILIATION_SWEEP_LIMIT),
-      retried: Math.min(retried, RECONCILIATION_SWEEP_LIMIT),
-      manualReview: Math.min(manualReview, RECONCILIATION_SWEEP_LIMIT),
+      selected: Math.min(candidates.length, remainingCapacity),
+      claimed: Math.min(claimed, remainingCapacity),
+      completed: Math.min(completed, remainingCapacity),
+      retried: Math.min(retried, remainingCapacity),
+      manualReview: Math.min(manualReview, remainingCapacity),
+      expiredSelected,
+      expiredQueued: Math.min(expiredQueued, expiredSelected),
+      expiredManualReview: Math.min(expiredManualReview, expiredSelected),
     }
   },
 })

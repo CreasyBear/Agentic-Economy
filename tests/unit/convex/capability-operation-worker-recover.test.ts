@@ -748,5 +748,175 @@ describe('capability operation invocation worker recover', () => {
       dispatchState: 'reconciliation_required',
       result: { kind: 'reconciliation_required' },
     })
+    const expiryWorker = createWorker('x402')
+    const appliedSetup = configureExpiryRecovery(expiryWorker, 'applied')
+    const appliedResult = await recoverCapabilityOperationInvocation(expiryWorker.ctx as never, {
+      invocationRef,
+      principalId: String(expiryWorker.state.dispatch.principalId),
+      credentialId: String(expiryWorker.state.dispatch.credentialId),
+      mode: 'expire_authorization',
+    })
+    expect(appliedResult).toMatchObject({
+      kind: 'reconciliation_required',
+      expiryDisposition: 'automatic',
+      evidence: {
+        attemptRef,
+        effectGeneration: 1,
+        evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+      },
+    })
+    expect(appliedSetup.nativeCalls).toHaveLength(1)
+    expect(appliedSetup.nativeCalls[0]).toMatchObject({
+      expectedInvocationVersion: 1,
+      expectedEffectGeneration: 1,
+      history: { kind: 'publish_observation' },
+      row: { control: { control: { state: 'reconciliation_required', attemptRef } } },
+    })
+    expect(appliedSetup.expiryCalls).toEqual([
+      expect.objectContaining({ nativeTransition: 'applied' }),
+    ])
+    const appliedPaths = expiryWorker.state.mutationCalls.map(({ path }) => path)
+    expect(appliedPaths).toContain('actionInvocationControl:transact')
+    expect(appliedPaths).toContain('capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization')
+    expect(appliedPaths).not.toContain('actionInvocationControls:patch')
+    expect(appliedPaths.some((path) => path.startsWith('moneyLedger:'))).toBe(false)
+
+    const manualWorker = createWorker('x402')
+    const manualSetup = configureExpiryRecovery(manualWorker, 'failed')
+    const manualResult = await recoverCapabilityOperationInvocation(manualWorker.ctx as never, {
+      invocationRef,
+      principalId: String(manualWorker.state.dispatch.principalId),
+      credentialId: String(manualWorker.state.dispatch.credentialId),
+      mode: 'expire_authorization',
+    })
+    expect(manualResult).toMatchObject({
+      kind: 'reconciliation_required',
+      expiryDisposition: 'manual_review',
+      evidence: {
+        evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+      },
+    })
+    expect(manualSetup.nativeCalls).toHaveLength(1)
+    expect(manualSetup.expiryCalls).toEqual([
+      expect.objectContaining({ nativeTransition: 'manual_review' }),
+    ])
+    expect(manualWorker.state.mutationCalls.some(({ path }) => path.startsWith('moneyLedger:'))).toBe(false)
   })
 })
+
+function configureExpiryRecovery(
+  worker: ReturnType<typeof createWorker>,
+  nativeResult: 'applied' | 'failed',
+): {
+  nativeCalls: Array<Record<string, unknown>>
+  expiryCalls: Array<Record<string, unknown>>
+} {
+  const dispatch = worker.state.dispatch
+  const operation = worker.state.operation
+  const descriptor = materializeRuntimePublishedOperation(operation)
+  const now = new Date().toISOString()
+  const actor = {
+    callerRef: String(dispatch.credentialId),
+    principalRef: String(dispatch.principalId),
+  }
+  const control = {
+    sourceRef: `operation-invocation-source:${invocationRef}`,
+    preparedMaterialDigest: String(dispatch.inputDigest),
+    updatedAt: now,
+    currentAttemptRef: attemptRef,
+    currentEffectGeneration: 1,
+    control: {
+      invocationRef,
+      invocationVersion: 1,
+      origin: { kind: 'standalone' as const, ...actor },
+      owner: actor,
+      action: { id: operation.operationId, contractVersion: String(descriptor.version) },
+      desired: { state: 'invoke' as const },
+      authority: { reference: 'authority:test-worker', expiresAt: now },
+      acceptedAuthority: { kind: 'approve_each' as const, authorityRef: 'authority:test-worker' },
+      freshness: { state: 'current' as const, observedAt: now },
+      control: {
+        state: 'leased' as const,
+        attemptRef,
+        effectGeneration: 1,
+        leaseOwner: 'worker:test-worker',
+        leaseExpiresAt: now,
+        release: 'not_started' as const,
+      },
+    },
+  }
+  const attempt = {
+    invocationRef,
+    attemptRef,
+    attemptNumber: 1,
+    actor,
+    effectGeneration: 1,
+    lease: { owner: 'worker:test-worker', expiresAt: now },
+    idempotency: {
+      operationKey: operation.operationId,
+      materialInputDigest: String(dispatch.inputDigest),
+      effectIdentity: digest('e'),
+    },
+    release: { state: 'not_released' as const },
+    outcome: { state: 'running' as const },
+    recordedAt: now,
+  }
+  const recoveryRow = { ...dispatch, state: 'pending' as const }
+  const paymentAttempt = {
+    dispatchRef: invocationRef,
+    attemptRef,
+    effectGeneration: 1,
+    custodyRef: 'custody:test-worker',
+    authorizationDigest: digest('a'),
+    reservationRef: 'reservation:test-worker',
+    state: 'prepared' as const,
+    paymentAuthorizationExpiresAt: 1,
+    evidenceRefs: [],
+  }
+  const nativeCalls: Array<Record<string, unknown>> = []
+  const expiryCalls: Array<Record<string, unknown>> = []
+  const runQuery = worker.ctx.runQuery as MockCall<QueryCall>
+  const queryImplementation = runQuery.getMockImplementation()
+  if (queryImplementation === undefined) throw new Error('worker_query_implementation_missing')
+  runQuery.mockImplementation(async (reference: unknown, args?: Record<string, unknown>) => {
+    const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
+    switch (path) {
+      case 'capabilityOperationInvocations:readRecovery': return recoveryRow
+      case 'actionInvocationControl:readControl': return control
+      case 'actionInvocationControl:readAttempt': return attempt
+      case 'actionInvocationControl:readAttempts': return [attempt]
+      case 'actionInvocationControl:readHistory': return []
+      case 'actionInvocationControl:readHistoryCommand': return null
+      case 'moneyX402PaymentAttempts:readX402PaymentAttempt': return paymentAttempt
+      default: return await queryImplementation(reference, args)
+    }
+  })
+  const runMutation = worker.ctx.runMutation as MockCall<MutationCall>
+  const mutationImplementation = runMutation.getMockImplementation()
+  if (mutationImplementation === undefined) throw new Error('worker_mutation_implementation_missing')
+  runMutation.mockImplementation(async (reference: unknown, args: Record<string, unknown>) => {
+    const path = typeof reference === 'string' ? reference : getFunctionName(reference as never)
+    worker.state.mutations.push(path)
+    worker.state.mutationCalls.push({ path, args })
+    if (path === 'actionInvocationControl:transact') {
+      nativeCalls.push(args)
+      if (nativeResult === 'failed') throw new Error('native_observation_unavailable')
+      return { kind: 'applied', invocationVersion: 2 }
+    }
+    if (path === 'capabilityOperationX402AuthorizationExpiry:queueExpiredX402Authorization') {
+      expiryCalls.push(args)
+      const evidence = {
+        attemptRef,
+        effectGeneration: 1,
+        requiredAt: new Date().toISOString(),
+        retry: 'reconcile_before_retry' as const,
+        evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
+      }
+      return nativeResult === 'failed'
+        ? { kind: 'manual_review', disposition: 'manual_review', invocationRef, operationRef: operation.operationId, evidence }
+        : { kind: 'queued', disposition: 'automatic', invocationRef, operationRef: operation.operationId, evidence }
+    }
+    return await mutationImplementation(reference, args)
+  })
+  return { nativeCalls, expiryCalls }
+}
