@@ -1,0 +1,68 @@
+{
+  "x402Version": 2,
+  "error": "Payment required",
+  "resource": {
+    "url": "https://api.example.test/lookup",
+    "description": "Synthetic POST bazaar fixture for importer tests.",
+    "mimeType": "application/json"
+  },
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:84532",
+      "amount": "1234500",
+      "asset": "0x0000000000000000000000000000000000000001",
+      "payTo": "0x0000000000000000000000000000000000000002",
+      "maxTimeoutSeconds": 60,
+      "extra": {}
+    }
+  ],
+  "extensions": {
+    "bazaar": {
+      "info": {
+        "input": {
+          "type": "http",
+          "method": "POST",
+          "bodyType": "json",
+          "body": { "query": "lookup-id" }
+        },
+        "output": {
+          "type": "json",
+          "example": { "result": "ok" }
+        }
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "const": "http" },
+              "method": { "type": "string", "enum": ["POST"] },
+              "bodyType": { "type": "string", "enum": ["json"] },
+              "body": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string" }
+                },
+                "required": ["query"]
+              }
+            },
+            "required": ["type", "method", "bodyType"],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "example": { "type": "object" }
+            },
+            "required": ["type"]
+          }
+        },
+        "required": ["input"]
+      }
+    }
+  }
+}
