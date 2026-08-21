@@ -283,7 +283,7 @@ export async function createCdpEvmX402PaymentSignature(
         apiKeyId: configuration.apiKeyId,
         apiKeySecret: configuration.apiKeySecret,
         walletSecret: configuration.walletSecret,
-      }) as unknown as CdpClientLike)
+      }) as CdpClientLike)
     const [accountPolicy, projectPolicy] = await Promise.all([
       cdp.policies.getPolicyById({ id: configuration.accountPolicyId }),
       cdp.policies.getPolicyById({ id: configuration.projectPolicyId }),

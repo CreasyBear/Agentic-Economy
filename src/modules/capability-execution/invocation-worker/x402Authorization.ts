@@ -466,9 +466,10 @@ async function readOrClaimManagedAuthorization(
     requestFingerprint,
     custodyConfiguration.credentialGeneration,
   )
+  if (reread === null) throw new Error('x402_payment_reconciliation_required')
   const first = storedAuthorizationFromMaterial(reread)
   if (first === undefined) throw new Error('x402_payment_reconciliation_required')
-  return currentManagedCustodyConfiguration(reread!) === undefined
+  return currentManagedCustodyConfiguration(reread) === undefined
     ? undefined
     : signedHeader
 }
