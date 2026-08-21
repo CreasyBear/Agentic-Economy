@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { assertAgentAccessRateAdmission } from '../../../convex/lib/rateLimit'
 import {
   admitCredentialBudget,
+  credentialBudgetDayWindowStart,
+  credentialBudgetMonthWindowStart,
   credentialBudgetReservationDigest,
   reverseCredentialBudget,
   releaseCredentialBudget,
@@ -118,5 +120,12 @@ describe('credential budget admission', () => {
     } finally {
       limit.mockRestore()
     }
+  })
+})
+
+describe('credential budget windows', () => {
+  it('derives UTC day and month window starts from the observation timestamp', () => {
+    expect(credentialBudgetDayWindowStart(Date.UTC(2026, 7, 19, 23, 30))).toBe('2026-08-19')
+    expect(credentialBudgetMonthWindowStart('2026-08-19')).toBe('2026-08')
   })
 })

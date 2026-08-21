@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   cdpX402CustodyBudgetRef: vi.fn(),
   readCdpX402PaymentAuthorization: vi.fn(),
   credentialFromEnvironment: vi.fn(),
+  isPaymentSigningIdempotencyKey: (value: unknown) => typeof value === 'string' && value.length > 0,
 }))
 
 vi.mock('@/modules/capability-supply/server', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/modules/capability-supply/server', () => ({
   createSandboxEvmX402PaymentSignature: mocks.createSandboxEvmX402PaymentSignature,
   credentialFromEnvironment: mocks.credentialFromEnvironment,
   readCdpX402PaymentAuthorization: mocks.readCdpX402PaymentAuthorization,
+  isPaymentSigningIdempotencyKey: mocks.isPaymentSigningIdempotencyKey,
   readX402PaymentPayer: vi.fn(),
   readGuardedX402EvmReceipt: vi.fn(),
   paymentObservationDigest: vi.fn(),

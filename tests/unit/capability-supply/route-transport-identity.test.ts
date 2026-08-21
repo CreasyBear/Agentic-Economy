@@ -133,6 +133,7 @@ describe('route transport durable identity binding', () => {
         },
         readX402PaymentAuthorization: async () => 'signed-payment',
         readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
+        markX402PaymentPossiblySubmitted: () => undefined,
         verifyX402Settlement: async () => true,
       }
       return await invokePreparedRouteTransport(await prepare(invocation(operationKeyDigest, 'x402-fetch:v2')), runtime)

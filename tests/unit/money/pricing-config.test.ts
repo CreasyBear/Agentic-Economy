@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  computeProviderFeeBreakdown,
   computeRakeSplit,
+  normalizePricingConfig,
   parseDecimalExactAmount,
   pricingConfigDigest,
   resolveInvocationPrice,
@@ -64,6 +66,47 @@ describe('money pricing configuration', () => {
       rake: amount('USD', '501', 2),
       providerNet: amount('USD', '0', 2),
     })
+  })
+
+  it('computes exact provider fees with upward rounding', () => {
+    expect(computeProviderFeeBreakdown(amount('USD', '0', 2))).toEqual({
+      providerAmount: amount('USD', '0', 2),
+      platformFee: amount('USD', '0', 2),
+      totalAmount: amount('USD', '0', 2),
+      feeBps: 1_000,
+    })
+    expect(computeProviderFeeBreakdown(amount('USD', '1', 2))).toEqual({
+      providerAmount: amount('USD', '1', 2),
+      platformFee: amount('USD', '1', 2),
+      totalAmount: amount('USD', '2', 2),
+      feeBps: 1_000,
+    })
+    expect(computeProviderFeeBreakdown(amount('USD', '9007199254740991', 2))).toEqual({
+      providerAmount: amount('USD', '9007199254740991', 2),
+      platformFee: amount('USD', '900719925474100', 2),
+      totalAmount: amount('USD', '9907919180215091', 2),
+      feeBps: 1_000,
+    })
+    expect(computeProviderFeeBreakdown(amount('USD', '9223372036854775807', 2))).toEqual({
+      providerAmount: amount('USD', '9223372036854775807', 2),
+      platformFee: amount('USD', '922337203685477581', 2),
+      totalAmount: amount('USD', '10145709240540253388', 2),
+      feeBps: 1_000,
+    })
+  })
+
+  it('accepts and digests an exact provider/platform fee pair', () => {
+    const config: PricingConfig = {
+      version: 'pricing:v2',
+      unit: 'call',
+      paidAmount: amount('USD', '11', 2),
+      providerAmount: amount('USD', '10', 2),
+      platformFee: amount('USD', '1', 2),
+    }
+    expect(normalizePricingConfig(config)).toEqual({ kind: 'valid', config })
+    expect(pricingConfigDigest(config)).not.toBe(pricingConfigDigest({ ...config, platformFee: amount('USD', '2', 2) }))
+    expect(normalizePricingConfig({ ...config, providerAmount: undefined })).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
+    expect(normalizePricingConfig({ ...config, platformFee: amount('USD', '2', 2) })).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
   })
 })
 

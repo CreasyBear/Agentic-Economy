@@ -179,6 +179,7 @@ describe('x402 payment reconciliation evidence', () => {
           authorizationDigest: `sha256:${'c'.repeat(64)}`,
         }
       },
+      markX402PaymentPossiblySubmitted: () => undefined,
       readX402PaymentAuthorization: async () => 'signed',
       readX402PaymentAuthorizationByDigest: async () => 'signed',
     }

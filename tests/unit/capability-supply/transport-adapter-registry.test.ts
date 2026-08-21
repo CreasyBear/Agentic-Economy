@@ -223,4 +223,34 @@ describe('capability supply transport adapter registry', () => {
       kind: 'admitted', transport: { adapterId: 'x402-fetch:v2' },
     })
   })
+
+  it('allows dotted provider identities but rejects URL punctuation and whitespace', () => {
+    const base = {
+      adapterId: 'x402-fetch:v2',
+      endpointUrl: 'https://api.example.com/paid-capability',
+      continuation: { kind: 'single_response' as const, evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported' as const, evidenceRefs: ['evidence:cancellation'] },
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+        currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+      },
+    }
+    expect(admitRegisteredTransport({
+      ...base,
+      authority: { ...providerAuthority, providerRef: 'provider:x402:api.example.com' },
+    })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'x402-fetch:v2' } })
+    for (const providerRef of [
+      'provider:x402:api.example.com/path',
+      'provider:x402:api.example.com?query',
+      'provider:x402:api.example.com#fragment',
+      'provider:x402:api.example.com with-space',
+    ]) {
+      expect(admitRegisteredTransport({
+        ...base,
+        authority: { ...providerAuthority, providerRef },
+      })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+    }
+  })
 })

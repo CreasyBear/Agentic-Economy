@@ -9,6 +9,7 @@ import {
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
+import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 
 const principal = {
   principalId: 'principal:one',
@@ -40,6 +41,25 @@ const reconciliationEvidenceMaterial = {
 const reconciliationEvidence = {
   ...reconciliationEvidenceMaterial,
   digest: canonicalDigest(reconciliationEvidenceMaterial),
+}
+const receipt: OperationInvokeReceipt = {
+  receiptRef: 'receipt:operation-one',
+  state: 'settled',
+  network: 'eip155:8453',
+  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  providerQuotedAmount: { currency: 'USDC', units: '100', exponent: 6 },
+  agenticEconomyFee: { currency: 'USDC', units: '10', exponent: 6 },
+  totalBuyerAuthorization: { currency: 'USDC', units: '110', exponent: 6 },
+  priceDigest: 'sha256:price',
+  transactionRef: 'money:operation-one',
+  settlementTransactionHash: '0xsettlement',
+  paymentIdentifier: 'payment:opaque',
+  accountingTransactionRefs: ['money:operation-one'],
+  refundState: 'not_applicable',
+  lossState: 'none',
+  externalSettlementRef: 'settlement:opaque',
+  evidenceHash: 'sha256:evidence',
+  issuedAt: '2026-08-09T00:00:00.000Z',
 }
 
 describe('operation recovery actions', () => {
@@ -103,6 +123,43 @@ describe('operation recovery actions', () => {
       transportObservationDigest: 'sha256:transport',
       paymentObservationDigest: 'sha256:payment',
     })
+  })
+
+  it('round-trips additive receipts for success, refund, and reconciliation while preserving absence', () => {
+    const settled = operationStatusAction.outputSchema.parse({ ...status, receipt })
+    expect(settled).toMatchObject({ receipt: { state: 'settled', paymentIdentifier: 'payment:opaque' } })
+
+    const refunded = operationCancelAction.outputSchema.parse({
+      kind: 'found',
+      invocationRef: status.invocationRef,
+      operationRef: status.operationRef,
+      state: 'terminal',
+      receipt: { ...receipt, state: 'refunded', refundState: 'released', lossState: 'provider_output_invalid' },
+    })
+    expect(refunded).toMatchObject({ receipt: { state: 'refunded', refundState: 'released', lossState: 'provider_output_invalid' } })
+
+    const reconciliation = operationReconcileAction.outputSchema.parse({
+      kind: 'reconciliation_required',
+      invocationRef: status.invocationRef,
+      operationRef: status.operationRef,
+      evidence: {
+        attemptRef: 'attempt:one',
+        effectGeneration: 1,
+        requiredAt: '2026-08-09T00:00:00.000Z',
+        retry: 'reconcile_before_retry',
+        evidenceSource: 'operation:one',
+      },
+      receipt: { ...receipt, state: 'reconciliation_required', refundState: 'unknown', lossState: 'unknown' },
+    })
+    expect(reconciliation).toMatchObject({ receipt: { state: 'reconciliation_required', refundState: 'unknown', lossState: 'unknown' } })
+
+    expect(operationStatusAction.outputSchema.parse(status)).not.toHaveProperty('receipt')
+    expect(operationCancelAction.outputSchema.parse({
+      kind: 'refused',
+      invocationRef: status.invocationRef,
+      code: 'invocation_not_found',
+      retryable: false,
+    })).not.toHaveProperty('receipt')
   })
 
   it('rejects transport and provider overrides at the action boundary', () => {

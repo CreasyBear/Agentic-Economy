@@ -11,10 +11,19 @@ import {
   authorizePaidCharge,
   createLedgerState,
   markOutcomeUnknown,
+  payoutAccrualFromChargeAmounts,
   reconcileCharge,
+  recoveryExceedsProvider,
+  selectChargeEntries,
+  decideChargeOutcomeUnknown,
+  validateChargeContract,
   type BeginTransactionInput,
+  type ChargeContractEntry,
+  type ChargeContractOriginal,
+  type ChargeContractUsage,
   type LedgerState,
   type MoneyAccount,
+  type ValidateChargeContractInput,
 } from '../../../src/modules/money/internal/ledger'
 import type { ExactAmount, MoneyLedgerEntry } from '../../../src/modules/money/public'
 
@@ -244,6 +253,79 @@ describe('money append-only ledger', () => {
     expect(refundReplay.state.entries.filter((entry) => entry.reversalOf === 'charge-1')).toHaveLength(3)
     expect(refundReplay.state.entries).toHaveLength(refunded.state.entries.length)
     expect(refundReplay.state.transactions).toHaveLength(refunded.state.transactions.length)
+  })
+
+  it('uses an explicit provider/platform pair for exact three-leg conservation', () => {
+    const topup = applyTopup({
+      state: createLedgerState(accounts),
+      transaction: { ...transaction(), transactionRef: 'topup-explicit', kind: 'topup', idempotencyKey: 'topup-explicit-key', inputDigest: 'topup-explicit-input', expectedAccountVersion: 0 },
+      accountRef: accountRefForOwner(ownerId, 'USD'),
+      accountId: ownerId,
+      amount: amount('USD', '2', 2),
+      sourceDigest: 'source-topup',
+      evidenceRefs: ['stripe:event:explicit'],
+    })
+    const charged = authorizePaidCharge({
+      state: topup.state,
+      transaction: transaction({ inputDigest: 'input-explicit' }),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
+      providerAccountRef: accountRefForProvider('business-1', 'USD'),
+      rakeAccountRef: accountRefForRake('USD'),
+      grossAmount: amount('USD', '2', 2),
+      providerAmount: amount('USD', '1', 2),
+      platformFee: amount('USD', '1', 2),
+      rakeConfig: { rakeBps: 1_000 },
+      priceDigest: 'price-explicit',
+      principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
+      credentialId: 'key-1',
+      serviceRef: 'service-1',
+      offeringRef: 'offering-1',
+      businessId: 'business-1',
+      invocationRef: 'inv-explicit',
+      attemptRef: 'attempt-explicit',
+      operationKey: 'operation-explicit',
+      sourceDigest: 'source-explicit',
+      evidenceRefs: ['invocation:explicit'],
+      observedAt: 11,
+    })
+    expect(charged.result).toMatchObject({
+      kind: 'accepted',
+      amount: amount('USD', '2', 2),
+      providerNet: amount('USD', '1', 2),
+      rake: amount('USD', '1', 2),
+    })
+    expect(charged.state.entries.filter((entry) => entry.transactionRef === 'charge-1').map((entry) => entry.amount)).toEqual([
+      amount('USD', '2', 2),
+      amount('USD', '1', 2),
+      amount('USD', '1', 2),
+    ])
+    const replay = authorizePaidCharge({
+      state: charged.state,
+      transaction: transaction({ inputDigest: 'input-explicit' }),
+      operatorAccountRef: accountRefForOwner(ownerId, 'USD'),
+      providerAccountRef: accountRefForProvider('business-1', 'USD'),
+      rakeAccountRef: accountRefForRake('USD'),
+      grossAmount: amount('USD', '2', 2),
+      providerAmount: amount('USD', '1', 2),
+      platformFee: amount('USD', '1', 2),
+      rakeConfig: { rakeBps: 1_000 },
+      priceDigest: 'price-explicit',
+      principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
+      credentialId: 'key-1',
+      serviceRef: 'service-1',
+      offeringRef: 'offering-1',
+      businessId: 'business-1',
+      invocationRef: 'inv-explicit',
+      attemptRef: 'attempt-explicit',
+      operationKey: 'operation-explicit',
+      sourceDigest: 'source-explicit',
+      evidenceRefs: ['invocation:explicit'],
+      observedAt: 11,
+    })
+    expect(replay.result).toMatchObject({ kind: 'accepted', providerNet: amount('USD', '1', 2), rake: amount('USD', '1', 2) })
+    expect(replay.state.entries).toHaveLength(charged.state.entries.length)
   })
 
   it('returns exact insufficient credit and performs no journal writes', () => {
@@ -580,6 +662,227 @@ describe('money append-only ledger', () => {
 
 })
 
+describe('charge journal helpers', () => {
+  it('selects charge, provider, rake, and optional recovery legs', () => {
+    const charge = { entryType: 'charge', direction: 'debit' } as const
+    const provider = { entryType: 'payout_accrual', direction: 'credit' } as const
+    const rake = { entryType: 'rake', direction: 'credit' } as const
+    const recovery = { entryType: 'payout_accrual', direction: 'debit' } as const
+    expect(selectChargeEntries([charge, provider, rake])).toEqual({ charge, provider, rake })
+    expect(selectChargeEntries([charge, provider, rake, recovery])).toEqual({
+      charge,
+      provider,
+      rake,
+      recovery,
+    })
+    expect(selectChargeEntries([charge, provider])).toBeUndefined()
+  })
+
+  it('fails closed when recovery cannot be compared to the provider credit', () => {
+    expect(recoveryExceedsProvider(undefined, amount('USD', '450', 2))).toBe(true)
+    expect(recoveryExceedsProvider(amount('USD', '451', 2), amount('USD', '450', 2))).toBe(true)
+    expect(recoveryExceedsProvider(amount('EUR', '100', 2), amount('USD', '450', 2))).toBe(true)
+    expect(recoveryExceedsProvider(amount('USD', '450', 2), amount('USD', '450', 2))).toBe(false)
+  })
+
+  it('accepts a charge debit, provider credit, and rake credit when amounts and refs match', () => {
+    const fixture = chargeContractFixture()
+    const contract = validateChargeContract(fixture)
+    expect(contract).toMatchObject({
+      accountId: ownerId,
+      businessId: 'business-1',
+      chargeAmount: amount('USD', '500', 2),
+      providerAmount: amount('USD', '450', 2),
+      rakeAmount: amount('USD', '50', 2),
+      operator: { accountRef: accountRefForOwner(ownerId, 'USD') },
+      provider: { accountRef: accountRefForProvider('business-1', 'USD') },
+      rake: { accountRef: accountRefForRake('USD') },
+    })
+    expect(contract?.selected.recovery).toBeUndefined()
+  })
+
+  it('accepts a matching provider recovery debit', () => {
+    const fixture = chargeContractFixture({ recovery: recoveryLeg('100') })
+    expect(validateChargeContract(fixture)?.selected.recovery?.amount).toEqual(amount('USD', '100', 2))
+  })
+
+  it('rejects recovery that exceeds the provider credit', () => {
+    expect(validateChargeContract(chargeContractFixture({ recovery: recoveryLeg('451') }))).toBeUndefined()
+  })
+
+  it('rejects wrong entryRef, missing usage, unpaid chargeState, amount mismatch, and evidence drift', () => {
+    const fixture = chargeContractFixture()
+    expect(validateChargeContract({
+      ...fixture,
+      selected: { ...fixture.selected, charge: { ...fixture.selected.charge, entryRef: 'charge-1:forged' } },
+    })).toBeUndefined()
+    expect(validateChargeContract({ ...fixture, usage: undefined })).toBeUndefined()
+    expect(validateChargeContract({
+      ...fixture,
+      usage: { ...fixture.usage, chargeState: 'free_tier' },
+    })).toBeUndefined()
+    expect(validateChargeContract({
+      ...fixture,
+      original: { ...fixture.original, amount: amount('USD', '499', 2) },
+    })).toBeUndefined()
+    expect(validateChargeContract({
+      ...fixture,
+      selected: {
+        ...fixture.selected,
+        provider: { ...fixture.selected.provider, evidenceRefs: ['invocation:drift'] },
+      },
+    })).toBeUndefined()
+  })
+
+  it('computes payout accrual after recovery at the provider account scale', () => {
+    expect(payoutAccrualFromChargeAmounts({
+      transactionRef: 'charge-1',
+      businessId: 'business-1',
+      chargeAmount: amount('USD', '500', 2),
+      providerAmount: amount('USD', '450', 2),
+      rakeAmount: amount('USD', '50', 2),
+      recoveryAmount: amount('USD', '100', 2),
+      accountCurrency: 'USD',
+      accountExponent: 2,
+    })).toEqual({
+      transactionRef: 'charge-1',
+      businessId: 'business-1',
+      currency: 'USD',
+      exponent: 2,
+      grossAccrual: amount('USD', '400', 2),
+      rake: amount('USD', '50', 2),
+      providerNet: amount('USD', '350', 2),
+    })
+  })
+
+  it('marks a reserved applied charge unknown without treating a settled budget as replay', () => {
+    expect(decideChargeOutcomeUnknown({
+      transaction: {
+        transactionRef: 'charge-1',
+        principalId: 'principal-1',
+        kind: 'charge',
+        state: 'applied',
+        budgetState: 'reserved',
+      },
+      principalId: 'principal-1',
+    })).toEqual({ kind: 'mark_unknown', transactionRef: 'charge-1' })
+    expect(decideChargeOutcomeUnknown({
+      transaction: {
+        transactionRef: 'charge-1',
+        principalId: 'principal-1',
+        kind: 'charge',
+        state: 'outcome_unknown',
+        budgetState: 'settled',
+      },
+      principalId: 'principal-1',
+    })).toEqual({ kind: 'refused', code: 'charge_reconciliation_required' })
+  })
+})
+
 function amount(currency: string, units: string, exponent: number): ExactAmount {
   return { currency, units, exponent }
+}
+
+function recoveryLeg(units: string): ChargeContractEntry {
+  return {
+    entryType: 'payout_accrual',
+    direction: 'debit',
+    entryRef: 'charge-1:provider-recovery',
+    accountRef: accountRefForProvider('business-1', 'USD'),
+    transactionRef: 'charge-1',
+    idempotencyKey: 'charge-1',
+    createdAt: 10,
+    sourceDigest: 'source-charge',
+    evidenceRefs: ['invocation:test'],
+    amount: amount('USD', units, 2),
+    businessId: 'business-1',
+    invocationRef: 'inv-test',
+    attemptRef: 'attempt-test',
+  }
+}
+
+function chargeContractFixture(
+  input: Readonly<{ recovery?: ChargeContractEntry }> = {},
+): ValidateChargeContractInput<ChargeContractEntry> & Readonly<{
+  original: ChargeContractOriginal
+  usage: ChargeContractUsage
+  selected: NonNullable<ValidateChargeContractInput<ChargeContractEntry>['selected']>
+}> {
+  const charge: ChargeContractEntry = {
+    entryType: 'charge',
+    direction: 'debit',
+    entryRef: 'charge-1:charge',
+    accountRef: accountRefForOwner(ownerId, 'USD'),
+    transactionRef: 'charge-1',
+    idempotencyKey: 'charge-1',
+    createdAt: 10,
+    sourceDigest: 'source-charge',
+    evidenceRefs: ['invocation:test'],
+    amount: amount('USD', '500', 2),
+    principalId: 'clerk_api_key:key-1',
+    invocationRef: 'inv-test',
+    attemptRef: 'attempt-test',
+  }
+  const provider: ChargeContractEntry = {
+    entryType: 'payout_accrual',
+    direction: 'credit',
+    entryRef: 'charge-1:provider',
+    accountRef: accountRefForProvider('business-1', 'USD'),
+    transactionRef: 'charge-1',
+    idempotencyKey: 'charge-1',
+    createdAt: 10,
+    sourceDigest: 'source-charge',
+    evidenceRefs: ['invocation:test'],
+    amount: amount('USD', '450', 2),
+    businessId: 'business-1',
+    invocationRef: 'inv-test',
+    attemptRef: 'attempt-test',
+  }
+  const rake: ChargeContractEntry = {
+    entryType: 'rake',
+    direction: 'credit',
+    entryRef: 'charge-1:rake',
+    accountRef: accountRefForRake('USD'),
+    transactionRef: 'charge-1',
+    idempotencyKey: 'charge-1',
+    createdAt: 10,
+    sourceDigest: 'source-charge',
+    evidenceRefs: ['invocation:test'],
+    amount: amount('USD', '50', 2),
+    businessId: 'business-1',
+  }
+  const selected = selectChargeEntries(
+    input.recovery === undefined ? [charge, provider, rake] : [charge, provider, rake, input.recovery],
+  )
+  if (selected === undefined) throw new Error('charge_contract_fixture_missing')
+  return {
+    original: {
+      transactionRef: 'charge-1',
+      kind: 'charge',
+      idempotencyKey: 'charge-1',
+      principalId: 'clerk_api_key:key-1',
+      accountId: ownerId,
+      credentialId: 'key-1',
+      currency: 'USD',
+      exponent: 2,
+      amount: amount('USD', '500', 2),
+      createdAt: 10,
+    },
+    usage: {
+      principalId: 'clerk_api_key:key-1',
+      credentialId: 'key-1',
+      accountId: ownerId,
+      businessId: 'business-1',
+      transactionRef: 'charge-1',
+      chargeState: 'paid',
+      amount: amount('USD', '500', 2),
+      observedAt: 10,
+      invocationRef: 'inv-test',
+      attemptRef: 'attempt-test',
+    },
+    selected,
+    operator: { accountRef: accountRefForOwner(ownerId, 'USD') },
+    provider: { accountRef: accountRefForProvider('business-1', 'USD') },
+    rake: { accountRef: accountRefForRake('USD') },
+  }
 }

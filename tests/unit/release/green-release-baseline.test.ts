@@ -57,7 +57,6 @@ describe('green release baseline', () => {
       'check:convex-codegen',
       'lint',
       'typecheck',
-      'check:kernel-retirement',
       'test:release:unit',
       'test:release:integration',
       'test:types',
@@ -91,19 +90,6 @@ describe('green release baseline', () => {
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()
 
-    const hosted = workflow.jobs?.['hosted-proof']
-    expect(hosted).toBeDefined()
-    expect(hosted?.if).toBe('github.event_name != \'pull_request\' && github.ref == \'refs/heads/main\'')
-    expect(hosted?.environment).toBe('production')
-    expect(hosted?.needs).toBe('source-proof')
-    const hostedCodegenIndex = hosted?.steps?.findIndex((step) => step.name === 'Verify committed Convex generated source') ?? -1
-    const hostedCodegen = hosted?.steps?.[hostedCodegenIndex]
-    expect(hostedCodegenIndex).toBeGreaterThanOrEqual(0)
-    expect(hosted?.steps?.findIndex((step) => step.name === 'Refuse a checkout other than the triggering revision')).toBeLessThan(hostedCodegenIndex)
-    expect(hosted?.steps?.findIndex((step) => step.name === 'Deploy the dual-compatible exact clean source revision')).toBeGreaterThan(hostedCodegenIndex)
-    expect(hostedCodegen?.run).toBe('npm run check:convex-codegen')
-    expect(hostedCodegen?.env?.CONVEX_DEPLOY_KEY).toBe('${{ secrets.CONVEX_DEPLOY_KEY }}')
-
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     for (const upload of uploads) {
       const artifactName = upload.with?.name ?? ''
@@ -113,7 +99,7 @@ describe('green release baseline', () => {
         expect(upload.if).toBe("inputs.live_gateway_stage == 'prepare'")
       } else {
         expect(upload.if).toBe('always()')
-        expect(artifactName).toMatch(/(?:source-release-gate|hosted-request-curated-fixture-smoke)/)
+        expect(artifactName).toContain('source-release-gate')
       }
       expect(artifactName).toContain('${{ github.sha }}')
       expect(artifactName).toContain('${{ github.run_id }}')
@@ -126,7 +112,7 @@ describe('green release baseline', () => {
     const metadataRuns = steps
       .map((step) => step.run ?? '')
       .filter((run) => run.includes('evidenceClass'))
-    expect(metadataRuns).toHaveLength(2)
+    expect(metadataRuns).toHaveLength(1)
     for (const run of metadataRuns) {
       expect(run).toContain('${GITHUB_SHA}')
       expect(run).toContain('${GITHUB_RUN_ID}')
@@ -134,27 +120,17 @@ describe('green release baseline', () => {
     }
   })
 
-  it('separates the production-approved paid gateway receipt from the hosted fixture smoke', () => {
-    const requestChain = releaseCommandChain('test:release:hosted:request')
-    expect(requestChain).toContain('test:release:hosted:readback')
-    expect(requestChain).toContain('smoke:customer-request:production:temporary-key')
-    expect(requestChain).toContain('smoke:customer-request:production:human')
-    expect(requestChain).not.toContain('smoke:gateway:production')
-
-    expect(releaseCommandChain('test:release:hosted')).not.toContain('smoke:gateway:production')
-    const gatewayChain = releaseCommandChain('test:release:hosted:live-gateway')
+  it('keeps the paid gateway smoke explicit and production-approved', () => {
+    expect(releaseCommandChain('test:release')).not.toContain('smoke:gateway:production')
+    const gatewayChain = releaseCommandChain('test:release:live-gateway')
     expect(gatewayChain.match(/npm run smoke:gateway:production/g)).toHaveLength(1)
 
     const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
-    const hosted = workflow.jobs?.['hosted-proof']
     const live = workflow.jobs?.['live-gateway-proof']
-    expect(hosted?.name).toBe('Exact-revision production Request curated fixture smoke')
-    expect(hosted?.steps?.some((step) => step.run?.includes('test:release:hosted:gateway'))).toBe(false)
-    expect(hosted?.steps?.some((step) => step.name === 'Record limitation: hosted supply checks cover curated fixtures only')).toBe(true)
     expect(live?.if).toBe("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true")
     expect(live?.name).toBe('Opt-in production-approved exact-revision paid gateway smoke')
     expect(live?.environment).toBe('production')
-    expect(live?.needs).toEqual(['source-proof', 'hosted-proof'])
+    expect(live?.needs).toBe('source-proof')
 
     const prepareIndex = live?.steps?.findIndex((step) => step.name === 'Prepare a run-scoped paid Checkout before any external payment') ?? -1
     const preparationUploadIndex = live?.steps?.findIndex((step) => step.name === 'Upload the exact run-scoped Checkout preparation artifact') ?? -1
@@ -215,9 +191,13 @@ describe('green release baseline', () => {
     expect(dispatch?.inputs?.live_gateway_run_id?.type).toBe('string')
     expect(dispatch?.inputs?.live_gateway_stage?.type).toBe('choice')
     expect(dispatch?.inputs?.live_gateway_prepare_workflow_run_id?.type).toBe('string')
-    expect(hosted?.env?.AE_X402_PAYMENT_CREDENTIAL_REF).toBe('${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}')
-    expect(hosted?.env?.AE_X402_PAYMENT_PRIVATE_KEY).toBe('${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}')
-    expect(hosted?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
+    expect(live?.env?.CDP_API_KEY_ID).toBe('${{ secrets.CDP_API_KEY_ID }}')
+    expect(live?.env?.CDP_API_KEY_SECRET).toBe('${{ secrets.CDP_API_KEY_SECRET }}')
+    expect(live?.env?.CDP_WALLET_SECRET).toBe('${{ secrets.CDP_WALLET_SECRET }}')
+    expect(live?.env?.AE_X402_CDP_ACCOUNT_NAME).toBe('${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}')
+    expect(live?.env?.AE_X402_CUSTODY_ENABLED).toBe('true')
+    expect(live?.env?.AE_X402_CUSTODY_MAX_ATOMIC).toBe('${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}')
+    expect(live?.env?.AE_X402_RPC_URLS_JSON).toBe('${{ secrets.AE_X402_RPC_URLS_JSON }}')
   })
 
   it('keeps React Doctor explicitly advisory', () => {

@@ -35,16 +35,11 @@ describe('Convex authz helpers', () => {
     }
   })
 
-  it('derives business actors from Convex Clerk identity and never from browser authority payloads', async () => {
+  it('derives business actors from Convex Clerk identity', async () => {
     const anonymous = await resolveBusinessActor(authCtx(new FakeDb(), null))
     expect(anonymous).toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })
 
-    const actor = await resolveBusinessActor(authCtx(new FakeDb(), sam()), {
-      actor: { kind: 'authenticated_owner', clerkUserId: 'browser_supplied' },
-      ownerId: 'browser-owner',
-      adminId: 'browser-admin',
-      clerkUserId: 'browser-clerk',
-    })
+    const actor = await resolveBusinessActor(authCtx(new FakeDb(), sam()))
 
     expect(actor).toMatchObject({
       kind: 'authenticated_owner',
@@ -52,28 +47,17 @@ describe('Convex authz helpers', () => {
       displayName: 'Sam Owner',
       sessionRef: 'clerk|user_sam',
     })
-    expect(actor).not.toMatchObject({ clerkUserId: 'browser_supplied' })
   })
 
-  it('fails closed for admin membership once listed memberships were unlisted', async () => {
+  it('denies callers without a durable admin membership', async () => {
     const db = new FakeDb()
 
-    await expect(resolveAdminAuthority(authCtx(db, null), 'set_operator_control')).resolves.toEqual({
+    await expect(resolveAdminAuthority(authCtx(db, null), 'register_capability_supply')).resolves.toEqual({
       kind: 'denied',
       reason: 'missing_membership',
     })
 
-    await expect(resolveAdminAuthority(authCtx(db, alex()), 'set_operator_control')).resolves.toEqual({
-      kind: 'denied',
-      reason: 'missing_membership',
-    })
-
-    await expect(resolveAdminAuthority(authCtx(db, support()), 'set_operator_control')).resolves.toEqual({
-      kind: 'denied',
-      reason: 'missing_membership',
-    })
-
-    await expect(resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')).resolves.toEqual({
+    await expect(resolveAdminAuthority(authCtx(db, sam()), 'register_capability_supply')).resolves.toEqual({
       kind: 'denied',
       reason: 'missing_membership',
     })
@@ -85,7 +69,7 @@ describe('Convex authz helpers', () => {
       subject: 'user_sam',
       issuer: 'https://clerk.example.test',
     } as UserIdentity
-    await expect(resolveAdminAuthority(authCtx(db, missingTokenIdentity), 'set_operator_control')).resolves.toEqual({
+    await expect(resolveAdminAuthority(authCtx(db, missingTokenIdentity), 'register_capability_supply')).resolves.toEqual({
       kind: 'denied',
       reason: 'missing_membership',
     })
@@ -155,30 +139,5 @@ function sam(): UserIdentity {
     issuer: 'https://clerk.example.test',
     name: 'Sam Owner',
     email: 'sam@example.test',
-  }
-}
-
-
-function alex(): UserIdentity {
-  return {
-    tokenIdentifier: 'clerk|user_alex',
-    subject: 'user_alex',
-    issuer: 'https://clerk.example.test',
-  }
-}
-
-function support(): UserIdentity {
-  return {
-    tokenIdentifier: 'clerk|user_support',
-    subject: 'user_support',
-    issuer: 'https://clerk.example.test',
-  }
-}
-
-function revoked(): UserIdentity {
-  return {
-    tokenIdentifier: 'clerk|user_revoked',
-    subject: 'user_revoked',
-    issuer: 'https://clerk.example.test',
   }
 }

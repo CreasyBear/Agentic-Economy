@@ -18,6 +18,7 @@ import {
   type OperationCompareResult,
 } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
 import { registryOperationsDetailAction, registryOperationsSearchAction } from '@/modules/registry/operations.actions'
 
 const operationRecord: CapabilityOperationSourceRecord = {
@@ -136,6 +137,50 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'registry.operations.detail',
     })
+  })
+  it('carries an additive Base USDC price breakdown through projection and wire roundtrip', () => {
+    const operation = projectCapabilityOperation({
+      ...operationRecord,
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1100', exponent: 2 } },
+      priceBreakdown: {
+        providerQuotedAmount: { currency: 'USD', units: '1000', exponent: 2 },
+        agenticEconomyFee: { currency: 'USD', units: '100', exponent: 2 },
+        totalBuyerAuthorization: { currency: 'USD', units: '1100', exponent: 2 },
+        network: 'eip155:8453',
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      },
+    }, 2_000)
+    const wire = serializeOperationDescriptor(operation)
+    expect(wire.commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
+    expect(deserializeOperationDescriptor(wire).commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
+  })
+  it('preserves backward absence and pinned fee rounding cases', () => {
+    expect(serializeOperationDescriptor(projectCapabilityOperation(operationRecord, 2_000)).commercial).not.toHaveProperty('priceBreakdown')
+    const cases = [
+      { provider: '1000', fee: '100', total: '1100' },
+      { provider: '1', fee: '1', total: '2' },
+      { provider: '0', fee: '0', total: '0' },
+      { provider: '9223372036854775807', fee: '922337203685477581', total: '10145709240540253388' },
+    ] as const
+    for (const value of cases) {
+      const config = {
+        version: 'pricing:v2' as const,
+        unit: 'call' as const,
+        providerAmount: { currency: 'USD', units: value.provider, exponent: 2 },
+        platformFee: { currency: 'USD', units: value.fee, exponent: 2 },
+        paidAmount: { currency: 'USD', units: value.total, exponent: 2 },
+      }
+      expect(normalizePricingConfig(config).kind).toBe('valid')
+      expect(pricingConfigDigest(config)).not.toBe('invalid')
+    }
+    const corrupted = {
+      version: 'pricing:v2' as const,
+      unit: 'call' as const,
+      providerAmount: { currency: 'USD', units: '1000', exponent: 2 },
+      platformFee: { currency: 'USD', units: '99', exponent: 2 },
+      paidAmount: { currency: 'USD', units: '1099', exponent: 2 },
+    }
+    expect(normalizePricingConfig(corrupted)).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
   })
   it('requires a fixed exact zero price for anonymous keyless eligibility', () => {
     const base = {

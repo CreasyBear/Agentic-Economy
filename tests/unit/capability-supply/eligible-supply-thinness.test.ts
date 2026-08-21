@@ -5,36 +5,40 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
+const listsSource = readFileSync('convex/capabilitySupplyLists.ts', 'utf8')
+const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
+const sharedSource = readFileSync('convex/capabilitySupplyShared.ts', 'utf8')
+const convexSupply = [convexHost, listsSource, commandsSource, sharedSource].join('\n')
 const moduleRoot = 'src/modules/capability-supply/internal/eligibility'
 
 describe('capability-supply eligible-supply thinness', () => {
   it('does not keep list/exact inventory bodies in the Convex host', () => {
-    expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
-    expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
-    expect(convexHost).not.toMatch(/reason:\s*['"]contract_integrity_failure['"]\s+as const/)
-    expect(convexHost).not.toMatch(/MAX_ELIGIBLE_SUPPLY\s*=/)
-    expect(convexHost).not.toMatch(/listAdmittedConformantBindingsByNetwork/)
-    expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
+    expect(convexSupply).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
+    expect(convexSupply).not.toMatch(/reason: 'supply_integrity_failure' as const/)
+    expect(convexSupply).not.toMatch(/reason:\s*['"]contract_integrity_failure['"]\s+as const/)
+    expect(convexSupply).not.toMatch(/MAX_ELIGIBLE_SUPPLY\s*=/)
+    expect(convexSupply).not.toMatch(/listAdmittedConformantBindingsByNetwork/)
+    expect(convexSupply).not.toMatch(/bindings\.length > input\.limit/)
   })
 
   it('keeps thin (db, input) wrappers via eligibleSupplyPorts', () => {
-    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
-    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
-    expect(convexHost).toContain('eligibleSupplyPorts')
-    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule')
-    expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')
-    expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
-    expect(convexHost).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
-    expect(convexHost).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
-    expect(convexHost).toMatch(/getEligibleExactCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
+    expect(convexSupply).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
+    expect(convexSupply).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
+    expect(convexSupply).toContain('eligibleSupplyPorts')
+    expect(convexSupply).toContain('listIntegratedCapabilitySupplyFromModule')
+    expect(convexSupply).toContain('getEligibleExactCapabilitySupplyFromModule')
+    expect(convexSupply).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
+    expect(convexSupply).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
+    expect(convexSupply).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
+    expect(convexSupply).toMatch(/getEligibleExactCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
   })
 
   it('leaves listIntegrated internalQuery wire and canonical publish writers in the host', () => {
     expect(convexHost).toMatch(/export const listIntegrated\s*=/)
     expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
     expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
-    expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
-    expect(convexHost).toMatch(/async function ownsPublishedBusiness\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityOffering\s*\(/)
+    expect(convexSupply).toMatch(/async function ownsPublishedBusiness\s*\(/)
   })
 
   it('keeps eligibility inventory modules free of Convex runtime imports', () => {

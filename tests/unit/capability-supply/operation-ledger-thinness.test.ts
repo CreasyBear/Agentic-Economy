@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
+const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
+const listsSource = readFileSync('convex/capabilitySupplyLists.ts', 'utf8')
+const convexSupply = [convexHost, commandsSource, listsSource].join('\n')
 const moduleRoot = 'src/modules/capability-supply/internal/operation-ledger'
 
 const movedBodies = [
@@ -24,33 +27,33 @@ const movedBodies = [
 describe('capability-supply operation-ledger thinness', () => {
   it('does not redefine moved ledger helpers in Convex host', () => {
     for (const symbol of movedBodies) {
-      expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
-      expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
+      expect(convexSupply).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
+      expect(convexSupply).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
     }
   })
 
   it('keeps thin (db, command, now) command re-exports via portsFor', () => {
-    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
-    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
-    expect(convexHost).toContain('capabilitySupplyOperationPorts')
-    expect(convexHost).toContain('function portsFor')
-    expect(convexHost).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityBindingCommand\s*\(/)
-    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibilityCommand\s*\(/)
-    expect(convexHost).toMatch(/export async function quarantineCapabilityBindingCommand\s*\(/)
-    expect(convexHost).toMatch(/runRegisterOfferingCommand\(\s*portsFor\(db\)/)
-    expect(convexHost).toMatch(/runRegisterBindingCommand\(\s*portsFor\(db\)/)
-    expect(convexHost).toMatch(/runSetEligibilityCommand\(\s*portsFor\(db\)/)
-    expect(convexHost).toMatch(/runQuarantineCommand\(\s*portsFor\(db\)/)
+    expect(convexSupply).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
+    expect(convexSupply).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
+    expect(convexSupply).toContain('capabilitySupplyOperationPorts')
+    expect(convexSupply).toContain('function portsFor')
+    expect(convexSupply).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityBindingCommand\s*\(/)
+    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibilityCommand\s*\(/)
+    expect(convexSupply).toMatch(/export async function quarantineCapabilityBindingCommand\s*\(/)
+    expect(convexSupply).toMatch(/runRegisterOfferingCommand\(\s*portsFor\(db\)/)
+    expect(convexSupply).toMatch(/runRegisterBindingCommand\(\s*portsFor\(db\)/)
+    expect(convexSupply).toMatch(/runSetEligibilityCommand\(\s*portsFor\(db\)/)
+    expect(convexSupply).toMatch(/runQuarantineCommand\(\s*portsFor\(db\)/)
   })
 
   it('leaves thin writer wrappers in the host and delegates listIntegrated via ports', () => {
-    expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
-    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
-    expect(convexHost).toContain('capabilitySupplyWriterPorts')
-    expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
-    expect(convexHost).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityOffering\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
+    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
+    expect(convexSupply).toContain('capabilitySupplyWriterPorts')
+    expect(convexSupply).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
+    expect(convexSupply).toMatch(/listIntegratedCapabilitySupplyFromModule\(\s*eligibleSupplyPorts\(db\)/)
     expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
     expect(convexHost).not.toMatch(/export const publishCapability\s*=/)
   })

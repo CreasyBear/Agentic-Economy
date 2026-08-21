@@ -1,8 +1,14 @@
-import { decodePaymentSignatureHeader } from '@x402/core/http'
+import {
+  decodePaymentSignatureHeader,
+  encodePaymentSignatureHeader,
+} from '@x402/core/http'
 import { declarePaymentIdentifierExtension, extractPaymentIdentifier } from '@x402/extensions/payment-identifier'
 import { describe, expect, it } from 'vitest'
 
-import { createEvmX402PaymentSignature } from '@/modules/capability-supply/internal/x402-payment-signer'
+import {
+  createSandboxEvmX402PaymentSignature,
+  readX402PaymentPayerAndNonce,
+} from '@/modules/capability-supply/internal/x402-payment-signer'
 
 describe('x402 route payment signer', () => {
   it('uses the official v2 exact EVM mechanism and preserves the operation identity', async () => {
@@ -12,7 +18,7 @@ describe('x402 route payment signer', () => {
       payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C', maxTimeoutSeconds: 60,
       extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' },
     }
-    const signature = await createEvmX402PaymentSignature({
+    const signature = await createSandboxEvmX402PaymentSignature({
       credential: `0x${'11'.repeat(32)}`,
       paymentIdentifier: `sha256:${'ab'.repeat(32)}`,
       selectedRequirement,
@@ -25,6 +31,10 @@ describe('x402 route payment signer', () => {
     })
 
     expect(signature).toEqual(expect.any(String))
+    expect(readX402PaymentPayerAndNonce(signature ?? '')).toMatchObject({
+      payer: expect.stringMatching(/^0x[0-9a-f]{40}$/i),
+      nonce: expect.stringMatching(/^0x[0-9a-f]{64}$/i),
+    })
     const payload = decodePaymentSignatureHeader(signature ?? '')
     expect(payload).toMatchObject({
       x402Version: 2,
@@ -50,7 +60,7 @@ describe('x402 route payment signer', () => {
       maxTimeoutSeconds: 60,
       extra: { assetTransferMethod: 'eip3009', name: 'USDC', version: '2' },
     }
-    await expect(createEvmX402PaymentSignature({
+    await expect(createSandboxEvmX402PaymentSignature({
       credential: `0x${'11'.repeat(32)}`,
       paymentIdentifier: `sha256:${'ab'.repeat(32)}`,
       selectedRequirement: requirement,
@@ -60,5 +70,42 @@ describe('x402 route payment signer', () => {
         accepts: [requirement],
       },
     })).resolves.toBeUndefined()
+  })
+
+  it('rejects malformed and Permit2 payloads as EIP-3009 authorization identity', () => {
+    const accepted = {
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '1',
+      asset: '0x833589fCD6e5BebaC2B0b6B4D8e5cD5B5C3aA123',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      maxTimeoutSeconds: 60,
+      extra: {},
+    } as const
+    const base = {
+      x402Version: 2 as const,
+      accepted,
+    }
+    expect(readX402PaymentPayerAndNonce(encodePaymentSignatureHeader({
+      ...base,
+      payload: {
+        signature: '0x1234',
+        authorization: { from: '0x0000000000000000000000000000000000000001' },
+      },
+    }))).toBeUndefined()
+    expect(readX402PaymentPayerAndNonce(encodePaymentSignatureHeader({
+      ...base,
+      payload: {
+        signature: `0x${'11'.repeat(65)}`,
+        permit2Authorization: {
+          from: '0x0000000000000000000000000000000000000001',
+          permitted: { token: accepted.asset, amount: '1' },
+          spender: accepted.payTo,
+          nonce: '1',
+          deadline: '2',
+          witness: { to: accepted.payTo, validAfter: '0' },
+        },
+      },
+    }))).toBeUndefined()
   })
 })

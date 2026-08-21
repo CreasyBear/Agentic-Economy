@@ -229,7 +229,7 @@ describe('capability operation search ranking', () => {
     expect(operationDetailOutputSchema.safeParse(result).success).toBe(true)
     expect(operationDetailOutputSchema.safeParse({
       ...result,
-      operation: { ...operation, callVia: '/api/v1/operations/execute' },
+      operation: { ...operation, callVia: '/api/v1/operations/other' },
     }).success).toBe(false)
     expect(operationDetailOutputSchema.safeParse({
       ...result,

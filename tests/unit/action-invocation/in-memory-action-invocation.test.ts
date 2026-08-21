@@ -11,6 +11,7 @@ vi.mock('@/modules/registry/registry.functions', () => ({
 }))
 
 import { findAction } from '@/modules/actions'
+import { requireDurableWriteFixtureAction } from '../../helpers/durable-write-fixture-action'
 import { createDevelopmentEvidenceVerifier } from '../../../tools/dev/fixtures/capability-supply/development-evidence-fixture'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -87,11 +88,11 @@ describe('in-memory Action Invocation tracer', () => {
   it.each([
     ['Request-owned', requestOrigin],
     ['standalone', standaloneOrigin],
-  ])('prepares, exactly authorizes, and runs inquiry.submit for %s origin', async (_label, origin) => {
-    const action = findAction('inquiry.submit')!
+  ])('prepares, exactly authorizes, and runs test.durable_write for %s origin', async (_label, origin) => {
+    const action = requireDurableWriteFixtureAction()
     const developmentAdapter = vi.fn().mockResolvedValue({
       kind: 'ok',
-      code: 'inquiry_submitted',
+      code: 'operation_invoked',
       receipt: {
         threadId: 'mock:thread:0001',
         businessId: 'mock:business:plumber',
@@ -114,13 +115,13 @@ describe('in-memory Action Invocation tracer', () => {
       origin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
 
     expect(developmentAdapter).not.toHaveBeenCalled()
     expect(prepared).toMatchObject({
-      action: { id: 'inquiry.submit', contractVersion: 'inquiry.submit:v1' },
+      action: { id: 'test.durable_write', contractVersion: 'test.durable_write:v1' },
       prepared: {
         target: inquiryInput.target,
         consequence: 'communication',
@@ -185,7 +186,7 @@ describe('in-memory Action Invocation tracer', () => {
   })
 
   it('refuses cross-principal authority and invalidates changed material input without running', async () => {
-    const action = findAction('inquiry.submit')!
+    const action = requireDurableWriteFixtureAction()
     const developmentAdapter = vi.fn()
     const tracer = createInMemoryActionInvocationTracer({
       action,
@@ -197,7 +198,7 @@ describe('in-memory Action Invocation tracer', () => {
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
 
@@ -251,7 +252,7 @@ describe('in-memory Action Invocation tracer', () => {
     ['standalone', standaloneOrigin],
   ])('records attributable pre-release retry and post-release uncertainty for %s origin', async (_label, origin) => {
     const evidenceSource = createDevelopmentEvidenceVerifier()
-    const action = findAction('inquiry.submit')!
+    const action = requireDurableWriteFixtureAction()
     const release = createDevelopmentReleaseSignal()
     const developmentAdapter = vi.fn()
       .mockRejectedValueOnce(new Error('MOCK pre-release connection refusal'))
@@ -275,7 +276,7 @@ describe('in-memory Action Invocation tracer', () => {
       origin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
     const decision = await tracer.decide({
@@ -355,7 +356,7 @@ describe('in-memory Action Invocation tracer', () => {
       kind: 'action_invocation_reconciliation',
       version: 1,
       evidenceRef: `mock:forged:${origin.kind}:not-released`,
-      source: 'inquiry.submit:delivery-observer:v1',
+      source: 'test.durable_write:delivery-observer:v1',
       invocationRef: prepared.invocationRef,
       attemptRef: `dev:attempt:${origin.kind}:2`,
       effectGeneration: uncertain.view.attempts[1]!.effectGeneration,
@@ -387,7 +388,7 @@ describe('in-memory Action Invocation tracer', () => {
         kind: 'action_invocation_reconciliation',
         version: 1,
         evidenceRef: `mock:evidence:${origin.kind}:released`,
-        source: 'inquiry.submit:delivery-observer:v1',
+        source: 'test.durable_write:delivery-observer:v1',
         invocationRef: prepared.invocationRef,
         attemptRef: `dev:attempt:${origin.kind}:2`,
         effectGeneration: uncertain.view.attempts[1]!.effectGeneration,
@@ -425,7 +426,7 @@ describe('in-memory Action Invocation tracer', () => {
 
   it('fails closed when no release observer can prove a runner throw happened before release', async () => {
     const evidenceSource = createDevelopmentEvidenceVerifier()
-    const action = findAction('inquiry.submit')!
+    const action = requireDurableWriteFixtureAction()
     const developmentAdapter = vi.fn().mockRejectedValue(new Error('MOCK unobserved interruption'))
     const tracer = createInMemoryActionInvocationTracer({
       action,
@@ -439,7 +440,7 @@ describe('in-memory Action Invocation tracer', () => {
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
     const decision = await tracer.decide({
@@ -480,7 +481,7 @@ describe('in-memory Action Invocation tracer', () => {
         kind: 'action_invocation_reconciliation',
         version: 1,
         evidenceRef: 'mock:evidence:missing-observer:not-released',
-        source: 'inquiry.submit:delivery-observer:v1',
+        source: 'test.durable_write:delivery-observer:v1',
         invocationRef: prepared.invocationRef,
         attemptRef: 'dev:attempt:missing-observer:1',
         effectGeneration: uncertain.view.attempts[0]!.effectGeneration,
@@ -521,7 +522,7 @@ describe('in-memory Action Invocation tracer', () => {
         if (releasePosture === 'possibly_after_release') release.markReleased()
       }))
       const tracer = createInMemoryActionInvocationTracer({
-        action: findAction('inquiry.submit')!,
+        action: requireDurableWriteFixtureAction(),
         now: () => '2026-07-19T08:30:00.000Z',
         nextInvocationRef: () => `dev:timeout:${origin.kind}:${releasePosture}`,
         nextAuthorityRef: () => `opaque:timeout:${origin.kind}:${releasePosture}`,
@@ -533,7 +534,7 @@ describe('in-memory Action Invocation tracer', () => {
         origin,
         actor,
         input: inquiryInput,
-        context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+        context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
         freshnessMs: 60_000,
       })
       const authority = await tracer.decide({
@@ -611,7 +612,7 @@ describe('in-memory Action Invocation tracer', () => {
     let attempt = 0
     const developmentAdapter = vi.fn().mockResolvedValue({ kind: 'error', code: 'mock', retryable: false, reason: 'mock' })
     const options = {
-      action: findAction('inquiry.submit')!,
+      action: requireDurableWriteFixtureAction(),
       now: () => now,
       nextInvocationRef: () => `dev:action-invocation:fence:${origin.kind}`,
       nextAuthorityRef: () => `opaque:authority:fence:${origin.kind}`,
@@ -622,7 +623,7 @@ describe('in-memory Action Invocation tracer', () => {
       origin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 300_000,
     })
     const authority = await tracer.decide({
@@ -705,7 +706,7 @@ describe('in-memory Action Invocation tracer', () => {
       initialSnapshot: snapshot,
       resolveSourceState: () => ({
         input: inquiryInput,
-        context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+        context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
         prepared: takeover.view.prepared!,
         observedResolution: takeover.view.observedResolution,
       }),
@@ -837,7 +838,7 @@ describe('in-memory Action Invocation tracer', () => {
     }>((resolve) => { resolveRunner = resolve })
     const developmentAdapter = vi.fn(() => pendingRunner)
     const tracer = createInMemoryActionInvocationTracer({
-      action: findAction('inquiry.submit')!,
+      action: requireDurableWriteFixtureAction(),
       now: () => '2026-07-19T10:00:00.000Z',
       nextInvocationRef: () => 'dev:action-invocation:late-completion',
       nextAuthorityRef: () => 'opaque:authority:late-completion',
@@ -847,7 +848,7 @@ describe('in-memory Action Invocation tracer', () => {
       origin: standaloneOrigin,
       actor,
       input: inquiryInput,
-      context: { developmentOnlyInquirySubmitAdapter: developmentAdapter },
+      context: { developmentOnlyDurableWriteAdapter: developmentAdapter },
       freshnessMs: 60_000,
     })
     const authority = await tracer.decide({

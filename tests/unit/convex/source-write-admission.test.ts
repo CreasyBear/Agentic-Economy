@@ -55,8 +55,8 @@ describe('Convex source-write:v2 admission', () => {
   it('rejects a sibling scope from the same key family before nonce consumption', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
-    const args = await validArgs('nonce:sibling-scope', 'public_inquiry')
-    await expect(requireSourceWrite({ db }, args, 'owner_inquiry')).resolves.toEqual({
+    const args = await validArgs('nonce:sibling-scope', 'catalog_publish')
+    await expect(requireSourceWrite({ db }, args, 'removal_dispute')).resolves.toEqual({
       kind: 'rejected',
       reason: 'source_write_scope_mismatch',
     })
@@ -76,7 +76,7 @@ describe('Convex source-write:v2 admission', () => {
     expect(db.inserts).toHaveLength(1)
   })
 
-  it.each(['public_inquiry', 'billing', 'catalog_publish'] as const)('fails closed for %s without the exact request binding', async (scope) => {
+  it.each(['discovery_repair', 'billing', 'catalog_publish'] as const)('fails closed for %s without the exact request binding', async (scope) => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
     const args = await validArgs(`nonce:missing-request:${scope}`)
@@ -89,7 +89,7 @@ describe('Convex source-write:v2 admission', () => {
   })
 })
 
-async function validArgs(nonce: string, scope: 'protected_action' | 'public_inquiry' = 'protected_action'): Promise<Record<string, unknown> & { sourceWrite: SourceWriteAdmission }> {
+async function validArgs(nonce: string, scope: 'protected_action' | 'catalog_publish' = 'protected_action'): Promise<Record<string, unknown> & { sourceWrite: SourceWriteAdmission }> {
   const command = { operationKey: 'operation:one', correlationId: 'correlation:one', value: 'one' }
   const sourceWrite = await createSourceWriteAdmission({
     env: { AE_SOURCE_WRITE_SECRET: secret },
