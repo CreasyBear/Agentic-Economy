@@ -65,7 +65,8 @@ describe('session sidebar after the first turn', () => {
         }
         expect(body.threads.length).toBeGreaterThanOrEqual(1)
         expect(body.threads[0]?.title).toBe('emergency plumber parramatta')
-        expect(server.requests.length).toBeLessThanOrEqual(3)
+        // The canonical preflight/tool/final loop makes exactly four OpenRouter requests.
+        expect(server.requests.length).toBe(4)
       } finally {
         restoreOpenRouter()
         await server.close()

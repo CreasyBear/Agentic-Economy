@@ -135,7 +135,8 @@ describe('public thread share route', () => {
         expect(seo.title).toContain('Agentic Economy')
         // Share copy must stay boundary-honest.
         expect(seo.description).not.toMatch(/book now|booking confirmed|pay now|payment required/i)
-        expect(server.requests.length).toBeLessThanOrEqual(3)
+        // The canonical preflight/tool/final loop makes exactly four OpenRouter requests.
+        expect(server.requests.length).toBe(4)
       } finally {
         restoreOpenRouter()
         await server.close()
