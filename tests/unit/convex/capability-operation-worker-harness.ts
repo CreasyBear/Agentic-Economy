@@ -13,16 +13,19 @@ const mocks = vi.hoisted(() => {
     _request: unknown,
     dependencies: {
       persistedIntent?: unknown
-      onUnsignedMaterial?: (intent: Record<string, string>) => Promise<void> | void
+      onUnsignedMaterial?: (intent: Record<string, string | number>) => Promise<void> | void
     },
   ) => {
     if (dependencies.persistedIntent === undefined) {
+      const paymentAuthorizationValidBefore = '9999999999'
       await dependencies.onUnsignedMaterial?.({
         paymentUnsignedMaterialJson: '{}',
         paymentUnsignedMaterialDigest: `sha256:${'u'.repeat(64)}`,
         paymentSigningIdempotencyKey: '11111111-1111-4111-8111-111111111111',
         paymentPayer: '0xmock-payer',
         paymentNonce: 'nonce:test-worker',
+        paymentAuthorizationValidBefore,
+        paymentAuthorizationExpiresAt: Number(BigInt(paymentAuthorizationValidBefore) * 1000n),
         requestFingerprint: `sha256:${'f'.repeat(64)}`,
       })
     }
@@ -197,6 +200,8 @@ type PaymentState = {
     paymentSignatureDigest?: string
     paymentPayer?: string
     paymentNonce?: string
+    paymentAuthorizationValidBefore?: string
+    paymentAuthorizationExpiresAt?: number
     requestFingerprint?: string
   }
 }
@@ -534,6 +539,12 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       ...(authorization.paymentNonce === undefined
         ? {}
         : { paymentNonce: authorization.paymentNonce }),
+      ...(authorization.paymentAuthorizationValidBefore === undefined
+        ? {}
+        : { paymentAuthorizationValidBefore: authorization.paymentAuthorizationValidBefore }),
+      ...(authorization.paymentAuthorizationExpiresAt === undefined
+        ? {}
+        : { paymentAuthorizationExpiresAt: authorization.paymentAuthorizationExpiresAt }),
       ...(authorization.requestFingerprint === undefined
         ? {}
         : { requestFingerprint: authorization.requestFingerprint }),
@@ -935,7 +946,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             && authorization.paymentSigningIdempotencyKey !== undefined
             && authorization.paymentSignatureDigest !== undefined
             && authorization.paymentPayer !== undefined
-            && authorization.paymentNonce !== undefined) {
+            && authorization.paymentNonce !== undefined
+            && authorization.paymentAuthorizationValidBefore !== undefined
+            && authorization.paymentAuthorizationExpiresAt !== undefined) {
             return {
               kind: 'stored',
               paymentUnsignedMaterialJson: authorization.paymentUnsignedMaterialJson,
@@ -944,6 +957,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
               paymentSignatureDigest: authorization.paymentSignatureDigest,
               paymentPayer: authorization.paymentPayer,
               paymentNonce: authorization.paymentNonce,
+              paymentAuthorizationValidBefore: authorization.paymentAuthorizationValidBefore,
+              paymentAuthorizationExpiresAt: authorization.paymentAuthorizationExpiresAt,
               requestFingerprint: authorization.requestFingerprint ?? requestFingerprint,
             }
           }
@@ -953,7 +968,9 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             || authorization.paymentSigningIdempotencyKey !== undefined
             || authorization.paymentSignatureDigest !== undefined
             || authorization.paymentPayer !== undefined
-            || authorization.paymentNonce !== undefined) {
+            || authorization.paymentNonce !== undefined
+            || authorization.paymentAuthorizationValidBefore !== undefined
+            || authorization.paymentAuthorizationExpiresAt !== undefined) {
             return { kind: 'pending' }
           }
           authorization.claimed = true
@@ -995,6 +1012,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           state.payment.authorization.paymentSigningIdempotencyKey = args.paymentSigningIdempotencyKey as string
           state.payment.authorization.paymentPayer = args.paymentPayer as string
           state.payment.authorization.paymentNonce = args.paymentNonce as string
+          state.payment.authorization.paymentAuthorizationValidBefore = args.paymentAuthorizationValidBefore as string
+          state.payment.authorization.paymentAuthorizationExpiresAt = args.paymentAuthorizationExpiresAt as number
           state.payment.authorization.requestFingerprint = args.requestFingerprint as string
           return null
         case 'moneyX402PaymentAttempts:recordX402PaymentSignatureDigest':

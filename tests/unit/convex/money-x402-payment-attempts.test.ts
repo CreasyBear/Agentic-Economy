@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   claimX402PaymentAuthorization,
+  listExpiredPreparedX402PaymentAttempts,
   markX402PaymentPossiblySubmitted,
   observeX402PaymentAttempt,
   prepareX402PaymentAuthorization,
@@ -15,7 +16,10 @@ import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
 type Row = Record<string, unknown> & { _id: string }
-type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
+type QueryBuilder = {
+  eq: (field: string, value: unknown) => QueryBuilder
+  lte: (field: string, value: unknown) => QueryBuilder
+}
 type Query = {
   withIndex: (name: string, build: (query: QueryBuilder) => QueryBuilder) => Query
   unique: () => Promise<Row | null>
@@ -37,6 +41,7 @@ const recordDigest = (recordX402PaymentSignatureDigest as unknown as HandlerExpo
 const recordIntent = (recordX402PaymentSigningIntent as unknown as HandlerExport)._handler
 const markPossiblySubmitted = (markX402PaymentPossiblySubmitted as unknown as HandlerExport)._handler
 const observe = (observeX402PaymentAttempt as unknown as HandlerExport)._handler
+const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 
 const custodyRef = 'sha256:custody'
 const authorizationDigest = 'sha256:authorization'
@@ -47,6 +52,8 @@ const secondDigest = canonicalDigest('header:second')
 const paymentPayer = '0x0000000000000000000000000000000000000001'
 const paymentNonce = `0x${'11'.repeat(32)}`
 const signingKey = '11111111-1111-4111-8111-111111111111'
+const paymentAuthorizationValidBefore = '999'
+const paymentAuthorizationExpiresAt = 999_000
 
 const unsignedMaterial = {
   x402Version: 2,
@@ -72,7 +79,7 @@ const unsignedMaterial = {
     domain: { chainId: '8453' },
     types: { TransferWithAuthorization: [{ name: 'value', type: 'uint256' }] },
     primaryType: 'TransferWithAuthorization',
-    message: { value: '1' },
+    message: { value: '1', validBefore: '999' },
   },
 } as const
 
@@ -129,6 +136,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentSignatureDigest: firstDigest,
       paymentPayer,
       paymentNonce,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
       requestFingerprint: fingerprint,
     })
     expect(material).not.toHaveProperty('paymentSignature')
@@ -149,10 +158,52 @@ describe('money x402 payment authorization attempt', () => {
     await recordIntent({ db }, intentArgs())
     await expect(recordIntent({ db }, intentArgs({ paymentUnsignedMaterialJson: `${unsignedMaterialJson} ` })))
       .rejects.toThrow('x402_payment_unsigned_material_invalid')
+    await expect(recordIntent({ db }, intentArgs({
+      paymentAuthorizationValidBefore: '1000',
+      paymentAuthorizationExpiresAt: 1_000_000,
+    }))).rejects.toThrow('x402_payment_unsigned_identity_conflict')
     await expect(recordIntent({ db }, intentArgs({ paymentSigningIdempotencyKey: '22222222-2222-4222-8222-222222222222' })))
       .rejects.toThrow('x402_payment_unsigned_identity_conflict')
     await expect(recordDigest({ db }, digestArgs({ paymentPayer: '0xother' })))
       .rejects.toThrow('x402_payment_authorization_material_invalid')
+  })
+
+  it.each([
+    ['non-decimal', '1e3', 1_000_000],
+    ['noncanonical', '0999', 999_000],
+    ['overflow', '9007199254740992', Number.MAX_SAFE_INTEGER],
+    ['mismatched milliseconds', paymentAuthorizationValidBefore, paymentAuthorizationExpiresAt + 1],
+  ] as const)('rejects invalid expiry identity: %s', async (_label, validBefore, expiresAt) => {
+    const db = new MemoryDb()
+    db.seed(attempt())
+    await expect(recordIntent({ db }, intentArgs({
+      paymentAuthorizationValidBefore: validBefore,
+      paymentAuthorizationExpiresAt: expiresAt,
+    }))).rejects.toThrow('x402_payment_unsigned_material_invalid')
+  })
+
+  it('refuses a partial first-win expiry identity', async () => {
+    const db = new MemoryDb()
+    db.seed({ ...attempt(), paymentAuthorizationValidBefore })
+    await expect(recordIntent({ db }, intentArgs()))
+      .rejects.toThrow('x402_payment_unsigned_identity_conflict')
+  })
+
+  it('refuses to record a signature digest for a partial expiry identity', async () => {
+    const db = new MemoryDb()
+    db.seed({
+      ...attempt(),
+      paymentUnsignedMaterialJson: unsignedMaterialJson,
+      paymentUnsignedMaterialDigest: unsignedMaterialDigest,
+      paymentSigningIdempotencyKey: signingKey,
+      paymentPayer,
+      paymentNonce,
+      paymentAuthorizationValidBefore,
+    })
+
+    await expect(recordDigest({ db }, digestArgs()))
+      .rejects.toThrow('x402_payment_authorization_material_invalid')
+    expect(db.rows('moneyX402PaymentAttempts')[0]).not.toHaveProperty('paymentSignatureDigest')
   })
 
   it('gates managed authorization reads and writes on the expected generation', async () => {
@@ -194,6 +245,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentUnsignedMaterialDigest: unsignedMaterialDigest,
       paymentSigningIdempotencyKey: signingKey,
       paymentSignatureDigest: firstDigest,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
     })
     expect(material).not.toHaveProperty('paymentSignature')
     await expect(claim({ db }, claimArgs())).resolves.toMatchObject({
@@ -201,6 +254,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentUnsignedMaterialDigest: unsignedMaterialDigest,
       paymentSigningIdempotencyKey: signingKey,
       paymentSignatureDigest: firstDigest,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
     })
   })
 
@@ -213,6 +268,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentSigningIdempotencyKey: signingKey,
       paymentPayer,
       paymentNonce,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
       paymentSignatureDigest: firstDigest,
       paymentSigningClaimedAt: 1,
     })
@@ -233,6 +290,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentSignatureDigest: firstDigest,
       paymentPayer,
       paymentNonce,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
       paymentSigningClaimedAt: 1,
     })
 
@@ -265,6 +324,8 @@ describe('money x402 payment authorization attempt', () => {
       paymentSignatureDigest: firstDigest,
       paymentPayer,
       paymentNonce,
+      paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt,
       paymentSigningClaimedAt: 1,
     })
     db.loseAcknowledgementAfterNextPatch()
@@ -303,6 +364,61 @@ describe('money x402 payment authorization attempt', () => {
       evidenceRefs: ['evidence:receipt'],
     })
   })
+
+  it('lists at most 25 redacted expired prepared candidates through the expiry index', async () => {
+    const db = new MemoryDb()
+    for (let index = 0; index < 30; index += 1) {
+      db.seed({
+        ...attempt(),
+        _id: `expired:${index}`,
+        dispatchRef: `dispatch:${index}`,
+        attemptRef: `attempt:${index}`,
+        custodyRef: `custody:${index}`,
+        authorizationDigest: `authorization:${index}`,
+        reservationRef: `reservation:${index}`,
+        paymentAuthorizationExpiresAt: 4_000 + index,
+      })
+    }
+    db.seed({ ...attempt(), state: 'prepared', paymentAuthorizationExpiresAt: 6_000 })
+    db.seed({ ...attempt(), state: 'possibly_submitted', paymentAuthorizationExpiresAt: 1_000 })
+    db.seed({ ...attempt(), state: 'observed', paymentAuthorizationExpiresAt: 1_000 })
+    db.seed({ ...attempt(), paymentAuthorizationExpiresAt: undefined })
+
+    const result = await listExpiredPrepared({ db }, { now: 5_000, limit: 25 }) as Array<Record<string, unknown>>
+    expect(db.indexCalls).toContain('by_state_and_paymentAuthorizationExpiresAt')
+    expect(result).toHaveLength(25)
+    expect(result[0]).toEqual({
+      dispatchRef: 'dispatch:0',
+      attemptRef: 'attempt:0',
+      effectGeneration: 1,
+      custodyRef: 'custody:0',
+      authorizationDigest: 'authorization:0',
+      reservationRef: 'reservation:0',
+      paymentAuthorizationExpiresAt: 4_000,
+    })
+    expect(Object.keys(result[0] ?? {}).sort()).toEqual([
+      'attemptRef',
+      'authorizationDigest',
+      'custodyRef',
+      'dispatchRef',
+      'effectGeneration',
+      'paymentAuthorizationExpiresAt',
+      'reservationRef',
+    ])
+    expect(JSON.stringify(result)).not.toContain('paymentUnsignedMaterialJson')
+    expect(JSON.stringify(result)).not.toContain('paymentSigningIdempotencyKey')
+    expect(JSON.stringify(result)).not.toContain('paymentPayer')
+    expect(JSON.stringify(result)).not.toContain('paymentNonce')
+  })
+
+  it.each([0, 26, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects expired prepared candidate limit %s',
+    async (limit) => {
+      const db = new MemoryDb()
+      await expect(listExpiredPrepared({ db }, { now: 5_000, limit }))
+        .rejects.toThrow('x402_payment_expired_prepared_limit_invalid')
+    },
+  )
 })
 
 function attempt(): Row {
@@ -378,6 +494,8 @@ function intentArgs(overrides: Record<string, unknown> = {}): Record<string, unk
     paymentSigningIdempotencyKey: signingKey,
     paymentPayer,
     paymentNonce,
+    paymentAuthorizationValidBefore,
+    paymentAuthorizationExpiresAt,
     requestFingerprint: fingerprint,
     ...overrides,
   }
@@ -429,6 +547,7 @@ class MemoryDb implements Db {
   private readonly tables = new Map<string, Row[]>()
   private throwAfterNextPatch = false
   private nextId = 1
+  readonly indexCalls: string[] = []
 
   seed(row: Row): void {
     const rows = this.tables.get('moneyX402PaymentAttempts') ?? []
@@ -453,10 +572,19 @@ class MemoryDb implements Db {
   query(table: string): Query {
     const filters: Array<(row: Row) => boolean> = []
     const query: Query = {
-      withIndex: (_name, build) => {
+      withIndex: (name, build) => {
+        this.indexCalls.push(name)
         const builder: QueryBuilder = {
           eq: (field, value) => {
             filters.push((row) => row[field] === value)
+            return builder
+          },
+          lte: (field, value) => {
+            filters.push((row) => (
+              typeof row[field] === 'number'
+              && typeof value === 'number'
+              && row[field] <= value
+            ))
             return builder
           },
         }

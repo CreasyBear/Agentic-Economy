@@ -107,6 +107,8 @@ export type CdpX402PaymentSigningIntent = Readonly<{
   paymentSigningIdempotencyKey: string
   paymentPayer: string
   paymentNonce: string
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
   requestFingerprint: string
 }>
 
@@ -410,6 +412,13 @@ async function captureUnsignedMaterial(
       || !decimalAtomicAmount(authorization.validBefore)
       || !isEip3009Nonce(authorization.nonce)
     ) return undefined
+    const expiry = paymentAuthorizationExpiryFromValidBefore(
+      capturedTypedData.message.validBefore,
+    )
+    if (
+      expiry === undefined
+      || authorization.validBefore !== expiry.paymentAuthorizationValidBefore
+    ) return undefined
     const material: CdpX402PaymentUnsignedMaterial = {
       x402Version: payload.x402Version,
       resource: required.resource,
@@ -446,6 +455,8 @@ function readPersistedUnsignedMaterial(
     || intent.requestFingerprint !== requestFingerprint
     || typeof intent.paymentUnsignedMaterialJson !== 'string'
     || typeof intent.paymentUnsignedMaterialDigest !== 'string'
+    || typeof intent.paymentAuthorizationValidBefore !== 'string'
+    || typeof intent.paymentAuthorizationExpiresAt !== 'number'
   ) return undefined
   let parsed: unknown
   try {
@@ -457,6 +468,15 @@ function readPersistedUnsignedMaterial(
     return undefined
   }
   if (!isUnsignedMaterial(parsed)) return undefined
+  const expiry = paymentAuthorizationExpiryFromValidBefore(
+    parsed.typedData.message.validBefore,
+  )
+  if (
+    expiry === undefined
+    || parsed.authorization.validBefore !== expiry.paymentAuthorizationValidBefore
+    || intent.paymentAuthorizationValidBefore !== expiry.paymentAuthorizationValidBefore
+    || intent.paymentAuthorizationExpiresAt !== expiry.paymentAuthorizationExpiresAt
+  ) return undefined
   if (
     parsed.x402Version !== required.x402Version
     || canonicalDigest(parsed.resource) !== canonicalDigest(required.resource)
@@ -477,6 +497,13 @@ function intentFromMaterial(
   paymentSigningIdempotencyKey: string,
   requestFingerprint: string,
 ): CdpX402PaymentSigningIntent {
+  const expiry = paymentAuthorizationExpiryFromValidBefore(
+    material.typedData.message.validBefore,
+  )
+  if (
+    expiry === undefined
+    || material.authorization.validBefore !== expiry.paymentAuthorizationValidBefore
+  ) throw new Error('x402_payment_authorization_expiry_invalid')
   const paymentUnsignedMaterialJson = stableStringify(material as StableHashValue)
   return {
     paymentUnsignedMaterialJson,
@@ -484,7 +511,38 @@ function intentFromMaterial(
     paymentSigningIdempotencyKey,
     paymentPayer: material.authorization.from.toLowerCase(),
     paymentNonce: material.authorization.nonce.toLowerCase(),
+    ...expiry,
     requestFingerprint,
+  }
+}
+
+function paymentAuthorizationExpiryFromValidBefore(
+  value: unknown,
+): Readonly<{
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
+}> | undefined {
+  if (typeof value !== 'string' || !/^(?:0|[1-9][0-9]*)$/.test(value)) return undefined
+  let seconds: bigint
+  try {
+    seconds = BigInt(value)
+  } catch {
+    return undefined
+  }
+  if (seconds <= 0n) return undefined
+  const milliseconds = seconds * 1000n
+  const expiresAt = Number(milliseconds)
+  if (
+    !Number.isFinite(expiresAt)
+    || !Number.isSafeInteger(expiresAt)
+    || expiresAt <= 0
+  ) return undefined
+  try {
+    return BigInt(expiresAt) === milliseconds
+      ? { paymentAuthorizationValidBefore: value, paymentAuthorizationExpiresAt: expiresAt }
+      : undefined
+  } catch {
+    return undefined
   }
 }
 

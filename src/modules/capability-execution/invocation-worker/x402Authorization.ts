@@ -55,6 +55,8 @@ type StoredX402Authorization = Readonly<{
   paymentSignatureDigest: string
   paymentPayer: string
   paymentNonce: string
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
   requestFingerprint: string
 }>
 
@@ -76,6 +78,8 @@ type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
   paymentSignatureDigest?: string
   paymentPayer?: string
   paymentNonce?: string
+  paymentAuthorizationValidBefore?: string
+  paymentAuthorizationExpiresAt?: number
   paymentSigningClaimedAt?: number
 }>
 
@@ -140,6 +144,8 @@ function storedAuthorizationFromMaterial(
     || material.paymentSignatureDigest === undefined
     || material.paymentPayer === undefined
     || material.paymentNonce === undefined
+    || material.paymentAuthorizationValidBefore === undefined
+    || material.paymentAuthorizationExpiresAt === undefined
     || material.requestFingerprint === undefined
     || !isPaymentSigningIdempotencyKey(material.paymentSigningIdempotencyKey)
   ) return undefined
@@ -150,6 +156,8 @@ function storedAuthorizationFromMaterial(
     paymentSignatureDigest: material.paymentSignatureDigest,
     paymentPayer: material.paymentPayer,
     paymentNonce: material.paymentNonce,
+    paymentAuthorizationValidBefore: material.paymentAuthorizationValidBefore,
+    paymentAuthorizationExpiresAt: material.paymentAuthorizationExpiresAt,
     requestFingerprint: material.requestFingerprint,
   }
 }
@@ -301,6 +309,8 @@ async function signAndCommitManagedAuthorization(
     material.paymentSigningIdempotencyKey,
     material.paymentPayer,
     material.paymentNonce,
+    material.paymentAuthorizationValidBefore,
+    material.paymentAuthorizationExpiresAt,
   ]
   const hasPartialIntent = intentFields.some((value) => value !== undefined)
   const persistedIntent: CdpX402PaymentSigningIntent | undefined = (
@@ -309,6 +319,8 @@ async function signAndCommitManagedAuthorization(
     && material.paymentSigningIdempotencyKey !== undefined
     && material.paymentPayer !== undefined
     && material.paymentNonce !== undefined
+    && material.paymentAuthorizationValidBefore !== undefined
+    && material.paymentAuthorizationExpiresAt !== undefined
     && material.requestFingerprint !== undefined
     && isPaymentSigningIdempotencyKey(material.paymentSigningIdempotencyKey)
   ) ? {
@@ -317,6 +329,8 @@ async function signAndCommitManagedAuthorization(
     paymentSigningIdempotencyKey: material.paymentSigningIdempotencyKey,
     paymentPayer: material.paymentPayer,
     paymentNonce: material.paymentNonce,
+    paymentAuthorizationValidBefore: material.paymentAuthorizationValidBefore,
+    paymentAuthorizationExpiresAt: material.paymentAuthorizationExpiresAt,
     requestFingerprint: material.requestFingerprint,
   } : undefined
   if (

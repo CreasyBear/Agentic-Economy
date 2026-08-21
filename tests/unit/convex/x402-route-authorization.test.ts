@@ -46,12 +46,14 @@ const CUSTODY_GENERATION = 7
 const CUSTODY_DAILY_MAXIMUM_UNITS = '100000'
 const PAYMENT_PAYER = '0xpayer'
 const PAYMENT_SIGNING_KEY = '11111111-1111-4111-8111-111111111111'
+const PAYMENT_AUTHORIZATION_VALID_BEFORE = '999'
+const PAYMENT_AUTHORIZATION_EXPIRES_AT = 999_000
 const UNSIGNED_MATERIAL = {
   x402Version: 2,
   resource: { url: 'https://provider.example/paid' },
   accepted: { scheme: 'exact', network: 'eip155:8453', amount: '1', asset: '0x833589', payTo: '0xrecipient', maxTimeoutSeconds: 60, extra: { assetTransferMethod: 'eip3009' } },
   authorization: { from: PAYMENT_PAYER, to: '0xrecipient', value: '1', validAfter: '0', validBefore: '999', nonce: 'nonce:first' },
-  typedData: { domain: { chainId: '8453' }, types: { TransferWithAuthorization: [] }, primaryType: 'TransferWithAuthorization', message: { value: '1' } },
+  typedData: { domain: { chainId: '8453' }, types: { TransferWithAuthorization: [] }, primaryType: 'TransferWithAuthorization', message: { value: '1', validBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE } },
 } as const
 const UNSIGNED_MATERIAL_JSON = stableStringify(UNSIGNED_MATERIAL as unknown as StableHashValue)
 const UNSIGNED_MATERIAL_DIGEST = canonicalDigest(UNSIGNED_MATERIAL)
@@ -86,6 +88,8 @@ describe('x402 route authorization', () => {
       paymentSignatureDigest: canonicalDigest(header),
       paymentPayer: PAYMENT_PAYER,
       paymentNonce: 'nonce:first',
+      paymentAuthorizationValidBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE,
+      paymentAuthorizationExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
     }))
     const ctx = db.actionCtx()
 
@@ -130,6 +134,8 @@ describe('x402 route authorization', () => {
       paymentSignatureDigest: canonicalDigest(header),
       paymentPayer: PAYMENT_PAYER,
       paymentNonce: 'nonce:first',
+      paymentAuthorizationValidBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE,
+      paymentAuthorizationExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
       requestFingerprint: REQUEST_FINGERPRINT,
       state: 'prepared',
     })
@@ -168,6 +174,8 @@ describe('x402 route authorization', () => {
       paymentSigningIdempotencyKey: PAYMENT_SIGNING_KEY,
       paymentPayer: PAYMENT_PAYER,
       paymentNonce: 'nonce:first',
+      paymentAuthorizationValidBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE,
+      paymentAuthorizationExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
     }))
 
     await expect(readX402Authorization(db.actionCtx(), prepared(), false, expected())).resolves.toBeUndefined()
@@ -210,6 +218,8 @@ describe('x402 route authorization', () => {
       paymentSignatureDigest: canonicalDigest(header),
       paymentPayer: PAYMENT_PAYER,
       paymentNonce: 'nonce:first',
+      paymentAuthorizationValidBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE,
+      paymentAuthorizationExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
     }
 
     const generationDb = new AuthorizationDb(material(stored))
@@ -278,6 +288,8 @@ type Material = Record<string, unknown> & {
   paymentSignatureDigest?: string
   paymentPayer?: string
   paymentNonce?: string
+  paymentAuthorizationValidBefore?: string
+  paymentAuthorizationExpiresAt?: number
   paymentSigningClaimedAt?: number
   requestFingerprint?: string
 }
@@ -359,6 +371,8 @@ function unsignedIntent(nonce = 'nonce:first'): {
   paymentSigningIdempotencyKey: string
   paymentPayer: string
   paymentNonce: string
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
   requestFingerprint: string
 } {
   const material = nonce === 'nonce:first'
@@ -373,6 +387,8 @@ function unsignedIntent(nonce = 'nonce:first'): {
     paymentSigningIdempotencyKey: PAYMENT_SIGNING_KEY,
     paymentPayer: PAYMENT_PAYER,
     paymentNonce: nonce,
+    paymentAuthorizationValidBefore: PAYMENT_AUTHORIZATION_VALID_BEFORE,
+    paymentAuthorizationExpiresAt: PAYMENT_AUTHORIZATION_EXPIRES_AT,
     requestFingerprint: REQUEST_FINGERPRINT,
   }
 }
@@ -427,6 +443,8 @@ class AuthorizationDb {
               this.row.paymentUnsignedMaterialJson !== input.paymentUnsignedMaterialJson
               || this.row.paymentUnsignedMaterialDigest !== input.paymentUnsignedMaterialDigest
               || this.row.paymentSigningIdempotencyKey !== input.paymentSigningIdempotencyKey
+              || this.row.paymentAuthorizationValidBefore !== input.paymentAuthorizationValidBefore
+              || this.row.paymentAuthorizationExpiresAt !== input.paymentAuthorizationExpiresAt
             )
           ) throw new Error('x402_payment_unsigned_identity_conflict')
           this.row = {
@@ -436,6 +454,8 @@ class AuthorizationDb {
             paymentSigningIdempotencyKey: input.paymentSigningIdempotencyKey as string,
             paymentPayer: input.paymentPayer as string,
             paymentNonce: input.paymentNonce as string,
+            paymentAuthorizationValidBefore: input.paymentAuthorizationValidBefore as string,
+            paymentAuthorizationExpiresAt: input.paymentAuthorizationExpiresAt as number,
             paymentSigningClaimedAt: this.row.paymentSigningClaimedAt ?? Date.now(),
           }
           return null
@@ -476,6 +496,8 @@ class AuthorizationDb {
             && this.row.paymentSignatureDigest !== undefined
             && this.row.paymentPayer !== undefined
             && this.row.paymentNonce !== undefined
+            && this.row.paymentAuthorizationValidBefore !== undefined
+            && this.row.paymentAuthorizationExpiresAt !== undefined
             && this.row.requestFingerprint !== undefined
           ) {
             return {
@@ -486,6 +508,8 @@ class AuthorizationDb {
               paymentSignatureDigest: this.row.paymentSignatureDigest,
               paymentPayer: this.row.paymentPayer,
               paymentNonce: this.row.paymentNonce,
+              paymentAuthorizationValidBefore: this.row.paymentAuthorizationValidBefore,
+              paymentAuthorizationExpiresAt: this.row.paymentAuthorizationExpiresAt,
               requestFingerprint: this.row.requestFingerprint,
             }
           }

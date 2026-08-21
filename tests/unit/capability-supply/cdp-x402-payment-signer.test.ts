@@ -14,6 +14,8 @@ import {
   type CdpX402RequestFingerprintContext,
 } from '@/modules/capability-supply/internal/cdp-x402-payment-signer'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify } from '@/modules/common/stable-hash'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 const account = privateKeyToAccount(`0x${'11'.repeat(32)}`)
 const otherAccount = privateKeyToAccount(`0x${'22'.repeat(32)}`)
@@ -190,6 +192,10 @@ describe('CDP x402 custody signer', () => {
     expect(material.authorization.value).toBe('10000')
     expect(material.authorization.validAfter).toEqual(expect.any(String))
     expect(material.authorization.validBefore).toEqual(expect.any(String))
+    expect(material.typedData.message.validBefore).toBe(intent?.paymentAuthorizationValidBefore)
+    expect(intent?.paymentAuthorizationExpiresAt).toBe(
+      Number(BigInt(intent?.paymentAuthorizationValidBefore ?? '0') * 1000n),
+    )
     expect(material.typedData.domain.chainId).toBe('8453')
     expect(material.typedData.message.value).toBe('10000')
 
@@ -238,6 +244,46 @@ describe('CDP x402 custody signer', () => {
       (secondPayload.payload.authorization as { nonce: string }).nonce,
     )
     expect(canonicalDigest(firstHeader)).toBe(canonicalDigest(secondHeader))
+  })
+
+  it.each([
+    ['non-decimal', 'not-decimal', 1_000],
+    ['overflow', '9007199254740992', Number.MAX_SAFE_INTEGER],
+    ['mismatched milliseconds', '9999999999', 1],
+  ] as const)('rejects %s persisted expiry identity', async (_label, validBefore, expiresAt) => {
+    let persisted: CdpX402PaymentSigningIntent | undefined
+    const first = makeDependencies({
+      onUnsignedMaterial: (intent) => {
+        persisted = intent
+      },
+    })
+    await createCdpEvmX402PaymentSignature(request, {
+      ...first.dependencies,
+      requestFingerprintContext: fingerprintContext,
+    })
+    if (persisted === undefined) throw new Error('test intent was not persisted')
+
+    const material = JSON.parse(persisted.paymentUnsignedMaterialJson) as {
+      authorization: { validBefore: string }
+      typedData: { message: { validBefore: string } }
+    }
+    material.authorization.validBefore = validBefore
+    material.typedData.message.validBefore = validBefore
+    const retry = makeDependencies({
+      persistedIntent: {
+        ...persisted,
+        paymentUnsignedMaterialJson: stableStringify(material as unknown as StableHashValue),
+        paymentUnsignedMaterialDigest: canonicalDigest(material),
+        paymentAuthorizationValidBefore: validBefore,
+        paymentAuthorizationExpiresAt: expiresAt,
+      },
+    })
+
+    await expect(createCdpEvmX402PaymentSignature(request, {
+      ...retry.dependencies,
+      requestFingerprintContext: fingerprintContext,
+    })).rejects.toThrow('x402_payment_unsigned_identity_conflict')
+    expect(retry.signTypedData).not.toHaveBeenCalled()
   })
 
   it('returns only safe authorization identity when inspecting a transient header', async () => {

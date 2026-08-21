@@ -27,9 +27,67 @@ const attemptStateValue = v.union(
 )
 
 const paymentSigningIdempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const paymentAuthorizationValidBeforePattern = /^(?:0|[1-9][0-9]*)$/
 
 function isPaymentSigningIdempotencyKey(value: unknown): value is string {
   return typeof value === 'string' && paymentSigningIdempotencyKeyPattern.test(value)
+}
+
+function paymentAuthorizationExpiryFromValidBefore(
+  validBefore: unknown,
+): Readonly<{
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
+}> | undefined {
+  if (typeof validBefore !== 'string' || !paymentAuthorizationValidBeforePattern.test(validBefore)) {
+    return undefined
+  }
+  let seconds: bigint
+  try {
+    seconds = BigInt(validBefore)
+  } catch {
+    return undefined
+  }
+  if (seconds <= 0n) return undefined
+  const milliseconds = seconds * 1000n
+  const expiresAt = Number(milliseconds)
+  if (
+    !Number.isFinite(expiresAt)
+    || !Number.isSafeInteger(expiresAt)
+    || expiresAt <= 0
+  ) return undefined
+  try {
+    return BigInt(expiresAt) === milliseconds
+      ? { paymentAuthorizationValidBefore: validBefore, paymentAuthorizationExpiresAt: expiresAt }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function paymentAuthorizationExpiryValid(
+  validBefore: unknown,
+  expiresAt: unknown,
+): boolean {
+  const expected = paymentAuthorizationExpiryFromValidBefore(validBefore)
+  return expected !== undefined && expected.paymentAuthorizationExpiresAt === expiresAt
+}
+
+function paymentAuthorizationExpiryFromMaterial(
+  value: unknown,
+): Readonly<{
+  paymentAuthorizationValidBefore: string
+  paymentAuthorizationExpiresAt: number
+}> | undefined {
+  if (!isRecord(value) || !isRecord(value.authorization) || !isRecord(value.typedData)) {
+    return undefined
+  }
+  const message = value.typedData.message
+  if (!isRecord(message)) return undefined
+  const expiry = paymentAuthorizationExpiryFromValidBefore(message.validBefore)
+  return expiry !== undefined && value.authorization.validBefore === expiry.paymentAuthorizationValidBefore
+    ? expiry
+    : undefined
 }
 
 function containsForbiddenSignatureKey(value: unknown): boolean {
@@ -110,6 +168,8 @@ const x402PaymentAuthorizationMaterial = v.object({
   paymentSigningIdempotencyKey: v.optional(v.string()),
   paymentPayer: v.optional(v.string()),
   paymentNonce: v.optional(v.string()),
+  paymentAuthorizationValidBefore: v.optional(v.string()),
+  paymentAuthorizationExpiresAt: v.optional(v.number()),
   paymentSigningClaimedAt: v.optional(v.number()),
   state: attemptStateValue,
   transportObservationDigest: v.optional(v.string()),
@@ -128,6 +188,8 @@ const x402PaymentAuthorizationStored = v.object({
   paymentSignatureDigest: v.string(),
   paymentPayer: v.string(),
   paymentNonce: v.string(),
+  paymentAuthorizationValidBefore: v.string(),
+  paymentAuthorizationExpiresAt: v.number(),
   requestFingerprint: v.string(),
 })
 
@@ -141,6 +203,8 @@ const x402PaymentAuthorizationClaimResult = v.union(
     paymentSignatureDigest: v.string(),
     paymentPayer: v.string(),
     paymentNonce: v.string(),
+    paymentAuthorizationValidBefore: v.string(),
+    paymentAuthorizationExpiresAt: v.number(),
     requestFingerprint: v.string(),
   }),
   v.object({ kind: v.literal('pending') }),
@@ -179,6 +243,8 @@ const x402PaymentAttemptReadValue = v.object({
   paymentSigningIdempotencyKey: v.optional(v.string()),
   paymentPayer: v.optional(v.string()),
   paymentNonce: v.optional(v.string()),
+  paymentAuthorizationValidBefore: v.optional(v.string()),
+  paymentAuthorizationExpiresAt: v.optional(v.number()),
   paymentSigningClaimedAt: v.optional(v.number()),
   state: attemptStateValue,
   preparedAt: v.number(),
@@ -192,6 +258,16 @@ const x402PaymentAttemptReadValue = v.object({
   reconciliationEvidenceRef: v.optional(v.string()),
   reconciliationEvidenceDigest: v.optional(v.string()),
   evidenceRefs: v.array(v.string()),
+})
+
+const expiredPreparedX402PaymentAttemptValue = v.object({
+  dispatchRef: v.string(),
+  attemptRef: v.string(),
+  effectGeneration: v.number(),
+  custodyRef: v.string(),
+  authorizationDigest: v.string(),
+  reservationRef: v.optional(v.string()),
+  paymentAuthorizationExpiresAt: v.number(),
 })
 
 export const x402PaymentEventArgs = {
@@ -433,6 +509,8 @@ function authorizationMaterial(row: AttemptRow): Infer<typeof x402PaymentAuthori
     ...(row.paymentSigningIdempotencyKey === undefined ? {} : { paymentSigningIdempotencyKey: row.paymentSigningIdempotencyKey }),
     ...(row.paymentPayer === undefined ? {} : { paymentPayer: row.paymentPayer }),
     ...(row.paymentNonce === undefined ? {} : { paymentNonce: row.paymentNonce }),
+    ...(row.paymentAuthorizationValidBefore === undefined ? {} : { paymentAuthorizationValidBefore: row.paymentAuthorizationValidBefore }),
+    ...(row.paymentAuthorizationExpiresAt === undefined ? {} : { paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt }),
     ...(row.paymentSigningClaimedAt === undefined ? {} : { paymentSigningClaimedAt: row.paymentSigningClaimedAt }),
     state: row.state,
     ...(row.transportObservationDigest === undefined ? {} : { transportObservationDigest: row.transportObservationDigest }),
@@ -455,8 +533,14 @@ function storedAuthorization(
     || row.paymentSignatureDigest === undefined
     || row.paymentPayer === undefined
     || row.paymentNonce === undefined
+    || row.paymentAuthorizationValidBefore === undefined
+    || row.paymentAuthorizationExpiresAt === undefined
     || row.requestFingerprint === undefined
     || !isPaymentSigningIdempotencyKey(row.paymentSigningIdempotencyKey)
+    || !paymentAuthorizationExpiryValid(
+      row.paymentAuthorizationValidBefore,
+      row.paymentAuthorizationExpiresAt,
+    )
   ) return undefined
   return {
     paymentUnsignedMaterialJson: row.paymentUnsignedMaterialJson,
@@ -465,6 +549,8 @@ function storedAuthorization(
     paymentSignatureDigest: row.paymentSignatureDigest,
     paymentPayer: row.paymentPayer,
     paymentNonce: row.paymentNonce,
+    paymentAuthorizationValidBefore: row.paymentAuthorizationValidBefore,
+    paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt,
     requestFingerprint: row.requestFingerprint,
   }
 }
@@ -503,6 +589,8 @@ function attemptRead(row: AttemptRow): Infer<typeof x402PaymentAttemptReadValue>
     ...(row.paymentSigningIdempotencyKey === undefined ? {} : { paymentSigningIdempotencyKey: row.paymentSigningIdempotencyKey }),
     ...(row.paymentPayer === undefined ? {} : { paymentPayer: row.paymentPayer }),
     ...(row.paymentNonce === undefined ? {} : { paymentNonce: row.paymentNonce }),
+    ...(row.paymentAuthorizationValidBefore === undefined ? {} : { paymentAuthorizationValidBefore: row.paymentAuthorizationValidBefore }),
+    ...(row.paymentAuthorizationExpiresAt === undefined ? {} : { paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt }),
     ...(row.paymentSigningClaimedAt === undefined ? {} : { paymentSigningClaimedAt: row.paymentSigningClaimedAt }),
     state: row.state,
     preparedAt: row.preparedAt,
@@ -692,6 +780,8 @@ export const recordX402PaymentSigningIntent = internalMutation({
     paymentSigningIdempotencyKey: v.string(),
     paymentPayer: v.string(),
     paymentNonce: v.string(),
+    paymentAuthorizationValidBefore: v.string(),
+    paymentAuthorizationExpiresAt: v.number(),
     requestFingerprint: v.string(),
     custodyGeneration: v.optional(v.number()),
   },
@@ -706,9 +796,14 @@ export const recordX402PaymentSigningIntent = internalMutation({
     } catch {
       throw new Error('x402_payment_unsigned_material_invalid')
     }
+    const parsedExpiry = paymentAuthorizationExpiryFromMaterial(parsed)
     if (
       canonicalUnsignedMaterialJson(parsed) !== args.paymentUnsignedMaterialJson
       || canonicalDigest(parsed) !== args.paymentUnsignedMaterialDigest
+      || !paymentAuthorizationExpiryValid(
+        args.paymentAuthorizationValidBefore,
+        args.paymentAuthorizationExpiresAt,
+      )
       || args.paymentPayer.trim().length === 0
       || args.paymentNonce.trim().length === 0
       || args.requestFingerprint.trim().length === 0
@@ -732,6 +827,8 @@ export const recordX402PaymentSigningIntent = internalMutation({
       row.paymentSigningIdempotencyKey,
       row.paymentPayer,
       row.paymentNonce,
+      row.paymentAuthorizationValidBefore,
+      row.paymentAuthorizationExpiresAt,
     ]
     const hasExistingIntent = existingIntentFields.some((value) => value !== undefined)
     if (hasExistingIntent) {
@@ -741,15 +838,23 @@ export const recordX402PaymentSigningIntent = internalMutation({
         || row.paymentSigningIdempotencyKey !== args.paymentSigningIdempotencyKey
         || row.paymentPayer !== args.paymentPayer
         || row.paymentNonce !== args.paymentNonce
+        || row.paymentAuthorizationValidBefore !== args.paymentAuthorizationValidBefore
+        || row.paymentAuthorizationExpiresAt !== args.paymentAuthorizationExpiresAt
       ) throw new Error('x402_payment_unsigned_identity_conflict')
       return null
     }
+    if (
+      parsedExpiry?.paymentAuthorizationValidBefore !== args.paymentAuthorizationValidBefore
+      || parsedExpiry?.paymentAuthorizationExpiresAt !== args.paymentAuthorizationExpiresAt
+    ) throw new Error('x402_payment_unsigned_material_invalid')
     await ctx.db.patch(row._id, {
       paymentUnsignedMaterialJson: args.paymentUnsignedMaterialJson,
       paymentUnsignedMaterialDigest: args.paymentUnsignedMaterialDigest,
       paymentSigningIdempotencyKey: args.paymentSigningIdempotencyKey,
       paymentPayer: args.paymentPayer,
       paymentNonce: args.paymentNonce,
+      paymentAuthorizationValidBefore: args.paymentAuthorizationValidBefore,
+      paymentAuthorizationExpiresAt: args.paymentAuthorizationExpiresAt,
       paymentSigningClaimedAt: row.paymentSigningClaimedAt ?? Date.now(),
     })
     return null
@@ -807,6 +912,12 @@ export const recordX402PaymentSignatureDigest = internalMutation({
         || !isPaymentSigningIdempotencyKey(row.paymentSigningIdempotencyKey)
         || row.paymentPayer !== args.paymentPayer
         || row.paymentNonce !== args.paymentNonce
+        || row.paymentAuthorizationValidBefore === undefined
+        || row.paymentAuthorizationExpiresAt === undefined
+        || !paymentAuthorizationExpiryValid(
+          row.paymentAuthorizationValidBefore,
+          row.paymentAuthorizationExpiresAt,
+        )
       ) throw new Error('x402_payment_authorization_material_invalid')
       await ctx.db.patch(row._id, {
         paymentSignatureDigest: args.paymentSignatureDigest,
@@ -946,6 +1057,36 @@ export const readX402PaymentAttempt = internalQuery({
     const row = await loadByAttempt(ctx, args.attemptRef, args.effectGeneration)
     if (row === null || row.dispatchRef !== args.dispatchRef) return null
     return attemptRead(row)
+  },
+})
+
+export const listExpiredPreparedX402PaymentAttempts = internalQuery({
+  args: {
+    now: v.number(),
+    limit: v.number(),
+  },
+  returns: v.array(expiredPreparedX402PaymentAttemptValue),
+  handler: async (ctx, args): Promise<Infer<typeof expiredPreparedX402PaymentAttemptValue>[]> => {
+    if (!Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
+      throw new Error('x402_payment_expired_prepared_limit_invalid')
+    }
+    const rows = await ctx.db.query('moneyX402PaymentAttempts')
+      .withIndex('by_state_and_paymentAuthorizationExpiresAt', (query) => (
+        query.eq('state', 'prepared').lte('paymentAuthorizationExpiresAt', args.now)
+      ))
+      .take(args.limit)
+    return rows.flatMap((row) => {
+      if (row.paymentAuthorizationExpiresAt === undefined) return []
+      return [{
+        dispatchRef: row.dispatchRef,
+        attemptRef: row.attemptRef,
+        effectGeneration: row.effectGeneration,
+        custodyRef: row.custodyRef,
+        authorizationDigest: row.authorizationDigest,
+        ...(row.reservationRef === undefined ? {} : { reservationRef: row.reservationRef }),
+        paymentAuthorizationExpiresAt: row.paymentAuthorizationExpiresAt,
+      }]
+    })
   },
 })
 

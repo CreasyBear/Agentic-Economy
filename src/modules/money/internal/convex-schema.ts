@@ -233,6 +233,8 @@ export const moneyTables = {
     paymentSigningIdempotencyKey: v.optional(v.string()),
     paymentPayer: v.optional(v.string()),
     paymentNonce: v.optional(v.string()),
+    paymentAuthorizationValidBefore: v.optional(v.string()),
+    paymentAuthorizationExpiresAt: v.optional(v.number()),
     paymentSigningClaimedAt: v.optional(v.number()),
     state: v.union(
       v.literal('prepared'),
@@ -259,7 +261,8 @@ export const moneyTables = {
     .index('by_attemptRef_and_effectGeneration', ['attemptRef', 'effectGeneration'])
     .index('by_custodyRef', ['custodyRef'])
     .index('by_authorizationDigest', ['authorizationDigest'])
-    .index('by_paymentIdentifier', ['paymentIdentifier']),
+    .index('by_paymentIdentifier', ['paymentIdentifier'])
+    .index('by_state_and_paymentAuthorizationExpiresAt', ['state', 'paymentAuthorizationExpiresAt']),
   moneyCredentialUsageSummaries: defineTable({
     principalId: identifier,
     credentialId: identifier,
