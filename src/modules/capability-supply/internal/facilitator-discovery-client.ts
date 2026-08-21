@@ -8,8 +8,8 @@ import {
 } from './publication-importer-x402-bazaar'
 import {
   FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE,
-  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
   FACILITATOR_DISCOVERY_URLS,
+  parseFacilitatorDiscoveryPage,
 } from './facilitator-discovery-ingest'
 
 export const FACILITATOR_DISCOVERY_MAX_PAGES = 20 as const
@@ -131,34 +131,11 @@ async function fetchPage(fetcher: Fetcher, requestUrl: string): Promise<Discover
     } catch {
       return undefined
     }
-    return parsePage(document)
+    return parseFacilitatorDiscoveryPage(document)
   } catch {
     return undefined
   } finally {
     clearTimeout(timer)
-  }
-}
-
-function parsePage(document: unknown): DiscoveryPage | undefined {
-  if (!isRecord(document) || !Array.isArray(document.items)) return undefined
-  if (document.items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) return undefined
-  const pagination = isRecord(document.pagination) ? document.pagination : undefined
-  const offset = safeNonNegativeInteger(pagination?.offset ?? document.offset)
-  const limit = safePositiveInteger(pagination?.limit ?? document.limit)
-  const total = safeNonNegativeInteger(pagination?.total ?? document.total)
-  const nextOffset = offset !== undefined && limit !== undefined && total !== undefined
-    && offset + document.items.length < total && Number.isSafeInteger(offset + document.items.length)
-    ? offset + document.items.length
-    : undefined
-  const candidateCursor = pagination?.nextCursor ?? pagination?.cursor ?? document.nextCursor
-  const nextCursor = typeof candidateCursor === 'string'
-    && candidateCursor.length > 0 && candidateCursor.length <= 2_000
-    ? candidateCursor
-    : undefined
-  return {
-    items: document.items,
-    ...(nextOffset === undefined ? {} : { nextOffset }),
-    ...(nextCursor === undefined ? {} : { nextCursor }),
   }
 }
 
@@ -168,12 +145,4 @@ function discoveryPageUrl(sourceUrl: string, offset: number, cursor: string | un
   if (cursor === undefined) url.searchParams.set('offset', String(offset))
   else url.searchParams.set('cursor', cursor)
   return url.toString()
-}
-
-function safeNonNegativeInteger(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
-}
-
-function safePositiveInteger(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 }
