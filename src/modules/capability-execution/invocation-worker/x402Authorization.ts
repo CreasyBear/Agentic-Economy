@@ -487,6 +487,7 @@ export function createX402PaymentCallbacks(
     leaseAuthority?: ProviderLeaseAuthority
     validateProviderAuthority: ProviderConnectionAuthorityValidator
     dispatcher: Agent
+    isGrantStillValid: () => Promise<boolean>
     useCustodySigner?: boolean
     onPaymentPossiblySubmitted?: () => void
   }>,
@@ -588,6 +589,20 @@ export function createX402PaymentCallbacks(
         [input.operationKeyDigest],
       )
       if (cleanupOutcome === 'failed') return undefined
+      return undefined
+    }
+    let grantStillValid = false
+    try {
+      grantStillValid = await input.isGrantStillValid()
+    } catch {
+      grantStillValid = false
+    }
+    if (!grantStillValid) {
+      await bestEffortReleaseX402ExternalSpend(
+        ctx,
+        expected,
+        [input.operationKeyDigest],
+      )
       return undefined
     }
     const signature = await readX402Authorization(ctx, prepared, byDigest, {

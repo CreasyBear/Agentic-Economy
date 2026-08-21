@@ -91,6 +91,7 @@ export function createBrokeredX402PaymentCallbacks(
     effectGeneration: number
     operationKeyDigest: string
     dispatcher: Agent
+    isGrantStillValid: () => Promise<boolean>
     onPaymentPossiblySubmitted: () => void
   }>,
 ): X402PaymentCallbacks {

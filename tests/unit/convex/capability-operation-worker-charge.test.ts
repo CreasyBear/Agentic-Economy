@@ -148,6 +148,30 @@ describe('capability operation invocation worker charge/x402', () => {
       result: { kind: 'refused', code: 'payment_signature_unavailable' },
     })
   })
+  it('releases the prepared spend without signing or paid send when the grant is revoked at the signing boundary', async () => {
+    vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
+    const worker = createWorker('x402', {
+      environment: 'production',
+      signingBoundaryGrant: null,
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    const paths = worker.state.mutationCalls.map(({ path }) => path)
+    expect(paths).toContain('moneyLedger:reserveBrokeredInvocationCharge')
+    expect(paths).toContain('moneyLedger:reserveExternalInvocationSpend')
+    expect(paths).toContain('moneyLedger:finalizeExternalInvocationSpend')
+    expect(paths).toContain('moneyLedger:releaseBrokeredInvocationCharge')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:claimX402PaymentAuthorization')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSigningIntent')
+    expect(paths).not.toContain('moneyX402PaymentAttempts:recordX402PaymentSignatureDigest')
+    expect(mocks.createCdpEvmX402PaymentSignature).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(1)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'payment_signature_unavailable' },
+    })
+  })
   it('retains buyer and external reservations after a post-submit timeout', async () => {
     const worker = createWorker('x402', {
       environment: 'production',

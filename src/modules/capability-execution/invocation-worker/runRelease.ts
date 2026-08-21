@@ -18,6 +18,34 @@ import type { InvocationPreparation } from './runPreparation'
 
 type PreparedInvocationRun = Extract<InvocationPreparation, { kind: 'prepared' }>
 
+type GrantValidityExpectation = Readonly<{
+  grantRef: string
+  ownerId: string
+  credentialId: string
+  principalId: string
+  applicationRef: string
+  environment: 'sandbox' | 'production'
+  generation: number
+  policyDigest: string
+}>
+
+function activeGrantMatches(
+  candidate: unknown,
+  expected: GrantValidityExpectation,
+): boolean {
+  if (candidate === null || typeof candidate !== 'object') return false
+  const grant = candidate as Record<string, unknown>
+  return grant.grantRef === expected.grantRef
+    && grant.ownerId === expected.ownerId
+    && grant.credentialId === expected.credentialId
+    && grant.principalId === expected.principalId
+    && grant.applicationRef === expected.applicationRef
+    && grant.environment === expected.environment
+    && grant.generation === expected.generation
+    && grant.policyDigest === expected.policyDigest
+    && grant.lifecycle === 'active'
+}
+
 export async function releaseInvocationRun(
   ctx: ActionCtx,
   preparedContext: PreparedInvocationRun,
@@ -239,6 +267,34 @@ export async function releaseInvocationRun(
     : economicRail === 'brokered_x402'
       ? brokeredProviderAuthorityValidator(ctx, connectionAuthority)
       : providerLeaseAuthorityValidator(ctx, connectionAuthority, dispatch)
+  const grantValidityExpectation: GrantValidityExpectation = {
+    grantRef: persistedAuthority.grantRef,
+    ownerId: dispatch.ownerId,
+    credentialId: dispatch.credentialId,
+    principalId: dispatch.principalId,
+    applicationRef: dispatch.applicationRef,
+    environment: dispatch.environment,
+    generation: dispatch.grantGeneration,
+    policyDigest: grant.policyDigest,
+  }
+  const isGrantStillValid = async (): Promise<boolean> => {
+    let currentGrant: unknown
+    try {
+      currentGrant = await ctx.runQuery(internal.agentAccessPolicy.readActiveGrant, {
+        grantRef: grantValidityExpectation.grantRef,
+        ownerId: grantValidityExpectation.ownerId,
+        credentialId: grantValidityExpectation.credentialId,
+        principalId: grantValidityExpectation.principalId,
+        applicationRef: grantValidityExpectation.applicationRef,
+        environment: grantValidityExpectation.environment,
+        generation: grantValidityExpectation.generation,
+        now: Date.now(),
+      })
+    } catch {
+      return false
+    }
+    return activeGrantMatches(currentGrant, grantValidityExpectation)
+  }
   let brokeredPaymentPossiblySubmitted = false
   const paymentCallbacks = connectionAuthority === undefined
     || economicRail === 'ae_internal'
@@ -253,6 +309,7 @@ export async function releaseInvocationRun(
           effectGeneration: claimed.attempt.effectGeneration,
           operationKeyDigest,
           dispatcher,
+          isGrantStillValid,
           onPaymentPossiblySubmitted: () => {
             brokeredPaymentPossiblySubmitted = true
           },
@@ -268,6 +325,7 @@ export async function releaseInvocationRun(
           ...(leaseAuthority === undefined ? {} : { leaseAuthority }),
           validateProviderAuthority,
           dispatcher,
+          isGrantStillValid,
         })
   const runtime: RouteTransportRuntime = {
     send,
@@ -310,16 +368,7 @@ export async function releaseInvocationRun(
     )
   }
   if (
-    finalGrant === null
-    || finalGrant.grantRef !== persistedAuthority.grantRef
-    || finalGrant.ownerId !== dispatch.ownerId
-    || finalGrant.credentialId !== dispatch.credentialId
-    || finalGrant.principalId !== dispatch.principalId
-    || finalGrant.applicationRef !== dispatch.applicationRef
-    || finalGrant.environment !== dispatch.environment
-    || finalGrant.generation !== dispatch.grantGeneration
-    || finalGrant.policyDigest !== grant.policyDigest
-    || finalGrant.lifecycle !== 'active'
+    !activeGrantMatches(finalGrant, grantValidityExpectation)
   ) {
     const settlement = await reconcileBeforeRelease()
     return await convergePreRelease(

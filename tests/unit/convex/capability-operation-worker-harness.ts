@@ -172,6 +172,7 @@ type WorkerOptions = Readonly<{
   actualOperatorAccountVersion?: number
   releaseFenceResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'refused' }>
   finalGrant?: Readonly<Record<string, unknown>> | null
+  signingBoundaryGrant?: Readonly<Record<string, unknown>> | null
   observation?: RouteTransportObservation
   reconcileRefused?: boolean
   reconcileNone?: boolean
@@ -676,6 +677,17 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
       }
       const signed = await runtime.readX402PaymentAuthorizationByDigest(prepared)
+      if (signed === undefined) {
+        return {
+          transport: 'x402',
+          disposition: 'refused',
+          releaseStarted: false,
+          requestDigest: digest('f'),
+          failureCode: 'payment_signature_unavailable',
+          paymentSubmissionStatus: 'not_submitted',
+          settlementEvidence: { kind: 'not_submitted' },
+        }
+      }
       expect(signed).toBe('signed:payment')
       const event: X402PaymentAttemptEvent = {
         paymentIdentifier: request.paymentIdentifier,
@@ -752,6 +764,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         case 'agentAccessPrincipals:getAgentPrincipal': return principal
         case 'agentAccessPolicy:readActiveGrant':
           activeGrantReads += 1
+          if (activeGrantReads > 2 && options.signingBoundaryGrant !== undefined) return options.signingBoundaryGrant
           return activeGrantReads > 1 && options.finalGrant !== undefined ? options.finalGrant : grant
         case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot': return { operationJson: JSON.stringify(currentOperation) }
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
