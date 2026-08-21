@@ -1,28 +1,16 @@
-import {
-  extractRequestedLocation,
-  type AnswerPriorTurnContext,
-} from '@/modules/answer/public'
+import { type AnswerPriorTurnContext } from '@/modules/answer/public'
 import type { AnswerOperationPresentation } from '@/modules/answer/answer-schema'
 import { isRecord } from '@/modules/common/is-record'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 import {
-  hasAnswerServiceSignal,
-} from './answer-response-planner'
-import {
   type AnswerPendingDecision,
-  type AnswerRequestInterpretation,
   type AnswerToolCallRecord,
   type AnswerTurnCheckpoint,
   type AnswerContinuationSource,
   type FrozenTurnEvidence,
 } from '../answer-thread.schema'
-import { normalizeAnswerTurnQuery } from './turn-digests'
-import {
-  findThreadNeedQuery,
-  resolveFollowUpRegistryQuery,
-} from './follow-up-query'
-import { type AnswerTurnRecordLite } from './answer-turn-finalization'
+import { type AnswerTurnRecordLite } from './answer-turn-evidence-freeze'
 import { parseFrozenEvidence } from './public-projection'
 import { isPublicWorkStep } from './public-worklog'
 
@@ -95,57 +83,11 @@ export function isRationaleFollowUpQuery(query: string): boolean {
   )
 }
 
-export function shouldOverrideOperationRouteForBusiness(input: {
-  query: string
-  interpretation: AnswerRequestInterpretation | undefined
-  priorOperationRef: string | undefined
-}): boolean {
-  const interpretation = input.interpretation
-  if (
-    interpretation === undefined
-    || interpretation.route !== 'operation'
-    || interpretation.continuation !== 'new'
-    || input.priorOperationRef !== undefined
-  ) {
-    return false
-  }
-
-  // A model route is not enough to suppress the deterministic local-service
-  // lane. Frozen/refined operation continuations remain in the operation lane.
-  return hasAnswerServiceSignal(input.query)
-}
-
 export function isCorrectiveSearchFollowUp(query: string): boolean {
   const normalized = query.toLowerCase().replace(/\s+/g, ' ').trim()
-  return (
-    extractRequestedLocation(query) !== undefined ||
-    /\b(?:only|just|licensed|registered|budget|under|within|available|tonight|today|tomorrow|this week|radius|km|exclude|must|prefer)\b/.test(
-      normalized,
-    )
+  return /\b(?:only|just|licensed|registered|budget|under|within|available|tonight|today|tomorrow|this week|radius|km|exclude|must|prefer)\b/.test(
+    normalized,
   )
-}
-
-export function buildCorrectiveRegistryQuery(
-  query: string,
-  priorTurns: readonly AnswerTurnRecordLite[],
-): string | undefined {
-  if (!isCorrectiveSearchFollowUp(query)) {
-    return undefined
-  }
-
-  const resolved = resolveFollowUpRegistryQuery(query, priorTurns)
-  if (hasAnswerServiceSignal(resolved)) {
-    return normalizeAnswerTurnQuery(resolved)
-  }
-
-  const priorNeed = findThreadNeedQuery(priorTurns)
-  if (
-    priorNeed === undefined ||
-    resolved.toLowerCase().includes(priorNeed.toLowerCase())
-  ) {
-    return normalizeAnswerTurnQuery(resolved)
-  }
-  return normalizeAnswerTurnQuery(`${priorNeed} ${resolved}`)
 }
 
 export function readPriorSearchContext(
@@ -396,14 +338,7 @@ export function buildRationaleEvidence(input: {
 } {
   const queries = [...input.priorTurns.map((turn) => turn.query), input.query]
   const constraints = new Set<string>()
-  const explicitLocations = queries
-    .map((query) => extractRequestedLocation(query))
-    .filter(
-      (location): location is string =>
-        location !== undefined && location.trim().length > 0,
-    )
-  const location =
-    explicitLocations.at(-1) ?? input.searchContext?.location?.label
+  const location = input.searchContext?.location?.label
   if (location !== undefined) {
     constraints.add(`Location: ${location}`)
   }
