@@ -1,10 +1,6 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isRecord } from '@/modules/common/is-record'
-import {
-  extractDiscoveryInfoFromExtension,
-  validateAndExtract,
-  type DiscoveryExtension,
-} from '@x402/extensions/bazaar'
+import { validateDiscoveryExtensionSpec } from '@x402/extensions/bazaar'
 
 import {
   admitBazaarDiscoveryInfo,
@@ -51,17 +47,16 @@ export function admitOfficialBazaarFromPaymentRequired(
   if (!isRecord(extension)) {
     return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
   }
-  const discoveryExtension = extension as unknown as DiscoveryExtension
   try {
-    const validation = validateAndExtract(discoveryExtension)
+    const validation = validateDiscoveryExtensionSpec(extension)
     if (!validation.valid) {
       return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
     }
-    const info = extractDiscoveryInfoFromExtension(discoveryExtension, false)
-    return admitBazaarDiscoveryInfo(extension, {
-      input: info.input as Readonly<Record<string, unknown>>,
-      output: info.output,
-    })
+    const info = isRecord(extension.info) ? extension.info : undefined
+    if (info === undefined || !isRecord(info.input)) {
+      return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
+    }
+    return admitBazaarDiscoveryInfo(extension, { input: info.input, output: info.output })
   } catch {
     return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
   }

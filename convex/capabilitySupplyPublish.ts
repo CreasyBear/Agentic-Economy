@@ -77,7 +77,7 @@ const adapterValue = v.object({
   adapterId: v.string(),
   config: v.union(v.null(), adapterConfigValue),
 })
-const capabilityPublicationOfferingValue = v.object({
+export const capabilityPublicationOfferingValue = v.object({
   offeringId: v.string(),
   networkId: v.string(),
   origin: v.optional(offeringOriginValue),
@@ -85,7 +85,7 @@ const capabilityPublicationOfferingValue = v.object({
   searchTerms: v.array(v.string()),
   registrationEvidenceRefs: evidenceRefsValue,
 })
-const capabilityPublicationBindingValue = v.object({
+export const capabilityPublicationBindingValue = v.object({
   bindingId: v.string(),
   endpointUrl: v.string(),
   authority: authorityValue,

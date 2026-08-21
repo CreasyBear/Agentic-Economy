@@ -7,7 +7,6 @@ export {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
   FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
   admittedFacilitatorDiscoveryDraft,
-  admitFacilitatorDiscoveryItems,
   decideFacilitatorDiscoveryItem,
   mapFacilitatorDiscoveryImporterRefusal,
   parseFacilitatorDiscoverySourceImport,

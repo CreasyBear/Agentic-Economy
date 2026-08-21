@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -16,10 +16,8 @@ import {
 } from '@/modules/capability-supply/provider-connection'
 import {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
-  admitFacilitatorDiscoveryItems,
   dereferenceLocalSchema,
   parseFacilitatorDiscoverySourceImport,
-  type FacilitatorDiscoveryAdmittedDraft,
 } from '@/modules/capability-supply/convex'
 import { isRecord } from '@/modules/common/is-record'
 
@@ -27,6 +25,8 @@ import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
 import { toDomain, toRow } from './capabilityProviderConnectionLifecycle'
 import {
+  capabilityPublicationBindingValue,
+  capabilityPublicationOfferingValue,
   publicationPorts,
   publishBootstrapCapability,
 } from './capabilitySupplyPublish'
@@ -45,8 +45,8 @@ const exactAmountValue = v.object({
   exponent: v.number(),
 })
 const facilitatorDiscoveryAdmissionValue = v.object({
-  offering: v.any(),
-  binding: v.any(),
+  offering: capabilityPublicationOfferingValue,
+  binding: capabilityPublicationBindingValue,
   execution: v.object({
     endpoint: v.object({ url: v.string() }),
     method: v.union(v.literal('GET'), v.literal('POST')),
@@ -65,6 +65,7 @@ const facilitatorDiscoveryAdmissionValue = v.object({
   sourceImportJson: v.string(),
   sourceRevision: v.string(),
 })
+type FacilitatorDiscoveryAdmissionItem = Infer<typeof facilitatorDiscoveryAdmissionValue>
 const reconcileResult = v.object({
   admitted: v.number(),
   published: v.number(),
@@ -197,11 +198,13 @@ export const reconcile = internalMutation({
     let published = 0
     let skipped = 0
     const seenPublicationRefs = new Set(args.seenPublicationRefs ?? [])
-    const admission = admitFacilitatorDiscoveryItems(
-      args.items as readonly FacilitatorDiscoveryAdmittedDraft[],
-    )
-    const candidates = admission.admitted
-    skipped += admission.skipped.length
+    const candidates = args.items.filter((item) => {
+      if (parseFacilitatorDiscoverySourceImport(item.sourceImportJson) === undefined) {
+        skipped += 1
+        return false
+      }
+      return true
+    })
     let deadlineExceeded = false
     if (Date.now() >= args.deadlineAt) deadlineExceeded = true
     for (const draft of candidates) {
@@ -232,7 +235,7 @@ export const reconcile = internalMutation({
 
 async function reconcileDraft(
   ctx: MutationCtx,
-  draft: FacilitatorDiscoveryAdmittedDraft,
+  draft: FacilitatorDiscoveryAdmissionItem,
   now: number,
 ): Promise<'published' | 'skipped'> {
   const sourceImport = parseFacilitatorDiscoverySourceImport(draft.sourceImportJson)

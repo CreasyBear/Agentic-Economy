@@ -39,7 +39,11 @@ const mcpItem = {
   extensions: {
     bazaar: {
       info: {
-        input: { type: "mcp" },
+        input: {
+          type: "mcp",
+          toolName: "lookup",
+          inputSchema: { type: "object", properties: {} },
+        },
         output: {},
       },
       schema: {
@@ -110,6 +114,10 @@ describe("facilitator discovery ingest", () => {
     expect(new Set(result.admitted.map((draft) => draft.offering.offeringId)).size).toBe(
       2,
     );
+    expect(result.admitted.map((draft) => draft.offering.origin)).toEqual([
+      { kind: "standalone" },
+      { kind: "standalone" },
+    ]);
     expect(result.admitted[1]?.price).toMatchObject({
       provider: { units: "100", exponent: 6 },
       platformFee: { units: "10", exponent: 6 },

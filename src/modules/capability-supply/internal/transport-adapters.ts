@@ -330,7 +330,7 @@ export function parseMcpJsonRpcTransportConfiguration(
 
 export type X402FetchTransportConfiguration = Readonly<{
   method: 'GET' | 'POST'
-  query?: readonly HttpJsonQueryParameterMapping[]
+  query?: HttpJsonQueryParameterMapping[]
   requestTimeoutMs: number
   scheme: 'exact'
   network: string

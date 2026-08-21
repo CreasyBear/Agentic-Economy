@@ -6,7 +6,11 @@ import type {
   CapabilityPublicationImport,
   CanonicalCapabilityPublicationDraft,
 } from "./publication-importer-types";
-import { validPublicHttpsEndpoint } from "./transport-adapters";
+import {
+  parseX402FetchTransportConfiguration,
+  validPublicHttpsEndpoint,
+  type X402FetchTransportConfiguration,
+} from "./transport-adapters";
 
 export const FACILITATOR_DISCOVERY_URLS = [
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
@@ -71,8 +75,15 @@ export type FacilitatorDiscoveryPage = Readonly<{
 
 export type FacilitatorDiscoveryAdmittedDraft = Readonly<
   {
-    offering: CanonicalCapabilityPublicationDraft["offering"];
-    binding: CanonicalCapabilityPublicationDraft["binding"];
+    offering: CanonicalCapabilityPublicationDraft["offering"] & Readonly<{
+      origin: { kind: "standalone" };
+    }>;
+    binding: Omit<CanonicalCapabilityPublicationDraft["binding"], "adapter"> & Readonly<{
+      adapter: Readonly<{
+        adapterId: "x402-fetch:v2";
+        config: X402FetchTransportConfiguration;
+      }>;
+    }>;
     execution: Readonly<{
         endpoint: Readonly<{ url: string }>;
         method: "GET" | "POST";
@@ -215,42 +226,6 @@ export function decideFacilitatorDiscoveryItem(
   return { kind: "admit", import: sourceImport, identity, price };
 }
 
-/**
- * The Node discovery action supplies already admitted DTOs. This boundary is
- * intentionally a no-op so the default Convex mutation tree has no Bazaar
- * SDK or Node-runtime validation path.
- */
-export function admitFacilitatorDiscoveryItems(
-  items: readonly FacilitatorDiscoveryAdmittedDraft[],
-): FacilitatorDiscoveryAdmissionResult {
-  const admitted: FacilitatorDiscoveryAdmittedDraft[] = [];
-  const skipped: FacilitatorDiscoverySkip[] = [];
-  for (const item of items.slice(0, FACILITATOR_DISCOVERY_MAX_PAGE_SIZE)) {
-    if (parseFacilitatorDiscoverySourceImport(item.sourceImportJson) === undefined) {
-      skipped.push({ kind: "skip", reason: "source_invalid" });
-      continue;
-    }
-    admitted.push(item);
-  }
-  if (items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) {
-    skipped.push({ kind: "skip", reason: "resource_invalid" });
-  }
-  return { admitted, skipped };
-}
-
-export function admitFacilitatorDiscoveryItem(
-  item: FacilitatorDiscoveryAdmittedDraft,
-): Promise<
-  | FacilitatorDiscoverySkip
-  | Readonly<{ kind: "admitted"; result: FacilitatorDiscoveryAdmittedDraft }>
-> {
-  return Promise.resolve(
-    parseFacilitatorDiscoverySourceImport(item.sourceImportJson) === undefined
-      ? { kind: "skip", reason: "source_invalid" as const }
-      : { kind: "admitted", result: item },
-  );
-}
-
 export function parseFacilitatorDiscoverySourceImport(
   value: string,
 ): Extract<CapabilityPublicationImport, { kind: "x402" }> | undefined {
@@ -368,22 +343,26 @@ export function admittedFacilitatorDiscoveryDraft(
     { termId: "platform-fee", label: "Platform fee", value: `${decision.price.platformFee.units} atomic USDC units (1000 bps)` },
     { termId: "buyer-total", label: "Buyer total", value: `${decision.price.total.units} atomic USDC units` },
   ].slice(0, 64);
-  const draft: CanonicalCapabilityPublicationDraft = {
-    ...normalized,
-    offering: {
-      ...normalized.offering,
-      presentation: {
-        ...normalized.offering.presentation,
-        price: { kind: "fixed", amount: decision.price.total },
-        materialTerms,
-      },
+  const offering: FacilitatorDiscoveryAdmittedDraft["offering"] = {
+    ...normalized.offering,
+    origin: { kind: "standalone" },
+    presentation: {
+      ...normalized.offering.presentation,
+      price: { kind: "fixed", amount: decision.price.total },
+      materialTerms,
     },
+  };
+  const config = parseX402FetchTransportConfiguration(normalized.binding.adapter.config);
+  if (config === undefined) throw new Error("facilitator_discovery_x402_binding_invariant");
+  const binding: FacilitatorDiscoveryAdmittedDraft["binding"] = {
+    ...normalized.binding,
+    adapter: { adapterId: "x402-fetch:v2", config },
   };
   const resource = isRecord(decision.import.resource) ? decision.import.resource : undefined;
   const query = Array.isArray(resource?.query) ? resource.query : undefined;
   return {
-    offering: draft.offering,
-    binding: draft.binding,
+    offering,
+    binding,
     execution: {
       endpoint: { url: decision.identity.origin + decision.identity.path },
       method: decision.identity.method,
