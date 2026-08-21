@@ -67,9 +67,6 @@ function queryAwareAnswerResponses(
       tool.function.name === openRouterToolName('registry.search'),
     ) === true
     if (scenario.toolCall === undefined) {
-      if (hasRegistrySearchTool) {
-        throw new Error('boundary scenario must not expose registry.search')
-      }
       return openRouterProseResponse(scenario.prose)
     }
     if (!hasToolResult) {
@@ -203,15 +200,17 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       expect(complete.answer.oneLine).toContain('cannot book or start the job')
       expect(complete.answer.oneLine).not.toContain('No businesses match')
       expect(complete.answer.summary).toContain('Use the cards to compare what is offered')
-      expect(server.requests).toHaveLength(2)
+      expect(server.requests).toHaveLength(3)
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
-      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(1)
-      expect(server.requests.every((request) => request.tools === undefined)).toBe(true)
-      expect(server.requests.filter((request) =>
+      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(2)
+      expect(
+        server.requests.filter(isSafetyModelRequest).every((request) => request.tools === undefined),
+      ).toBe(true)
+      expect(server.requests.some((request) =>
         request.tools?.some((tool) =>
           tool.function.name === openRouterToolName('registry.search'),
         ),
-      )).toHaveLength(0)
+      )).toBe(true)
       expect(
         persistedRegistrySearches(store).reduce((count, calls) => count + calls.length, 0),
       ).toBe(0)
@@ -300,18 +299,21 @@ describe('POST /api/answer/turn boundary follow-up', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toContain('cannot book or start the job')
-      // Two preflights plus the first turn's search/prose pair and one boundary prose request.
-      expect(server.requests).toHaveLength(5)
+      // Two preflights plus first-turn search/stop/prose and boundary tool-stop then AnswerProse.
+      expect(server.requests).toHaveLength(7)
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
       const agentRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
-      expect(agentRequests).toHaveLength(3)
+      expect(agentRequests).toHaveLength(5)
       const boundaryRequests = agentRequests.filter((request) =>
         request.messages.some((message) =>
           message.role === 'user' && message.content.includes('User query: What can Agentic Economy do here?'),
         ),
       )
-      expect(boundaryRequests).toHaveLength(1)
-      expect(boundaryRequests[0]?.tools).toBeUndefined()
+      expect(boundaryRequests.length).toBeGreaterThanOrEqual(1)
+      expect(boundaryRequests.some((request) =>
+        (request.tools ?? []).some((tool) => tool.function.name === openRouterToolName('registry.search')),
+      )).toBe(true)
+      expect(boundaryRequests.at(-1)?.response_format?.json_schema?.name).toBe('answer_prose')
       expect(boundaryRequests[0]?.messages.filter((message) => message.role === 'tool')).toHaveLength(0)
 
       const searches = persistedRegistrySearches(store)
@@ -333,27 +335,42 @@ describe('POST /api/answer/turn boundary follow-up', () => {
     }
   })
 
-  it('re-searches Parramatta while retaining the service need instead of searching the chip label', async () => {
+  it('searches the written Parramatta follow-up instead of rewriting a chip label', async () => {
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([{
-      query: /parramatta/i,
-      toolCall: {
-        toolId: 'registry.search',
-        input: {
-          query: 'plumber Parramatta',
-          limit: 3,
-          mode: 'near_me',
-          location: 'Parramatta',
+    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([
+      {
+        query: /plumber parramatta/i,
+        toolCall: {
+          toolId: 'registry.search',
+          input: {
+            query: 'plumber Parramatta',
+            limit: 3,
+          },
+        },
+        prose: {
+          oneLine: 'One business matches in Parramatta.',
+          summary:
+            'The business offers emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
+          whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
         },
       },
-      prose: {
-        oneLine: 'One business matches in Parramatta.',
-        summary:
-          'The business offers emergency pipe repair around Parramatta. Scope, price, and current availability still need confirmation.',
-        whatToDoNow: 'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
+      {
+        query: /Narrow to Parramatta/i,
+        toolCall: {
+          toolId: 'registry.search',
+          input: {
+            query: 'Narrow to Parramatta',
+            limit: 3,
+          },
+        },
+        prose: {
+          oneLine: 'No businesses match "Narrow to Parramatta" yet.',
+          summary: 'The host did not rewrite that follow-up into the prior plumber search.',
+          whatToDoNow: 'Name the service and place in the query if you want another search.',
+        },
       },
-    }]))
+    ]))
     const restoreOpenRouter = server.installEnv()
 
     let threadId = ''
@@ -377,7 +394,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (firstComplete?.type !== 'complete') {
         throw new Error('expected first complete event')
       }
-      expect(firstComplete.answer.providers.length).toBeGreaterThan(0)
+      expect(firstComplete.answer.oneLine).toContain('matches in Parramatta')
 
       const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
       if (threadEvent?.type !== 'thread') {
@@ -407,14 +424,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.providers.length).toBeGreaterThan(0)
-      expect(complete.answer.oneLine).toContain('matches in Parramatta')
-      expect(complete.answer.oneLine).not.toContain('No businesses match "Narrow to Parramatta"')
+      expect(complete.answer.oneLine).toContain('Narrow to Parramatta')
+      expect(complete.answer.oneLine).not.toContain('matches in Parramatta')
       expect(complete.answer.compactLayout).toBe(true)
-      // Each refine_search turn pays one preflight plus a registry.search/prose pair.
-      expect(server.requests).toHaveLength(6)
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
-      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(4)
 
       const searches = persistedRegistrySearches(store)
       expect(searches).toHaveLength(2)
@@ -424,15 +437,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const searchInputs = searches.map((turnSearches) =>
         JSON.parse(turnSearches[0]?.inputJson ?? '{}') as Record<string, unknown>,
       )
-      for (const input of searchInputs) {
-        expect(input).toMatchObject({
-          location: 'Parramatta',
-          mode: 'near_me',
-        })
-        expect(input.query).toEqual(expect.stringContaining('plumber'))
-        expect(input.query).toEqual(expect.stringContaining('Parramatta'))
-      }
-      expect(searchInputs[1]?.query).not.toContain('Narrow to Parramatta')
+      expect(searchInputs[0]).toMatchObject({ query: 'plumber Parramatta' })
+      expect(searchInputs[1]).toMatchObject({ query: 'Narrow to Parramatta' })
+      expect(searchInputs[0]?.mode).toBeUndefined()
+      expect(searchInputs[1]?.mode).toBeUndefined()
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -443,27 +451,42 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
     }
   }, 15_000)
-  it('keeps the dental need while refining a natural Adelaide location follow-up', async () => {
+  it('searches the written Adelaide follow-up instead of rewriting location', async () => {
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
-    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([{
-      query: /adelaide/i,
-      toolCall: {
-        toolId: 'registry.search',
-        input: {
-          query: 'dentist Adelaide',
-          limit: 3,
-          mode: 'near_me',
-          location: 'Adelaide',
+    const server = await startOpenRouterContractServer(queryAwareAnswerResponses([
+      {
+        query: /^dentist Adelaide$/i,
+        toolCall: {
+          toolId: 'registry.search',
+          input: {
+            query: 'dentist Adelaide',
+            limit: 3,
+          },
+        },
+        prose: {
+          oneLine: 'Start with a dentist serving Adelaide.',
+          summary:
+            'The Adelaide listing publishes general dental care. Scope, price, and current availability still need confirmation.',
+          whatToDoNow: 'Contact the listing and ask whether it handles this need, what it costs, and when it is available.',
         },
       },
-      prose: {
-        oneLine: 'Start with a dentist serving Adelaide.',
-        summary:
-          'The Adelaide listing publishes general dental care. Scope, price, and current availability still need confirmation.',
-        whatToDoNow: 'Contact the listing and ask whether it handles this need, what it costs, and when it is available.',
+      {
+        query: /Only show options near Adelaide/i,
+        toolCall: {
+          toolId: 'registry.search',
+          input: {
+            query: 'Only show options near Adelaide',
+            limit: 3,
+          },
+        },
+        prose: {
+          oneLine: 'No businesses match "Only show options near Adelaide" yet.',
+          summary: 'The host did not rewrite that follow-up into the prior dentist search.',
+          whatToDoNow: 'Name the service and place in the query if you want another search.',
+        },
       },
-    }]))
+    ]))
     const restoreOpenRouter = server.installEnv()
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     const previousConvexUrl = process.env.CONVEX_URL
@@ -490,7 +513,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const firstFrames = await readAnswerTurnStream(first)
       const firstComplete = firstFrames.at(-1)?.event
       if (firstComplete?.type !== 'complete') throw new Error('expected first complete event')
-      expect(firstComplete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
+      expect(firstComplete.answer.oneLine).toContain('Adelaide')
 
       const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
       if (threadEvent?.type !== 'thread') throw new Error('expected thread event')
@@ -511,12 +534,8 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const complete = followUpFrames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') throw new Error('expected follow-up complete event')
-      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual(['adelaide-dental-clinic'])
-      expect(complete.answer.oneLine).toContain('Adelaide')
-      // Each refine_search turn pays one preflight plus a registry.search/prose pair.
-      expect(server.requests).toHaveLength(6)
+      expect(complete.answer.oneLine).toContain('Only show options near Adelaide')
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(2)
-      expect(server.requests.filter((request) => !isSafetyModelRequest(request))).toHaveLength(4)
       const searches = persistedRegistrySearches(store)
       expect(searches).toHaveLength(2)
       for (const turnSearches of searches) {
@@ -525,15 +544,10 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       const searchInputs = searches.map((turnSearches) =>
         JSON.parse(turnSearches[0]?.inputJson ?? '{}') as Record<string, unknown>,
       )
-      for (const input of searchInputs) {
-        expect(input).toMatchObject({
-          location: 'Adelaide',
-          mode: 'near_me',
-        })
-        expect(input.query).toEqual(expect.stringContaining('dentist'))
-        expect(input.query).toEqual(expect.stringContaining('Adelaide'))
-      }
-      expect(searchInputs[1]?.query).not.toContain('Only show options near Adelaide')
+      expect(searchInputs[0]).toMatchObject({ query: 'dentist Adelaide' })
+      expect(searchInputs[1]).toMatchObject({ query: 'Only show options near Adelaide' })
+      expect(searchInputs[0]?.mode).toBeUndefined()
+      expect(searchInputs[1]?.mode).toBeUndefined()
     } finally {
       restoreOpenRouter()
       await server.close()

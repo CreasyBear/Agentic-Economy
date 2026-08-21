@@ -11,14 +11,6 @@ import type { BusinessSupplyProjection } from '@/modules/catalog/public'
 type Business = Parameters<typeof readOfferingSupplyForBusiness>[1]
 
 describe('Offering registry runtime guards', () => {
-  it('refuses active suppression before reading the Offering snapshot', async () => {
-    const db = new SuppressedReader()
-    const business = businessRow('hidden')
-
-    expect(await readOfferingSupplyForBusiness(db, business)).toBeUndefined()
-    expect(db.tablesRead).toEqual(['suppressionRules'])
-  })
-
   it('hydrates a current native Offering snapshot through the shared read seam', async () => {
     const db = new NativeReader()
     const business = businessRow('native')
@@ -40,25 +32,7 @@ function businessRow(slug: string): Business {
   }
 }
 
-class SuppressedReader implements OfferingSupplyReadPort {
-  readonly tablesRead: string[] = []
-
-  hasActiveBusinessSuppression(_businessId: string): Promise<boolean> {
-    this.tablesRead.push('suppressionRules')
-    return Promise.resolve(true)
-  }
-
-  readBusinessSupplyProjectionSnapshot(_businessId: string): Promise<OfferingSupplySnapshot | null> {
-    this.tablesRead.push('businessSupplyProjectionSnapshots')
-    return Promise.resolve(null)
-  }
-}
-
 class NativeReader implements OfferingSupplyReadPort {
-  hasActiveBusinessSuppression(_businessId: string): Promise<boolean> {
-    return Promise.resolve(false)
-  }
-
   readBusinessSupplyProjectionSnapshot(_businessId: string): Promise<OfferingSupplySnapshot | null> {
     return Promise.resolve({
       status: 'current',

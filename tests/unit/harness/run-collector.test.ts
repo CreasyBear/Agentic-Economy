@@ -8,7 +8,7 @@ import {
 
 describe('harness run collector', () => {
   it('builds stable sorted coverage and per-tool counters', () => {
-    const collector = createHarnessRunCollector(['registry.detail', 'registry.search', 'inquiry.submit'])
+    const collector = createHarnessRunCollector(['registry.detail', 'registry.search', 'operation.invoke'])
 
     collector.recordTool({ toolId: 'registry.search', status: 'ok', durationMs: 12.345 })
     collector.recordTool({ toolId: 'registry.detail', status: 'error', durationMs: 7, errorCode: 'invalid_output' })
@@ -45,9 +45,9 @@ describe('harness run collector', () => {
       codes: ['grounding_failed', 'invalid_output', 'write_not_allowed'],
     })
     expect(report.coverage).toEqual({
-      toolsAvailable: ['inquiry.submit', 'registry.detail', 'registry.search'],
+      toolsAvailable: ['operation.invoke', 'registry.detail', 'registry.search'],
       toolsInvoked: ['registry.detail', 'registry.search'],
-      toolsUnused: ['inquiry.submit'],
+      toolsUnused: ['operation.invoke'],
       phases: ['gate', 'retrieve'],
       statuses: ['ok', 'error', 'blocked'],
       modelsUsed: [],

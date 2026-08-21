@@ -111,9 +111,9 @@ describe('openRemovalDispute', () => {
 
 function validCommand(overrides: Partial<DisputeOpenCommand> = {}): DisputeOpenCommand {
   return {
-    businessId: brandNonEmpty('business:parramatta-emergency-plumbing', 'BusinessId'),
+    businessId: brandNonEmpty('business:demo-listed-provider', 'BusinessId'),
     targetType: 'business',
-    targetRef: 'business:parramatta-emergency-plumbing',
+    targetRef: 'business:demo-listed-provider',
     reasonCode: 'privacy_removal_requested',
     contact: {
       email: 'owner@example.test',

@@ -10,10 +10,10 @@ import {
 import { projectPublicServicesPage, type PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
 
 describe('action registry', () => {
-  it('does not list the quarantined public inquiry action', () => {
+  it('does not list deleted public inquiry or customer-request actions', () => {
     const ids = listActions().map((action) => action.id)
     expect(ids).not.toContain('inquiry.submit')
-    expect(findAction('inquiry.submit')).toBeDefined()
+    expect(findAction('inquiry.submit')).toBeUndefined()
     expect(ids).not.toContain('inquiry.readOwnerInbox')
     expect(ids).not.toContain('inquiry.readOwnerThread')
     expect(ids).not.toContain('inquiry.reply')
@@ -37,18 +37,14 @@ describe('action registry', () => {
   })
 
 
-  it('registers route confirmation as a findable retired tombstone', () => {
-    const action = findAction('customerRequest.confirm')
-    expect(action).toBeDefined()
+  it('does not register deleted customer-request actions', () => {
+    expect(findAction('customerRequest.confirm')).toBeUndefined()
     expect(listActions().map((candidate) => candidate.id)).not.toContain('customerRequest.confirm')
   })
 
-  it('keeps customer-safe run and recovery ids findable after unlist', () => {
+  it('does not keep deleted customer-request run and recovery ids', () => {
     expect(['customerRequest.run', 'customerRequest.cancel', 'customerRequest.reportProblem', 'customerRequest.inspectEvidence']
-      .map((id) => findAction(id)?.id)).toEqual([
-        'customerRequest.run', 'customerRequest.cancel', 'customerRequest.reportProblem', 'customerRequest.inspectEvidence',
-      ])
-    expect(findAction('customerRequest.inspectEvidence')?.readOnly).toBe(true)
+      .map((id) => findAction(id))).toEqual([undefined, undefined, undefined, undefined])
   })
 
 
@@ -149,7 +145,7 @@ describe('action registry', () => {
       {
         name: 'operationRefs',
         type: 'array',
-        description: 'One to four opaque current operation references.',
+        description: 'Required array of 1–4 opaque current operation references. Send { "operationRefs": ["operation:v1:…"] }, never a singular operationRef field.',
         required: true,
       },
       {
@@ -239,19 +235,19 @@ describe('action registry', () => {
       disposition: 'current',
       offerings: [
         {
-          offeringRef: 'legacy-offering:adelaide-emergency-plumbing:emergency-pipe-repair',
+          offeringRef: 'legacy-offering:adelaide-emergency-plumbing:listed-offering',
           revision: 1,
-          name: 'Emergency pipe repair',
+          name: 'Listed offering',
           category: 'Emergency plumbing',
           summary: 'Urgent local plumbing.',
           serviceAreaSummary: 'Adelaide and nearby suburbs',
           availabilitySummary: 'Hours supplied by owner',
           accessPaths: [
             {
-              accessPathRef: 'legacy-access:adelaide-emergency-plumbing:emergency-pipe-repair',
+              accessPathRef: 'legacy-access:adelaide-emergency-plumbing:listed-offering',
               offeringRevision: 1,
               kind: 'human_request',
-              channel: 'ae_inquiry',
+              channel: 'website',
               disclosure: 'Use the inquiry form for a first contact.',
             },
           ],
@@ -306,10 +302,10 @@ describe('action registry', () => {
     expect(detail.hasOutputSchema).toBe(true)
     expect(detail.outputJsonSchema).toBeDefined()
 
-    const submit = describeActionForAgent(findAction('inquiry.submit')!)
-    expect(submit.hasOutputSchema).toBe(true)
-    expect(submit.outputJsonSchema).toBeDefined()
-    expect(submit.inputJsonSchema).toBeDefined()
+    const invoke = describeActionForAgent(findAction('operation.invoke')!)
+    expect(invoke.hasOutputSchema).toBe(true)
+    expect(invoke.outputJsonSchema).toBeDefined()
+    expect(invoke.inputJsonSchema).toBeDefined()
   })
   it('marks canonical registry actions as read-only with honest boundaries', () => {
     const search = findAction('registry.search')
@@ -342,65 +338,38 @@ describe('action registry', () => {
     expect(JSON.stringify(canonicalDescriptors)).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
-  it('keeps inquiry.submit outside the internal answer-thread tools', () => {
-    const action = findAction('inquiry.submit')
+  it('keeps operation.invoke outside the internal answer-thread tools', () => {
+    const action = findAction('operation.invoke')
     expect(action).toBeDefined()
     expect(action?.readOnly).toBe(false)
     expect(action?.surfaces).not.toContain('answerThread')
   })
 
-  it('carries boundary-honest descriptors on the agent-facing tool', () => {
-    const action = findAction('inquiry.submit')
-    const descriptor = describeActionForAgent(action!)
+  it('carries boundary-honest descriptors on the agent-facing invoke tool', () => {
+    const action = findAction('operation.invoke')
+    if (action === undefined) throw new Error('operation.invoke missing')
+    const descriptor = describeActionForAgent(action)
     expect(descriptor.boundaries.length).toBeGreaterThan(0)
-    expect(descriptor.summary).toMatch(/inquiry/i)
-    expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessId')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('target.offeringRef')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessSlug')
-    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.serviceId')
-    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.serviceSlug')
-    expect(descriptor.parameters.map((p) => p.name)).not.toContain('target.capabilityKind')
-    expect(descriptor.parameters.map((p) => p.name)).toContain('body')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('operationRef')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('input')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('idempotencyKey')
   })
 
-  it('refuses booking/payment/dispatch in the boundaries', () => {
-    const descriptor = describeActionForAgent(findAction('inquiry.submit')!)
+  it('refuses booking/payment/dispatch in registry search boundaries', () => {
+    const descriptor = describeActionForAgent(findAction('registry.search')!)
     const joined = descriptor.boundaries.join(' ')
     expect(joined).toMatch(/book/)
     expect(joined).toMatch(/charge|pay/)
     expect(joined).toMatch(/dispatch/)
   })
 
-  it('keeps owner-only operations outside the public action registry', () => {
+  it('keeps deleted inquiry operations outside the public action registry', () => {
+    expect(findAction('inquiry.submit')).toBeUndefined()
     expect(findAction('inquiry.readOwnerInbox')).toBeUndefined()
     expect(findAction('inquiry.readOwnerThread')).toBeUndefined()
     expect(findAction('inquiry.reply')).toBeUndefined()
     expect(findAction('inquiry.markRead')).toBeUndefined()
     expect(findAction('inquiry.close')).toBeUndefined()
-  })
-
-  it('rejects inquiry.submit body and contact fields beyond the route-boundary max length', () => {
-    const schema = findAction('inquiry.submit')!.schema
-    const target = {
-      businessId: 'business:plumbing-demo',
-      offeringRef: 'offering:plumbing-demo:emergency-plumbing',
-    }
-    const baseInput = {
-      target,
-      body: 'Need help with a leak.',
-      contact: { email: 'person@example.test' },
-      expectedDigest: `sha256:${'0'.repeat(64)}`,
-    }
-
-    expect(schema.safeParse(baseInput).success).toBe(true)
-    expect(schema.safeParse({ ...baseInput, body: 'a'.repeat(2_000) }).success).toBe(true)
-    expect(schema.safeParse({ ...baseInput, body: 'a'.repeat(2_001) }).success).toBe(false)
-    expect(schema.safeParse({ ...baseInput, contact: { name: 'a'.repeat(200) } }).success).toBe(true)
-    expect(schema.safeParse({ ...baseInput, contact: { name: 'a'.repeat(201) } }).success).toBe(false)
-    expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(241)}@example.test` } }).success).toBe(true)
-    expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(242)}@example.test` } }).success).toBe(false)
-    expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(32) } }).success).toBe(true)
-    expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
   })
 
   it('accepts an exact price ceiling and refuses malformed ceilings', () => {

@@ -1,14 +1,10 @@
-import { LOCAL_E2E_BUSINESS_FIXTURES } from './local-e2e-business-fixtures'
+import { DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG, LOCAL_E2E_BUSINESS_FIXTURES } from './local-e2e-business-fixtures'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import { brandNonEmpty, type BusinessId, type OfferingRef } from '../../src/modules/common/ids'
-import { matchingCsrf } from '../../src/modules/common/matching-csrf'
-import { claimBusiness } from '../../src/modules/business/public'
 import {
   getPublicBusinessOfferingSupplyBySlug,
   listPublicBusinessOfferingSupply,
-  resolvePublishedInquiryTarget,
   searchPublicBusinessOfferingSupply,
-  createDefaultRegistrySourceState,
   type RegistrySourceState,
 } from '../../src/modules/registry/public'
 import {
@@ -17,59 +13,78 @@ import {
 } from '../../src/modules/registry/registry.functions'
 import { createPublicSourceTransport, setPublicSourceTransportForTests } from '../../src/lib/server/convex-source'
 import { isRecord } from '../../src/modules/common/is-record'
-import { createLocalE2eInquiryServerBackend } from './inquiry-local-e2e-adapter'
 
 export function createLocalE2eRegistrySourceState(): RegistrySourceState {
-  const state = createDefaultRegistrySourceState()
+  const state: RegistrySourceState = {
+    owners: [],
+    businesses: [],
+    businessContexts: [],
+    offerings: [],
+    revisions: [],
+    accessPaths: [],
+    operationKeys: [],
+    auditEvents: [],
+    registryProjectionItems: [],
+    registryProjectionAttempts: [],
+    registrySearchDocuments: [],
+    indexStatus: [],
+  }
 
-  for (const fixture of LOCAL_E2E_BUSINESS_FIXTURES) {
+  for (const [fixtureIndex, fixture] of LOCAL_E2E_BUSINESS_FIXTURES.entries()) {
     const offering = fixture.offerings[0]
     if (offering === undefined) {
       throw new Error(`Local e2e fixture offering missing for ${fixture.requestedSlug}`)
     }
-    const publishedAt = Date.now()
-    const claim = claimBusiness(state, {
-      actor: {
-        kind: 'authenticated_owner',
-        clerkUserId: `owner:${fixture.requestedSlug}`,
-        displayName: `${fixture.businessName} Owner`,
-      },
-      facts: {
-        name: fixture.businessName,
-        category: fixture.category,
-        businessContext: {
-          kind: 'local_human',
-          suburb: fixture.suburb,
-          stateTerritory: fixture.stateTerritory,
-          ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
-        },
-        requestedSlug: fixture.requestedSlug,
-        ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
-        ownerMessage: 'Local e2e owner-supplied Offering facts.',
-        sourceRefs: [{
-          label: 'Local e2e Offering facts',
-          evidenceRef: `private:evidence:${fixture.requestedSlug}`,
-          sourceHash: canonicalDigest(`source:${fixture.requestedSlug}`),
-        }],
-      },
-      security: { csrf: matchingCsrf(`local-e2e-claim:${fixture.requestedSlug}`) },
-      operationKey: brandNonEmpty(`op:registry-default:local-e2e-claim:${fixture.requestedSlug}`, 'OperationKey'),
-      correlationId: brandNonEmpty(`corr:registry-default:local-e2e-claim:${fixture.requestedSlug}`, 'CorrelationId'),
-      now: publishedAt - 1,
-    })
-    if (claim.kind === 'error') {
-      throw new Error(`Local e2e registry claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
+    const publishedAt = 1_777_100_000_000 + fixtureIndex * 1_000
+    const ownerId = brandNonEmpty(`owner:${fixture.requestedSlug}`, 'OwnerId')
+    const businessId = brandNonEmpty(`business:${fixture.requestedSlug}`, 'BusinessId')
+    const slug = brandNonEmpty(fixture.requestedSlug, 'Slug')
+    const businessContext = {
+      kind: 'local_human' as const,
+      suburb: fixture.suburb,
+      stateTerritory: fixture.stateTerritory,
+      ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
     }
-
-    claim.business.publicStatus = 'published'
-    claim.business.claimStatus = 'published'
-    claim.business.updatedAt = publishedAt
-    claim.claim.status = 'published'
-    claim.claim.updatedAt = publishedAt
+    const sourceHash = canonicalDigest({ fixture, businessContext })
+    state.owners.push({
+      ownerId,
+      clerkUserId: `owner:${fixture.requestedSlug}`,
+      displayName: `${fixture.businessName} Owner`,
+      createdAt: publishedAt,
+      updatedAt: publishedAt,
+    })
+    state.businesses.push({
+      businessId,
+      ownerId,
+      slug,
+      name: fixture.businessName,
+      normalizedName: fixture.businessName.toLowerCase(),
+      category: fixture.category,
+      businessContext,
+      publicStatus: 'published',
+      trustTier: 'claimed',
+      sourceHash,
+      createdAt: publishedAt,
+      updatedAt: publishedAt,
+    })
+    state.businessContexts.push({
+      businessId,
+      category: fixture.category,
+      businessContext,
+      ownerMessage: 'Local e2e owner-supplied Offering facts.',
+      sourceRefs: [{
+        label: 'Local e2e Offering facts',
+        evidenceRef: `private:evidence:${fixture.requestedSlug}`,
+        sourceHash,
+      }],
+      sourceHash,
+      approvedAt: publishedAt,
+      ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+    })
 
     const offeringSlug = offering.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     appendPublishedOffering(state, {
-      businessId: claim.business.businessId,
+      businessId,
       offeringRef: brandNonEmpty(`offering:${fixture.requestedSlug}:${offeringSlug}`, 'OfferingRef'),
       facts: {
         name: offering.name,
@@ -88,6 +103,21 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
 
 }
 
+export function createDefaultPublicRegistryFixtureState(): RegistrySourceState {
+  const state = createLocalE2eRegistrySourceState()
+  const business = state.businesses.find((candidate) => candidate.slug === DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG)
+  if (business === undefined) throw new Error('Default public registry fixture is required.')
+  return {
+    ...state,
+    owners: state.owners.filter((candidate) => candidate.ownerId === business.ownerId),
+    businesses: [business],
+    businessContexts: state.businessContexts.filter((candidate) => candidate.businessId === business.businessId),
+    offerings: state.offerings.filter((candidate) => candidate.businessId === business.businessId),
+    revisions: state.revisions.filter((candidate) => candidate.businessId === business.businessId),
+    accessPaths: state.accessPaths.filter((candidate) => candidate.businessId === business.businessId),
+  }
+}
+
 /** Builds a source port from the real local-e2e registry projection. */
 export function createLocalE2eRegistrySourcePort(): PublicRegistrySourcePort {
   const state = createLocalE2eRegistrySourceState()
@@ -95,7 +125,6 @@ export function createLocalE2eRegistrySourcePort(): PublicRegistrySourcePort {
     list: (input) => Promise.resolve(listPublicBusinessOfferingSupply(state, input)),
     search: (input) => Promise.resolve(searchPublicBusinessOfferingSupply(state, input)),
     detail: (input) => Promise.resolve(getPublicBusinessOfferingSupplyBySlug(state, input)),
-    resolveInquiryTarget: (input) => Promise.resolve(resolvePublishedInquiryTarget(state, input)),
   }
 }
 
@@ -103,7 +132,6 @@ export function createLocalE2eRegistrySourcePort(): PublicRegistrySourcePort {
 export function createLocalE2ePublicSourceTransport(
   registry: PublicRegistrySourcePort = createLocalE2eRegistrySourcePort(),
 ) {
-  const inquiry = createLocalE2eInquiryServerBackend()
   return createPublicSourceTransport({
     env: { CONVEX_URL: 'http://local-registry-source.test' },
     fetch: async (_input, init) => {
@@ -130,23 +158,6 @@ export function createLocalE2ePublicSourceTransport(
           return sourceSuccess(await registry.detail(
             args as Parameters<PublicRegistrySourcePort['detail']>[0],
           ))
-        case 'registry:resolvePublishedInquiryTargetBySlug':
-          return sourceSuccess(await registry.resolveInquiryTarget(
-            args as Parameters<PublicRegistrySourcePort['resolveInquiryTarget']>[0],
-          ))
-        case 'inquiries:readPublicTargetAdmission': {
-          if (typeof args.businessId !== 'string' || typeof args.offeringRef !== 'string') {
-            throw new Error('local_registry_source_inquiry_target_invalid')
-          }
-          const result = inquiry.readPublicTargetAdmission({
-            businessId: args.businessId,
-            offeringRef: args.offeringRef,
-          })
-          if (result.kind !== 'ok') {
-            throw new Error(`local_registry_source_inquiry_unavailable:${result.code}`)
-          }
-          return sourceSuccess(result.admission)
-        }
         case 'capabilitySupplyOperations:offeringOperationMap':
           return sourceSuccess([])
         default:
@@ -186,7 +197,7 @@ function appendPublishedOffering(
       pricingSummary?: string
     }
     accessPaths?: readonly {
-      channel: 'phone' | 'website' | 'ae_inquiry'
+      channel: 'phone' | 'website'
       disclosure: string
     }[]
     now: number

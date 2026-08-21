@@ -4,18 +4,9 @@
 //   - Workflow ids + honesty rules derive from the engine evaluation table
 //     (.planning/research/2026-08-05-engine-usefulness-path.md §2) and the live
 //     WORKFLOWS table in eval/engine/run-evaluation.mjs.
-//   - expectedCapabilities / forbiddenCapabilities use the real curated catalog
-//     capability identifiers (operator-allowed substrings), read from the curated
-//     cluster publications under src/modules/capability-supply/:
-//       Cluster A (keyless): open-meteo.forecast, open-meteo.geocoding,
-//         wikipedia-rest.page-summary, thecatapi.image-search,
-//         coingecko.simple-price, ipify.public-ip
-//       Cluster B (keyed, env-credentialed): openweathermap.current-weather,
-//         tavily.search, serpapi.google-search, coingecko.simple-price-demo
-//       Exa live: exa.search, exa.contents ; Frankfurter: frankfurter.single-rate
-//       Cluster C (observed x402, 7 ops): *-x402 (exa-search, timezone-convert,
-//         wolframalpha-query, coinmarketcap-quotes, flightaware-nearby,
-//         bizintel-forex-rate, tavily-search) -- discoverable, NEVER executable.
+//   - expectedCapabilities / forbiddenCapabilities previously named Cluster
+//     A/B/C catalog ids. Those packs are evicted. This corpus is historical
+//     engine-eval furniture, not the product catalog.
 //
 // Sovereign honesty invariants (never negotiable): no fabrication, no data/secret
 // leak, no false positive. A keyed-env case without a credential must answer

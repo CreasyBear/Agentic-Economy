@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
 
-const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
+const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'demo-inquiry-provider')
 if (demoBusiness === undefined) {
-  throw new Error('The plumbing-demo local E2E fixture is required.')
+  throw new Error('The demo-inquiry-provider local E2E fixture is required.')
 }
 
 const futureSurfaceCopy =
@@ -16,15 +16,15 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByRole('search', { name: /ask a question or describe what you need done/i })).toBeVisible()
 
-    const query = 'emergency plumber parramatta'
+    const query = 'listed offering parramatta'
     await submitLandingQuery(page, query)
 
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)
 
     await expect(page.getByRole('link', { name: demoBusiness.businessName })).toBeVisible()
-    await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
-    await expect(page.getByText(/publishes Emergency pipe repair/i).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /Demo listed provider/i })).toBeVisible()
+    await expect(page.getByText(/publishes Listed offering/i).first()).toBeVisible()
     await expect(page.getByText(/Published matches do not confirm price or current availability/i).first()).toBeVisible()
     await expect(page.getByText(/confirm timing, price, and current availability directly/i).first()).toBeVisible()
 

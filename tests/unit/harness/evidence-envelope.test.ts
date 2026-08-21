@@ -6,7 +6,6 @@ import {
   createPrivateToolEvidence,
   createPublicProjectionMetadata,
   detectStalePublicProjection,
-  isInquirySubmitToolResult,
   isProtectedAeToolResult,
   isRegistryDetailToolResult,
   isRegistrySearchToolResult,
@@ -62,7 +61,6 @@ describe('harness evidence envelope', () => {
       toolRuns: 1,
       catalogSearches: 1,
       listingsRead: 0,
-      qualifiedInquiries: 0,
       listedBusinesses: 3,
       checksPassed: 1,
       checksFailed: 0,
@@ -143,18 +141,14 @@ describe('harness evidence envelope', () => {
   it('classifies protected AE tool and evidence kinds', () => {
     const search = toolResult({ toolId: 'registry.search' })
     const detail = toolResult({ toolId: 'registry.detail' })
-    const inquiry = toolResult({ toolId: 'inquiry.submit' })
     const internal = toolResult({ toolId: 'internal.telemetry' })
 
     expect(isRegistrySearchToolResult({ toolResult: search })).toBe(true)
     expect(isRegistryDetailToolResult({ toolResult: detail })).toBe(true)
-    expect(isInquirySubmitToolResult({ toolResult: inquiry })).toBe(true)
     expect(isProtectedAeToolResult(search)).toBe(true)
     expect(isProtectedAeToolResult(detail)).toBe(true)
-    expect(isProtectedAeToolResult(inquiry)).toBe(true)
     expect(isProtectedAeToolResult(internal)).toBe(false)
     expect(classifyHarnessEvidenceSensitivity({ kind: 'sourceFact' })).toBe('protectedPrivate')
-    expect(classifyHarnessEvidenceSensitivity({ kind: 'inquiryReceipt' })).toBe('protectedPrivate')
     expect(classifyHarnessEvidenceSensitivity({ kind: 'publicSummary' })).toBe('public')
   })
 

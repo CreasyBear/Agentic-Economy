@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const FIRST_QUERY = 'emergency plumber parramatta'
+const FIRST_QUERY = 'listed offering parramatta'
 const SECOND_QUERY = 'emergency roofer nowhere 9999'
 
 const futureSurfaceCopy =
@@ -40,10 +40,10 @@ test.describe('thread-first answer flow', () => {
     await startThreadFromQueryUrl(page, SECOND_QUERY, { expectTranscript: false })
 
     await expect(page.getByRole('complementary', { name: /recent questions/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('link', { name: /listed offering parramatta/i })).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('link', { name: /emergency roofer nowhere 9999/i })).toBeVisible({ timeout: 15_000 })
 
-    await page.getByRole('link', { name: /emergency plumber parramatta/i }).click()
+    await page.getByRole('link', { name: /listed offering parramatta/i }).click()
     await expect(page).toHaveURL(firstThreadUrl)
   })
 })

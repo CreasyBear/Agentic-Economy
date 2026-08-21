@@ -20,7 +20,6 @@ import {
   TOOLCALL_CASES,
   type CapabilityCatalogEntry,
 } from './cases'
-import { executeWikipediaSummary } from './execute-keyless'
 
 const { values } = parseArgs({
   options: {
@@ -30,51 +29,11 @@ const { values } = parseArgs({
   strict: false,
 })
 
-const WIKIPEDIA_CAPABILITY_ID = 'wikipedia-rest.page-summary'
-
-function wikipediaContractOverrides() {
-  return {
-    contractFormat: 'ae.capability-contract:v2' as const,
-    capabilityId: WIKIPEDIA_CAPABILITY_ID,
-    version: 1,
-    name: 'Wikipedia page summary',
-    description: 'Returns a plain-text summary for a Wikipedia page through the keyless REST summary endpoint.',
-    inputSchema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: { title: { type: 'string', minLength: 1, maxLength: 300 } },
-      required: ['title'],
-      additionalProperties: false,
-    },
-    outputSchema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: { title: { type: 'string' }, extract: { type: 'string' } },
-      required: ['title', 'extract'],
-      additionalProperties: false,
-    },
-    customerAnnotations: [
-      { annotationId: 'title', document: 'input', pointer: '/title', label: 'Page title', role: 'request' },
-      { annotationId: 'summary', document: 'output', pointer: '/extract', label: 'Page summary', role: 'completion_evidence' },
-    ],
-    dataUse: [{
-      effectId: 'query_release', inputPointer: '/title', classification: 'public',
-      phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['retrieve_wikipedia_summary'],
-    }],
-    effects: [{
-      effectId: 'query_release', class: 'data_release', authority: 'mandate_or_explicit', reversibility: 'not_applicable',
-    }],
-    evidence: [{ evidenceId: 'summary', outputPointer: '/extract', purpose: 'completion' }],
-    lifecycle: { idempotency: 'required', recovery: 'reconcile_required' },
-  }
-}
-
 function buildModel(entry: CapabilityCatalogEntry): CapabilityDecisionModel {
   const document = capabilityContractV2({
     capabilityId: entry.capabilityId,
     name: entry.name,
     description: entry.description,
-    ...(entry.capabilityId === WIKIPEDIA_CAPABILITY_ID ? wikipediaContractOverrides() : {}),
   })
   return openCapabilityDecisionModel(defineCapabilityContract(document))
 }
@@ -180,23 +139,7 @@ async function main(): Promise<boolean> {
   }
 
   if (values['live-execute'] === true) {
-    const wikipediaCase = TOOLCALL_CASES.find((testCase) => testCase.executable === true)
-    if (wikipediaCase === undefined) {
-      failures.push('live-execute: no executable case found')
-    } else {
-      try {
-        const { observation, validationKind } = await executeWikipediaSummary(wikipediaCase.input ?? {})
-        if (observation.disposition === 'succeeded' && observation.outputJson !== undefined && validationKind === 'valid') {
-          console.log(`live-execute ${wikipediaCase.id}: OK - real result ${observation.outputJson}`)
-        } else {
-          failures.push(`live-execute ${wikipediaCase.id}: disposition=${observation.disposition} validation=${validationKind} failure=${observation.failureCode ?? 'none'}`)
-          logCase(wikipediaCase.id, false, 'live keyless execution failed')
-        }
-      } catch (error) {
-        failures.push(`live-execute ${wikipediaCase.id}: threw ${error instanceof Error ? error.message : String(error)}`)
-        logCase(wikipediaCase.id, false, 'live keyless execution threw')
-      }
-    }
+    failures.push('live-execute: cluster keyless catalog is evicted; paid /call is parked')
   }
 
   console.log(`tool-call harness: ${TOOLCALL_CASES.length} cases, ${failures.length} failures`)

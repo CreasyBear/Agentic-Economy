@@ -272,7 +272,7 @@ function supplyOffering(
     offering: {
       offeringRef: brandNonEmpty('offering:meridian:hours', 'OfferingRef'),
       revision: 1,
-      name: 'Emergency pipe repair',
+      name: 'Listed offering',
       category: 'Emergency plumbing',
       summary: 'Burst pipe triage.',
       ...facts,

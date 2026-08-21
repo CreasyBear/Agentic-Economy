@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoveryExamples,
@@ -74,9 +70,9 @@ describe('developer discovery generated artifact parity', () => {
       },
     })
     expect(examples.examples[0]).toMatchObject({
-      slug: 'parramatta-emergency-plumbing',
+      slug: 'demo-listed-provider',
       schemaVersion: 'public-business-catalog-api:v2',
-      offerings: [expect.objectContaining({ name: 'Emergency pipe repair' })],
+      offerings: [expect.objectContaining({ name: 'Listed offering' })],
     })
 
     expect(serialized).not.toMatch(forbiddenPrivateOrAuthorityPattern)
@@ -102,35 +98,17 @@ describe('developer discovery generated artifact parity', () => {
         }),
       ],
     })
-    expect(serialized).not.toContain('parramatta-emergency-plumbing')
+    expect(serialized).not.toContain('demo-listed-provider')
     expect(serialized).not.toMatch(forbiddenPrivateOrAuthorityPattern)
   })
 
-  it('withholds generated artifacts when publication is disabled or parity fails', () => {
+  it('withholds generated artifacts when parity fails', () => {
     const state = availableDiscoveryState()
-    const disabledOptions = {
-      canonicalBaseUrl: 'https://ae.example',
-      now: 5_000,
-      operatorControls: [{ key: 'developer_discovery_publish_enabled', effectiveEnabled: false }],
-    } as const
-    const schema = generateDeveloperDiscoverySchema(state, disabledOptions)
-    const examples = generateDeveloperDiscoveryExamples(state, disabledOptions)
     const withheld = withholdDeveloperDiscoveryArtifact(
       generateDeveloperDiscoverySchema(state, { canonicalBaseUrl: 'https://ae.example', now: 5_000 }),
       'Route parity failed for schema test.'
     )
 
-    expect(schema).toMatchObject({
-      state: 'unavailable',
-      parityStatus: 'withheld',
-      fields: [],
-    })
-    expect(examples).toMatchObject({
-      state: 'unavailable',
-      parityStatus: 'withheld',
-      examples: [],
-      emptyExample: { kind: 'ok' },
-    })
     expect(withheld).toMatchObject({
       state: 'unavailable',
       parityStatus: 'withheld',
@@ -140,27 +118,7 @@ describe('developer discovery generated artifact parity', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createFixtureDiscoverySourceState()
-  const business = state.businesses.at(0)
-
-  if (business === undefined) {
-    throw new Error('Expected default discovery source state to include a business.')
-  }
-
-  const generated = regenerateDiscoveryManifest(
-    state,
-    { businessId: business.businessId },
-    {
-      canonicalBaseUrl: 'https://agentic.test',
-      now: 3_000,
-      adapter: testOnlyDiscoveryManifestAdapter,
-    },
-  )
-  if (generated.kind !== 'ok') {
-    throw new Error(`Expected discovery manifest generation to succeed: ${generated.reason}`)
-  }
-
-  return state
+  return createFixtureDiscoverySourceState()
 }
 
 function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot {
@@ -290,12 +248,12 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
       },
       {
         route: 'https://ae.example/route-derived-solar-repair/ucp',
-        label: 'AE-hosted UCP fallback',
+        label: 'AE-hosted UCP manifest',
         ok: true,
         checkedAt: 6_000,
         httpStatus: 200,
-        schemaVersion: 'ae-ucp-fallback:v1',
-        expectedSchemaVersion: 'ae-ucp-fallback:v1',
+        schemaVersion: 'ae-ucp:v2',
+        expectedSchemaVersion: 'ae-ucp:v2',
       },
       { route: 'https://ae.example/llms.txt', label: 'LLMs text discovery file', ok: true, checkedAt: 6_000, httpStatus: 200 },
       { route: 'https://ae.example/sitemap.xml', label: 'Sitemap discovery file', ok: true, checkedAt: 6_000, httpStatus: 200 },

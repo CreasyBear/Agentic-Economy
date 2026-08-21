@@ -18,9 +18,13 @@ function productionEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
-    AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
-    AE_X402_PAYMENT_PRIVATE_KEY: 'x402-payer-private-key',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":"https://base.example/rpc"}',
+    CDP_API_KEY_ID: 'cdp-key-id',
+    CDP_API_KEY_SECRET: 'cdp-key-secret',
+    CDP_WALLET_SECRET: 'cdp-wallet-secret',
+    AE_X402_CDP_ACCOUNT_NAME: 'agentic-economy-x402',
+    AE_X402_CUSTODY_ENABLED: 'true',
+    AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'sk_live_example',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
@@ -65,7 +69,7 @@ describe('deployment manifest validator', () => {
       'AE_CANONICAL_BASE_URL',
       'AE_CANONICAL_HOST_ALLOWLIST',
       'OPENROUTER_API_KEY',
-      'AE_SOURCE_WRITE_KEY_INQUIRY',
+      'AE_SOURCE_WRITE_KEY_BILLING',
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
@@ -137,31 +141,47 @@ describe('deployment manifest validator', () => {
     ]))
   })
 
-  it('requires the fixed x402 payer locator and never emits its private-key value', () => {
+  it('requires CDP custody, forbids raw production keys, and redacts custody secrets', () => {
     const missing = validateDeploymentManifest({
       ...productionEnvironment(),
-      AE_X402_PAYMENT_CREDENTIAL_REF: '',
-      AE_X402_PAYMENT_PRIVATE_KEY: '',
+      CDP_API_KEY_ID: '',
+      CDP_API_KEY_SECRET: '',
+      CDP_WALLET_SECRET: '',
+      AE_X402_CDP_ACCOUNT_NAME: '',
+      AE_X402_CUSTODY_ENABLED: '',
+      AE_X402_CUSTODY_MAX_ATOMIC: '',
       AE_X402_RPC_URLS_JSON: '',
     }, { nodeMajor: 22 })
     expect(missing.findings.flatMap((finding) => finding.names)).toEqual(expect.arrayContaining([
-      'AE_X402_PAYMENT_CREDENTIAL_REF',
-      'AE_X402_PAYMENT_PRIVATE_KEY',
+      'CDP_API_KEY_ID',
+      'CDP_API_KEY_SECRET',
+      'CDP_WALLET_SECRET',
+      'AE_X402_CDP_ACCOUNT_NAME',
+      'AE_X402_CUSTODY_ENABLED',
+      'AE_X402_CUSTODY_MAX_ATOMIC',
       'AE_X402_RPC_URLS_JSON',
     ]))
 
-    const malformed = validateDeploymentManifest({
+    const forbidden = validateDeploymentManifest({
       ...productionEnvironment(),
-      AE_X402_PAYMENT_CREDENTIAL_REF: 'env:OTHER_PRIVATE_KEY',
+      AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+      AE_X402_PAYMENT_PRIVATE_KEY: 'raw-private-key',
     }, { nodeMajor: 22 })
-    expect(malformed.findings).toContainEqual(expect.objectContaining({
-      kind: 'malformed',
-      names: ['AE_X402_PAYMENT_CREDENTIAL_REF'],
-    }))
-    expect(JSON.stringify(malformed)).not.toContain('x402-payer-private-key')
+    expect(forbidden.findings.filter((finding) => finding.kind === 'forbidden').flatMap((finding) => finding.names))
+      .toEqual(expect.arrayContaining(['AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY']))
+    expect(JSON.stringify(forbidden)).not.toContain('raw-private-key')
+    const malformedCustody = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_X402_CUSTODY_ENABLED: 'false',
+      AE_X402_CUSTODY_MAX_ATOMIC: '0',
+    }, { nodeMajor: 22 })
+    expect(malformedCustody.findings.map((finding) => finding.code)).toEqual(expect.arrayContaining([
+      'x402_custody_not_enabled',
+      'x402_custody_cap_invalid',
+    ]))
     const malformedRpc = validateDeploymentManifest({
       ...productionEnvironment(),
-      AE_X402_RPC_URLS_JSON: '{"eip155:8453":"http://localhost:8545"}',
+      AE_X402_RPC_URLS_JSON: '{"eip155:8453":["http://localhost:8545"]}',
     }, { nodeMajor: 22 })
     expect(malformedRpc.findings).toContainEqual(expect.objectContaining({
       kind: 'malformed',
@@ -171,17 +191,6 @@ describe('deployment manifest validator', () => {
     expect(JSON.stringify(malformedRpc)).not.toContain('base.example')
   })
 
-
-  it('closes partially configured optional notification providers', () => {
-    const result = validateDeploymentManifest({
-      ...productionEnvironment(),
-      RESEND_API_KEY: 'resend-secret',
-    }, { nodeMajor: 22 })
-    const names = result.findings.flatMap((finding) => finding.names)
-
-    expect(result.ok).toBe(false)
-    expect(names).toEqual(expect.arrayContaining(['RESEND_FROM', 'RESEND_WEBHOOK_SECRET', 'AE_NOTIFICATION_OUTBOX_SECRET']))
-  })
 
   it('requires the whole production live-gateway fixture when spend is confirmed', () => {
     const partial = validateDeploymentManifest({

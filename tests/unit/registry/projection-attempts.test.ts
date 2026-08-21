@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { claimBusiness } from '@/modules/business/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
-import { brandNonEmpty } from '@/modules/common/ids'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { readCatalogHealth, retryRegistryProjection, syncCatalogProjection } from '@/modules/registry/public'
 import { emptyRegistryProjectionSourceState } from '../../fixtures/source-state'
+import { createLocalE2eRegistrySourceState } from '../../helpers/registry-local-e2e'
 
 describe('registry projection attempts', () => {
   it('syncs a published catalog DTO into durable projection items and index readback', () => {
@@ -28,9 +26,9 @@ describe('registry projection attempts', () => {
       kind: 'ok',
       code: 'registry_projection_indexed',
       catalog: {
-        slug: 'parramatta-emergency-plumbing',
+        slug: 'demo-listed-provider',
         schemaVersion: 'public-business-catalog-api:v2',
-        offerings: [{ offeringRef: 'offering:business:parramatta-emergency-plumbing:emergency-pipe-repair' }],
+        offerings: [{ offeringRef: 'offering:demo-listed-provider:listed-offering' }],
       },
       attempt: {
         status: 'succeeded',
@@ -121,78 +119,17 @@ describe('registry projection attempts', () => {
 })
 
 function publishSamCatalog(state: RegistrySourceState) {
-  const claim = claimBusiness(state, {
-    actor: { kind: 'authenticated_owner', clerkUserId: 'user_sam' },
-    facts: {
-      name: 'Parramatta Emergency Plumbing',
-      category: 'Emergency plumbing',
-      businessContext: {
-        kind: 'local_human',
-        suburb: 'Parramatta',
-        stateTerritory: 'NSW',
-      },
-      requestedSlug: 'parramatta-emergency-plumbing',
-      sourceRefs: [
-        {
-          label: 'Owner supplied',
-          evidenceRef: 'private:evidence:sam',
-          sourceHash: canonicalDigest('source:sam'),
-        },
-      ],
-    },
-    security: { csrf: mutationCsrf('claim').csrf },
-    operationKey: brandNonEmpty('op:claim:sam-registry-unit', 'OperationKey'),
-    correlationId: brandNonEmpty('corr:claim:sam-registry-unit', 'CorrelationId'),
-    now: 1_000,
-  })
-
-  if (claim.kind === 'error') {
-    throw new Error(claim.reason)
-  }
-
-  claim.business.publicStatus = 'published'
-  claim.business.claimStatus = 'published'
-  claim.business.updatedAt = 2_000
-  claim.claim.status = 'published'
-  claim.claim.updatedAt = 2_000
-
-  const offeringRef = brandNonEmpty(
-    'offering:business:parramatta-emergency-plumbing:emergency-pipe-repair',
-    'OfferingRef',
-  )
-  const facts = {
-    name: 'Emergency pipe repair',
-    category: 'Emergency plumbing',
-    summary: 'Burst pipe triage and repair.',
-    serviceAreaSummary: 'Parramatta and nearby suburbs',
-  }
-  const sourceHash = canonicalDigest({ businessId: claim.business.businessId, offeringRef, revision: 1, ...facts })
-  state.offerings.push({
-    offeringRef,
-    businessId: claim.business.businessId,
-    currentRevision: 1,
-    status: 'published',
-    createdAt: 2_000,
-    updatedAt: 2_000,
-  })
-  state.revisions.push({
-    offeringRef,
-    businessId: claim.business.businessId,
-    revision: 1,
-    ...facts,
-    sourceHash,
-    createdAt: 2_000,
-  })
-
-  return { business: claim.business }
-}
-
-function mutationCsrf(key: string) {
-  return {
-    csrf: {
-      csrfToken: `csrf-${key}`,
-      csrfCookie: `csrf-${key}`,
-      allowedOrigins: ['https://ae.example'],
-    },
-  }
+  const fixture = createLocalE2eRegistrySourceState()
+  const business = fixture.businesses.find((candidate) => candidate.slug === 'demo-listed-provider')
+  if (business === undefined) throw new Error('Default registry fixture is required.')
+  const context = fixture.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+  const owner = fixture.owners.find((candidate) => candidate.ownerId === business.ownerId)
+  if (context === undefined || owner === undefined) throw new Error('Default registry fixture is incomplete.')
+  state.owners.push(owner)
+  state.businesses.push(business)
+  state.businessContexts.push(context)
+  state.offerings.push(...fixture.offerings.filter((candidate) => candidate.businessId === business.businessId))
+  state.revisions.push(...fixture.revisions.filter((candidate) => candidate.businessId === business.businessId))
+  state.accessPaths.push(...fixture.accessPaths.filter((candidate) => candidate.businessId === business.businessId))
+  return { business }
 }

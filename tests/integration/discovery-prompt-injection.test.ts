@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import {
-  buildCatalogDiscoveryManifest,
+  buildOfferingDiscoveryManifest,
   buildLlmsTxt,
 } from '@/modules/discovery/public'
 import { createLocalE2eRegistrySourceState } from '../helpers/registry-local-e2e'
@@ -40,8 +40,8 @@ describe('discovery prompt-injection protection', () => {
       throw new Error('Expected public catalog.')
     }
 
-    const manifestResult = buildCatalogDiscoveryManifest({
-      catalog: catalogResult.catalog,
+    const manifestResult = buildOfferingDiscoveryManifest({
+      business: catalogResult.catalog,
       canonicalBaseUrl: 'https://ae.example',
       now: 6_000,
     })
@@ -57,9 +57,7 @@ describe('discovery prompt-injection protection', () => {
     expect(serialized).not.toMatch(/callable=true|paymentRequired=true|payable|verified/i)
     expect(manifestResult.manifest.disposition).toBe('current')
     expect(manifestResult.manifest.offerings[0]?.support).toEqual(catalogResult.catalog.offerings[0]?.support)
-    expect(manifestResult.manifest.offerings[0]?.accessPaths[0]).toMatchObject({
-      kind: 'human_request',
-    })
+    expect(manifestResult.manifest.offerings[0]?.accessPaths).toEqual([])
   })
 
   it('keeps llms.txt free of owner summaries, disclosures, markup, and bidi payloads', () => {
@@ -90,18 +88,17 @@ describe('discovery prompt-injection protection', () => {
     expect(llms.body).not.toContain('<b>HTML</b>')
     expect(llms.body).not.toContain('\u202E')
     expect(llms.body).not.toContain('Owner disclosure')
-    expect(llms.body).toContain('slug=plumbing-demo')
-    expect(llms.body).toContain('disposition=partial')
+    expect(llms.body).toContain('slug=demo-inquiry-provider')
+    expect(llms.body).toContain('disposition=current')
   })
 
 })
 function explicitPathDiscoveryFixture() {
   const state = {
     ...createLocalE2eRegistrySourceState(),
-    discoveryManifests: [],
     invalidationIntents: [],
   }
-  const business = state.businesses.find((candidate) => candidate.slug === 'plumbing-demo')
+  const business = state.businesses.find((candidate) => candidate.slug === 'demo-inquiry-provider')
   if (business === undefined) {
     throw new Error('Expected an explicit local Offering fixture.')
   }

@@ -41,10 +41,6 @@ vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicOfferingRegistryPage: vi.fn(),
   readPublicOfferingRegistrySearchPage: vi.fn(),
 }))
-vi.mock('@/modules/registry/public-inquiry-projection', () => ({
-  projectCurrentOfferingInquiryDetail: vi.fn(async (detail: unknown) => detail),
-  projectCurrentOfferingInquiryPage: vi.fn(async (page: unknown) => page),
-}))
 
 import { findAction } from '@/modules/actions'
 import {

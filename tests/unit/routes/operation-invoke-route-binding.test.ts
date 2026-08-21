@@ -10,7 +10,6 @@ vi.mock('@/lib/server/operation-invoke-api', () => ({
 }))
 
 import { Route as OperationCallRoute } from '@/routes/api.v1.operations.call'
-import { Route as OperationExecuteRoute } from '@/routes/api.v1.operations.execute'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | 'TRACE' | 'CONNECT'
@@ -30,14 +29,12 @@ function routeHandlers(route: unknown): RouteHandlers {
 }
 
 describe('operation invoke route binding', () => {
-  it('registers each served file at the contract router path', () => {
+  it('registers the canonical route at the contract router path', () => {
     expect(readFileSync('src/routes/api.v1.operations.call.ts', 'utf8'))
       .toContain(`createFileRoute('${invokeContract.routerPath}')`)
-    expect(readFileSync('src/routes/api.v1.operations.execute.ts', 'utf8'))
-      .toContain(`createFileRoute('${invokeContract.legacyRouterPath}')`)
   })
 
-  it('wires POST invoke on /call and 410 tombstone on /execute', async () => {
+  it('wires POST invoke on /call', async () => {
     const callHandlers = routeHandlers(OperationCallRoute)
     const callPost = callHandlers[invokeContract.method]
     expect(callPost).toBeTypeOf('function')
@@ -51,19 +48,6 @@ describe('operation invoke route binding', () => {
     const callRejected = await callGet({ request, params: {} })
     expect(callRejected.status).toBe(405)
     expect(callRejected.headers.get('allow')).toBe(invokeContract.method)
-
-    const executeHandlers = routeHandlers(OperationExecuteRoute)
-    const executePost = executeHandlers.POST
-    expect(executePost).toBeTypeOf('function')
-    if (executePost === undefined) throw new Error('execute POST handler missing')
-    const executeResponse = await executePost({ request, params: {} })
-    expect(executeResponse.status).toBe(410)
-
-    const executeGet = executeHandlers.GET
-    expect(executeGet).toBeTypeOf('function')
-    if (executeGet === undefined) throw new Error('execute GET handler missing')
-    const executeRejected = await executeGet({ request, params: {} })
-    expect(executeRejected.status).toBe(410)
 
     expect(mocks.invoke).toHaveBeenCalledTimes(1)
   })

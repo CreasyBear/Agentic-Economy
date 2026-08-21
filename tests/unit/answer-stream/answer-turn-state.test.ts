@@ -24,7 +24,6 @@ const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
   nextStepLabel: 'Send inquiry',
   detailUrl: '/demo-plumber',
   services: [],
-  inquiryUrl: '/demo-plumber/inquiry',
   ...overrides,
 })
 
@@ -73,7 +72,6 @@ describe('reduceAnswerTurnState', () => {
 
     expect(complete.artifacts.map((artifact) => artifact.kind)).toEqual([
       'one-line',
-      'provider-cards',
       'prose',
       'what-to-do-now',
     ])

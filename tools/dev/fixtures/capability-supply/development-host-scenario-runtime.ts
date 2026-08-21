@@ -118,6 +118,7 @@ export function developmentSuccessRuntime(
         : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
     verifyX402Settlement: async () => true,
+    markX402PaymentPossiblySubmitted: () => undefined,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -264,4 +265,3 @@ function developmentChallenge(endpoint: string, requestUrl?: string | URL): X402
     }],
   }
 }
-

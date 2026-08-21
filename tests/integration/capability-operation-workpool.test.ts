@@ -11,8 +11,15 @@ vi.mock('undici', async (importOriginal) => ({
 import { components, api, internal } from '../../convex/_generated/api'
 import {
   convexTestWithWorkers,
+  publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
+import {
+  admitPublication,
+  capabilityPublicationInput,
+  preparedPublicationArgs,
+  seedCatalogOffering,
+} from './capability-publication-harness'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
@@ -21,29 +28,61 @@ import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
 
-const OPERATION_REF = 'frankfurter.single-rate'
-const INPUT = { base: 'EUR', quote: 'USD' } as const
+const INPUT = { request: 'lookup' } as const
 
 type TestPrincipal = Readonly<{
   principalId: string
   ownerId: string
   credentialId: string
   applicationRef: string
-  environment: 'sandbox'
+  environment: 'production'
   scopes: readonly [string]
-  authorityMode: 'full_yolo'
+  authorityMode: 'bounded_mandate'
 }>
 
-async function seedFrankfurterSupply(backend: ConvexFixtureBackend): Promise<string> {
-  const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
-  if (seeded.kind !== 'seeded') throw new Error(`curated seed unavailable: ${seeded.kind}`)
+async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string> {
+  const suffix = 'workpool-lookup'
+  const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
+  await seedCatalogOffering(backend, businessId, suffix, '/lookup', 'GET')
+  const source = capabilityPublicationInput(businessId, suffix)
+  const published = await owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    await preparedPublicationArgs(backend, {
+      ...source,
+      offering: {
+        ...source.offering,
+        presentation: {
+          ...source.offering.presentation,
+          price: {
+            kind: 'fixed',
+            amount: { currency: 'USD', units: '0', exponent: 2 },
+          },
+        },
+      },
+      binding: {
+        ...source.binding,
+        endpointUrl: `https://${suffix}.example.test/lookup`,
+        authority: { kind: 'keyless' },
+        adapter: {
+          adapterId: 'http-json:v1',
+          config: {
+            method: 'GET',
+            query: [{ inputPointer: '/request', parameter: 'request' }],
+            requestTimeoutMs: 5_000,
+          },
+        },
+      },
+    }),
+  )
+  if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
+  await admitPublication(backend, published, suffix)
   await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
   const publication = await backend.run(async (ctx) => (
     (await ctx.db.query('capabilityPublications').collect()).find((row) => (
-      row.capabilityId === OPERATION_REF && row.disposition === 'current'
+      row.offeringId === published.offeringId && row.disposition === 'current'
     ))
   ))
-  if (publication === undefined) throw new Error('Frankfurter publication missing')
+  if (publication === undefined) throw new Error('workpool publication missing')
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: publication.publicationRef,
     expectedRevision: publication.revision,
@@ -55,7 +94,7 @@ async function seedFrankfurterSupply(backend: ConvexFixtureBackend): Promise<str
     reasonCode: 'test_readiness',
     evidenceRefs: ['test:operation-workpool'],
   })
-  if (observed.kind !== 'observed') throw new Error(`Frankfurter readiness refused: ${observed.reason}`)
+  if (observed.kind !== 'observed') throw new Error(`workpool readiness refused: ${observed.reason}`)
   const qualification = await backend.run(async (ctx) => qualifySuppliedCandidate(
     capabilitySupplyGraphPorts(ctx.db),
     {
@@ -77,8 +116,8 @@ async function seedFrankfurterSupply(backend: ConvexFixtureBackend): Promise<str
   ))
   expect(qualification).toMatchObject({ status: 'eligible', reasons: [] })
   const executable = await backend.query(api.capabilitySupplyOperations.listKeylessExecutable, {})
-  const descriptor = executable.find((candidate) => candidate.capabilityId === OPERATION_REF)
-  if (descriptor === undefined) throw new Error('Frankfurter executable descriptor missing')
+  const descriptor = executable.find((candidate) => candidate.capabilityId === publication.capabilityId)
+  if (descriptor === undefined) throw new Error('workpool executable descriptor missing')
   return descriptor.operationRef
 }
 
@@ -92,15 +131,15 @@ async function seedPrincipal(
     ownerId: `owner:operation-workpool:${suffix}`,
     credentialId: `credential:operation-workpool:${suffix}`,
     applicationRef: 'agentic-economy',
-    environment: 'sandbox' as const,
+    environment: 'production' as const,
     scopes: [MARKET_OPERATIONS_INVOKE_SCOPE] as const,
-    authorityMode: 'full_yolo' as const,
+    authorityMode: 'bounded_mandate' as const,
   }
   const amount = { currency: 'USD', units: '0', exponent: 2 }
   const policy = {
     format: 'ae.agent-access-policy:v1' as const,
     operationAccess: 'all_admitted' as const,
-    environment: 'sandbox' as const,
+    environment: 'production' as const,
     budget: {
       budgetPolicyRef: `budget-policy:operation-workpool:${suffix}`,
       generation: 1,
@@ -159,6 +198,7 @@ async function seedPrincipal(
       currency: 'USD',
       exponent: 2,
       balanceUnits: '0',
+      heldUnits: '0',
       recoveryDueUnits: '0',
       version: 1,
       state: 'active',
@@ -245,7 +285,7 @@ describe('capability operation Workpool lifecycle', () => {
     vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
 
     const backend = convexTestWithWorkers()
-    const operationRef = await seedFrankfurterSupply(backend)
+    const operationRef = await seedKeylessLookup(backend)
     const now = Date.now()
     const first = await seedPrincipal(backend, 'success', now)
     await expect(backend.query(
@@ -261,11 +301,11 @@ describe('capability operation Workpool lifecycle', () => {
       now,
     })).resolves.toMatchObject({ grantRef: first.grantRef })
 
-    const providerOutput = [{ date: '2099-12-31', base: 'EUR', quote: 'USD', rate: 1.08123456789 }]
+    const providerOutput = { result: 'ok' }
     let historyObservedDuringProvider: string[] = []
     let pendingInvocationRef: string | undefined
     providerFetch.mockImplementation(async (input) => {
-      expect(String(input)).toContain('api.frankfurter.dev')
+      expect(String(input)).toContain('workpool-lookup.example.test')
       const providerInvocationRef = pendingInvocationRef
       if (providerInvocationRef === undefined) {
         throw new Error('operation invocation not assigned before provider transport')

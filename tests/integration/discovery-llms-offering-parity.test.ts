@@ -15,14 +15,14 @@ describe('durable llms Offering parity', () => {
       await ctx.db.insert('businesses', {
         ownerId, slug: 'offering-engineering', name: 'Offering Engineering', normalizedName: 'offering engineering',
         category: 'Engineering', businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
-        publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
+        publicStatus: 'published', trustTier: 'listed',
         sourceHash: 'business:offering-engineering', createdAt: 1, updatedAt: 1,
       })
 
       await ctx.db.insert('businesses', {
         ownerId, slug: 'profile-only-consulting', name: 'Profile Only Consulting', normalizedName: 'profile only consulting',
         category: 'Consulting', businessContext: { kind: 'local_human', suburb: 'Fremantle', stateTerritory: 'WA' },
-        publicStatus: 'published', trustTier: 'listed', claimStatus: 'published',
+        publicStatus: 'published', trustTier: 'listed',
         sourceHash: 'business:profile-only', createdAt: 1, updatedAt: 1,
       })
     })
@@ -30,6 +30,7 @@ describe('durable llms Offering parity', () => {
     const result = await backend.query(api.discovery.readLlmsTxt, {
       canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://ae.example', now: 3,
     })
+    expect(result.body).toContain('## Operation market loop')
     expect(result.body).toContain('- none')
     expect(result.body).toContain('- total=0; the lines above are a bounded sample')
     expect(result.body).not.toContain('offering-engineering')

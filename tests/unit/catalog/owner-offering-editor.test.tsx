@@ -154,7 +154,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave.mock.calls[0]?.[0]?.price).toEqual({
       kind: 'fixed',
-      amount: { currency: 'AUD', units: '12950', exponent: 2 },
+      amount: { currency: 'USD', units: '12950', exponent: 2 },
       unit: 'call',
       taxTreatment: 'inclusive',
     })
@@ -172,7 +172,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     const value = onSave.mock.calls[0]?.[0]
     expect(value?.pricingSummary).toBe('Call-out fee waived for regulars.')
-    expect(value?.price).toEqual({ kind: 'from', amount: { currency: 'AUD', units: '9000', exponent: 2 }, taxTreatment: 'unstated' })
+    expect(value?.price).toEqual({ kind: 'from', amount: { currency: 'USD', units: '9000', exponent: 2 }, taxTreatment: 'unstated' })
   })
 
   it('reveals a second amount for a range and drops the group until both bounds exist', async () => {
@@ -196,8 +196,8 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
     expect(onSave.mock.calls[1]?.[0]?.price).toEqual({
       kind: 'range',
-      minimum: { currency: 'AUD', units: '8000', exponent: 2 },
-      maximum: { currency: 'AUD', units: '15000', exponent: 2 },
+      minimum: { currency: 'USD', units: '8000', exponent: 2 },
+      maximum: { currency: 'USD', units: '15000', exponent: 2 },
       taxTreatment: 'unstated',
     })
   })
@@ -211,7 +211,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
-    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({ kind: 'quote_only', currency: 'AUD', taxTreatment: 'unstated' })
+    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({ kind: 'quote_only', currency: 'USD', taxTreatment: 'unstated' })
   })
 
   it('restores the price group from a parked draft', async () => {
@@ -223,7 +223,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     choose('Price type', 'Fixed price')
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
     await waitFor(() => expect(readStoredOfferingDraft('business-price')?.price).toEqual({
-      kind: 'fixed', amount: { currency: 'AUD', units: '25000', exponent: 2 }, taxTreatment: 'unstated',
+      kind: 'fixed', amount: { currency: 'USD', units: '25000', exponent: 2 }, taxTreatment: 'unstated',
     }))
 
     first.unmount()

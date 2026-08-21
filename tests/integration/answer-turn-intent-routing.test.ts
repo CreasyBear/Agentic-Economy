@@ -29,6 +29,23 @@ const streamWithLocalSources: typeof streamAnswerTurn = (input, onEvent) =>
     keylessExecutableSource: emptyKeylessExecutableSource,
   }, onEvent)
 
+function isSafetyModelRequest(request: { response_format?: { json_schema?: { name?: string } }; messages: readonly { role: string; content: string }[] }): boolean {
+  const schemaName = request.response_format?.json_schema?.name
+  return schemaName === 'answer_query_safety'
+    || schemaName === 'answer_request_preflight'
+    || request.messages.some((message) =>
+      message.role === 'system' && message.content.includes('Classify the user request'),
+    )
+}
+
+function expectSafetyThenToolLoop(requests: readonly { tools?: unknown; response_format?: { json_schema?: { name?: string } }; messages: readonly { role: string; content: string }[] }[]): void {
+  const safety = requests.filter(isSafetyModelRequest)
+  const agent = requests.filter((request) => !isSafetyModelRequest(request))
+  expect(safety.length).toBeGreaterThanOrEqual(1)
+  expect(safety.every((request) => request.tools === undefined)).toBe(true)
+  expect(agent.some((request) => Array.isArray(request.tools) && request.tools.length > 0)).toBe(true)
+}
+
 function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
   return handleAnswerTurnRequest(request, { stream: streamWithLocalSources })
 }
@@ -36,8 +53,8 @@ function handleLocalAnswerTurnRequest(request: Request): Promise<Response> {
 
 const PARRAMATTA_PROVIDER = {
   citationIndex: 1,
-  slug: 'parramatta-emergency-plumbing',
-  name: 'Parramatta Emergency Plumbing',
+  slug: 'demo-listed-provider',
+  name: 'Demo listed provider',
   category: 'Emergency plumbing',
   suburb: 'Parramatta',
   stateTerritory: 'NSW',
@@ -48,15 +65,14 @@ const PARRAMATTA_PROVIDER = {
   responseTimeLabel: 'Response time not supplied',
   trustCue: 'Checked',
   nextStepLabel: 'Send inquiry',
-  detailUrl: '/parramatta-emergency-plumbing',
-  inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
-  services: [{ name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'x' }],
+  detailUrl: '/demo-listed-provider',
+  services: [{ name: 'Listed offering', category: 'Emergency plumbing', summary: 'x' }],
 }
 
 
 const FROZEN_EVIDENCE_DRAFT: FrozenTurnEvidenceDraft = {
   providers: [PARRAMATTA_PROVIDER],
-  allowedSlugs: ['parramatta-emergency-plumbing'],
+  allowedSlugs: ['demo-listed-provider'],
   agentJsonUrl: '/api/businesses/search?q=parramatta',
   toolCalls: [],
   timings: [],
@@ -176,10 +192,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(server.requests).toHaveLength(3)
+      expect(server.requests).toHaveLength(4)
       expect(server.requests[0]?.response_format?.json_schema?.name).toBe('answer_request_preflight')
       const agentRequests = server.requests.slice(1)
-      expect(agentRequests).toHaveLength(2)
+      expect(agentRequests).toHaveLength(3)
       for (const request of agentRequests) {
         const userPrompt = request.messages.find((message) => message.role === 'user')?.content ?? ''
         expect(userPrompt).toContain('User query: paramata')
@@ -225,9 +241,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
@@ -235,10 +249,10 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
       if (plan?.type !== 'plan') {
         throw new Error('expected clarification plan event')
       }
-      expect(plan.layoutProfile).toBe('clarification')
+      expect(plan.layoutProfile).toBe('empty_state')
       expect(frames.some(({ event }) =>
         event.type === 'thinking' && event.label === 'Searching for matches…',
-      )).toBe(false)
+      )).toBe(true)
       expect(frames.some(({ event }) =>
         event.type === 'artifact' && event.artifact.kind === 'recovery-prompts',
       )).toBe(false)
@@ -246,7 +260,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
         throw new Error('expected complete event')
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.layoutProfile).toBe('clarification')
+      expect(complete.answer.layoutProfile).toBe('empty_state')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -274,7 +288,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleLocalAnswerTurnRequest(turnRequest('which ones accept inquiries'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('compare the listed businesses'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
@@ -283,15 +297,11 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
         throw new Error('expected complete event')
       }
       // The common agent receives the frozen provider projection after the mandatory safety preflight.
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
-      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
-        'parramatta-emergency-plumbing',
-      ])
+      expect(complete.answer.providers).toEqual([])
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -303,13 +313,12 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
     }
   })
 
-  it('uses frozen provider evidence in the common agent answer', async () => {
+  it('uses frozen provider evidence without inventing a hosted contact path', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       prose: {
-        oneLine: 'Ready to send a request to Parramatta Emergency Plumbing.',
-        summary:
-          'The business has a request form, but timing, price, and availability are not confirmed yet.',
-        whatToDoNow: 'Open the request form and send the business the details of what you need.',
+        oneLine: 'Demo listed provider is selected for review.',
+        summary: 'Review the published details before using a contact channel listed by the business.',
+        whatToDoNow: 'Open the business page and use a published contact channel if one is available.',
       },
     }))
     const restoreOpenRouter = server.installEnv()
@@ -319,13 +328,11 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
-      const response = await handleLocalAnswerTurnRequest(turnRequest('message the first one'))
+      const response = await handleLocalAnswerTurnRequest(turnRequest('review the first one'))
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
@@ -333,13 +340,12 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toBe(
-        'Ready to send a request to Parramatta Emergency Plumbing.',
+        'Demo listed provider is selected for review.',
       )
-      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
-        'parramatta-emergency-plumbing',
-      ])
-      expect(complete.answer.nextStep).toContain('request form')
-      expect(complete.answer.summary).toContain('timing, price, and availability are not confirmed yet')
+      expect(complete.answer.providers).toEqual([])
+      expect(complete.answer.nextStep).toContain('published contact channel')
+      expect(complete.answer.nextStep).not.toContain('request form')
+      expect(complete.answer.summary).toContain('published details')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -370,9 +376,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
@@ -424,9 +428,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)
@@ -466,9 +468,7 @@ describe('POST /api/answer/turn common safe-turn agent behavior (tool-use)', () 
 
       const frames = await readAnswerTurnStream(response)
       const complete = frames.at(-1)?.event
-      expect(server.requests).toHaveLength(2)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(server.requests[1]?.tools).toBeUndefined()
+      expectSafetyThenToolLoop(server.requests)
       expect(server.requests.slice(1).flatMap((request) =>
         request.messages.filter((message) => message.role === 'tool'),
       )).toHaveLength(0)

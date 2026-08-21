@@ -17,7 +17,7 @@ npm run -s ae -- <command> [args] [flags]
 | `npm run -s ae -- compare <operationRef> [operationRef ...]` | `POST /api/v1/market-operations/compare` | One to four exact references are compared without selecting or authorizing one. |
 | `npm run -s ae -- inspect-plan <operationRef> [operationRef ...]` | `POST /api/v1/market-operations/inspect-plan` | One to four exact references are validated as a bounded, non-authorizing composition plan. |
 | `npm run -s ae -- connect` | OAuth device flow plus authenticated validation | One owner-approved AE credential is issued, or an existing key is validated by the gateway. |
-| `npm run -s ae -- invoke <operationRef> '<json>' --idempotency-key <key>` | `POST /api/v1/operations/call` | One AE key invokes through the canonical gateway with a required body replay identity. `/api/v1/operations/execute` is gone (HTTP 410). |
+| `npm run -s ae -- invoke <operationRef> '<json>' --idempotency-key <key>` | `POST /api/v1/operations/call` | One AE key invokes through the canonical gateway with a required body replay identity. |
 | `npm run -s ae -- status <invocationRef>` | `GET /api/v1/operations/<invocationRef>` | The same caller reads durable state, exact refs, usage, evidence, and the typed next action. |
 | `npm run -s ae -- recover <invocationRef> '<evidence-json>' --idempotency-key <key>` | `POST /api/v1/operations/<invocationRef>/reconcile` | Evidence-bound reconciliation after a real uncertain outcome; it preserves the same stable identity and does not replay a known result. |
 
@@ -50,13 +50,7 @@ npm run -s ae -- demand ask "<question>" [--thread-id <thread-id>]
 npm run -s ae -- demand ask --thread-id <thread-id> --operation-ref <operation-ref> --candidate-digest <digest> '<input-json>'
 npm run -s ae -- demand business <slug>
 npm run -s ae -- demand discover
-npm run -s ae -- demand enrich "<business name>" [--suburb X]
-npm run -s ae -- demand import <websiteUrl>
 npm run -s ae -- demand journey "<query>"
-npm run -s ae -- demand request create "<text>"
-npm run -s ae -- demand request get <requestRef>
-npm run -s ae -- demand request options <requestRef>
-npm run -s ae -- demand request confirm <requestRef> <optionRef>
 ```
 
 ## Advanced/operator commands
@@ -74,7 +68,7 @@ npm run -s ae -- advanced policy [test|refine|fidelity]
 
 ## Flags
 
-- `--base-url <url>` targets the server; default `https://agentic-economy-phi.vercel.app` (env `AE_CLI_BASE_URL` or `AE_CANONICAL_BASE_URL`). Anonymous reads may use any valid HTTP(S) override.
+- `--base-url <url>` targets the server. Env `AE_CLI_BASE_URL` or `AE_CANONICAL_BASE_URL` win. If those are unset and `CONVEX_URL` / `VITE_CONVEX_URL` is loopback, the CLI uses `http://127.0.0.1:3024`. Otherwise it uses the hosted origin `https://agentic-economy-phi.vercel.app`. Anonymous reads may use any valid HTTP(S) override.
 - `AE_API_KEY` is the reusable caller credential for `invoke`, `status`, `recover`, and `advanced cancel`.
 - `AE_API_KEY_ORIGIN` is required whenever `AE_API_KEY` is used and must be the exact origin of `--base-url`; credentialed requests require HTTPS except loopback `localhost`, `127.0.0.1`, or `::1` HTTP development.
 - `--idempotency-key <key>` is required for `invoke`, `recover`, and advanced cancel; the CLI never generates or rotates one, and sends the key only in each request JSON body.

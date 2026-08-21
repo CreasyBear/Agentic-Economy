@@ -6,12 +6,10 @@ import { describe, expect, it } from 'vitest'
 const deployableRoots = [
   'src/modules/registry/**/*.ts',
   'src/modules/discovery/**/*.ts',
-  'src/modules/catalog/owner-claim.functions.ts',
-  'src/modules/inquiries/**/*.ts',
+  'src/modules/catalog/owner-status.functions.ts',
   'src/modules/settings/**/*.ts',
   'src/modules/answer-thread/internal/turn-orchestrator.ts',
   'src/modules/capability-execution/**/*.ts',
-  'src/modules/answer/internal/keyless-data-ask.ts',
   'src/routes/llms[.]txt.ts',
   'src/routes/sitemap[.]xml.ts',
   'src/routes/$slug.ucp.ts',
@@ -19,7 +17,6 @@ const deployableRoots = [
 
 const sourceFiles = globSync(deployableRoots).sort()
 const movedProductionFiles = [
-  'src/modules/inquiries/internal/local-e2e-adapter.ts',
   'src/modules/capability-execution/seed-supply.ts',
 ]
 
@@ -52,7 +49,6 @@ describe('faux runtime surfaces (source-shape proof only)', () => {
 
   it('keeps moved pure adapters out of deployable source paths', () => {
     expect(movedProductionFiles.filter((path) => existsSync(path))).toEqual([])
-    expect(normalize(resolve('tests/helpers/inquiry-local-e2e-adapter.ts'))).toContain(normalize(resolve('tests/helpers')))
     expect(normalize(resolve('tests/helpers/keyless-seed-source.ts'))).toContain(normalize(resolve('tests/helpers')))
   })
 })

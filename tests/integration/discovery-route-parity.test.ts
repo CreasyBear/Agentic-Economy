@@ -26,7 +26,6 @@ import {
   buildLlmsTxt,
   buildRobotsTxt,
   buildSitemapXml,
-  regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
@@ -39,10 +38,7 @@ import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-oper
 import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
 import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSiteDiscoveryManifestRequest } from '@/routes/[.]well-known/ucp'
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
@@ -77,19 +73,12 @@ describe('discovery route parity', () => {
     const apiDetail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
-    const generated = regenerateDiscoveryManifest(
+    const ucpResponse = handleUcpManifestRequest(
+      new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
+      'fremantle-heat-pump-repairs',
       state,
-      { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      {
-        canonicalBaseUrl: 'https://ae.example',
-        now: 13_000,
-        adapter: testOnlyDiscoveryManifestAdapter,
-      },
     )
-    if (generated.kind !== 'ok') {
-      throw new Error(`Expected source UCP manifest to generate: ${generated.reason}`)
-    }
-    const ucp = generated.manifest
+    const ucp = await ucpResponse.json()
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
 
@@ -110,7 +99,7 @@ describe('discovery route parity', () => {
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('https://ae.example/fremantle-heat-pump-repairs')
     expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llms })).not.toContain(
-      'parramatta-emergency-plumbing'
+      'demo-listed-provider'
     )
 
     suppressFirstBusiness(state)
@@ -129,14 +118,10 @@ describe('discovery route parity', () => {
     const suppressedDetail = getPublicBusinessOfferingSupplyBySlug(state, {
       slug: 'fremantle-heat-pump-repairs',
     })
-    const suppressedGenerated = regenerateDiscoveryManifest(
+    const suppressedManifest = handleUcpManifestRequest(
+      new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
+      'fremantle-heat-pump-repairs',
       state,
-      { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      {
-        canonicalBaseUrl: 'https://ae.example',
-        now: 13_000,
-        adapter: testOnlyDiscoveryManifestAdapter,
-      },
     )
     const suppressedLlms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
     const suppressedSitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
@@ -149,12 +134,7 @@ describe('discovery route parity', () => {
       code: 'business_not_found',
       reason: 'No public business catalog exists for this slug.',
     })
-    expect(suppressedGenerated).toEqual({
-      kind: 'error',
-      code: 'discovery_manifest_not_public',
-      reason: 'no_public_catalog',
-      retryable: false,
-    })
+    expect(suppressedManifest.status).toBe(404)
     expect(suppressedLlms.body).not.toContain('fremantle-heat-pump-repairs')
     expect(suppressedSitemap.body).not.toContain('fremantle-heat-pump-repairs')
   })
@@ -163,8 +143,8 @@ describe('discovery route parity', () => {
     const origin = 'https://ae.example'
     const state = createFixtureDiscoverySourceState()
     const manifestResponse = handleUcpManifestRequest(
-      new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
-      'parramatta-emergency-plumbing',
+      new Request(`${origin}/demo-listed-provider/ucp`),
+      'demo-listed-provider',
       state,
     )
     const manifest = await manifestResponse.json()
@@ -172,7 +152,7 @@ describe('discovery route parity', () => {
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
     const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
     const routes = uniqueRoutes([
-      ...manifest.routes.map((route: { url: string }) => advertisedRoute(route.url)),
+      ...[manifest.publicUrl, manifest.manifestUrl].map(advertisedRoute),
       ...llms.urls.map(advertisedRoute),
       ...sitemap.urls.map(advertisedRoute),
       ...sitemapLocs(sitemap.body).map(advertisedRoute),
@@ -201,7 +181,7 @@ describe('discovery route parity', () => {
     const apiPaths = apiRoutes.map((route) => new URL(route.url).pathname)
     const expectedApiPaths = [
       '/api/businesses',
-      '/api/businesses/parramatta-emergency-plumbing',
+      ...state.businesses.map((business) => `/api/businesses/${business.slug}`),
       OPERATION_MARKET_SEARCH_PATH,
       OPERATION_MARKET_DETAIL_PATH,
       OPERATION_MARKET_COMPARE_PATH,
@@ -217,7 +197,7 @@ describe('discovery route parity', () => {
 
     const listRoute = apiRoutes.find((route) => new URL(route.url).pathname === '/api/businesses')
     const businessDetailRoute = apiRoutes.find(
-      (route) => new URL(route.url).pathname === '/api/businesses/parramatta-emergency-plumbing',
+      (route) => new URL(route.url).pathname === '/api/businesses/demo-listed-provider',
     )
     const searchRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_SEARCH_PATH)
     const operationDetailRoute = apiRoutes.find((route) => new URL(route.url).pathname === OPERATION_MARKET_DETAIL_PATH)
@@ -238,7 +218,7 @@ describe('discovery route parity', () => {
     })
 
     expect(registryListAction.outputSchema.safeParse(listBody).success).toBe(true)
-    expect(listBody.page.map((item) => item.slug)).toContain('parramatta-emergency-plumbing')
+    expect(listBody.page.map((item) => item.slug)).toContain('demo-listed-provider')
     expect(registryDetailAction.outputSchema.safeParse(detailBody).success).toBe(true)
     const restoreMarketOperationSource = installMarketOperationSource()
     const operationDetailResponse = await routeHandler(MarketOperationDetailRoute, 'POST')({
@@ -291,7 +271,7 @@ function advertisedRoute(url: string): AdvertisedRoute {
   const marketRoute = OPERATION_MARKET_ACTION_ENTRIES.find((entry) => entry.pathTemplate === path)
   return {
     url,
-    method: path === '/api/v1/requests' ? 'POST' : (marketRoute?.method ?? 'GET'),
+    method: marketRoute?.method ?? 'GET',
   }
 }
 type RouteHandler = (context: Readonly<{
@@ -391,7 +371,7 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
     return route.method === 'GET'
   }
 
-  if (path === '/claim' || path === '/for-agents' || path === '/privacy/remove-business') {
+  if (path === '/for-agents' || path === '/for-providers' || path === '/privacy/remove-business') {
     return route.method === 'GET'
   }
 
@@ -564,17 +544,5 @@ function suppressFirstBusiness(state: DiscoverySourceState): void {
   }
 
   business.publicStatus = 'suppressed'
-  business.claimStatus = 'suppressed'
   business.suppressedAt = 12_000
-  state.suppressionRules.push({
-    targetType: 'business',
-    targetRef: business.businessId,
-    status: 'active',
-    reasonCode: 'privacy_removal_requested',
-    evidenceRefs: ['private:evidence:suppression'],
-    createdByAdminRef: 'admin:test',
-    createdAt: 12_000,
-    beforePublicStatus: 'published',
-    beforeClaimStatus: 'published',
-  })
 }

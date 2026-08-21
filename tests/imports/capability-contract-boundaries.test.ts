@@ -6,17 +6,19 @@ const contractRoot = 'src/modules/capability-contract'
 
 describe('capability contract boundaries', () => {
   it('keeps the contract independent from routing, persistence, provider, and transport source', () => {
-    const imports = contractSources().flatMap((source) => (
-      [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((match) => match[1])
-    ))
+    const imports = [...new Set(contractSources().flatMap((source) => (
+      [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)]
+        .map((match) => match[1])
+        .filter((value): value is string => value !== undefined && !value.startsWith('.'))
+    )))].sort()
 
     expect(imports).toEqual([
+      '@/modules/common/canonical-digest',
+      '@/modules/common/deep-freeze',
+      '@/modules/common/is-record',
+      '@/modules/common/stable-hash',
       '@cfworker/json-schema',
       'zod',
-      '@/modules/common/canonical-digest',
-      '@/modules/common/is-record',
-      '@/modules/common/deep-freeze',
-      '@/modules/common/stable-hash',
     ])
   })
 

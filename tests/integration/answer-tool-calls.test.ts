@@ -39,8 +39,8 @@ describe('answerToolCalls persistence', () => {
     })
     resetThreadPort = installAnswerThreadTestPort(store)
     const buffered: AnswerToolCallRecord[] = [
-      buildToolCall('tc-1', turnId, 1, 'registry.search', ['parramatta-emergency-plumbing'], 1),
-      buildToolCall('tc-2', turnId, 2, 'registry.detail', ['parramatta-emergency-plumbing'], 1),
+      buildToolCall('tc-1', turnId, 1, 'registry.search', ['demo-listed-provider'], 1),
+      buildToolCall('tc-2', turnId, 2, 'registry.detail', ['demo-listed-provider'], 1),
     ]
     const reservation = await reserveAnswerTurn({
       threadId,

@@ -196,8 +196,7 @@ export function createDevelopmentEvidenceSupplyPorts(): CapabilityGraphPorts {
     loadBindingByBindingId: async () => binding,
     loadPublishedBusiness: async () => ({
       businessId: developmentEvidenceCandidate.businessId, trustTier: 'fixture_only',
-      publicStatus: 'published', claimStatus: 'published',
-      suppressed: false, currentlyPublished: true,
+      publicStatus: 'published', suppressed: false, currentlyPublished: true,
     }),
     loadProviderConnection: async () => undefined,
     catalogOriginIsCurrent: async (origin, businessId) => (

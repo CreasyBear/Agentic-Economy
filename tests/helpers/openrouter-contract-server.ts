@@ -287,6 +287,16 @@ export function openRouterToolThenProseResponses(input: {
       const hasToolResults = request.messages.some(
         (message) => message.role === 'tool',
       )
+      if (toolCalls.length === 0) {
+        return {
+          id: 'chatcmpl-no-tool-calls',
+          model: 'test-model',
+          choices: [{
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: '' },
+          }],
+        }
+      }
       if (input.emitAllToolCallsTogether === true) {
         nextToolCallIndex = toolCalls.length
         return openRouterToolResponse(toolCalls)

@@ -6,7 +6,8 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
+import { AGENT_DOOR, BUSINESS_DOOR } from '@/content/brand-copy'
+import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
 
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
@@ -75,7 +76,7 @@ describe('public semantic comfort', () => {
 
     const examples = screen.getByRole('navigation', { name: 'Example asks' })
     const links = within(examples).getAllByRole('link')
-    expect(links).toHaveLength(HOME.exampleAsks.length)
+    expect(links).toHaveLength(AE_CATALOG_EXAMPLE_ASKS.length)
     for (const link of links) expect(link.classList.contains('min-h-11')).toBe(true)
   })
 

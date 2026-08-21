@@ -72,15 +72,8 @@ describe('harness tool contract', () => {
     expect(tool.strictOutputSchemaViolation).toBe(validation.strictOutputSchemaViolation)
   })
 
-  it('does not expose principal-authorized study reads to the answer model', () => {
-    const action = findAction('study.inspect')
-    expect(action).toBeDefined()
-    expect(action!.readOnly).toBe(true)
-    expect(action!.surfaces).toContain('answerThread')
-    expect(action!.invocationContract.authorityRequirement).toBe('principal')
-
-    const contract = actionToHarnessToolContract(action!)
-    expect(contract.exposure.answerModel).toBe(false)
+  it('does not expose deleted study reads to the answer model', () => {
+    expect(findAction('study.inspect')).toBeUndefined()
   })
 
   it('projects action identity into harness policy and exposure', () => {

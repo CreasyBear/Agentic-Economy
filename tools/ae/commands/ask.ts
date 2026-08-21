@@ -8,7 +8,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-import { buildAnswerTurnProblem, parseAnswerTurnProblemStrict, redactAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
+import { buildAnswerTurnProblem, parseAnswerTurnProblem, redactAnswerTurnProblem, type AnswerTurnProblem } from '@/lib/errors'
 import {
   AnswerTurnProtocolError,
   readAnswerTurnFrames,
@@ -256,7 +256,7 @@ export async function runAskCommand(args: readonly string[], options: CliOptions
 
   if (!response.ok) {
     const outcome = await readHttpOutcome(response, startedAt)
-    const problem = parseAnswerTurnProblemStrict(outcome.body)
+    const problem = parseAnswerTurnProblem(outcome.body)
     if (problem === undefined) {
       throw new CliFailure('The answer service returned an invalid problem response.', {
         exitCode: 1,

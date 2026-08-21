@@ -1,13 +1,14 @@
 import type { CliOptions } from '../lib/args'
 import { heading, line, printJson, table } from '../lib/output'
 
-type DoctorGroup = 'core' | 'optionalProviders'
+type DoctorGroup = 'core' | 'optionalProviders' | 'x402Payment'
 type DoctorStatus = 'configured' | 'missing'
 type DoctorVariable = Readonly<{ name: string; group: DoctorGroup }>
 export type DoctorEntry = Readonly<{ name: string; status: DoctorStatus }>
 export type DoctorReport = Readonly<{
   core: readonly DoctorEntry[]
   optionalProviders: readonly DoctorEntry[]
+  x402Payment: readonly DoctorEntry[]
 }>
 
 export const DOCTOR_ENVIRONMENT_VARIABLES = [
@@ -23,6 +24,13 @@ export const DOCTOR_ENVIRONMENT_VARIABLES = [
   { name: 'SERPAPI_API_KEY', group: 'optionalProviders' },
   { name: 'TAVILY_API_KEY', group: 'optionalProviders' },
   { name: 'COINGECKO_DEMO_API_KEY', group: 'optionalProviders' },
+  { name: 'CDP_API_KEY_ID', group: 'x402Payment' },
+  { name: 'CDP_API_KEY_SECRET', group: 'x402Payment' },
+  { name: 'CDP_WALLET_SECRET', group: 'x402Payment' },
+  { name: 'AE_X402_CDP_ACCOUNT_NAME', group: 'x402Payment' },
+  { name: 'AE_X402_CUSTODY_ENABLED', group: 'x402Payment' },
+  { name: 'AE_X402_CUSTODY_MAX_ATOMIC', group: 'x402Payment' },
+  { name: 'AE_X402_RPC_URLS_JSON', group: 'x402Payment' },
 ] as const satisfies readonly DoctorVariable[]
 
 export function collectDoctorReport(
@@ -38,6 +46,7 @@ export function collectDoctorReport(
   return {
     core: DOCTOR_ENVIRONMENT_VARIABLES.filter((variable) => variable.group === 'core').map(read),
     optionalProviders: DOCTOR_ENVIRONMENT_VARIABLES.filter((variable) => variable.group === 'optionalProviders').map(read),
+    x402Payment: DOCTOR_ENVIRONMENT_VARIABLES.filter((variable) => variable.group === 'x402Payment').map(read),
   }
 }
 
@@ -57,6 +66,9 @@ export async function runDoctorCommand(_args: readonly string[], options: CliOpt
   line('')
   line('Optional keyed providers')
   tableEntries(report.optionalProviders)
+  line('')
+  line('x402 payer custody')
+  tableEntries(report.x402Payment)
 }
 
 function tableEntries(entries: readonly DoctorEntry[]): void {

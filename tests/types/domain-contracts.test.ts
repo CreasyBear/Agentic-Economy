@@ -2,23 +2,21 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
 import type { PublicStatus } from '@/modules/business/public'
-import { ClaimStatusValues, PublicStatusValues, TrustTierValues } from '@/modules/business/public'
+import { PublicStatusValues, TrustTierValues } from '@/modules/business/public'
 import type { BusinessOfferingStatus, OfferingAccessPathStatus } from '@/modules/catalog/public'
 import { BusinessOfferingStatusValues, OfferingAccessPathStatusValues } from '@/modules/catalog/public'
 import type { AdminRole } from '@/modules/security/public'
 import { AdminRoleSchema } from '@/modules/security/internal/validators'
-import type { AuditEventType, AuditTargetType, FunnelEventType, OperatorControlKey } from '@/modules/observability/public'
+import type { AuditEventType, AuditTargetType, FunnelEventType } from '@/modules/observability/public'
 import {
   AuditEventTypeValues,
   AuditTargetTypeValues,
   FunnelEventTypeValues,
-  OperatorControlKeyValues,
 } from '@/modules/observability/public'
 import {
   AuditEventTypeSchema,
   AuditTargetTypeSchema,
   FunnelEventTypeSchema,
-  OperatorControlKeySchema,
 } from '@/modules/observability/internal/validators'
 
 const BusinessOfferingStatusSchema = z.enum(BusinessOfferingStatusValues)
@@ -30,12 +28,10 @@ describe('domain-owned state contracts', () => {
     expectTypeOf<z.infer<typeof OfferingAccessPathStatusSchema>>().toEqualTypeOf<OfferingAccessPathStatus>()
     expectTypeOf<z.infer<typeof AdminRoleSchema>>().toEqualTypeOf<AdminRole>()
     expectTypeOf<z.infer<typeof AuditEventTypeSchema>>().toEqualTypeOf<AuditEventType>()
-    expectTypeOf<z.infer<typeof OperatorControlKeySchema>>().toEqualTypeOf<OperatorControlKey>()
     expectTypeOf<z.infer<typeof AuditTargetTypeSchema>>().toEqualTypeOf<AuditTargetType>()
     expectTypeOf<z.infer<typeof FunnelEventTypeSchema>>().toEqualTypeOf<FunnelEventType>()
     expectTypeOf<(typeof AuditTargetTypeValues)[number]>().toEqualTypeOf<AuditTargetType>()
     expectTypeOf<(typeof FunnelEventTypeValues)[number]>().toEqualTypeOf<FunnelEventType>()
-    expectTypeOf<(typeof OperatorControlKeyValues)[number]>().toEqualTypeOf<OperatorControlKey>()
     expectTypeOf<(typeof AuditEventTypeValues)[number]>().toEqualTypeOf<AuditEventType>()
   })
 
@@ -44,16 +40,13 @@ describe('domain-owned state contracts', () => {
     expect(OfferingAccessPathStatusSchema.safeParse('active').success).toBe(false)
   })
 
-  it('accepts representative P2-P5 observability substrate literals at runtime', () => {
-    expect(AuditEventTypeSchema.parse('notification.webhook_held')).toBe('notification.webhook_held')
+  it('accepts representative observability literals at runtime', () => {
     expect(AuditEventTypeSchema.parse('billing.provider_event_held')).toBe('billing.provider_event_held')
     expect(AuditTargetTypeSchema.parse('protected_action_attempt')).toBe('protected_action_attempt')
     expect(FunnelEventTypeSchema.parse('paid_activation_started')).toBe('paid_activation_started')
-    expect(OperatorControlKeySchema.parse('billing_reconciliation_enabled')).toBe('billing_reconciliation_enabled')
   })
 
   it('keeps authority state values exact', () => {
-    expect(ClaimStatusValues).toEqual(['draft', 'authenticated', 'published', 'contested', 'disputed', 'suppressed'])
     expect(PublicStatusValues).toEqual(['unpublished', 'published', 'suppressed'])
     expect(TrustTierValues).toEqual(['claimed', 'contact_confirmed', 'listed', 'registry_verified'])
   })

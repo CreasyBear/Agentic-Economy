@@ -17,7 +17,8 @@ vi.mock('@/modules/catalog/public-route.functions', () => ({
   readPublicBusinessRouteServer: readPublicBusinessRouteMock,
 }))
 
-import { PublicBusinessNotFound, Route } from '@/routes/$slug'
+import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
+import { Route } from '@/routes/$slug'
 
 
 afterEach(() => {
@@ -37,7 +38,7 @@ function renderWithRouter(ui: ReactElement) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/claim' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),
@@ -93,13 +94,12 @@ describe('PublicBusinessNotFound copy', () => {
     expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
   })
 
-  it('keeps the claim framing only when a real business page is withheld from the public', () => {
+  it('does not revive claim framing when a real business page is withheld', () => {
     renderWithRouter(<PublicBusinessNotFound data={{ reason: 'not_public' }} isNotFound routeId="/$slug" />)
 
     expect(screen.getByText('Business page unavailable')).toBeTruthy()
-    expect(
-      screen.getByText('This page is not visible right now. The business may need to claim or review it.'),
-    ).toBeTruthy()
+    expect(screen.getByText('This page is not visible right now.')).toBeTruthy()
+    expect(screen.queryByText(/claim or review/)).toBeNull()
     expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
   })
 

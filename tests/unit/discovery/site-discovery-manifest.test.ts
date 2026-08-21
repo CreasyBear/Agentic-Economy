@@ -66,8 +66,6 @@ describe('Site discovery manifest', () => {
     // Guards the helper itself: a broken scan would make every path "missing".
     expect(routePaths.has('/.well-known/http-message-signatures-directory')).toBe(true)
     expect(routePaths.has('/$slug/ucp')).toBe(true)
-    expect(routePaths.has('/$slug/tools/$toolId')).toBe(true)
-    expect(routePaths.has('/$slug/tools/$toolId/prepare')).toBe(true)
     expect(routePaths.has('/llms.txt')).toBe(true)
     expect(routePaths.has('/agent-access')).toBe(true)
     expect(routePaths.has('/')).toBe(true)
@@ -99,9 +97,7 @@ describe('Site discovery manifest', () => {
     expect(pathsByKind.get('catalog_list')).toEqual(['/api/businesses'])
     expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
     expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
-    expect(pathsByKind.get('customer_request_submit')).toEqual(['/api/v1/requests'])
     expect(pathsByKind.get('answer_turn')).toEqual(['/api/answer/turn'])
-    expect(pathsByKind.get('customer_request_schema')).toEqual(['/api/v1/requests/schema'])
     expect(pathsByKind.get('operation_read')).toEqual([
       '/api/v1/market-operations/search',
       '/api/v1/market-operations/detail',
@@ -113,11 +109,11 @@ describe('Site discovery manifest', () => {
       '/api/discovery/examples',
     ])
     expect(manifest.businessManifestUrlTemplate).toBe(`${origin}/{slug}/ucp`)
+    expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
   })
 
   it('states the authentication each endpoint actually enforces', () => {
-    const submit = manifest.endpoints.find((endpoint) => endpoint.kind === 'customer_request_submit')
     const answerTurn = manifest.endpoints.find((endpoint) => endpoint.kind === 'answer_turn')
     const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
     const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
@@ -125,13 +121,7 @@ describe('Site discovery manifest', () => {
     if (directKeylessAction === undefined) throw new Error('operation.execute action missing')
     const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
 
-    // An agent that reads this as an open GET would fail its first real call.
-    expect(submit).toMatchObject({
-      method: 'POST',
-      authentication: 'clerk_api_key',
-      requiredScope: 'customer_requests:create',
-    })
-    expect(manifest.customerRequest.requiredScope).toBe('customer_requests:create')
+    expect(manifest).not.toHaveProperty('customerRequest')
     expect(answerTurn).toMatchObject({
       method: 'POST',
       authentication: 'none',

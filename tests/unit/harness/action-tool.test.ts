@@ -77,9 +77,9 @@ describe('harness action tool adapter', () => {
 
   it('blocks admitted writes until AE source-write context is present', async () => {
     const action = defineAction({
-      id: 'inquiry.submit',
-      name: 'Submit inquiry',
-      summary: 'Send a qualified inquiry.',
+      id: 'fixture.qualifiedWrite',
+      name: 'Fixture qualified write',
+      summary: 'Send a qualified write in this harness fixture.',
       boundaries: ['Does not book, charge, dispatch, or auto-fulfil.'],
       schema: z.object({ body: z.string().min(1) }),
       outputSchema: z.object({ kind: z.literal('ok'), receiptId: z.string() }),
@@ -91,13 +91,13 @@ describe('harness action tool adapter', () => {
       },
       surfaces: ['answerThread'],
       invocationContract: {
-        version: 'inquiry.submit:v1',
+        version: 'fixture.qualifiedWrite:v1',
         consequenceClass: 'communication',
         materialInputPaths: ['body'],
         authorityRequirement: 'principal',
         retryClass: 'attributable_retry',
-        expectedEvidence: ['attributable inquiry receipt'],
-        safeContinuations: ['inspect the returned inquiry receipt'],
+        expectedEvidence: ['attributable write receipt'],
+        safeContinuations: ['inspect the returned write receipt'],
         invalidationConditions: ['body changes', 'source write admission changes'],
       },
       run: async () => ({ kind: 'ok', receiptId: 'receipt-1' }),
@@ -113,11 +113,11 @@ describe('harness action tool adapter', () => {
     })
     expect(withoutWriteAdmission.decision).toMatchObject({
       policy: 'prompt',
-      reason: 'write_requires_source_admission',
+      reason: 'write_source_admission_not_declared',
     })
     expect(withoutWriteAdmission.result).toMatchObject({
       status: 'blocked',
-      errorCode: 'write_requires_source_admission',
+      errorCode: 'write_source_admission_not_declared',
     })
 
     const admitted = await runHarnessTool({

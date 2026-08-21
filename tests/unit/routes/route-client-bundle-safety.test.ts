@@ -10,8 +10,6 @@ import { describe, expect, it } from 'vitest'
  * hydration, and leaves every page as inert server-rendered HTML — the whole
  * product, not just the offending route.
  *
- * This happened: `api.notification.resend-webhook.ts` pulled `node:crypto`
- * through `lib/server/notification-provider.ts` and no test noticed.
  */
 
 const repoRoot = path.resolve(__dirname, '../../..')

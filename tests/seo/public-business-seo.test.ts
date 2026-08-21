@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
-import { getDefaultPublicOwnerStatusReadback } from '../helpers/owner-default-claim'
+import { getDefaultPublicBusinessStatusReadback } from '../helpers/public-business-fixture'
 
 describe('public business SEO builder', () => {
   it('builds canonical metadata and schema without ratings, offers, or payments', () => {
-    const readback = getDefaultPublicOwnerStatusReadback()
+    const readback = getDefaultPublicBusinessStatusReadback()
     const seo = buildPublicBusinessSeo({
       catalog: readback.catalog,
       options: { canonicalBaseUrl: 'https://ae.example/' },
@@ -15,21 +15,21 @@ describe('public business SEO builder', () => {
     const jsonLd = serializeJsonLd(seo.jsonLd)
     const offeringJsonLd = seo.jsonLd.find((item) => item['@type'] === 'Service')
     expect(seo).toMatchObject({
-      slug: 'parramatta-emergency-plumbing',
-      h1: 'Parramatta Emergency Plumbing',
-      canonicalUrl: 'https://ae.example/parramatta-emergency-plumbing',
+      slug: 'demo-listed-provider',
+      h1: 'Demo listed provider',
+      canonicalUrl: 'https://ae.example/demo-listed-provider',
       indexDirective: 'index',
     })
-    expect(seo.title).toContain('Emergency pipe repair')
+    expect(seo.title).toContain('Listed offering')
     expect(seo.description).toContain('Parramatta, NSW')
     expect(jsonLd).toContain('LocalBusiness')
     expect(jsonLd).toContain('Service')
     expect(jsonLd).toContain('BreadcrumbList')
     expect(offeringJsonLd).toMatchObject({
       '@id': expect.stringContaining('#offering-'),
-      name: 'Emergency pipe repair',
-      serviceType: 'Emergency plumbing',
-      description: 'Burst pipe triage and repair for urgent local plumbing jobs.',
+      name: 'Listed offering',
+      serviceType: 'Listed provider',
+      description: 'Published listing for first contact.',
       areaServed: 'Parramatta and nearby suburbs',
     })
     expect(jsonLd).not.toMatch(/AggregateRating|Review|Offer|paymentAccepted|priceRange/)
@@ -58,7 +58,7 @@ describe('public business SEO builder', () => {
 
 
 async function assertPublicCatalogSubsetResponse(): Promise<void> {
-  const response = await handleDurableBusinessDetailRequest('parramatta-emergency-plumbing')
+  const response = await handleDurableBusinessDetailRequest('demo-listed-provider')
   const body = await response.json()
   const serialized = JSON.stringify(body)
 
@@ -68,10 +68,10 @@ async function assertPublicCatalogSubsetResponse(): Promise<void> {
     kind: 'found',
     schemaVersion: 'public-business-catalog-api:v2',
     business: {
-      slug: 'parramatta-emergency-plumbing',
+      slug: 'demo-listed-provider',
       trustTier: 'claimed',
       offerings: [
-        { name: 'Emergency pipe repair' },
+        { name: 'Listed offering' },
       ],
     },
   })

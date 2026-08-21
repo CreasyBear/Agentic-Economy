@@ -17,7 +17,7 @@ function renderWithRouter(ui: ReactElement) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/claim' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),

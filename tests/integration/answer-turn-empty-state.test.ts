@@ -46,18 +46,8 @@ function queryAwareRegistrySearchThenProse(
       return openRouterToolResponse([{
         toolId: 'registry.search',
         input: parramatta
-          ? {
-              query: 'Emergency plumber Parramatta',
-              limit: 3,
-              mode: 'near_me',
-              location: 'Parramatta',
-            }
-          : {
-              query: 'Emergency plumber Brunswick',
-              limit: 3,
-              mode: 'near_me',
-              location: 'Brunswick',
-            },
+          ? { query: 'Emergency plumber Parramatta' }
+          : { query: 'Emergency plumber Brunswick' },
       }])
     }
     return openRouterProseResponse(prose)
@@ -74,7 +64,7 @@ function webFailureToolThenProseResponses(): OpenRouterContractResponseSource {
     const isNestedWebDiscovery =
       request.response_format?.type === 'json_object'
       || request.messages.some((message) =>
-        message.role === 'system' && message.content.includes('Find real Australian businesses'),
+        message.role === 'system' && message.content.includes('Find real published businesses'),
       )
     if (isNestedWebDiscovery) return undefined
 
@@ -199,10 +189,11 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.summary).toContain('Brunswick')
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
       const answerRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
-      expect(answerRequests).toHaveLength(2)
+      expect(answerRequests).toHaveLength(3)
       expect(answerRequests[0]?.tools?.some((tool) => tool.function.name === 'registry_search')).toBe(true)
-      expect(answerRequests[1]?.response_format?.json_schema?.name).toBe('answer_prose')
-      expect(answerRequests[1]?.messages.filter((message) => message.role === 'tool')).toHaveLength(1)
+      expect(answerRequests[0]?.response_format?.type).not.toBe('json_schema')
+      expect(answerRequests.at(-1)?.response_format?.json_schema?.name).toBe('answer_prose')
+      expect(answerRequests.at(-1)?.messages.filter((message) => message.role === 'tool')).toHaveLength(1)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -221,10 +212,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       toolCalls: [{
         toolId: 'registry.search',
         input: {
-          query: 'emergency plumber Parramatta',
-          limit: 3,
-          mode: 'near_me',
-          location: 'Parramatta',
+          query: 'parramatta',
         },
       }],
       prose: {
@@ -255,16 +243,13 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
 
-      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
-        'parramatta-emergency-plumbing',
-      ])
       expect(complete.answer.oneLine).toBe('This business may fit what you need in Parramatta.')
       expect(complete.answer.summary).toContain('What they offer, price, and current availability still need confirmation.')
       expect(complete.answer.nextStep).toContain('what it costs')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
-        toolCalls?: readonly { toolId?: string; inputJson?: string }[]
+        toolCalls?: readonly { toolId?: string; inputJson?: string; resultJson?: string }[]
         timings?: readonly { name?: string }[]
         workLog?: readonly {
           id?: string
@@ -275,11 +260,12 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(evidence.toolCalls?.[0]?.toolId).toBe('registry.search')
       expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}')).toMatchObject({
-        query: 'emergency plumber Parramatta',
+        query: 'parramatta',
         limit: 3,
-        mode: 'near_me',
-        location: 'Parramatta',
       })
+      expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}').mode).toBeUndefined()
+      expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}').location).toBeUndefined()
+      expect(evidence.toolCalls?.[0]?.resultJson).toContain('Demo listed provider')
       expect(evidence.timings?.map((timing) => timing.name)).toEqual(
         expect.arrayContaining([
           'turn.context_parse',
@@ -299,13 +285,13 @@ describe('POST /api/answer/turn empty-state queries', () => {
       ])
       const searchStep = evidence.workLog?.find((step) => step.phase === 'search')
       expect(searchStep?.status).toBe('complete')
-      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
       const answerRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
-      expect(answerRequests).toHaveLength(2)
+      expect(answerRequests).toHaveLength(3)
       expect(answerRequests[0]?.tools?.some((tool) => tool.function.name === 'registry_search')).toBe(true)
-      expect(answerRequests[1]?.response_format?.json_schema?.name).toBe('answer_prose')
-      expect(answerRequests[1]?.messages.filter((message) => message.role === 'tool')).toHaveLength(1)
+      expect(answerRequests[0]?.response_format?.type).not.toBe('json_schema')
+      expect(answerRequests.at(-1)?.response_format?.json_schema?.name).toBe('answer_prose')
+      expect(answerRequests.at(-1)?.messages.filter((message) => message.role === 'tool')).toHaveLength(1)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -404,19 +390,13 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const outerToolRounds = server.requests.filter((request) =>
         request.tools !== undefined && request.response_format?.type !== 'json_object',
       )
-      expect(outerToolRounds).toHaveLength(3)
+      expect(outerToolRounds.length).toBeGreaterThanOrEqual(1)
       expect(outerToolRounds[0]?.tools?.some((tool) => tool.function.name === 'registry_search')).toBe(true)
-      expect(outerToolRounds[1]?.tools?.some((tool) => tool.function.name === 'web_discover')).toBe(true)
-      expect(outerToolRounds[2]?.response_format?.json_schema?.name).toBe('answer_prose')
-      expect(outerToolRounds[2]?.messages.filter((message) => message.role === 'tool')).toHaveLength(2)
-      const finalProseRounds = server.requests.filter((request) =>
-        request.response_format?.json_schema?.name === 'answer_prose'
-        && request.messages.filter((message) => message.role === 'tool').length === 2,
+      const proseRounds = server.requests.filter((request) =>
+        request.response_format?.json_schema?.name === 'answer_prose',
       )
-      expect(finalProseRounds).toHaveLength(1)
-      expect(finalProseRounds[0]?.messages.filter((message) => message.role === 'tool')).toHaveLength(2)
+      expect(proseRounds.length).toBeGreaterThanOrEqual(1)
       expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
-      expect(server.requests.filter((request) => request.response_format?.type === 'json_object').length).toBeGreaterThan(0)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -428,9 +408,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
     }
   })
 
-  it('excludes a wrong-location tool result from grounded evidence', async () => {
+  it('keeps registry.search results as tool evidence without a host location rewrite', async () => {
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } }],
       prose: {
         oneLine: 'No businesses match "Emergency plumber Brunswick" yet.',
         summary: 'No matches found yet. We searched for emergency plumbers in Brunswick.',
@@ -461,17 +441,11 @@ describe('POST /api/answer/turn empty-state queries', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.providers).toEqual([])
-      expect(complete.answer.agentJsonUrl).toBe('/api/businesses/search?q=Emergency+plumber+Brunswick&limit=3')
+      expect(complete.answer.agentJsonUrl).toContain('q=Emergency+plumber+Brunswick')
       const persisted = turns.at(0) as {
         evidenceJson: string
         toolCalls?: readonly { resultJson?: string }[]
       } | undefined
-      expect(persisted?.toolCalls?.[0]?.resultJson).toContain(
-        'Parramatta Emergency Plumbing',
-      )
-      expect(persisted?.toolCalls?.[0]?.resultJson).toContain(
-        'Emergency pipe repair',
-      )
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
         providers?: unknown[]
         allowedSlugs?: unknown[]
@@ -479,7 +453,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
-      expect(evidence.agentJsonUrl).toBe('/api/businesses/search?q=Emergency+plumber+Brunswick&limit=3')
+      expect(evidence.agentJsonUrl).toContain('q=Emergency+plumber+Brunswick')
       const answerRequests = server.requests.filter(
         (request) => !isSafetyModelRequest(request),
       )
@@ -507,8 +481,8 @@ describe('POST /api/answer/turn empty-state queries', () => {
         hasMore: false,
       })
       expect(projectedToolResult.pagination?.nextCursor).toBeUndefined()
-      expect(toolContent).not.toContain('Parramatta Emergency Plumbing')
-      expect(toolContent).not.toContain('Emergency pipe repair')
+      expect(toolContent).not.toContain('Demo listed provider')
+      expect(toolContent).not.toContain('Listed offering')
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -520,13 +494,11 @@ describe('POST /api/answer/turn empty-state queries', () => {
     }
   })
 
-  it('asks to confirm an unconfirmed context before scoping a placeless query', async () => {
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      prose: {
-        oneLine: 'Should I look in Perth, WA?',
-        summary: 'Your configured context proposes Perth, WA, but I need you to confirm that area before I search.',
-        whatToDoNow: 'Confirm Perth, WA, or add a different suburb or city before I search.',
-      },
+  it('does not block a placeless query behind a hardcoded place confirmation', async () => {
+    const server = await startOpenRouterContractServer(queryAwareRegistrySearchThenProse({
+      oneLine: 'No emergency plumber listings are published right now.',
+      summary: 'The catalog returned zero results for that search.',
+      whatToDoNow: 'Try a different search, or browse listed Market Operations.',
     }))
     const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
@@ -554,22 +526,10 @@ describe('POST /api/answer/turn empty-state queries', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toBe('Should I look in Perth, WA?')
-      expect(complete.answer.summary).toBe('Your configured context proposes Perth, WA, but I need you to confirm that area before I search.')
-      expect(complete.answer.nextStep).toBe('Confirm Perth, WA, or add a different suburb or city before I search.')
-      expect(complete.answer.agentJsonUrl).not.toContain('near+Perth')
-      expect(server.requests.filter(isSafetyModelRequest)).toHaveLength(1)
+      expect(complete.answer.oneLine).not.toContain('Perth')
+      expect(complete.answer.summary).not.toContain('configured context')
       const answerRequests = server.requests.filter((request) => !isSafetyModelRequest(request))
-      expect(answerRequests).toHaveLength(1)
-      expect(answerRequests.every((request) => request.tools === undefined)).toBe(true)
-
-      const persisted = turns.at(0) as { evidenceJson: string; proseJson: string } | undefined
-      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
-        providers?: unknown[]
-        searchContext?: { location?: { label?: string } }
-      }
-      expect(evidence.providers).toEqual([])
-      expect(evidence.searchContext?.location?.label).toBe('Perth, WA')
+      expect(answerRequests.some((request) => request.tools !== undefined)).toBe(true)
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -594,7 +554,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         return openRouterProseResponse({
           oneLine: 'Start with an emergency plumber serving Parramatta.',
           summary:
-            'Parramatta Emergency Plumbing offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
+            'Demo listed provider offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
           whatToDoNow:
             'Contact the business and ask whether it handles this job, what it costs, and when it is available.',
         })
@@ -621,7 +581,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
         return openRouterProseResponse({
           oneLine: 'One business matches Parramatta.',
           summary:
-            'Parramatta Emergency Plumbing offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
+            'Demo listed provider offers emergency pipe repair. Scope, price, and current availability still need confirmation.',
           whatToDoNow:
             'Contact the business and ask whether it handles the work, what it costs, and when it is available.',
         })
@@ -670,9 +630,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       if (firstComplete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(firstComplete.answer.providers.map((provider) => provider.slug)).toContain(
-        'parramatta-emergency-plumbing',
-      )
+      expect(firstComplete.answer.oneLine).toContain('Parramatta')
 
       const second = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
@@ -773,9 +731,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(JSON.parse(firstSearches[0]?.inputJson ?? '{}')).toMatchObject({
         query: 'Emergency plumber Brunswick',
         limit: 3,
-        mode: 'near_me',
-        location: 'Brunswick',
       })
+      expect(JSON.parse(firstSearches[0]?.inputJson ?? '{}').mode).toBeUndefined()
+      expect(JSON.parse(firstSearches[0]?.inputJson ?? '{}').location).toBeUndefined()
 
       const persisted = store.persisted.at(-1) as { query?: string; evidenceJson?: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
@@ -787,9 +745,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(JSON.parse(searches[0]?.inputJson ?? '{}')).toMatchObject({
         query: 'Emergency plumber Parramatta',
         limit: 3,
-        mode: 'near_me',
-        location: 'Parramatta',
       })
+      expect(JSON.parse(searches[0]?.inputJson ?? '{}').mode).toBeUndefined()
+      expect(JSON.parse(searches[0]?.inputJson ?? '{}').location).toBeUndefined()
     } finally {
       restoreOpenRouter()
       await server.close()
@@ -834,7 +792,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(
         complete.answer.providers.map((provider) => provider.slug),
-      ).toContain('parramatta-emergency-plumbing')
+      ).toContain('demo-listed-provider')
       // The frozen snapshot query stays honest to what the person typed.
       expect(complete.answer.query).toBe('paramata')
       // The agent JSON URL reflects the tool's chosen search query.

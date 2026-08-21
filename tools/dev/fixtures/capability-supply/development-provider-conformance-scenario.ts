@@ -328,6 +328,7 @@ function paymentRuntime(
     },
     x402PaymentSigningAvailable: () => true,
     verifyX402Settlement: async () => true,
+    markX402PaymentPossiblySubmitted: () => undefined,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         provider: operation.identity.businessId,

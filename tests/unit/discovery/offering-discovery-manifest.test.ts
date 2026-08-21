@@ -17,7 +17,7 @@ describe('Offering discovery manifest', () => {
     expect(result).toMatchObject({
       kind: 'available',
       manifest: {
-        schemaVersion: 'ae-ucp-fallback:v2',
+        schemaVersion: 'ae-ucp:v2',
         businessCatalogSchemaVersion: 'public-business-catalog-api:v2',
         offerings: [],
       },
@@ -94,12 +94,11 @@ describe('Offering discovery manifest', () => {
   })
 
   it('publishes no price for an offering that published none', () => {
-    const business = projectBusinessSupplyToPublicApi(projection([humanRequestOffering('ae_inquiry')]))
+    const business = projectBusinessSupplyToPublicApi(projection([humanRequestOffering('phone')]))
     const result = buildOfferingDiscoveryManifest({
       business,
       canonicalBaseUrl: 'https://agentic.market',
       now: 101,
-      inquiryAdmitted: true,
     })
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return
@@ -107,31 +106,24 @@ describe('Offering discovery manifest', () => {
     expect(result.manifest.offerings[0]).not.toHaveProperty('price')
   })
 
-  /**
-   * The human business page withdraws first-contact copy when the inquiry
-   * route would refuse. The machine manifest bypassed that projection and was
-   * telling agents to "use the inquiry form" for a business whose send would
-   * be rejected. Both surfaces must describe one fact.
-   */
-  it('withdraws the AE inquiry path when the inquiry route would refuse', () => {
-    const business = projectBusinessSupplyToPublicApi(projection([humanRequestOffering('ae_inquiry')]))
+  it('keeps published contact paths', () => {
+    const business = projectBusinessSupplyToPublicApi({
+      ...projection([humanRequestOffering('phone')]),
+      business: {
+        ...projection([]).business,
+        businessContext: { kind: 'local_human', suburb: 'Online', stateTerritory: 'Global', publishedPhone: '(08) 5550 1030' },
+      },
+    })
 
     const refused = buildOfferingDiscoveryManifest({
-      business, canonicalBaseUrl: 'https://agentic.market', now: 101, inquiryAdmitted: false,
+      business, canonicalBaseUrl: 'https://agentic.market', now: 101,
     })
     expect(refused.kind).toBe('available')
     if (refused.kind !== 'available') return
-    expect(refused.manifest.offerings[0]?.accessPaths).toEqual([])
-
-    const admitted = buildOfferingDiscoveryManifest({
-      business, canonicalBaseUrl: 'https://agentic.market', now: 101, inquiryAdmitted: true,
-    })
-    expect(admitted.kind).toBe('available')
-    if (admitted.kind !== 'available') return
-    expect(admitted.manifest.offerings[0]?.accessPaths).toMatchObject([{ channel: 'ae_inquiry' }])
+    expect(refused.manifest.offerings[0]?.accessPaths).toMatchObject([{ channel: 'phone' }])
   })
 
-  it('describes a surviving phone channel by its own channel when inquiry is refused', () => {
+  it('describes a surviving phone channel by its own channel', () => {
     const business = projectBusinessSupplyToPublicApi({
       ...projection([humanRequestOffering('phone')]),
       business: {
@@ -141,25 +133,30 @@ describe('Offering discovery manifest', () => {
     })
 
     const result = buildOfferingDiscoveryManifest({
-      business, canonicalBaseUrl: 'https://agentic.market', now: 101, inquiryAdmitted: false,
+      business, canonicalBaseUrl: 'https://agentic.market', now: 101,
     })
 
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return
     expect(result.manifest.offerings[0]?.accessPaths).toMatchObject([
-      { channel: 'phone', disclosure: 'Call the business directly.' },
+      { channel: 'phone', disclosure: 'Call the published number on the listing.' },
     ])
   })
 
-  /** Unknown admission must fail closed: inviting a refused send is the worse failure. */
-  it('treats unknown admission as refused', () => {
-    const business = projectBusinessSupplyToPublicApi(projection([humanRequestOffering('ae_inquiry')]))
+  it('keeps published contact paths without hosted tools', () => {
+    const business = projectBusinessSupplyToPublicApi({
+      ...projection([humanRequestOffering('phone')]),
+      business: {
+        ...projection([]).business,
+        businessContext: { kind: 'local_human', suburb: 'Online', stateTerritory: 'Global', publishedPhone: '(08) 5550 1030' },
+      },
+    })
 
     const result = buildOfferingDiscoveryManifest({ business, canonicalBaseUrl: 'https://agentic.market', now: 101 })
 
     expect(result.kind).toBe('available')
     if (result.kind !== 'available') return
-    expect(result.manifest.offerings[0]?.accessPaths).toEqual([])
+    expect(result.manifest.offerings[0]?.accessPaths).toMatchObject([{ channel: 'phone' }])
   })
 })
 
@@ -182,7 +179,7 @@ function projection(offerings: BusinessSupplyProjection['offerings']): BusinessS
   }
 }
 
-function humanRequestOffering(channel: 'ae_inquiry' | 'phone'): BusinessSupplyProjection['offerings'][number] {
+function humanRequestOffering(channel: 'website' | 'phone'): BusinessSupplyProjection['offerings'][number] {
   return {
     offering: {
       offeringRef: brandNonEmpty('offering:demo:plumbing', 'OfferingRef'),

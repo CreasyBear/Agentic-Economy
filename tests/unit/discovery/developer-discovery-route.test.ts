@@ -2,18 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { emptyDiscoverySourceState } from '../../fixtures/source-state'
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   evaluateDiscoveryProjectionGate,
   mapDeveloperDiscoveryRouteExecutions,
   readDeveloperDiscoveryRoute,
   readDeveloperDiscoverySupportMatrix,
-  readP2InquiryAvailabilityPublicStatus,
   renderDeveloperDiscoveryRouteCopy,
 } from '@/modules/discovery/developer-discovery'
 import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
@@ -51,25 +46,13 @@ const privateP2FieldNames = [
 describe('developer discovery route readback', () => {
   it('renders available public catalog facts with schema, example, download, and unsupported labels', async () => {
     const state = createFixtureDiscoverySourceState()
-    const generated = regenerateDiscoveryManifest(
-      state,
-      { businessId: firstBusiness(state).businessId },
-      {
-        canonicalBaseUrl: 'https://agentic.test',
-        now: 3_000,
-        adapter: testOnlyDiscoveryManifestAdapter,
-      },
-    )
-
-    expect(generated.kind).toBe('ok')
-
     const readback = readDeveloperDiscoveryRoute(state, { now: 4_000 })
     const copy = renderDeveloperDiscoveryRouteCopy(readback)
 
     await expect(loadDeveloperDiscoveryRoute()).resolves.toMatchObject({ schemaVersion: 'developer-discovery:v1' })
     expect(readback.publicFacts).toEqual([
       expect.objectContaining({
-        slug: 'parramatta-emergency-plumbing',
+        slug: 'demo-listed-provider',
         schemaVersion: 'public-business-catalog-api:v2',
         disposition: 'current',
         offeringCount: 1,
@@ -93,10 +76,6 @@ describe('developer discovery route readback', () => {
       expect.arrayContaining([expect.objectContaining({ label: 'Public catalog fixture bundle' })])
     )
     expect(readback.routeHealth.every((route) => route.status === 'available')).toBe(true)
-    expect(readback.p2InquiryAvailability).toMatchObject({
-      state: 'unavailable',
-      source: 'phase2-public-status-contract',
-    })
     expect(readback.supportMatrix).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -122,7 +101,6 @@ describe('developer discovery route readback', () => {
     expect(copy).toContain('Business-origin discovery file: unavailable')
     expect(copy).toContain('Commercial or owner-action authority: unavailable')
     expect(copy).toContain('API keys: unavailable')
-    expect(copy).toContain('Phase 2 inquiry public status: unavailable')
     expectCopyHasNoPlatformOrPaymentClaims(copy)
     expectNoPrivateP2Fields(JSON.stringify(readback))
   }, 30_000)
@@ -150,7 +128,7 @@ describe('developer discovery route readback', () => {
         schemaVersion: 'public-business-catalog-api:v2',
       }),
     ])
-    expect(JSON.stringify(readback)).not.toContain('parramatta-emergency-plumbing')
+    expect(JSON.stringify(readback)).not.toContain('demo-listed-provider')
     expect(readback.routeHealth).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -165,9 +143,9 @@ describe('developer discovery route readback', () => {
         }),
         expect.objectContaining({
           route: 'https://ae.example/durable-route-plumbing/ucp',
-          label: 'AE-hosted UCP fallback',
+          label: 'AE-hosted UCP manifest',
           status: 'available',
-          schemaVersion: 'ae-ucp-fallback:v1',
+          schemaVersion: 'ae-ucp:v2',
         }),
       ])
     )
@@ -246,19 +224,19 @@ describe('developer discovery route readback', () => {
     )
   })
 
-  it('renders degraded when public facts exist without current discovery readback', () => {
+  it('renders current when public facts are available', () => {
     const readback = readDeveloperDiscoveryRoute(createFixtureDiscoverySourceState(), { now: 4_000 })
     const copy = renderDeveloperDiscoveryRouteCopy(readback)
 
     expect(readback.catalogCount).toBe(1)
     expect(readback.freshness).toMatchObject({
-      state: 'degraded',
-      label: 'Discovery degraded',
+      state: 'current',
+      label: 'Discovery current',
     })
-    expect(readback.artifacts.every((artifact) => artifact.state === 'degraded')).toBe(true)
-    expect(readback.routeHealth.every((route) => route.status === 'stale' && route.freshness === 'degraded')).toBe(true)
-    expect(readback.supportMatrix.every((row) => row.state === 'degraded')).toBe(true)
-    expect(copy).toContain('At least one public catalog is missing a current discovery readback.')
+    expect(readback.artifacts.every((artifact) => artifact.state === 'available')).toBe(true)
+    expect(readback.routeHealth.every((route) => route.status === 'available' && route.freshness === 'current')).toBe(true)
+    expect(readback.supportMatrix.every((row) => row.state === 'shipped')).toBe(true)
+    expect(copy).toContain('Public catalog, read path status, schema, and examples match current source state.')
     expectCopyHasNoPlatformOrPaymentClaims(copy)
   })
 
@@ -277,26 +255,6 @@ describe('developer discovery route readback', () => {
     expect(readback.supportMatrix.every((row) => row.state === 'unavailable')).toBe(true)
     expect(copy).toContain('No source-owned public catalog facts are published.')
     expectCopyHasNoPlatformOrPaymentClaims(copy)
-  })
-
-  it('normalizes public Phase 2 inquiry availability without private inquiry fields', () => {
-    for (const state of ['available', 'unavailable', 'degraded', 'not_shipped'] as const) {
-      const status = readP2InquiryAvailabilityPublicStatus({
-        state,
-        publicReason: `Public ${state} reason`,
-        source: `phase2:${state}`,
-        lastVerifiedAt: 4_000,
-      })
-
-      expect(status).toEqual({
-        state,
-        publicReason: `Public ${state} reason`,
-        source: `phase2:${state}`,
-        lastVerifiedAt: 4_000,
-      })
-      expect(Object.keys(status).sort()).toEqual(['lastVerifiedAt', 'publicReason', 'source', 'state'])
-      expectNoPrivateP2Fields(JSON.stringify(status))
-    }
   })
 
   it('keeps OpenAPI and MCP out of the support matrix until route parity evidence accepts them', () => {
@@ -497,13 +455,13 @@ function routeSnapshotWithBusiness(input: {
       },
       {
         route: `https://ae.example/${input.slug}/ucp`,
-        label: 'AE-hosted UCP fallback',
+        label: 'AE-hosted UCP manifest',
         ok: true,
         checkedAt: 8_000,
         httpStatus: 200,
         cacheControl: 'public, max-age=60, stale-while-revalidate=300',
-        schemaVersion: 'ae-ucp-fallback:v1',
-        expectedSchemaVersion: 'ae-ucp-fallback:v1',
+        schemaVersion: 'ae-ucp:v2',
+        expectedSchemaVersion: 'ae-ucp:v2',
       },
       {
         route: 'https://ae.example/llms.txt',

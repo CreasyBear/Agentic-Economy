@@ -6,7 +6,6 @@ import {
   setHttpRateLimitAdmissionForTests,
   type RateLimitAdmission,
 } from '@/lib/server/rate-limit'
-import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import {
   createAnswerThreadTestStore,
@@ -330,27 +329,6 @@ describe('answer HTTP rate limits', () => {
       kind: 'UNAVAILABLE',
       code: 'unavailable',
     })
-  })
-
-  it('maps a refused follow-up-chip admission to 429', async () => {
-    const admit = sequencedAdmission()
-    const request = () => new Request('https://ae.example/api/answer/follow-up-chips', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        cookie: sessionCookieHeader('follow-up-chips-rate-limit-session'),
-      },
-      body: JSON.stringify({
-        query: 'emergency plumber parramatta',
-        providers: [],
-      }),
-    })
-
-    const accepted = await handleFollowUpChipsRequest(request(), { admit })
-    expect(accepted.status).not.toBe(429)
-
-    const limited = await handleFollowUpChipsRequest(request(), { admit })
-    await expectRateLimited(limited)
   })
 })
 

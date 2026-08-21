@@ -7,9 +7,9 @@ import { callJson, heading, line, printJson, table } from '../lib/output'
  * independently so one unavailable surface does not hide the others.
  */
 const discoveryRoutes = [
+  '/.well-known/ucp',
   '/api/discovery/schema',
   '/api/discovery/examples',
-  '/api/v1/requests/schema',
 ] as const
 
 export async function runDiscoverCommand(_args: readonly string[], options: CliOptions): Promise<void> {

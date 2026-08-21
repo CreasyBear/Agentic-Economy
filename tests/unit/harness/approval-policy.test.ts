@@ -82,7 +82,7 @@ describe('AE harness approval policy', () => {
     })
   })
 
-  it('blocks inquiry source-write actions until request admission context is present', () => {
+  it('blocks inquiry.submit because no source-write admission is declared', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: inquirySubmitTool(),
       mode: 'public-qualified-write',
@@ -91,12 +91,11 @@ describe('AE harness approval policy', () => {
       policy: 'prompt',
       status: 'blocked',
       promptAllowed: false,
-      sourceWriteScope: 'public_inquiry',
-      reason: 'write_requires_source_admission',
+      reason: 'write_source_admission_not_declared',
     })
   })
 
-  it('refuses the removed public-qualified-write mode', () => {
+  it('refuses public-qualified-write without a declared source-write admission', () => {
     const results = Object.fromEntries(
       HarnessApprovalModeValues.map((mode) => [
         mode,
@@ -112,16 +111,14 @@ describe('AE harness approval policy', () => {
     expect(results['public-qualified-write']).toMatchObject({
       policy: 'prompt',
       status: 'blocked',
-      sourceWriteScope: 'public_inquiry',
-      reason: 'agent_tool_admission_required',
+      reason: 'write_source_admission_not_declared',
     })
 
     for (const mode of HarnessApprovalModeValues.filter((mode) => mode !== 'public-qualified-write')) {
       expect(results[mode]).toMatchObject({
         policy: 'prompt',
         status: 'blocked',
-        sourceWriteScope: 'public_inquiry',
-        reason: 'source_write_mode_not_allowed',
+        reason: 'write_source_admission_not_declared',
       })
     }
   })
@@ -216,11 +213,6 @@ function sourceWriteContext() {
       targetPath: '/v1/route',
       targetQuery: '',
       bodyDigest: SOURCE_WRITE_NO_BODY_DIGEST,
-    },
-    agentToolAdmission: {
-      toolId: 'inquiry.submit',
-      scope: 'public_inquiry' as const,
-      principalId: 'agent:test-principal',
     },
   }
 }

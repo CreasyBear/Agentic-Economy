@@ -20,7 +20,7 @@ const convexModules = Object.fromEntries(
 
 describe('admin authority contract', () => {
   it('does not grant authority from env or session alone', () => {
-    expect(requireAdminAuthority(undefined, 'set_operator_control')).toEqual({
+    expect(requireAdminAuthority(undefined, 'register_capability_supply')).toEqual({
       kind: 'denied',
       reason: 'missing_membership',
     })
@@ -28,7 +28,7 @@ describe('admin authority contract', () => {
 
   it('enforces the source-owned role and action matrix', () => {
     expect(requireAdminAuthority(activeMembership('support'), 'read_admin_readbacks')).toMatchObject({ kind: 'allowed' })
-    expect(requireAdminAuthority(activeMembership('support'), 'set_operator_control')).toEqual({
+    expect(requireAdminAuthority(activeMembership('support'), 'register_capability_supply')).toEqual({
       kind: 'denied',
       reason: 'action_not_allowed',
     })
@@ -239,22 +239,41 @@ describe('admin authority contract', () => {
     ).toMatchObject({ kind: 'error', code: 'admin_missing_evidence' })
   })
 
-  it('fails closed for admin membership once listed memberships were unlisted', async () => {
+  it('resolves authority only from an active token-bound durable membership', async () => {
     const backend = convexTest(schema, convexModules)
 
-    const legacyAuthority = await backend.withIdentity({
-      subject: 'legacy-admin',
+    const missingAuthority = await backend.withIdentity({
+      subject: 'missing-admin',
       issuer: 'https://clerk.example.test',
-      tokenIdentifier: 'clerk|legacy-admin',
-    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'set_operator_control'))
-    expect(legacyAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
+      tokenIdentifier: 'clerk|missing-admin',
+    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'register_capability_supply'))
+    expect(missingAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
+
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: 'current-admin',
+        tokenIdentifier: 'clerk|current-admin',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'bootstrap',
+        grantedAt: 1,
+      })
+    })
 
     const currentAuthority = await backend.withIdentity({
       subject: 'current-admin',
       issuer: 'https://clerk.example.test',
       tokenIdentifier: 'clerk|current-admin',
-    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'set_operator_control'))
-    expect(currentAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
+    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'register_capability_supply'))
+    expect(currentAuthority).toMatchObject({
+      kind: 'allowed',
+      membership: {
+        clerkUserId: 'current-admin',
+        tokenIdentifier: 'clerk|current-admin',
+        role: 'owner_admin',
+        state: 'active',
+      },
+    })
   })
 })
 

@@ -69,17 +69,6 @@ export async function runJourneyCommand(args: readonly string[], options: CliOpt
     note: discover.ok ? 'Discovery document returned.' : 'Discovery document unavailable.',
   })
 
-  const requestSchemaPath = '/api/v1/requests/schema'
-  const requestSchema = await callJson(options.baseUrl, requestSchemaPath)
-  steps.push({
-    step: 'learn the request contract',
-    path: requestSchemaPath,
-    status: requestSchema.status,
-    durationMs: requestSchema.durationMs,
-    nextMoveDerivable: requestSchema.ok,
-    note: requestSchema.ok ? 'Request contract schema returned.' : 'Request contract schema unavailable.',
-  })
-
   if (options.json) {
     printJson({ query, steps })
     return

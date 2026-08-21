@@ -12,10 +12,10 @@ describe('audit and redaction contracts', () => {
     const result = validateAuditEvent(
       auditInput({
         eventId: brandNonEmpty('audit:1', 'AuditEventId'),
-        eventType: 'claim.created',
-        targetType: 'claim',
-        targetRef: 'claim:1',
-        idempotencyKey: brandNonEmpty('op:claim:1', 'OperationKey'),
+        eventType: 'registry.sync_queued',
+        targetType: 'registry_projection',
+        targetRef: 'registry:1',
+        idempotencyKey: brandNonEmpty('op:registry:1', 'OperationKey'),
         correlationId: brandNonEmpty('corr:1', 'CorrelationId'),
         redactedPayload,
         payloadHash: payloadHash(redactedPayload),
@@ -36,12 +36,12 @@ describe('audit and redaction contracts', () => {
     const result = validateAuditEvent(
       auditInput({
         eventId: brandNonEmpty('audit:2', 'AuditEventId'),
-        eventType: 'business.suppressed',
-        actorKind: 'admin',
-        actorRef: 'admin:1',
-        targetType: 'business',
-        targetRef: 'business:1',
-        idempotencyKey: brandNonEmpty('op:suppress:1', 'OperationKey'),
+        eventType: 'developer_discovery.parity_failed',
+        actorKind: 'system',
+        actorRef: 'registry:worker',
+        targetType: 'developer_discovery',
+        targetRef: 'developer-discovery:1',
+        idempotencyKey: brandNonEmpty('op:registry:2', 'OperationKey'),
         correlationId: brandNonEmpty('corr:2', 'CorrelationId'),
       })
     )
@@ -49,13 +49,8 @@ describe('audit and redaction contracts', () => {
     expect(result).toEqual({ valid: false, reason: 'missing_state_transition' })
   })
 
-  it('covers consequential P2-P5 audit events with source-owned before and after states', () => {
+  it('covers consequential audit events with source-owned before and after states', () => {
     const consequentialEvents = [
-      ['inquiry.replied', 'inquiry'],
-      ['inquiry.private_content_deleted', 'inquiry'],
-      ['notification.webhook_held', 'notification_provider_event'],
-      ['notification.retry_exhausted', 'notification'],
-      ['notification.no_repair_marked', 'notification'],
       ['developer_discovery.parity_failed', 'developer_discovery'],
       ['protected_action.gateway_consumed', 'protected_action_attempt'],
       ['protected_action.no_repair_marked', 'protected_action'],
@@ -94,11 +89,11 @@ describe('audit and redaction contracts', () => {
 function auditInput(overrides: Partial<AuditEventInput> = {}): AuditEventInput {
   return {
     eventId: brandNonEmpty('audit:base', 'AuditEventId'),
-    eventType: 'claim.created',
+    eventType: 'registry.sync_queued',
     actorKind: 'owner',
     actorRef: 'owner:1',
-    targetType: 'claim',
-    targetRef: 'claim:1',
+    targetType: 'registry_projection',
+    targetRef: 'registry:1',
     idempotencyKey: brandNonEmpty('op:base', 'OperationKey'),
     correlationId: brandNonEmpty('corr:base', 'CorrelationId'),
     redactedPayload: null,

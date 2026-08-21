@@ -57,7 +57,7 @@ describe('integrated Offering supply projection', () => {
         status: 'published',
         descriptor: {
           kind: 'human_request',
-          channel: 'ae_inquiry',
+          channel: 'website',
           disclosure: 'Ask the business for a scoped estimate.',
         },
         sourceHash: brandNonEmpty('sha256:human-path', 'SourceHash'),
@@ -101,7 +101,7 @@ describe('integrated Offering supply projection', () => {
       projection: {
         offering: { offeringRef, revision: 2, name: 'Subgraph query' },
         accessPaths: [
-          { descriptor: { kind: 'human_request', channel: 'ae_inquiry' } },
+          { descriptor: { kind: 'human_request', channel: 'website' } },
           {
             descriptor: {
               kind: 'external_operation',
@@ -179,7 +179,7 @@ function humanPath(): OfferingAccessPathRecord {
     status: 'published',
     descriptor: {
       kind: 'human_request',
-      channel: 'ae_inquiry',
+      channel: 'website',
       disclosure: 'Ask the business for a scoped estimate.',
     },
     sourceHash: brandNonEmpty('sha256:human-path', 'SourceHash'),

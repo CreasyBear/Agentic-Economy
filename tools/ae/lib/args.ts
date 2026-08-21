@@ -6,7 +6,6 @@ export type CliOptions = {
   help: boolean
   allowWrite: boolean
   technical?: boolean
-  suburb?: string
   threadId?: string
   operationRef?: string
   candidateDigest?: string
@@ -31,7 +30,8 @@ export type ParsedArgs = {
   providedOptions: readonly string[]
 }
 
-const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+const LOCAL_DEV_BASE_URL = 'http://127.0.0.1:3024'
 export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
 const CLI_ENTRYPOINT = 'npm run -s ae --'
 
@@ -48,6 +48,23 @@ export function safeOriginForDiagnostics(value: unknown): string {
   } catch {
     return INVALID_BASE_URL_PLACEHOLDER
   }
+}
+
+function isLoopbackHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+function defaultCliBaseUrl(): string {
+  const convexUrl = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()
+  if (convexUrl !== undefined && convexUrl.length > 0 && isLoopbackHttpUrl(convexUrl)) {
+    return LOCAL_DEV_BASE_URL
+  }
+  return HOSTED_DEFAULT_BASE_URL
 }
 
 function parseBaseUrl(value: unknown): string {
@@ -79,7 +96,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       technical: { type: 'boolean' },
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
-      suburb: { type: 'string' },
       'thread-id': { type: 'string' },
       'operation-ref': { type: 'string' },
       'candidate-digest': { type: 'string' },
@@ -109,7 +125,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const configuredBaseUrl = process.env.AE_CLI_BASE_URL?.trim() || process.env.AE_CANONICAL_BASE_URL?.trim()
   const baseUrl = parseBaseUrl(
     parsed.values['base-url'] === undefined
-      ? configuredBaseUrl || DEFAULT_BASE_URL
+      ? configuredBaseUrl || defaultCliBaseUrl()
       : parsed.values['base-url'],
   )
   const options: CliOptions = {
@@ -119,7 +135,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     allowWrite: parsed.values['allow-write'] ?? false,
     technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
-    ...(parsed.values.suburb === undefined ? {} : { suburb: parsed.values.suburb }),
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
     ...(parsed.values['operation-ref'] === undefined ? {} : { operationRef: parsed.values['operation-ref'] }),
     ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
@@ -149,7 +164,7 @@ export function printUsage(): void {
 
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-Canonical Operation commands (need a running server; default ${DEFAULT_BASE_URL}):
+Canonical Operation commands (need a running server; hosted default ${HOSTED_DEFAULT_BASE_URL}, or ${LOCAL_DEV_BASE_URL} when CONVEX_URL is loopback):
   ${CLI_ENTRYPOINT} manifest
   ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
   ${CLI_ENTRYPOINT} inspect <operation-ref>
@@ -165,10 +180,7 @@ Demand commands:
   ${CLI_ENTRYPOINT} demand ask --thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>'
   ${CLI_ENTRYPOINT} demand business <slug>
   ${CLI_ENTRYPOINT} demand discover
-  ${CLI_ENTRYPOINT} demand enrich "<business name>" [--suburb X]
-  ${CLI_ENTRYPOINT} demand import <websiteUrl>
   ${CLI_ENTRYPOINT} demand journey "<query>"
-  ${CLI_ENTRYPOINT} demand request create "<text>" | request get <ref> | request options <ref> | request confirm <ref> <optionRef>
 
 Advanced/operator commands:
   ${CLI_ENTRYPOINT} advanced action <id> ['<json>'] [--allow-write]

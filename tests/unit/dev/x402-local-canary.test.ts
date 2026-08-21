@@ -69,7 +69,7 @@ describe('development x402 local canary', () => {
     expect(eth.providerOutput.price).not.toBe(btc.providerOutput.price)
   })
 
-  it('keeps the opt-in testnet path closed behind the existing live-money gate', async () => {
+  it('keeps the opt-in testnet path closed until server-only credentials are configured', async () => {
     const result = await runDevelopmentX402Canary({
       mode: 'testnet',
       environment: {},
@@ -78,13 +78,13 @@ describe('development x402 local canary', () => {
     expect(result).toMatchObject({
       kind: 'refused',
       mode: 'testnet',
-      code: 'x402_testnet_live_money_gate_required',
+      code: 'x402_testnet_prerequisite_missing',
       requiredEnvironment: [
         'AE_X402_CANARY_PROVIDER_URL',
         'AE_X402_PAYMENT_PRIVATE_KEY',
       ],
     })
     if (result.kind !== 'refused') throw new Error('expected testnet refusal')
-    expect(result.prerequisite).toContain('live-money policy/consent gate')
+    expect(result.prerequisite).toContain('Set these server-only environment variables')
   })
 })

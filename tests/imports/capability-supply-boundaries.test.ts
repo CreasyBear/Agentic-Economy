@@ -9,6 +9,12 @@ const neutralSources = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-supply/internal/convex-schema.ts',
   'convex/capabilitySupply.ts',
+  'convex/capabilitySupplyShared.ts',
+  'convex/capabilitySupplyPublish.ts',
+  'convex/capabilitySupplyProbes.ts',
+  'convex/capabilitySupplyGraph.ts',
+  'convex/capabilitySupplyLists.ts',
+  'convex/capabilitySupplyCommands.ts',
 ] as const
 
 const deepenedFolders = [
@@ -76,12 +82,13 @@ describe('capability supply boundaries', () => {
     }
   })
 
-  it('forces sandbox identity, publication, and eligibility through shared production commands', () => {
+  it('keeps the development seed on current catalog commands and out of retired claim paths', () => {
     const seed = readFileSync('convex/devSeed.ts', 'utf8')
 
-    expect(seed).toContain('claimBusinessCommand')
-    expect(seed).toContain('publishBusinessCatalogCommand')
-    expect(seed).toContain('setCapabilitySupplyEligibilityCommand')
+    expect(seed).toContain('persistDevSeedCatalogState')
+    expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
+    expect(seed).not.toContain('claimBusinessCommand')
+    expect(seed).not.toContain('publishBusinessCatalogCommand')
     expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 
@@ -109,5 +116,4 @@ function sources(): string[] {
     ...deepenedFolders.flatMap((directory) => listTsFiles(directory).map((path) => readFileSync(path, 'utf8'))),
   ]
 }
-
 

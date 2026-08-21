@@ -6,13 +6,8 @@ import {
   bootstrapOwnerAdmin,
   grantAdminMembership,
   readAdminAuditEvents,
-  readAdminClaims,
   readAdminIndexHealth,
 } from '../../convex/security'
-import {
-  readOperatorControls,
-  setOperatorControl,
-} from '../../convex/observability'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 
@@ -47,13 +42,10 @@ type TestCtx = {
 
 type Handler<Args> = (ctx: TestCtx, args: Args) => Promise<unknown>
 
-const readClaimsHandler = (readAdminClaims as unknown as { _handler: Handler<Record<string, never>> })._handler
 const readAuditHandler = (readAdminAuditEvents as unknown as { _handler: Handler<Record<string, never>> })._handler
 const readIndexHealthHandler = (readAdminIndexHealth as unknown as { _handler: Handler<Record<string, never>> })._handler
 const bootstrapHandler = (bootstrapOwnerAdmin as unknown as { _handler: Handler<AdminBootstrapArgs> })._handler
 const grantHandler = (grantAdminMembership as unknown as { _handler: Handler<GrantArgs> })._handler
-const setControlHandler = (setOperatorControl as unknown as { _handler: Handler<SetControlArgs> })._handler
-const readControlsHandler = (readOperatorControls as unknown as { _handler: Handler<Record<string, never>> })._handler
 
 type AdminBootstrapArgs = {
   reasonCode: string
@@ -76,35 +68,22 @@ type GrantArgs = {
   sourceWrite: SourceWriteAdmission
 }
 
-type SetControlArgs = {
-  key: 'claims_enabled' | 'publish_enabled' | 'registry_enabled' | 'discovery_enabled' | 'public_copy_safe_mode'
-  enabled: boolean
-  reasonCode: string
-  evidenceRefs: string[]
-  expiresAt?: number
-  operationKey: string
-  correlationId: string
-  sourceWriteRequest: SourceWriteAdmissionRequest
-  sourceWrite: SourceWriteAdmission
-}
-
 describe('admin Convex runtime controls', () => {
   it('denies non-admin readbacks without private rows and allows owner_admin durable readbacks', async () => {
     const db = seededAdminDb()
 
-    const denied = await readClaimsHandler(authCtx(db, null), {})
+    const denied = await readAuditHandler(authCtx(db, null), {})
     expect(denied).toMatchObject({ kind: 'denied', httpStatus: 401, rows: [] })
     expect(JSON.stringify(denied)).not.toMatch(/private:evidence|owner@example|rawContact/i)
 
-    const claims = await readClaimsHandler(authCtx(db, ownerAdmin()), {})
     const audit = await readAuditHandler(authCtx(db, ownerAdmin()), {})
     const indexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
+    const repeatedAudit = await readAuditHandler(authCtx(db, ownerAdmin()), {})
+    const repeatedIndexHealth = await readIndexHealthHandler(authCtx(db, ownerAdmin()), {})
 
-    expect(claims).toMatchObject({
-      kind: 'allowed',
-      httpStatus: 200,
-      rows: [expect.objectContaining({ rowType: 'claim', readbackState: 'available' })],
-    })
+    expect(JSON.stringify(repeatedAudit)).toBe(JSON.stringify(audit))
+    expect(JSON.stringify(repeatedIndexHealth)).toBe(JSON.stringify(indexHealth))
+
     expect(audit).toMatchObject({
       kind: 'allowed',
       rows: [expect.objectContaining({ rowType: 'audit_event', readbackState: 'available' })],
@@ -113,7 +92,7 @@ describe('admin Convex runtime controls', () => {
       kind: 'allowed',
       rows: [expect.objectContaining({ rowType: 'index_surface', repairAction: 'regenerate_projection' })],
     })
-    expect(JSON.stringify({ claims, audit, indexHealth })).not.toMatch(/private:evidence:raw|contactEmail|ownerId|adminId/i)
+    expect(JSON.stringify({ audit, indexHealth })).not.toMatch(/private:evidence:raw|contactEmail|ownerId|adminId/i)
   })
 
   it('bootstraps only a preauthorized first owner_admin and stores audit rows', async () => {
@@ -140,7 +119,7 @@ describe('admin Convex runtime controls', () => {
     delete process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS
   })
 
-  it('lets owner_admin grant support while support is denied destructive controls with audit evidence', async () => {
+  it('lets owner_admin grant support', async () => {
     const db = seededAdminDb()
 
     const grant = await grantHandler(
@@ -156,174 +135,52 @@ describe('admin Convex runtime controls', () => {
       })
     )
     expect(grant).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
-
-    const supportDenied = await setControlHandler(authCtx(db, support()), await operatorArgs('support-denied'))
-    expect(supportDenied).toMatchObject({
-      kind: 'error',
-      code: 'operator_control_admin_denied',
-      reason: 'action_not_allowed',
-    })
-    expect(db.dump('auditEvents')).toEqual(
-      expect.arrayContaining([expect.objectContaining({ eventType: 'admin.action_denied', actorRef: 'user_support' })])
-    )
-
-    const ownerChanged = await setControlHandler(authCtx(db, ownerAdmin()), await operatorArgs('owner-changed'))
-    expect(ownerChanged).toMatchObject({
-      kind: 'ok',
-      code: 'operator_control_changed',
-      readback: { key: 'claims_enabled', configuredEnabled: false, effectiveEnabled: false },
-      auditEvent: { eventType: 'operator_control.changed' },
-    })
-    expect(db.dump('operatorControls')).toHaveLength(1)
-
-    const controls = await readControlsHandler(authCtx(db, ownerAdmin()), {})
-    expect(controls).toMatchObject({
-      kind: 'allowed',
-    })
-    if (!isRecord(controls) || !Array.isArray(controls.controls)) {
-      throw new Error('Expected operator controls readback.')
-    }
-    expect(controls.controls).toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: 'claims_enabled', effectiveEnabled: false })])
-    )
-    expect(JSON.stringify(controls)).not.toContain('private:evidence')
   })
 
-  it('upgrades one active tokenless grant in place and replays without a duplicate', async () => {
+  it('replays an authorized grant without duplicating membership or audit effects', async () => {
     const db = seededAdminDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:legacy-support',
-      _creationTime: 7,
-      clerkUserId: 'legacy_support',
-      role: 'support',
-      state: 'active',
-      grantedBy: 'historical-bootstrap',
-      grantedAt: 1,
-    })
-    const args = await withSourceWrite('admin_operator', {
-      targetClerkUserId: 'legacy_support',
-      targetTokenIdentifier: 'clerk|legacy_support',
+    const command = {
+      targetClerkUserId: 'user_replayed_support',
+      targetTokenIdentifier: 'clerk|user_replayed_support',
       role: 'support' as const,
       reasonCode: 'support_queue_access',
-      evidenceRefs: ['private:evidence:legacy-upgrade'],
-      operationKey: 'op:admin:grant:legacy-upgrade',
-      correlationId: 'corr:admin:grant:legacy-upgrade',
-    })
+      evidenceRefs: ['private:evidence:replay'],
+      operationKey: 'op:admin:grant:replay',
+      correlationId: 'corr:admin:grant:replay',
+    }
 
-    const first = await grantHandler(authCtx(db, ownerAdmin()), args)
+    const first = await grantHandler(authCtx(db, ownerAdmin()), await withSourceWrite('admin_operator', command))
+    const second = await grantHandler(authCtx(db, ownerAdmin()), await withSourceWrite('admin_operator', command))
+
     expect(first).toMatchObject({
       kind: 'ok',
       code: 'admin_membership_granted',
-      membership: { clerkUserId: 'legacy_support', tokenIdentifier: 'clerk|legacy_support' },
-    })
-    const firstTarget = db.dump('adminMemberships').find((row) => row.clerkUserId === 'legacy_support')
-    expect(firstTarget).toMatchObject({
-      _id: 'adminMemberships:legacy-support',
-      tokenIdentifier: 'clerk|legacy_support',
-      state: 'active',
-    })
-    expect(db.dump('adminMemberships')).toHaveLength(3)
-
-    const replayArgs = await withSourceWrite('admin_operator', {
-      targetClerkUserId: args.targetClerkUserId,
-      targetTokenIdentifier: args.targetTokenIdentifier,
-      role: args.role,
-      reasonCode: args.reasonCode,
-      evidenceRefs: args.evidenceRefs,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-    })
-    const second = await grantHandler(authCtx(db, ownerAdmin()), replayArgs)
-    expect(second).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
-    const replayTarget = db.dump('adminMemberships').find((row) => row.clerkUserId === 'legacy_support')
-    expect(replayTarget).toMatchObject({ _id: 'adminMemberships:legacy-support', tokenIdentifier: 'clerk|legacy_support' })
-    expect(db.dump('adminMemberships')).toHaveLength(3)
-    expect(db.dump('auditEvents')).toHaveLength(2)
-    expect(db.dump('adminMembershipAuditEvents')).toHaveLength(1)
-  })
-
-  it('bootstraps one active tokenless owner in place without counting it as current authority', async () => {
-    const db = new FakeDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:legacy-owner',
-      _creationTime: 1,
-      clerkUserId: 'legacy_owner',
-      role: 'owner_admin',
-      state: 'active',
-      grantedBy: 'historical-bootstrap',
-      grantedAt: 1,
-    })
-    process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS = 'legacy_owner'
-
-    try {
-      const result = await bootstrapHandler(
-        authCtx(db, {
-          subject: 'legacy_owner',
-          tokenIdentifier: 'clerk|legacy_owner',
-          issuer: 'https://clerk.example.test',
-        }),
-        await bootstrapArgs('legacy-owner-upgrade')
-      )
-      expect(result).toMatchObject({
-        kind: 'ok',
-        code: 'admin_membership_bootstrapped',
-        membership: { clerkUserId: 'legacy_owner', tokenIdentifier: 'clerk|legacy_owner' },
-      })
-      expect(db.dump('adminMemberships')).toHaveLength(1)
-      expect(db.dump('adminMemberships')[0]).toMatchObject({
-        _id: 'adminMemberships:legacy-owner',
-        tokenIdentifier: 'clerk|legacy_owner',
-        role: 'owner_admin',
+      membership: {
+        clerkUserId: command.targetClerkUserId,
+        tokenIdentifier: command.targetTokenIdentifier,
+        role: command.role,
         state: 'active',
-      })
-    } finally {
-      delete process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS
-    }
-  })
-
-  it('refuses grant when target has conflicting active memberships without changing rows', async () => {
-    const db = seededAdminDb()
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:legacy-support',
-      _creationTime: 7,
-      clerkUserId: 'legacy_support',
-      role: 'support',
-      state: 'active',
-      grantedBy: 'historical-bootstrap',
-      grantedAt: 1,
+      },
     })
-    db.seed('adminMemberships', {
-      _id: 'adminMemberships:other-support-token',
-      _creationTime: 8,
-      clerkUserId: 'legacy_support',
-      tokenIdentifier: 'clerk|old-legacy-support',
-      role: 'support',
-      state: 'active',
-      grantedBy: 'historical-bootstrap',
-      grantedAt: 2,
+    expect(second).toMatchObject({
+      kind: 'ok',
+      code: 'admin_membership_granted',
+      membership: {
+        clerkUserId: command.targetClerkUserId,
+        tokenIdentifier: command.targetTokenIdentifier,
+        role: command.role,
+        state: 'active',
+      },
     })
-    const before = db.dump('adminMemberships')
-
-    const result = await grantHandler(
-      authCtx(db, ownerAdmin()),
-      await withSourceWrite('admin_operator', {
-        targetClerkUserId: 'legacy_support',
-        targetTokenIdentifier: 'clerk|legacy_support',
-        role: 'support',
-        reasonCode: 'support_queue_access',
-        evidenceRefs: ['private:evidence:legacy-conflict'],
-        operationKey: 'op:admin:grant:legacy-conflict',
-        correlationId: 'corr:admin:grant:legacy-conflict',
-      })
-    )
-
-    expect(result).toEqual({
-      kind: 'error',
-      code: 'admin_action_denied',
-      retryable: false,
-      reason: 'membership_conflict',
-    })
-    expect(db.dump('adminMemberships')).toEqual(before)
+    expect(db.dump('adminMemberships').filter((row) => (
+      row.clerkUserId === command.targetClerkUserId && row.state === 'active'
+    ))).toHaveLength(1)
+    expect(db.dump('auditEvents').filter((row) => (
+      row.eventType === 'admin.membership_granted' && row.targetRef === command.targetClerkUserId
+    ))).toHaveLength(1)
+    expect(db.dump('adminMembershipAuditEvents').filter((row) => (
+      row.eventType === 'membership_granted' && row.targetRef === command.targetClerkUserId
+    ))).toHaveLength(1)
   })
 
   it('refuses grant when target is already bound to a different active token', async () => {
@@ -331,11 +188,11 @@ describe('admin Convex runtime controls', () => {
     db.seed('adminMemberships', {
       _id: 'adminMemberships:other-support-token',
       _creationTime: 7,
-      clerkUserId: 'legacy_support',
-      tokenIdentifier: 'clerk|old-legacy-support',
+      clerkUserId: 'target_support',
+      tokenIdentifier: 'clerk|old-target-support',
       role: 'support',
       state: 'active',
-      grantedBy: 'historical-bootstrap',
+      grantedBy: 'bootstrap',
       grantedAt: 1,
     })
     const before = db.dump('adminMemberships')
@@ -343,13 +200,13 @@ describe('admin Convex runtime controls', () => {
     const result = await grantHandler(
       authCtx(db, ownerAdmin()),
       await withSourceWrite('admin_operator', {
-        targetClerkUserId: 'legacy_support',
-        targetTokenIdentifier: 'clerk|legacy_support',
+        targetClerkUserId: 'target_support',
+        targetTokenIdentifier: 'clerk|target_support',
         role: 'support',
         reasonCode: 'support_queue_access',
-        evidenceRefs: ['private:evidence:legacy-token-conflict'],
-        operationKey: 'op:admin:grant:legacy-token-conflict',
-        correlationId: 'corr:admin:grant:legacy-token-conflict',
+        evidenceRefs: ['private:evidence:token-conflict'],
+        operationKey: 'op:admin:grant:token-conflict',
+        correlationId: 'corr:admin:grant:token-conflict',
       })
     )
 
@@ -365,26 +222,26 @@ describe('admin Convex runtime controls', () => {
   it('refuses bootstrap when a current target has a different active token', async () => {
     const db = new FakeDb()
     db.seed('adminMemberships', {
-      _id: 'adminMemberships:legacy-owner',
+      _id: 'adminMemberships:target-owner',
       _creationTime: 1,
-      clerkUserId: 'legacy_owner',
-      tokenIdentifier: 'clerk|old-legacy-owner',
+      clerkUserId: 'target_owner',
+      tokenIdentifier: 'clerk|old-target-owner',
       role: 'support',
       state: 'active',
-      grantedBy: 'historical-bootstrap',
+      grantedBy: 'bootstrap',
       grantedAt: 1,
     })
     const before = db.dump('adminMemberships')
-    process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS = 'legacy_owner'
+    process.env.ADMIN_BOOTSTRAP_PRINCIPAL_IDS = 'target_owner'
 
     try {
       const result = await bootstrapHandler(
         authCtx(db, {
-          subject: 'legacy_owner',
-          tokenIdentifier: 'clerk|legacy_owner',
+          subject: 'target_owner',
+          tokenIdentifier: 'clerk|target_owner',
           issuer: 'https://clerk.example.test',
         }),
-        await bootstrapArgs('legacy-owner-token-conflict')
+        await bootstrapArgs('owner-token-conflict')
       )
       expect(result).toEqual({
         kind: 'error',
@@ -421,32 +278,6 @@ describe('admin Convex runtime controls', () => {
       reason: 'malformed_token_identifier',
     })
     expect(db.dump('adminMemberships')).toEqual(before)
-  })
-
-  it('bounds claims readbacks to the newest native rows', async () => {
-    const db = seededAdminDb()
-    for (let index = 0; index < 105; index += 1) {
-      db.seed('claims', {
-        _id: `claims:extra:${index}`,
-        _creationTime: 100 + index,
-        ownerId: 'owners:1',
-        businessId: 'businesses:1',
-        slug: `sam-plumbing-${index}`,
-        status: 'contested',
-        submittedFactsHash: `source:claim:${index}`,
-        createdAt: 100 + index,
-        updatedAt: 100 + index,
-      })
-    }
-
-    const claims = await readClaimsHandler(authCtx(db, ownerAdmin()), {})
-    if (!isRecord(claims) || !Array.isArray(claims.rows)) {
-      throw new Error('Expected bounded claims rows.')
-    }
-
-    expect(claims.rows).toHaveLength(100)
-    expect(claims.rows[0]).toMatchObject({ rowId: 'row:claim:claims:extra:104' })
-    expect(claims.rows.at(-1)).toMatchObject({ rowId: 'row:claim:claims:extra:5' })
   })
 
 })
@@ -590,66 +421,45 @@ function seededAdminDb(): FakeDb {
     stateTerritory: 'NSW',
     publicStatus: 'published',
     trustTier: 'claimed',
-    claimStatus: 'published',
     sourceHash: 'source:business:v1',
     createdAt: 3,
     updatedAt: 3,
   })
-  db.seed('claims', {
-    _id: 'claims:1',
+  db.seed('disputes', {
+    _id: 'disputes:1',
     _creationTime: 4,
-    ownerId: 'owners:1',
     businessId: 'businesses:1',
-    slug: 'sam-plumbing',
     status: 'contested',
-    submittedFactsHash: 'source:claim:v1',
+    openedByContactHash: 'contact:owner',
+    targetType: 'business',
+    targetRef: 'businesses:1',
+    reasonCode: 'ownership_contested',
+    evidenceHash: 'evidence:dispute:1',
+    evidenceRefs: ['private:evidence:raw'],
+    publicMessageHash: 'message:dispute:1',
+    operationKey: 'operation:dispute:1',
+    operationKeys: ['operation:dispute:1'],
+    correlationId: 'correlation:dispute:1',
+    requestCount: 1,
     createdAt: 4,
     updatedAt: 4,
   })
   db.seed('auditEvents', {
     _id: 'auditEvents:1',
     _creationTime: 5,
-    eventId: 'audit:claim:1',
-    eventType: 'claim.duplicate_suspected',
+    eventId: 'audit:dispute:1',
+    eventType: 'dispute.opened',
     actorKind: 'owner',
     actorRef: 'owner:hash',
-    targetType: 'claim',
-    targetRef: 'claims:1',
+    targetType: 'dispute',
+    targetRef: 'disputes:1',
     businessId: 'businesses:1',
-    idempotencyKey: 'op:claim:duplicate',
-    correlationId: 'corr:claim:duplicate',
+    idempotencyKey: 'op:dispute:open',
+    correlationId: 'corr:dispute:open',
     evidenceRefs: ['private:evidence:raw'],
-    redactedPayload: { evidenceCount: 1 },
-    payloadHash: 'payload:claim:1',
+    redactedPayloadJson: '{"evidenceCount":1}',
+    payloadHash: 'payload:dispute:1',
     createdAt: 5,
-  })
-  db.seed('registryProjectionAttempts', {
-    _id: 'registryProjectionAttempts:1',
-    _creationTime: 6,
-    businessId: 'businesses:1',
-    logicalKey: 'registry:businesses:1',
-    status: 'failed',
-    sourceHash: 'source:business:v1',
-    sourceVersion: 'public-catalog:v1',
-    projectionKind: 'business_catalog',
-    retryCount: 1,
-    startedAt: 6,
-    finishedAt: 7,
-    lastErrorCode: 'adapter_failed',
-    lastErrorRedacted: 'Projection adapter failed.',
-    staleThresholdAt: 8,
-    repairAction: 'retry_projection',
-    repairResult: 'failed',
-  })
-  db.seed('indexStatus', {
-    _id: 'indexStatus:1',
-    _creationTime: 8,
-    targetType: 'business',
-    targetRef: 'businesses:1',
-    status: 'failed',
-    latestAttemptRef: 'registry:businesses:1',
-    latestReadback: { generatedHash: 'readback:registry:failed' },
-    updatedAt: 8,
   })
   return db
 }
@@ -678,17 +488,5 @@ async function bootstrapArgs(key: string): Promise<AdminBootstrapArgs> {
     evidenceRefs: ['private:evidence:bootstrap'],
     operationKey: `op:admin:bootstrap:${key}`,
     correlationId: `corr:admin:bootstrap:${key}`,
-  })
-}
-
-async function operatorArgs(key: string): Promise<SetControlArgs> {
-  return await withSourceWrite('admin_operator', {
-    key: 'claims_enabled',
-    enabled: false,
-    reasonCode: 'abuse_spike',
-    evidenceRefs: ['private:evidence:operator-control'],
-    expiresAt: Date.now() + 60_000,
-    operationKey: `op:operator:${key}`,
-    correlationId: `corr:operator:${key}`,
   })
 }

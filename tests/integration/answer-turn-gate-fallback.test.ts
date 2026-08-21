@@ -118,8 +118,8 @@ describe('POST /api/answer/turn grounded-provider gate fallback', () => {
         throw new Error('expected complete event')
       }
       expect(lastEvent.answer.providers.map((provider) => provider.slug)).toEqual([
-        'plumbing-demo',
-        'parramatta-emergency-plumbing',
+        'demo-inquiry-provider',
+        'demo-listed-provider',
       ])
       expect(lastEvent.answer.oneLine).toBe(expectedFallback.oneLine)
       expect(lastEvent.answer.summary).toBe(expectedFallback.summary)

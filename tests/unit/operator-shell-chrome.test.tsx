@@ -71,7 +71,7 @@ function OperatorShellHarness() {
   const breadcrumbs = useMemo(() => [
     { label: version === 'one' ? 'First crumb' : 'Second crumb', href: `/admin/${version}` },
   ], [version])
-  const navBadges = useMemo(() => ({ '/admin/inquiries': version === 'one' ? 2 : 5 }), [version])
+  const navBadges = useMemo(() => ({ '/admin/audit-events': version === 'one' ? 2 : 5 }), [version])
 
   return (
     <AeOperatorShell
@@ -85,7 +85,7 @@ function OperatorShellHarness() {
         operatorRole="admin"
         title="Nested shell"
         description="Nested shell description"
-        currentPath="/admin/inquiries"
+        currentPath="/admin/audit-events"
         actions={actions}
         breadcrumbs={breadcrumbs}
         navBadges={navBadges}

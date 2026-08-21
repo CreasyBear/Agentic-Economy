@@ -52,7 +52,22 @@ export async function ownerAdmin(
     tokenIdentifier: subject.replace(/^user_/u, 'token_'),
   }
   await backend.run(async (ctx) => {
-    void ctx
+    const existing = await ctx.db
+      .query('adminMemberships')
+      .withIndex('by_tokenIdentifier_and_state', (query) =>
+        query.eq('tokenIdentifier', identity.tokenIdentifier).eq('state', 'active')
+      )
+      .unique()
+    if (existing === null) {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: identity.subject,
+        tokenIdentifier: identity.tokenIdentifier,
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'test-fixture',
+        grantedAt: 1,
+      })
+    }
   })
   return backend.withIdentity(identity)
 }
@@ -99,7 +114,6 @@ export async function publishedBusinessOwner(
       },
       publicStatus: 'published',
       trustTier: 'listed',
-      claimStatus: 'published',
       sourceHash: `source:${prefixLabel.length === 0 ? '' : `${prefixLabel}:`}${slug}`,
       createdAt: 1,
       updatedAt: 1,
