@@ -7,16 +7,13 @@ import type {
   CanonicalCapabilityPublicationDraft,
 } from "./publication-importer-types";
 import { validPublicHttpsEndpoint } from "./transport-adapters";
-import {
-  FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE,
-  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
-  FACILITATOR_DISCOVERY_URLS,
-} from "./facilitator-discovery-client";
-export {
-  FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE,
-  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
-  FACILITATOR_DISCOVERY_URLS,
-} from "./facilitator-discovery-client";
+
+export const FACILITATOR_DISCOVERY_URLS = [
+  "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",
+  "https://facilitator.payai.network/discovery/resources",
+] as const;
+export const FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE = 20 as const;
+export const FACILITATOR_DISCOVERY_MAX_PAGE_SIZE = 100 as const;
 
 export const FACILITATOR_DISCOVERY_PUBLISHER_REF = "system:facilitator-discovery";
 export const FACILITATOR_DISCOVERY_NETWORK = "eip155:8453" as const;

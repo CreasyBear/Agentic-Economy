@@ -10,13 +10,12 @@ import {
   admitBazaarDiscoveryInfo,
   type BazaarAdmission,
 } from './publication-importer-x402-bazaar'
+import {
+  FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE,
+  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
+  FACILITATOR_DISCOVERY_URLS,
+} from './facilitator-discovery-ingest'
 
-export const FACILITATOR_DISCOVERY_URLS = [
-  'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources',
-  'https://facilitator.payai.network/discovery/resources',
-] as const
-export const FACILITATOR_DISCOVERY_DEFAULT_PAGE_SIZE = 20 as const
-export const FACILITATOR_DISCOVERY_MAX_PAGE_SIZE = 100 as const
 export const FACILITATOR_DISCOVERY_MAX_PAGES = 20 as const
 export const FACILITATOR_DISCOVERY_MAX_BODY_BYTES = 2_097_152 as const
 export const FACILITATOR_DISCOVERY_REQUEST_TIMEOUT_MS = 10_000 as const
