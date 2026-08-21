@@ -15,7 +15,7 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import { recordQualifiedUsePayoutAllocation } from './moneyLedger'
+import { recordQualifiedUsePayoutAllocation } from './moneyQualifiedUsePayout'
 import type { Id } from './_generated/dataModel'
 
 const identifier = v.string()
