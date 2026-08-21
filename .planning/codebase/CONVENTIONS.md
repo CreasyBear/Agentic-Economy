@@ -1,306 +1,186 @@
+# Coding Conventions — Agentic-Economy
+
+**Analysis Date:** 2026-08-21
+**Scope:** Full repository, current working tree (large uncommitted refactor included: module splits under `convex/` and `src/components/ae/`, deleted inquiry/work-tree families, `eval/answer` harness split into `lib/eval-*.ts`)
+**Sources of truth:** `AGENTS.md`, `RULES.MD`, `UBIQUITOUS_LANGUAGE.md`, `.planning/ENGINEERING-STANDARDS.md`, `tsconfig.json`, `.oxlintrc.json`, `vitest.config.ts`, `convex/_generated/ai/guidelines.md`, and the working-tree source itself.
+
+<!-- refreshed: 2026-08-21 -->
+
 ---
-last_mapped_commit: 796c584aaac12a48443b2f42c9d0d69c949615e2
+
+## 1. Naming Patterns
+
+### 1.1 File and Directory Naming
+
+| Artifact | Convention | Example |
+| --- | --- | --- |
+| App/Convex modules (kebab-case) | `kebab-case.ts` | `src/modules/answer-thread/internal/answer-response-planner.ts` |
+| Convex backend files | camelCase, one domain per file | `convex/moneyPayoutTransferBegin.ts`, `convex/capabilitySupplyOwnerFunnelCommands.ts` |
+| Convex-adjacent split files | dotted role suffix | `convex/capabilitySupplyOperationKeyless.ts`, `convex/moneyPayoutTransferSettlement.ts` |
+| React components | `PascalCase.tsx`, `Ae` prefix for product components | `src/components/ae/readback/AeAdminReadbackPanel.tsx`, `src/components/ui/button.tsx` |
+| Route files (TanStack Start) | dot-namespaced under `src/routes/` | `src/routes/api.answer.turn.ts`, `src/routes/api.answer.turn.stop.ts`, `src/routes/$slug.tsx` |
+| Module seams | reserved file names | `public.ts`, `server.ts`, `testing.ts` per module |
+| Tests | `*.test.ts(x)` mirroring source layout | `tests/unit/answer/answer-gate.test.ts`, `convex/agentAccessPolicy.test.ts` |
+| Playwright specs | `*.spec.ts` under typed directories | `tests/e2e/public-owner-ui.spec.ts`, `tests/deploy-smoke/phase2-support-record-smoke.spec.ts` |
+| Eval harness (non-test) | plain `.ts` under `eval/` | `eval/answer/lib/eval-turn.ts`, `eval/braintrust/answer.eval.ts` |
+
+Directories under `src/modules/` are kebab-case (`answer-thread/`, `capability-supply/`, `action-invocation/`); logic lives in `internal/` subdirectories (`src/modules/capability-supply/internal/operation-ledger/policy.ts`).
+
+### 1.2 Function and Variable Naming
+
+- Functions: camelCase verbs — `runAnswerGate`, `finalizeReservedAnswerTurnError`, `readCapabilityOperationSearch`, `evaluateLiveMoneyGate`.
+- Boolean predicates: `isX` / `hasX` / `shouldX`.
+- Type guards: `isX` returning a type predicate.
+- Convex command handlers: `<verb><Noun>Handler` exported from domain files and registered in the command module (e.g. `reserveConnectAccountHandler`, `finalizeConnectAccountHandler` in `convex/moneyConnect.ts`).
+- Test factories: `makeX` / `snapshot` / `seedX` helpers (`tests/helpers/convex-fixtures.ts`: `ownerAdmin`, `publishedBusinessOwner`).
+- Unused parameters: `_` or `_name` prefix.
+- Money values: always `ExactAmount` (branded), never bare numbers — `src/modules/money/public` re-exports `ExactAmount`; consumers import it as `import type { ExactAmount } from '@/modules/money/public'` (see `src/modules/action-invocation/x402-payment-attempt.ts`).
+
+### 1.3 Type Naming
+
+- Types/interfaces: PascalCase (`AnswerTurnState`, `WorkflowJob` in `tests/unit/release/green-release-baseline.test.ts`).
+- Discriminated unions use a literal `kind` or `type` field (e.g. `{ kind: 'refused', code: 'connect_account_unlisted', retryable: false }` returned by `convex/moneyConnect.ts`).
+- Status/state vocabularies are const-tuple-derived literal unions, not TypeScript `enum` (no `enum` anywhere in first-party code).
+- Branded string IDs from `src/modules/common/ids.ts`: `OwnerId`, `BusinessId`, etc., created via `brandNonEmpty`.
+- Generated Convex types: `Id<'tableName'>`, `Doc<'tableName'>`, `QueryCtx`, `MutationCtx`, `ActionCtx` from `./_generated/*` (type-only imports — see §4.2).
+- Exhaustive lookup maps: `satisfies Record<Union, Payload>` — e.g. `src/modules/security/internal/admin-authority.ts` (`satisfies Record<AdminRole, Record<AdminAction, boolean>>`), `src/lib/ui/status-presentation.ts` (`satisfies Record<AeStatus, AeStatusPresentation>`), `src/components/ae/readback/AeAdminReadbackPanel.tsx`.
+
+### 1.4 Constants
+
+- Module-level constants: SCREAMING_SNAKE_CASE (`PROBLEM_KINDS` in `src/lib/errors.ts`, `LIVE_MONEY_GATE_POLICY` in `src/modules/money/internal/live-money-gate.ts`, `ANSWER_OPERATION_EFFECT_TOOL_IDS` in `src/modules/answer-thread/answer-thread.schema.ts`).
+- TanStack Start server route option objects: `XRoute` / `XMethod` / `XMiddleware` naming exported alongside the route (`src/routes/api.answer.turn.ts`).
+
 ---
 
-# Coding Conventions
+## 2. Code Style
 
-**Analysis Date:** 2026-08-20
+### 2.1 Formatting (no formatter config; consistency by convention + review)
 
-## Naming Patterns
+- 2-space indentation, single quotes, no semicolons, trailing commas in multiline literals.
+- No Prettier/Biome/ESLint/EditorConfig; lint enforcement is **Oxlint** run with `--deny-warnings` (`.oxlintrc.json`: `categories.correctness = 'error'`, `suspicious = 'off'`, plugins `typescript` + `oxc`, `ignorePatterns` includes `convex/_generated/**`, `tests/fixtures/**`, `vendor/**`).
+- `npm run papercut -- -m <model> "message"` is the mandated channel for logging small frictions (per `AGENTS.md`).
 
-**Files:**
-- Source files are kebab-case TypeScript: `answer-gate.ts`, `live-money-gate.ts`, `source-write-admission.ts`.
-- React components are PascalCase `.tsx` files. Product UI under `src/components/ae/` uses the `Ae` prefix (`AeQueryPanel.tsx`, `AeGenerativeAnswer.tsx`, `AeChat.tsx`, `AeOperationCandidates.tsx`, `AeProviderCompare.tsx`). Domain section files without the prefix exist when they are not standalone product components (`ClaimFormSections.tsx`, `OwnerSettingsSections.tsx`).
-- Module seams are fixed names, not kebab-case: `public.ts`, `server.ts`, `testing.ts`, plus `internal/` for private implementation.
-- Convex-adjacent domain files use dotted role suffixes: `*.functions.ts` (source reads/writes), `*.actions.ts` (TanStack / action-registry entry), `*.schema.ts` (Zod / Convex document contracts). Examples: `src/modules/registry/registry.functions.ts`, `src/modules/answer-thread/answer-thread.schema.ts`.
-- Tests mirror the domain folder, not the source tree: `tests/unit/answer/answer-gate.test.ts`, `tests/unit/chat/ae-query-panel.test.tsx`, `tests/e2e/landing-answer.spec.ts`. Playwright uses `.spec.ts`; Vitest uses `.test.ts` / `.test.tsx`.
-- Route files follow TanStack file routing: `src/routes/api.$.ts`, `src/routes/claim.tsx`, `src/routes/llms[.]txt.ts`.
-- Do not invent `index.ts` barrels inside `src/modules/*/`. The public seam is `public.ts`.
-- Do not recreate deleted family folders (`src/modules/inquiries/`, `src/modules/work-tree/`, `src/modules/study/`, `src/modules/demand/`). Absence is pinned by tests, not by restoring the module.
+### 2.2 TypeScript Strictness (`tsconfig.json`)
 
-**Functions:**
-- Use camelCase verbs: `runAnswerGate`, `buildProblem`, `evaluateLiveMoneyGate`, `claimBusiness`, `validateCapabilityPublication`.
-- Type guards are `isX`: `isMoneyRefusal`, `isPublicOperationRef`, `isStableProblemCode`.
-- Convex-test / unit seam injectors are `setXForTests` and return a restore function: `setPublicRegistrySourcePortForTests`, `setHttpRateLimitAdmissionForTests`.
-- Factories that brand IDs live in `src/modules/common/ids.ts` (`brandNonEmpty`). Operation refs use `createPublicOperationRef` in `src/modules/capability-supply/public.ts`.
+- `strict: true`, `exactOptionalPropertyTypes: true`, `noUncheckedIndexedAccess: true`, `useUnknownInCatchVariables: true`, `noImplicitOverride: true`, `allowJs: false`.
+- Path aliases: `@/*` → repo-root `src/*` (primary), `~/*` also mapped; `convex/_generated/**` excluded from the app program.
+- Forbidden by scanner (`src/lib/ui/contract-scans.ts` `scanTypeScriptStandards`, enforced by `tests/imports/ts-standards.test.ts`):
+  - explicit `any` (except documented JSON-boundary `v.any()` via `isDocumentedJsonBoundary`),
+  - non-null `!` assertions,
+  - `as unknown as` double casts.
+- No TypeScript `enum`; no hard-coded broad status strings; no hard-coded CSRF literals; `VITE_AE_SOURCE_WRITE_SECRET` must never appear in client code.
+- Catch clauses receive `unknown` (`useUnknownInCatchVariables`); narrow with helpers rather than casting.
 
-**Variables:**
-- camelCase locals. Prefix unused Convex/auth payload parameters with `_` (`_ignoredPayload`, `_db`) rather than omitting the parameter.
-- Boolean names are predicates: `retryable`, `ok`, `complete`. Do not use `isOk` when the discriminant is already `kind`.
-- Money amounts are never `number`. Use `ExactAmount` (`currency`, `units`, `exponent`) from `src/modules/money/internal/exact-amount.ts`.
+### 2.3 Imports
 
-**Types:**
-- PascalCase types and type aliases: `ProblemDetails`, `MoneyRefusal`, `ExactAmount`, `PublicOperationRef`.
-- Discriminated unions use `kind` (domain results) or `type` (events/parts): `{ kind: 'accepted' } | { kind: 'refused' }`, `{ kind: 'ok' } | { kind: 'error' }`, `{ type: 'thread' } | { type: 'one-line' }`.
-- Status and result fields are literal unions, never `string`. Enforced by `scanTypeScriptStandards` in `src/lib/ui/contract-scans.ts` (`broad-status-string`).
-- Branded string IDs live in `src/modules/common/ids.ts` (`OwnerId`, `BusinessId`, `OperationKey`, `CorrelationId`, …).
-- Prefer `Readonly<{ ... }>` for public records. Prefer `readonly T[]` over `T[]` on public arrays.
+- **Imports live at the top of the module.** Inline imports inside function bodies are forbidden by workspace rule *except* the documented lazy-load seam (below).
+- Ordering within the import block: `node:` builtins → external packages → `@/` alias → `./` relative (see `tests/unit/release/green-release-baseline.test.ts` header for a canonical example).
+- Prefer `import type { ... }` for type-only dependencies, including from module seams and generated Convex modules:
+  - `import type { BusinessContext } from '@/modules/business/public'` (`src/modules/discovery/internal/manifest-projection.ts`)
+  - `import type { MutationCtx } from './_generated/server'` (`convex/moneyChargeBrokered.ts`, `convex/capabilitySupplyOwnerFunnelCommands.ts`)
+- **Sanctioned inline import (lazy seam):** route handlers and action `run` functions use `await import('@/modules/.../server')` to keep Node-only/server-only modules out of the client route graph. The reason is stated in a comment, e.g. `src/routes/api.answer.turn.ts`: `// Static import would pull Node-only answer execution into the client route graph.` Other verified sites: `src/routes/api.answer.turn.stop.ts`, `src/routes/api.health.ts`, `src/routes/api.observability.funnel.ts`, `src/modules/storefront/storefront.actions.ts`, `src/modules/registry/operations.actions.ts`. The boundary suites in `tests/imports/route-boundary.test.ts` and `tests/imports/private-imports.test.ts` police these seams; fixtures for violations live in `tests/fixtures/bad-imports/`.
 
-**Constants:**
-- Value catalogs are `XValues` + derived union: `PROBLEM_KINDS` / `ProblemKind` in `src/lib/errors.ts`; `ClaimStatusValues` in `src/modules/business/public`; `LIVE_MONEY_COUNSEL_DECISIONS` in `src/modules/money/internal/live-money-gate.ts`.
-- Stable machine tokens are `snake_case` strings: `live_money_gate_open`, `grounding_failed`, `method_not_allowed`, `catalog_publish_wrong_owner`, `connect_account_unlisted`.
+### 2.4 Comments
 
-## Code Style
+- File-level doc comments state the module's responsibility and its seam role.
+- JSDoc on exported functions for non-obvious contracts (units, retryability, authority requirements).
+- Fail-closed gates carry comments explaining *why* refusal is the safe default (e.g. `src/modules/money/internal/live-money-gate.ts`, `convex/authz.ts` `readActiveAdminMembership` returning `undefined` by design — known-red pin).
+- No narration comments (`// increment the counter` style) and no change-log comments.
 
-**Formatting:**
-- No Prettier, Biome, ESLint, or EditorConfig file is present. Format is social + TypeScript + Oxlint.
-- Dominant new-module style: 2-space indent, single quotes, no semicolons, trailing commas in multiline literals. Match the file you edit. Some older seams use double quotes and semicolons (`src/modules/money/public.ts`, `src/lib/ui/contract-scans.ts`).
-- Keep imports at module top. Inline `import()` in function bodies is forbidden unless a documented circular-dependency exception exists.
+---
 
-**Linting:**
-- Oxlint is the linter. Config: `.oxlintrc.json`. Command: `npm run lint` → `oxlint src convex tests tools --deny-warnings`.
-- Categories: `correctness` is `error`; `suspicious` is `off`. Plugins: `typescript`, `oxc`.
-- Explicitly off: `no-unused-vars` (TypeScript handles this), `no-underscore-dangle`, `no-useless-escape`, `no-control-regex`, `typescript/triple-slash-reference`.
-- Ignore: `convex/_generated/**`, `tests/fixtures/**`, `vendor/**`.
-- Additional standards are **test-enforced**, not Oxlint: `npm run test:ts-standards` scans `src/` and `convex/` via `scanTypeScriptStandards` in `src/lib/ui/contract-scans.ts`.
+## 3. Patterns
 
-**TypeScript:**
-- Root config: `tsconfig.json`. Convex overlay: `convex/tsconfig.json`. Tools overlay: `tools/tsconfig.json`.
-- Strictness that new code must satisfy:
-  - `strict: true`
-  - `exactOptionalPropertyTypes: true` — do not assign `undefined` to an optional property unless the type includes `| undefined`. Omit the key with a conditional spread instead.
-  - `noUncheckedIndexedAccess: true` — `array[0]` is `T | undefined`; narrow before use.
-  - `useUnknownInCatchVariables: true` — `catch (error)` is `unknown`.
-  - `noImplicitOverride: true`
-- Path aliases: `@/*` → `src/*`, `~/*` → `src/*`. Route remaps exist for operator routes (`@/routes/owner.*` → `src/routes/_operator/owner.*`).
-- `allowJs: false`. Do not add `.js` implementation next to TypeScript sources.
-- Generated Convex types in `convex/_generated/` are excluded from the root tsconfig; never edit them.
+### 3.1 Module Seams
 
-**`exactOptionalPropertyTypes` (hard rule):**
-- Optional fields use conditional spreads. Do not pass `field: value` when `value` may be `undefined`.
+Every domain module under `src/modules/<domain>/` exposes a fixed seam set:
 
-```typescript
-return {
-  kind: 'authenticated_owner',
-  clerkUserId: identity.subject,
-  ...(displayName === undefined ? {} : { displayName }),
-  ...(emailHash === undefined ? {} : { emailHash }),
-  sessionRef: identity.tokenIdentifier,
-}
-```
+- `public.ts` — barrel of types + pure functions shared across modules (`src/modules/answer/public.ts`, `src/modules/money/public`).
+- `server.ts` — server-only entry (lazy-imported by routes/actions; see `src/routes/api.answer.turn.ts` importing `@/modules/answer-thread/server`).
+- `testing.ts` — test-only exports (consumed by `tests/`).
+- `internal/` — implementation; **never imported from outside the module** (enforced by `tests/imports/private-imports.test.ts`).
+- Convex-adjacent modules keep command/query/read splits with dotted suffixes (`convex/capabilitySupplyOwnerFunnelCommands.ts` + `convex/capabilitySupplyOwnerFunnelProjection.ts` + `convex/capabilitySupplyOwnerFunnelRead.ts` + `convex/capabilitySupplyOwnerFunnelAgentRead.ts`).
 
-Canonical examples: `convex/authz.ts` (`actorFromIdentity`), `convex/moneyCreditTopup.ts` (source-write args into `applyCreditTopup`), `src/modules/harness/session-journal.ts`, `src/modules/answer-thread/answer-thread.schema.ts`.
+### 3.2 Action Registry
 
-**TS standards guardrail (must remain green):**
-- No explicit `any` (`: any`, `<any`, `as any`).
-- No `as unknown as`.
-- No non-null assertions (`value!`).
-- No `v.any()` in Convex validators except documented JSON-boundary comments allowlisted by `isDocumentedJsonBoundary` in `src/lib/ui/contract-scans.ts`: `convex/capabilitySupply.ts`, `convex/capabilitySupplyOperations.ts`, `convex/capabilitySupplyOperationQueries.ts`, `convex/capabilitySupplyOperationKeyless.ts`, and `src/modules/capability-execution/internal/convex-schema.ts`.
-- No `status: string` / `result: string` / `sourceState: string`.
-- No hard-coded CSRF literals; no `VITE_AE_SOURCE_WRITE_SECRET`.
-- No TypeScript `enum`; use const tuple unions (`StatusValues` + `(typeof StatusValues)[number]`). See `.planning/ENGINEERING-STANDARDS.md`.
+- All agent-callable operations register in `src/modules/actions/index.ts` with `ActionSurface` contracts from `src/modules/common/action.ts` (`ActionParameter`, `ActionResult`, `AgentToolDescriptor`).
+- Action `run` implementations lazy-import their module server seam (`src/modules/registry/operations.actions.ts`).
+- Deleted families (inquiry, study, work-tree, customerRequest) are asserted absent by tests (`tests/unit/actions/registry.test.ts`, `tests/unit/study-actions.test.ts`).
 
-## Import Organization
+### 3.3 Error Handling
 
-**Order:**
-1. Side-effect / environment pragmas (`/// <reference types="vite/client" />`, `/** @vitest-environment jsdom */`).
-2. External packages (`vitest`, `zod`, `convex/server`, `@testing-library/react`, `node:fs`).
-3. Blank line.
-4. Alias imports (`@/modules/...`, `@/lib/...`, `@/components/...`).
-5. Relative imports (`./internal/...`, `../helpers/...`).
-6. Type-only imports may mix with value imports; prefer `import type` for types.
+Two complementary models — see `src/lib/errors.ts` and `.planning/ENGINEERING-STANDARDS.md`:
 
-```typescript
-import { describe, expect, it } from 'vitest'
+1. **HTTP layer: RFC 9457 problem details.** `src/lib/server/problem.ts` builds `application/problem+json` responses with `Cache-Control: no-store`; kinds/codes are stable machine tokens from `PROBLEM_KINDS` / `DEFAULT_STATUS` in `src/lib/errors.ts` (Google API code mapping via `kindForStatus`, `defaultTitle`). Server routes return problems for method violations (`methodNotAllowed` in `src/routes/api.answer.turn.ts`), admission failures (`assertHttpAdmission`), and unexpected faults; `remoteProblemToProblem` / `gatewayFailureToProblem` normalize upstream failures.
+2. **Domain layer: discriminated result unions, not exceptions, for expected refusals.** Money and publication operations return `{ ok: true, ... } | { ok: false, code: '<named-refusal>', retryable }`-style results (e.g. `convex/moneyConnect.ts` `{ kind: 'refused', code: 'connect_account_unlisted', retryable: false }`; publication validation in `src/modules/capability-supply/internal/publication/validate.ts` maps reasons to actionable `publicationValidationFix` strings — the "named refusals" pattern). Exceptions are reserved for truly unexpected invariant violations.
 
-import { runAnswerGate } from '@/modules/answer/public'
-import type { AnswerSnapshot } from '@/modules/answer/public'
-```
+**Money is fail-closed.** `src/modules/money/internal/live-money-gate.ts` (`LIVE_MONEY_GATE_POLICY`, `evaluateLiveMoneyGate`) refuses live spend unless every policy condition holds; Connect reserve/finalize handlers currently always refuse (known-red pin); payout transfer commands use localized `refusedPayout` helpers (`convex/moneyPayoutTransferBegin.ts`) rather than a shared helper.
 
-**Path Aliases:**
-- Always import product code through `@/`, not relative hops out of `src/`.
-- Tests under `tests/` import product through `@/` and fixtures through `../helpers/` or `../fixtures/`.
-- Convex files may import `../src/modules/.../public` (see `convex/authz.ts`) or `@/` (Convex tsconfig maps `@/*` → `src/*`).
+**Admin authority is fail-closed.** `convex/authz.ts` `readActiveAdminMembership` intentionally returns `undefined` (known-red pin), so `assertAdminAuthority` denies; `actorFromIdentity` derives business actors from Clerk identity claims.
 
-**Module seams (hard rule):**
-- Routes and sibling modules import `src/modules/<name>/public.ts` (or `server.ts` / `testing.ts` when those exist). Never `@/modules/<name>/internal/...`.
-- Enforced by `scanPrivateImports` and `scanRouteBoundaries` in `src/lib/ui/contract-scans.ts`, run by `npm run test:imports`.
-- Tests **may** import `internal/` when they are pinning a private contract (`tests/types/domain-contracts.test.ts` imports `@/modules/observability/internal/validators`). Production routes may not.
-- `server.ts` is the server-only seam (LLM agent, Stripe, secrets). Example: `src/modules/answer/server.ts` re-exports `runAnswerToolUseAgent`; `src/modules/money/server.ts` owns Stripe webhook/server functions.
-- `testing.ts` is the test-only seam. Example: `src/modules/answer-thread/testing.ts` re-exports `setAnswerThreadPortForTests`. Do not import `testing.ts` from routes or `public.ts`.
+### 3.4 Exhaustive Switches
 
-**Forbidden imports:**
-- Runtime must not import `.planning/` or a backup repo (`scanBackupImports`).
-- Routes must not import `convex/schema` or `convex/browser` / `convex/server`.
-- Handshake / x402 / MCP SDKs stay in reviewed transport adapters (`forbidden-handshake-import`).
-- Deployable source must not import `tests/helpers`, `tests/fixtures`, or `tools/dev` (`tests/imports/development-evidence-boundary.test.ts`).
-- Answer / customer-request modules must not import `src/modules/capability-supply` (`tests/imports/capability-supply-boundaries.test.ts`).
+Workspace rule: every `switch` over a discriminated union or literal union ends with a `never` check in the default case. Canonical form in `src/lib/ui/status-presentation.ts`:
 
-## Error Handling
-
-**Patterns:**
-- HTTP errors are RFC 9457 `application/problem+json`. Canonical model: `src/lib/errors.ts`. Wire helper: `src/lib/server/problem.ts`. Status-only helper: `src/lib/server/json-error.ts`. Method 405: `src/lib/server/method-guard.ts`.
-- Domain operations return discriminated results, they do not throw for expected refusals:
-
-```typescript
-export type MoneyRefusal = Readonly<{
-  kind: 'refused'
-  code: MoneyRefusalCode
-  retryable: boolean
-  nextAction?: 'credit_topup_required'
-  requiredAmount?: ExactAmount
-  availableAmount?: ExactAmount
-}>
-```
-
-Defined in `src/modules/money/public.ts`. Optional money fields still use conditional spreads at construction sites; do not assign `undefined` into those keys.
-
-- `kind: 'error'` is used on catalog/claim command results (`claim_unauthenticated`, `catalog_publish_wrong_owner` in `src/modules/catalog/public.ts` / `src/modules/business/public.ts`).
-- `kind: 'refused'` plus `code` / `refusalCode` is the named-refusal pattern (money, capability publication, operation invoke).
-- Throw only for programmer/protocol violations (missing required fixture, malformed AE stream chunks). Answer streaming treats malformed AE chunks as fail-closed protocol errors (`src/modules/answer/answer-ui-stream.ts`).
-- Catch variables are `unknown`. Narrow with `isRecord` (`src/modules/common/is-record.ts`) or a type guard. Do not `as Error`.
-- Remote/provider problem bodies are **not** copied into user-facing `title`/`detail`. `remoteProblemToProblem` and `gatewayFailureToProblem` in `src/lib/errors.ts` rebuild human text locally and only pass through a stable `code`, canonical `kind`, and `retryable`.
-
-**RFC 9457 wire object:**
-
-```typescript
-export function problem(input: ProblemInput, headers: Readonly<Record<string, string>> = {}): Response {
-  const details = buildProblem(input)
-  // Content-Type and Cache-Control are reserved.
-  responseHeaders.set('Content-Type', 'application/problem+json')
-  responseHeaders.set('Cache-Control', 'no-store')
-  return new Response(JSON.stringify(details), { status: details.status, headers: responseHeaders })
-}
-```
-
-Use `problem({ kind, code, ... })` from `src/lib/server/problem.ts`. Do not hand-roll `{ error: string }` JSON. `type` is always `'about:blank'`. `kind` is a `PROBLEM_KINDS` value (`INVALID_ARGUMENT`, `NOT_FOUND`, `no_data`, …). `code` is the stable snake_case token. `no_data` is HTTP 200 by design (ok-outcome, not an error).
-
-**Named refusals:**
-- Prefer a precise `code` over a blanket `schema_profile_unsupported` / generic 400.
-- Capability publication maps each refusal to an actionable `fix` string in `publicationValidationFix` (`src/modules/capability-supply/internal/publication/validate.ts`). Add a `switch` arm when adding a refusal reason.
-- Operation invoke / MCP surfaces emit `refusalCode` on failed outcomes (`src/lib/server/operation-invoke-api.ts`, `src/lib/server/mcp-api.ts`).
-- Telemetry may record `refusalCode` only when it matches `IDENTIFIER_PATTERN` (`src/lib/server/gateway-telemetry.ts`). Never put provider payloads in telemetry.
-
-**Money command refusals (hard rule):**
-- Do not extract a shared `throw` / `refusal()` helper for money commands.
-- `refusedPayout` is a 3-line local copy in each payout file. Keep it local. Do not unify it.
-
-```typescript
-function refusedPayout(code: string, retryable: boolean): PayoutTransferResult {
-  return { kind: 'refused', code, retryable }
-}
-```
-
-Copies live in `convex/moneyPayoutTransferRead.ts`, `convex/moneyPayoutTransferBegin.ts`, `convex/moneyPayoutTransferCompleteApply.ts`, `convex/moneyPayoutTransferReconcile.ts`, and `convex/moneyPayoutTransferSettlement.ts`. Sister locals `refusedTopup` (`convex/moneyCreditTopup.ts`) and `refusedConnect` (`convex/moneyConnect.ts`) stay file-private for the same reason: the `{ kind: 'refused' }` shape is shared, the helper is not.
-
-**Fail-closed money:**
-- Live money is gated by source-owned policy in `src/modules/money/internal/live-money-gate.ts`, **not** an environment flag. `LIVE_MONEY_GATE_POLICY` currently has all counsel decisions `open` and Stripe `mode: 'test'`, `readiness: 'unavailable'`.
-- `evaluateLiveMoneyGate()` returns `{ kind: 'refused', code: 'live_money_gate_open', retryable: false }` until every counsel decision is `accepted` with an `artifactRef` and Stripe is `live`/`ready`.
-- Missing/invalid policy parses fail closed to `live_money_gate_open`. Stripe not live fails closed to `stripe_setup_required`.
-- Money math uses `ExactAmount` string units, never IEEE floats. Align/rescale through `addExactAmounts` / `compareExactAmounts` in `src/modules/money/internal/exact-amount.ts`.
-- Ledger writes are idempotent: digest mismatch → `ledger_idempotency_conflict`; unknown Stripe outcome → `*_outcome_unknown` / `*_reconciliation_required`, not a guessed success.
-- Connect reserve/finalize handlers in `convex/moneyConnect.ts` return `{ kind: 'refused', code: 'connect_account_unlisted', retryable: false }`. That unlist is source-owned. Do not open it to make tests green.
-
-**Convex:**
-- Always read `convex/_generated/ai/guidelines.md` before writing Convex functions (`AGENTS.md`).
-- Always include `args` validators (`v.*`) on `query` / `mutation` / `action` and their `internal*` variants.
-- Public vs internal: a function only your code calls is `internalQuery` / `internalMutation` / `internalAction`, not `query`/`mutation`/`action`.
-- Do not return `undefined` from Convex handlers (becomes `null`). Use `null` or a discriminated result.
-- Authz lives in `convex/authz.ts` and resolves actors from `ctx.auth.getUserIdentity()`, never from browser-supplied admin payloads.
-- `readActiveAdminMembership` in `convex/authz.ts` always returns `undefined` after listed memberships were unlisted. Admin success paths stay denied (`missing_membership`). Do not restore membership lookup to green tests.
-
-## Logging
-
-**Framework:** PostHog (`posthog-node`) behind `src/lib/observability/posthog.server.ts`. Client funnel events go through `src/lib/observability/funnel-client.ts` and `src/lib/observability/capture-client-events.ts`. There is no Pino/Winston logger.
-
-**Patterns:**
-- Observability must never alter application behavior. `captureServerEvent` swallows errors in `try/catch`.
-- Sanitize before emit: `sanitizeTelemetryValue` in `src/lib/observability/private-route-safety.ts`. Distinct IDs and event names are sanitized.
-- Gateway telemetry is an allowlisted scalar projection (`recordGatewayTelemetry` in `src/lib/server/gateway-telemetry.ts`). Do not add input/output/provider content fields.
-- Funnel / audit events use exact literal unions from `src/modules/observability/public.ts`, not free-form strings.
-- Do not `console.log` in product paths. Agent papercuts go to `PAPERCUTS.md` via `npm run papercut -- -m <model> "message"` (`AGENTS.md`), not into runtime logs.
-
-## Comments
-
-**When to Comment:**
-- File-level module docs on `public.ts` / `server.ts` stating the seam and what callers must not import (`src/modules/answer/public.ts`).
-- Why a fail-closed gate exists, not what the next line does (`LIVE_MONEY_GATE_POLICY` comment in `src/modules/money/internal/live-money-gate.ts`: "Source-owned first-dollar policy. Do not replace this with an environment flag.").
-- Documented `v.any()` JSON-boundary comments that the TS-standards scanner allowlists.
-- Vitest environment pragmas and setup-file rationale (`tests/setup/web-storage.ts`).
-
-**JSDoc/TSDoc:**
-- Use JSDoc on exported helpers that other modules consume (`buildProblem`, `problem`, `evaluateLiveMoneyGate`, `publicationValidationFix`).
-- `{@link Name}` for in-repo symbols. Do not duplicate the type signature in prose.
-- Do not comment obvious assignments.
-
-## Function Design
-
-**Size:**
-- Keep public seam files as re-export barrels plus a small amount of type-level API (`src/modules/answer/public.ts`, `src/modules/catalog/public.ts`). Deep logic lives under `internal/`.
-- Convex **wrappers** stay thin: `query()` / `mutation()` / `action()` register args, returns, and a handler imported from a sibling file. Do not grow business rules inside the wrapper file.
-- Prefer many small typed helpers over a 200-line inline closure.
-
-**Parameters:**
-- Public functions take one `Readonly<{ ... }>` input object once arity exceeds ~3 fields (`evaluateLiveMoneyGate`, `createPublicOperationRef`, `validatePaymentBinding`).
-- Pass branded IDs, not raw strings, across module seams (`OperationKey`, `CorrelationId`).
-- Time is `now: number` (epoch ms) injected by the caller so tests stay deterministic.
-- Do not read `process.env` inside domain `public.ts`. Env belongs in `server.ts` / `src/lib/server/*` adapters.
-
-**Return Values:**
-- Discriminated unions with `kind`. Callers switch on `kind` and read `code` / `refusalCode`.
-- Include `retryable: boolean` on refusals and problem details when the client might retry (429 yes; live-money gate no).
-- Pure functions return new state; they do not mutate input (`claimBusiness(state, command)` in catalog/business).
-
-## Module Design
-
-**Exports:**
-- Every `src/modules/<name>/` exposes `public.ts`. That is the interface other modules and routes learn.
-- Optional `server.ts` for Node/secret/LLM/Stripe. Optional `testing.ts` for test injectors.
-- Re-export types and values from `internal/` through `public.ts`. Do not make callers reach into `internal/`.
-- `src/modules/capability-contract/public.ts` is a deep, dependency-narrow grammar: only `zod`, `@cfworker/json-schema`, and `src/modules/common/*` (enforced by `tests/imports/capability-contract-boundaries.test.ts`).
-
-**Barrel Files:**
-- `public.ts` is the barrel. Do not add `index.ts` beside it.
-- `src/modules/answer-thread/testing.ts` is a test barrel, not a second public API.
-
-**Internal layout:**
-- `internal/` holds implementation, Convex schema fragments, and unpublished helpers.
-- Capability-supply deepens into named folders: `internal/publication`, `internal/eligibility`, `internal/operation-ledger`, etc. Neutral files listed in `tests/imports/capability-supply-boundaries.test.ts` must not grow operation/vertical vocabulary.
-
-**UI modules:**
-- Product components live in `src/components/ae/<domain>/`.
-- Use semantic design tokens, not raw Tailwind palette classes. Enforced by `scanUiContract` (`tests/ui-contract/ui-contract.test.ts`): no hex/rgb/hsl, no `bg-blue-500`, no `space-x-*` (use `gap-*`), no `transition-all`, no hardcoded `z-50`, no `bg-black/40`.
-- Role-based queries in tests (`getByRole`) match the accessibility contract of the component.
-
-**Exhaustive switches (hard rule):**
-- Switch over unions must assign the discriminant to `never` in `default` so new variants fail compile:
-
-```typescript
+```ts
 default: {
-  const _exhaustive: never = action
-  void _exhaustive
-  return state
+  const _exhaustive: never = status
+  return _exhaustive
 }
 ```
 
-Canonical examples: `src/components/ae/chat/answer-turn-state.ts`, `src/lib/ui/status-presentation.ts`, `src/modules/capability-supply/internal/x402-invocation-policy.ts`, `convex/moneyStripeEvents.ts`, `convex/moneyPayoutTransferCompleteApply.ts`.
+Exhaustive *maps* use `satisfies Record<Union, ...>` (see §1.3) so adding a variant fails compilation at the map site.
 
-## Convex Patterns
+### 3.5 Convex Patterns (per `convex/_generated/ai/guidelines.md` — read before any Convex work)
 
-Follow `convex/_generated/ai/guidelines.md` (Convex `^1.41.0` / installed `1.42.0`):
-- Register HTTP in `convex/http.ts` with `httpAction`. Treat `await req.json()` as `unknown`.
-- Index names include all fields: `by_field1_and_field2`.
-- Do not store unbounded arrays on a document; use a child table.
-- Pagination: pass `args.paginationOpts` through unchanged; return `paginationResultValidator`.
-- Nested `ctx.runMutation` from a mutation is a subtransaction; catch independently if the caller must continue.
-- An **action** may `ctx.runMutation` a registered internal mutation (example: `applyVerifiedStripeEventHandler` in `convex/moneyCreditTopup.ts` calls `internal.moneyLedger.applyCreditTopup`). That is action I/O, not wrapper forwarding.
+- Public functions use `query`/`mutation`/`action` from `./_generated/server` with full argument validators (`v.object({ ... })`); internal helpers use `internalQuery`/`internalMutation`/`internalAction` registered against `internal.*` references.
+- Thin registered wrappers delegate to exported `*Handler(ctx, args)` functions so tests and sibling modules can reuse logic (`convex/moneyConnect.ts`, `convex/capabilityOperationInvocations.ts`).
+- Handlers return values instead of throwing for expected refusals; never return `undefined` from public mutations — return an explicit result object.
+- Context types come from `./_generated/server` as type-only imports (`QueryCtx`, `MutationCtx`, `ActionCtx`); document types from `./_generated/dataModel` (`Doc<'table'>`, `Id<'table'>`, `DataModel`).
+- Cross-function calls go through `ctx.runQuery`/`ctx.runMutation`/`ctx.runAction` with `makeFunctionReference` (see `convex/agentAccessPolicy.test.ts` for reference shapes); actions that need Node APIs start with `"use node"` and never touch `ctx.db`.
+- Queries: index-backed, bounded (no unbounded `.collect()`), no wall-clock reads inside queries; bulk work is scheduled via `ctx.scheduler` / crons (`convex/crons.ts`).
+- Schema in `convex/schema.ts`; index names follow `domain_field_desc` style; new indexes may be staged.
+- Auth: Clerk JWT via `convex/auth.config.ts`; identity read with `ctx.auth.getUserIdentity()`; `tokenIdentifier` is the stable principal key.
+- Source-write admission: mutating entry points pass through `requireSourceWrite` / source-write admission seams (`convex/sourceWriteAdmission*`, `tests/unit/server/source-write-admission-seam.test.ts`); the local secret is provisioned for dev only (`tests/unit/dev/local-source-write-secret.test.ts`), and `VITE_AE_SOURCE_WRITE_SECRET` is never client-visible.
 
-**Wrappers-first (hard rule for money):**
-- `query()` / `mutation()` / `action()` / `internalQuery` / `internalMutation` stay registered on `convex/moneyLedger.ts`.
-- Handlers and validators live in sibling files (`convex/moneyCreditTopup.ts`, `convex/moneyConnect.ts`, `convex/moneyPayoutTransferBegin.ts`, …). The wrapper file imports the handler and wires `args` / `returns` / `handler`.
-- Never replace a `convex/moneyLedger.ts` export with a thin `ctx.runMutation` forwarder to another registered function. Keep the public function reference (`api.moneyLedger.reserveCreditTopup`, `api.moneyLedger.reserveConnectAccount`, …) stable.
-- Same peel shape exists on `convex/catalog.ts`, `convex/answerThreads.ts`, `convex/harnessSessions.ts`, and `convex/capabilitySupply.ts`: wrappers stay on the original module path; handlers move to `*Publish.ts` / `*Reads.ts` / sibling files. Do not invent a second public API path.
+### 3.6 Logging & Observability
 
-## Adding New Code
+- Client telemetry: PostHog via `src/lib/observability/*`; values pass through `sanitizeTelemetryValue`; funnel events flow through `src/modules/observability/funnel.functions.ts` (which lazy-imports `funnel.capture.server`).
+- Server capture (`captureServerEvent`, `captureServerException`) swallows its own errors so telemetry never alters application behavior (`src/lib/observability/posthog.server.ts`).
+- No stray `console.log` in first-party code; request correlation via `src/lib/server/request-correlation.ts` (`runWithRequestCorrelation`, `withRequestCorrelationHeader`) wrapped around route handlers (`src/routes/api.health.ts`, `src/routes/api.ready.ts`).
+- Audit/proof events (gateway receipts, release evidence) are emitted with explicit `evidenceClass` metadata and `sanitized: true` markers (asserted by `tests/unit/release/green-release-baseline.test.ts`).
 
-- New domain logic: `src/modules/<name>/internal/`, export through `public.ts`, tests in `tests/unit/<name>/`.
-- New HTTP error: add a stable `code`, map it in `src/lib/errors.ts` if it is a gateway code, return `problem(...)`.
-- New money path: return `MoneyRefusal` (or the local `refusedPayout` copy), never open the live-money gate from an env flag, never extract a shared refusal helper.
-- New Convex money command: add the handler next to the existing peel file, register `query`/`mutation`/`action` on `convex/moneyLedger.ts`.
-- New union variant: extend the `XValues` array, handle the `switch` with a `never` default, and add a unit test for the new `code`.
-- New optional object field: conditional-spread it (`...(value === undefined ? {} : { value })`).
-- Log papercuts to `PAPERCUTS.md` when tooling friction appears; do not paper over it in product code.
+### 3.7 Adding New Code (checklist distilled from `RULES.MD` + `.planning/ENGINEERING-STANDARDS.md`)
+
+1. Domain logic goes in `src/modules/<domain>/internal/`; expose through `public.ts` / `server.ts` seams only.
+2. HTTP failures use problem kinds from `src/lib/errors.ts` — never ad-hoc status strings or JSON error shapes.
+3. Money paths: brand amounts as `ExactAmount`, evaluate the live-money gate, refuse closed, and return named-refusal unions with `retryable` set deliberately.
+4. Convex commands: split file per domain role, validators on every public function, thin wrapper + handler pattern, type-only generated imports.
+5. New union variant? Add the `never`-checked switch arm and the `satisfies Record<...>` row in the same change.
+6. Optional fields must respect `exactOptionalPropertyTypes` (no explicit `undefined` assignment unless the type says `| undefined`).
+7. Log frictions via `npm run papercut -- -m <model> "..."`.
 
 ---
 
-*Convention analysis: 2026-08-20*
+## 4. UI Conventions
+
+- Semantic design tokens only — no raw hex values in components (enforced by `tests/imports/` UI-contract scans; violation fixtures in `tests/fixtures/bad-ui-contract/route-styles.fixture`).
+- Product components are prefixed `Ae` and live under `src/components/ae/` (e.g. `src/components/ae/readback/AeAdminReadbackPanel.tsx`); primitives under `src/components/ui/`.
+- Presentation mapping for statuses/tones is centralized in `src/lib/ui/status-presentation.ts` with exhaustive `satisfies` maps.
+- Tests query by role/label (`@testing-library/react`, Playwright `getByRole`); see `TESTING.md` §5.
+
+---
+
+## 5. Anti-Patterns (explicitly rejected by `RULES.MD` and scanners)
+
+- Importing another module's `internal/` or reaching past a `public.ts`/`server.ts` seam.
+- Inline static imports of server-only modules into route/client graphs (must use the documented lazy seam).
+- Throwing exceptions for expected business refusals; returning bare booleans for money outcomes.
+- `enum`, `any`, non-null assertions, `as unknown as`, undisciplined `v.any()`.
+- Unbounded Convex queries, wall-clock reads in queries, or index-less filters on hot tables.
+- Client-visible secrets (`VITE_AE_SOURCE_WRITE_SECRET`), hard-coded CSRF literals, or broad free-text status fields.
+- Silent catch blocks in application code (telemetry capture is the only sanctioned swallow).
+
+---
+
+*Conventions analysis: 2026-08-21*
