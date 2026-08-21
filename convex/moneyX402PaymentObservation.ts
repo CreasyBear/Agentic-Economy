@@ -178,8 +178,28 @@ export async function recordX402PaymentObservationHandler(
     row.paymentResponseDigest !== undefined
     && row.paymentResponseDigest !== args.paymentResponseDigest
   ) throw new Error('x402_payment_response_identity_conflict')
+  const targetState = args.settlementStatus === 'unknown' ? 'reconciliation_required' : 'observed'
+  if (row.state === 'observed' || row.state === 'reconciliation_required') {
+    if (row.state !== targetState) {
+      throw new Error('x402_payment_attempt_observation_state_invalid')
+    }
+    if (row.settlementStatus !== args.settlementStatus) {
+      throw new Error('x402_payment_settlement_identity_conflict')
+    }
+    if (row.paymentResponseDigest !== args.paymentResponseDigest) {
+      throw new Error('x402_payment_response_identity_conflict')
+    }
+    if (
+      row.operationRef !== args.operationRef
+      || row.inputDigest !== args.inputDigest
+      || row.paymentObservationDigest !== args.paymentObservationDigest
+      || row.transportObservationDigest !== args.transportObservationDigest
+      || row.transportRequestDigest !== args.transportRequestDigest
+    ) throw new Error('x402_payment_observation_attribution_invalid')
+    return null
+  }
   await ctx.db.patch(row._id, {
-    state: args.settlementStatus === 'unknown' ? 'reconciliation_required' : 'observed',
+    state: targetState,
     operationRef: args.operationRef,
     paymentObservationDigest: args.paymentObservationDigest,
     inputDigest: args.inputDigest,

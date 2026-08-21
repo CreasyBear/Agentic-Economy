@@ -8,6 +8,7 @@ import {
   prepareX402PaymentAuthorization,
   readX402PaymentAuthorization,
   readX402PaymentAuthorizationByDigest,
+  recordX402PaymentObservation,
   recordX402PaymentSignatureDigest,
   recordX402PaymentSigningIntent,
 } from '../../../convex/moneyX402PaymentAttempts'
@@ -42,6 +43,7 @@ const recordDigest = (recordX402PaymentSignatureDigest as unknown as HandlerExpo
 const recordIntent = (recordX402PaymentSigningIntent as unknown as HandlerExport)._handler
 const markPossiblySubmitted = (markX402PaymentPossiblySubmitted as unknown as HandlerExport)._handler
 const observe = (observeX402PaymentAttempt as unknown as HandlerExport)._handler
+const recordObservation = (recordX402PaymentObservation as unknown as HandlerExport)._handler
 const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 const queueExpired = (queueExpiredX402Authorization as unknown as HandlerExport)._handler
 
@@ -365,6 +367,67 @@ describe('money x402 payment authorization attempt', () => {
       paymentResponseDigest: 'sha256:settlement',
       evidenceRefs: ['evidence:receipt'],
     })
+  })
+
+  it.each([
+    ['observed', 'settled'],
+    ['reconciliation_required', 'unknown'],
+  ] as const)('replays an already %s payment observation without patching', async (state, settlementStatus) => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs({ settlementStatus })
+    db.seed({
+      ...attempt(),
+      state,
+      operationRef: args.operationRef,
+      inputDigest: args.inputDigest,
+      paymentObservationDigest: args.paymentObservationDigest,
+      transportObservationDigest: args.transportObservationDigest,
+      transportRequestDigest: args.transportRequestDigest,
+      settlementStatus,
+      paymentResponseDigest: args.paymentResponseDigest,
+      observedAt: 1_000,
+    })
+    const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+
+    await expect(recordObservation({ db }, args)).resolves.toBeNull()
+
+    expect(db.patchCalls).toHaveLength(0)
+    expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it.each([
+    ['operationRef', 'x402_payment_observation_attribution_invalid'],
+    ['inputDigest', 'x402_payment_observation_attribution_invalid'],
+    ['paymentObservationDigest', 'x402_payment_observation_attribution_invalid'],
+    ['transportObservationDigest', 'x402_payment_observation_attribution_invalid'],
+    ['transportRequestDigest', 'x402_payment_observation_attribution_invalid'],
+    ['settlementStatus', 'x402_payment_settlement_identity_conflict'],
+    ['paymentResponseDigest', 'x402_payment_response_identity_conflict'],
+  ] as const)('rejects an already observed payment observation when %s drifts without patching', async (field, error) => {
+    const db = new MemoryDb()
+    const args = paymentObservationArgs()
+    db.seed({
+      ...attempt(),
+      state: 'observed',
+      operationRef: args.operationRef,
+      inputDigest: args.inputDigest,
+      paymentObservationDigest: args.paymentObservationDigest,
+      transportObservationDigest: args.transportObservationDigest,
+      transportRequestDigest: args.transportRequestDigest,
+      settlementStatus: args.settlementStatus,
+      paymentResponseDigest: args.paymentResponseDigest,
+      observedAt: 1_000,
+    })
+    const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+    const driftedArgs = {
+      ...args,
+      [field]: field === 'settlementStatus' ? 'not_settled' : 'sha256:drift',
+    }
+
+    await expect(recordObservation({ db }, driftedArgs)).rejects.toThrow(error)
+
+    expect(db.patchCalls).toHaveLength(0)
+    expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
   })
 
   it('lists at most 25 redacted expired prepared candidates through the expiry index', async () => {
@@ -752,6 +815,24 @@ function observationArgs(): Record<string, unknown> {
   }
 }
 
+function paymentObservationArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    dispatchRef: 'invocation:test',
+    attemptRef: 'attempt:test',
+    effectGeneration: 1,
+    paymentIdentifier,
+    operationRef: 'operation:test',
+    inputDigest: 'sha256:input',
+    transportObservationDigest: 'sha256:transport-observation',
+    transportRequestDigest: 'sha256:transport-request',
+    paymentObservationDigest: 'sha256:payment-observation',
+    settlementStatus: 'settled',
+    paymentResponseDigest: 'sha256:payment-response',
+    observedAt: 2_000,
+    ...overrides,
+  }
+}
+
 function invocationRow(overrides: Record<string, unknown> = {}): Row {
   return {
     _id: 'invocation:row',
@@ -820,6 +901,7 @@ class MemoryDb implements Db {
   private throwAfterNextPatch = false
   private nextId = 1
   readonly indexCalls: string[] = []
+  readonly patchCalls: Array<{ id: string; value: Record<string, unknown> }> = []
 
   seed(row: Row): void {
     this.seedTable('moneyX402PaymentAttempts', row)
@@ -883,6 +965,7 @@ class MemoryDb implements Db {
     for (const rows of this.tables.values()) {
       const row = rows.find((candidate) => candidate._id === id)
       if (row === undefined) continue
+      this.patchCalls.push({ id, value })
       for (const [key, next] of Object.entries(value)) {
         if (next === undefined) delete row[key]
         else row[key] = next
