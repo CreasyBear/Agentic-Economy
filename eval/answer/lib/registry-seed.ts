@@ -171,19 +171,13 @@ function buildFixture(
       summary: industry.serviceSummary,
       serviceAreaSummary: `${locale.suburb} and nearby suburbs`,
       availabilitySummary: industry.hoursOrUnknown,
-      accessPaths: mode === 'inquiry_available'
-        ? [{
+      accessPaths: mode === 'not_available_yet'
+        ? []
+        : [{
             kind: 'human_request' as const,
             channel: 'phone' as const,
             disclosure: disclosureFor(mode),
-          }]
-        : mode === 'quote_request_available'
-          ? [{
-              kind: 'human_request' as const,
-              channel: 'ae_inquiry' as const,
-              disclosure: disclosureFor(mode),
-            }]
-          : [],
+          }],
       firstRequestMode: mode,
       publicDisclosure: disclosureFor(mode),
       noContactReason: mode === 'not_available_yet'
@@ -199,20 +193,14 @@ function firstRequestModeFor(
   localeIndex: number,
   industryIndex: number,
 ): DevSeedBusinessFixture['offerings'][number]['firstRequestMode'] {
-  const value = (localeIndex + industryIndex) % 3
+  const value = (localeIndex + industryIndex) % 2
   if (value === 0) {
-    return 'inquiry_available'
-  }
-  if (value === 1) {
     return 'quote_request_available'
   }
   return 'not_available_yet'
 }
 
 function disclosureFor(mode: DevSeedBusinessFixture['offerings'][number]['firstRequestMode']): string {
-  if (mode === 'inquiry_available') {
-    return 'Use the inquiry form for a first contact.'
-  }
   if (mode === 'quote_request_available') {
     return 'Published quote request details are available for human review.'
   }

@@ -244,6 +244,23 @@ function auditTurnCaseShape(
       }
     }
 
+    if (coverTags.has('execute-ref-from-detail')) {
+      const calls = testCase.openRouterAgent?.toolCalls ?? []
+      const detail = calls.find((call) => call.toolId === 'registry.operations.detail')
+      const execute = calls.find((call) => call.toolId === 'operation.execute')
+      if (
+        detail === undefined
+        || execute === undefined
+        || detail.input.operationRef !== execute.input.operationRef
+      ) {
+        issues.push({
+          code: 'execute_ref_without_prior_detail',
+          message: 'Execute-ref-from-detail cases must call operations.detail then operation.execute with the same operationRef.',
+          caseId: testCase.id,
+        })
+      }
+    }
+
     if (coverTags.has('broad-catalog-scale') && testCase.registrySeed !== 'broad') {
       issues.push({
         code: 'broad_case_without_broad_seed',
@@ -259,7 +276,6 @@ function auditThreadCaseShape(
   issues: AnswerEvalCoverageIssue[],
 ): void {
   for (const testCase of threadCases) {
-    const coverTags = new Set(testCase.covers)
     if (testCase.turns.length < 2) {
       issues.push({
         code: 'thread_case_too_short',
@@ -282,20 +298,6 @@ function auditThreadCaseShape(
         testCase,
         issues,
       )
-    }
-
-    if (coverTags.has('frozen-evidence-follow-up')) {
-      const followUp = testCase.turns.slice(1).find((turn) =>
-        sameStringList(turn.expected.toolQueries ?? [], []) &&
-        hasString(turn.expected.excludeTimingNames ?? [], 'retrieval.initial_search'),
-      )
-      if (followUp === undefined) {
-        issues.push({
-          code: 'frozen_follow_up_without_no_retrieval_assertion',
-          message: 'Frozen-evidence follow-up cases must assert no tool queries and no initial search on a later turn.',
-          caseId: testCase.id,
-        })
-      }
     }
   }
 }

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Agentic Economy answer gate + follow-up chip eval
+description: Agentic Economy answer gate + tool-loop eval
 
 prompts:
   - '{{testId}}'
@@ -63,39 +63,6 @@ tests:
       - type: javascript
         value: file://assertions/expect-gate.mjs
 
-  - description: Overclaim chip rejected
-    vars:
-      testId: chip-overclaim-fail
-      mode: chip
-      chip: Book now and pay today
-      priorQueryCount: '1'
-      expectPass: 'false'
-    assert:
-      - type: javascript
-        value: file://assertions/expect-chip.mjs
-
-  - description: Compare chip accepted
-    vars:
-      testId: chip-compare-pass
-      mode: chip
-      chip: Compare the top two
-      priorQueryCount: '1'
-      expectPass: 'true'
-    assert:
-      - type: javascript
-        value: file://assertions/expect-chip.mjs
-
-  - description: Boundary chip accepted
-    vars:
-      testId: chip-boundary-pass
-      mode: chip
-      chip: What can Agentic Economy do here?
-      priorQueryCount: '1'
-      expectPass: 'true'
-    assert:
-      - type: javascript
-        value: file://assertions/expect-chip.mjs
-
   - description: Overclaim prose fails gate
     vars:
       testId: gate-overclaim-fail
@@ -107,28 +74,6 @@ tests:
       - type: javascript
         value: file://assertions/expect-gate.mjs
 
-  - description: Filter chip accepted
-    vars:
-      testId: chip-filter-pass
-      mode: chip
-      chip: Which take inquiries?
-      priorQueryCount: '1'
-      expectPass: 'true'
-    assert:
-      - type: javascript
-        value: file://assertions/expect-chip.mjs
-
-  - description: Unsupported booking chip rejected
-    vars:
-      testId: chip-unsupported-fail
-      mode: chip
-      chip: Book the first one for me
-      priorQueryCount: '1'
-      expectPass: 'false'
-    assert:
-      - type: javascript
-        value: file://assertions/expect-chip.mjs
-
   - description: Injection upgrade language detected in prose
     vars:
       testId: injection-detect-pass
@@ -137,17 +82,17 @@ tests:
       expectPass: 'true'
     assert:
       - type: javascript
-        value: file://assertions/expect-chip.mjs
+        value: file://assertions/expect-eval-ok.mjs
 
   - description: Catalog parity returns expected slug
     vars:
       testId: parity-registry-pass
       mode: parity
-      query: emergency plumber parramatta
+      query: listed offering parramatta
       expectPass: 'true'
     assert:
       - type: javascript
-        value: file://assertions/expect-chip.mjs
+        value: file://assertions/expect-eval-ok.mjs
 
   - description: Tool-use agent recovers a misspelled query by choosing registry.search
     vars:
@@ -157,9 +102,9 @@ tests:
       plannedTool: registry.search
       plannedInput: '{"query":"parramatta"}'
       proseOneLine: One listed business matches this need.
-      proseSummary: The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.
+      proseSummary: The listing publishes listed offering. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.
       proseNextStep: Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.
-      expectedSlug: parramatta-emergency-plumbing
+      expectedSlug: demo-listed-provider
       expectPass: 'true'
     assert:
       - type: javascript
@@ -291,11 +236,31 @@ tests:
       - type: javascript
         value: file://assertions/expect-answer-turn.mjs
 
-  - description: Answer thread filter uses frozen evidence
+  - description: Answer turn compares when two listings match
     vars:
-      testId: thread-filter-uses-frozen-evidence
+      testId: turn-compare-when-two-listings
+      mode: answer-turn
+      caseId: turn-compare-when-two-listings
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn refuses keyed anonymous execute
+    vars:
+      testId: turn-keyed-execute-refused
+      mode: answer-turn
+      caseId: turn-keyed-execute-refused
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer thread follow-up searches again
+    vars:
+      testId: thread-follow-up-searches-again
       mode: answer-thread
-      caseId: thread-filter-uses-frozen-evidence
+      caseId: thread-follow-up-searches-again
       expectPass: 'true'
     assert:
       - type: javascript

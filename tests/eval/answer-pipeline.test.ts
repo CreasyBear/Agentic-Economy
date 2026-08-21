@@ -16,8 +16,9 @@ import {
   type AnswerTurnFrame,
   type AnswerTurnUIMessage,
 } from '@/modules/answer/public'
-import { assembleAnswerEvidence, runAnswerToolUseAgent } from '@/modules/answer/server'
+import { runAnswerToolUseAgent } from '@/modules/answer/server'
 import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
+import { registrySearchAction } from '@/modules/registry/registry.actions'
 import {
   runAnswerThreadEvalCase,
   runAnswerTurnEvalCase,
@@ -35,7 +36,7 @@ import {
 import { readAnswerTurnStream } from '../helpers/answer-turn-stream'
 import { createLocalE2eRegistrySourcePort } from '../helpers/registry-local-e2e'
 
-const QUERY = 'emergency plumber parramatta'
+const QUERY = 'listed offering parramatta'
 
 type SerializedReportValues = {
   keys: string[]
@@ -188,13 +189,13 @@ describe('answer pipeline eval', () => {
     )
 
     expect(report.summary.capabilityToolCounts).toEqual({
-      total: 1,
+      total: 2,
       complete: 1,
-      refused: 0,
+      refused: 1,
       error: 0,
     })
     expect(report.summary.capabilityOperationRefDialects).toEqual({
-      canonical: 1,
+      canonical: 2,
       readable: 0,
       invalid: 0,
       missing: 0,
@@ -203,26 +204,25 @@ describe('answer pipeline eval', () => {
 
     const capabilityReport = report.cases.find((testCase) => testCase.id === 'turn-capability-tool-executes')
     expect(capabilityReport?.kind).toBe('turn')
-    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelRequestCount : undefined).toBe(3)
-    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelToolRunCount : undefined).toBe(1)
+    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelRequestCount : undefined).toBe(5)
+    expect(capabilityReport?.kind === 'turn' ? capabilityReport.modelToolRunCount : undefined).toBe(3)
     const directReport = report.cases.find((testCase) => testCase.id === 'turn-direct-parramatta-fast-path')
     expect(directReport?.kind).toBe('turn')
-    expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(1)
-    expect(directReport?.kind === 'turn' ? directReport.modelToolRunCount : undefined).toBe(0)
+    expect(directReport?.kind === 'turn' ? directReport.modelRequestCount : undefined).toBe(4)
+    expect(directReport?.kind === 'turn' ? directReport.modelToolRunCount : undefined).toBe(1)
 
     const paramataReport = report.cases.find((testCase) => testCase.id === 'turn-paramata-visible-recovery')
     expect(paramataReport?.kind).toBe('turn')
-    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(3)
-    expect(paramataReport?.kind === 'turn' ? paramataReport.modelToolRunCount : undefined).toBe(1)
-    expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(1)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.modelRequestCount : undefined).toBe(5)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.modelToolRunCount : undefined).toBe(2)
+    expect(paramataReport?.kind === 'turn' ? paramataReport.toolRunCount : undefined).toBe(2)
     expect(paramataReport?.kind === 'turn' ? paramataReport.costUnavailableReasons : undefined).toEqual([
       'price_table_missing',
-      'provider_metadata_missing',
     ])
     expect(paramataReport?.kind === 'turn' ? paramataReport.usage : undefined).toMatchObject({
-      inputTokens: 280,
-      outputTokens: 69,
-      totalTokens: 349,
+      inputTokens: 520,
+      outputTokens: 136,
+      totalTokens: 656,
     })
 
     const { keys, strings } = readSerializedReportValues(JSON.stringify(report))
@@ -281,8 +281,8 @@ describe('answer pipeline eval', () => {
     }
     const result = await runAnswerTurnEvalCase(impossibleCase)
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 0 model requests, got 3')
-    expect(result.problems).toContain('expected 0 model tool runs, got 1')
+    expect(result.problems).toContain('expected 0 model requests, got 5')
+    expect(result.problems).toContain('expected 0 model tool runs, got 3')
   })
   it('rejects a seed-only capability response that violates its output schema', async () => {
     const sourceCase = ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === 'turn-capability-tool-executes')
@@ -311,10 +311,17 @@ describe('answer pipeline eval', () => {
       id: 'turn-capability-tool-executes-query-mismatch',
       openRouterAgent: {
         ...sourceCase.openRouterAgent,
-        toolCalls: [{
-          ...sourceCase.openRouterAgent.toolCalls[0]!,
-          input: { ids: 'ethereum', vs_currencies: 'usd' },
-        }],
+        toolCalls: sourceCase.openRouterAgent.toolCalls.map((call) =>
+          call.toolId === 'operation.execute'
+            ? {
+                ...call,
+                input: {
+                  ...call.input,
+                  input: { ids: 'ethereum', vs_currencies: 'usd' },
+                },
+              }
+            : call
+        ),
       },
     })
 
@@ -382,7 +389,9 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('tool status expectation failed (2 expected, 2 observed)')
+    expect(result.problems.some((problem) =>
+      problem.startsWith('tool status expectation failed (2 expected, 2 observed)'),
+    )).toBe(true)
     expect(result.problems.join('; ')).not.toContain('registry.search')
   })
 
@@ -403,8 +412,8 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 0 model requests, got 1')
-    expect(result.problems).toContain('expected 1 model tool runs, got 0')
+    expect(result.problems).toContain('expected 0 model requests, got 4')
+    expect(result.problems.join('; ')).not.toContain('model tool runs')
   })
 
   it('rejects wrong model request and model-tool counts', async () => {
@@ -425,9 +434,9 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('expected 1 model requests, got 3')
-    expect(result.problems).toContain('expected 2 model tool runs, got 1')
-    expect(result.problems).toContain('model request count 3 exceeds 1')
+    expect(result.problems).toContain('expected 1 model requests, got 5')
+    expect(result.problems).toContain('expected 2 model tool runs, got 3')
+    expect(result.problems).toContain('model request count 5 exceeds 1')
   })
 
   it('rejects nonfinite wall-clock latency', async () => {
@@ -486,52 +495,13 @@ describe('answer pipeline eval', () => {
   it('returns grounded evidence for the default registry fixture', async () => {
     const resetRegistryPort = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
     try {
-      const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
-      expect(evidence).toBeDefined()
-      expect(evidence?.providers.map((provider) => provider.slug)).toEqual(['parramatta-emergency-plumbing'])
-    } finally {
-      resetRegistryPort()
-    }
-  })
-
-  it('keeps frozen prose on the tool-disabled path with one model request and no tool runs', async () => {
-    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
-      toolCalls: [],
-      prose: {
-        oneLine: 'Two businesses may fit what you need.',
-        summary:
-          'The businesses offer emergency pipe repair in Parramatta. The businesses handle timing, price, and availability.',
-        whatToDoNow:
-          'Open a business page and send a request when published. Agentic Economy does not book or take payment on this page.',
-      },
-    }))
-    const restoreOpenRouter = server.installEnv()
-    const resetRegistryPort = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
-
-    try {
-      const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
-      if (evidence === undefined) {
-        throw new Error('expected frozen provider evidence')
-      }
-      const result = await runAnswerToolUseAgent({
-        query: 'which provider should I compare?',
-        priorProviders: evidence.providers,
-        priorAllowedSlugs: evidence.providers.map((provider) => provider.slug),
-        followUpIntent: 'filter_known',
-        disableTools: true,
+      const page = await registrySearchAction.run({
+        data: { query: QUERY, limit: 10 },
+        context: { caller: 'answerThread' },
       })
-
-      expect(result.modelRequests).toHaveLength(1)
-      expect(result.toolCalls).toHaveLength(0)
-      expect(server.requests).toHaveLength(1)
-      expect(server.requests[0]?.tools).toBeUndefined()
-      expect(result.snapshot.providers.map((provider) => provider.slug)).toEqual(
-        evidence.providers.map((provider) => provider.slug),
-      )
+      expect(page.items.map((item) => item.slug)).toEqual(['demo-listed-provider'])
     } finally {
       resetRegistryPort()
-      restoreOpenRouter()
-      await server.close()
     }
   })
 

@@ -574,7 +574,8 @@ function workStepEvidenceMatchesPath(input: TurnScoreInput): boolean {
     return false
   }
 
-  const expectedToolQueries = input.testCase.expected.toolQueries ?? []
+  const expectedToolQueries = (input.testCase.expected.toolQueries ?? [])
+    .filter((query) => query.length > 0)
   if (expectedToolQueries.length === 0) {
     return true
   }
