@@ -745,11 +745,7 @@ export function offeringAccessToAeStatus(
 
 function firstRequestModeLabel(mode: FirstRequestMode): string {
   if (mode === 'quote_request_available') {
-    return 'Quote details supplied'
-  }
-
-  if (mode === 'inquiry_available') {
-    return 'Contact instructions supplied'
+    return 'Contact details supplied'
   }
 
   return 'No contact option published yet'
@@ -773,10 +769,8 @@ export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
   }
 
   switch (firstRequestMode) {
-    case 'inquiry_available':
-      return 'Contact supplied'
     case 'quote_request_available':
-      return 'Quote on request'
+      return 'Contact supplied'
     case 'not_available_yet':
       return 'No contact option yet'
     default: {
@@ -838,10 +832,8 @@ export function plainTrustLabel(trustTier: TrustTier): string {
  */
 export function plainNextStepLabel(firstRequestMode: FirstRequestMode): string {
   switch (firstRequestMode) {
-    case 'inquiry_available':
-      return 'View contact instructions'
     case 'quote_request_available':
-      return 'View quote details'
+      return 'View contact details'
     case 'not_available_yet':
       return 'View details'
     default: {

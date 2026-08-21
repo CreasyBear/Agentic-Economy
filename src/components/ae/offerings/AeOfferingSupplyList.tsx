@@ -8,7 +8,6 @@ import {
   Code2Icon,
   Globe2Icon,
   MapPinIcon,
-  MessageSquareTextIcon,
   PhoneIcon,
 } from 'lucide-react'
 
@@ -187,9 +186,8 @@ function AccessPathItem({ path, showTechnicalDetails }: { path: PublicOfferingAc
   )
 }
 
-function accessIcon(kind: 'phone' | 'website' | 'ae_inquiry' | 'external_operation') {
+function accessIcon(kind: 'phone' | 'website' | 'external_operation') {
   if (kind === 'phone') return <PhoneIcon className="size-4" aria-hidden="true" />
   if (kind === 'website') return <Globe2Icon className="size-4" aria-hidden="true" />
-  if (kind === 'ae_inquiry') return <MessageSquareTextIcon className="size-4" aria-hidden="true" />
   return <Code2Icon className="size-4" aria-hidden="true" />
 }

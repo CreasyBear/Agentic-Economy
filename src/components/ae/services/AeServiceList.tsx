@@ -51,14 +51,14 @@ export function AeServiceList({ services, query, plan, canonicalBaseUrl, importe
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="default" data-variant="primary" className="min-h-11 w-full sm:w-auto">
-              <Link to="/claim" search={{ source: 'supply' }}>List your business</Link>
+              <Link to="/for-providers">Publish an operation</Link>
             </Button>
             <Button asChild variant="secondary" className="min-h-11 w-full sm:w-auto">
               <Link to="/">Try another ask</Link>
             </Button>
           </div>
         </Card>
-        <AeImportedClaims claims={importedClaims} query={query} />
+        <AeImportedClaims claims={importedClaims} />
       </div>
     )
   }

@@ -150,11 +150,14 @@ export function offeringSupportCopy(
   }
 }
 
-function humanChannelLabel(channel: 'phone' | 'website' | 'ae_inquiry'): string {
+function humanChannelLabel(channel: 'phone' | 'website'): string {
   switch (channel) {
     case 'phone': return 'Call'
     case 'website': return 'Website'
-    case 'ae_inquiry': return 'Send a message'
+    default: {
+      const _exhaustive: never = channel
+      return _exhaustive
+    }
   }
 }
 

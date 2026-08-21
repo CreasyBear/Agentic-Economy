@@ -28,7 +28,7 @@ function SignInRoute() {
   const { redirect } = Route.useSearch()
   const isLocalE2E = isLocalE2EAuthBypassEnabled()
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
-  const isClaimFlow = redirect === undefined || redirect.startsWith('/claim')
+  const isProviderFlow = redirect === undefined || redirect.startsWith('/owner')
   const contextHeading = isAgentAccessFlow ? 'Sign in to connect your assistant' : 'Almost there'
   const contextText = isAgentAccessFlow
     ? 'After you sign in, you’ll return to assistant access.'
@@ -37,7 +37,7 @@ function SignInRoute() {
   return (
     <AePublicShell>
       <div className="mx-auto grid min-h-[70vh] w-full max-w-lg place-items-center px-4 py-12 md:px-6">
-        <section className="grid w-full gap-6" aria-labelledby={isLocalE2E || (!isClaimFlow && !isAgentAccessFlow) ? undefined : 'sign-in-context-heading'}>
+        <section className="grid w-full gap-6" aria-labelledby={isLocalE2E || (!isProviderFlow && !isAgentAccessFlow) ? undefined : 'sign-in-context-heading'}>
           {isLocalE2E ? (
             <div className="grid gap-4">
               <div className="grid gap-1">
@@ -48,13 +48,13 @@ function SignInRoute() {
             </div>
           ) : (
             <>
-              {isClaimFlow || isAgentAccessFlow ? (
+              {isProviderFlow || isAgentAccessFlow ? (
                 <div className="grid gap-1">
                   <h1 id="sign-in-context-heading" className="text-4xl font-semibold leading-tight tracking-tight text-balance text-foreground">{contextHeading}</h1>
                   <p className="block text-muted-foreground">{contextText}</p>
                 </div>
               ) : null}
-              <SignIn fallbackRedirectUrl={redirect ?? '/claim'} signUpUrl="/sign-up" />
+              <SignIn fallbackRedirectUrl={redirect ?? '/owner/supply'} signUpUrl="/sign-up" />
             </>
           )}
         </section>

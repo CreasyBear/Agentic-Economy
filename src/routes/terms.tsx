@@ -39,7 +39,7 @@ const canDoItems = [
   {
     icon: SendIcon,
     title: 'Start contact',
-    body: 'Send a qualified inquiry when the business page offers it.',
+    body: 'Use only the contact channels explicitly published on a business page.',
   },
 ] as const
 
@@ -57,7 +57,7 @@ const termsItems = [
   {
     icon: PencilIcon,
     title: 'Page details can be fixed',
-    body: 'Owners can claim a page. Anyone can request a correction when something looks wrong.',
+    body: 'Providers can manage their published page. Anyone can request a correction when something looks wrong.',
   },
 ] as const
 

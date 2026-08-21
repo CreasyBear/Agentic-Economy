@@ -225,9 +225,7 @@
   }
 }
 /*
- * Semantic token bridge + ae-* palette (relocated from the retired tokens.css).
- * New UI should use shadcn/ui semantic tokens; ae-* aliases retained for
- * base.css/theme defaults until full migration.
+ * Canonical semantic tokens and the ae-* product palette.
  */
   :root {
   color-scheme: light;
@@ -237,7 +235,7 @@
   --ae-font-mono: var(--font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   --ae-font-body: var(--ae-font-sans);
 
-  /* Legacy compatibility palette; retained for old surfaces during migration. */
+  /* Product palette. */
   --ae-bg: oklch(0.99 0.005 95);             /* cream #FDFBFA */
   --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
   --ae-muted-fg: oklch(0.47 0.012 130);      /* stronger sage grey */
@@ -418,11 +416,11 @@
   --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
   --ae-public-underline-offset: 0.2em;
 
-  /* Relative-color derivations kept for remaining compatibility adapters. */
+  /* Relative-color derivations. */
   --ae-bubble-tinted-bg: oklch(from var(--ae-primary) 0.93 calc(c * 0.4) h);
   --ae-bubble-tinted-bg-hover: oklch(from var(--ae-primary) 0.88 calc(c * 0.5) h);
 
-  /* Routing object compatibility primitives. */
+  /* Routing object primitives. */
   --ae-public-routing-object-bg: color-mix(in oklch, var(--ae-public-surface) 72%, var(--ae-public-field));
   --ae-public-routing-object-border: color-mix(in oklch, var(--ae-public-line-strong) 78%, var(--ae-public-amber) 22%);
   --ae-public-routing-object-shadow: var(--ae-shadow-border), inset 0 1px 0 oklch(1 0 0 / 0.30);
@@ -466,7 +464,7 @@
   --ae-duration-state: 160ms;
   --ae-duration-route: 240ms;
 
-  /* legacy Tailwind semantic bridge */
+  /* Tailwind semantic tokens */
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
   --card: var(--ae-surface);

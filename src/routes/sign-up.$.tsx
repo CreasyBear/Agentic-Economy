@@ -51,7 +51,7 @@ function SignUpRoute() {
                 <h1 id="sign-up-context-heading" className="text-4xl font-semibold leading-tight tracking-tight text-balance text-foreground">{contextHeading}</h1>
                 <p className="block text-muted-foreground">{contextText}</p>
               </div>
-              <SignUp fallbackRedirectUrl={redirect ?? '/claim'} signInUrl="/sign-in" />
+              <SignUp fallbackRedirectUrl={redirect ?? '/owner/supply'} signInUrl="/sign-in" />
             </>
           )}
         </section>

@@ -16,11 +16,6 @@ import {
  * `browser-guest-assertion.ts` so the Convex source can verify the same token
  * without pulling a request-scoped framework import. This module only reads and
  * writes the http-only cookie that carries it.
- *
- * The Customer Request host keeps its own `/api/requests`-scoped cookie for now
- * (`src/lib/server/customer-request-browser-api.ts`); it uses the same key and
- * token format and should be rewired onto this primitive rather than a third
- * copy being written.
  */
 
 export type BrowserGuestSession = Readonly<{

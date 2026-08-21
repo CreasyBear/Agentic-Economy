@@ -1,16 +1,13 @@
-import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 
 type AeImportedClaimsProps = Readonly<{
   claims: readonly WebDiscoveryClaim[]
-  query?: string
 }>
 
-export function AeImportedClaims({ claims, query }: AeImportedClaimsProps) {
+export function AeImportedClaims({ claims }: AeImportedClaimsProps) {
   if (claims.length === 0) return null
 
   return (
@@ -43,22 +40,6 @@ export function AeImportedClaims({ claims, query }: AeImportedClaimsProps) {
                 )}
               </dl>
               <div className="mt-auto flex flex-wrap items-center gap-2">
-                <Button asChild variant="default" size="sm">
-                  <Link
-                    to="/claim"
-                    search={{
-                      businessName: claim.businessName,
-                      businessContext: {
-                        kind: 'local_human',
-                        suburb: claim.suburb,
-                        stateTerritory: '',
-                      },
-                      ...(query === undefined ? {} : { category: query.slice(0, 120) }),
-                    }}
-                  >
-                    Invite this business to list on AE
-                  </Link>
-                </Button>
                 {claim.sourceUrl === undefined ? null : <a className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href={claim.sourceUrl} target="_blank" rel="noreferrer">Web source</a>}
               </div>
             </Card>

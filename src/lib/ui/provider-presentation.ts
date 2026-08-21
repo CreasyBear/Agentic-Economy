@@ -53,8 +53,8 @@ export function buildProviderPresentation(
   const primaryOffering = offerings[0]
   const locationLabel = formatProviderLocation(catalog)
   const serviceArea = primaryOffering?.serviceAreaSummary?.trim()
-  const firstRequestMode = primaryOffering !== undefined && hasInquiryPath(primaryOffering)
-    ? 'inquiry_available' as const
+  const firstRequestMode = primaryOffering !== undefined && hasContactPath(primaryOffering)
+    ? 'quote_request_available' as const
     : 'not_available_yet' as const
   const availabilityLabel = plainAvailabilityLabelForCatalog(catalog, firstRequestMode)
   const responseLabel = plainResponseTimeLabel(catalog.responseTimeMinutes)
@@ -94,16 +94,16 @@ export function buildProviderPresentation(
 
 function plainAvailabilityLabelForCatalog(
   catalog: ProviderPresentationCatalog,
-  firstRequestMode: 'inquiry_available' | 'not_available_yet',
+  firstRequestMode: 'quote_request_available' | 'not_available_yet',
 ): string {
   if (catalog.disposition === 'stale' || catalog.disposition === 'partial') {
     return 'Needs confirmation'
   }
-  return firstRequestMode === 'inquiry_available' ? 'Contact supplied' : 'No contact option yet'
+  return firstRequestMode === 'quote_request_available' ? 'Contact supplied' : 'No contact option yet'
 }
 
-function hasInquiryPath(offering: ProviderPresentationOffering): boolean {
-  return offering.accessPaths.some((path) => path.kind === 'human_request' && path.channel === 'ae_inquiry')
+function hasContactPath(offering: ProviderPresentationOffering): boolean {
+  return offering.accessPaths.some((path) => path.kind === 'human_request')
 }
 
 function formatProviderLocation(catalog: ProviderPresentationCatalog): string {

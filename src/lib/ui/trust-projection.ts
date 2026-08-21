@@ -2,8 +2,6 @@ import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 import { plainHoursLabel } from './status-presentation'
 
-export const AE_EXPLAINER_FULL = 'AE sends your request in writing and keeps a record — or call directly.' as const
-export const AE_EXPLAINER_NO_PHONE = 'AE sends your request in writing and keeps a record.' as const
 export const DIRECT_CONTACT_EXPLAINER = 'Use the published phone number to contact this business directly.' as const
 export const NO_CONTACT_EXPLAINER = 'Contact details and a request path are not published yet.' as const
 export const NO_REPLY_HISTORY = 'No reply history yet' as const
@@ -37,8 +35,6 @@ export type ListingTrustProjection = {
   serviceArea: TrustFact
   replyPosture: ReplyPosture
   explainer:
-    | typeof AE_EXPLAINER_FULL
-    | typeof AE_EXPLAINER_NO_PHONE
     | typeof DIRECT_CONTACT_EXPLAINER
     | typeof NO_CONTACT_EXPLAINER
 }
@@ -46,7 +42,6 @@ export type ListingTrustProjection = {
 
 export function buildListingTrustProjection(
   catalog: PublicBusinessCatalogApiV2Dto,
-  inquiryAvailable = true,
 ): ListingTrustProjection {
   const primaryOffering = catalog.offerings.at(0)
   const publishedPhone = catalog.businessContext.kind === 'local_human'
@@ -59,9 +54,7 @@ export function buildListingTrustProjection(
     hours: publishedHours(primaryOffering?.availabilitySummary, catalog.observedAt),
     serviceArea: publishedFact(primaryOffering?.serviceAreaSummary, 'Service area not published here', catalog.observedAt),
     replyPosture: { kind: 'no_history', label: NO_REPLY_HISTORY },
-    explainer: inquiryAvailable
-      ? phone.kind === 'published' ? AE_EXPLAINER_FULL : AE_EXPLAINER_NO_PHONE
-      : phone.kind === 'published' ? DIRECT_CONTACT_EXPLAINER : NO_CONTACT_EXPLAINER,
+    explainer: phone.kind === 'published' ? DIRECT_CONTACT_EXPLAINER : NO_CONTACT_EXPLAINER,
   }
 }
 

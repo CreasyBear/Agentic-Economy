@@ -232,9 +232,9 @@ const publicDestinations = [
     keywords: ['question', 'search', 'answer'],
   },
   {
-    id: 'claim',
-    label: 'List or claim a business',
-    href: '/claim',
+    id: 'providers',
+    label: 'Publish an operation',
+    href: '/for-providers',
     group: 'Owner',
     hint: 'Owner',
     icon: Building2Icon,

@@ -87,7 +87,7 @@ function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Public navigation" className="grid gap-2 p-4">
       <Link to="/" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</Link>
-      <Link to="/claim" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List your business</Link>
+      <Link to="/for-providers" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For providers</Link>
       <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
     </nav>
   )
@@ -102,8 +102,8 @@ function PublicNavActions({
 }) {
   return (
     <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
-      <Link to="/claim" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
-        List your business
+      <Link to="/for-providers" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
+        For providers
       </Link>
       <Link to="/sign-in/$" params={{ _splat: '' }} className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
         Sign in

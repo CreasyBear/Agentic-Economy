@@ -37,7 +37,7 @@ function OwnerOfferingsRoute() {
       {result.kind === 'error' ? (
         <Alert variant="destructive"><AlertTitle>Offerings did not load</AlertTitle><AlertDescription>{result.reason ?? 'Sign in again or retry this page.'}</AlertDescription></Alert>
       ) : result.kind === 'not_found' ? (
-        <Alert><AlertTitle>Claim a business first</AlertTitle><AlertDescription><p>Offerings belong to a claimed business page.</p><Button asChild variant="secondary"><Link to="/claim">Claim a business</Link></Button></AlertDescription></Alert>
+        <Alert><AlertTitle>No provider identity is available</AlertTitle><AlertDescription><p>Offerings require a current provider identity.</p><Button asChild variant="secondary"><Link to="/for-providers">Review provider setup</Link></Button></AlertDescription></Alert>
       ) : result.offerings.some((item) => item.revision === undefined) ? (
         <div className="grid gap-4">
           <Alert><AlertTitle>One Offering needs repair</AlertTitle><AlertDescription>Its current revision could not be read, so it is not shown or editable.</AlertDescription></Alert>
@@ -48,7 +48,6 @@ function OwnerOfferingsRoute() {
   )
 }
 
-function projectionState(result: Extract<Awaited<ReturnType<typeof readOwnerOfferingSupplyServer>>, { kind: 'available' }>): 'current' | 'projection_pending' | 'migration_mismatch' {
-  if (result.cutover.lastCheckStatus === 'mismatch') return 'migration_mismatch'
+function projectionState(result: Extract<Awaited<ReturnType<typeof readOwnerOfferingSupplyServer>>, { kind: 'available' }>): 'current' | 'projection_pending' {
   return result.projection.status === 'current' ? 'current' : 'projection_pending'
 }

@@ -9,9 +9,7 @@ export type RateLimitName =
   | 'public-mutation'
   | 'oauth-issuance'
   | 'answer-turn-submit'
-  | 'answer-follow-up-chips'
   | 'answer-stream'
-  | 'inquiry-submit'
 
 export type RateLimitResult =
   | { ok: true; retryAfter?: number | undefined }

@@ -105,7 +105,6 @@ function RootDocument({ children }: { children: ReactNode }) {
 }
 
 function requiresClerkProvider(pathname: string): boolean {
-  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin') || pathname.startsWith('/claim')
+  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }
-
 

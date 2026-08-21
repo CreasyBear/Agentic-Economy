@@ -13,7 +13,6 @@ export type FunnelCaptureInput = Pick<
   | 'utmCampaign'
   | 'actorRef'
   | 'businessId'
-  | 'claimId'
   | 'payload'
 >
 
@@ -28,7 +27,6 @@ export function buildFunnelEventProperties(input: FunnelCaptureInput): Record<st
     ...(input.utmCampaign === undefined ? {} : { utm_campaign: input.utmCampaign }),
     ...(input.actorRef === undefined ? {} : { ae_actor_ref: input.actorRef }),
     ...(input.businessId === undefined ? {} : { ae_business_id: input.businessId }),
-    ...(input.claimId === undefined ? {} : { ae_claim_id: input.claimId }),
     ...(input.payload === undefined ? {} : input.payload),
   }
 }

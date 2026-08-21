@@ -98,12 +98,6 @@ export function setPublicSourceTransportForTests(
 
 export const sourceConvexApi = anyApi
 
-export const sourceConvexFunctions = {
-  catalog: {
-    publishBusinessCatalog: sourceMutation('catalog:publishBusinessCatalog'),
-  },
-} as const
-
 export function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
   name: string
 ): FunctionReference<'query', 'public', Args, Result> {
@@ -275,4 +269,3 @@ export async function readRequiredConvexAuthToken(authObject: ConvexSourceAuth, 
 
   return token
 }
-

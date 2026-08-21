@@ -1,7 +1,6 @@
 import { ArrowLeftIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useRouter } from '@tanstack/react-router'
-import { Badge } from '@/components/ui/badge'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -21,51 +20,30 @@ import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProject
 import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import { projectPublicInquiryOfferingSupply, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
-
 
 export type AeProviderListingPageProps = {
   catalog: PublicBusinessCatalogApiV2Dto
-  inquiryAffordance: PublicInquiryAffordance
   agentJsonUrl: string
   supply?: PublicOfferingSupplyView
   backFrom?: 'thread'
   backThreadId?: string
 }
 
-const ownerReplyStamp = 'owner confirms on reply'
-
 const peerActionClassName = 'min-h-11 w-full sm:w-auto'
 
-/** Thread origin carried into the inquiry route; empty when the reader did not arrive from a thread. */
-type InquiryOriginSearch = { from?: 'thread'; id?: string }
-
 export function AeProviderListingPage({
-  catalog,
-  inquiryAffordance,
+  catalog: rawCatalog,
   agentJsonUrl,
-  supply,
+  supply: rawSupply,
   backFrom,
   backThreadId,
 }: AeProviderListingPageProps) {
+  const catalog = rawCatalog
+  const supply = rawSupply
   const presentation = buildProviderPresentation(catalog)
-  const trust = buildListingTrustProjection(catalog, inquiryAffordance.kind === 'available')
+  const trust = buildListingTrustProjection(catalog)
   const officeAddress = readOfficeAddress(catalog)
-  const router = useRouter()
-  const inquirySearch: InquiryOriginSearch = backFrom === 'thread' && backThreadId !== undefined && backThreadId.length > 0
-    ? { from: 'thread', id: backThreadId }
-    : {}
-  // The offering supply read carries stored access-path copy. Admission is the
-  // only fact that says whether the inquiry route will accept a first contact,
-  // so the rendered paths are derived from it rather than from what was stored.
-  const supplyOfferings = supply === undefined
-    ? undefined
-    : projectPublicInquiryOfferingSupply(
-        supply.offerings,
-        inquiryAffordance.kind === 'available'
-          ? router.buildLocation({ to: '/$slug/inquiry', params: { slug: catalog.slug }, search: inquirySearch }).href
-          : undefined,
-      )
+  const supplyOfferings = supply?.offerings
   const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
 
   useEffect(() => {
@@ -91,8 +69,6 @@ export function AeProviderListingPage({
       <ListingFirstScreen
         catalog={catalog}
         trust={trust}
-        inquiryAffordance={inquiryAffordance}
-        inquirySearch={inquirySearch}
         pseudonymousJourneyId={journeyIdentityForCatalog?.id ?? null}
         offeringDetailMode={supply !== undefined}
       />
@@ -112,12 +88,12 @@ export function AeProviderListingPage({
 
           {supply === undefined ? (
             <div className="grid gap-4 md:grid-cols-2">
-              <ReachOutStepsCard updatedAt={catalog.observedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
+              <ReachOutStepsCard updatedAt={catalog.observedAt} />
               <SourceStampCard updatedAt={catalog.observedAt} />
             </div>
           ) : <SourceStampCard updatedAt={catalog.observedAt} />}
 
-          {supply === undefined ? <OfferingCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquirySearch={inquirySearch} /> : null}
+          {supply === undefined ? <OfferingCardsSection catalog={catalog} /> : null}
 
           {supply === undefined ? <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} /> : null}
         </div>
@@ -128,19 +104,15 @@ export function AeProviderListingPage({
               <div className="grid gap-4">
                 <div>
                   <h2 className="block text-lg font-semibold text-foreground">
-                    Your request
+                    Contact this business
                   </h2>
                   <p className="block text-muted-foreground">
                     {replyPostureLabel(trust.replyPosture)}
                   </p>
                 </div>
-                {inquiryAffordance.kind === 'available' ? (
-                  <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
-                    <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>Ask this business</Link>
-                  </Button>
-                ) : (
-                  <p className="block text-muted-foreground">This business hasn’t joined AE yet</p>
-                )}
+                <p className="block text-muted-foreground">
+                  Use the published phone number or website on this listing.
+                </p>
                 <AeProtectedByAe />
               </div>
             </Card>
@@ -169,15 +141,11 @@ export function AeProviderListingPage({
 export function ListingFirstScreen({
   catalog,
   trust,
-  inquiryAffordance,
-  inquirySearch,
   pseudonymousJourneyId,
   offeringDetailMode = false,
 }: {
   catalog: PublicBusinessCatalogApiV2Dto
   trust: ListingTrustProjection
-  inquiryAffordance: PublicInquiryAffordance
-  inquirySearch: InquiryOriginSearch
   pseudonymousJourneyId?: PseudonymousJourneyId | null
   offeringDetailMode?: boolean
 }) {
@@ -258,14 +226,8 @@ export function ListingFirstScreen({
               {detailsCopied ? 'Details copied' : 'Copy details'}
             </Button>
           </div>
-          {offeringDetailMode ? null : inquiryAffordance.kind === 'available' ? (
-            <div data-peer-action="ask" data-variant="secondary">
-              <Button asChild variant="secondary" size="lg" className={peerActionClassName}>
-                <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>Ask this business</Link>
-              </Button>
-            </div>
-          ) : (
-            <p className="block text-muted-foreground">This business has not enabled messages here yet</p>
+          {offeringDetailMode ? null : (
+            <p className="block text-muted-foreground">Use the published phone or website on this page.</p>
           )}
         </div>
       </div>
@@ -301,19 +263,12 @@ function replyPostureLabel(posture: ReplyPosture): string {
 
 function OfferingCardsSection({
   catalog,
-  inquiryAffordance,
-  inquirySearch,
 }: {
   catalog: PublicBusinessCatalogApiV2Dto
-  inquiryAffordance: PublicInquiryAffordance
-  inquirySearch: InquiryOriginSearch
 }) {
   if (catalog.offerings.length === 0) {
     return null
   }
-  const selectedOfferingRef = inquiryAffordance.kind === 'available'
-    ? inquiryAffordance.target.offeringRef
-    : undefined
 
   return (
     <Card className="p-6" aria-labelledby="listing-offerings">
@@ -323,27 +278,17 @@ function OfferingCardsSection({
             What this business offers
           </h2>
           <p className="block text-sm text-muted-foreground">
-            Published by {catalog.name}. The business confirms each request.
+            Published by {catalog.name}. Contact them using the phone or website on this page.
           </p>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          {catalog.offerings.map((offering) => {
-            const actionable = selectedOfferingRef === offering.offeringRef
-            return (
-              <AeOfferingCard
-                key={offering.offeringRef}
-                offering={offering}
-                className="h-full content-start gap-2"
-                actions={actionable ? (
-                  <div className="pt-1">
-                    <Link to="/$slug/inquiry" params={{ slug: catalog.slug }} search={inquirySearch}>
-                      <Button variant="secondary" size="sm">Send a message</Button>
-                    </Link>
-                  </div>
-                ) : undefined}
-              />
-            )
-          })}
+          {catalog.offerings.map((offering) => (
+            <AeOfferingCard
+              key={offering.offeringRef}
+              offering={offering}
+              className="h-full content-start gap-2"
+            />
+          ))}
         </div>
       </div>
     </Card>
@@ -384,7 +329,7 @@ function SourceStamp({ label, updatedAt }: { label: string; updatedAt?: number }
   )
 }
 
-function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number; inquiryAvailable: boolean }) {
+function ReachOutStepsCard({ updatedAt }: { updatedAt: number }) {
   const steps = [
     {
       title: 'Read the page',
@@ -399,11 +344,9 @@ function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number;
       reached: true,
     },
     {
-      title: inquiryAvailable ? 'Send a message' : 'Contact details needed',
-      stamp: 'for owner review',
-      note: inquiryAvailable
-        ? 'The business reviews your message and confirms the price and timing.'
-        : 'The business needs to add a contact route first.',
+      title: 'Use published contact details',
+      stamp: 'phone or website',
+      note: 'Call the published number or use the published website on the listing.',
       reached: false,
     },
   ] satisfies Array<{ title: string; stamp: string; note: string; reached: boolean }>

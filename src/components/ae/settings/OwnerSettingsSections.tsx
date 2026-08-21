@@ -1,19 +1,10 @@
-import { useState } from 'react'
 import { UserProfile } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
-import { useServerFn } from '@tanstack/react-start'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Switch } from '@/components/ui/switch'
 
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
-import {
-  updateOwnerNotificationPreferencesServer,
-  type OwnerNotificationPreferencesMutationResult,
-  type OwnerNotificationPreferencesReadResult,
-} from '@/modules/settings/settings.functions'
 
 export function AccountSettingsSection() {
   const localPreview = isLocalE2EAuthBypassEnabled()
@@ -38,110 +29,17 @@ export function AccountSettingsSection() {
   )
 }
 
-export function NotificationSettingsSection({
-  readback,
-  onReadbackChange,
-}: {
-  readback: OwnerNotificationPreferencesReadResult
-  onReadbackChange: (next: OwnerNotificationPreferencesReadResult) => void
-}) {
-  const updatePreferences = useServerFn(updateOwnerNotificationPreferencesServer)
-  const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState<string | undefined>()
-  const [error, setError] = useState<string | undefined>(readback.kind === 'error' ? readback.reason : undefined)
-  const enabled = readback.kind === 'ok' ? readback.preferences.newInquiryEmailEnabled : true
-
-  async function handleChange(nextEnabled: boolean) {
-    if (readback.kind !== 'ok') {
-      setError(readback.reason)
-      return
-    }
-
-    const previous = readback
-    setPending(true)
-    setError(undefined)
-    setMessage(undefined)
-    onReadbackChange({
-      ...readback,
-      preferences: {
-        ...readback.preferences,
-        newInquiryEmailEnabled: nextEnabled,
-      },
-    })
-
-    try {
-      const result = await updatePreferences({ data: { newInquiryEmailEnabled: nextEnabled } })
-      handleMutationResult(result, previous)
-    } catch {
-      onReadbackChange(previous)
-      setError('AE could not update message email preferences. Try again.')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  function handleMutationResult(
-    result: OwnerNotificationPreferencesMutationResult,
-    previous: OwnerNotificationPreferencesReadResult,
-  ) {
-    if (result.kind === 'ok') {
-      onReadbackChange({
-        kind: 'ok',
-        code: 'owner_notification_preferences_read',
-        ownerId: result.ownerId,
-        preferences: result.preferences,
-      })
-      setMessage(result.preferences.newInquiryEmailEnabled ? 'Message emails are on.' : 'Message emails are off.')
-      return
-    }
-
-    onReadbackChange(previous)
-    setError(result.reason)
-  }
-
-  return (
-    <Card className="grid gap-4 p-5">
-      <SectionHeader
-        title="Notifications"
-        description="Choose whether AE emails you when a new written message is recorded for your business page."
-      />
-      {readback.kind === 'error' ? (
-        <Alert>
-          <AlertTitle>Notification preferences need an owner record</AlertTitle>
-          <AlertDescription>{readback.reason}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Field orientation="horizontal" data-disabled={pending || readback.kind === 'error'} className="rounded-md border border-border bg-card p-4">
-        <FieldContent>
-          <FieldLabel htmlFor="new-message-email" className="min-h-11 items-center">New message email</FieldLabel>
-          <FieldDescription id="new-message-email-description">Email me when a customer sends a written message through AE. Your message list still keeps the record.</FieldDescription>
-        </FieldContent>
-        <Switch
-          id="new-message-email"
-          aria-describedby="new-message-email-description"
-          checked={enabled}
-          onCheckedChange={(checked) => void handleChange(checked)}
-          disabled={pending || readback.kind === 'error'}
-        />
-      </Field>
-      {message === undefined ? null : <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{message}</p>}
-      {error === undefined ? null : <FieldError>{error}</FieldError>}
-    </Card>
-  )
-}
-
 export function BusinessSettingsSection() {
   return (
     <Card className="grid gap-4 p-5">
       <SectionHeader
         title="Business"
-        description="Open the existing owner surfaces for page status, messages, and claim updates."
+        description="Manage your provider page status, offerings, and setup."
       />
       <div className="flex flex-wrap gap-3">
         <Button asChild variant="default"><Link to="/owner/status">Business page</Link></Button>
         <Button asChild variant="secondary"><Link to="/owner/offerings">Offerings</Link></Button>
-        <Button asChild variant="secondary"><Link to="/owner/inquiries">Messages</Link></Button>
-        <Button asChild variant="secondary"><Link to="/claim">List or claim a business</Link></Button>
+        <Button asChild variant="secondary"><Link to="/for-providers">Review provider setup</Link></Button>
       </div>
     </Card>
   )

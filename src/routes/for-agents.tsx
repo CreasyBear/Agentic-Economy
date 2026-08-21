@@ -189,7 +189,7 @@ function ForAgentsRoute() {
           <p className="block max-w-3xl text-muted-foreground">
             The business catalog and <code>registry.search</code>/<code>registry.detail</code> are business-only. They return Providers and offering portfolios; they do not select an admitted Market Operation. An Agent Service means one admitted Market Operation.
           </p>
-          <Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/claim">List your business</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11 justify-self-start"><Link to="/for-providers">Publish an operation</Link></Button>
         </section>
       </div>
     </AePublicShell>

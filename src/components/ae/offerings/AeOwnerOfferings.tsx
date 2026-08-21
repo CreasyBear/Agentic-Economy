@@ -23,6 +23,7 @@ import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   SUPPORTED_OFFERING_CURRENCIES,
+  DEFAULT_OFFERING_PRICE_CURRENCY,
   isSupportedOfferingCurrency,
   normalizeOfferingPrice,
 } from '@/modules/catalog/public'
@@ -108,7 +109,7 @@ export function AeOwnerOfferingsList({
   onRetryProjection,
 }: {
   offerings: readonly OwnerOfferingSummary[]
-  projectionState?: 'current' | 'projection_pending' | 'migration_mismatch'
+  projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
 }) {
   const publishedCount = offerings.filter((item) => item.status === 'published').length
@@ -118,12 +119,10 @@ export function AeOwnerOfferingsList({
   return (
     <div className="grid gap-6">
       {projectionState === 'current' ? null : (
-        <Alert variant={projectionState === 'migration_mismatch' ? 'destructive' : 'default'}>
-          <AlertTitle>{projectionState === 'projection_pending' ? 'Your public page is still updating' : 'Your public page has not changed'}</AlertTitle>
+        <Alert>
+          <AlertTitle>Your public page is still updating</AlertTitle>
           <AlertDescription>
-            <p>{projectionState === 'projection_pending'
-              ? 'Your changes are saved. People still see the last safe page until this update finishes.'
-              : 'We found a difference while updating. People still see the earlier page.'}</p>
+            <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
               <Button type="button" variant="secondary" onClick={onRetryProjection}>Try publishing again</Button>
             )}
@@ -327,7 +326,7 @@ export function AeOwnerOfferingEditor({
         <div className="grid gap-1">
           <p className="block text-sm font-semibold text-muted-foreground">1 · THE SERVICE</p>
           <h2 className="text-xl font-semibold text-foreground">Service details</h2>
-          <p className="block max-w-2xl text-muted-foreground">Describe the job customers ask you to do—not your internal team or process.</p>
+          <p className="block max-w-2xl text-muted-foreground">Describe the Market Operation or offering you publish—not your internal team or process.</p>
         </div>
         <FieldGroup className="gap-4">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
@@ -342,7 +341,7 @@ export function AeOwnerOfferingEditor({
               <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so people and assistants can compare it. Your note is never read to fill this in, and this never rewrites your note.</p>
             </div>
             <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
-              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : 'AUD' })}>
+              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : DEFAULT_OFFERING_PRICE_CURRENCY })}>
                 <SelectTrigger id="offering-price-currency" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
@@ -427,7 +426,7 @@ export function AeOwnerOfferingEditor({
 }
 
 function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly OwnerAccessPathEditorValue[]; disabled: boolean; onChange: (paths: readonly OwnerAccessPathEditorValue[]) => void }) {
-  const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'ae_inquiry' | 'external_operation'>('phone')
+  const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'external_operation'>('phone')
   const [technicalExpanded, setTechnicalExpanded] = useState(false)
   const [draftDetail, setDraftDetail] = useState('')
   const [endpoint, setEndpoint] = useState(emptyOwnerEndpointDraft)
@@ -461,7 +460,6 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
             <SelectContent><SelectGroup>
               <SelectItem value="phone">Call</SelectItem>
               <SelectItem value="website">Website</SelectItem>
-              <SelectItem value="ae_inquiry">Send a message</SelectItem>
               <SelectItem value="external_operation">Assistant request</SelectItem>
             </SelectGroup></SelectContent>
           </Select>
@@ -689,8 +687,8 @@ function TextAreaInput({
 
 function statusLabel(status: BusinessOfferingStatus) { return status[0]?.toUpperCase() + status.slice(1) }
 function toStatus(value: string): BusinessOfferingStatus { return ['draft', 'published', 'paused', 'retired'].includes(value) ? value as BusinessOfferingStatus : 'draft' }
-function toAccessKind(value: string): 'phone' | 'website' | 'ae_inquiry' | 'external_operation' { return ['phone', 'website', 'ae_inquiry', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'ae_inquiry' | 'external_operation' : 'phone' }
-function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : descriptor.channel === 'website' ? 'Website' : 'Send a message' }
+function toAccessKind(value: string): 'phone' | 'website' | 'external_operation' { return ['phone', 'website', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'external_operation' : 'phone' }
+function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : 'Website' }
 
 function isHttpsUrl(value: string): boolean {
   try {
@@ -730,7 +728,7 @@ type OwnerEndpointDraft = Readonly<{
 /** The one select value that means "the owner has not chosen". */
 const unsetOptionValue = 'none'
 
-const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: 'AUD', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
+const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: DEFAULT_OFFERING_PRICE_CURRENCY, amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
 const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method: '', documentationUrl: '', interfaceFormat: '', interfaceUrl: '', authenticationSummary: '', pricingSummary: '' }
 
 const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
@@ -742,7 +740,7 @@ function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPrice
   const maximumAmount = price.kind === 'range' ? price.maximum : undefined
   return {
     kind: price.kind,
-    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? 'AUD',
+    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? DEFAULT_OFFERING_PRICE_CURRENCY,
     amount: amount === undefined ? '' : formatExactAmount(amount) ?? '',
     maximumAmount: maximumAmount === undefined ? '' : formatExactAmount(maximumAmount) ?? '',
     unit: price.unit ?? '',

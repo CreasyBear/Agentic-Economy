@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { readLlmFollowUpChipsEnabled } from '@/modules/answer/public'
+import { readAnswerEvalPassed } from '@/modules/answer/public'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 
 export const Route = createFileRoute('/api/answer/eval-status')({
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/api/answer/eval-status')({
 
 export function handleEvalStatusRequest(): Response {
   return Response.json(
-    { llmChipsEnabled: readLlmFollowUpChipsEnabled() },
+    { evalPassed: readAnswerEvalPassed() },
     { headers: { 'Cache-Control': 'private, max-age=60' } },
   )
 }

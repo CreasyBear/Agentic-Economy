@@ -50,11 +50,7 @@ function NewOwnerOfferingRoute() {
   )
 }
 
-/**
- * The claim's service facts are not reachable from this read, so the quick
- * start seeds the category from the owner's most recent Offering instead.
- * Seeding from the claim would need new source plumbing; recorded as follow-up.
- */
+/** Seeds the quick-start category from the owner's most recent offering. */
 function readSeed(
   result: Extract<OwnerOfferingSupplyReadResult, { kind: 'available' }>,
 ): Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }> | undefined {

@@ -18,7 +18,7 @@ export function AeOwnerStatusEmptyState({ kind }: AeOwnerStatusEmptyStateProps) 
         <EmptyTitle>{isNotFound ? 'No service page yet' : 'Status unavailable'}</EmptyTitle>
         <EmptyDescription>
           {isNotFound
-            ? 'Claim your business to publish a page customers and assistants can read.'
+            ? 'Set up your provider profile to publish a page customers and assistants can read.'
             : 'Try again in a moment. If this keeps happening, contact support through corrections.'}
         </EmptyDescription>
       </EmptyHeader>
@@ -26,7 +26,7 @@ export function AeOwnerStatusEmptyState({ kind }: AeOwnerStatusEmptyStateProps) 
         <div className="flex flex-wrap justify-center gap-3">
           {isNotFound ? (
             <Button asChild variant="default">
-              <a href="/claim"><ArrowRightIcon aria-hidden="true" />List or claim your business</a>
+              <a href="/for-providers"><ArrowRightIcon aria-hidden="true" />Review provider setup</a>
             </Button>
           ) : (
             <Button asChild variant="secondary">

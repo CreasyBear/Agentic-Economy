@@ -50,14 +50,14 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
     return (
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-2xl font-semibold text-foreground">Claim your provider identity to publish</h2></CardTitle>
+          <CardTitle><h2 className="text-2xl font-semibold text-foreground">No provider identity is available</h2></CardTitle>
         </CardHeader>
         <CardContent className="p-5">
-          <p className="text-muted-foreground">A programmable-provider claim connects each admitted operation to the right owner.</p>
+          <p className="text-muted-foreground">Review the provider requirements before publishing operations.</p>
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <Link to="/claim/form" search={{ source: 'supply' }}>Claim provider identity</Link>
+            <Link to="/for-providers">Review provider setup</Link>
           </Button>
         </CardFooter>
       </Card>

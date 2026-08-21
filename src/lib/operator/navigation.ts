@@ -2,12 +2,8 @@ import {
   Activity,
   Bot,
   CircleHelp,
-  ClipboardList,
   Contact,
-  CreditCard,
-  Inbox,
   ListChecks,
-  LockKeyhole,
   ScrollText,
   Search,
   Settings,
@@ -60,7 +56,6 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
       { href: '/owner/status', label: 'Business page', icon: Activity, tier: 'core' },
       { href: '/owner/offerings', label: 'Offerings', icon: Store, tier: 'core' },
       { href: '/owner/supply', label: 'Supply', icon: Wrench, tier: 'core' },
-      { href: '/owner/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
     ],
   },
   {
@@ -78,19 +73,9 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
     id: 'review',
     label: 'Review',
     items: [
-      { href: '/admin/claims', label: 'Claims', icon: ClipboardList, tier: 'core' },
       { href: '/admin/audit-events', label: 'Activity log', icon: ScrollText, tier: 'advanced' },
       { href: '/admin/index-health', label: 'Catalog health', icon: Activity, tier: 'advanced' },
-      { href: '/admin/search-gaps', label: 'Unmatched asks', icon: Search, tier: 'core' },
       { href: '/admin/runs', label: 'Runs', icon: ListChecks, tier: 'advanced' },
-    ],
-  },
-  {
-    id: 'operations',
-    label: 'Operations',
-    items: [
-      { href: '/admin/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
-      { href: '/admin/request-problems', label: 'Failed asks', icon: CircleHelp, tier: 'core' },
     ],
   },
 ] as const
@@ -115,7 +100,7 @@ const operatorUtilityItems: readonly OperatorUtilityItem[] = [
 
 export const roleHomeHref: Record<OperatorRole, string> = {
   owner: '/owner/status',
-  admin: '/admin/claims',
+  admin: '/admin/audit-events',
   developer: '/developers/discovery',
 }
 

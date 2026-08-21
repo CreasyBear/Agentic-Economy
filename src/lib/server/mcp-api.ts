@@ -17,17 +17,15 @@ import { z } from 'zod'
 import { bearerChallenge, bearerModeChallenge } from '@/lib/http/oauth-challenge'
 import { buildProblem, gatewayFailureToProblem, type ProblemDetails, type ProblemKind } from '@/lib/errors'
 import { problem } from '@/lib/server/problem'
+import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
 import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
-import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
-import { isQuarantineFamilyActionId, isQuarantineSurfaceRetired, quarantineSurfaceRetiredProblemInput } from '@/modules/product-frontier/quarantine-write-admission'
-import { DEPRECATION_SUCCESSOR_PATH } from '@/modules/product-frontier/deprecation-notice'
 import {
   agentAuthorityModeAllows,
   type AgentAccessAuthorityMode,
@@ -270,17 +268,11 @@ export function createAeMcpServer(
           readOnlyHint: action.readOnly,
           destructiveHint: !action.readOnly,
           idempotentHint: true,
-          ...(isDeprecatedMcpAction(action.id) ? { deprecated: true } : {}),
         },
       },
       async (data: unknown) => {
         const startedAt = Date.now()
         try {
-          captureLegacyRegistryActionRequest(action.id, 'mcp')
-          if (isQuarantineSurfaceRetired(action.id)) {
-            recordMcpGatewayTelemetry(action.id, data, { kind: 'refused' }, access, startedAt)
-            return mcpToolError(buildProblem(quarantineSurfaceRetiredProblemInput(action.id)))
-          }
           const result = await action.run({
             data,
             context: {
@@ -329,6 +321,9 @@ type McpRequestOptions = Readonly<{
 
 export async function handleMcpRequest(request: Request, options: McpRequestOptions = {}): Promise<Response> {
   return await runWithRequestCorrelation(request, async ({ correlationId }) => {
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      return withRequestCorrelationHeader(methodNotAllowed(['POST', 'DELETE']), correlationId)
+    }
     const actions = options.actions ?? listMcpActions()
     const bounded = await boundedMcpRequest(request)
     if (!bounded.ok) {
@@ -449,14 +444,9 @@ async function actionRequiringAuthenticationForRequest(
   }
 }
 
-function isDeprecatedMcpAction(actionId: string): boolean {
-  return actionId === 'operation.execute' || isQuarantineFamilyActionId(actionId)
-}
-
 function mcpToolDescription(action: AnyAction): string {
   const boundaries = `Boundaries:\n${action.boundaries.map((boundary) => `- ${boundary}`).join('\n')}`
-  if (!isDeprecatedMcpAction(action.id)) return `${action.summary}\n\n${boundaries}`
-  return `${action.summary}\n\nDeprecated. Successor: POST ${DEPRECATION_SUCCESSOR_PATH}.\n\n${boundaries}`
+  return `${action.summary}\n\n${boundaries}`
 }
 
 function requiredModeForAction(action: AnyAction): AgentAccessAuthorityMode {

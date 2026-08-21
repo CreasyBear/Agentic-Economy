@@ -41,7 +41,6 @@ export type OwnerOfferingSupplyReadResult =
         revision?: BusinessOfferingRevisionRecord
         accessPaths: readonly OfferingAccessPathRecord[]
       }>[]
-      cutover: Readonly<{ mode: 'legacy' | 'compare' | 'offering'; lastCheckStatus: 'not_run' | 'matched' | 'mismatch'; postCutoverNativeChanges: boolean }>
       projection: Readonly<{ status: 'current' | 'projection_pending'; observedAt?: number; disposition?: 'current' | 'partial' | 'stale'; lastErrorCode?: string }>
     }>
   | Readonly<{ kind: 'not_found' }>
@@ -64,7 +63,7 @@ type SourceWriteArgs = Readonly<{
 
 const accessDescriptorSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('human_request'), channel: z.enum(['phone', 'website', 'ae_inquiry']), disclosure: z.string(), url: z.string().optional(),
+    kind: z.literal('human_request'), channel: z.enum(['phone', 'website']), disclosure: z.string(), url: z.string().optional(),
   }).superRefine((descriptor, context) => {
     if (descriptor.channel !== 'website') return
     try {

@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AeCustomerRecord } from '@/components/ae/inquiries/AeCustomerRecord'
 import { AeChat } from '@/components/ae/chat/AeChat'
 import {
   blockTelemetryForPrivateRecord,
@@ -58,18 +57,14 @@ export const Route = createFileRoute('/t/$threadId')({
 function ThreadPage() {
   const { threadId } = Route.useParams()
   const { projection } = Route.useLoaderData()
-  const [accessKey, setAccessKey] = useState<string>()
   useEffect(() => {
     securePrivateRecordLocation(window.location, window.history)
     const bootstrappedAccessKey = readPrivateRecordAccessKey(threadId)
     if (bootstrappedAccessKey !== undefined) {
       blockTelemetryForPrivateRecord()
-      setAccessKey(bootstrappedAccessKey)
     }
   }, [threadId])
-  return accessKey === undefined
-    ? <AeChat threadId={threadId} initialProjection={projection} />
-    : <AeCustomerRecord threadId={threadId} recordAccessKey={accessKey} />
+  return <AeChat threadId={threadId} initialProjection={projection} />
 }
 
 

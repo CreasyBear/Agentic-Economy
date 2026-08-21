@@ -7,9 +7,8 @@
  * signs `v1.sessionId.issuedAtMs` with a server-only key; a caller can neither
  * choose nor forge a principal, only present a token this server issued.
  *
- * Key and token format match the anonymous Customer Request submit already in
- * production (`src/lib/server/customer-request-browser-api.ts`,
- * `AE_CONVEX_SERVER_FUNCTION_TOKEN` + HMAC-SHA-256).
+ * Key and token format are HMAC-SHA-256 over `v1.sessionId.issuedAtMs` with a
+ * server-only key (`AE_CONVEX_SERVER_FUNCTION_TOKEN`).
  */
 
 import { constantTimeStringEqual } from '@/lib/server/constant-time'

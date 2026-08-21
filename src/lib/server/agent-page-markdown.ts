@@ -42,7 +42,7 @@ export async function respondWithAgentPageMarkdown(
  * one segment long would otherwise be reported as a missing business.
  */
 const nonBusinessPagePaths = new Set([
-  'about', 'agent-access', 'claim', 'developers', 'engine', 'for-agents',
+  'about', 'agent-access', 'developers', 'engine', 'for-agents',
   'help', 'privacy', 'terms',
 ])
 
