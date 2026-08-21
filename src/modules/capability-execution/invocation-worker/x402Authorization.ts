@@ -3,21 +3,19 @@ import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent } from 'undici'
 import {
-  isPaymentSigningIdempotencyKey,
-  type CdpX402PaymentSigningIntent,
-} from '@/modules/capability-supply/internal/cdp-x402-payment-signer'
-import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
   cdpX402RequestFingerprint,
   createCdpEvmX402PaymentSignature,
   createSandboxEvmX402PaymentSignature,
   credentialFromEnvironment,
+  isPaymentSigningIdempotencyKey,
   readCdpX402PaymentAuthorization,
   readX402PaymentPayerAndNonce,
   verifyExactEvmX402Settlement,
   x402PaymentCredentialRefFromEnvironment,
   type CdpX402RequestFingerprintContext,
+  type CdpX402PaymentSigningIntent,
 } from '@/modules/capability-supply/server'
 import type {
   ProviderConnectionAuthorityValidator,
@@ -799,11 +797,6 @@ export function createX402PaymentCallbacks(
           settlementEvidence?.kind === 'not_submitted'
             ? 'not_settled'
             : settlementEvidence?.kind ?? 'unknown',
-        ...(settlementEvidence !== undefined
-          && settlementEvidence.kind !== 'not_submitted'
-          && settlementEvidence.response !== undefined
-          ? { settlementResponse: settlementEvidence.response }
-          : {}),
         ...(settlementEvidence !== undefined
           && settlementEvidence.kind !== 'not_submitted'
           && settlementEvidence.digest !== undefined

@@ -18,9 +18,9 @@ import {
   FACILITATOR_DISCOVERY_PUBLISHER_REF,
   admitFacilitatorDiscoveryItems,
   dereferenceLocalSchema,
+  parseFacilitatorDiscoverySourceImport,
   type FacilitatorDiscoveryAdmittedDraft,
 } from '@/modules/capability-supply/convex'
-import { parseFacilitatorDiscoverySourceImport } from '@/modules/capability-supply/internal/facilitator-discovery-ingest'
 import { isRecord } from '@/modules/common/is-record'
 
 import type { Id } from './_generated/dataModel'

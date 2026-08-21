@@ -3,6 +3,11 @@ import {
   type JsonValue,
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
+import {
+  extractDiscoveryInfoFromExtension,
+  validateAndExtract,
+  type DiscoveryExtension,
+} from "@x402/extensions/bazaar";
 
 const JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema";
 const BAZAAR_KEY = "bazaar";
@@ -51,7 +56,24 @@ export function admitBazaarFromPaymentRequired(
   if (!isRecord(extensions) || !(BAZAAR_KEY in extensions)) {
     return { kind: "absent" };
   }
-  return { kind: "refused", reason: "bazaar_discovery_invalid" };
+  const extension = extensions[BAZAAR_KEY];
+  if (!isRecord(extension)) {
+    return { kind: "refused", reason: "bazaar_discovery_invalid" };
+  }
+  const discoveryExtension = extension as DiscoveryExtension;
+  try {
+    const validation = validateAndExtract(discoveryExtension);
+    if (!validation.valid) {
+      return { kind: "refused", reason: "bazaar_discovery_invalid" };
+    }
+    const info = extractDiscoveryInfoFromExtension(discoveryExtension, false);
+    return admitBazaarDiscoveryInfo(extension, {
+      input: info.input as Readonly<Record<string, unknown>>,
+      output: info.output,
+    });
+  } catch {
+    return { kind: "refused", reason: "bazaar_discovery_invalid" };
+  }
 }
 
 /**

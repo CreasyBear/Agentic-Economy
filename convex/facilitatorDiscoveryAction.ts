@@ -1,30 +1,26 @@
 "use node"
 
 import { v } from 'convex/values'
-import {
-  extractDiscoveryInfoFromExtension,
-  validateAndExtract,
-  type DiscoveryExtension,
-} from '@x402/extensions/bazaar'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { fetchFacilitatorDiscoveryPages } from '@/modules/capability-supply/server'
-import { importX402Capability } from '@/modules/capability-supply/internal/publication-importer-x402'
 import {
-  admitBazaarDiscoveryInfo,
-  type BazaarAdmission,
-} from '@/modules/capability-supply/internal/publication-importer-x402-bazaar'
-import {
+  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
   admittedFacilitatorDiscoveryDraft,
   decideFacilitatorDiscoveryItem,
-  FACILITATOR_DISCOVERY_MAX_PAGE_SIZE,
   mapFacilitatorDiscoveryImporterRefusal,
   paymentRequiredFromDiscoveryItem,
   type FacilitatorDiscoveryAdmittedDraft,
   type FacilitatorDiscoveryAdmissionResult,
   type FacilitatorDiscoverySkip,
-} from '@/modules/capability-supply/internal/facilitator-discovery-ingest'
-import type { CapabilityPublicationImport } from '@/modules/capability-supply/internal/publication-importer-types'
+} from '@/modules/capability-supply/convex'
+import {
+  admitBazaarFromPaymentRequired,
+  fetchFacilitatorDiscoveryPages,
+} from '@/modules/capability-supply/server'
+import {
+  importX402Capability,
+  type CapabilityPublicationImport,
+} from '@/modules/capability-supply/public'
 import { isRecord } from '@/modules/common/is-record'
 
 import { internal } from './_generated/api'
@@ -41,7 +37,7 @@ export async function admitFacilitatorDiscoveryItems(
       skipped.push({ kind: 'skip', reason: 'resource_invalid' })
       continue
     }
-    const bazaar = admitOfficialBazaar(paymentRequired)
+    const bazaar = admitBazaarFromPaymentRequired(paymentRequired)
     const decision = decideFacilitatorDiscoveryItem(item, bazaar)
     if (decision.kind === 'skip') {
       skipped.push(decision)
@@ -81,33 +77,6 @@ export async function admitFacilitatorDiscoveryItems(
   return { admitted, skipped }
 }
 
-function admitOfficialBazaar(
-  paymentRequired: Readonly<Record<string, unknown>>,
-): BazaarAdmission {
-  const extensions = paymentRequired.extensions
-  const extension = isRecord(extensions) ? extensions.bazaar : undefined
-  if (extension === undefined) {
-    return { kind: 'absent' }
-  }
-  if (!isRecord(extension)) {
-    return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
-  }
-  const discoveryExtension = extension as unknown as DiscoveryExtension
-  try {
-    const validation = validateAndExtract(discoveryExtension)
-    if (!validation.valid) {
-      return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
-    }
-    const info = extractDiscoveryInfoFromExtension(discoveryExtension, false)
-    return admitBazaarDiscoveryInfo(extension, {
-      input: info.input as Readonly<Record<string, unknown>>,
-      output: info.output,
-    })
-  } catch {
-    return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
-  }
-}
-
 function withoutRawBazaarPaymentRequired(
   input: Extract<CapabilityPublicationImport, { kind: 'x402' }>,
 ): Extract<CapabilityPublicationImport, { kind: 'x402' }> {
@@ -131,11 +100,6 @@ export const run = internalAction({
     let complete = fetched.complete && Date.now() < deadlineAt
     let deadlineExceeded = Date.now() >= deadlineAt
     for (const fetchedPage of fetched.pages) {
-      if (Date.now() >= deadlineAt) {
-        complete = false
-        deadlineExceeded = true
-        break
-      }
       if (Date.now() >= deadlineAt) {
         complete = false
         deadlineExceeded = true

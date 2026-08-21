@@ -202,7 +202,9 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
         violation.excerpt.includes(
           "runtime-validated capability publication boundary",
         ))) ||
-    (violation.file === "convex/capabilitySupplyOperations.ts" &&
+    ((violation.file === "convex/capabilitySupplyOperations.ts" ||
+      violation.file === "convex/capabilitySupplyOperationQueries.ts" ||
+      violation.file === "convex/capabilitySupplyOperationKeyless.ts") &&
       violation.excerpt.includes("v.any()") &&
       violation.excerpt.includes("runtime-validated JsonValue boundary")) ||
     (violation.file ===
@@ -396,6 +398,35 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
 
 function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   if (violation.rule !== "forbidden-handshake-import") return false;
+  if (
+    violation.file ===
+    "src/modules/capability-supply/internal/publication-importer-x402-bazaar.ts"
+  ) {
+    return /from\s+['"]@x402\/extensions\/bazaar['"]/.test(
+      violation.excerpt,
+    );
+  }
+  if (
+    violation.file ===
+    "src/modules/capability-supply/internal/x402-evm-receipt-reader.ts"
+  ) {
+    return /from\s+['"](?:@x402\/evm|viem(?:\/[^'"]+)?)['"]/.test(
+      violation.excerpt,
+    );
+  }
+  const reviewedCapabilityTransportFiles = new Set([
+    "src/modules/capability-supply/internal/cdp-x402-payment-signer.ts",
+    "src/modules/capability-supply/internal/readiness-probe-mcp.ts",
+    "src/modules/capability-supply/internal/route-transport-invoke.ts",
+    "src/modules/capability-supply/internal/route-transport-mcp.ts",
+    "src/modules/capability-supply/internal/route-transport-x402.ts",
+    "src/modules/capability-supply/internal/x402-offer-receipt.ts",
+    "src/modules/capability-supply/internal/x402-payment-signer.ts",
+    "src/modules/capability-supply/internal/x402-settlement-verifier.ts",
+  ]);
+  if (reviewedCapabilityTransportFiles.has(violation.file)) {
+    return /from\s+['"](?:@x402\/[^'"]+|@modelcontextprotocol\/sdk\/[^'"]+|viem(?:\/[^'"]+)?)['"]/.test(violation.excerpt);
+  }
   if (
     violation.file ===
     "src/modules/capability-supply/internal/x402-payment-signer.ts"

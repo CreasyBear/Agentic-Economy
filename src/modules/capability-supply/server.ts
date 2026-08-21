@@ -1,14 +1,35 @@
 export { runCapabilityReadinessProbe } from './internal/readiness-probe'
 
-export { credentialFromEnvironment, x402PaymentCredentialRefFromEnvironment } from './internal/server-credential'
+export {
+  cdpX402CustodyBudgetRef,
+  cdpX402CustodyConfigurationFromEnvironment,
+  credentialFromEnvironment,
+  x402PaymentCredentialRefFromEnvironment,
+} from './internal/server-credential'
 
 export { signRouteTransportCall } from './internal/route-call-signing'
 export {
-  createEvmX402PaymentSignature,
+  createCdpEvmX402PaymentSignature,
+  createCdpEvmX402PaymentSignature as createEvmX402PaymentSignature,
+  cdpX402RequestFingerprint,
+  isPaymentSigningIdempotencyKey,
+  readCdpX402PaymentAuthorization,
+} from './internal/cdp-x402-payment-signer'
+export type {
+  CdpX402PaymentAuthorization,
+  CdpX402RequestFingerprintContext,
+  CdpX402PaymentSigningIntent,
+} from './internal/cdp-x402-payment-signer'
+export { createSandboxEvmX402PaymentSignature } from './internal/x402-payment-signer'
+export {
   encodeX402PaymentRequiredHeader,
   encodeX402PaymentResponseHeader,
   readX402PaymentPayer,
+  readX402PaymentPayerAndNonce,
 } from './internal/x402-payment-signer'
+export { fetchFacilitatorDiscoveryPages } from './internal/facilitator-discovery-client'
+export { admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
+export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'
 export type {
   X402PaymentRequired,
   X402SettlementResponse,
@@ -67,10 +88,8 @@ export {
   providerConnectionRevocationRef,
   recordProviderConnectionCleanupResult,
   reauthorizeProviderConnection,
-  reconnectProviderConnection,
   resolveProviderConnectionCredentialRef,
   resolveProviderConnectionCredentialRefForLease,
-  rotateProviderConnection,
   PROVIDER_CONNECTION_CLEANUP_OUTCOMES,
   PROVIDER_CONNECTION_CLEANUP_WORK_KINDS,
   PROVIDER_CONNECTION_LEASE_REFUSAL_CODES,
@@ -97,8 +116,6 @@ export {
   type ProviderConnectionRefusalCode,
   type RecordProviderConnectionCleanupResultCommand,
   type ReauthorizeProviderConnectionCommand,
-  type ReconnectProviderConnectionCommand,
-  type RotateProviderConnectionCommand,
 } from './provider-connection'
 
 export {
