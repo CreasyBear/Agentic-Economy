@@ -1,0 +1,144 @@
+import { convexTest } from 'convex-test'
+import { describe, expect, it } from 'vitest'
+
+import { internal } from '../../convex/_generated/api'
+import schema from '../../convex/schema'
+import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
+import { convexModules } from '../helpers/convex-fixtures'
+
+describe('facilitator discovery reconciliation', () => {
+  it('creates deterministic provider state and replays the same publication', async () => {
+    const backend = convexTest(schema, convexModules)
+    const deadlineAt = Date.now() + 60_000
+    const item = JSON.stringify(timezoneFixture.paymentRequired)
+
+    const first = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: Array.from({ length: 21 }, () => item),
+      complete: false,
+      deadlineAt,
+    })
+    const second = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [item],
+      complete: false,
+      deadlineAt,
+    })
+    expect(first).toMatchObject({ admitted: 21, published: 1, skipped: 20 })
+    expect(second).toMatchObject({ admitted: 1, published: 0, skipped: 1 })
+
+    const persisted = await backend.run(async (ctx) => ({
+      businesses: await ctx.db.query('businesses').collect(),
+      owners: await ctx.db.query('owners').collect(),
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+    }))
+    expect(persisted.businesses).toHaveLength(1)
+    expect(persisted.owners[0]?.clerkUserId).toMatch(/^system:facilitator-discovery:/u)
+    expect(persisted.connections[0]).toMatchObject({
+      providerRef: 'provider:x402:402timezones.vercel.app',
+      providerAccountRef: 'x402:https://402timezones.vercel.app/api/convert-timezone',
+      adapterId: 'x402-fetch:v2',
+      credentialRef: null,
+    })
+    expect(persisted.publications).toHaveLength(1)
+    expect(JSON.parse(persisted.publications[0]?.pricingConfigJson ?? '{}')).toMatchObject({
+      version: 'pricing:v2',
+      providerAmount: { units: '1000' },
+      platformFee: { units: '100' },
+      paidAmount: { units: '1100' },
+    })
+
+    const withdrawn = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [],
+      complete: true,
+      seenPublicationRefs: [],
+      deadlineAt,
+    })
+    expect(withdrawn.withdrawn).toBe(1)
+    await expect(backend.run(async (ctx) => ({
+      business: await ctx.db.query('businesses').unique(),
+      current: await ctx.db.query('capabilityPublications')
+        .withIndex('by_networkId_and_disposition', (query) => (
+          query.eq('networkId', 'ae:public').eq('disposition', 'current')
+        )).collect(),
+    }))).resolves.toMatchObject({
+      business: { publicStatus: 'unpublished' },
+      current: [],
+    })
+  })
+
+  it('does not create a business for malformed input or withdraw on a partial run', async () => {
+    const backend = convexTest(schema, convexModules)
+    const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [JSON.stringify({ malformed: true })],
+      complete: false,
+      deadlineAt: Date.now() + 60_000,
+    })
+    expect(result).toMatchObject({ admitted: 0, published: 0, withdrawn: 0 })
+    await expect(backend.run(async (ctx) => await ctx.db.query('businesses').collect())).resolves.toHaveLength(0)
+  })
+
+  it('performs no writes when the reconciliation deadline has expired', async () => {
+    const backend = convexTest(schema, convexModules)
+
+    const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [JSON.stringify(timezoneFixture.paymentRequired)],
+      complete: true,
+      seenPublicationRefs: [],
+      deadlineAt: 0,
+    })
+
+    expect(result).toMatchObject({
+      published: 0,
+      withdrawn: 0,
+      deadlineExceeded: true,
+    })
+    await expect(backend.run(async (ctx) => ({
+      businesses: await ctx.db.query('businesses').collect(),
+      owners: await ctx.db.query('owners').collect(),
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+    }))).resolves.toMatchObject({
+      businesses: [],
+      owners: [],
+      connections: [],
+      publications: [],
+    })
+  })
+
+  it('rejects structural reconciliation limits before any writes', async () => {
+    const backend = convexTest(schema, convexModules)
+    const deadlineAt = Date.now() + 60_000
+    const rawItem = JSON.stringify(timezoneFixture.paymentRequired)
+
+    await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: Array.from({ length: 101 }, () => rawItem),
+      complete: false,
+      deadlineAt,
+    })).rejects.toThrow('facilitator_discovery_batch_invalid')
+
+    await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: ['"' + 'x'.repeat(262_144) + '"'],
+      complete: false,
+      deadlineAt,
+    })).rejects.toThrow('facilitator_discovery_batch_invalid')
+
+    await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [],
+      complete: true,
+      seenPublicationRefs: Array.from({ length: 2_001 }, (_, index) => `ref-${index}`),
+      deadlineAt,
+    })).rejects.toThrow('facilitator_discovery_batch_invalid')
+
+    await expect(backend.run(async (ctx) => ({
+      businesses: await ctx.db.query('businesses').collect(),
+      owners: await ctx.db.query('owners').collect(),
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+    }))).resolves.toMatchObject({
+      businesses: [],
+      owners: [],
+      connections: [],
+      publications: [],
+    })
+  })
+})
