@@ -5,16 +5,23 @@ import { internal } from './_generated/api'
 const crons = cronJobs()
 
 crons.interval(
-  'refresh capability supply readiness',
+  'reconcile due facilitator invocations',
   { minutes: 1 },
-  internal.capabilitySupply.scheduleDueCapabilityProbes,
-  {}
+  internal.capabilityOperationInvocationWorker.reconcileScheduled,
+  {},
 )
 
 crons.interval(
-  'cleanup expired inquiry abuse buckets',
-  { hours: 1 },
-  internal.inquiries.cleanupExpiredInquiryAbuseBuckets,
+  'refresh facilitator discovery',
+  { minutes: 10 },
+  internal.facilitatorDiscoveryAction.run,
+  {},
+)
+
+crons.interval(
+  'refresh capability supply readiness',
+  { minutes: 1 },
+  internal.capabilitySupply.scheduleDueCapabilityProbes,
   {}
 )
 
@@ -26,10 +33,10 @@ crons.interval(
 )
 
 crons.interval(
-  'cleanup expired OAuth grants',
+  'cleanup expired agent access oauth grants',
   { hours: 1 },
   internal.agentAccessOAuth.cleanupExpiredOAuthGrants,
-  {}
+  {},
 )
 
 crons.cron(
