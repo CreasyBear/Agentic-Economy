@@ -5,16 +5,6 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
   sourceWriteArgs: {},
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
 }))
-vi.mock('../../../src/modules/money/public', async () => {
-  const actual = await vi.importActual('../../../src/modules/money/public')
-  return {
-    ...actual,
-    evaluateLiveMoneyGate: () => ({
-      kind: 'accepted' as const,
-      policyId: 'test-money-policy',
-    }),
-  }
-})
 
 import {
   applyCreditTopup,
@@ -382,6 +372,41 @@ describe('Stripe Checkout top-up lifecycle', () => {
       code: 'ledger_idempotency_conflict',
     })
     expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+  })
+
+  it('refuses account events without inserting an ignored Stripe row', async () => {
+    const db = new MemoryDb()
+    const result = await apply(
+      { db, auth: identity },
+      {
+        event: {
+          kind: 'account',
+          stripeEventId: 'evt_account_updated_1',
+          eventType: 'account.updated',
+          externalRef: 'acct_connect_1',
+          stripeAccountId: 'acct_connect_1',
+          providerObjectDigest: 'sha256:account-object-1',
+          payloadDigest: 'sha256:account-payload-1',
+          observedAt: 10,
+        },
+        readback: {
+          externalRef: 'cs_test_topup_1',
+          amount: { currency: 'USD', units: '1050', exponent: 2 },
+          status: 'succeeded',
+          evidenceRef: 'stripe:cs_test_topup_1',
+          requestDigest: 'sha256:request-topup-1',
+          metadataDigest: 'sha256:metadata-topup-1',
+          checkoutSessionDigest: 'sha256:checkout-topup-1',
+          evidenceDigest: 'sha256:evidence-topup-1',
+        },
+        ...sourceArgs,
+      },
+    )
+    expect(result).toMatchObject({
+      kind: 'refused',
+      code: 'payment_binding_invalid',
+    })
+    expect(db.rows('moneyStripeEvents')).toHaveLength(0)
   })
 })
 

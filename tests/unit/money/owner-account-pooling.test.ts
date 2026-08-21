@@ -16,16 +16,6 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
   sourceWriteArgs: {},
   requireSourceWrite: vi.fn(async () => ({ kind: 'accepted' as const })),
 }))
-vi.mock('../../../src/modules/money/public', async () => {
-  const actual = await vi.importActual<typeof import('@/modules/money/public')>('@/modules/money/public')
-  return {
-    ...actual,
-    evaluateLiveMoneyGate: () => ({
-      kind: 'accepted' as const,
-      policyId: 'test-money-policy',
-    }),
-  }
-})
 
 import { authorizeInvocationCharge, reserveCreditTopup } from '../../../convex/moneyLedger'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

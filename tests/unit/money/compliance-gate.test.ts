@@ -7,8 +7,6 @@ import {
   applyTopup,
   authorizePaidCharge,
   createLedgerState,
-  evaluateLiveMoneyGate,
-  LIVE_MONEY_GATE_POLICY,
   validatePaymentBinding,
   type ExactAmount,
   type LedgerState,
@@ -29,7 +27,7 @@ const approved: PaymentBinding = {
   providerRef: accountRefForProvider('business-1', 'USD'),
   actionVersion: 'published-operation:v1',
   expiresAt: 100,
-  idempotencyKey: 'charge-key-1',
+  idempotencyKey: 'charge-1',
 }
 
 function chargeInput(state: LedgerState, binding: PaymentBinding = approved) {
@@ -58,24 +56,7 @@ function chargeInput(state: LedgerState, binding: PaymentBinding = approved) {
   }
 }
 
-describe('T52 first-dollar money gate', () => {
-  it('refuses live money while any counsel sign-off remains open', () => {
-    const result = evaluateLiveMoneyGate()
-
-    expect(result).toMatchObject({ kind: 'refused', code: 'live_money_gate_open', retryable: false })
-    expect(LIVE_MONEY_GATE_POLICY.counselSignoffs.every((row) => row.status === 'open')).toBe(true)
-  })
-
-  it('admits only an accepted policy record with Stripe readiness', () => {
-    const acceptedPolicy = {
-      ...LIVE_MONEY_GATE_POLICY,
-      counselSignoffs: LIVE_MONEY_GATE_POLICY.counselSignoffs.map((row) => ({ ...row, status: 'accepted' as const, artifactRef: 'counsel:accepted' })),
-      stripe: { mode: 'live' as const, readiness: 'ready' as const },
-    }
-
-    expect(evaluateLiveMoneyGate(acceptedPolicy)).toMatchObject({ kind: 'accepted', policyId: LIVE_MONEY_GATE_POLICY.policyId })
-  })
-
+describe('payment binding approval', () => {
   it('validates the exact payment binding before the pure ledger can debit', () => {
     expect(validatePaymentBinding({ approved, requested: approved, now: 10 })).toMatchObject({ kind: 'accepted' })
 
