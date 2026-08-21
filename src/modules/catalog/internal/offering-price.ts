@@ -17,6 +17,7 @@ export const OfferingPriceKindValues = ['fixed', 'from', 'range', 'quote_only'] 
 /** Currencies currently supported by owner-entered offering prices. */
 export const SUPPORTED_OFFERING_CURRENCIES = ['AUD', 'USD'] as const
 export type SupportedOfferingCurrency = (typeof SUPPORTED_OFFERING_CURRENCIES)[number]
+export const DEFAULT_OFFERING_PRICE_CURRENCY: SupportedOfferingCurrency = 'USD'
 export const supportedOfferingCurrencySchema = z.enum(SUPPORTED_OFFERING_CURRENCIES)
 
 export function isSupportedOfferingCurrency(value: unknown): value is SupportedOfferingCurrency {

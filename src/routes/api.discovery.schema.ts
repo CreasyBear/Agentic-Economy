@@ -156,15 +156,15 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
     firstCatalog === undefined
       ? unavailableJsonRoute<unknown>({
           route: `${origin}/{slug}/ucp`,
-          label: 'AE-hosted UCP fallback',
+          label: 'AE-hosted UCP manifest',
           checkedAt,
           reason: 'No public slug was returned by /api/businesses.',
         })
       : await executeJsonRoute<unknown>({
           route: `${origin}/${encodeURIComponent(firstCatalog.slug)}/ucp`,
-          label: 'AE-hosted UCP fallback',
+          label: 'AE-hosted UCP manifest',
           checkedAt,
-          expectedSchemaVersion: 'ae-ucp-fallback:v2',
+          expectedSchemaVersion: 'ae-ucp:v2',
           run: () => handleDurableUcpManifestRequest(new Request(`${origin}/${firstCatalog.slug}/ucp`), firstCatalog.slug),
         })
   const [llms, sitemap, robots] = await Promise.all([

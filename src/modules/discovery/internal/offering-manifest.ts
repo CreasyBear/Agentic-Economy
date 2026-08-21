@@ -3,19 +3,14 @@ import type { OfferingPrice } from '@/modules/catalog/public'
 import type { ExactAmount } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
-import {
-  PUBLIC_PHONE_CHANNEL_DISCLOSURE,
-  PUBLIC_WEBSITE_CHANNEL_DISCLOSURE,
-} from '@/modules/inquiries/public-copy'
 import type {
   PublicBusinessCatalogApiV2Dto,
   PublicOfferingAccessPathDto,
 } from '@/modules/registry/public'
-import type { BusinessToolDescriptor } from '@/modules/business-tools/public'
 
 import { projectManifestCatalog, safePublicText } from './manifest-projection'
 
-export const OfferingDiscoveryManifestSchemaVersion = 'ae-ucp-fallback:v2' as const
+export const OfferingDiscoveryManifestSchemaVersion = 'ae-ucp:v2' as const
 
 export type OfferingDiscoveryManifestContract = Readonly<{
   schemaVersion: typeof OfferingDiscoveryManifestSchemaVersion
@@ -49,11 +44,6 @@ export type OfferingDiscoveryManifestContract = Readonly<{
       validUntil?: number
     }>
   }>[]
-  /**
-   * What an agent may do with this business, not merely what it is. Present
-   * and non-empty only when the underlying route would accept the call.
-   */
-  tools: readonly BusinessToolDescriptor[]
 }>
 
 export type BuildOfferingDiscoveryManifestResult =
@@ -64,30 +54,14 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
   business?: PublicBusinessCatalogApiV2Dto
   canonicalBaseUrl: string
   now: number
-  /**
-   * Whether the inquiry route would actually accept a first contact for this
-   * business. The human page already withdraws first-contact copy when it
-   * would not (`projectPublicInquiryAvailability`); the machine manifest was
-   * bypassing that projection and telling agents to "use the inquiry form"
-   * for businesses the route refuses. Absent means unknown, treated as not
-   * admitted, because inviting a refused send is the worse failure.
-   */
-  inquiryAdmitted?: boolean
-  /**
-   * Built by the caller so this stays a pure projection; the descriptor
-   * builder reaches into the action registry, which does not belong in a
-   * discovery document builder.
-   */
-  tools?: readonly BusinessToolDescriptor[]
 }>): BuildOfferingDiscoveryManifestResult {
   if (input.business === undefined) return { kind: 'hidden', reason: 'not_public' }
 
   const business = input.business
-  const inquiryAdmitted = input.inquiryAdmitted === true
   const projection = projectManifestCatalog(business, (offering, projectedOffering) => ({
     ...projectedOffering,
     ...(projectedOffering.price === undefined ? {} : { price: safeManifestPrice(projectedOffering.price) }),
-    accessPaths: projectManifestAccessPaths(offering.accessPaths, inquiryAdmitted),
+    accessPaths: projectManifestAccessPaths(offering.accessPaths),
     support: offering.support,
   }))
   const baseUrl = trimTrailingSlashes(input.canonicalBaseUrl)
@@ -108,34 +82,23 @@ export function buildOfferingDiscoveryManifest(input: Readonly<{
     offerings: projection.offerings,
   }
 
-  // `generatedHash` identifies the business projection. Tool descriptors are
-  // derived from action code rather than source data, so hashing them would
-  // churn the business fingerprint on unrelated releases.
   return {
     kind: 'available',
     manifest: {
       ...body,
       generatedHash: canonicalDigest(body),
-      tools: inquiryAdmitted ? (input.tools ?? []) : [],
     },
   }
 }
 
-/**
- * Mirrors `projectPublicInquiryOfferingSupply` for the machine manifest. When
- * the inquiry route would refuse, the AE inquiry path is withdrawn rather than
- * advertised without a working destination, and the remaining human channels
- * are described by their own channel instead of stored first-contact copy that
- * points at a form the send would be rejected by.
- */
+const PUBLIC_PHONE_CHANNEL_DISCLOSURE = 'Call the published number on the listing.'
+const PUBLIC_WEBSITE_CHANNEL_DISCLOSURE = 'Use the published website on the listing.'
+
 function projectManifestAccessPaths(
   paths: readonly PublicOfferingAccessPathDto[],
-  inquiryAdmitted: boolean,
 ): readonly PublicOfferingAccessPathDto[] {
-  if (inquiryAdmitted) return paths.map(sanitizeAccessPath)
   return paths.flatMap((path): readonly PublicOfferingAccessPathDto[] => {
     if (path.kind !== 'human_request') return [sanitizeAccessPath(path)]
-    if (path.channel === 'ae_inquiry') return []
     return [sanitizeAccessPath({
       ...path,
       disclosure: path.channel === 'phone'

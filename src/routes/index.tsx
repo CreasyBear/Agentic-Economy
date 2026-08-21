@@ -9,52 +9,22 @@ import { Input } from '@/components/ui/input'
 import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { ServicesError, ServicesLoading } from '@/components/ae/home/HomeRouteStates'
-import { RootWorkTreeLoop } from '@/components/ae/home/RootWorkTreeLoop'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
-import {
-  readRootWorkTreeServer,
-  type RootWorkTreeReadback,
-} from '@/modules/work-tree/human-root.functions'
+import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
 
 const rootSearchSchema = z.object({
   q: z.string().optional().catch(undefined),
   project: z.string().max(200).optional().catch(undefined),
 })
 
-/** Fixed browse chips that map to preset asks the engine already resolves. */
-const CATEGORY_CHIPS: readonly { label: string; query: string }[] = [
-  { label: 'Finance & crypto', query: 'crypto price' },
-  { label: 'Search & research', query: 'search the web' },
-  { label: 'Geo & maps', query: 'geocode' },
-  { label: 'Reference', query: 'wikipedia' },
-]
-
-
 export type RootSearchParams = {
   q?: string | undefined
   project?: string | undefined
 }
 
-export type RootRouteReadback =
-  | Readonly<{ kind: 'work-tree'; readback: RootWorkTreeReadback }>
-
-export type RootRouteDeps = Readonly<{
-  readWorkTree: (projectId: string) => Promise<RootWorkTreeReadback>
-}>
-
-export const defaultRootRouteDeps: RootRouteDeps = {
-  readWorkTree: (projectId) => readRootWorkTreeServer({ data: { projectId } }),
-}
-
-
-/** Root route readback: explicit project references read the source-backed tree. */
-export async function loadRootRoute(
-  search: RootSearchParams,
-  deps: RootRouteDeps = defaultRootRouteDeps,
-): Promise<RootRouteReadback | undefined> {
-  const projectId = search.project?.trim() ?? ''
-  if (projectId.length === 0) return undefined
-  return { kind: 'work-tree', readback: await deps.readWorkTree(projectId) }
+/** Home never reads WorkTree. `project` is accepted so old `/?project=` URLs do not 400. */
+export async function loadRootRoute(_search: RootSearchParams): Promise<undefined> {
+  return undefined
 }
 
 export function validateRootSearch(search: Record<string, unknown>): RootSearchParams {
@@ -69,13 +39,12 @@ export function validateRootSearch(search: Record<string, unknown>): RootSearchP
 
 export const Route = createFileRoute('/')({
   validateSearch: validateRootSearch,
-  loaderDeps: ({ search }) => ({ project: search.project }),
   beforeLoad: ({ search }) => {
-    if (search.project === undefined && search.q !== undefined) {
+    if (search.q !== undefined) {
       throw redirect({ to: '/t/new', search: { q: search.q } })
     }
   },
-  loader: ({ deps }) => loadRootRoute(deps),
+  loader: () => loadRootRoute({}),
   pendingComponent: ServicesLoading,
   errorComponent: ServicesError,
   head: () => ({
@@ -89,10 +58,8 @@ export const Route = createFileRoute('/')({
 
 
 function ServicesRoute() {
-  const { q, project } = Route.useSearch()
-  const data = Route.useLoaderData()
+  const { q } = Route.useSearch()
   const navigate = useNavigate()
-  const hasAnswer = project !== undefined
   const [queryValue, setQueryValue] = useState(q ?? '')
   const [queryError, setQueryError] = useState<'required' | 'too-long' | undefined>()
   const queryTooLong = queryValue.length > QUERY_MAX_LENGTH
@@ -119,11 +86,7 @@ function ServicesRoute() {
     <AePublicShell>
       <div className="grid w-full gap-10 px-4 py-14 sm:px-6 md:py-20">
         <section className="mx-auto grid w-full max-w-3xl justify-items-center gap-7 text-center">
-          <h1
-            className={hasAnswer
-              ? 'max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl'
-              : 'max-w-4xl text-4xl leading-tight tracking-tight md:text-6xl'}
-          >
+          <h1 className="max-w-4xl text-4xl leading-tight tracking-tight md:text-6xl">
             {HOME.heroHeading}
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
@@ -151,7 +114,7 @@ function ServicesRoute() {
                   type="search"
                   value={queryValue}
                   required
-                  placeholder="e.g. Get a quote for solar installation, or the current price of bitcoin"
+                  placeholder={`e.g. ${AE_CATALOG_EXAMPLE_ASKS[0].query}`}
                   autoComplete="off"
                   aria-describedby="service-search-hint service-search-count"
                   aria-invalid={queryError !== undefined || queryTooLong ? 'true' : undefined}
@@ -182,64 +145,34 @@ function ServicesRoute() {
             </form>
           </Card>
 
-          {hasAnswer ? null : (
-            <nav aria-label="Browse by category" className="flex flex-wrap justify-center gap-2.5">
-              {CATEGORY_CHIPS.map((chip) => (
-                <Link
-                  key={chip.label}
-                  to="/t/new"
-                  search={{ q: chip.query }}
-                  className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
-                >
-                  {chip.label}
-                </Link>
-              ))}
-            </nav>
-          )}
+          <nav aria-label="Example asks" className="flex flex-wrap justify-center gap-2.5">
+            {AE_CATALOG_EXAMPLE_ASKS.map((ask) => (
+              <Link
+                key={ask.label}
+                to="/t/new"
+                search={{ q: ask.query }}
+                className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+              >
+                {ask.label}
+              </Link>
+            ))}
+          </nav>
 
-          {hasAnswer ? null : (
-            <nav aria-label="Example asks" className="flex flex-wrap justify-center gap-x-5 gap-y-1.5">
-              {HOME.exampleAsks.map((ask) => (
-                <Link
-                  key={ask}
-                  to="/t/new"
-                  search={{ q: ask }}
-                  className="inline-flex min-h-11 items-center px-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  {ask}
-                </Link>
-              ))}
-            </nav>
-          )}
-
-          {hasAnswer ? null : (
-            <div className="grid w-full gap-3 text-left sm:grid-cols-2">
+          <div className="grid w-full gap-3 text-left sm:grid-cols-2">
               {[AGENT_DOOR, BUSINESS_DOOR].map((door) => (
                 <Card key={door.href} className="grid gap-1 border border-border bg-card p-5">
                   <h2 className="block font-semibold text-foreground">{door.heading}</h2>
                   <p className="block text-sm text-muted-foreground">
                     {door.body}
                   </p>
-                  {door.href === '/claim?source=supply' ? (
-                    <Link to="/claim" search={{ source: 'supply' }} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
-                      {door.cta}
-                    </Link>
-                  ) : (
-                    <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
-                      {door.cta}
-                    </Link>
-                  )}
+                  <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
+                    {door.cta}
+                  </Link>
                 </Card>
               ))}
             </div>
-          )}
-
-          {data?.kind === 'work-tree' ? (
-            <RootWorkTreeLoop readback={data.readback} />
-          ) : null}
         </section>
       </div>
     </AePublicShell>
   )
 }
-

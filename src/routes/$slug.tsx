@@ -1,17 +1,13 @@
-import { Outlet, Link, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
+import { Outlet, Link, createFileRoute, notFound, useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
+import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
-import {
-  buildPublicInquiryAffordance,
-  projectPublicInquiryAvailability,
-} from '@/modules/inquiries/route-readbacks'
 import { serializeJsonLd } from '@/modules/seo/public'
 
 type ProviderListingSearch = {
@@ -236,49 +232,6 @@ export function PublicBusinessUnavailable() {
   )
 }
 
-export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
-  // `data` crosses the router's not-found boundary untyped, and a bare notFound()
-  // raised anywhere under /$slug carries none: default to the claim we can defend.
-  const reason: PublicBusinessPageNotFoundReason =
-    typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'not_public'
-      ? 'not_public'
-      : 'no_such_business'
-
-  return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-        {reason === 'not_public' ? (
-          <Empty className="border border-border bg-card p-5">
-            <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">Business page unavailable</h1>
-              <EmptyDescription>This page is not visible right now. The business may need to claim or review it.</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/claim">Claim your business page</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-              </div>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <Empty className="border border-border bg-card p-5">
-            <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">No business page at this address</h1>
-              <EmptyDescription>Nothing is published here. Check the address, or return to Ask.</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Ask a question</Link></Button>
-              </div>
-            </EmptyContent>
-          </Empty>
-        )}
-      </section>
-    </AePublicShell>
-  )
-}
-
 function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
@@ -293,16 +246,14 @@ function PublicBusinessRoute() {
     return <PublicBusinessUnavailable />
   }
 
-  const { page, admission, supply } = routeData
-  const catalog = projectPublicInquiryAvailability(page.catalog, admission)
-  const inquiryAffordance = buildPublicInquiryAffordance(catalog, undefined, admission)
+  const { page, supply } = routeData
+  const catalog = page.catalog
   const agentJsonUrl = `/api/businesses/${catalog.slug}`
 
   return (
     <AePublicShell>
       <AeProviderListingPage
         catalog={catalog}
-        inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
         {...(supply === undefined ? {} : { supply })}
         {...(from === undefined ? {} : { backFrom: from })}

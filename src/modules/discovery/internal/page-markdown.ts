@@ -10,7 +10,7 @@ import {
   OperationMarketIdempotencyLine,
   OperationMarketInvokeScopeLine,
 } from './offering-discovery-file'
-import { safePublicText } from './ucp-manifest'
+import { safePublicText } from './manifest-projection'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { operationRouteExamples } from './operation-contract'
@@ -267,4 +267,3 @@ function businessContextLabel(context: BusinessContext): string {
     ? `${context.suburb}, ${context.stateTerritory}`
     : `${context.providerIdentifier} (${context.website})`
 }
-
