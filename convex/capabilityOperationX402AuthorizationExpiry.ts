@@ -1,6 +1,6 @@
 import { v, type Infer, type ObjectType } from 'convex/values'
 
-import { reconciliationValue } from '@/modules/capability-execution/internal/convex-schema'
+import { reconciliationValue } from '@/modules/capability-execution/convex'
 
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'

@@ -24,9 +24,9 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   reconciliationEvidenceValue,
+  reconciliationValue,
   recoveryResultValue,
 } from '@/modules/capability-execution/convex'
-import { reconciliationValue } from '@/modules/capability-execution/internal/convex-schema'
 import type { OperationInvokeReceipt } from '@/modules/capability-execution/operation-invoke-contracts'
 import {
   verifyExactEvmX402Settlement,

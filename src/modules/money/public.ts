@@ -738,6 +738,7 @@ export {
   decideExternalSpendFinalization,
   decideExternalSpendReconciliation,
   decideExternalSpendReversal,
+  externalSpendCustodyPolicyRefusal,
   externalSpendFinalizationCommandRefusal,
   externalSpendIdentityDigest,
   externalSpendIdentityFromReservation,

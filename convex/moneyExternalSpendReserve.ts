@@ -6,8 +6,8 @@ import {
   prepareCredentialBudgetReservation,
   reserveCustodyDailyBudgetInTransaction,
 } from './moneyBudgetPersist'
-import { externalSpendCustodyPolicyRefusal } from '../src/modules/money/internal/external-spend'
 import {
+  externalSpendCustodyPolicyRefusal,
   externalSpendIdentityDigest,
   externalSpendPaymentFactsValid,
   mintExternalSpendIdentity,

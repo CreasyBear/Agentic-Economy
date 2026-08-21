@@ -3,8 +3,8 @@ import { v, type Infer } from 'convex/values'
 import { action, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { actionInvocationTransactArgs } from './actionInvocationControl'
-import { invocationReconciliationValue } from '@/modules/capability-execution/internal/convex-schema'
 import {
+  invocationReconciliationValue,
   jsonObject,
   operationResultValue,
   reconciliationEvidenceValue,
