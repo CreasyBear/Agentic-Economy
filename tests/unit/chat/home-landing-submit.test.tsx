@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
+import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 
 const routeState = vi.hoisted(() => {
@@ -80,17 +81,15 @@ describe('plan-first home', () => {
     expect(screen.getByText(HOME.heroSubhead)).toBeTruthy()
     const examples = screen.getByRole('navigation', { name: 'Example asks' })
     const exampleLinks = Array.from(examples.querySelectorAll('a'))
-    expect(exampleLinks.length).toBe(HOME.exampleAsks.length)
-    expect(screen.getByRole('link', { name: 'Show me a random cat photo' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Search the web for the latest on electric cars' })).toBeNull()
-    // The router serialises `search` with URLSearchParams (spaces as `+`), not encodeURIComponent.
-    // The value is pinned to the real copy; only the encoding is derived, since encoding is the
-    // router's job and this test is about the home page passing the ask through to the link.
-    const firstAsk = HOME.exampleAsks[0]!
+    expect(exampleLinks.length).toBe(AE_CATALOG_EXAMPLE_ASKS.length)
+    expect(screen.getByRole('link', { name: AE_CATALOG_EXAMPLE_ASKS[0]!.label })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Show me a random cat photo' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Finance & crypto' })).toBeNull()
+    const firstAsk = AE_CATALOG_EXAMPLE_ASKS[0]!
     expect(exampleLinks.map((link) => link.getAttribute('href')))
-      .toContain(`/t/new?${new URLSearchParams({ q: firstAsk }).toString()}`)
+      .toContain(`/t/new?${new URLSearchParams({ q: firstAsk.query }).toString()}`)
     expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim?source=supply')).toBe(true)
+    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/for-providers')).toBe(true)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
   })
 
@@ -99,7 +98,7 @@ describe('plan-first home', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: AGENT_DOOR.heading })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: BUSINESS_DOOR.heading })).toBeTruthy()
-    const categories = screen.getByRole('navigation', { name: 'Browse by category' })
+    const categories = screen.getByRole('navigation', { name: 'Example asks' })
     for (const link of categories.querySelectorAll('a')) {
       expect(link.classList.contains('min-h-11')).toBe(true)
     }

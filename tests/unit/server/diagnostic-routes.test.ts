@@ -38,9 +38,13 @@ function productionReadinessEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
-    AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
-    AE_X402_PAYMENT_PRIVATE_KEY: 'test-only-x402-payer-placeholder',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":"https://base.example/rpc"}',
+    CDP_API_KEY_ID: 'cdp-key-id',
+    CDP_API_KEY_SECRET: 'cdp-key-secret',
+    CDP_WALLET_SECRET: 'cdp-wallet-secret',
+    AE_X402_CDP_ACCOUNT_NAME: 'agentic-economy-x402',
+    AE_X402_CUSTODY_ENABLED: 'true',
+    AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'test-only-stripe-secret',
     STRIPE_WEBHOOK_SECRET: 'test-only-stripe-webhook-secret',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
@@ -100,7 +104,8 @@ describe('operational diagnostics routes', () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain('convex.example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('source-write-secret')
     expect(JSON.stringify(result.diagnostics)).not.toContain('test-only-x402-payer-placeholder')
-    expect(JSON.stringify(result.diagnostics)).not.toContain('env:AE_X402_PAYMENT_PRIVATE_KEY')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-key-secret')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-wallet-secret')
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 

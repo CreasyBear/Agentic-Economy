@@ -38,7 +38,6 @@ const provider: AnswerSource = {
   trustCue: 'Published listing only',
   nextStepLabel: 'Send inquiry',
   detailUrl: '/invented-provider',
-  inquiryUrl: '/invented-provider/inquiry',
   services: [
     {
       name: 'Emergency plumbing',
@@ -102,9 +101,10 @@ describe('answer turn catalog grounding', () => {
     if (admission.kind !== 'reserved') throw new Error(`fixture reservation ${admission.kind}`)
 
     const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'Compare the top two' } }],
       prose: {
-        oneLine: 'No prose should be needed for this boundary.',
-        summary: 'No prose should be needed for this boundary.',
+        oneLine: 'No listed businesses matched this comparison.',
+        summary: 'A fresh catalog search returned no listed businesses to compare.',
         whatToDoNow: 'Ask a supported question.',
       },
     }))
@@ -148,12 +148,11 @@ describe('answer turn catalog grounding', () => {
     expect(terminalFrames).toHaveLength(1)
     expect(observed.at(-1)).toBe(terminalFrames[0])
     expect(terminalFrames[0]).toMatchObject({
-      event: { type: 'error', problem: { code: 'grounding_failed' } },
-      durableStatus: 'error',
+      event: { type: 'complete' },
+      durableStatus: 'complete',
       reservationState: 'finalized',
     })
-    expect(storedTurn?.status).toBe('error')
-    expect(storedTurn?.errorProblemJson).toBeDefined()
+    expect(storedTurn?.status).toBe('complete')
 
     const evidence = JSON.parse(storedTurn?.evidenceJson ?? '{}') as {
       providers?: unknown[]

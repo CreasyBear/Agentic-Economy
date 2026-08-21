@@ -9,7 +9,7 @@ describe('session context', () => {
     expect(buildSessionContext({ projection: null, liveTurn: null })).toBeNull()
   })
 
-  it('summarizes listed businesses and inquiry readiness from saved turns', () => {
+  it('summarizes listed businesses from saved turns', () => {
     const context = buildSessionContext({ projection: projection([turn()]), liveTurn: null })
 
     expect(context?.badgeLabel).toBe('Saved context')
@@ -17,7 +17,6 @@ describe('session context', () => {
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'current', value: '2 matches in this answer: Demo Plumber, Northside Plumbing' }),
       expect.objectContaining({ id: 'businesses', value: 'Demo Plumber, Northside Plumbing' }),
-      expect.objectContaining({ id: 'inquiry', value: '1 business has a request form' }),
       expect.objectContaining({ id: 'boundary', value: 'Business confirms timing, quote, and availability.' }),
     ]))
   })
@@ -71,9 +70,9 @@ describe('session context', () => {
         turn({
           seq: 2,
           intent: 'filter_known',
-          query: 'Show only businesses that accept inquiries',
+          query: 'Show only the closest businesses',
           artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
-          oneLine: 'One listed business accepts inquiries.',
+          oneLine: 'One listed business is closest.',
         }),
       ]),
       liveTurn: null,
@@ -88,39 +87,38 @@ describe('session context', () => {
     ]))
   })
 
-  it('keeps the selected business explicit after an inquiry handoff turn', () => {
-    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
+  it('keeps the selected business explicit after a review turn', () => {
+    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing' })
     const context = buildSessionContext({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Northside Plumbing is selected for inquiry review.',
+          oneLine: 'Northside Plumbing is selected for review.',
         }),
       ]),
       liveTurn: null,
     })
 
-    expect(context?.summary).toBe('Northside Plumbing is selected for your request.')
+    expect(context?.summary).toBe('Northside Plumbing is selected for review.')
     expect(context?.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'current', value: 'Northside Plumbing selected for contact' }),
+      expect.objectContaining({ id: 'current', value: 'Northside Plumbing selected for review' }),
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
-      expect.objectContaining({ id: 'inquiry', value: '2 businesses have a request form' }),
     ]))
   })
 
   it('keeps the selected business active through a later boundary-only answer', () => {
-    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
+    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing' })
     const context = buildSessionContext({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Northside Plumbing is selected for inquiry review.',
+          oneLine: 'Northside Plumbing is selected for review.',
         }),
         turn({
           seq: 3,
@@ -131,7 +129,7 @@ describe('session context', () => {
             {
               kind: 'prose',
               block: 'summary',
-              text: 'AE can keep the inquiry context, but the business confirms details.',
+              text: 'AE can keep the comparison context, but the business confirms details.',
             },
           ],
           oneLine: 'AE cannot book, charge, or dispatch.',
@@ -140,7 +138,7 @@ describe('session context', () => {
       liveTurn: null,
     })
 
-    expect(context?.summary).toBe('Northside Plumbing is selected for your request.')
+    expect(context?.summary).toBe('Northside Plumbing is selected for review.')
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'current', value: 'No clear match in this answer' }),
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
@@ -148,13 +146,13 @@ describe('session context', () => {
   })
 
   it('labels a selected review-only business as listing review', () => {
-    const selected = provider({ name: 'Review Only Plumbing', slug: 'review-only-plumbing', inquiryUrl: '' })
+    const selected = provider({ name: 'Review Only Plumbing', slug: 'review-only-plumbing' })
     const context = buildSessionContext({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           query: 'Message Review Only Plumbing',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
           oneLine: 'Review Only Plumbing needs listing review first.',
@@ -171,23 +169,23 @@ describe('session context', () => {
   })
 
   it('does not let an older selected business hide a later narrowed answer', () => {
-    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
+    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing' })
     const context = buildSessionContext({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
-          query: 'Send a qualified inquiry to the first listed business',
+          intent: 'unsupported',
+          query: 'Review the first listed business',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Northside Plumbing is selected for inquiry review.',
+          oneLine: 'Northside Plumbing is selected for review.',
         }),
         turn({
           seq: 3,
           intent: 'filter_known',
-          query: 'Show only businesses that accept inquiries',
+          query: 'Show only the closest businesses',
           artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
-          oneLine: 'One listed business accepts inquiries.',
+          oneLine: 'One listed business is closest.',
         }),
       ]),
       liveTurn: null,
@@ -241,7 +239,7 @@ function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
         kind: 'provider-cards',
         providers: [
           provider(),
-          provider({ citationIndex: 2, slug: 'northside-plumbing', name: 'Northside Plumbing', inquiryUrl: '' }),
+          provider({ citationIndex: 2, slug: 'northside-plumbing', name: 'Northside Plumbing' }),
         ],
       },
     ],
@@ -264,9 +262,8 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     trustLabel: 'Checked',
     responseTimeLabel: '',
     trustCue: 'Checked',
-    nextStepLabel: 'Send inquiry',
+    nextStepLabel: 'Review details',
     detailUrl: '/demo-plumber',
-    inquiryUrl: '/demo-plumber/inquiry',
     services: [],
     ...overrides,
   }

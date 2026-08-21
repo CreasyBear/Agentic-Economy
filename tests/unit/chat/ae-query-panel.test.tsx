@@ -42,12 +42,12 @@ describe('AeQueryPanel', () => {
         onSubmit={() => undefined}
         showExamples={false}
         placeholder="Ask a follow-up"
-        loopHint="These options do not have a request form yet."
+        loopHint="Compare the published details first."
       />,
     )
 
     expect(screen.getByPlaceholderText('Ask a follow-up')).toBeTruthy()
-    expect(screen.getByText('These options do not have a request form yet.')).toBeTruthy()
+    expect(screen.getByText('Compare the published details first.')).toBeTruthy()
   })
 
   it('hides business timing controls for data follow-ups', () => {
@@ -250,7 +250,7 @@ describe('AeQueryPanel', () => {
       />,
     )
 
-    const chip = screen.getByRole('button', { name: 'Emergency plumber' })
+    const chip = screen.getByRole('button', { name: 'Search operations' })
     const suggestions = chip.parentElement
     expect(suggestions?.classList.contains('flex-wrap')).toBe(true)
     expect(suggestions?.closest('[data-slot="scroll-area"]')).toBeNull()
@@ -258,12 +258,12 @@ describe('AeQueryPanel', () => {
     fireEvent.click(chip)
     expect(
       (screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement).value,
-    ).toBe('I need an emergency plumber in Parramatta')
+    ).toBe('What admitted operations can I inspect?')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => {
       expect(submitted).toEqual([
-        ['I need an emergency plumber in Parramatta', 'flexible', undefined],
+        ['What admitted operations can I inspect?', 'flexible', undefined],
       ])
     })
   })
@@ -286,9 +286,9 @@ describe('AeQueryPanel', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Locksmith now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Local weather' }))
     expect(
       (screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement).value,
-    ).toBe('I need a locksmith near Footscray right now')
+    ).toBe('What is the current weather in Footscray?')
   })
 })

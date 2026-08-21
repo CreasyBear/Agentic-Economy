@@ -15,7 +15,9 @@ describe('answer tool registry', () => {
     const synthetic = { ...canonical!, id: 'unlisted.answer.read' }
     const answerContracts = filterAnswerModelToolContracts([...contracts, synthetic])
 
-    expect(answerContracts.map((contract) => contract.id)).toEqual(ANSWER_READ_TOOL_IDS)
+    expect(answerContracts.map((contract) => contract.id)).toEqual(
+      ANSWER_READ_TOOL_IDS.filter((id) => id !== 'operation.execute'),
+    )
     expect(answerContracts.every((contract) => contract.policy.tier === 'read')).toBe(true)
     expect(answerContracts.every((contract) => contract.exposure.answerModel)).toBe(true)
     expect(answerContracts.every((contract) => contract.schemas.providerViolations.length === 0)).toBe(true)

@@ -12,16 +12,14 @@ describe('emitSnapshotEvents', () => {
     expect(events.map((event) => event.type)).toEqual([
       'plan',
       'one-line',
-      'sources',
-      'artifact',
       'next-step',
       'summary-delta',
       'summary-delta',
       'complete',
     ])
-    expect(events[3]).toMatchObject({ type: 'artifact', artifact: { kind: 'selected-provider' } })
-    expect(events[5]).toMatchObject({ type: 'summary-delta', delta: 'First sentence.' })
-    expect(events[6]).toMatchObject({ type: 'summary-delta', delta: 'Second sentence.' })
+    expect(events[2]).toMatchObject({ type: 'next-step' })
+    expect(events[3]).toMatchObject({ type: 'summary-delta', delta: 'First sentence.' })
+    expect(events[4]).toMatchObject({ type: 'summary-delta', delta: 'Second sentence.' })
   })
 
   it('uses answer mode for a data answer with no providers', async () => {
@@ -47,7 +45,7 @@ function snapshot(): AnswerSnapshot {
   const provider = {
     citationIndex: 1,
     slug: 'demo-plumbing',
-    name: 'Demo Plumbing',
+    name: 'Demo inquiry provider',
     category: 'Plumber',
     suburb: 'Perth',
     stateTerritory: 'WA',
@@ -63,7 +61,7 @@ function snapshot(): AnswerSnapshot {
   } as const
   return {
     query: 'plumber Perth',
-    oneLine: 'Demo Plumbing publishes a qualified inquiry path.',
+    oneLine: 'Demo inquiry provider publishes a qualified inquiry path.',
     providers: [provider],
     selectedProvider: provider,
     summary: 'First sentence. Second sentence.',

@@ -66,7 +66,7 @@ describe('shortlist export interaction', () => {
     )
 
     const initialDialog = screen.getByRole('dialog', { name: 'Export preview' })
-    expect(within(initialDialog).getByLabelText('Export preview text').textContent).toContain('Demo Plumbing')
+    expect(within(initialDialog).getByLabelText('Export preview text').textContent).toContain('Demo inquiry provider')
 
     rerender(
       <AeExportPreview
@@ -84,7 +84,7 @@ describe('shortlist export interaction', () => {
     expect(copySummary.hasAttribute('disabled')).toBe(true)
     fireEvent.click(copySummary)
     expect(writeText).not.toHaveBeenCalled()
-    expect(within(staleDialog).getByLabelText('Export preview text').textContent).toContain('Demo Plumbing')
+    expect(within(staleDialog).getByLabelText('Export preview text').textContent).toContain('Demo inquiry provider')
     expect(within(staleDialog).getByLabelText('Export preview text').textContent).not.toContain('Replacement Plumbing')
 
     fireEvent.click(within(staleDialog).getByRole('button', { name: /refresh/i }))
@@ -109,7 +109,7 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   return {
     citationIndex: 1,
     slug: 'demo-plumbing',
-    name: 'Demo Plumbing',
+    name: 'Demo inquiry provider',
     category: 'Plumber',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
@@ -122,9 +122,7 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     freshnessLabel: 'Updated recently',
     nextStepLabel: 'Review listing',
     detailUrl: '/demo-plumbing?q=customer-search-phrase&k=private-access-secret',
-    inquiryUrl: '/demo-plumbing/inquiry?k=private-access-secret',
     services: [],
     ...overrides,
   }
 }
-

@@ -15,6 +15,13 @@ const ENVIRONMENT_NAMES = [
   'SERPAPI_API_KEY',
   'TAVILY_API_KEY',
   'COINGECKO_DEMO_API_KEY',
+  'CDP_API_KEY_ID',
+  'CDP_API_KEY_SECRET',
+  'CDP_WALLET_SECRET',
+  'AE_X402_CDP_ACCOUNT_NAME',
+  'AE_X402_CUSTODY_ENABLED',
+  'AE_X402_CUSTODY_MAX_ATOMIC',
+  'AE_X402_RPC_URLS_JSON',
 ] as const
 
 const SENTINEL = 'doctor-sentinel-secret-value'
@@ -74,6 +81,15 @@ describe('market-terminal doctor command', () => {
         { name: 'TAVILY_API_KEY', status: 'configured' },
         { name: 'COINGECKO_DEMO_API_KEY', status: 'missing' },
       ],
+      x402Payment: [
+        { name: 'CDP_API_KEY_ID', status: 'missing' },
+        { name: 'CDP_API_KEY_SECRET', status: 'missing' },
+        { name: 'CDP_WALLET_SECRET', status: 'missing' },
+        { name: 'AE_X402_CDP_ACCOUNT_NAME', status: 'missing' },
+        { name: 'AE_X402_CUSTODY_ENABLED', status: 'missing' },
+        { name: 'AE_X402_CUSTODY_MAX_ATOMIC', status: 'missing' },
+        { name: 'AE_X402_RPC_URLS_JSON', status: 'missing' },
+      ],
     })
   }, 15_000)
 
@@ -90,5 +106,13 @@ describe('market-terminal doctor command', () => {
     expect(result.stdout).toMatch(/^  EXA_API_KEY\s+configured$/mu)
     expect(result.stdout).toMatch(/^  OPENWEATHER_API_KEY\s+missing$/mu)
     expect(result.stdout).toMatch(/^  COINGECKO_DEMO_API_KEY\s+missing$/mu)
+    expect(result.stdout).toContain('x402 payer custody')
+    expect(result.stdout).toMatch(/^  CDP_API_KEY_ID\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  CDP_API_KEY_SECRET\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  CDP_WALLET_SECRET\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  AE_X402_CDP_ACCOUNT_NAME\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  AE_X402_CUSTODY_ENABLED\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  AE_X402_CUSTODY_MAX_ATOMIC\s+missing$/mu)
+    expect(result.stdout).toMatch(/^  AE_X402_RPC_URLS_JSON\s+missing$/mu)
   }, 15_000)
 })

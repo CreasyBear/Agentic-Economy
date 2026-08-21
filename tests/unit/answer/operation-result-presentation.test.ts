@@ -288,7 +288,7 @@ describe('frozen operation result presentation', () => {
         },
       }, continuedEffectAt - 1),
       record('operation.execute', { operationRef: descriptor.operationRef, input: {} }, result, continuedEffectAt),
-    ], undefined, {
+    ], {
       operationRef: descriptor.operationRef,
       presentation: initial.presentation,
     }).outcome

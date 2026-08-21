@@ -7,7 +7,6 @@ import { runInspectCommand } from '../../../tools/ae/commands/inspect'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
-import { runImportCommand } from '../../../tools/ae/commands/import'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
@@ -201,41 +200,6 @@ describe('external-agent Market Operation cold loop', () => {
         filters: '{"availability":["routeable"]}',
       },
     })
-  })
-
-  it('imports one absolute HTTP URL through the demand route', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'unavailable',
-      reason: 'test',
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await runImportCommand(['https://supplier.example/catalog'], options)
-
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/storefront/import-draft')
-    expect(init?.method).toBe('POST')
-    expect(JSON.parse(String(init?.body))).toEqual({ websiteUrl: 'https://supplier.example/catalog' })
-  })
-
-  it('rejects invalid demand import URLs and extra positionals before network work', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetchMock)
-    const invalidCases: readonly { args: readonly string[]; code: string }[] = [
-      { args: [], code: 'import-usage' },
-      { args: ['https://supplier.example/catalog', 'extra'], code: 'import-usage' },
-      { args: ['javascript:alert(1)'], code: 'import-url-invalid' },
-      { args: ['file:///tmp/catalog'], code: 'import-url-invalid' },
-      { args: ['supplier.example/catalog'], code: 'import-url-invalid' },
-    ]
-
-    for (const invalidCase of invalidCases) {
-      await expect(runImportCommand(invalidCase.args, options)).rejects.toMatchObject({
-        kind: 'INVALID_ARGUMENT',
-        code: invalidCase.code,
-      } satisfies Partial<CliFailure>)
-    }
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('inspects one exact operation anonymously', async () => {
@@ -646,7 +610,7 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         access_token: 'ae-issued-secret',
         token_type: 'Bearer',
-        scope: 'market_operations:invoke',
+        scope: 'market_operations:invoke customer_requests:bounded_mandate',
         expires_in: 604800,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -662,7 +626,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(String(registration[1]?.body))).toMatchObject({
       grant_types: ['urn:ietf:params:oauth:grant-type:device_code'],
       token_endpoint_auth_method: 'none',
-      scope: 'market_operations:invoke',
+      scope: 'market_operations:invoke customer_requests:bounded_mandate',
     })
     const deviceAuthorization = fetchMock.mock.calls[1]!
     expect(deviceAuthorization[0]).toBe('https://market.example/oauth/device_authorization')

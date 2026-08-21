@@ -280,8 +280,6 @@ describe('public thread projection', () => {
     expect(projectedTurn).toBeDefined()
     const candidatesArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-candidates')
     const outcomeArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-outcome')
-    const comparisonArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-comparison')
-    const planArtifact = projectedTurn?.artifacts.find((artifact) => artifact.kind === 'operation-plan')
     expect(candidatesArtifact).toEqual({
       kind: 'operation-candidates',
       candidates: operation.operationCandidates,
@@ -292,14 +290,8 @@ describe('public thread projection', () => {
       kind: 'operation-outcome',
       outcome: operation.operationOutcome,
     })
-    expect(comparisonArtifact).toEqual({
-      kind: 'operation-comparison',
-      ...operationComparison,
-    })
-    expect(planArtifact).toEqual({
-      kind: 'operation-plan',
-      ...operationPlan,
-    })
+    expect(projectedTurn?.artifacts.some((artifact) => artifact.kind === 'operation-comparison')).toBe(false)
+    expect(projectedTurn?.artifacts.some((artifact) => artifact.kind === 'operation-plan')).toBe(false)
     expect(projectedTurn?.requestedIntents).toEqual([{
       intentId: 'current-value',
       phrase: 'current value',

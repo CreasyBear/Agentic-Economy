@@ -53,92 +53,36 @@ describe('AeThreadTranscript', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the latest completed shortlist as a terminal decision surface', () => {
-    const onChangeCriteria = vi.fn()
-    const first = provider()
-    const second = provider({
-      citationIndex: 2,
-      slug: 'westmead-local-plumbing',
-      name: 'Westmead Local Plumbing',
-      detailUrl: '/westmead-local-plumbing',
-      inquiryUrl: '/westmead-local-plumbing/inquiry',
-    })
-
+  it('does not render a shortlist terminal from provider-card artifacts', () => {
     render(
       <AeThreadTranscript
-        projection={projectionWithShortlist([first, second], 'flexible')}
-        onChangeCriteria={onChangeCriteria}
+        projection={projectionWithShortlist([provider(), provider({
+          citationIndex: 2,
+          slug: 'westmead-local-plumbing',
+          name: 'Westmead Local Plumbing',
+          detailUrl: '/westmead-local-plumbing',
+        })], 'flexible')}
       />,
     )
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Your options are ready' })).toBeTruthy()
-    expect(screen.getByText('Compare the published details, then open a business page when you are ready.')).toBeTruthy()
-    expect(screen.queryByText('No reply history yet')).toBeNull()
-
-    const actions = screen.getByLabelText('Shortlist actions')
-    const changeCriteria = within(actions).getByRole('button', { name: 'Change criteria' })
-    expect(within(actions).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(first.detailUrl)
-    expect(within(actions).getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false)
-    expect(within(actions).getByRole('button', { name: 'Call' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Open the business page for its published contact options.')).toBeTruthy()
-
-    fireEvent.click(changeCriteria)
-    expect(onChangeCriteria).toHaveBeenCalledOnce()
-    expect(screen.queryByText('Send request')).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Continue this thread' })).toBeNull()
-    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.getByText('Find plumbers near Parramatta')).toBeTruthy()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
+    expect(screen.queryByLabelText('Shortlist actions')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Change criteria' })).toBeNull()
   })
 
-  it('renders a published phone as a sanitized direct-call link', () => {
-    render(
-      <AeThreadTranscript
-        projection={projectionWithShortlist([provider({ publishedPhone: '0412 345 678' })], 'flexible')}
-      />,
-    )
-
-    const actions = screen.getByLabelText('Shortlist actions')
-    expect(
-      within(actions).getByRole('link', { name: 'Call 0412 345 678' }).getAttribute('href'),
-    ).toBe('tel:0412345678')
-    expect(screen.getByText('Calls go directly to the published business number.')).toBeTruthy()
-  })
-
-  it('previews the exact shortlist payload before copying it', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { clipboard: { writeText } })
-    const source = provider()
-
-    render(<AeThreadTranscript projection={projectionWithShortlist([source], 'flexible')} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-
-    expect(writeText).not.toHaveBeenCalled()
-    const dialog = screen.getByRole('dialog', { name: 'Export preview' })
-    const visiblePayload = within(dialog).getByLabelText('Export preview text').textContent
-    expect(visiblePayload).toContain(source.name)
-    expect(visiblePayload).toContain(`${window.location.origin}${source.detailUrl}`)
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy summary' }))
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    expect(writeText).toHaveBeenCalledWith(visiblePayload)
-    expect(screen.getByText('Summary copied.', { selector: '[role="status"]' })).toBeTruthy()
-  })
-
-  it('prioritizes a later phone provider over an earlier inquiry-only provider for today', () => {
+  it('keeps the asked query without provider-card name links', () => {
     const inquiryOnly = provider({
       citationIndex: 1,
       slug: 'inquiry-only-plumbing',
       name: 'Inquiry Only Plumbing',
       detailUrl: '/inquiry-only-plumbing',
-      inquiryUrl: '/inquiry-only-plumbing/inquiry',
     })
     const phoneCapable = provider({
       citationIndex: 2,
       slug: 'phone-capable-plumbing',
       name: 'Phone Capable Plumbing',
       detailUrl: '/phone-capable-plumbing',
-      inquiryUrl: '/phone-capable-plumbing/inquiry',
       publishedPhone: '0412 345 678',
     })
     const baseProjection = projectionWithShortlist([inquiryOnly, phoneCapable], 'today')
@@ -164,35 +108,17 @@ describe('AeThreadTranscript', () => {
       />,
     )
 
+    expect(screen.getByText('Find plumbers near Parramatta')).toBeTruthy()
     expect(
-      screen.getByText(
-        'For today, businesses with published contact details appear first. Phone details are shown only when published.',
+      screen.queryAllByRole('link').filter((link) =>
+        link.textContent?.includes(phoneCapable.name) || link.textContent?.includes(inquiryOnly.name)
       ),
-    ).toBeTruthy()
-    const urgentContact = screen.getByLabelText('Call first option')
-    expect(within(urgentContact).getByText(phoneCapable.name)).toBeTruthy()
-    expect(within(urgentContact).queryByText('No reply history yet')).toBeNull()
-    expect(
-      within(urgentContact).getByRole('link', { name: 'Call 0412 345 678' }).getAttribute('href'),
-    ).toBe('tel:0412345678')
-
-    const replayQuery = screen.getByText('Find plumbers near Parramatta')
-    const processCopy = screen.getByRole('button', { name: 'How this was checked' })
-    expect(urgentContact.compareDocumentPosition(replayQuery) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-    expect(urgentContact.compareDocumentPosition(processCopy) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
-
-    const orderedProviderLinks = screen
-      .getAllByRole('link')
-      .filter((link) => link.textContent?.includes(phoneCapable.name) || link.textContent?.includes(inquiryOnly.name))
-    expect(orderedProviderLinks.map((link) => link.textContent)).toEqual([
-      expect.stringContaining(phoneCapable.name),
-      expect.stringContaining(inquiryOnly.name),
-    ])
-    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(phoneCapable.detailUrl)
+    ).toEqual([])
+    expect(screen.queryByLabelText('Call first option')).toBeNull()
   })
 
   it('does not terminalize a selected-provider handoff without a shortlist', () => {
-    stubDeterministicChips()
+    stubEvalStatus()
     const handoff = projectionWithSelectedProviderBoundaryTurn()
     const projection: PublicThreadProjection = {
       ...handoff,
@@ -206,7 +132,7 @@ describe('AeThreadTranscript', () => {
   })
 
   it('does not terminalize an earlier shortlist when a newer turn has errored', () => {
-    stubDeterministicChips()
+    stubEvalStatus()
     const shortlist = projectionWithShortlist([provider()], 'flexible')
     const projection: PublicThreadProjection = {
       ...shortlist,
@@ -255,10 +181,11 @@ describe('AeThreadTranscript', () => {
 
     render(<AeThreadTranscript projection={projection} />)
 
-    expect(screen.getByText(
+    expect(screen.getByText('No listed businesses match this search.')).toBeTruthy()
+    expect(screen.queryByText(
       'No matching businesses were found. Try changing the service or location.',
       { exact: true },
-    )).toBeTruthy()
+    )).toBeNull()
   })
   it('shows owner Stop for pending replay rows but keeps shared transcripts read-only', async () => {
     const pendingProjection: PublicThreadProjection = {
@@ -299,58 +226,9 @@ describe('AeThreadTranscript', () => {
 
 
 
-  it('keeps follow-up chips connected after a providerless boundary turn', () => {
-    stubDeterministicChips()
-    let selectedQuery: string | null = null
-
-    render(
-      <AeThreadTranscript
-        projection={projectionWithBoundaryTurn()}
-        onFollowUp={(query) => {
-          selectedQuery = query
-        }}
-      />,
-    )
-
-    const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText('Continue with these options'))).toBe(true)
-    expect(
-      panel.contains(
-        screen.getByText(
-          'Narrow or compare the options already found here, or ask the business about them.',
-        ),
-      ),
-    ).toBe(true)
-
-    fireEvent.click(screen.getByText('Ask Parramatta Emergency Plumbing about this'))
-
-    expect(selectedQuery).toBe('Message Parramatta Emergency Plumbing')
-  })
-
-  it('labels selected-provider follow-ups as carried from the thread after a boundary turn', () => {
-    stubDeterministicChips()
-    let selectedQuery: string | null = null
-
-    render(
-      <AeThreadTranscript
-        projection={projectionWithSelectedProviderBoundaryTurn()}
-        onFollowUp={(query) => {
-          selectedQuery = query
-        }}
-      />,
-    )
-
-    const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(
-      panel.contains(
-        screen.getByText('Use the selected business\'s request form from this thread, or keep narrowing the options.'),
-      ),
-    ).toBe(true)
-    expect(screen.queryByText(/Ask .* about this/)).toBeNull()
-
-    fireEvent.click(screen.getByText('Businesses accepting requests'))
-
-    expect(selectedQuery).toBe('Show only businesses accepting requests')
+  it('does not render follow-up chips after a providerless boundary turn', () => {
+    render(<AeThreadTranscript projection={projectionWithBoundaryTurn()} />)
+    expect(screen.queryByRole('region', { name: 'Continue this thread' })).toBeNull()
   })
 
   it('keeps one stable polite status node and updates only its text', () => {
@@ -729,7 +607,7 @@ describe('AeThreadTranscript', () => {
     expect(screen.getByText('sha256:price')).toBeTruthy()
     expect(screen.getByText('sha256:tool-record')).toBeTruthy()
     expect(screen.getByText('sha256:evidence')).toBeTruthy()
-    expect(screen.queryByText('Parramatta Emergency Plumbing')).toBeNull()
+    expect(screen.queryByText('Demo listed provider')).toBeNull()
   })
 
   it('links the exact Operation without fabricating invocation status for a keyless outcome', () => {
@@ -791,8 +669,8 @@ function routeableWeatherCandidate(): AnswerOperationCandidate {
   }
 }
 
-function stubDeterministicChips() {
-  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ llmChipsEnabled: false })))
+function stubEvalStatus() {
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ evalPassed: false })))
 }
 
 function projectionWithBoundaryTurn(): PublicThreadProjection {
@@ -848,9 +726,9 @@ function projectionWithSelectedProviderBoundaryTurn(): PublicThreadProjection {
         turnId: 'turn-1',
         seq: 1,
         query: 'Message the first listed business',
-        intent: 'inquiry_handoff',
+        intent: 'unsupported',
         status: 'complete',
-        oneLine: 'Parramatta Emergency Plumbing is ready for contact.',
+        oneLine: 'Demo listed provider is ready for contact.',
         workLog: [],
         artifacts: [{ kind: 'selected-provider', provider: source }],
       },
@@ -903,8 +781,8 @@ function projectionWithShortlist(
 function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   return {
     citationIndex: 1,
-    slug: 'parramatta-emergency-plumbing',
-    name: 'Parramatta Emergency Plumbing',
+    slug: 'demo-listed-provider',
+    name: 'Demo listed provider',
     category: 'Plumber',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
@@ -915,10 +793,8 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     responseTimeLabel: 'Responds ~22m',
     trustCue: 'Responds ~22m - Checked',
     nextStepLabel: 'Send inquiry',
-    detailUrl: '/parramatta-emergency-plumbing',
+    detailUrl: '/demo-listed-provider',
     services: [],
-    inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
     ...overrides,
   }
 }
-

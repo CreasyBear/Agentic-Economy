@@ -9,10 +9,9 @@ describe('session journey', () => {
     expect(buildSessionJourney({ projection: null, liveTurn: null })).toBeNull()
   })
 
-  it('stays hidden for a first live query until listings or inquiry activity exist', () => {
+  it('stays hidden for a first live query until listing evidence exists', () => {
     // Nothing to orient during the opening search: the answer's own streaming
-    // state carries progress, so an empty "inquiry path" would only be noise.
-    // The journey appears once listings arrive or an inquiry is in play.
+    // state carries progress, so an empty journey would only be noise.
     expect(buildSessionJourney({ projection: null, liveTurn: { intent: 'refine_search' } })).toBeNull()
   })
 
@@ -20,104 +19,86 @@ describe('session journey', () => {
     const journey = buildSessionJourney({ projection: projection([turn()]), liveTurn: null })
 
     expect(journey?.providerCount).toBe(2)
-    expect(journey?.hasInquiryReadyProvider).toBe(true)
     expect(journey?.statusText).toBe('2 matches ready to compare')
-    expect(journey?.guidance).toBe(
-      'Compare the options, then choose a business to contact. The business still confirms timing, quote, and availability.',
-    )
-    expect(journey?.steps.map((step) => step.label)).toEqual(['Find', 'Compare', 'Follow up', 'Ask the business'])
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
+    expect(journey?.steps.map((step) => step.label)).toEqual(['Find', 'Compare', 'Follow up'])
     expect(journey?.steps.map((step) => [step.id, step.status])).toEqual([
       ['search', 'complete'],
       ['compare', 'complete'],
       ['follow_up', 'active'],
-      ['inquiry', 'pending'],
     ])
   })
 
-  it('shows an inquiry handoff as the active safe next step while it streams', () => {
+  it('does not treat an unsupported follow-up as a hosted inquiry step', () => {
     const journey = buildSessionJourney({
       projection: projection([turn()]),
-      liveTurn: { intent: 'inquiry_handoff' },
+      liveTurn: { intent: 'unsupported' },
     })
 
-    expect(journey?.guidance).toBe(
-      'Preparing a request to the business. The business still confirms timing, quote, and availability.',
-    )
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
     expect(journey?.steps.map((step) => [step.id, step.status])).toEqual([
       ['search', 'complete'],
       ['compare', 'complete'],
       ['follow_up', 'complete'],
-      ['inquiry', 'active'],
     ])
   })
 
-  it('keeps completed inquiry handoffs visible on replay', () => {
+  it('keeps a selected provider on replay without a hosted inquiry step', () => {
     const journey = buildSessionJourney({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: provider() }],
-          oneLine: "Ready to open Demo Plumber's qualified inquiry form.",
+          oneLine: 'Demo Plumber is selected for review.',
         }),
       ]),
       liveTurn: null,
     })
 
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
-    expect(journey?.statusText).toBe('Demo Plumber selected for contact')
-    expect(journey?.guidance).toBe(
-      'Demo Plumber is selected for contact. The business still confirms timing, quote, and availability.',
-    )
+    expect(journey?.statusText).toBe('Demo Plumber selected for review')
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
   })
 
-  it('counts selected-provider handoff artifacts as provider and inquiry context', () => {
+  it('counts selected-provider artifacts as provider context', () => {
     const selected = provider({ slug: 'northside-plumbing', name: 'Northside Plumbing' })
     const journey = buildSessionJourney({
       projection: projection([
         turn({
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
+          oneLine: 'Northside Plumbing is selected for review.',
         }),
       ]),
       liveTurn: null,
     })
 
     expect(journey?.providerCount).toBe(1)
-    expect(journey?.hasInquiryReadyProvider).toBe(true)
-    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
-    expect(journey?.statusText).toBe('Northside Plumbing selected for contact')
+    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing' })
+    expect(journey?.statusText).toBe('Northside Plumbing selected for review')
     expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 match')
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Request form available')
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
   })
 
-  it('does not call a selected review-only business inquiry-ready just because another thread listing is ready', () => {
-    const selected = providerWithoutInquiry({ slug: 'review-only-plumbing', name: 'Review Only Plumbing' })
+  it('keeps a selected business in review state', () => {
+    const selected = provider({ slug: 'review-only-plumbing', name: 'Review Only Plumbing' })
     const journey = buildSessionJourney({
       projection: projection([
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Review Only Plumbing does not publish an AE inquiry form yet.',
+          oneLine: 'Review Only Plumbing does not publish contact on AE.',
         }),
       ]),
       liveTurn: null,
     })
 
     expect(journey?.providerCount).toBe(3)
-    expect(journey?.hasInquiryReadyProvider).toBe(true)
-    expect(journey?.selectedProvider).toEqual({ name: 'Review Only Plumbing', hasInquiryPath: false })
+    expect(journey?.selectedProvider).toEqual({ name: 'Review Only Plumbing' })
     expect(journey?.statusText).toBe('Review Only Plumbing selected for review')
-    expect(journey?.guidance).toBe(
-      'Review Only Plumbing is selected for review. This business does not have a request form yet.',
-    )
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('No request form yet')
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
   })
 
   it('keeps a selected provider through a later boundary-only answer', () => {
@@ -127,7 +108,7 @@ describe('session journey', () => {
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
           oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
         }),
@@ -149,11 +130,9 @@ describe('session journey', () => {
       liveTurn: null,
     })
 
-    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
-    expect(journey?.statusText).toBe('Northside Plumbing selected for contact')
-    expect(journey?.guidance).toBe(
-      'Northside Plumbing is selected for contact. The business still confirms timing, quote, and availability.',
-    )
+    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing' })
+    expect(journey?.statusText).toBe('Northside Plumbing selected for review')
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
   })
 
   it('lets a later provider-list answer replace an older selected provider as the active journey state', () => {
@@ -163,14 +142,14 @@ describe('session journey', () => {
         turn(),
         turn({
           seq: 2,
-          intent: 'inquiry_handoff',
+          intent: 'unsupported',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
           oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
         }),
         turn({
           seq: 3,
           intent: 'filter_known',
-          query: 'Show only businesses that accept inquiries',
+          query: 'Show only the closest businesses',
           artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
           oneLine: 'One listed business accepts inquiries.',
         }),
@@ -180,10 +159,7 @@ describe('session journey', () => {
 
     expect(journey?.selectedProvider).toBeUndefined()
     expect(journey?.statusText).toBe('2 matches ready to compare')
-    expect(journey?.guidance).toBe(
-      'Compare the options, then choose a business to contact. The business still confirms timing, quote, and availability.',
-    )
-    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('pending')
+    expect(journey?.guidance).toBe('Compare the published details, then use a listed contact channel when one is available.')
   })
 })
 
@@ -231,15 +207,9 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     trustLabel: 'Checked',
     responseTimeLabel: '',
     trustCue: 'Checked',
-    nextStepLabel: 'Send inquiry',
+    nextStepLabel: 'Review details',
     detailUrl: '/demo-plumber',
-    inquiryUrl: '/demo-plumber/inquiry',
     services: [],
     ...overrides,
   }
-}
-
-function providerWithoutInquiry(overrides: Partial<AnswerSource> = {}): AnswerSource {
-  const { inquiryUrl: _inquiryUrl, ...source } = provider(overrides)
-  return source
 }

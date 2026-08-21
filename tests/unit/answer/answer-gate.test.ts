@@ -186,16 +186,29 @@ describe('runAnswerGate', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('passes empty-catalog copy that denies availability instead of inventing a match', () => {
+    const result = runAnswerGate({
+      snapshot: snapshot({
+        providers: [],
+        oneLine: 'No businesses are available in the live catalog for that query.',
+        summary: 'No published provider is available to compare or inspect.',
+        nextStep: 'Search listed operations, or ask a more specific question.',
+      }),
+      allowedSlugs: new Set<string>(),
+    })
+    expect(result.ok).toBe(true)
+  })
+
   it('fails when prose names a location-rejected provider', () => {
     const result = runAnswerGate({
       snapshot: snapshot({
         providers: [],
-        oneLine: 'Parramatta Emergency Plumbing appeared in the wider search results.',
+        oneLine: 'Demo listed provider appeared in the wider search results.',
         summary: 'No providers matched the requested location.',
         nextStep: 'Try the registry.',
       }),
       allowedSlugs: new Set<string>(),
-      forbiddenProviderNames: ['parramatta emergency plumbing'],
+      forbiddenProviderNames: ['demo listed provider'],
     })
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error('expected gate failure')

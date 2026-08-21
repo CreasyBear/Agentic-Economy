@@ -31,41 +31,41 @@ describe('turn context line', () => {
     expect(buildTurnContextLine({ intent: 'compare_known', seq: 2, artifacts })).toBe(
       'Comparing 1 match from this thread.',
     )
-    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'No business is selected yet. Find a match before sending a request.',
+    expect(buildTurnContextLine({ intent: 'unsupported', seq: 2, artifacts })).toBe(
+      'This request is outside the current path; the answer will return to other options.',
     )
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 2, artifacts: [] })).toBe(
       'Checking again with this follow-up.',
     )
   })
 
-  it('names the selected business during inquiry handoff turns', () => {
+  it('does not prepare a hosted request from selected-business context', () => {
     const artifacts: AnswerArtifact[] = [{ kind: 'selected-provider', provider: provider() }]
 
     expect(countListedProvidersInArtifacts(artifacts)).toBe(1)
-    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'Preparing a request to Demo Plumber.',
+    expect(buildTurnContextLine({ intent: 'unsupported', seq: 2, artifacts })).toBe(
+      'This request is outside the current path; the answer will return to other options.',
     )
   })
-  it('requires a request route before preparing selected-business contact copy', () => {
+  it('keeps selected-business copy on the unsupported path when no request route exists', () => {
     const artifacts: AnswerArtifact[] = [{
       kind: 'selected-provider',
-      provider: provider({ inquiryUrl: undefined }),
+      provider: provider(),
     }]
 
-    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'Demo Plumber does not have a request form here yet.',
+    expect(buildTurnContextLine({ intent: 'unsupported', seq: 2, artifacts })).toBe(
+      'This request is outside the current path; the answer will return to other options.',
     )
   })
 
-  it('neutralizes direction controls in selected-business context copy', () => {
+  it('keeps unsupported-path copy when a selected business name includes direction controls', () => {
     const artifacts: AnswerArtifact[] = [{
       kind: 'selected-provider',
       provider: provider({ name: 'Demo\u202e Plumber' }),
     }]
 
-    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
-      'Preparing a request to Demo Plumber.',
+    expect(buildTurnContextLine({ intent: 'unsupported', seq: 2, artifacts })).toBe(
+      'This request is outside the current path; the answer will return to other options.',
     )
   })
 
@@ -173,8 +173,7 @@ describe('AeWorkDisclosure', () => {
   })
 })
 
-function provider(overrides: Omit<Partial<AnswerSource>, 'inquiryUrl'> & { inquiryUrl?: string | undefined } = {}): AnswerSource {
-  const { inquiryUrl, ...otherOverrides } = overrides
+function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   return {
     citationIndex: 1,
     slug: 'demo-plumber',
@@ -188,13 +187,10 @@ function provider(overrides: Omit<Partial<AnswerSource>, 'inquiryUrl'> & { inqui
     trustLabel: 'Checked',
     responseTimeLabel: '',
     trustCue: 'Checked',
-    nextStepLabel: 'Send inquiry',
+    nextStepLabel: 'Review details',
     detailUrl: '/demo-plumber',
     services: [],
-    ...otherOverrides,
-    ...(inquiryUrl === undefined
-      ? ('inquiryUrl' in overrides ? {} : { inquiryUrl: '/demo-plumber/inquiry' })
-      : { inquiryUrl }),
+    ...overrides,
   }
 }
 
@@ -209,4 +205,3 @@ function workStep(overrides: Partial<AnswerWorkStep> = {}): AnswerWorkStep {
     ...overrides,
   }
 }
-

@@ -95,11 +95,28 @@ describe('browser answer stream transport', () => {
     expect(JSON.stringify(network)).not.toContain('socket secret')
   })
 
-  it('rejects a malformed RFC problem body as a protocol failure', async () => {
+  it('projects a rate-limited problem by code even when the wire detail is not the answer copy', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({
       ...buildAnswerTurnProblem('rate_limited'),
-      detail: 'provider detail',
+      detail: 'Rate limit exceeded. Please retry later.',
     }, { status: 429 })))
+
+    const result = await streamAnswerTurnRequest({
+      query: 'bitcoin price',
+      clientTurnKey: 'turn-key-malformed-problem',
+      onFrame: vi.fn(),
+    })
+
+    expect(result).toEqual({ kind: 'problem', problem: buildAnswerTurnProblem('rate_limited') })
+    expect(JSON.stringify(result)).not.toContain('Rate limit exceeded. Please retry later.')
+  })
+
+  it('rejects a problem body without a public answer code as a protocol failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      type: 'about:blank',
+      title: 'Unavailable',
+      status: 503,
+    }, { status: 503 })))
 
     const result = await streamAnswerTurnRequest({
       query: 'bitcoin price',

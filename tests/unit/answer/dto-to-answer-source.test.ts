@@ -11,7 +11,7 @@ const AE_INQUIRY_PATH: PublicOfferingAccessPathDto = {
   accessPathRef: 'access:ae',
   offeringRevision: 1,
   kind: 'human_request',
-  channel: 'ae_inquiry',
+  channel: 'website',
   disclosure: 'Send an inquiry through Agentic Economy.',
 }
 
@@ -37,7 +37,7 @@ function offering(overrides: Partial<PublicOfferingDto> = {}): PublicOfferingDto
   return {
     offeringRef: 'offering:emergency',
     revision: 1,
-    name: 'Emergency pipe repair',
+    name: 'Listed offering',
     category: 'Plumbing',
     summary: 'Burst pipe triage.',
     accessPaths: [],
@@ -53,7 +53,7 @@ function dto(overrides: Partial<PublicBusinessCatalogApiV2Dto> = {}): PublicBusi
     schemaVersion: 'public-business-catalog-api:v2',
     businessId: 'business:demo-plumbing',
     slug: 'demo-plumbing',
-    name: 'Demo Plumbing',
+    name: 'Demo inquiry provider',
     category: 'Plumbing',
     businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
     publicUrl: '/demo-plumbing',
@@ -72,25 +72,23 @@ function dto(overrides: Partial<PublicBusinessCatalogApiV2Dto> = {}): PublicBusi
 }
 
 describe('toAnswerSource — access paths replace firstRequest.mode', () => {
-  it('treats an ae_inquiry human request path as the AE inquiry first step', () => {
+  it('treats a website human request path as published contact', () => {
     const source = toAnswerSource(
       dto({ offerings: [offering({ accessPaths: [AE_INQUIRY_PATH] })] }),
       1,
     )
 
-    expect(source.nextStepLabel).toBe('Send inquiry')
-    expect(source.inquiryUrl).toBe('/demo-plumbing/inquiry')
+    expect(source.nextStepLabel).toBe('View contact details')
     expect(source.availabilityLabel).toBe('Contact supplied')
   })
 
-  it('treats a phone-only human request path as published contact, not an AE inquiry', () => {
+  it('treats a phone-only human request path as published contact', () => {
     const source = toAnswerSource(
       dto({ offerings: [offering({ accessPaths: [PHONE_PATH] })] }),
       1,
     )
 
-    expect(source.nextStepLabel).toBe('View contact instructions')
-    expect(source.inquiryUrl).toBeUndefined()
+    expect(source.nextStepLabel).toBe('View contact details')
     expect(source.availabilityLabel).toBe('Contact supplied')
   })
 
@@ -101,11 +99,10 @@ describe('toAnswerSource — access paths replace firstRequest.mode', () => {
     )
 
     expect(source.nextStepLabel).toBe('View details')
-    expect(source.inquiryUrl).toBeUndefined()
     expect(source.availabilityLabel).toBe('No contact option yet')
   })
 
-  it('finds the ae_inquiry path on a later offering', () => {
+  it('finds a published contact path on a later offering', () => {
     const source = toAnswerSource(
       dto({
         offerings: [
@@ -116,8 +113,7 @@ describe('toAnswerSource — access paths replace firstRequest.mode', () => {
       1,
     )
 
-    expect(source.nextStepLabel).toBe('Send inquiry')
-    expect(source.inquiryUrl).toBe('/demo-plumbing/inquiry')
+    expect(source.nextStepLabel).toBe('View contact details')
   })
 })
 

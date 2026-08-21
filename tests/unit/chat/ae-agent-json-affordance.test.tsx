@@ -19,7 +19,7 @@ describe('AeAgentJsonAffordance', () => {
     const executedQuery = 'Emergency plumber in Parramatta today'
     const responsePayload = {
       query: 'tool-selected-query',
-      providers: [{ name: 'Parramatta Emergency Plumbing', suburb: 'Parramatta' }],
+      providers: [{ name: 'Demo listed provider', suburb: 'Parramatta' }],
       resultCount: 1,
       evidence: { source: 'published business details', checkedAt: '2026-07-13T01:30:00.000Z' },
     }

@@ -473,9 +473,10 @@ describe('answer turn structured selection gate', () => {
     expect(runAnswerToolUseAgent).toHaveBeenCalledTimes(1)
     expect(runAnswerToolUseAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        disableTools: true,
+        query: 'yes',
         effectiveRoute: expect.objectContaining({
           lane: 'operation',
+          effectAllowed: true,
         }),
       }),
     )
@@ -503,16 +504,15 @@ describe('answer turn structured selection gate', () => {
     expect(runAnswerToolUseAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         query: 'yes',
-        keylessDataAsk: expect.objectContaining({
-          kind: 'resolved',
-          selected: expect.objectContaining({
-            operationRef: PENDING_OPERATION_REF,
-            executionBindingDigest: PENDING_BINDING_DIGEST,
-          }),
-          selectedCandidate: expect.objectContaining({
-            descriptorDigest: PENDING_DESCRIPTOR_DIGEST,
-          }),
+        effectiveRoute: expect.objectContaining({
+          lane: 'operation',
+          effectAllowed: true,
         }),
+      }),
+    )
+    expect(runAnswerToolUseAgent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        keylessDataAsk: expect.anything(),
       }),
     )
     expect(events.at(-1)).toMatchObject({
@@ -551,9 +551,10 @@ describe('answer turn structured selection gate', () => {
     expect(runAnswerToolUseAgent).toHaveBeenCalledTimes(1)
     expect(runAnswerToolUseAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        disableTools: true,
+        query: 'yes',
         effectiveRoute: expect.objectContaining({
           lane: 'operation',
+          effectAllowed: true,
         }),
       }),
     )

@@ -208,8 +208,8 @@ describe('answer turn execution lease durability', () => {
           input: { operationRef },
         },
         {
-          toolId: `capability.${operationRef}`,
-          input: { city: 'Sydney' },
+          toolId: 'operation.execute',
+          input: { operationRef, input: { city: 'Sydney' } },
         },
       ],
       prose: {

@@ -98,7 +98,7 @@ describe('rider service surfaces', () => {
 
     expect(screen.getByRole('heading', { name: 'Expand the network for this ask' })).toBeTruthy()
     expect(screen.getByText(/Businesses publish what they do here so people and agents can bring them work/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'List your business' }).getAttribute('href')).toBe('/claim?source=supply')
+    expect(screen.getByRole('link', { name: 'Publish an operation' }).getAttribute('href')).toBe('/for-providers')
     expect(screen.getByRole('link', { name: 'Try another ask' }).getAttribute('href')).toBe('/')
     expect(container.querySelectorAll('[data-variant="primary"]')).toHaveLength(1)
   })
@@ -160,8 +160,8 @@ const serviceWithPublishedPrice = {
 function renderWithRouter(ui: ReactElement) {
   const rootRoute = createRootRoute()
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' })
-  const claimRoute = createRoute({ getParentRoute: () => rootRoute, path: '/claim' })
-  const routeTree = rootRoute.addChildren([indexRoute, claimRoute])
+  const providerRoute = createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' })
+  const routeTree = rootRoute.addChildren([indexRoute, providerRoute])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

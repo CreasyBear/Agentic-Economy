@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type * as PosthogServerModule from '@/lib/observability/posthog.server'
 import {
   HarnessRunLoop,
   type HarnessRuntimeEvent,
@@ -14,13 +13,6 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import { createLocalE2eRegistrySourcePort } from '../../helpers/registry-local-e2e'
-
-const captureLegacyRegistryActionRequestMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@/lib/observability/posthog.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof PosthogServerModule>()),
-  captureLegacyRegistryActionRequest: captureLegacyRegistryActionRequestMock,
-}))
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
@@ -85,7 +77,6 @@ vi.mock('@/modules/capability-supply/operation-source', () => ({
 }))
 
 afterEach(() => {
-  captureLegacyRegistryActionRequestMock.mockReset()
   delete process.env.OPENROUTER_API_KEY
 })
 
@@ -114,13 +105,13 @@ describe('runAnswerToolCall', () => {
       expect(result.record.resultHash).toMatch(/^sha256:[0-9a-f]{64}$/)
 
       const summary = JSON.parse(result.record.resultSummaryJson)
-      expect(summary.slugs).toContain('parramatta-emergency-plumbing')
+      expect(summary.slugs).toContain('demo-listed-provider')
       expect(summary.count).toBeGreaterThan(0)
 
       expect(result.providers.map((provider) => provider.slug)).toContain(
-        'parramatta-emergency-plumbing',
+        'demo-listed-provider',
       )
-      expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
+      expect(result.allowedSlugs.has('demo-listed-provider')).toBe(true)
     } finally {
       restoreRegistry()
       if (previousLocalRegistry === undefined) {
@@ -140,90 +131,14 @@ describe('runAnswerToolCall', () => {
       }
     }
   })
-  it('captures only legacy registry reads on the Answer surface', async () => {
-    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-    const previousConvexUrl = process.env.CONVEX_URL
-    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
-    delete process.env.CONVEX_URL
-    delete process.env.VITE_CONVEX_URL
-    delete process.env.OPENROUTER_API_KEY
-    const restoreRegistry = setPublicRegistrySourcePortForTests(createLocalE2eRegistrySourcePort())
-
-    try {
-      const search = await runAnswerToolCall({
-        toolId: 'registry.search',
-        input: { query: 'parramatta' },
-        turnId: TURN_ID,
-        seq: BASE_SEQ,
-      })
-      const detail = await runAnswerToolCall({
-        toolId: 'registry.detail',
-        input: { slug: 'parramatta-emergency-plumbing' },
-        turnId: TURN_ID,
-        seq: BASE_SEQ + 1,
-      })
-      const nonlegacy = await runAnswerToolCall({
-        toolId: 'registry.operations.detail',
-        input: { operationRef },
-        turnId: TURN_ID,
-        seq: BASE_SEQ + 2,
-      })
-      const unknown = await runAnswerToolCall({
-        toolId: 'registry.nothing',
-        input: {},
-        turnId: TURN_ID,
-        seq: BASE_SEQ + 3,
-      })
-
-      expect(search.record.status).toBe('complete')
-      expect(detail.record.status).toBe('complete')
-      expect(nonlegacy.record.status, nonlegacy.record.resultSummaryJson).toBe('complete')
-      expect(unknown.record.status).toBe('refused')
-      expect(captureLegacyRegistryActionRequestMock).toHaveBeenCalledTimes(3)
-      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
-        1,
-        'registry.search',
-        'answer',
-      )
-      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
-        2,
-        'registry.detail',
-        'answer',
-      )
-      expect(captureLegacyRegistryActionRequestMock).toHaveBeenNthCalledWith(
-        3,
-        'registry.operations.detail',
-        'answer',
-      )
-    } finally {
-      restoreRegistry()
-      if (previousLocalRegistry === undefined) {
-        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
-      } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
-      }
-      if (previousConvexUrl === undefined) {
-        delete process.env.CONVEX_URL
-      } else {
-        process.env.CONVEX_URL = previousConvexUrl
-      }
-      if (previousPublicConvexUrl === undefined) {
-        delete process.env.VITE_CONVEX_URL
-      } else {
-        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
-      }
-    }
-  })
-
   it.each([
     {
-      query: 'emergency plumbing Joondalup',
-      expectedSlug: 'joondalup-rapid-plumbing',
+      query: 'listed offering Joondalup',
+      expectedSlug: 'joondalup-listed-provider',
     },
     {
-      query: 'electrical repairs Fremantle',
-      expectedSlug: 'fremantle-coastal-electrical',
+      query: 'listed offering Fremantle',
+      expectedSlug: 'fremantle-listed-provider',
     },
   ])('recalls $expectedSlug from the shared local-e2e source for a detailed trade query', async ({
     query,
@@ -403,13 +318,13 @@ describe('runAnswerToolCall', () => {
     try {
       const found = await runAnswerToolCall({
         toolId: 'registry.detail',
-        input: { slug: 'parramatta-emergency-plumbing' },
+        input: { slug: 'demo-listed-provider' },
         turnId: TURN_ID,
         seq: BASE_SEQ,
       })
       expect(found.record.status).toBe('complete')
       const foundSummary = JSON.parse(found.record.resultSummaryJson)
-      expect(foundSummary.slugs).toEqual(['parramatta-emergency-plumbing'])
+      expect(foundSummary.slugs).toEqual(['demo-listed-provider'])
       expect(foundSummary.count).toBe(1)
 
       const missing = await runAnswerToolCall({

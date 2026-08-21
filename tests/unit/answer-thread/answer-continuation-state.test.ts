@@ -14,7 +14,6 @@ import {
   pendingDecisionFor,
   readPriorContinuationState,
   selectedInputDigestFor,
-  shouldOverrideOperationRouteForBusiness,
 } from '@/modules/answer-thread/internal/answer-continuation-state'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -373,32 +372,5 @@ describe('answer-continuation-state', () => {
         [],
       ),
     ).toBeUndefined()
-  })
-
-  it('overrides model operation routing only for new local-service queries without a prior operation', () => {
-    expect(
-      shouldOverrideOperationRouteForBusiness({
-        query: 'find a plumber in Darwin tonight',
-        interpretation: {
-          route: 'operation',
-          requestedIntents: [],
-          continuation: 'new',
-          effectPolicy: 'run_when_ready',
-        },
-        priorOperationRef: undefined,
-      }),
-    ).toBe(true)
-    expect(
-      shouldOverrideOperationRouteForBusiness({
-        query: 'find a plumber in Darwin tonight',
-        interpretation: {
-          route: 'operation',
-          requestedIntents: [],
-          continuation: 'new',
-          effectPolicy: 'run_when_ready',
-        },
-        priorOperationRef: OPERATION_REF,
-      }),
-    ).toBe(false)
   })
 })

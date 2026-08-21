@@ -32,11 +32,9 @@ describe('chat funnel events', () => {
     ])
   })
 
-  it('records provider selection and inquiry attempt for handoff-shaped follow-ups', () => {
+  it('records handoff-shaped follow-ups as unsupported instead of a hosted inquiry', () => {
     expect(buildChatSubmitFunnelEvents({ query: 'message the first one', completedTurnCount: 1 }).map((event) => event.eventType)).toEqual([
       'answer_follow_up_submitted',
-      'answer_provider_selected',
-      'inquiry_attempted',
     ])
   })
 

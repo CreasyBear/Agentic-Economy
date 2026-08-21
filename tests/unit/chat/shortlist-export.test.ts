@@ -25,7 +25,7 @@ describe('shortlist export preview', () => {
 
     expect(preview.sanitized).toBe(true)
     expect(selectedFields.some((field) => field.sensitive)).toBe(false)
-    expect(text).toContain('Demo Plumbing')
+    expect(text).toContain('Demo inquiry provider')
     expect(text).toContain('Parramatta, NSW')
     expect(text).toContain('https://agentic.example/demo-plumbing')
     expect(text).toContain('Not sent')
@@ -35,7 +35,7 @@ describe('shortlist export preview', () => {
     expect(text).not.toContain('private-access-secret')
     expect(text).not.toContain('internal-only-value')
     expect(text).not.toContain('?')
-    expect(text).not.toMatch(/\b(?:access key|bearer|kernel|mandate|protocol|provider|token)\b/i)
+    expect(text).not.toMatch(/\b(?:access key|bearer|kernel|mandate|protocol|token)\b/i)
   })
 
   it('replaces a cross-origin business page with the trusted-origin slug', () => {
@@ -99,7 +99,7 @@ describe('shortlist export preview', () => {
       'business-1-name',
       'business-1-location',
     ])
-    expect(text.indexOf('Demo Plumbing')).toBeLessThan(text.indexOf('Parramatta, NSW'))
+    expect(text.indexOf('Demo inquiry provider')).toBeLessThan(text.indexOf('Parramatta, NSW'))
     expect(text).not.toContain('https://agentic.example/demo-plumbing')
     expect(preview.text).toBe(text)
   })
@@ -120,7 +120,7 @@ describe('shortlist export preview', () => {
       'business-1-name', 'business-1-location', 'business-1-page',
       'business-2-name', 'business-2-location', 'business-2-page',
     ])
-    expect(preview.text.indexOf('Business 1 name: Demo Plumbing'))
+    expect(preview.text.indexOf('Business 1 name: Demo inquiry provider'))
       .toBeLessThan(preview.text.indexOf('Business 2 name: Second Electrician'))
   })
 
@@ -143,7 +143,7 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   return {
     citationIndex: 1,
     slug: 'demo-plumbing',
-    name: 'Demo Plumbing',
+    name: 'Demo inquiry provider',
     category: 'Plumber',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
@@ -158,7 +158,6 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     nextStepLabel: 'Review listing',
     detailUrl:
       '/demo-plumbing?q=customer-search-phrase&accessKey=private-access-secret#private-record',
-    inquiryUrl: '/demo-plumbing/inquiry?k=private-access-secret',
     services: [
       {
         name: 'Emergency plumbing',
