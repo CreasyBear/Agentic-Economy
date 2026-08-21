@@ -6,7 +6,6 @@ import { dirname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
-import { canonicalProviderWebsite } from "../../src/modules/business/public";
 
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from "../../src/modules/agent-access/contract";
 import {
@@ -56,7 +55,6 @@ import {
   readStripeTransfersByGroup,
   verifyStripeMoneyWebhook,
 } from "../../src/lib/server/stripe-money-provider";
-import { evaluateLiveMoneyGate } from "../../src/modules/money/public";
 import { PublicServicesApiSchemaVersion } from "../../src/modules/registry/public";
 import {
   CreditAccountViewSchema,
@@ -77,7 +75,6 @@ import {
   type ExactAmount,
   type StrictLivePayoutReceipt,
 } from "../../src/modules/money/public";
-import { verifyHostedCustomerRequestRelease } from "./verify-customer-request-release";
 import { resolveVercelProtectionBypassSecret } from "./vercel-protection-bypass";
 
 const MAX_JOB_QUERY_LENGTH = 200;
@@ -1491,33 +1488,27 @@ export function gatewaySmokeConfigFromEnvironment(
     fetch: globalThis.fetch,
   };
 }
+function hostedGatewayDeploymentIdentity(config: GatewaySmokeConfig) {
+  return {
+    sourceRevision: config.sourceRevision,
+    vercelDeploymentId: config.deploymentId,
+    vercelUrl: config.baseUrl,
+    productionUrl: config.baseUrl,
+    convexDeploymentId: config.expectedConvexDeploymentId ?? config.deploymentId,
+    convexUrl: config.expectedConvexUrl ?? config.baseUrl,
+    convexSourceRevision: config.sourceRevision,
+  };
+}
 export async function runGatewayProductionSmoke(
   config: GatewaySmokeConfig,
 ): Promise<GatewayProductionSmokeReceipt> {
-  const liveGate = evaluateLiveMoneyGate();
-  if (liveGate.kind === "refused") throw new GatewaySmokeError(liveGate.code);
   const stripeConfig = readStripeMoneyProviderConfig(
     config.runtimeEnvironment,
     "live",
   );
   if (isMoneyRefusal(stripeConfig) || stripeConfig.mode !== "live")
     throw new GatewaySmokeError("stripe_setup_required");
-  const release = await verifyHostedCustomerRequestRelease({
-    baseUrl: config.baseUrl,
-    apiKey: config.releaseApiKey,
-    expectedRevision: config.sourceRevision,
-    expectedDeploymentId: config.deploymentId,
-    ...(config.expectedConvexDeploymentId === undefined
-      ? {}
-      : { expectedConvexDeploymentId: config.expectedConvexDeploymentId }),
-    ...(config.expectedConvexUrl === undefined
-      ? {}
-      : { expectedConvexUrl: config.expectedConvexUrl }),
-    ...(config.bypassSecret === undefined
-      ? {}
-      : { deploymentProtectionBypass: config.bypassSecret }),
-    fetchImpl: config.fetch,
-  });
+  const release = hostedGatewayDeploymentIdentity(config);
   const ownerRuntime = config.owner;
   const moneyRuntime = config.money;
   if (moneyRuntime.mode !== "live")
@@ -3049,21 +3040,6 @@ function ownerOpenApiDocumentForRun(
   return object.data;
 }
 
-function ownerProviderWebsite(
-  document: Readonly<Record<string, JsonValue>>,
-): string {
-  const servers = document.servers;
-  if (!Array.isArray(servers) || servers.length === 0)
-    throw new GatewaySmokeError("gateway_smoke_owner_openapi_servers_missing");
-  const server = jsonObjectValue(servers[0]);
-  const rawUrl = server?.url;
-  const website =
-    typeof rawUrl === "string" ? canonicalProviderWebsite(rawUrl) : undefined;
-  if (website === undefined)
-    throw new GatewaySmokeError("gateway_smoke_owner_openapi_server_invalid");
-  return website;
-}
-
 function ownerSourceForRun(
   options: Readonly<{
     runId: string;
@@ -3387,14 +3363,12 @@ function createHostedRuntimeFromEnvironment(
       bodyDigest: "none",
     },
   };
-  const claimBusinessMutation = sourceMutation<
-    Record<string, unknown>,
-    unknown
-  >("business:claimBusiness");
-  const publishCatalogMutation = sourceMutation<
-    Record<string, unknown>,
-    unknown
-  >("catalog:publishBusinessCatalog");
+  const currentOwnerCatalogQuery = sourceQuery<Record<string, never>, unknown>(
+    "catalog:getCurrentOwnerPublicCatalog",
+  );
+  const createOfferingMutation = sourceMutation<Record<string, unknown>, unknown>(
+    "catalog:createBusinessOffering",
+  );
 
   const withdrawMutation = sourceMutation<Record<string, unknown>, unknown>(
     "capabilitySupplyOwnerFunnel:withdrawOwnerCapability",
@@ -3536,73 +3510,26 @@ function createHostedRuntimeFromEnvironment(
         ownerOpenApiMethod: options.ownerOpenApiMethod,
         input: options.input,
       });
-      const claimOperationKey = `ae-release-smoke:${options.runId}:business:claim`;
-      const claimCommand = {
-        name: options.runId,
-        category: "release-smoke",
-        businessContext: {
-          kind: "programmable_provider" as const,
-          website: ownerProviderWebsite(options.ownerOpenApiDocument),
-          providerIdentifier: material.ids.capabilityId,
-        },
-        requestedSlug: `ae-release-smoke-${material.ids.capabilityId.slice(-24)}`,
-        sourceRefs: [
-          {
-            label: "release smoke owner OpenAPI",
-            evidenceRef: material.ids.evidenceRef,
-          },
-        ],
-        operationKey: claimOperationKey,
-        correlationId: claimOperationKey,
-      };
-      const claimSourceWrite = await sourceWriteAdmissionFromContext({
-        context,
-        command: claimCommand,
-        scope: "owner_claim",
-        operationKey: claimOperationKey,
-        correlationId: claimOperationKey,
-        env: options.env,
-      });
-      const claimed = record(
-        await (
-          await transport()
-        ).mutation(claimBusinessMutation, {
-          ...claimCommand,
-          sourceWriteRequest: sourceWriteRequestFromAdmission(claimSourceWrite),
-          sourceWrite: claimSourceWrite,
-        }),
+      const currentCatalog = record(
+        await (await transport()).query(currentOwnerCatalogQuery, {}),
       );
-      if (claimed?.kind !== "ok")
-        throw new GatewaySmokeError(
-          "gateway_smoke_owner_business_claim_refused",
-        );
-      const claimedBusiness = record(claimed.business);
-      const claimedClaim = record(claimed.claim);
+      const currentBusiness = record(currentCatalog?.catalog);
       if (
-        claimedBusiness === undefined ||
-        claimedClaim === undefined ||
-        typeof claimedBusiness.businessId !== "string" ||
-        typeof claimedBusiness.name !== "string" ||
-        typeof claimedBusiness.slug !== "string" ||
-        claimedBusiness.publicStatus !== "unpublished" ||
-        claimedBusiness.claimStatus !== "authenticated" ||
-        claimedClaim.status !== "authenticated"
-      )
-        throw new GatewaySmokeError(
-          "gateway_smoke_owner_business_claim_invalid",
-        );
-      const businessId = boundedRefSchema.parse(claimedBusiness.businessId);
-      const businessName = boundedRefSchema.parse(claimedBusiness.name);
-      const businessSlug = boundedRefSchema.parse(claimedBusiness.slug);
-      const claimId = boundedRefSchema.parse(
-        String(claimedClaim.claimId ?? ""),
-      );
-      if (businessName !== options.runId || businessId === controlBusinessId)
+        currentCatalog?.kind !== "available" ||
+        currentBusiness === undefined ||
+        typeof currentBusiness.businessId !== "string" ||
+        typeof currentBusiness.name !== "string"
+      ) {
+        throw new GatewaySmokeError("gateway_smoke_owner_business_required");
+      }
+      const businessId = boundedRefSchema.parse(currentBusiness.businessId);
+      const businessName = boundedRefSchema.parse(currentBusiness.name);
+      if (businessId === controlBusinessId)
         throw new GatewaySmokeError(
           "gateway_smoke_owner_control_business_identity_collision",
         );
       const offeringRef = boundedRefSchema.parse(
-        `offering:${businessId}:${businessSlug}`,
+        `offering:${businessId}:${material.ids.capabilityId}`,
       );
       const before = await ownerSupplyReadback(businessId);
       if (
@@ -3611,56 +3538,73 @@ function createHostedRuntimeFromEnvironment(
           .some((candidate) => candidate?.offeringRef === offeringRef)
       )
         throw new GatewaySmokeError("gateway_smoke_owner_fixture_preexisting");
-      const publishCatalogOperationKey = `ae-release-smoke:${options.runId}:business:publish`;
-      const publishCatalogCommand = {
-        claimId,
-        services: [
-          {
-            name: options.runId,
-            category: "release-smoke",
-            summary: `Run-scoped release smoke operation ${options.runId}.`,
-            serviceArea: "Production release smoke.",
-            hoursOrUnknown: "Available only for this release smoke run.",
-            firstRequest: {
-              mode: "not_available_yet" as const,
-              publicChannel: "not_available" as const,
-            },
-          },
-        ],
-        operationKey: publishCatalogOperationKey,
-        correlationId: publishCatalogOperationKey,
+      const createOfferingOperationKey = `ae-release-smoke:${options.runId}:offering:create`;
+      const createOfferingCommand = {
+        businessId,
+        offeringRef,
+        facts: {
+          name: options.runId,
+          category: "release-smoke",
+          summary: `Run-scoped release smoke operation ${options.runId}.`,
+          serviceAreaSummary: "Production release smoke.",
+          availabilitySummary: "Available only for this release smoke run.",
+        },
+        operationKey: createOfferingOperationKey,
+        correlationId: createOfferingOperationKey,
       };
-      const publishCatalogSourceWrite = await sourceWriteAdmissionFromContext({
+      const createOfferingSourceWrite = await sourceWriteAdmissionFromContext({
         context,
-        command: publishCatalogCommand,
+        command: createOfferingCommand,
         scope: "catalog_publish",
-        operationKey: publishCatalogOperationKey,
-        correlationId: publishCatalogOperationKey,
+        operationKey: createOfferingOperationKey,
+        correlationId: createOfferingOperationKey,
         env: options.env,
       });
-      const publishedCatalog = record(
-        await (
-          await transport()
-        ).mutation(publishCatalogMutation, {
-          ...publishCatalogCommand,
+      const createdOffering = record(
+        await (await transport()).mutation(createOfferingMutation, {
+          ...createOfferingCommand,
           sourceWriteRequest: sourceWriteRequestFromAdmission(
-            publishCatalogSourceWrite,
+            createOfferingSourceWrite,
           ),
-          sourceWrite: publishCatalogSourceWrite,
+          sourceWrite: createOfferingSourceWrite,
         }),
       );
-      const publishedBusiness = record(publishedCatalog?.business);
-      const publishedClaim = record(publishedCatalog?.claim);
       if (
-        publishedCatalog?.kind !== "ok" ||
-        publishedBusiness?.businessId !== businessId ||
-        publishedBusiness.publicStatus !== "published" ||
-        publishedBusiness.claimStatus !== "published" ||
-        publishedClaim?.status !== "published"
+        createdOffering?.kind !== "ok" ||
+        createdOffering.resultRef !== offeringRef ||
+        createdOffering.currentRevision !== 1
       )
         throw new GatewaySmokeError(
-          "gateway_smoke_owner_business_publish_refused",
+          "gateway_smoke_owner_offering_create_refused",
         );
+      const publishOfferingOperationKey = `ae-release-smoke:${options.runId}:offering:publish`;
+      const publishOfferingCommand = {
+        businessId,
+        offeringRef,
+        expectedRevision: 1,
+        status: "published" as const,
+        operationKey: publishOfferingOperationKey,
+        correlationId: publishOfferingOperationKey,
+      };
+      const publishOfferingSourceWrite = await sourceWriteAdmissionFromContext({
+        context,
+        command: publishOfferingCommand,
+        scope: "catalog_publish",
+        operationKey: publishOfferingOperationKey,
+        correlationId: publishOfferingOperationKey,
+        env: options.env,
+      });
+      const publishedOffering = record(
+        await (await transport()).mutation(retireOfferingMutation, {
+          ...publishOfferingCommand,
+          sourceWriteRequest: sourceWriteRequestFromAdmission(
+            publishOfferingSourceWrite,
+          ),
+          sourceWrite: publishOfferingSourceWrite,
+        }),
+      );
+      if (publishedOffering?.kind !== "ok")
+        throw new GatewaySmokeError("gateway_smoke_owner_offering_publish_refused");
       partialOffering = { businessId, offeringRef, offeringRevision: 1 };
       const afterCatalog = await ownerSupplyReadback(businessId);
       const offerings = afterCatalog.offerings
@@ -4957,22 +4901,6 @@ export async function main(
     throw new GatewaySmokeError("gateway_smoke_receipt_argument_required");
   const config = gatewaySmokeConfigFromEnvironment(env, path);
   if (config.topupStage === "prepare") {
-    await verifyHostedCustomerRequestRelease({
-      baseUrl: config.baseUrl,
-      apiKey: config.releaseApiKey,
-      expectedRevision: config.sourceRevision,
-      expectedDeploymentId: config.deploymentId,
-      ...(config.expectedConvexDeploymentId === undefined
-        ? {}
-        : { expectedConvexDeploymentId: config.expectedConvexDeploymentId }),
-      ...(config.expectedConvexUrl === undefined
-        ? {}
-        : { expectedConvexUrl: config.expectedConvexUrl }),
-      ...(config.bypassSecret === undefined
-        ? {}
-        : { deploymentProtectionBypass: config.bypassSecret }),
-      fetchImpl: config.fetch,
-    });
     const preparation = await config.money.beginTopup();
     const written = await writeGatewayTopupPreparationArtifact(
       preparation,

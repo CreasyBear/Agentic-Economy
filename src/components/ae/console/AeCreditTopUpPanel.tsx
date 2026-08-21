@@ -280,7 +280,7 @@ function CheckoutPaymentForm({ confirming, onConfirmed }: Readonly<{ confirming:
 }
 
 function topUpErrorCopy(result: MoneyRefusal | CreditTopupOutcomeUnknownResult): string {
-  if (result.code === 'stripe_setup_required' || result.code === 'live_money_gate_open') return 'Adding credit is unavailable right now. No payment started and your balance did not change. Try again later.'
+  if (result.code === 'stripe_setup_required') return 'Adding credit is unavailable right now. No payment started and your balance did not change. Try again later.'
   if (result.code === 'billing_identity_missing' || result.code === 'billing_identity_mismatch') return 'Your authenticated credit account is unavailable. No payment started.'
   if (result.code === 'credit_topup_amount_invalid') return 'That credit amount is outside the configured limits. No payment started.'
   if (result.code === 'credit_topup_pending' || result.code === 'credit_topup_outcome_unknown') return 'Payment is still being verified. Your balance will not change until the canonical server readback completes.'

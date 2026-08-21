@@ -18,7 +18,6 @@ import {
 } from '../../src/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
-import { evaluateLiveMoneyGate } from '../../src/modules/money/public'
 
 import type {
   PaymentPayload,
@@ -51,7 +50,7 @@ export const LOCAL_X402_ROUTE_PATTERN = 'GET /dev/x402/quote/:symbol'
 export const LOCAL_X402_PAY_TO = '0x000000000000000000000000000000000000dead' as const
 export const LOCAL_X402_PAYMENT_AMOUNT = '10000' as const
 export const LOCAL_X402_EVIDENCE_CEILING =
-  'Protocol/wire evidence only: local HTTP provider and fake facilitator. No blockchain settlement, provider earnings, AE credit debit, AE rake, hosted certification, production proof, or Cluster C observed-listing admission.'
+  'Protocol/wire evidence only: local HTTP provider and fake facilitator. No blockchain settlement, provider earnings, AE credit debit, AE rake, hosted certification, production proof, or observed-listing admission.'
 export const LOCAL_X402_TESTNET_ENVIRONMENT = [
   'AE_X402_CANARY_PROVIDER_URL',
   'AE_X402_PAYMENT_PRIVATE_KEY',
@@ -401,17 +400,6 @@ async function runDevelopmentX402RouteRuntimeCanary(
 }
 
 async function runDevelopmentX402TestnetCanary(environment: Environment): Promise<LocalX402CanaryRefusal | LocalX402TestnetResult> {
-  const gate = evaluateLiveMoneyGate()
-  if (gate.kind === 'refused') {
-    return {
-      kind: 'refused',
-      mode: 'testnet',
-      code: 'x402_testnet_live_money_gate_required',
-      prerequisite: `Existing live-money policy/consent gate must be accepted before a testnet payment attempt. Current gate: ${gate.code}.`,
-      requiredEnvironment: LOCAL_X402_TESTNET_ENVIRONMENT,
-      evidenceCeiling: LOCAL_X402_EVIDENCE_CEILING,
-    }
-  }
   const missing = LOCAL_X402_TESTNET_ENVIRONMENT.filter((name) => typeof environment[name] !== 'string' || environment[name]!.trim() === '')
   if (missing.length > 0) {
     return {

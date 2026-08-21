@@ -437,7 +437,7 @@ function EarningsCurrencyCard({
       )}
       <div className="grid gap-2 rounded-md bg-muted/40 p-3">
         <p className="m-0 text-sm text-muted-foreground">
-          AE records eligible net earnings in a daily payout balance. Live transfers remain held while the live-money gate is closed.
+          Payouts become available when your payout account and provider configuration are ready.
         </p>
         <div className="flex flex-wrap gap-2">
           {accountState === "ready" ? null : stripeAccountId === undefined ? (
