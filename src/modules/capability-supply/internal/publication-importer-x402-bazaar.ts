@@ -60,7 +60,7 @@ export function admitBazaarFromPaymentRequired(
   if (!isRecord(extension)) {
     return { kind: "refused", reason: "bazaar_discovery_invalid" };
   }
-  const discoveryExtension = extension as DiscoveryExtension;
+  const discoveryExtension = extension as unknown as DiscoveryExtension;
   try {
     const validation = validateAndExtract(discoveryExtension);
     if (!validation.valid) {
