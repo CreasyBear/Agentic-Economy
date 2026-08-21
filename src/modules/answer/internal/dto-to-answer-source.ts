@@ -39,16 +39,8 @@ export function toAnswerSource(
     ? dto.businessContext
     : undefined
 
-  // V1 `firstRequest.mode === 'inquiry_available'` ⟷ an AE-inquiry human request
-  // path. Any other human request path (phone / website) is still a published
-  // first-contact route, just not one AE hosts.
-  const hasAeInquiryPath = dto.offerings.some((offering) =>
-    offering.accessPaths.some(
-      (path) => path.kind === 'human_request' && path.channel === 'ae_inquiry',
-    ),
-  )
-  const firstRequestMode = dto.accessSummary.humanRequest
-    ? 'inquiry_available'
+    const firstRequestMode = dto.accessSummary.humanRequest
+    ? 'quote_request_available'
     : 'not_available_yet'
 
   const trustLabel = plainTrustLabel(dto.trustTier)
@@ -86,9 +78,8 @@ export function toAnswerSource(
     ...(pricingSummary === undefined ? {} : { pricingSummary }),
     ...(availabilitySummary === undefined ? {} : { availabilitySummary }),
     freshnessLabel: plainFreshnessLabel(dto.observedAt),
-    nextStepLabel: hasAeInquiryPath ? 'Send inquiry' : plainNextStepLabel(firstRequestMode),
+    nextStepLabel: plainNextStepLabel(firstRequestMode),
     detailUrl: buildDetailUrl(dto.slug),
-    ...(hasAeInquiryPath ? { inquiryUrl: `/${dto.slug}/inquiry` } : {}),
     services: dto.offerings.map((offering) => {
       const offeringAvailability = realAvailability(offering.availabilitySummary)
       const offeringPricing = offering.pricingSummary?.trim()

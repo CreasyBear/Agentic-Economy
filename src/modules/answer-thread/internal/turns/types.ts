@@ -35,7 +35,6 @@ export type TurnPathId =
   | 'frozen_filter'
   | 'frozen_compare'
   | 'agent'
-  | 'inquiry_handoff'
   | 'boundary_explain'
   | 'unsupported'
 

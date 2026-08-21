@@ -68,7 +68,7 @@ export function classifyFollowUpIntent(query: string, priorQueryCount: number): 
   }
 
   if (INQUIRY_HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return 'inquiry_handoff'
+    return 'unsupported'
   }
 
   if (COMPARE_PATTERNS.some((pattern) => pattern.test(normalized))) {

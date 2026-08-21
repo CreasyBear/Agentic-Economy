@@ -3,13 +3,12 @@ import type { FollowUpIntent, PublicThreadProjection } from '@/modules/answer-th
 import {
   activeSelectedProviderForTurns,
   listedProvidersFromArtifacts,
-  providerHasInquiryPath,
 } from './session-provider-context'
 
 export type SessionJourneyStatus = 'complete' | 'active' | 'pending'
 
 export type SessionJourneyStep = {
-  id: 'search' | 'compare' | 'follow_up' | 'inquiry'
+  id: 'search' | 'compare' | 'follow_up'
   label: string
   detail: string
   status: SessionJourneyStatus
@@ -17,10 +16,8 @@ export type SessionJourneyStep = {
 
 export type SessionJourney = {
   providerCount: number
-  hasInquiryReadyProvider: boolean
   selectedProvider?: {
     name: string
-    hasInquiryPath: boolean
   }
   heading: string
   statusText: string
@@ -42,10 +39,8 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   const providerSlugs = new Set<string>()
   for (const provider of providers) providerSlugs.add(provider.slug)
   const providerCount = providerSlugs.size
-  const hasInquiryReadyProvider = providers.some((provider) => providerHasInquiryPath(provider))
   const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const completedTurnCount = completedTurns.length
-  const liveIntent = input.liveTurn?.intent
   const liveTurnCount = input.liveTurn === null || input.liveTurn === undefined ? 0 : 1
   const totalTurnCount = completedTurnCount + liveTurnCount
 
@@ -53,8 +48,6 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
     return null
   }
 
-  const handoffActive = liveIntent === 'inquiry_handoff'
-  const handoffComplete = selectedProvider !== undefined && completedTurns.some((turn) => turn.intent === 'inquiry_handoff')
   const hasFollowUp = completedTurns.some((turn) => turn.seq > 1) || (completedTurnCount > 0 && liveTurnCount > 0)
   const hasSearchStarted = totalTurnCount > 0
   const hasSearchCompleted = completedTurnCount > 0
@@ -63,29 +56,24 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   // Nothing to orient yet: no matches and no contact activity. An empty
   // "request" only restates "nothing found", so suppress it entirely and
   // let the answer's own recovery prompts carry the empty case.
-  if (!hasProviderEvidence && selectedProvider === undefined && !handoffActive && !handoffComplete && !hasInquiryReadyProvider) {
+  if (!hasProviderEvidence && selectedProvider === undefined) {
     return null
   }
 
   return {
     providerCount,
-    hasInquiryReadyProvider,
     ...(selectedProvider === undefined
       ? {}
       : {
           selectedProvider: {
             name: selectedProvider.name,
-            hasInquiryPath: providerHasInquiryPath(selectedProvider),
           },
         }),
     heading: 'Next steps',
     statusText: buildSessionJourneyStatusText({ providerCount, selectedProvider }),
     guidance: buildSessionJourneyGuidance({
       providerCount,
-      hasInquiryReadyProvider,
       selectedProvider,
-      handoffActive,
-      handoffComplete,
       hasSearchCompleted,
     }),
     steps: [
@@ -110,37 +98,15 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
         detail: 'Narrow, compare, or ask about limits',
         status: hasFollowUp ? 'complete' : hasProviderEvidence ? 'active' : 'pending',
       },
-      {
-        id: 'inquiry',
-        label: 'Ask the business',
-        detail: inquiryStepDetail({ hasInquiryReadyProvider, selectedProvider }),
-        status: handoffComplete ? 'complete' : handoffActive ? 'active' : 'pending',
-      },
     ],
   }
 }
 
 function buildSessionJourneyGuidance(input: {
   providerCount: number
-  hasInquiryReadyProvider: boolean
   selectedProvider: AnswerSource | undefined
-  handoffActive: boolean
-  handoffComplete: boolean
   hasSearchCompleted: boolean
 }): string {
-  if (input.handoffActive) {
-    return 'Preparing a request to the business. The business still confirms timing, quote, and availability.'
-  }
-
-  if (input.handoffComplete) {
-    if (input.selectedProvider !== undefined && !providerHasInquiryPath(input.selectedProvider)) {
-      return `${input.selectedProvider.name} is selected for review. This business does not have a request form yet.`
-    }
-    if (input.selectedProvider !== undefined) {
-      return `${input.selectedProvider.name} is selected for contact. The business still confirms timing, quote, and availability.`
-    }
-  }
-
   if (!input.hasSearchCompleted) {
     return "Checking what's available before any contact step."
   }
@@ -149,11 +115,7 @@ function buildSessionJourneyGuidance(input: {
     return 'No clear match yet. Refine the request before contacting a business.'
   }
 
-  if (input.hasInquiryReadyProvider) {
-    return 'Compare the options, then choose a business to contact. The business still confirms timing, quote, and availability.'
-  }
-
-  return 'Compare the published details first; these options do not have a request form yet.'
+  return 'Compare the published details, then use a listed contact channel when one is available.'
 }
 
 function buildSessionJourneyStatusText(input: {
@@ -161,9 +123,7 @@ function buildSessionJourneyStatusText(input: {
   selectedProvider: AnswerSource | undefined
 }): string {
   if (input.selectedProvider !== undefined) {
-    return providerHasInquiryPath(input.selectedProvider)
-      ? `${input.selectedProvider.name} selected for contact`
-      : `${input.selectedProvider.name} selected for review`
+    return `${input.selectedProvider.name} selected for review`
   }
 
   if (input.providerCount > 0) {
@@ -172,15 +132,3 @@ function buildSessionJourneyStatusText(input: {
 
   return 'Finding a match'
 }
-
-function inquiryStepDetail(input: {
-  hasInquiryReadyProvider: boolean
-  selectedProvider: AnswerSource | undefined
-}): string {
-  if (input.selectedProvider !== undefined) {
-    return providerHasInquiryPath(input.selectedProvider) ? 'Request form available' : 'No request form yet'
-  }
-
-  return input.hasInquiryReadyProvider ? 'Request form available' : 'Choose a business first'
-}
-

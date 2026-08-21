@@ -1,5 +1,5 @@
 /**
- * Shared human-copy guards for the answer gate and follow-up chip validation.
+ * Shared human-copy guards for the answer gate.
  *
  * These shared patterns protect against prompt injection and internal
  * epistemic labels. Provider-assurance checks live in `answer-gate.ts`, where

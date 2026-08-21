@@ -224,9 +224,7 @@ function buildCoverage(
   summary: AnswerRunSummary,
   workLog: FrozenTurnEvidenceDraft['workLog'],
 ): AnswerRunCoverage {
-  // Coverage is over the DIRECT model toolset. `operation.execute` and
-  // `operation.invoke` are record seams behind dynamic per-op tools, not
-  // themselves callable tools, so neither is listed as available.
+  // Coverage is over the DIRECT model toolset, including generic operation.execute.
   const toolsAvailable = [...ANSWER_READ_TOOL_IDS]
   const toolsInvoked = uniq(Object.keys(summary.tools.byName)).sort((a, b) => a.localeCompare(b)).filter(isAnswerToolId)
   const invoked = new Set(toolsInvoked)

@@ -21,13 +21,6 @@ export function buildChatSubmitFunnelEvents(input: {
     },
   ]
 
-  if (intent === 'inquiry_handoff') {
-    events.push(
-      { eventType: 'answer_provider_selected', payload: basePayload },
-      { eventType: 'inquiry_attempted', payload: basePayload },
-    )
-  }
-
   return events
 }
 

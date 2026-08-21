@@ -79,8 +79,8 @@ export const ANSWER_OPERATION_EFFECT_TOOL_IDS = [
 ] as const satisfies readonly AnswerToolId[]
 
 
-// Read-only model tools. `operation.execute` stays out: dynamic capability tools
-// bind one strict operation schema instead of exposing a free-form record tool.
+// Model-facing market tools. `operation.execute` is the generic keyless
+// executor (same contract as MCP). `operation.invoke` stays authenticated.
 export const ANSWER_READ_TOOL_IDS = [
   'registry.search',
   'registry.detail',
@@ -88,6 +88,7 @@ export const ANSWER_READ_TOOL_IDS = [
   'registry.operations.detail',
   'registry.operations.compare',
   'registry.operations.inspectPlan',
+  'operation.execute',
 ] as const satisfies readonly AnswerToolId[]
 
 const ThinkingStepValues = ['search', 'read', 'write'] as const

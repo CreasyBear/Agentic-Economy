@@ -64,7 +64,6 @@ const forbiddenPublicProjectionMarkers = [
   'responseId',
   'registry.search',
   'registry.detail',
-  'inquiry.submit',
   'provider request ids',
   'internal trace names',
 ] as const

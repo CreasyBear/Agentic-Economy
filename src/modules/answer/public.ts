@@ -1,11 +1,9 @@
 /**
  * Public seam for the answer module.
  *
- * Routes and components import from here, never from `./internal`. Phase 7
- * collapsed the answer path onto a single LLM tool-use agent; the deterministic
- * synthesizer and the legacy gated-LLM prose path were deleted in slice 7G after
- * the eval gate went green. Boundary/unsupported intents answer from
- * `boundary-prose.ts` without an LLM call.
+ * Routes and components import from here, never from `./internal`. The answer
+ * path uses one LLM tool-use agent; boundary and unsupported intents answer
+ * from `boundary-prose.ts` without an LLM call.
  */
 
 export type { AnswerToolUseAgentCheckpoint } from './internal/answer-tool-use-agent'
@@ -27,14 +25,6 @@ export {
   hasInjectionUpgrade,
 } from './internal/copy-guard-patterns'
 export {
-  keylessDataAskFromCandidates,
-  resolveKeylessDataAskFromInterpretation,
-  resolveKeylessDataAskSelection,
-  type KeylessDataAskDecision,
-  type KeylessDataAskDecisionCandidate,
-  type KeylessDataAskResolution,
-} from './internal/keyless-data-ask'
-export {
   ANSWER_OPERATION_INPUT_MAX_BYTES,
   parseAnswerOperationSelectionInput,
   type AnswerOperationSelectionInput,
@@ -46,18 +36,16 @@ export {
   snapshotProseFromAnswer,
 } from './answer-prose'
 export {
-  buildArtifactsFromSnapshot,
-  getDefaultArtifactBudgetForLayoutProfile,
-  type AnswerArtifactBudget,
-} from './internal/snapshot-artifacts'
+  buildMessagePartsFromSnapshot,
+  artifactsToMessageParts,
+  kernelArtifactsFromSnapshot,
+  kernelArtifactsFromSnapshot as buildArtifactsFromSnapshot,
+  type AnswerMessagePart,
+  type AnswerMessagePartsResult,
+} from './internal/build-message-parts'
 export { toAnswerSource } from './internal/dto-to-answer-source'
 export { emitSnapshotEvents } from './internal/emit-snapshot-events'
 export { mergeAnswerArtifact } from './internal/merge-answer-artifact'
-export { artifactsFromStructured } from './internal/structured-artifacts'
-export {
-  extractRequestedLocation,
-  isConfirmedSearchContext,
-} from './internal/provider-location-filter'
 export {
   type AnswerLayoutProfile,
   AnswerLayoutProfileValues,
@@ -66,12 +54,6 @@ export {
   resolveLayoutProfile,
 } from './internal/answer-layout-profile'
 export { neutralizeBidiFormattingControls } from './projection'
-export {
-  buildMessagePartsFromSnapshot,
-  artifactsToMessageParts,
-  type AnswerMessagePart,
-  type AnswerMessagePartsResult,
-} from './internal/build-message-parts'
 export {
   projectAnswerOperationResult,
   sanitizeAnswerOperationOutcome,
@@ -99,16 +81,10 @@ export {
   buildUnsupportedSummary,
 } from './internal/boundary-prose'
 export {
-  buildAnswerInquiryHref,
-  type AnswerInquiryHrefInput,
-} from './internal/inquiry-link'
-export {
   readAnswerEvalPassed,
-  readLlmFollowUpChipsEnabled,
 } from './internal/llm-config'
 export {
-  buildFollowUpChipsSystemPrompt,
-  buildFollowUpChipsUserPrompt,
+  buildToolUseAgentProseInstructions,
   buildToolUseAgentSystemPrompt,
   buildToolUseAgentUserPrompt,
 } from './internal/answer-llm-prompts'
@@ -190,3 +166,7 @@ export {
   type AnswerTurnProblemCode,
 } from '@/lib/errors'
 
+export {
+  AE_CATALOG_EXAMPLE_ASKS,
+  type CatalogExampleAsk,
+} from './catalog-example-asks'

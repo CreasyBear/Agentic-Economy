@@ -2,7 +2,6 @@ export const FollowUpIntentValues = [
   'refine_search',
   'filter_known',
   'compare_known',
-  'inquiry_handoff',
   'explain_boundary',
   'unsupported',
 ] as const
@@ -18,7 +17,6 @@ export const AnswerTurnCheckpointRouteValues = [
   'tool_search',
   'frozen_filter',
   'frozen_compare',
-  'inquiry_handoff',
   'boundary_explain',
   'unsupported',
   'rationale',

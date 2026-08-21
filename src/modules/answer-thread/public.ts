@@ -42,19 +42,8 @@ export {
 } from './answer-thread.functions'
 export { buildPublicThreadProjection } from './internal/public-projection'
 
-export {
-  buildFollowUpChips,
-  buildDeterministicFollowUpChips,
-  validateFollowUpChip,
-  type FollowUpChip,
-} from './internal/follow-up-chips'
 export { classifyFollowUpIntent, buildThreadTitle } from './internal/follow-up-intent'
-export {
-  planAnswerTurn,
-} from './internal/answer-response-planner'
 export { formatTurnQueryLabel } from './internal/format-turn-query-label'
-export { resolveThreadAgentJson } from './internal/resolve-thread-agent-json'
-export { generateLlmFollowUpChips } from './internal/llm-follow-up-chips'
 export {
   appendSessionCookie,
   readAnswerSessionId,

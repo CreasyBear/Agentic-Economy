@@ -49,6 +49,5 @@ function orderProviders(providers: readonly AnswerSource[], timing: NeedTiming |
 }
 
 function contactPriority(provider: AnswerSource): number {
-  if (directCallHref(provider) !== undefined) return 2
-  return typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0 ? 1 : 0
+  return directCallHref(provider) === undefined ? 0 : 1
 }

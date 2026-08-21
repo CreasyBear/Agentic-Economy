@@ -28,6 +28,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 import { cn } from '@/lib/utils'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
+import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
 import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
 
 import { AeAnswerSuggestions, type AeSuggestionItem } from './AeSuggestionChips'
@@ -50,11 +51,9 @@ export type AeAnswerPromptInputProps = {
   focusOnMount?: boolean
 }
 
-const DEFAULT_EXAMPLES: readonly AeSuggestionItem[] = [
-  { label: 'Emergency plumber', value: 'I need an emergency plumber in Brunswick' },
-  { label: 'Locksmith now', value: 'I need a locksmith in Footscray right now' },
-  { label: 'Electrician today', value: 'I need an electrician in Geelong today' },
-]
+export const AE_CHAT_MARKET_EXAMPLES: readonly AeSuggestionItem[] = AE_CATALOG_EXAMPLE_ASKS.map(
+  (ask) => ({ label: ask.label, value: ask.query }),
+)
 
 
 // Stable accessible name for the query field. The visible placeholder rotates
@@ -66,7 +65,7 @@ export function AeAnswerPromptInput({
   defaultValue = '',
   initialTiming = 'flexible',
   initialTimingDate = '',
-  examples = DEFAULT_EXAMPLES,
+  examples = AE_CHAT_MARKET_EXAMPLES,
   ...props
 }: AeAnswerPromptInputProps) {
   const inputId = useId()

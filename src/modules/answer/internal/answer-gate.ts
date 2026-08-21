@@ -94,16 +94,29 @@ function hasUnsupportedProviderClaim(text: string, providerNames: readonly strin
     String.raw`(?:confirms?|guarantees?|handles?|can|will)\b|(?:is|are)\s+(?:available|qualified|registered|verified)\b`
   const genericSubject = new RegExp(
     String.raw`\b(?:business(?:es)?|provider(?:s)?|listing(?:s)?|it|they)\s+(?:${unsupportedPredicate})`,
-    'i',
+    'gi',
   )
-  if (genericSubject.test(text)) {
-    return true
+  for (const match of text.matchAll(genericSubject)) {
+    if (!claimIsNegated(text, match.index ?? 0)) {
+      return true
+    }
   }
 
   return providerNames.some((name) => {
     const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(String.raw`\b${escapedName}\s+(?:${unsupportedPredicate})`, 'i').test(text)
+    const named = new RegExp(String.raw`\b${escapedName}\s+(?:${unsupportedPredicate})`, 'gi')
+    for (const match of text.matchAll(named)) {
+      if (!claimIsNegated(text, match.index ?? 0)) {
+        return true
+      }
+    }
+    return false
   })
+}
+
+function claimIsNegated(text: string, matchIndex: number): boolean {
+  const prefix = text.slice(Math.max(0, matchIndex - 64), matchIndex)
+  return /(?:\bno\b|\bnot\b|\bnone\b|\bneither\b|\bwithout\b|\bzero\b|n't)(?:\s+\S+){0,6}\s*$/iu.test(prefix)
 }
 
 function hasUnsupportedPublishedDetail(

@@ -1,4 +1,6 @@
-export { buildArtifactsFromSnapshot } from './internal/snapshot-artifacts'
+export {
+  kernelArtifactsFromSnapshot as buildArtifactsFromSnapshot,
+} from './internal/build-message-parts'
 export {
   hasEpistemicVocabulary,
   hasInjectionUpgrade,

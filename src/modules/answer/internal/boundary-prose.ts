@@ -17,10 +17,6 @@ export function buildBoundarySummary(providers: readonly AnswerSource[]): string
 }
 
 export function buildBoundaryNextStep(providers: readonly AnswerSource[]): string {
-  if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
-    return 'Open a business and send a request when that option is available.'
-  }
-
   return 'See other options or refine your search, then contact the business when you find a match.'
 }
 
@@ -41,10 +37,6 @@ export function buildUnsupportedSummary(providers: readonly AnswerSource[]): str
 }
 
 export function buildUnsupportedNextStep(providers: readonly AnswerSource[]): string {
-  if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
-    return 'Send a request from the business page.'
-  }
-
   return 'Open a business page to use its request option when available.'
 }
 

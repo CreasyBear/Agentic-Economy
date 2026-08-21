@@ -4,6 +4,5 @@ export {
   setAnswerHarnessFinalizerForTests,
   type AnswerHarnessFinalizer,
   type AnswerHarnessFinalizerInput,
-} from './internal/answer-turn-finalization'
-export { setLlmFollowUpChipGeneratorForTests } from './internal/llm-follow-up-chips'
+} from './internal/answer-turn-harness-report'
 export { answerTurnFinalizationDigest } from './internal/turn-digests'

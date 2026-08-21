@@ -6,7 +6,3 @@ export {
   type AnswerToolUseAgentInput,
   type AnswerToolUseAgentResult,
 } from './internal/answer-tool-use-agent'
-export {
-  assembleAnswerEvidence,
-  type AssembledAnswerEvidence,
-} from './internal/evidence-assembler'

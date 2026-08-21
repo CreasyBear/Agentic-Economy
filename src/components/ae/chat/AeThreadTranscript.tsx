@@ -6,10 +6,7 @@ import type { StopAnswerTurnResult } from './turn-stop'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
 import { AeThreadTurnReplaySection } from './AeThreadTurnReplaySection'
 import { AeThreadTurnStreamSection, type TurnStreamOutcome } from './AeThreadTurnStreamSection'
-import { AeFollowUpChips } from './AeSuggestionChips'
 import { toThreadViewModel } from './thread-turn-view'
-import { AeShortlistTerminal } from './AeShortlistTerminal'
-import { settledShortlistFromArtifacts } from './shortlist-projection'
 
 export type AeThreadTranscriptProps = {
   threadId?: string | null
@@ -29,7 +26,6 @@ export type AeThreadTranscriptProps = {
   onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
   onLiveStopChange?: (stop: (() => Promise<void>) | null) => void
   onFollowUp?: (query: string) => void
-  onChangeCriteria?: () => void
   onRetry?: (query: string) => void
   onStopPendingTurn?: (threadId: string, turnId: string) => Promise<StopAnswerTurnResult>
 }
@@ -49,18 +45,13 @@ export function AeThreadTranscript({
   onSettledTurn,
   onLiveStopChange,
   onFollowUp,
-  onChangeCriteria,
   onStopPendingTurn,
   onRetry,
 }: AeThreadTranscriptProps) {
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const displayedTurns = projection?.turns ?? []
   const resolvedThreadId = resolveThreadId(threadId, projection?.threadId).threadId
-  const followUpContext = buildFollowUpContext(completedTurns)
   const latestProjectedTurn = projection?.turns.at(-1)
-  const terminal = latestProjectedTurn?.status === 'complete'
-    ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
-    : null
   const previousTurnRef = useRef<TurnStatusSnapshot | null>(null)
   const liveGenerationRef = useRef<number | null>(null)
   const settledLiveTurnRef = useRef<TurnStatusSnapshot | null>(null)
@@ -143,21 +134,12 @@ export function AeThreadTranscript({
       </p>
       {displayedTurns.map((turn, index) => {
         const isLastSettled = index === displayedTurns.length - 1
-        const isLastCompleted = turn.status === 'complete' && turn.turnId === completedTurns.at(-1)?.turnId
         const expanded = isLastSettled
         const viewModel = toThreadViewModel(turn)
         const turnKey = turnRenderKeys?.[turn.turnId] ?? turn.turnId
 
         const anchorThisTurn = liveTurn === null && isLastSettled
         const canSelectOperations = liveTurn === null && isLastSettled
-        const showsTerminal = isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null
-        const terminalProps = showsTerminal ? {
-          ...terminal,
-          threadId: resolvedThreadId ?? projection?.threadId ?? 'shortlist',
-          revision: `${latestProjectedTurn.turnId}:${latestProjectedTurn.seq}`,
-          ...(latestProjectedTurn.createdAt === undefined ? {} : { sourceAt: new Date(latestProjectedTurn.createdAt).toISOString() }),
-          ...(onChangeCriteria === undefined ? {} : { onChangeCriteria }),
-        } : null
 
         return (
           <MessageScrollerItem
@@ -168,7 +150,6 @@ export function AeThreadTranscript({
             {...(anchorThisTurn ? { 'data-scroll-anchor': 'true' } : {})}
           >
             <div className="flex flex-col gap-2">
-              {terminalProps?.timing === 'today' ? <AeShortlistTerminal {...terminalProps} /> : null}
               {expanded ? (
                 <AeThreadTurnReplaySection
                   {...viewModel}
@@ -190,20 +171,6 @@ export function AeThreadTranscript({
                   {...(onOperationSelect === undefined || !canSelectOperations ? {} : { onOperationSelect })}
                 />
               )}
-              {terminalProps !== null && terminalProps.timing !== 'today' ? <AeShortlistTerminal {...terminalProps} /> : showsTerminal ? null : isLastCompleted && liveTurn === null ? (
-                <>
-                  {isNoMatchTurn(turn) ? (
-                    <p className="text-muted-foreground">
-                      No matching businesses were found. Try changing the service or location.
-                    </p>
-                  ) : null}
-                  <AeFollowUpChips
-                    turn={followUpContext?.turn ?? turn}
-                    contextPlacement={followUpContext?.contextPlacement ?? 'current'}
-                    {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })}
-                  />
-                </>
-              ) : null}
             </div>
           </MessageScrollerItem>
         )
@@ -264,56 +231,4 @@ function resolveThreadId(
 ): { threadId?: string } {
   const id = routeThreadId ?? projectionThreadId
   return id === undefined || id.length === 0 ? {} : { threadId: id }
-}
-
-type FollowUpContext = {
-  turn: PublicThreadTurn
-  contextPlacement: 'current' | 'carried'
-}
-
-function buildFollowUpContext(turns: readonly PublicThreadTurn[]): FollowUpContext | undefined {
-  const latest = turns.at(-1)
-  if (latest === undefined || hasProviderContext(latest)) {
-    return latest === undefined ? undefined : { turn: latest, contextPlacement: 'current' }
-  }
-
-  const providerContextTurn = turns.slice(0, -1).findLast(hasProviderContext)
-  if (providerContextTurn === undefined) {
-    return { turn: latest, contextPlacement: 'current' }
-  }
-
-  return {
-    turn: {
-      ...latest,
-      artifacts: [
-        ...latest.artifacts,
-        ...providerContextTurn.artifacts.filter(isProviderContextArtifact),
-      ],
-    },
-    contextPlacement: 'carried',
-  }
-}
-
-function hasProviderContext(turn: PublicThreadTurn): boolean {
-  return turn.artifacts.some(isProviderContextArtifact)
-}
-
-function isProviderContextArtifact(artifact: PublicThreadTurn['artifacts'][number]): boolean {
-  switch (artifact.kind) {
-    case 'selected-provider':
-      return true
-    case 'provider-cards':
-    case 'provider-compare-table':
-      return artifact.providers.length > 0
-    default:
-      return false
-  }
-}
-
-function isNoMatchTurn(turn: PublicThreadTurn): boolean {
-  const providerCount = turn.artifacts.reduce((count, artifact) => {
-    if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') return count
-    return count + artifact.providers.length
-  }, 0)
-  return providerCount === 0 && turn.artifacts.some((artifact) => artifact.kind === 'recovery-prompts')
 }

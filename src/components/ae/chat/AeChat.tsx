@@ -18,7 +18,6 @@ import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import {
   emitWave1JourneyEvent,
   getOrCreatePseudonymousJourneyId,
-  markJourneyViewedAfterReopenWindow,
 } from '@/lib/ui/journey-events'
 import { cn } from '@/lib/utils'
 import { ANSWER_OPERATION_INPUT_MAX_BYTES } from '@/modules/answer/public'
@@ -49,7 +48,6 @@ import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
 import { AeThreadTranscript } from './AeThreadTranscript'
-import { settledShortlistFromArtifacts } from './shortlist-projection'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import {
   buildChatCompleteFunnelEvents,
@@ -175,16 +173,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   )
   const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState<boolean | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(initialDraft?.threadId ?? null)
   const readbackSupportedTurnIdsRef = useRef(new Set<string>())
   const mobileSidebarOpenerRef = useRef<HTMLElement | null>(null)
   const routeFocusHeadingRef = useRef<HTMLHeadingElement | null>(null)
   const previousRouteThreadIdRef = useRef(routeThreadId)
 
-  useEffect(() => {
-    setRefinementComposerOpen(false)
-  }, [routeThreadId])
   useLayoutEffect(() => {
     threadsRef.current = threads
   }, [threads])
@@ -273,36 +267,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const completedTurns = sessionProjection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const completedTurnCount = completedTurns.length
   const latestProjectedTurn = sessionProjection?.turns.at(-1)
-  const terminalShortlist = liveTurn === null && latestProjectedTurn?.status === 'complete'
-    ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
-    : null
   const composerTiming = latestProjectedTurn?.timing ?? liveTurn?.searchContext.timing ?? 'flexible'
   const composerTimingDate = latestProjectedTurn?.timingDate ?? liveTurn?.searchContext.timingDate
-  const terminalLayoutProfile = liveTurn === null && latestProjectedTurn?.status === 'complete'
-    ? latestProjectedTurn.layoutProfile
-    : undefined
-  const showBusinessComposerControls =
-    terminalLayoutProfile === undefined
-    || terminalLayoutProfile === 'discovery_full'
-    || terminalLayoutProfile === 'clarification'
-    || terminalLayoutProfile === 'refinement_compact'
-    || terminalLayoutProfile === 'compare_pair'
-  const showComposerTiming = showBusinessComposerControls
-  useEffect(() => {
-    if (effectiveRouteThreadId === null || terminalShortlist === null) {
-      return
-    }
-
-    const pseudonymousJourneyId = getOrCreatePseudonymousJourneyId('J2', effectiveRouteThreadId)
-    if (markJourneyViewedAfterReopenWindow('J2', effectiveRouteThreadId)) {
-      emitWave1JourneyEvent({
-        event: 'shortlist_reopened',
-        eventVersion: 1,
-        journey: 'J2',
-        pseudonymousJourneyId,
-      })
-    }
-  }, [effectiveRouteThreadId, terminalShortlist])
+  const showComposerTiming = !showWelcome
 
 
   const refreshThreads = useCallback(async () => {
@@ -408,7 +375,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleSubmit(query: string, timing: NeedTiming = 'flexible', timingDate?: string) {
-    setRefinementComposerOpen(false)
     const turnSearchContext = { ...searchContext, timing, ...(timingDate === undefined ? {} : { timingDate }) }
     const intent = classifyFollowUpIntent(query, completedTurnCount)
     if (!startTurn(query, turnSearchContext, intent)) {
@@ -480,14 +446,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         nextRecord,
       ]
     })
-    if (settledShortlistFromArtifacts(turn.artifacts, turn.timing) !== null) {
-      emitWave1JourneyEvent({
-        event: 'shortlist_ready',
-        eventVersion: 1,
-        journey: 'J2',
-        pseudonymousJourneyId: getOrCreatePseudonymousJourneyId('J2', threadIdForTurn),
-      })
-    }
   }
 
   function handleStreamEnd(outcome: 'complete' | 'pending' | 'error' | 'stopped') {
@@ -568,10 +526,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setActiveTurnStop(() => stop)
   }, [])
 
-  function handleChangeCriteria() {
-    setRefinementComposerOpen(true)
-  }
-
   function handleRetry(query: string) {
     const retryIntent = liveTurn?.query === query ? liveTurn.intent : classifyFollowUpIntent(query, completedTurnCount)
     const retryContext = {
@@ -606,7 +560,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     pendingThreadIdRef.current = null
     readbackSupportedTurnIdsRef.current.clear()
     setOptimisticTurns([])
-    setRefinementComposerOpen(false)
     setMobileSidebarOpen(false)
     await Promise.resolve(navigate({ to: '/t/new' }))
   }
@@ -630,15 +583,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const scrollerKey = effectiveRouteThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
   const defaultScrollPosition =
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
-  const followUpComposerCopy =
-    showBusinessComposerControls || terminalLayoutProfile === 'data_answer'
-      ? buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
-      : {
-          placeholder: terminalLayoutProfile === 'empty_state'
-            ? 'Try a different question'
-            : 'Ask a different question',
-          loopHint: '',
-        }
+  const followUpComposerCopy = buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
 
   // Both large-screen column states are explicit so the content column resizes
   // smoothly and the sidebar slides in from a 0-width track instead of the
@@ -757,7 +702,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                   onSettledTurn={handleSettledTurn}
                   onLiveStopChange={handleLiveStopChange}
                   {...(effectiveRouteThreadId === null ? {} : { onFollowUp: handleFollowUp })}
-                  {...(effectiveRouteThreadId === null || !showBusinessComposerControls ? {} : { onChangeCriteria: handleChangeCriteria })}
                   onStopPendingTurn={handleStopPendingTurn}
                   onRetry={handleRetry}
                 />
@@ -777,8 +721,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 {...(streamingBusy && activeTurnStop !== null ? { onStop: () => void activeTurnStop() } : {})}
                 searchContext={searchContext}
                 showExamples={showWelcome}
-                defaultValue={refinementComposerOpen ? (latestProjectedTurn?.query ?? '') : showWelcome ? initialRouteQuery : ''}
-                focusOnMount={refinementComposerOpen}
+                defaultValue={showWelcome ? initialRouteQuery : ''}
                 initialTiming={composerTiming}
                 showTiming={showComposerTiming}
                 {...(composerTimingDate === undefined ? {} : { initialTimingDate: composerTimingDate })}

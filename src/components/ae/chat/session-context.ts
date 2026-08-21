@@ -3,12 +3,11 @@ import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@
 import {
   activeSelectedProviderForTurns,
   listedProvidersFromArtifacts,
-  providerHasInquiryPath,
   selectedProviderFromArtifacts,
 } from './session-provider-context'
 
 export type SessionContextFact = {
-  id: 'focus' | 'current' | 'businesses' | 'selected' | 'inquiry' | 'boundary'
+  id: 'focus' | 'current' | 'businesses' | 'selected' | 'boundary'
   label: string
   value: string
 }
@@ -38,7 +37,6 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
   const latestProviders = listedProvidersFromArtifacts(latestTurn.artifacts)
   const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
-  const inquiryReadyCount = providers.filter(providerHasInquiryPath).length
   const liveTurn = input.liveTurn ?? null
 
   // No matches and nothing selected: the context card would just repeat "no
@@ -80,11 +78,6 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
             value: selectedProvider.name,
           }]),
       {
-        id: 'inquiry',
-        label: 'Request status',
-        value: inquiryReadinessLabel(inquiryReadyCount),
-      },
-      {
         id: 'boundary',
         label: 'Boundary',
         value: 'Business confirms timing, quote, and availability.',
@@ -114,9 +107,7 @@ function contextSummary(input: {
   }
 
   if (input.selectedProvider !== undefined) {
-    return providerHasInquiryPath(input.selectedProvider)
-      ? `${input.selectedProvider.name} is selected for your request.`
-      : `${input.selectedProvider.name} is selected for review.`
+    return `${input.selectedProvider.name} is selected for review.`
   }
 
   if (input.currentProviders.length > 0 && input.providerCount > input.currentProviders.length) {
@@ -138,7 +129,6 @@ function liveIntentSummary(intent: FollowUpIntent): string {
   switch (intent) {
     case 'filter_known':
     case 'compare_known':
-    case 'inquiry_handoff':
     case 'explain_boundary':
       return `${intentSummary(intent)} using the matches already found in this thread.`
     case 'unsupported':
@@ -154,8 +144,6 @@ function intentLabel(intent: FollowUpIntent): string {
       return 'Narrowing'
     case 'compare_known':
       return 'Comparing'
-    case 'inquiry_handoff':
-      return 'Contact'
     case 'explain_boundary':
       return 'Checking limits'
     case 'unsupported':
@@ -171,8 +159,6 @@ function intentSummary(intent: FollowUpIntent): string {
       return 'This follow-up is narrowing the matches'
     case 'compare_known':
       return 'This follow-up is comparing the options'
-    case 'inquiry_handoff':
-      return 'This follow-up is preparing a request to the business'
     case 'explain_boundary':
       return 'This follow-up is checking what can happen next'
     case 'unsupported':
@@ -188,8 +174,6 @@ function completedIntentSummary(intent: FollowUpIntent): string {
       return 'This answer narrowed the matches'
     case 'compare_known':
       return 'This answer compared the options'
-    case 'inquiry_handoff':
-      return 'This answer prepared a request to the business'
     case 'explain_boundary':
       return 'This answer checked what can happen next'
     case 'unsupported':
@@ -214,9 +198,7 @@ function listedProvidersFromTurns(turns: readonly PublicThreadTurn[]): AnswerSou
 function currentAnswerLabel(turn: PublicThreadTurn): string {
   const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
   if (selectedProvider !== undefined) {
-    return providerHasInquiryPath(selectedProvider)
-      ? `${selectedProvider.name} selected for contact`
-      : `${selectedProvider.name} selected for review`
+    return `${selectedProvider.name} selected for review`
   }
 
   const providers = listedProvidersFromArtifacts(turn.artifacts)
@@ -240,11 +222,3 @@ function providerListLabel(providers: readonly AnswerSource[]): string {
   const extra = providers.length - names.length
   return extra > 0 ? `${names.join(', ')} + ${extra} more` : names.join(', ')
 }
-
-function inquiryReadinessLabel(count: number): string {
-  if (count <= 0) {
-    return 'No request form available yet'
-  }
-  return `${count} ${count === 1 ? 'business has' : 'businesses have'} a request form`
-}
-

@@ -1,12 +1,11 @@
 /**
  * The keyless agent entry.
  *
- * `/api/v1/requests` is the only path that can compare, confirm, and start a
- * registered option, and it needs an issued key because it can reach
- * consequential work. Reading and comparing published supply causes no external
- * effect, so the Answer Thread turn route accepts a cold caller with no
- * credential. Every assistant-facing surface quotes this record so the
- * advertised shape and the served route cannot drift apart.
+ * Reading and comparing published supply causes no external effect, so the
+ * Answer Thread turn route accepts a cold caller with no credential. Paid
+ * market work is POST /api/v1/operations/call and needs an issued key.
+ * Every assistant-facing surface quotes this record so the advertised shape
+ * and the served route cannot drift apart.
  */
 export const ANSWER_THREAD_AGENT_ENTRYPOINT = Object.freeze({
   contract: 'Answer Thread turn' as const,

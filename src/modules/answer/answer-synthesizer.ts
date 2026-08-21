@@ -16,7 +16,6 @@ export type AnswerSynthesizerFollowUpIntent =
   | 'refine_search'
   | 'filter_known'
   | 'compare_known'
-  | 'inquiry_handoff'
   | 'explain_boundary'
   | 'unsupported'
 
@@ -112,7 +111,6 @@ export type AnswerSource = {
   availabilitySummary?: string
   nextStepLabel: string
   detailUrl: string
-  inquiryUrl?: string
   services: readonly {
     name: string
     category: string
@@ -131,7 +129,7 @@ export type AnswerSnapshot = {
   providers: readonly AnswerSource[]
   /** Web-sourced businesses shown separately from AE-listed supply. */
   importedClaims?: readonly WebDiscoveryClaim[]
-  /** Chosen provider for compact inquiry-path confirmations. */
+  /** Chosen provider for compact selection confirmations. */
   selectedProvider?: AnswerSource
   /** Compact canonical Operation evidence, never projected into business sources. */
   operationCandidates?: readonly AnswerOperationCandidate[]

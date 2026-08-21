@@ -99,7 +99,8 @@ export function oneNativeBatchCoversRequestedIntents(
   requestedIntents: AnswerRequestInterpretation['requestedIntents'] | undefined,
 ): boolean {
   if (requestedIntents === undefined || requestedIntents.length <= 1) return true
-  if (descriptor === undefined || !isRecord(rawInput) || !isRecord(rawInput.input)) {
+  if (descriptor === undefined) return true
+  if (!isRecord(rawInput) || !isRecord(rawInput.input)) {
     return false
   }
   const operationInput = rawInput.input
@@ -260,6 +261,187 @@ export function answerNavigationBudgetExhausted(input: {
     input.state.navigationReadCallAttempts >= input.maxNavigationCalls
     || input.state.effectCallAttempts >= input.maxEffectCalls
   )
+}
+
+const OPERATION_INSPECT_TOOL_IDS = [
+  'registry.operations.search',
+  'registry.operations.detail',
+  'registry.operations.compare',
+  'registry.operations.inspectPlan',
+] as const
+
+const OPERATION_REF_PATTERN = /^operation:v1:[0-9a-f]{64}$/
+
+function isOperationInspectToolId(
+  toolId: string,
+): toolId is (typeof OPERATION_INSPECT_TOOL_IDS)[number] {
+  return (OPERATION_INSPECT_TOOL_IDS as readonly string[]).includes(toolId)
+}
+
+function pushOperationRef(
+  value: unknown,
+  refs: string[],
+  seen: Set<string>,
+): void {
+  if (!isRecord(value) || typeof value.operationRef !== 'string') return
+  if (!OPERATION_REF_PATTERN.test(value.operationRef) || seen.has(value.operationRef)) {
+    return
+  }
+  seen.add(value.operationRef)
+  refs.push(value.operationRef)
+}
+
+/**
+ * Candidate refs from search/compare/inspect-plan continue inspection.
+ * They do not authenticate an executable identity; that requires
+ * {@link completedOperationDetailResult} for the selected ordinal.
+ */
+export function inspectEvidenceHasOperationRef(
+  toolCalls: readonly AnswerToolCallRecord[],
+): boolean {
+  const refs: string[] = []
+  const seen = new Set<string>()
+  for (const call of toolCalls) {
+    if (call.status !== 'complete' || !isOperationInspectToolId(call.toolId)) {
+      continue
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(call.resultJson)
+    } catch {
+      continue
+    }
+    if (!isRecord(parsed)) continue
+    if (parsed.kind === 'found') {
+      pushOperationRef(parsed.operation, refs, seen)
+    }
+    if (parsed.kind === 'ok') {
+      if (Array.isArray(parsed.operations)) {
+        for (const item of parsed.operations) pushOperationRef(item, refs, seen)
+      }
+      if (Array.isArray(parsed.items)) {
+        for (const item of parsed.items) pushOperationRef(item, refs, seen)
+      }
+    }
+  }
+  return refs.length > 0
+}
+
+export function selectedOperationRefFromCompletedDetail(
+  toolCalls: readonly AnswerToolCallRecord[],
+): string | undefined {
+  for (const call of toolCalls.toReversed()) {
+    if (
+      call.toolId !== 'registry.operations.detail'
+      || call.status !== 'complete'
+    ) {
+      continue
+    }
+    let callInput: unknown
+    try {
+      callInput = JSON.parse(call.inputJson) as unknown
+    } catch {
+      continue
+    }
+    if (!isRecord(callInput) || typeof callInput.operationRef !== 'string') {
+      continue
+    }
+    if (
+      completedOperationDetailResult(toolCalls, callInput.operationRef)
+      !== undefined
+    ) {
+      return callInput.operationRef
+    }
+  }
+  return undefined
+}
+
+export type AnswerToolLoopStep = Readonly<{
+  kind: 'inspect' | 'execute' | 'prose'
+  activeToolIds: readonly string[]
+  toolChoice: 'required' | 'auto' | 'none'
+}>
+
+export function nextToolLoopStep(input: {
+  route: EffectiveAnswerAgentRoute | undefined
+  toolCalls: readonly AnswerToolCallRecord[]
+  navigationState: AnswerOperationNavigationState
+  allowedToolIds: readonly string[]
+  maxNavigationCalls: number
+  maxEffectCalls: number
+  unsafeOperationOutput: boolean
+  toolExecutionError: boolean
+  selectedOperationRef: string | undefined
+}): AnswerToolLoopStep {
+  const stop = (): AnswerToolLoopStep => ({
+    kind: 'prose',
+    activeToolIds: [],
+    toolChoice: 'none',
+  })
+  if (
+    input.unsafeOperationOutput
+    || input.toolExecutionError
+    || input.navigationState.effectCallAttempts > 0
+    || answerNavigationBudgetExhausted({
+      state: input.navigationState,
+      maxNavigationCalls: input.maxNavigationCalls,
+      maxEffectCalls: input.maxEffectCalls,
+    })
+  ) {
+    return stop()
+  }
+
+  const inspectIds = input.allowedToolIds.filter(
+    (toolId) => toolId !== 'operation.execute' && toolId !== 'operation.invoke',
+  )
+  const executeIds = input.allowedToolIds.filter(
+    (toolId) => toolId === 'operation.execute' || toolId === 'operation.invoke',
+  )
+  if (inspectIds.length === 0 && executeIds.length === 0) return stop()
+
+  const hasRef = inspectEvidenceHasOperationRef(input.toolCalls)
+  const hasAuthenticatedIdentity =
+    input.selectedOperationRef !== undefined
+    && completedOperationDetailResult(
+      input.toolCalls,
+      input.selectedOperationRef,
+    ) !== undefined
+  const effectsPermitted = input.route?.effectAllowed !== false
+  const hasCompletedOperationInspect = input.toolCalls.some(
+    (call) =>
+      call.status === 'complete' && isOperationInspectToolId(call.toolId),
+  )
+  const hasCompletedInspect = input.toolCalls.some(
+    (call) => call.status === 'complete' && inspectIds.includes(call.toolId),
+  )
+
+  if (
+    hasAuthenticatedIdentity
+    && effectsPermitted
+    && executeIds.length > 0
+  ) {
+    return {
+      kind: 'execute',
+      activeToolIds: [...inspectIds, ...executeIds],
+      toolChoice: 'required',
+    }
+  }
+  if (hasRef) {
+    return {
+      kind: 'inspect',
+      activeToolIds: inspectIds,
+      toolChoice:
+        effectsPermitted && !hasAuthenticatedIdentity
+          ? 'required'
+          : hasCompletedInspect ? 'auto' : 'required',
+    }
+  }
+  if (hasCompletedOperationInspect) return stop()
+  return {
+    kind: 'inspect',
+    activeToolIds: [...inspectIds, ...executeIds],
+    toolChoice: 'required',
+  }
 }
 
 export function completedOperationDetailResult(

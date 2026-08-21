@@ -2,7 +2,7 @@ import {
   aeSearchContextLocationLabel,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import { AeAnswerPromptInput } from './AeAnswerPromptInput'
+import { AE_CHAT_MARKET_EXAMPLES, AeAnswerPromptInput } from './AeAnswerPromptInput'
 
 export type AeQueryPanelProps = {
   onSubmit: (query: string, timing: AeSearchContext['timing'], timingDate?: string) => void
@@ -66,26 +66,17 @@ function buildContextExamples(searchContext: AeSearchContext | undefined): reado
   value: string
 }[] {
   if (searchContext?.mode !== 'near_me') {
-    return [
-      { label: 'Emergency plumber', value: 'I need an emergency plumber in Parramatta' },
-      { label: 'Locksmith now', value: 'I need a locksmith right now' },
-      { label: 'Electrician today', value: 'I need an electrician today' },
-    ]
+    return AE_CHAT_MARKET_EXAMPLES
   }
 
   const label = aeSearchContextLocationLabel(searchContext)
   if (label === undefined) {
-    return [
-      { label: 'Emergency plumber', value: 'I need an emergency plumber near me' },
-      { label: 'Locksmith now', value: 'I need a locksmith near me right now' },
-      { label: 'Electrician today', value: 'I need an electrician near me today' },
-    ]
+    return AE_CHAT_MARKET_EXAMPLES
   }
 
   const place = label.replace(/,\s*[A-Z]{2,3}$/i, '')
   return [
-    { label: 'Emergency plumber', value: `I need an emergency plumber near ${place}` },
-    { label: 'Locksmith now', value: `I need a locksmith near ${place} right now` },
-    { label: 'Electrician today', value: `I need an electrician near ${place} today` },
+    ...AE_CHAT_MARKET_EXAMPLES.slice(0, 2),
+    { label: 'Local weather', value: `What is the current weather in ${place}?` },
   ]
 }

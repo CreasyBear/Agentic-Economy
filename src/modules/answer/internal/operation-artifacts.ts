@@ -22,7 +22,6 @@ import {
   type AnswerOperationSelection,
 } from "../answer-schema";
 import { decideAnswerOperationResultPrivacy } from "./operation-result-presentation";
-import type { KeylessDataAskResolution } from "./keyless-data-ask";
 import type {
   AnswerToolCallRecord,
   AnswerToolId,
@@ -63,54 +62,29 @@ export type AnswerOperationArtifacts = Readonly<{
 
 export function buildOperationArtifactsFromToolCalls(
   records: readonly AnswerToolCallRecord[],
-  keylessDataAsk?: KeylessDataAskResolution,
   frozenPresentation?: Readonly<{
     operationRef: string
     presentation: AnswerOperationPresentation
   }>,
 ): AnswerOperationArtifacts {
-  const selectedRef =
-    keylessDataAsk?.kind === "resolved"
-      ? (keylessDataAsk.selectedCandidate?.operationRef ??
-        keylessDataAsk.selected?.operationRef)
-      : readSelectedOperationRef(records);
+  const selectedRef = readSelectedOperationRef(records);
   const descriptors = readCanonicalOperationDescriptors(records);
-  const frozenCandidates =
-    keylessDataAsk === undefined || keylessDataAsk.kind === "unavailable"
-      ? []
-      : (keylessDataAsk.operationCandidates ??
-        (keylessDataAsk.kind === "resolved" &&
-        keylessDataAsk.selectedCandidate !== undefined
-          ? [keylessDataAsk.selectedCandidate]
-          : []));
-  const canonicalCandidates =
-    frozenCandidates.length > 0
-      ? frozenCandidates
-          .slice(0, ANSWER_OPERATION_CANDIDATE_LIMIT)
-          .map((candidate, index) => ({ ...candidate, rank: index + 1 }))
-      : descriptors
-          .slice(0, ANSWER_OPERATION_CANDIDATE_LIMIT)
-          .map((descriptor, index) =>
-            toCandidate(descriptor, index + 1, selectedRef),
-          )
-          .filter(
-            (candidate): candidate is AnswerOperationCandidate =>
-              candidate !== undefined,
-          );
+  const canonicalCandidates = descriptors
+    .slice(0, ANSWER_OPERATION_CANDIDATE_LIMIT)
+    .map((descriptor, index) =>
+      toCandidate(descriptor, index + 1, selectedRef),
+    )
+    .filter(
+      (candidate): candidate is AnswerOperationCandidate =>
+        candidate !== undefined,
+    );
   const candidates = canonicalCandidates.map((candidate) =>
     compactCandidate(candidate, selectedRef),
   );
-  const computedDigest =
+  const digest =
     canonicalCandidates.length === 0
       ? undefined
       : answerOperationCandidateSetDigest(canonicalCandidates);
-  const resolutionDigest =
-    keylessDataAsk?.kind === "resolved"
-      ? (keylessDataAsk.candidateSetDigest ?? computedDigest)
-      : keylessDataAsk?.kind === "needs_clarification"
-        ? keylessDataAsk.decision.candidateSetDigest
-        : computedDigest;
-  const digest = candidates.length === 0 ? undefined : resolutionDigest;
   const comparison = readOperationComparison(records);
   const outcome = readOperationOutcome(records, frozenPresentation);
   const plan = readOperationPlan(records);

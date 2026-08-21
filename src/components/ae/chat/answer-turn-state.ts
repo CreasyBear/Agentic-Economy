@@ -233,16 +233,8 @@ function applyAnswerEvent(state: AnswerTurnUiState, event: AnswerEvent): AnswerT
         oneLineFallback: event.oneLine,
         artifacts: mergeAnswerArtifact(state.artifacts, { kind: 'one-line', text: event.oneLine }),
       }
-    case 'sources': {
-      const providers = providersForSourcesEvent(state, event.providers)
-      if (providers.length === 0) {
-        return state
-      }
-      return {
-        ...state,
-        artifacts: mergeAnswerArtifact(state.artifacts, { kind: 'provider-cards', providers }),
-      }
-    }
+    case 'sources':
+      return state
     case 'summary-delta': {
       const prior = state.artifacts.find((artifact) => artifact.kind === 'prose' && artifact.block === 'summary')
       const priorText = prior?.kind === 'prose' && prior.block === 'summary' ? prior.text : ''

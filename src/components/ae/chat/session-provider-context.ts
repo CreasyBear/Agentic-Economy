@@ -63,10 +63,6 @@ function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
   })
 }
 
-export function providerHasInquiryPath(provider: AnswerSource): boolean {
-  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
-}
-
 function latestSelectedProvider(turns: readonly PublicThreadTurn[]): AnswerSource | undefined {
   const turn = turns.findLast((candidate) => selectedProviderFromArtifacts(candidate.artifacts) !== undefined)
   return turn === undefined ? undefined : selectedProviderFromArtifacts(turn.artifacts)

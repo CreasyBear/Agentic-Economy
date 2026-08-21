@@ -511,9 +511,6 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
       ...(operationOutcome === undefined ? {} : { operationOutcome }),
       ...(evidence.operationPlan === undefined ? {} : { operationPlan: evidence.operationPlan }),
       ...(evidence.operationSelection === undefined ? {} : { operationSelection: evidence.operationSelection }),
-      ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
-        ? { selectedProvider: evidence.providers[0] }
-        : {}),
       summary: prose.summary,
       nextStep: prose.nextStep,
       agentJsonUrl: evidence.agentJsonUrl,

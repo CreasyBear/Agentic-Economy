@@ -35,10 +35,6 @@ export function formatTurnQueryLabel(input: {
     return { text: `→ ${suburb}`, role: 'follow-up' }
   }
 
-  if (/^show only businesses that accept inquiries$/i.test(query.trim())) {
-    return { text: '→ Inquiry-ready listings', role: 'follow-up' }
-  }
-
   if (/^compare the top two$/i.test(query.trim())) {
     return { text: '→ Compare the top two', role: 'follow-up' }
   }

@@ -326,7 +326,6 @@ export const AnswerSourceSchema = z.object({
   availabilitySummary: z.string().exactOptional(),
   nextStepLabel: z.string(),
   detailUrl: z.string(),
-  inquiryUrl: z.string().exactOptional(),
   publishedPhone: z.string().exactOptional(),
   services: z.array(
     z.object({
@@ -402,7 +401,7 @@ export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
     kind: z.literal('recovery-prompts'),
     title: z.string().exactOptional(),
     prompts: z.array(z.object({ label: z.string(), query: z.string() })).min(1).max(4),
-    links: z.array(z.object({ label: z.string(), href: z.enum(['/claim']) })).max(2).exactOptional(),
+    links: z.array(z.object({ label: z.string(), href: z.enum(['/for-providers']) })).max(2).exactOptional(),
   }),
   z.object({
     kind: z.literal('location-map'),
@@ -481,7 +480,7 @@ export type AnswerArtifact =
   | ({ kind: 'operation-comparison' } & AnswerOperationComparison)
   | ({ kind: 'operation-plan' } & AnswerOperationPlan)
   | { kind: 'operation-outcome'; outcome: AnswerOperationOutcome }
-  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/claim' }[] }
+  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[]; links?: readonly { label: string; href: '/for-providers' }[] }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string }

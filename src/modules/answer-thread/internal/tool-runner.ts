@@ -12,7 +12,6 @@ import {
   type HarnessToolStatus,
   type RunHarnessToolOutcome,
 } from '@/modules/harness/public'
-import { captureLegacyRegistryActionRequest } from '@/lib/observability/posthog.server'
 import type {
   InspectPlanResult,
   OperationCompareResult,
@@ -99,7 +98,6 @@ export async function runAnswerToolCall(
         }),
   }
   let outcome: RunHarnessToolOutcome
-  captureLegacyRegistryActionRequest(action.id, 'answer')
   if (input.harnessLoop === undefined) {
     outcome = await runHarnessTool({
       tool,
@@ -352,4 +350,3 @@ export function toolCallRecordsToGateInput(
     return summary.slugs.map((slug) => ({ slug }))
   })
 }
-

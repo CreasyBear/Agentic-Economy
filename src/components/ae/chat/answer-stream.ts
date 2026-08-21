@@ -1,5 +1,5 @@
 import {
-  parseAnswerTurnProblemStrict,
+  parseAnswerTurnProblem,
   type AnswerTurnProblem,
 } from '@/lib/errors'
 import {
@@ -54,7 +54,7 @@ function protocolTransportError(
 
 async function parseHttpProblem(response: Response): Promise<AnswerTurnProblem | undefined> {
   try {
-    return parseAnswerTurnProblemStrict(await response.json())
+    return parseAnswerTurnProblem(await response.json())
   } catch {
     return undefined
   }

@@ -19,17 +19,15 @@ export const HOME = {
   metaDescription: CORE_SENTENCE,
   heroHeading: 'Ask. It gets done.',
   heroSubhead:
-    'Tell us what you need done. We find the businesses that can help, compare them, and lay out your options.',
+    'Tell us what you need. We search admitted Market Operations, compare them, and lay out grounded options.',
   /**
-   * Current executable demand demos. Keep these asks machine-resolvable and
-   * problem-phrased; they are furniture, not the category definition.
+   * Handshake furniture. Keep these asks about the market, not a seeded
+   * weather or FX row.
    */
   exampleAsks: [
-    'I need the current price of bitcoin',
-    'Convert 500 US dollars to euros',
-    'What’s the weather like in Melbourne right now?',
-    'Summarise the Wikipedia page on quantum computing',
-    'Show me a random cat photo',
+    'What admitted operations can I inspect?',
+    'How do I connect an agent to this market?',
+    'How do I inspect an operation before calling it?',
   ],
 } as const
 
@@ -57,7 +55,7 @@ export const BUSINESS_DOOR = {
   heading: 'Publish a Market Operation',
   body: 'Host your capability and publish its admitted Market Operation once — authorized agents bring qualified demand.',
   cta: 'For suppliers',
-  href: '/claim?source=supply',
+  href: '/for-providers',
 } as const
 
 /** Engine dialog empty-state welcome. */

@@ -18,7 +18,7 @@ const AeSearchLocationSchema = z.object({
   label: z.string().trim().min(1).max(80),
   suburb: z.string().trim().min(1).max(80).optional(),
   stateTerritory: z.string().trim().min(2).max(3).optional(),
-  countryCode: z.literal('AU').default('AU'),
+  countryCode: z.string().length(2).optional(),
   source: z.enum(AeSearchLocationSourceValues),
 })
 
@@ -36,15 +36,7 @@ export const AeSearchContextSchema = z.object({
 export type AeSearchContext = z.infer<typeof AeSearchContextSchema>
 
 export const DEFAULT_AE_SEARCH_CONTEXT: AeSearchContext = {
-  mode: 'near_me',
-  allowOutsideArea: false,
-  location: {
-    label: 'Perth, WA',
-    suburb: 'Perth',
-    stateTerritory: 'WA',
-    countryCode: 'AU',
-    source: 'default',
-  },
+  mode: 'whole_catalogue',
 }
 
 export function aeSearchContextLocationLabel(context: AeSearchContext | undefined): string | undefined {

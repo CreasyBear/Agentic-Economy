@@ -19,7 +19,6 @@ import type {
   AnswerToolCallRecord,
   AnswerTurnOperationArtifacts,
 } from '../../answer-thread.schema'
-import type { AnswerToolPolicy } from '../answer-response-planner'
 import {
   answerRunGateFromAnswerGate,
   finalizeAnswerTurnSnapshot,
@@ -45,26 +44,11 @@ export const agentTurnPath: TurnPath<
     AgentInput,
     readonly AnswerToolCallRecord[],
     StreamPlanMode | undefined,
-    AnswerToolPolicy | undefined,
   ]
 > = {
   id: 'agent',
-  async run(ctx, agentInput, seedToolCalls = [], planMode, toolPolicy) {
-    return streamAgentTurn(
-      ctx,
-      toolPolicy === undefined
-        ? agentInput
-        : {
-            ...agentInput,
-            maxToolCalls:
-              toolPolicy.kind === 'registry.search' ||
-              toolPolicy.kind === 'registry.detail'
-                ? toolPolicy.maxCalls
-                : 0,
-          },
-      seedToolCalls,
-      planMode,
-    )
+  async run(ctx, agentInput, seedToolCalls = [], planMode) {
+    return streamAgentTurn(ctx, agentInput, seedToolCalls, planMode)
   },
 }
 
@@ -74,68 +58,25 @@ async function streamAgentTurn(
   seedToolCalls: readonly AnswerToolCallRecord[] = [],
   planMode?: StreamPlanMode,
 ): Promise<TurnPathResult | undefined> {
-  const keylessDataAsk = agentInput.keylessDataAsk
-  const capabilityCandidates =
-    keylessDataAsk?.kind === 'resolved' ? keylessDataAsk.candidates : []
-  const selectedCapability =
-    keylessDataAsk?.kind === 'resolved' ? keylessDataAsk.selected : undefined
-  const capabilityName = selectedCapability?.name.trim() || 'selected operation'
-  const hasCapabilityCandidates = capabilityCandidates.length > 0
   const recoveryStartedAt = Date.now()
-  if (hasCapabilityCandidates) {
-    ctx.workLog.emit({
-      id: 'capability.execute',
-      phase: 'read',
-      status: 'running',
-      title:
-        selectedCapability === undefined
-          ? 'Choosing a live capability'
-          : `Running ${capabilityName}`,
-      summary:
-        selectedCapability === undefined
-          ? 'Choosing from the matching published operations.'
-          : 'Running the selected operation.',
-      startedAtMs: recoveryStartedAt,
-    })
-    ctx.send({
-      type: 'thinking',
-      step: 'read',
-      label:
-        selectedCapability === undefined
-          ? 'Choosing a live capability…'
-          : `Running ${capabilityName}…`,
-    })
-  } else if (planMode !== 'clarify' || agentInput.disableTools !== true) {
-    if (agentInput.disableTools === true) {
-      ctx.workLog.emit({
-        id: 'search.registry.recovery',
-        phase: 'search',
-        status: 'skipped',
-        title: 'Using businesses already found',
-        summary: 'No extra search is needed for this follow-up.',
-        completedAtMs: recoveryStartedAt,
-      })
-    } else {
-      ctx.workLog.emit({
-        id: 'search.registry.recovery',
-        phase: 'search',
-        status: 'running',
-        title: 'Trying another search',
-        summary:
-          'The first search did not settle the answer, so another search is underway.',
-        startedAtMs: recoveryStartedAt,
-      })
-    }
-    ctx.send({
-      type: 'thinking',
-      step: 'search',
-      label: 'Searching for matches…',
-    })
-  }
+  ctx.workLog.emit({
+    id: 'search.registry.recovery',
+    phase: 'search',
+    status: 'running',
+    title: 'Trying another search',
+    summary:
+      'The first search did not settle the answer, so another search is underway.',
+    startedAtMs: recoveryStartedAt,
+  })
+  ctx.send({
+    type: 'thinking',
+    step: 'search',
+    label: 'Searching for matches…',
+  })
 
   let latestCheckpoint: AnswerToolUseAgentCheckpoint | undefined
   const stopAgentTiming = ctx.timings.start('model.agent_total', {
-    hasCapabilityCandidates,
+    seedToolCalls: seedToolCalls.length,
   })
   let agentTimingStopped = false
   const stopModelTiming = (
@@ -146,11 +87,7 @@ async function streamAgentTurn(
     stopAgentTiming(metadata)
   }
   const maxToolCalls =
-    agentInput.maxToolCalls ??
-    (agentInput.effectiveRoute?.lane === 'operation' ||
-      agentInput.keylessDataAsk === undefined
-      ? ANSWER_AGENT_MAX_TOOL_CALLS
-      : 1)
+    agentInput.maxToolCalls ?? ANSWER_AGENT_MAX_TOOL_CALLS
   try {
     const result = await runAnswerToolUseAgent({
       ...agentInput,
@@ -166,7 +103,6 @@ async function streamAgentTurn(
               generation: ctx.generation,
             },
           }),
-      ...(keylessDataAsk === undefined ? {} : { keylessDataAsk }),
       ...(ctx.resumeCheckpoint === undefined
         ? {}
         : { resumeCheckpoint: ctx.resumeCheckpoint }),
@@ -193,7 +129,6 @@ async function streamAgentTurn(
     )
     const operationArtifacts = readOperationArtifacts(result.snapshot)
     const hasCapabilityActivity =
-      hasCapabilityCandidates ||
       capabilityCalls.length > 0 ||
       operationArtifacts !== undefined
     if (hasCapabilityActivity) {
@@ -210,23 +145,9 @@ async function streamAgentTurn(
       } else {
         capabilityCalls.forEach((call, index) => {
           const executedOperationRef = readExecutedOperationRef(call)
-          const executedCapabilityName =
-            keylessDataAsk?.kind === 'resolved'
-              ? keylessDataAsk.descriptors
-                  .find(
-                    ({ operationRef }) => operationRef === executedOperationRef,
-                  )
-                  ?.name.trim()
-              : undefined
-          const selectedCapabilityName = capabilityCandidates
-            .find(({ operationRef }) => operationRef === executedOperationRef)
-            ?.name.trim()
           ctx.workLog.emit(
             buildCapabilityExecutionWorkStep(
-              executedCapabilityName ||
-                selectedCapabilityName ||
-                executedOperationRef ||
-                capabilityName,
+              executedOperationRef || 'operation',
               call,
               recoveryStartedAt,
               index === 0
@@ -237,35 +158,30 @@ async function streamAgentTurn(
         })
       }
     }
-    if (
-      agentInput.disableTools !== true &&
-      !hasCapabilityCandidates
-    ) {
-      ctx.workLog.emit({
-        id: 'search.registry.recovery',
-        phase: 'search',
-        status: result.toolCalls.length === 0 ? 'skipped' : 'complete',
-        title:
-          result.toolCalls.length === 0
-            ? 'Using the first search result'
-            : hasCapabilityActivity
-              ? 'Checked registered capabilities'
-              : 'Trying another search',
-        summary:
-          result.toolCalls.length === 0
-            ? 'No extra search was needed.'
-            : hasCapabilityActivity
-              ? 'Current operation evidence was checked.'
-              : describeProviderCount(result.providers.length, 'match'),
-        detailRows: buildRecoveryWorkStepDetailRows(
-          result.toolCalls,
-          result.providers.length,
-        ),
-        relatedProviderSlugs: result.providers.map((provider) => provider.slug),
-        startedAtMs: recoveryStartedAt,
-        completedAtMs: Date.now(),
-      })
-    }
+    ctx.workLog.emit({
+      id: 'search.registry.recovery',
+      phase: 'search',
+      status: result.toolCalls.length === 0 ? 'skipped' : 'complete',
+      title:
+        result.toolCalls.length === 0
+          ? 'Using the first search result'
+          : hasCapabilityActivity
+            ? 'Checked registered capabilities'
+            : 'Trying another search',
+      summary:
+        result.toolCalls.length === 0
+          ? 'No extra search was needed.'
+          : hasCapabilityActivity
+            ? 'Current operation evidence was checked.'
+            : describeProviderCount(result.providers.length, 'match'),
+      detailRows: buildRecoveryWorkStepDetailRows(
+        result.toolCalls,
+        result.providers.length,
+      ),
+      relatedProviderSlugs: result.providers.map((provider) => provider.slug),
+      startedAtMs: recoveryStartedAt,
+      completedAtMs: Date.now(),
+    })
     const toolCalls = [
       ...seedToolCalls,
       ...resequenceToolCalls(result.toolCalls, seedToolCalls.length),
@@ -290,11 +206,7 @@ async function streamAgentTurn(
     emitReadAndCompareSteps(ctx.workLog, result.providers)
     const snapshot = {
       ...withFollowUpLayout(result.snapshot, ctx.priorTurnsCount, ctx.intent),
-      ...(planMode === 'clarify'
-        ? { layoutProfile: 'clarification' as const }
-        : hasCapabilityActivity
-          ? { layoutProfile: 'data_answer' as const }
-          : {}),
+      ...(hasCapabilityActivity ? { layoutProfile: 'data_answer' as const } : {}),
     }
     const finalized = finalizeAnswerTurnSnapshot({
       snapshot,
@@ -341,14 +253,13 @@ async function streamAgentTurn(
     )
     const operationArtifacts = readOperationArtifacts(recoveryCheckpoint)
     const hasCapabilityActivity =
-      hasCapabilityCandidates ||
       capabilityCalls.length > 0 ||
       operationArtifacts !== undefined
     if (hasCapabilityActivity) {
       if (capabilityCalls.length === 0) {
         ctx.workLog.emit(
           buildCapabilityExecutionWorkStep(
-            capabilityName,
+            'operation',
             undefined,
             recoveryStartedAt,
           ),
@@ -356,17 +267,9 @@ async function streamAgentTurn(
       } else {
         capabilityCalls.forEach((call, index) => {
           const executedOperationRef = readExecutedOperationRef(call)
-          const executedCapabilityName =
-            keylessDataAsk?.kind === 'resolved'
-              ? keylessDataAsk.descriptors
-                  .find(
-                    ({ operationRef }) => operationRef === executedOperationRef,
-                  )
-                  ?.name.trim()
-              : undefined
           ctx.workLog.emit(
             buildCapabilityExecutionWorkStep(
-              executedCapabilityName || executedOperationRef || capabilityName,
+              executedOperationRef || 'operation',
               call,
               recoveryStartedAt,
               index === 0
@@ -377,24 +280,19 @@ async function streamAgentTurn(
         })
       }
     }
-    if (
-      agentInput.disableTools !== true &&
-      !hasCapabilityCandidates
-    ) {
-      ctx.workLog.emit({
-        id: 'search.registry.recovery',
-        phase: 'search',
-        status: 'error',
-        title: hasCapabilityActivity
-          ? 'Checked registered capabilities'
-          : 'Trying another search',
-        summary: hasCapabilityActivity
-          ? 'The capability call did not complete.'
-          : 'The extra search did not complete.',
-        startedAtMs: recoveryStartedAt,
-        completedAtMs: Date.now(),
-      })
-    }
+    ctx.workLog.emit({
+      id: 'search.registry.recovery',
+      phase: 'search',
+      status: 'error',
+      title: hasCapabilityActivity
+        ? 'Checked registered capabilities'
+        : 'Trying another search',
+      summary: hasCapabilityActivity
+        ? 'The capability call did not complete.'
+        : 'The extra search did not complete.',
+      startedAtMs: recoveryStartedAt,
+      completedAtMs: Date.now(),
+    })
     const copyId = makeCopyId()
     const errorProblem = buildAnswerTurnProblem(
       isAnswerToolUseAgentError(error) ? error.code : 'answer_turn_failed',
