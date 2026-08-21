@@ -324,6 +324,7 @@ export async function readOfferingSupplyForBusiness(
   const projection = snapshot.projection
   if (String(projection.business.businessId) !== String(business._id) || projection.business.slug !== business.slug) return undefined
   const projected = projectBusinessSupplyToPublicApi(projection, Date.now())
+  if (projected.offerings.length === 0) return undefined
   return snapshot.status === 'projection_pending' ? { ...projected, disposition: 'stale' } : projected
 }
 const SEARCH_DOCUMENT_PAGE_SIZE = 250
