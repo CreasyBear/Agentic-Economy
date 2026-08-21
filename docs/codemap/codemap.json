@@ -330,7 +330,12 @@
         "src/modules/action-invocation/dynamic-published-snapshot-verifier.ts"
       ],
       "tests": [
-        "tests/unit/action-invocation/durable-action-invocation.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-transact.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-lease.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-release.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-cancel.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-observation.test.ts",
+        "tests/unit/action-invocation/durable-action-invocation-result.test.ts",
         "tests/unit/action-invocation/standing-mandate.test.ts",
         "tests/unit/harness/run-loop.test.ts"
       ],
@@ -429,7 +434,12 @@
         "src/modules/inquiries/route-readbacks.ts::validatePublicInquiryFormInput"
       ],
       "tests": [
-        "tests/unit/inquiries/inquiry-flow.test.ts",
+        "tests/unit/inquiries/inquiry-flow-admission.test.ts",
+        "tests/unit/inquiries/inquiry-flow-submit.test.ts",
+        "tests/unit/inquiries/inquiry-flow-owner-mutations.test.ts",
+        "tests/unit/inquiries/inquiry-flow-privacy.test.ts",
+        "tests/unit/inquiries/inquiry-flow-operator-reconstruction.test.ts",
+        "tests/unit/inquiries/inquiry-flow-public-route.test.ts",
         "tests/unit/inquiries/governed-send-evidence-integrity.test.ts",
         "tests/unit/inquiries/admission.test.ts",
         "tests/unit/inquiries/privacy-erasure.test.ts",
@@ -456,8 +466,7 @@
         "src/modules/notification-outbox/operator/index.ts"
       ],
       "tests": [
-        "tests/unit/notification-outbox/operator-thinness.test.ts",
-        "tests/unit/convex/notification-outbox-runtime.test.ts"
+        "tests/unit/notification-outbox/operator-thinness.test.ts"
       ],
       "constraints": [
         "Dispatch is disabled unless controls allow: notification_dispatch_disabled when !controls.notificationDispatchEnabled (internal/commands.ts)",
