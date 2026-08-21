@@ -1,7 +1,6 @@
 import type {
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
-  PublishedInquiryTargetResolution,
 } from './internal/search'
 import type {
   ServiceEndpointDto,
@@ -154,21 +153,11 @@ export type {
 export type {
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
-  PublishedInquiryTargetResolution,
 }
 export {
-  canonicalTradeToken,
-  TRADE_CANONICAL_TOKENS,
-  TRADE_WORDS,
-  type TradeVocabularyEntry,
-} from './internal/trade-vocabulary'
-
-export {
-  createDefaultRegistrySourceState,
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
   getPublicBusinessOfferingSupplyBySlug,
-  resolvePublishedInquiryTarget,
 } from './internal/search'
 export {
   buildRegistrySearchDocumentsForCatalog,

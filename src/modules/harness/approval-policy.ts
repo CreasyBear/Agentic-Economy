@@ -59,25 +59,6 @@ const PUBLIC_MODES: ReadonlySet<HarnessApprovalMode> = new Set([
 ])
 
 const BUILTIN_SOURCE_WRITE_DECLARATIONS: Readonly<Record<string, HarnessSourceWriteAdmissionDeclaration>> = {
-  'inquiry.submit': {
-    scope: 'public_inquiry',
-    allowedModes: ['public-qualified-write'],
-  },
-  'inquiry.reply': {
-    scope: 'owner_inquiry',
-    allowedModes: ['owner-ui'],
-    authority: 'owner',
-  },
-  'inquiry.markRead': {
-    scope: 'owner_inquiry',
-    allowedModes: ['owner-ui'],
-    authority: 'owner',
-  },
-  'inquiry.close': {
-    scope: 'owner_inquiry',
-    allowedModes: ['owner-ui'],
-    authority: 'owner',
-  },
 }
 
 const APPROVAL_VALUES: ReadonlySet<HarnessApprovalPolicy> = new Set([

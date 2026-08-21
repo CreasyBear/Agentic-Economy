@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
+  operationInvokeReceiptSchema,
   operationInvokeResultSchema,
   operationInvokeUsageSchema,
 } from './operation-invoke-contracts'
@@ -28,6 +29,7 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     attemptRef: boundedText(300).exactOptional(),
     effectGeneration: z.number().int().positive().exactOptional(),
     result: operationInvokeResultSchema.exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal('refused'),
@@ -35,6 +37,7 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     code: operationInvokeStatusRefusalCodeSchema,
     retryable: z.boolean(),
     nextAction: boundedText(300).exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
 ])
 
@@ -53,6 +56,7 @@ export const operationInvokeRecoveryResultSchema: z.ZodType<OperationInvokeRecov
     invocationRef: boundedText(300),
     operationRef: boundedText(300),
     evidence: publicReconciliationStateSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
 ])
 

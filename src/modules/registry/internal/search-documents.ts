@@ -1,11 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
-import {
-  canonicalTradeToken,
-  TRADE_CANONICAL_TOKENS,
-  TRADE_WORDS,
-  tradeAliasesForText,
-} from './trade-vocabulary'
 import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
 import type { PublicBusinessCatalogSearchInput } from './search'
 import type { RegistrySearchDocumentContract } from './projection-contracts'
@@ -45,40 +39,38 @@ export function registrySearchTokens(query: string): readonly string[] {
   return normalizeSearchText(query)
     .split(' ')
     .filter((token) => token.length > 0 && !SEARCH_STOP_WORDS.has(token))
-    .map(canonicalTradeToken)
 }
 
-
-// Every trade alias is a service word by construction. Listing them by hand is
-// how `electrical` and `sparky` came to be parsed as suburb names and filtered
-// the whole result set away.
 const SERVICE_WORDS = new Set([
   ...SEARCH_STOP_WORDS,
-  ...TRADE_WORDS,
   'appointment',
   'callout',
-  'cleaner',
-  'cleaners',
   'day',
-  'dentist',
-  'dentists',
   'diagnostic',
   'diagnostics',
+  'emergency',
+  'help',
+  'listed',
+  'listing',
+  'listings',
+  'metro',
+  'offering',
+  'offerings',
+  'plumber',
+  'plumbers',
+  'plumbing',
   'electrician',
   'electricians',
-  'emergency',
-  'heat',
-  'help',
-  'hot',
+  'electrical',
+  'dentist',
+  'dentists',
+  'dental',
   'locksmith',
   'locksmiths',
   'mechanic',
   'mechanics',
-  'metro',
-  'plumber',
-  'plumbers',
-  'plumbing',
-  'pump',
+  'cleaner',
+  'cleaners',
   'repair',
   'repairs',
   'same',
@@ -86,10 +78,7 @@ const SERVICE_WORDS = new Set([
   'suburbs',
   'today',
   'tomorrow',
-  'trade',
-  'trades',
   'urgent',
-  'water',
   'this',
   'week',
   'weeks',
@@ -146,8 +135,8 @@ export function buildRegistrySearchDocumentsForCatalog(
       businessContext,
       publicStatus: 'published' as const,
       trustTier: catalog.trustTier,
-      firstRequestMode: offering.accessPaths.some((path) => path.kind === 'human_request' && path.channel === 'ae_inquiry')
-        ? 'inquiry_available' as const
+      firstRequestMode: offering.accessPaths.some((path) => path.kind === 'human_request')
+        ? 'quote_request_available' as const
         : 'not_available_yet' as const,
       placeKeys,
       keywords,
@@ -218,10 +207,6 @@ export function documentMatchesRegistryQuery(
   if (tokens.length === 0) {
     return false
   }
-  const serviceIntentTokens = tokens.filter((token) => TRADE_CANONICAL_TOKENS.has(token))
-  if (serviceIntentTokens.length > 0) {
-    return serviceIntentTokens.some((token) => document.searchText.includes(token))
-  }
   return tokens.every((token) => document.searchText.includes(token))
 }
 
@@ -248,13 +233,8 @@ function placeKeysFor(input: {
   return [...keys].sort()
 }
 
-function offeringKeywordsFor(...values: readonly string[]): readonly string[] {
-  const text = normalizeSearchText(values.join(' '))
-  const keywords = new Set<string>(tradeAliasesForText(text))
-  if (/\bemergency\b/.test(text)) {
-    keywords.add('urgent')
-  }
-  return [...keywords].sort()
+function offeringKeywordsFor(..._values: readonly string[]): readonly string[] {
+  return []
 }
 
 function extractLocationFromRegistryQuery(query: string): string | undefined {

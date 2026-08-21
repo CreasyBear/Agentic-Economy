@@ -294,7 +294,7 @@ function readSourceCatalog(
   | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'hidden'; reason: 'not_public' | 'missing_context' | 'not_published' | 'no_published_offerings' } {
   const business = state.businesses.find((candidate) => candidate.businessId === businessId)
-  if (business === undefined || !isPubliclyDiscoverable(business, state.suppressionRules)) {
+  if (business === undefined || !isPubliclyDiscoverable(business)) {
     return { kind: 'hidden', reason: 'not_public' }
   }
 

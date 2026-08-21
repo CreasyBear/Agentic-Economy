@@ -4,10 +4,32 @@ import { v } from 'convex/values'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
   ActorKindValues,
+  AuditEventTypeValues,
+  AuditTargetTypeValues,
   OperationKeyStatusValues,
 } from '@/modules/observability/public'
 
 export const observabilityTables = {
+  auditEvents: defineTable({
+    eventId: v.string(),
+    eventType: literalUnion(AuditEventTypeValues),
+    actorKind: literalUnion(ActorKindValues),
+    actorRef: v.string(),
+    businessId: v.optional(v.id('businesses')),
+    targetType: literalUnion(AuditTargetTypeValues),
+    targetRef: v.string(),
+    beforeState: v.optional(v.string()),
+    afterState: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    correlationId: v.string(),
+    reasonCode: v.optional(v.string()),
+    evidenceRefs: v.array(v.string()),
+    redactedPayloadJson: v.string(),
+    payloadHash: v.string(),
+    failureCode: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index('by_eventId', ['eventId']),
+
   operationKeys: defineTable({
     scope: v.string(),
     actorKind: literalUnion(ActorKindValues),

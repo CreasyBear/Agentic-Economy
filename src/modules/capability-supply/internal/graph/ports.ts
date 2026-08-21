@@ -43,7 +43,6 @@ export type GraphPublishedBusiness = Readonly<{
   businessId: string
   trustTier: string
   publicStatus: 'published'
-  claimStatus: 'published'
   suppressed: false
   currentlyPublished: true
 }>

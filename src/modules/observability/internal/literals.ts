@@ -2,29 +2,6 @@ export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_ret
 
 export { ActorKindValues, AuditEventTypeValues, AuditTargetTypeValues } from '@/modules/common/audit-events'
 
-export const OperatorControlKeyValues = [
-  'claims_enabled',
-  'publish_enabled',
-  'registry_enabled',
-  'discovery_enabled',
-  'public_copy_safe_mode',
-  'inquiries_enabled',
-  'inquiry_owner_replies_enabled',
-  'notification_dispatch_enabled',
-  'notification_webhooks_enabled',
-  'developer_discovery_publish_enabled',
-  'discovery_api_keys_enabled',
-  'protected_actions_enabled',
-  'protected_action_attempts_enabled',
-  'paid_activation_enabled',
-  'billing_webhooks_enabled',
-  'billing_reconciliation_enabled',
-  'business_actions_enabled',
-  'business_action_attempts_enabled',
-  'offering_authoring_enabled',
-  'offering_public_projection_enabled',
-] as const
-
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 
 export const InvalidationIntentStatusValues = ['queued', 'applied'] as const
@@ -60,14 +37,9 @@ export const JOURNEY_EVENT_NAMES = [
 
 export const FunnelEventTypeValues = [
   'visitor_attributed',
-  'claim_cta_clicked',
-  'claim_started',
   'auth_started',
   'auth_completed',
   'owner_interest_submitted',
-  'claim_submitted',
-  'slug_conflict',
-  'duplicate_suspected',
   'publish_succeeded',
   'service_added',
   'capability_status_viewed',
@@ -83,19 +55,6 @@ export const FunnelEventTypeValues = [
   'service_registry_result_clicked',
   'ucp_manifest_fetched',
   ...JOURNEY_EVENT_NAMES,
-  'suppression_applied',
-  'inquiry_available_seen',
-  'inquiry_attempted',
-  'inquiry_started',
-  'inquiry_submitted',
-  'inquiry_rejected',
-  'owner_inbox_viewed',
-  'owner_inquiry_read',
-  'owner_inquiry_replied',
-  'inquiry_closed',
-  'notification_queued',
-  'notification_delivered',
-  'notification_failed',
   'developer_docs_viewed',
   'schema_downloaded',
   'example_fixture_downloaded',
@@ -124,4 +83,4 @@ export const FunnelEventTypeValues = [
   'business_action_proof_gap_recorded',
 ] as const
 
-export const ActivationStageValues = ['visitor', 'claim_started', 'published', 'activated', 'blocked'] as const
+export const ActivationStageValues = ['visitor', 'published', 'activated', 'blocked'] as const

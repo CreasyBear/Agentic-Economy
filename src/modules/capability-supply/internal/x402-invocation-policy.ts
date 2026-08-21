@@ -4,7 +4,7 @@ import type { ExternalSpendSettlementStatus } from '@/modules/money/public'
 
 import type { RouteTransportObservation } from '../route-transport-runtime'
 
-export type EconomicRail = 'provider_direct_x402' | 'ae_internal'
+export type EconomicRail = 'provider_direct_x402' | 'brokered_x402' | 'ae_internal'
 
 export type PaymentLaneAdmission =
   | Readonly<{ kind: 'admitted'; lane: 'brokered' | 'provider_direct_x402' }>
@@ -26,6 +26,8 @@ export function paymentLaneAdmission(
 ): PaymentLaneAdmission {
   switch (input.rail) {
     case 'ae_internal':
+      return { kind: 'admitted', lane: 'brokered' }
+    case 'brokered_x402':
       return { kind: 'admitted', lane: 'brokered' }
     case 'provider_direct_x402':
       return input.environment === 'production'
@@ -94,7 +96,7 @@ export function chargeSettlementOutcome(
     || observation.quoteDeliveryStatus === 'unknown'
   ) return 'unknown'
   if (!contractValidOutput) {
-    return economicRail === 'ae_internal' ? 'not_released' : 'unknown'
+    return economicRail === 'provider_direct_x402' ? 'unknown' : 'not_released'
   }
   return observation.releaseStarted ? 'released' : 'not_released'
 }
@@ -123,6 +125,7 @@ export function transportObservationDigest(
       observation.providerReceipt === undefined
         ? null
         : canonicalDigest(observation.providerReceipt),
+    providerOfferDigest: observation.providerOfferDigest ?? null,
     paymentProofDigest:
       observation.paymentProof === undefined
         ? null
@@ -155,6 +158,7 @@ export function paymentObservationDigest(
       observation.providerReceipt === undefined
         ? null
         : canonicalDigest(observation.providerReceipt),
+    providerOfferDigest: observation.providerOfferDigest ?? null,
     paymentProofDigest:
       observation.paymentProof === undefined
         ? null

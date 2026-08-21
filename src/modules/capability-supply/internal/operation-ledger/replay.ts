@@ -139,20 +139,24 @@ export async function recoverEligibilityReplayDesired(
   command: Readonly<{ actor: SupplyCommandActor; eligibility: EligibilityInput; context: RegistrationContext }>,
 ): Promise<DesiredEligibility> {
   if (replay.effectRefs.length !== 2) throw new Error('capability_supply_operation_integrity_failure')
-  const eventId = supplyAuditEventId({
-    eventType: 'capability_supply.eligibility_changed', targetType: 'capability_offering',
-    action: 'set_eligibility',
-    targetRef: command.eligibility.offeringId, actor: command.actor, context: command.context,
-    payload: {}, beforeState: '', afterState: '', createdAt: 0,
-  })
-  const audit = await ports.findAuditByEventId(eventId)
-  if (audit === null || (audit.afterState !== 'active' && audit.afterState !== 'inactive')) {
+  const offering = await ports.loadOfferingByOfferingId(command.eligibility.offeringId)
+  const binding = await ports.loadBindingByBindingId(command.eligibility.bindingId)
+  if (
+    offering === null
+    || binding === null
+    || !offeringIntegrityIsValid(offering)
+    || !bindingIntegrityIsValid(binding)
+  ) {
     throw new Error('capability_supply_operation_integrity_failure')
   }
-  if (command.eligibility.decision === 'admit' && audit.afterState !== 'active') {
+  if (command.eligibility.decision === 'admit' && (
+    offering.status !== 'active'
+    || binding.admission !== 'admitted'
+    || binding.conformance !== 'conformant'
+  )) {
     throw new Error('capability_supply_operation_integrity_failure')
   }
-  return desiredEligibility(command.eligibility.decision, audit.afterState)
+  return desiredEligibility(command.eligibility.decision, offering.status)
 }
 
 export async function verifyReplayAudits(
@@ -163,17 +167,20 @@ export async function verifyReplayAudits(
   if (replay.effectRefs.length !== expectations.length) {
     throw new Error('capability_supply_operation_integrity_failure')
   }
-  await Promise.all(expectations.map(async (expectation, index) => {
-    const eventId = supplyAuditEventId(expectation.audit)
-    const existing = await ports.findAuditByEventId(eventId)
+  const rows = await Promise.all(expectations.map(async (expectation, index) => {
+    const existing = await ports.findAuditByEventId(supplyAuditEventId(expectation.audit))
+    return { expectation, index, existing }
+  }))
+  if (rows.every((row) => row.existing === null)) return
+  for (const row of rows) {
     if (
-      existing === null
-      || replay.effectRefs[index] !== storedSupplyAuditEffectRef(existing)
-      || !storedAuditMatches(existing, expectation.audit, expectation.allowedBeforeStates)
+      row.existing === null
+      || replay.effectRefs[row.index] !== storedSupplyAuditEffectRef(row.existing)
+      || !storedAuditMatches(row.existing, row.expectation.audit, row.expectation.allowedBeforeStates)
     ) {
       throw new Error('capability_supply_operation_integrity_failure')
     }
-  }))
+  }
 }
 
 export async function ensureSupplyAudit(

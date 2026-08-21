@@ -114,9 +114,6 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   now: number
 }): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
   const { db, sourceDb, businessId, support, now } = input
-  if (!await projectionOperatorControlEnabled(sourceDb, 'offering_public_projection_enabled', now)) {
-    return markPending(db, businessId, 'projection_disabled', now)
-  }
   const projection = await readLiveBusinessSupplyProjection({ db, businessId, support, now })
   if (projection === null) return markPending(db, businessId, 'business_not_public', now)
   const businessRow = await db.get(businessId)
@@ -557,14 +554,6 @@ function toPersistedDescriptor(descriptor: OfferingAccessPathDescriptor) {
     ...(descriptor.pricingSummary === undefined ? {} : { pricingSummary: descriptor.pricingSummary }),
     provenance: descriptor.provenance,
   }
-}
-
-async function projectionOperatorControlEnabled(_db: CapabilityProjectionReadDb, _key: string, _now: number): Promise<boolean> {
-  return true
-}
-
-async function businessHasActiveSuppression(_db: CapabilityProjectionReadDb, _businessId: Id<'businesses'>): Promise<boolean> {
-  return false
 }
 
 function requiredString<Row extends object>(row: Row, field: keyof Row): string {

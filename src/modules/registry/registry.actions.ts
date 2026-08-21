@@ -31,10 +31,6 @@ import {
   readPublicOfferingRegistrySearchPage,
 } from '@/modules/registry/registry.functions'
 import {
-  projectCurrentOfferingInquiryDetail,
-  projectCurrentOfferingInquiryPage,
-} from '@/modules/registry/public-inquiry-projection'
-import {
   PublicBusinessCatalogApiSchemaVersion,
   PublicServicesApiSchemaVersion,
   type PublicBusinessCatalogApiV2Dto,
@@ -116,7 +112,7 @@ const offeringAccessPathOutputSchema = z.discriminatedUnion('kind', [
     accessPathRef: z.string(),
     offeringRevision: z.number().int().nonnegative(),
     kind: z.literal('human_request'),
-    channel: z.enum(['phone', 'website', 'ae_inquiry']),
+    channel: z.enum(['phone', 'website']),
     disclosure: z.string(),
     url: z.string().optional(),
   }),
@@ -157,7 +153,7 @@ const offeringPriceOutputSchema = z.discriminatedUnion('kind', [
     taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
   }),
   z.strictObject({
-    kind: z.literal('quote_only').describe('Price supplied after inquiry'),
+    kind: z.literal('quote_only').describe('Price supplied on request'),
     currency: z.string().describe('Currency code retained for quote-only pricing'),
     unit: z.enum(OfferingPriceUnitValues).optional().describe('Unit the price applies to'),
     taxTreatment: z.enum(OfferingPriceTaxTreatmentValues).describe('Published tax treatment'),
@@ -289,7 +285,7 @@ const serviceEndpointOutputSchema = z.strictObject({
     .optional()
     .describe('Decimal endpoint price when published'),
   providerName: z.string().optional().describe('Provider name only when linked supply is provider-owned'),
-  serviceName: z.string().describe('Published business name in the legacy wire field'),
+  serviceName: z.string().describe('Published business name for endpoint grouping'),
   tags: z.array(z.string()).describe('Published endpoint tags'),
   parameters: z
     .array(
@@ -346,7 +342,7 @@ const serviceOutputSchema = z.strictObject({
   isNew: z.boolean().optional().describe('Whether the business portfolio is newly published'),
   endpoints: z.array(serviceEndpointOutputSchema).describe('Flat external endpoint links published by the business portfolio'),
   priceSummary: servicePriceSummaryOutputSchema.optional().describe('Aggregate published decimal price summary'),
-  serviceName: z.string().describe('Published business name in the legacy wire field'),
+  serviceName: z.string().describe('Published business name for portfolio grouping'),
   tags: z.array(z.string()).describe('Published business portfolio tags'),
   iconUrl: z.string().optional().describe('Published business icon URL'),
   ae: z
@@ -361,7 +357,7 @@ const serviceOutputSchema = z.strictObject({
       observedAt: z.number().describe('Source observation time for freshness context'),
       disposition: z.enum(['current', 'partial', 'stale']).describe('Catalog disposition'),
       source: z.literal('business_published').describe('Published business listing provenance'),
-      offerings: z.array(serviceOfferingOutputSchema).describe('Local merchandising and inquiry listing view'),
+      offerings: z.array(serviceOfferingOutputSchema).describe('Local business offering view'),
       links: z
         .strictObject({
           business: z.string().describe('Provider business detail link'),
@@ -479,7 +475,7 @@ const searchParameters: readonly ActionParameter[] = [
   {
     name: 'location',
     type: 'string',
-    description: 'Place to search around when mode is near_me, for example "Perth" or "Brunswick".',
+    description: 'Place to search around when mode is near_me, for example "Berlin" or "New York".',
     required: false,
   },
   {
@@ -518,7 +514,7 @@ export const registryListAction = defineAction({
   boundaries: [
     'Read-only. Does not book, charge, dispatch, or send inquiries.',
     'Returns only public supply facts for published listings.',
-    'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
+    'Availability, quotes, and job acceptance require a published business contact channel.',
   ],
   schema: registryListInputSchema as z.ZodType<RegistryListActionInput>,
   outputSchema: registryPageOutputSchema,
@@ -543,9 +539,9 @@ export const registryListAction = defineAction({
     safeContinuations: ['inspect_result'],
     invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
   },
-  run: async ({ data }) => projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
+  run: async ({ data }) => readPublicOfferingRegistryPage(
     normalizeRegistryListInput(data),
-  )),
+  ),
 })
 
 export const registrySearchAction = defineAction({
@@ -562,7 +558,7 @@ export const registrySearchAction = defineAction({
     'The registry is literal. Misspelled suburbs (e.g. "paramata") do not auto-correct; choose better search arguments instead.',
     'maxPrice filters on the published comparable price using exact currency units and exponent. A business is kept when any one of its offerings fits the budget. An offering quoted on request has no comparable ceiling, so it is never removed by a budget: absence of a price is not evidence of an expensive one.',
     'hasPrice set to true narrows to businesses publishing at least one comparable price. Most local supply quotes on request, so this filter hides real options; use it only when a number is genuinely required.',
-    'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
+    'Availability, quotes, and job acceptance require a published business contact channel.',
   ],
   schema: registrySearchInputSchema,
   outputSchema: registrySearchPageOutputSchema,
@@ -596,10 +592,10 @@ export const registrySearchAction = defineAction({
       'hasPrice_changed',
     ],
   },
-  run: async ({ data, context }) => projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
+  run: async ({ data, context }) => readPublicOfferingRegistrySearchPage(
     normalizeRegistrySearchInput(data),
-    { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: context.caller === 'answerThread' ? 'answer_thread' : 'registry_action' },
-  )),
+    { ...(context.timing === undefined ? {} : { timing: context.timing }) },
+  ),
 })
 
 export const registryServicesListAction = defineAction({
@@ -636,9 +632,9 @@ export const registryServicesListAction = defineAction({
     invalidationConditions: ['action_contract_version_changed', 'cursor_changed', 'limit_changed'],
   },
   run: async ({ data }) => {
-    const page = await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistryPage(
+    const page = await readPublicOfferingRegistryPage(
       normalizeRegistryListInput(data),
-    ))
+    )
     return projectPublicServicesPage(page, await offeringOperationMapFor(page.page.map((item) => item.businessId)))
   },
 })
@@ -686,10 +682,10 @@ export const registryServicesSearchAction = defineAction({
     ],
   },
   run: async ({ data, context }) => {
-    const page = await projectCurrentOfferingInquiryPage(await readPublicOfferingRegistrySearchPage(
+    const page = await readPublicOfferingRegistrySearchPage(
       normalizeRegistrySearchInput(data),
-      { ...(context.timing === undefined ? {} : { timing: context.timing }), surface: 'registry_action' },
-    ))
+      { ...(context.timing === undefined ? {} : { timing: context.timing }) },
+    )
     const services = projectPublicServicesSearchPage(
       page,
       await offeringOperationMapFor(page.items.map((item) => item.businessId)),
@@ -733,9 +729,7 @@ export const registryServicesDetailAction = defineAction({
     invalidationConditions: ['action_contract_version_changed', 'slug_changed'],
   },
   run: async ({ data }) => {
-    const detail = await projectCurrentOfferingInquiryDetail(
-      await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() }),
-    )
+    const detail = await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() })
     if (detail.kind === 'not_found') {
       return {
         kind: 'not_found' as const,
@@ -878,9 +872,7 @@ export const registryDetailAction = defineAction({
         await context.developmentOnlyRegistryDetailAdapter({ slug: data.slug.trim() }),
       )
     }
-    return projectCurrentOfferingInquiryDetail(
-      await readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() }),
-    )
+    return readPublicOfferingRegistryBusinessDetail({ slug: data.slug.trim() })
   },
 })
 export {

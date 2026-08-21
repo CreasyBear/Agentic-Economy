@@ -149,5 +149,7 @@ export function publicationValidationFix(reason: CapabilityPublicationImportRefu
       return 'The declared payment execution path is not supported for this profile. Drop or re-specify the payment/execution metadata and re-validate.'
     case 'payment_required_invalid':
       return 'The x402 submission carries a malformed PaymentRequired (402 challenge) document. Supply a valid payment-requirements claim and re-validate.'
+    case 'bazaar_discovery_invalid':
+      return 'The x402 Bazaar discovery extension is malformed. Provide a valid Bazaar discovery object and re-validate.'
   }
 }

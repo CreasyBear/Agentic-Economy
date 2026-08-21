@@ -17,7 +17,7 @@ import {
   validPublicHttpsEndpoint,
 } from '../transport-adapters'
 
-import type { CapabilityGraphPorts } from './ports'
+import type { CapabilityGraphPorts, GraphPublicationRow } from './ports'
 import { probeTargetDigest } from './probe-digest'
 
 type CapabilityProbeConnectionAuthority = Omit<
@@ -139,13 +139,6 @@ export async function readCapabilityProbeTarget(
   }
   const { inputSchema, outputSchema } = contractDocument
 
-  const probeKind = publication.sourceKind === 'mcp' || publication.sourceKind === 'agent_plugin_mcp'
-    ? 'mcp' as const
-    : publication.sourceKind === 'openapi_http'
-      ? 'openapi_http' as const
-      : publication.sourceKind === 'x402'
-        ? 'x402' as const
-        : 'ae_quote' as const
   const httpConfiguration = binding.adapterId === 'http-json:v1'
     ? parseHttpJsonTransportConfiguration(parseJson(binding.configJson))
     : undefined
@@ -155,16 +148,24 @@ export async function readCapabilityProbeTarget(
   const x402Configuration = binding.adapterId === 'x402-fetch:v2'
     ? parseX402FetchTransportConfiguration(parseJson(binding.configJson))
     : undefined
-  if ((probeKind === 'openapi_http' && httpConfiguration === undefined)
-    || (probeKind === 'mcp' && mcpConfiguration === undefined)
-    || (probeKind === 'x402' && x402Configuration === undefined)) {
-    return unavailable('binding_invalid')
-  }
-  if (probeKind === 'mcp' && (mcpConfiguration === undefined || mcpConfiguration.toolName.trim().length === 0)) {
-    return unavailable('mcp_tool_missing')
+  switch (binding.adapterId) {
+    case 'http-json:v1':
+      if (httpConfiguration === undefined) return unavailable('binding_invalid')
+      break
+    case 'mcp-jsonrpc:v1':
+      if (mcpConfiguration === undefined) return unavailable('binding_invalid')
+      if (mcpConfiguration.toolName.trim().length === 0) return unavailable('mcp_tool_missing')
+      break
+    case 'x402-fetch:v2':
+      if (x402Configuration === undefined) return unavailable('binding_invalid')
+      break
+    default:
+      break
   }
   if (
-    (probeKind === 'openapi_http' || probeKind === 'mcp')
+    (publication.sourceKind === 'openapi_http'
+      || publication.sourceKind === 'mcp'
+      || publication.sourceKind === 'agent_plugin_mcp')
     && contractDocument.effects.some((effect) => (
       effect.class === 'financial_exposure' || effect.class === 'external_state_change'
     ))
@@ -173,7 +174,12 @@ export async function readCapabilityProbeTarget(
   }
 
   let probeInputJson: string | undefined
-  if (probeKind === 'openapi_http' || probeKind === 'mcp' || probeKind === 'x402') {
+  if (
+    publication.sourceKind === 'openapi_http'
+    || publication.sourceKind === 'mcp'
+    || publication.sourceKind === 'agent_plugin_mcp'
+    || publication.sourceKind === 'x402'
+  ) {
     const candidate = contractDocument.inputExamples?.find(({ input }) => (
       validateJsonSchema(inputSchema, input)
     ))
@@ -184,7 +190,7 @@ export async function readCapabilityProbeTarget(
   }
 
   let expectedPaymentJson: string | undefined
-  if (probeKind === 'x402') {
+  if (binding.adapterId === 'x402-fetch:v2') {
     const paidAmount = publication.pricingConfig?.paidAmount
     if (x402Configuration === undefined || paidAmount === undefined) {
       return unavailable('binding_invalid')
@@ -209,9 +215,9 @@ export async function readCapabilityProbeTarget(
     capabilityId: publication.capabilityId,
     endpointUrl: binding.endpointUrl,
     adapterId: binding.adapterId,
-    probeKind,
+    probeKind: storedProbeKind(binding.adapterId, publication.sourceKind),
     probeQuery: [...probeConfiguration.fixedQuery],
-    probeMethod: probeKind === 'mcp'
+    probeMethod: binding.adapterId === 'mcp-jsonrpc:v1'
       ? 'POST' as const
       : probeConfiguration.method,
     transportConfigJson: binding.configJson,
@@ -240,6 +246,34 @@ export async function readCapabilityProbeTarget(
 
 function unavailable(reason: CapabilityProbeTargetUnavailableReason): ReadCapabilityProbeTargetResult {
   return { kind: 'unavailable', reason, evidenceRefs: [`probe-target:${reason}`] }
+}
+
+function storedProbeKind(
+  adapterId: string,
+  sourceKind: GraphPublicationRow['sourceKind'],
+): CapabilityProbeTargetBase['probeKind'] {
+  switch (adapterId) {
+    case 'mcp-jsonrpc:v1':
+      return 'mcp'
+    case 'x402-fetch:v2':
+      return 'x402'
+    case 'http-json:v1':
+      switch (sourceKind) {
+        case 'openapi_http':
+          return 'openapi_http'
+        case 'ae_envelope':
+        case 'mcp':
+        case 'agent_plugin_mcp':
+        case 'x402':
+          return 'ae_quote'
+        default: {
+          const _exhaustive: never = sourceKind
+          return _exhaustive
+        }
+      }
+    default:
+      return 'ae_quote'
+  }
 }
 
 function parseJson(value: string): unknown {

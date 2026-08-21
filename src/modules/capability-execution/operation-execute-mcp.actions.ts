@@ -64,7 +64,7 @@ const operationExecuteParameters: readonly ActionParameter[] = [
 const operationExecuteBoundaries = [
   'Executes only the current admitted keyless read operation described by AE; the executor rereads and validates its authoritative descriptor before any request.',
   'Only public HTTPS keyless http-json:v1 GET or POST operations with effects containing neither financial_exposure nor external_state_change are eligible. The caller cannot supply or override the endpoint, method, credential, headers, payment, or provider configuration.',
-  'Observation only. Does not book, pay, dispatch, send an inquiry, contact a provider, fulfil a request, or claim fulfilment.',
+  'Observation only. Does not book, pay, dispatch, contact a provider, fulfil a request, or claim fulfilment.',
   'Search results and operation references are hints, not execution authority; stale, withdrawn, keyed, x402, effectful, private, or otherwise non-executable references are refused.',
 ] as const
 

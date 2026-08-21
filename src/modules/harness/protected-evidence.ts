@@ -5,7 +5,6 @@ export type HarnessEvidenceSensitivity = 'public' | 'private' | 'protectedPrivat
 export type HarnessProtectedEvidenceKind =
   | 'sourceFact'
   | 'catalogDto'
-  | 'inquiryReceipt'
   | 'gateDecision'
   | 'modelMessage'
   | 'rawToolMessage'
@@ -26,13 +25,11 @@ export type HarnessProtectedToolMatcher =
 export const AE_PROTECTED_TOOL_IDS = [
   'registry.search',
   'registry.detail',
-  'inquiry.submit',
 ] as const
 
 const PROTECTED_EVIDENCE_KINDS: readonly HarnessProtectedEvidenceKind[] = [
   'sourceFact',
   'catalogDto',
-  'inquiryReceipt',
   'gateDecision',
   'modelMessage',
   'rawToolMessage',
@@ -73,10 +70,6 @@ export function isRegistrySearchToolResult(context: HarnessProtectedToolContext)
 
 export function isRegistryDetailToolResult(context: HarnessProtectedToolContext): boolean {
   return context.toolResult.toolId === 'registry.detail'
-}
-
-export function isInquirySubmitToolResult(context: HarnessProtectedToolContext): boolean {
-  return context.toolResult.toolId === 'inquiry.submit'
 }
 
 export function isProtectedAeToolResult(

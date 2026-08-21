@@ -367,7 +367,6 @@ function businessIsCurrentlyPublished(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false
   const business = value as Record<string, unknown>
   return business.publicStatus === 'published'
-    && business.claimStatus === 'published'
     && business.suppressed === false
     && business.currentlyPublished === true
 }

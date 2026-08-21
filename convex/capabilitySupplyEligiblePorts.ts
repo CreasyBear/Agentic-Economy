@@ -38,7 +38,6 @@ export function eligibleSupplyPorts(db: QueryCtx['db']): EligibleSupplyPorts {
       const business = await db.get(businessId as Id<'businesses'>)
       return business !== null
         && business.publicStatus === 'published'
-        && business.claimStatus === 'published'
         && business.suppressedAt === undefined
         ? toPublishedBusiness(business)
         : null

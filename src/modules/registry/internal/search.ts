@@ -1,21 +1,9 @@
-import {
-  claimBusiness,
-  createEmptyBusinessSourceState,
-} from '@/modules/business/public'
-import {
-  createEmptyCatalogSourceState,
-  getPublicBusinessCatalog,
-  publicOwnerDefaultClaimInput,
-  toBusinessContext,
-} from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
-import { matchingCsrf } from '@/modules/common/matching-csrf'
+import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { brandNonEmpty } from '@/modules/common/ids'
 import type {
   BusinessId,
-  CorrelationId,
   OfferingRef,
-  OperationKey,
   Slug,
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
@@ -51,10 +39,6 @@ export type PublicBusinessCatalogSearchInput = {
   maxPrice?: ExactAmount
   hasPrice?: boolean
 }
-
-export type PublishedInquiryTargetResolution =
-  | { kind: 'resolved'; businessId: BusinessId; offeringRef: OfferingRef }
-  | { kind: 'not_found'; reason: string }
 
 export function listPublicBusinessOfferingSupply(
   state: RegistrySourceState,
@@ -156,96 +140,6 @@ export function getPublicBusinessOfferingSupplyBySlug(
       }
 }
 
-export function resolvePublishedInquiryTarget(
-  state: RegistrySourceState,
-  input: { businessSlug: Slug | string; offeringRef: OfferingRef | string },
-): PublishedInquiryTargetResolution {
-  const business = readPublicCatalogs(state)
-    .find((candidate) => candidate.slug === String(input.businessSlug))
-  const offering = business?.offerings.find((candidate) => candidate.offeringRef === String(input.offeringRef))
-  if (business === undefined || offering === undefined) {
-    return {
-      kind: 'not_found',
-      reason: 'No published Offering is discoverable for this slug on the business.',
-    }
-  }
-  return {
-    kind: 'resolved',
-    businessId: brandNonEmpty(business.businessId, 'BusinessId'),
-    offeringRef: brandNonEmpty(offering.offeringRef, 'OfferingRef'),
-  }
-}
-
-export function createDefaultRegistrySourceState(): RegistrySourceState {
-  const state: RegistrySourceState = {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    registrySearchDocuments: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-  }
-  const publishedAt = Date.now()
-
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: 'source-owned-owner-session',
-      displayName: 'Sam',
-    },
-    facts: {
-      name: publicOwnerDefaultClaimInput.businessName,
-      category: publicOwnerDefaultClaimInput.category,
-      businessContext: toBusinessContext(publicOwnerDefaultClaimInput),
-      requestedSlug: publicOwnerDefaultClaimInput.requestedSlug,
-      ownerMessage: publicOwnerDefaultClaimInput.ownerMessage,
-      sourceRefs: [
-        {
-          label: publicOwnerDefaultClaimInput.sourceLabel,
-          evidenceRef: `private:evidence:${publicOwnerDefaultClaimInput.requestedSlug}`,
-          sourceHash: canonicalDigest(`source:${publicOwnerDefaultClaimInput.requestedSlug}`),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('claim'),
-    },
-    operationKey: operationKey(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    correlationId: correlationId(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    now: publishedAt - 1,
-  })
-
-  if (claim.kind === 'error') {
-    throw new Error(`Default registry claim failed: ${claim.reason}`)
-  }
-
-  claim.business.publicStatus = 'published'
-  claim.business.claimStatus = 'published'
-  claim.business.updatedAt = publishedAt
-  claim.claim.status = 'published'
-  claim.claim.updatedAt = publishedAt
-
-  appendPublishedOffering(state, {
-    businessId: claim.business.businessId,
-    offeringRef: brandNonEmpty(`offering:${claim.business.businessId}:emergency-pipe-repair`, 'OfferingRef'),
-    facts: {
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
-      serviceAreaSummary: 'Parramatta and nearby suburbs',
-      availabilitySummary: publicOwnerDefaultClaimInput.hoursOrUnknown,
-    },
-    now: publishedAt,
-  })
-
-  return state
-}
-
-
 function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
   const catalogs: PublicBusinessCatalogApiV2Dto[] = []
   for (const business of state.businesses) {
@@ -276,7 +170,7 @@ function appendPublishedOffering(
       pricingSummary?: string
     }
     accessPaths?: readonly {
-      channel: 'phone' | 'website' | 'ae_inquiry'
+      channel: 'phone' | 'website'
       disclosure: string
     }[]
     now: number
@@ -434,14 +328,4 @@ function compareCatalogs(
 ): number {
   const byName = left.name.localeCompare(right.name)
   return byName === 0 ? left.slug.localeCompare(right.slug) : byName
-}
-
-
-
-function operationKey(value: string): OperationKey {
-  return brandNonEmpty(`op:registry-default:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string): CorrelationId {
-  return brandNonEmpty(`corr:registry-default:${value}`, 'CorrelationId')
 }

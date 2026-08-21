@@ -35,7 +35,7 @@ const readOnlyEffect = {
 } as const
 
 const boundaries = [
-  'Read-only public discovery. Does not create a Customer Request, RoutePlan, mandate, grant, reservation, invocation, payment, disclosure, or external effect.',
+  'Read-only public discovery. Does not create a RoutePlan, mandate, grant, reservation, invocation, payment, disclosure, or external effect.',
   'Returns redacted current operation semantics, commercial terms, provenance, readiness, consequences, and navigation only.',
   'Opaque refs are current-revision-bound and never execution authority.',
 ] as const
@@ -77,7 +77,7 @@ const compareParameters: readonly ActionParameter[] = [
 ]
 
 const inspectParameters: readonly ActionParameter[] = [
-  parameterFromCanonicalSchema(operationInspectPlanInputSchema, 'operationRefs', 'One to four opaque current operation references.'),
+  parameterFromCanonicalSchema(operationInspectPlanInputSchema, 'operationRefs', 'Required array of 1–4 opaque current operation references. Send { "operationRefs": ["operation:v1:…"] }, never a singular operationRef field.'),
   parameterFromCanonicalSchema(operationInspectPlanInputSchema, 'mappingRefs', 'Registered opaque mapping references.'),
   parameterFromCanonicalSchema(operationInspectPlanInputSchema, 'expiresInMs', 'Ephemeral inspection lifetime, bounded to 24 hours.'),
 ]
@@ -156,7 +156,7 @@ export const registryOperationsInspectPlanContract = {
   schema: operationInspectPlanInputSchema,
   surfaces: operationMarketActionSurfaces,
   name: 'Inspect an operation plan',
-  summary: 'Validate an ephemeral bounded operation composition without creating authority.',
+  summary: 'Validate an ephemeral bounded operation composition without creating authority. Required input is operationRefs (string array of 1–4 current operation references), not a singular operationRef.',
   boundaries,
   outputSchema: operationInspectPlanOutputSchema,
   parameters: inspectParameters,

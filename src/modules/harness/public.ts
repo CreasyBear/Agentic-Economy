@@ -108,7 +108,6 @@ export {
   AE_PROTECTED_TOOL_IDS,
   classifyHarnessEvidenceSensitivity,
   isAeProtectedToolId,
-  isInquirySubmitToolResult,
   isProtectedAeToolResult,
   isRegistryDetailToolResult,
   isRegistrySearchToolResult,

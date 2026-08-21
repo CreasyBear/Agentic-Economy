@@ -18,21 +18,6 @@ import {
   supplyPublishAction,
   supplyWithdrawAction,
 } from '@/modules/capability-supply/supply-actions'
-import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
-import {
-  customerRequestAllowRepeatPermissionAction,
-  customerRequestCancelAction,
-  customerRequestConfirmAction,
-  customerRequestInspectEvidenceAction,
-  customerRequestInspectRepeatPermissionAction,
-  customerRequestListConnectedAssistantsAction,
-  customerRequestPlanPreviewAction,
-  customerRequestReplyProblemAction,
-  customerRequestReportProblemAction,
-  customerRequestRunAction,
-  customerRequestUseRepeatPermissionAction,
-  customerRequestWithdrawRepeatPermissionAction,
-} from '@/modules/product-frontier/quarantine-family-actions'
 import {
   registryDetailAction,
   registrySearchAction,
@@ -50,32 +35,8 @@ import {
   operationStatusAction,
 } from '@/modules/capability-execution/operation-recovery.actions'
 import { operationInvokeAction } from '@/modules/capability-execution/operation-invoke.actions'
-import { studyInspectAction, studyStartAction } from '@/modules/study/study.actions'
-import { workTreeCreateAction, workTreeInspectAction } from '@/modules/work-tree/work-tree.actions'
-import { workTreeApplyAction, workTreeDecideAction } from '@/modules/work-tree/work-tree-agent.actions'
-import {
-  workTreeFinalizeRepeatUseAction,
-  workTreeInspectRepeatUseAction,
-  workTreeReconcileRepeatUseAction,
-  workTreeReserveRepeatUseAction,
-} from '@/modules/work-tree/work-tree-repeat.actions'
-import { isQuarantineFamilyActionId } from '@/modules/product-frontier/quarantine-write-admission'
 
 const registeredActions: readonly AnyAction[] = [
-  customerRequestConfirmAction,
-  customerRequestRunAction,
-  customerRequestCancelAction,
-  customerRequestReportProblemAction,
-  customerRequestReplyProblemAction,
-  customerRequestInspectEvidenceAction,
-  customerRequestAllowRepeatPermissionAction,
-  customerRequestUseRepeatPermissionAction,
-  customerRequestInspectRepeatPermissionAction,
-  customerRequestPlanPreviewAction,
-  customerRequestListConnectedAssistantsAction,
-  customerRequestWithdrawRepeatPermissionAction,
-  submitInquiryAction,
-  readCustomerRecordAction,
   registrySearchAction,
   registryDetailAction,
   registryOperationsSearchAction,
@@ -87,16 +48,6 @@ const registeredActions: readonly AnyAction[] = [
   operationStatusAction,
   operationCancelAction,
   operationReconcileAction,
-  studyStartAction,
-  studyInspectAction,
-  workTreeCreateAction,
-  workTreeInspectAction,
-  workTreeApplyAction,
-  workTreeDecideAction,
-  workTreeReserveRepeatUseAction,
-  workTreeFinalizeRepeatUseAction,
-  workTreeReconcileRepeatUseAction,
-  workTreeInspectRepeatUseAction,
   supplyPublishAction,
   supplyWithdrawAction,
   supplyEarningsAction,
@@ -104,9 +55,7 @@ const registeredActions: readonly AnyAction[] = [
 
 assertUniqueActionIds(registeredActions)
 
-const actions: readonly AnyAction[] = registeredActions.filter(
-  (action) => !isQuarantineFamilyActionId(action.id),
-)
+const actions: readonly AnyAction[] = registeredActions
 
 export function listActions(): readonly AnyAction[] {
   return actions

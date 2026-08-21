@@ -473,8 +473,8 @@ export {
   type SupplyAuditEventRow,
 } from './internal/shared'
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
+export { transportObservationDigest } from './internal/x402-invocation-policy'
 
-export { buildExaSearchContentsMapping } from './curated-provider-mapping'
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
 const evidenceRefs = z.array(identifier).min(1).max(64)

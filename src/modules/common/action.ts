@@ -105,7 +105,7 @@ export type ActionContext = {
   /** Harness-only approval authority for owner/admin-gated tools. */
   harnessApproval?: ActionHarnessApprovalContext
   /** Explicitly labelled in-process adapter for Action Invocation development evals only. */
-  developmentOnlyInquirySubmitAdapter?: (
+  developmentOnlyDurableWriteAdapter?: (
     data: unknown,
   ) => Promise<ActionResult>
   developmentOnlySuppliedQuoteAdapter?: (

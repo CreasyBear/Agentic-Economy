@@ -16,7 +16,7 @@ export type PublicOfferingAccessPathDto =
       accessPathRef: string
       offeringRevision: number
       kind: 'human_request'
-      channel: 'phone' | 'website' | 'ae_inquiry'
+      channel: 'phone' | 'website'
       disclosure: string
       url?: string
     }>
@@ -115,13 +115,7 @@ export function projectBusinessSupplyToPublicApi(
   projection: BusinessSupplyProjection,
   now = Date.now(),
 ): PublicBusinessCatalogApiV2Dto {
-  /**
-   * The legacy expansion cannot see the business profile, so it derives a
-   * `phone` channel from the service's public-contact flag alone. When the
-   * profile publishes no number there is nothing to dial, and a rendered
-   * "Call" affordance is a way to get started that does not exist. The v1
-   * adapter below already applies this rule; both projections owe the same one.
-   */
+  /** A phone access path is actionable only when the profile publishes a number. */
   const dialable = projection.business.businessContext.kind === 'local_human'
     && (projection.business.businessContext.publishedPhone ?? '').trim().length > 0
   const offerings = projection.offerings.map((item): PublicOfferingDto => {

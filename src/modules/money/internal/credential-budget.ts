@@ -188,3 +188,11 @@ export function reverseCredentialBudget(input: Readonly<{
 export function credentialBudgetReservationDigest(reservation: Omit<CredentialBudgetReservation, 'state' | 'updatedAt'>): string {
   return canonicalDigest({ contract: 'ae.money-credential-budget-reservation:v1', ...reservation })
 }
+
+export function credentialBudgetDayWindowStart(now: number): string {
+  return new Date(now).toISOString().slice(0, 10)
+}
+
+export function credentialBudgetMonthWindowStart(day: string): string {
+  return day.slice(0, 7)
+}

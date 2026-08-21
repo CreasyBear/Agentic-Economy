@@ -3,7 +3,6 @@ import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
-  ClaimStatusValues,
   PublicStatusValues,
   TrustTierValues,
   businessContext,
@@ -27,7 +26,6 @@ export const businessTables = {
     businessContext,
     publicStatus: literalUnion(PublicStatusValues),
     trustTier: literalUnion(TrustTierValues),
-    claimStatus: literalUnion(ClaimStatusValues),
     sourceHash: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),

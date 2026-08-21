@@ -9,9 +9,7 @@ const rateLimitName = v.union(
   v.literal('public-mutation'),
   v.literal('oauth-issuance'),
   v.literal('answer-turn-submit'),
-  v.literal('answer-follow-up-chips'),
   v.literal('answer-stream'),
-  v.literal('inquiry-submit'),
   v.literal('dispute-open'),
 )
 

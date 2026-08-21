@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type {
   OperationInvokeRefusalCode,
+  OperationInvokeReceipt,
   OperationInvokeResult,
   OperationInvokeUsageSummary,
   PublicReconciliationState,
@@ -45,6 +46,7 @@ export type OperationInvokeStatusResult =
       attemptRef?: string
       effectGeneration?: number
       result?: OperationInvokeResult
+      receipt?: OperationInvokeReceipt
     }>
   | Readonly<{
       kind: 'refused'
@@ -52,6 +54,7 @@ export type OperationInvokeStatusResult =
       code: Extract<OperationInvokeRefusalCode, 'invocation_not_found' | 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'invocation_runtime_unavailable'>
       retryable: boolean
       nextAction?: string
+      receipt?: OperationInvokeReceipt
     }>
 export type OperationInvokeRecoveryResult =
   | OperationInvokeStatusResult
@@ -60,4 +63,5 @@ export type OperationInvokeRecoveryResult =
       invocationRef: string
       operationRef: string
       evidence: PublicReconciliationState
+      receipt?: OperationInvokeReceipt
     }>

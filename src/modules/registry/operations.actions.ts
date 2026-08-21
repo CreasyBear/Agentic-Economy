@@ -5,23 +5,29 @@ import {
   registryOperationsInspectPlanContract,
   registryOperationsSearchContract,
 } from './operation-action-contracts'
+import {
+  readCapabilityOperationCompare,
+  readCapabilityOperationDetail,
+  readCapabilityOperationInspectPlan,
+  readCapabilityOperationSearch,
+} from '@/modules/capability-supply/operation-source'
 
 export const registryOperationsSearchAction = defineAction({
   ...registryOperationsSearchContract,
-  run: async ({ data }) => (await import('@/modules/capability-supply/operation-source')).readCapabilityOperationSearch(data),
+  run: async ({ data }) => readCapabilityOperationSearch(data),
 })
 
 export const registryOperationsDetailAction = defineAction({
   ...registryOperationsDetailContract,
-  run: async ({ data }) => (await import('@/modules/capability-supply/operation-source')).readCapabilityOperationDetail(data),
+  run: async ({ data }) => readCapabilityOperationDetail(data),
 })
 
 export const registryOperationsCompareAction = defineAction({
   ...registryOperationsCompareContract,
-  run: async ({ data }) => (await import('@/modules/capability-supply/operation-source')).readCapabilityOperationCompare(data),
+  run: async ({ data }) => readCapabilityOperationCompare(data),
 })
 
 export const registryOperationsInspectPlanAction = defineAction({
   ...registryOperationsInspectPlanContract,
-  run: async ({ data }) => (await import('@/modules/capability-supply/operation-source')).readCapabilityOperationInspectPlan(data),
+  run: async ({ data }) => readCapabilityOperationInspectPlan(data),
 })

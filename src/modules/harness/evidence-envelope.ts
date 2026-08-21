@@ -27,7 +27,6 @@ export type HarnessPublicToolEvidenceProjection = {
   toolRuns: number
   catalogSearches: number
   listingsRead: number
-  qualifiedInquiries: number
   listedBusinesses: number
   checksPassed: number
   checksFailed: number
@@ -110,7 +109,6 @@ export function projectPrivateToolEvidenceForPublic(
     toolRuns: evidenceList.length,
     catalogSearches: 0,
     listingsRead: 0,
-    qualifiedInquiries: 0,
     listedBusinesses: 0,
     checksPassed: 0,
     checksFailed: 0,
@@ -124,8 +122,6 @@ export function projectPrivateToolEvidenceForPublic(
       projection.listedBusinesses += readSummaryCount(result.summaryJson)
     } else if (result.toolId === 'registry.detail') {
       projection.listingsRead += 1
-    } else if (result.toolId === 'inquiry.submit') {
-      projection.qualifiedInquiries += 1
     }
 
     if (isPassingStatus(result.status)) {
@@ -197,7 +193,6 @@ export function createPublicProjectionMetadata(input: {
       toolRuns: input.publicProjection.toolRuns,
       catalogSearches: input.publicProjection.catalogSearches,
       listingsRead: input.publicProjection.listingsRead,
-      qualifiedInquiries: input.publicProjection.qualifiedInquiries,
       listedBusinesses: input.publicProjection.listedBusinesses,
       checksPassed: input.publicProjection.checksPassed,
       checksFailed: input.publicProjection.checksFailed,
@@ -271,5 +266,4 @@ function isFailingStatus(status: HarnessToolStatus): boolean {
     status === 'timeout' ||
     status === 'aborted'
 }
-
 

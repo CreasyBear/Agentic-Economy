@@ -229,9 +229,7 @@ function exposureForAction(
     action.invocationContract.authorityRequirement === 'none'
   const publicProjection = action.readOnly
     ? 'sanitized-counts'
-    : action.id === 'inquiry.submit'
-      ? 'receipt-status'
-      : 'none'
+    : 'none'
 
   return {
     surfaces: action.surfaces,
@@ -245,20 +243,6 @@ function policyForAction(
   _exposure: HarnessToolExposure,
 ): HarnessToolPolicy {
   const tier: HarnessToolTier = action.readOnly ? 'read' : 'write'
-
-  if (action.id === 'inquiry.submit') {
-    return {
-      tier,
-      approval: {
-        mode: 'public-qualified-write',
-        policy: 'prompt',
-        reason: 'write_requires_source_admission',
-      },
-      concurrency: 'exclusive',
-      interruptible: false,
-      loadMode: 'essential',
-    }
-  }
 
   return {
     tier,

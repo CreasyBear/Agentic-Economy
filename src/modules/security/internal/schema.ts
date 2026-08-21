@@ -4,11 +4,41 @@ import { v } from 'convex/values'
 import { VisibilityTargetTypeValues } from '@/modules/business/public'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
+  AdminMembershipAuditEventTypeValues,
+  AdminMembershipStateValues,
+  AdminRoleValues,
   DisputeStatusValues,
 } from '@/modules/security/public'
 import { SourceWriteAdmissionScopeValues } from '@/modules/security/source-write-admission'
 
 export const securityTables = {
+  adminMemberships: defineTable({
+    clerkUserId: v.string(),
+    tokenIdentifier: v.string(),
+    role: literalUnion(AdminRoleValues),
+    state: literalUnion(AdminMembershipStateValues),
+    grantedBy: v.string(),
+    grantedAt: v.number(),
+    revokedBy: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+    evidenceRef: v.optional(v.string()),
+  })
+    .index('by_clerkUserId_and_state', ['clerkUserId', 'state'])
+    .index('by_tokenIdentifier_and_state', ['tokenIdentifier', 'state'])
+    .index('by_state_and_role', ['state', 'role']),
+
+  adminMembershipAuditEvents: defineTable({
+    auditEventId: v.string(),
+    eventType: literalUnion(AdminMembershipAuditEventTypeValues),
+    actorRef: v.string(),
+    targetRef: v.string(),
+    reasonCode: v.string(),
+    evidenceRefs: v.array(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    createdAt: v.number(),
+  }).index('by_auditEventId', ['auditEventId']),
+
   disputes: defineTable({
     businessId: v.id('businesses'),
     status: literalUnion(DisputeStatusValues),

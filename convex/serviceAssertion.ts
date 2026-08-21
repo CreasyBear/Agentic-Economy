@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 
-/** Agent-access service assertion. Lived on the retired Customer Request mandate host. */
+/** Signed server-to-server agent-access assertion. */
 export const serviceAssertion = v.object({
   principalId: v.string(),
   ownerId: v.string(),

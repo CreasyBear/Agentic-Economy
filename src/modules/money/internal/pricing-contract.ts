@@ -15,7 +15,13 @@ export const pricingConfigSchema = z.strictObject({
   version: z.literal('pricing:v2'),
   unit: z.literal('call'),
   paidAmount: exactAmountSchema,
+  providerAmount: exactAmountSchema.optional(),
+  platformFee: exactAmountSchema.optional(),
   freeTier: freeTierSchema.optional(),
+}).superRefine((config, ctx) => {
+  if ((config.providerAmount === undefined) !== (config.platformFee === undefined)) {
+    ctx.addIssue({ code: 'custom', message: 'pricing_config_fee_pair_required' })
+  }
 })
 
 export type PricingConfig = z.infer<typeof pricingConfigSchema>

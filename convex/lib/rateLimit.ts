@@ -7,9 +7,7 @@ export const RATE_LIMIT_NAMES = [
   'public-mutation',
   'oauth-issuance',
   'answer-turn-submit',
-  'answer-follow-up-chips',
   'answer-stream',
-  'inquiry-submit',
   'dispute-open',
 ] as const
 
@@ -27,9 +25,7 @@ const limits: RateLimitDefinitions = {
   'public-mutation': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'oauth-issuance': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'answer-turn-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'answer-follow-up-chips': { kind: 'token bucket', rate: 60, period: HOUR, capacity: 60 },
   'answer-stream': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'inquiry-submit': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE, capacity: 3 },
 }
 

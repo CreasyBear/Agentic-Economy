@@ -46,7 +46,6 @@ export function capabilitySupplyGraphPorts(
       const business = await db.get(businessId as Id<'businesses'>)
       return business !== null
         && business.publicStatus === 'published'
-        && business.claimStatus === 'published'
         && business.suppressedAt === undefined
         ? toPublishedBusiness(business)
         : null
@@ -149,7 +148,6 @@ function toPublishedBusiness(doc: Doc<'businesses'>): GraphPublishedBusiness {
     businessId: String(doc._id),
     trustTier: doc.trustTier,
     publicStatus: 'published',
-    claimStatus: 'published',
     suppressed: false,
     currentlyPublished: true,
   }
@@ -173,7 +171,7 @@ function toAccessPathDescriptor(
 ): OfferingAccessPathDescriptor {
   if (value.kind === 'human_request') {
     const channel = value.channel
-    if (channel !== 'phone' && channel !== 'website' && channel !== 'ae_inquiry') {
+    if (channel !== 'phone' && channel !== 'website') {
       throw new Error('offering_access_path_descriptor_invalid')
     }
     return {
@@ -252,5 +250,4 @@ function parsePricingConfig(value: string): PricingConfig | undefined {
     return undefined
   }
 }
-
 

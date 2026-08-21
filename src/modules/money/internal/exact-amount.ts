@@ -17,13 +17,40 @@ export const exactAmountSchema = z.strictObject({
   exponent: z.number().int().min(0).max(18),
 })
 
-function readExactAmount(value: unknown): ExactAmount | undefined {
+export function readExactAmount(value: unknown): ExactAmount | undefined {
   try {
     const parsed = exactAmountSchema.safeParse(value)
     return parsed.success ? parsed.data : undefined
   } catch {
     return undefined
   }
+}
+
+export function amountFromParts(
+  currency: unknown,
+  units: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  return readExactAmount({ currency, units, exponent })
+}
+
+export function amountAtScale(
+  amount: unknown,
+  currency: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  const parsed = readExactAmount(amount)
+  if (parsed === undefined || typeof currency !== 'string' || parsed.currency !== currency) {
+    return undefined
+  }
+  return rescaleExactAmount(parsed, exponent)
+}
+
+export function zeroExactAmount(
+  currency: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  return amountFromParts(currency, '0', exponent)
 }
 
 function readExponent(value: unknown): number | undefined {

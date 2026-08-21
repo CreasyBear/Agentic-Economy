@@ -26,12 +26,19 @@ import type { DataModel } from "./dataModel.js";
  */
 type Env = {
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
-  readonly AE_CUSTOMER_REQUEST_MODEL: string | undefined;
   readonly AE_RELEASE_SOURCE_REVISION: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;
   readonly AE_SITE_URL: string | undefined;
+  readonly AE_X402_CDP_ACCOUNT_NAME: string | undefined;
+  readonly AE_X402_CUSTODY_ENABLED: string | undefined;
+  readonly AE_X402_CUSTODY_MAX_ATOMIC: string | undefined;
+  readonly AE_X402_PAYMENT_CREDENTIAL_REF: string | undefined;
+  readonly AE_X402_PAYMENT_PRIVATE_KEY: string | undefined;
   readonly AE_X402_RPC_URLS_JSON: string | undefined;
+  readonly CDP_API_KEY_ID: string | undefined;
+  readonly CDP_API_KEY_SECRET: string | undefined;
+  readonly CDP_WALLET_SECRET: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
 };
