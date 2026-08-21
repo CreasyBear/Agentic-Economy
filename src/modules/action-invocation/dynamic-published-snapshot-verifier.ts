@@ -19,7 +19,7 @@ import {
   dynamicPublishedSourceDigest,
   executableFixedPrice,
 } from './dynamic-published-contract'
-import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter'
+import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter-snapshot'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
 import { reconstructDurableControlRow } from './internal/durable-contracts'
 
