@@ -14,7 +14,7 @@ import {
   type FacilitatorDiscoverySkip,
 } from '@/modules/capability-supply/convex'
 import {
-  admitBazaarFromPaymentRequired,
+  admitOfficialBazaarFromPaymentRequired,
   fetchFacilitatorDiscoveryPages,
 } from '@/modules/capability-supply/server'
 import {
@@ -37,7 +37,7 @@ export async function admitFacilitatorDiscoveryItems(
       skipped.push({ kind: 'skip', reason: 'resource_invalid' })
       continue
     }
-    const bazaar = admitBazaarFromPaymentRequired(paymentRequired)
+    const bazaar = admitOfficialBazaarFromPaymentRequired(paymentRequired)
     const decision = decideFacilitatorDiscoveryItem(item, bazaar)
     if (decision.kind === 'skip') {
       skipped.push(decision)

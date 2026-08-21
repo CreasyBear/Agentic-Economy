@@ -400,7 +400,7 @@ function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
   if (violation.rule !== "forbidden-handshake-import") return false;
   if (
     violation.file ===
-    "src/modules/capability-supply/internal/publication-importer-x402-bazaar.ts"
+    "src/modules/capability-supply/internal/facilitator-discovery-client.ts"
   ) {
     return /from\s+['"]@x402\/extensions\/bazaar['"]/.test(
       violation.excerpt,

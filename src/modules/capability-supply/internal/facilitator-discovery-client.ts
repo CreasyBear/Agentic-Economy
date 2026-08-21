@@ -1,5 +1,15 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { isRecord } from '@/modules/common/is-record'
+import {
+  extractDiscoveryInfoFromExtension,
+  validateAndExtract,
+  type DiscoveryExtension,
+} from '@x402/extensions/bazaar'
+
+import {
+  admitBazaarDiscoveryInfo,
+  type BazaarAdmission,
+} from './publication-importer-x402-bazaar'
 
 export const FACILITATOR_DISCOVERY_URLS = [
   'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources',
@@ -30,6 +40,33 @@ export type FacilitatorDiscoveryFetchResult = Readonly<{
   pages: readonly FacilitatorDiscoveryFetchedPage[]
   complete: boolean
 }>
+
+export function admitOfficialBazaarFromPaymentRequired(
+  paymentRequired: Readonly<Record<string, unknown>>,
+): BazaarAdmission {
+  const extensions = paymentRequired.extensions
+  const extension = isRecord(extensions) ? extensions.bazaar : undefined
+  if (extension === undefined) {
+    return { kind: 'absent' }
+  }
+  if (!isRecord(extension)) {
+    return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
+  }
+  const discoveryExtension = extension as unknown as DiscoveryExtension
+  try {
+    const validation = validateAndExtract(discoveryExtension)
+    if (!validation.valid) {
+      return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
+    }
+    const info = extractDiscoveryInfoFromExtension(discoveryExtension, false)
+    return admitBazaarDiscoveryInfo(extension, {
+      input: info.input as Readonly<Record<string, unknown>>,
+      output: info.output,
+    })
+  } catch {
+    return { kind: 'refused', reason: 'bazaar_discovery_invalid' }
+  }
+}
 
 export async function fetchFacilitatorDiscoveryPages(input: Readonly<{
   fetcher?: Fetcher

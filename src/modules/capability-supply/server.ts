@@ -28,6 +28,7 @@ export {
   readX402PaymentPayerAndNonce,
 } from './internal/x402-payment-signer'
 export { fetchFacilitatorDiscoveryPages } from './internal/facilitator-discovery-client'
+export { admitOfficialBazaarFromPaymentRequired } from './internal/facilitator-discovery-client'
 export { admitBazaarFromPaymentRequired } from './internal/publication-importer-x402-bazaar'
 export type { BazaarAdmission } from './internal/publication-importer-x402-bazaar'
 export type {

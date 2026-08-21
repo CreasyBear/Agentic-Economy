@@ -137,10 +137,10 @@ describe("facilitator discovery ingest", () => {
     const mutationPath = resolve(root, "convex/facilitatorDiscovery.ts");
     const actionPath = resolve(root, "convex/facilitatorDiscoveryAction.ts");
     const mutationImports = collectStaticImportTree(mutationPath, root);
-    const actionText = readFileSync(actionPath, "utf8");
+    const actionImports = collectStaticImportTree(actionPath, root);
     expect(mutationImports).not.toContain("@x402/extensions/bazaar");
     expect([...mutationImports].filter((value) => value.startsWith("node:") || NODE_BUILTINS.has(value))).toEqual([]);
-    expect(actionText).toContain("@x402/extensions/bazaar");
+    expect(actionImports).toContain("@x402/extensions/bazaar");
   });
 });
 
