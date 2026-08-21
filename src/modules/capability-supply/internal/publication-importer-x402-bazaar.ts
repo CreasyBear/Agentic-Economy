@@ -3,14 +3,6 @@ import {
   type JsonValue,
 } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
-import {
-  extractDiscoveryInfoFromExtension,
-  validateAndExtract,
-  type DiscoveryExtension,
-  type DiscoveryInfo,
-} from "@x402/extensions/bazaar";
-
-import { inspectSource } from "./publication-importer-types";
 
 const JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema";
 const BAZAAR_KEY = "bazaar";
@@ -41,9 +33,15 @@ export type BazaarAdmission =
       query: BazaarAdmissionQuery | undefined;
     }>;
 
+export type BazaarDiscoveryInfo = Readonly<{
+  input: Readonly<Record<string, unknown>>;
+  output: unknown;
+}>;
+
 /**
- * Bazaar's validated info is the call contract. AE only admits the HTTP
- * subset it can represent and keeps the source schema/example bounded.
+ * Raw Bazaar extensions are admitted only by the Node discovery action. The
+ * shared importer fails closed when it sees one so it cannot bypass that
+ * runtime boundary.
  */
 export function admitBazaarFromPaymentRequired(
   paymentRequired: unknown,
@@ -53,27 +51,16 @@ export function admitBazaarFromPaymentRequired(
   if (!isRecord(extensions) || !(BAZAAR_KEY in extensions)) {
     return { kind: "absent" };
   }
-  const extension = extensions[BAZAAR_KEY];
-  if (!isRecord(extension) || inspectSource(extension).kind === "refused") {
-    return { kind: "refused", reason: "bazaar_discovery_invalid" };
-  }
-
-  const discoveryExtension = extension as unknown as DiscoveryExtension;
-  try {
-    const validation = validateAndExtract(discoveryExtension);
-    if (!validation.valid) {
-      return { kind: "refused", reason: "bazaar_discovery_invalid" };
-    }
-    const info = extractDiscoveryInfoFromExtension(discoveryExtension, false);
-    return admitHttpDiscoveryInfo(extension, info);
-  } catch {
-    return { kind: "refused", reason: "bazaar_discovery_invalid" };
-  }
+  return { kind: "refused", reason: "bazaar_discovery_invalid" };
 }
 
-function admitHttpDiscoveryInfo(
+/**
+ * Applies AE's bounded HTTP/schema profile to info already extracted by the
+ * official Bazaar SDK in the Node discovery action.
+ */
+export function admitBazaarDiscoveryInfo(
   extension: Readonly<Record<string, unknown>>,
-  info: DiscoveryInfo,
+  info: BazaarDiscoveryInfo,
 ): BazaarAdmission {
   if (info.input.type !== "http") {
     return { kind: "refused", reason: "transport_unsupported" };

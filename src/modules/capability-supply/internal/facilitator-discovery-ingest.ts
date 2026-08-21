@@ -1,11 +1,9 @@
 import { isRecord } from "@/modules/common/is-record";
 import type { ExactAmount } from "@/modules/money/public";
 
-import { admitBazaarFromPaymentRequired } from "./publication-importer-x402-bazaar";
-import { importX402Capability } from "./publication-importer-x402";
+import type { BazaarAdmission } from "./publication-importer-x402-bazaar";
 import type {
   CapabilityPublicationImport,
-  CapabilityPublicationImportResult,
   CanonicalCapabilityPublicationDraft,
 } from "./publication-importer-types";
 import { validPublicHttpsEndpoint } from "./transport-adapters";
@@ -75,19 +73,21 @@ export type FacilitatorDiscoveryPage = Readonly<{
 }>;
 
 export type FacilitatorDiscoveryAdmittedDraft = Readonly<
-  CanonicalCapabilityPublicationDraft & {
-    contract: Readonly<Record<string, unknown>>;
+  {
+    offering: CanonicalCapabilityPublicationDraft["offering"];
+    binding: CanonicalCapabilityPublicationDraft["binding"];
     execution: Readonly<{
-      endpoint: Readonly<{ url: string }>;
-      method: "GET" | "POST";
-      query?: readonly Readonly<{
-        inputPointer: string;
-        parameter: string;
-        required?: boolean;
-      }>[];
-    }>;
+        endpoint: Readonly<{ url: string }>;
+        method: "GET" | "POST";
+        query?: Readonly<{
+          inputPointer: string;
+          parameter: string;
+          required?: boolean;
+        }>[];
+      }>;
     price: FacilitatorDiscoveryPriceBreakdown;
-    sourceImport: Extract<CapabilityPublicationImport, { kind: "x402" }>;
+    sourceImportJson: string;
+    sourceRevision: string;
   }
 >;
 
@@ -123,6 +123,7 @@ export function parseFacilitatorDiscoveryPage(
 
 export function decideFacilitatorDiscoveryItem(
   item: unknown,
+  bazaar: BazaarAdmission = { kind: "absent" },
 ): FacilitatorDiscoveryDecision {
   const paymentRequired = paymentRequiredFromDiscoveryItem(item);
   if (paymentRequired === undefined) return { kind: "skip", reason: "resource_invalid" };
@@ -131,7 +132,6 @@ export function decideFacilitatorDiscoveryItem(
   const endpoint = resourceUrl === undefined ? undefined : admittedResourceUrl(resourceUrl);
   if (endpoint === undefined) return { kind: "skip", reason: "resource_invalid" };
 
-  const bazaar = admitBazaarFromPaymentRequired(paymentRequired);
   if (bazaar.kind === "absent") return { kind: "skip", reason: "bazaar_missing" };
   if (bazaar.kind === "refused") {
     return {
@@ -218,29 +218,22 @@ export function decideFacilitatorDiscoveryItem(
   return { kind: "admit", import: sourceImport, identity, price };
 }
 
-export async function admitFacilitatorDiscoveryItems(
-  items: readonly unknown[],
-): Promise<FacilitatorDiscoveryAdmissionResult> {
+/**
+ * The Node discovery action supplies already admitted DTOs. This boundary is
+ * intentionally a no-op so the default Convex mutation tree has no Bazaar
+ * SDK or Node-runtime validation path.
+ */
+export function admitFacilitatorDiscoveryItems(
+  items: readonly FacilitatorDiscoveryAdmittedDraft[],
+): FacilitatorDiscoveryAdmissionResult {
   const admitted: FacilitatorDiscoveryAdmittedDraft[] = [];
   const skipped: FacilitatorDiscoverySkip[] = [];
   for (const item of items.slice(0, FACILITATOR_DISCOVERY_MAX_PAGE_SIZE)) {
-    const decision = decideFacilitatorDiscoveryItem(item);
-    if (decision.kind === "skip") {
-      skipped.push(decision);
-      continue;
-    }
-    let result: CapabilityPublicationImportResult;
-    try {
-      result = await importX402Capability(decision.import);
-    } catch {
+    if (parseFacilitatorDiscoverySourceImport(item.sourceImportJson) === undefined) {
       skipped.push({ kind: "skip", reason: "source_invalid" });
       continue;
     }
-    if (result.kind !== "normalized") {
-      skipped.push({ kind: "skip", reason: mapImporterRefusal(result.reason) });
-      continue;
-    }
-    admitted.push(admittedDraft(result.draft, decision));
+    admitted.push(item);
   }
   if (items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) {
     skipped.push({ kind: "skip", reason: "resource_invalid" });
@@ -248,24 +241,37 @@ export async function admitFacilitatorDiscoveryItems(
   return { admitted, skipped };
 }
 
-export async function admitFacilitatorDiscoveryItem(
-  item: unknown,
+export function admitFacilitatorDiscoveryItem(
+  item: FacilitatorDiscoveryAdmittedDraft,
 ): Promise<
   | FacilitatorDiscoverySkip
   | Readonly<{ kind: "admitted"; result: FacilitatorDiscoveryAdmittedDraft }>
 > {
-  const result = await admitFacilitatorDiscoveryItems([item]);
-  const draft = result.admitted[0];
-  return draft === undefined
-    ? result.skipped[0] ?? { kind: "skip", reason: "source_invalid" }
-    : { kind: "admitted", result: draft };
+  return Promise.resolve(
+    parseFacilitatorDiscoverySourceImport(item.sourceImportJson) === undefined
+      ? { kind: "skip", reason: "source_invalid" as const }
+      : { kind: "admitted", result: item },
+  );
+}
+
+export function parseFacilitatorDiscoverySourceImport(
+  value: string,
+): Extract<CapabilityPublicationImport, { kind: "x402" }> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) && parsed.kind === "x402"
+      ? parsed as Extract<CapabilityPublicationImport, { kind: "x402" }>
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function isAllowlistedFacilitatorDiscoveryUrl(value: string): boolean {
   return (FACILITATOR_DISCOVERY_URLS as readonly string[]).includes(value);
 }
 
-function paymentRequiredFromDiscoveryItem(
+export function paymentRequiredFromDiscoveryItem(
   item: unknown,
 ): Readonly<Record<string, unknown>> | undefined {
   if (!isRecord(item)) return undefined;
@@ -354,9 +360,10 @@ function exactAtomicAmount(units: bigint): ExactAmount | undefined {
     : { currency: "USD", units: value, exponent: FACILITATOR_DISCOVERY_ASSET_EXPONENT };
 }
 
-function admittedDraft(
+export function admittedFacilitatorDiscoveryDraft(
   normalized: CanonicalCapabilityPublicationDraft,
   decision: FacilitatorDiscoveryAdmitCandidate,
+  sourceRevision: string,
 ): FacilitatorDiscoveryAdmittedDraft {
   const materialTerms = [
     ...normalized.offering.presentation.materialTerms,
@@ -375,25 +382,19 @@ function admittedDraft(
       },
     },
   };
-  let contract: Readonly<Record<string, unknown>> = {};
-  try {
-    const parsed: unknown = JSON.parse(draft.documentJson);
-    if (isRecord(parsed)) contract = parsed;
-  } catch {
-    // The importer has already validated documentJson; keep this view bounded.
-  }
   const resource = isRecord(decision.import.resource) ? decision.import.resource : undefined;
   const query = Array.isArray(resource?.query) ? resource.query : undefined;
   return {
-    ...draft,
-    contract,
+    offering: draft.offering,
+    binding: draft.binding,
     execution: {
       endpoint: { url: decision.identity.origin + decision.identity.path },
       method: decision.identity.method,
       ...(query === undefined ? {} : { query }),
     },
     price: decision.price,
-    sourceImport: decision.import,
+    sourceImportJson: JSON.stringify(decision.import),
+    sourceRevision,
   };
 }
 
@@ -438,7 +439,9 @@ function searchTermsFromResource(resource: Readonly<Record<string, unknown>> | u
   return [...new Set([...(name === undefined ? [] : [name]), ...tags])].slice(0, 16);
 }
 
-function mapImporterRefusal(reason: string): FacilitatorDiscoverySkipReason {
+export function mapFacilitatorDiscoveryImporterRefusal(
+  reason: string,
+): FacilitatorDiscoverySkipReason {
   switch (reason) {
     case "bazaar_discovery_invalid": return "bazaar_discovery_invalid";
     case "schema_missing": return "schema_missing";

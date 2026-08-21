@@ -1,6 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
+import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
@@ -10,7 +11,10 @@ describe('facilitator discovery reconciliation', () => {
   it('creates deterministic provider state and replays the same publication', async () => {
     const backend = convexTest(schema, convexModules)
     const deadlineAt = Date.now() + 60_000
-    const item = JSON.stringify(timezoneFixture.paymentRequired)
+    const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
+    const item = admission.admitted[0]
+    expect(item).toBeDefined()
+    if (item === undefined) throw new Error('expected recorded discovery admission')
 
     const first = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
       items: Array.from({ length: 21 }, () => item),
@@ -68,8 +72,10 @@ describe('facilitator discovery reconciliation', () => {
 
   it('does not create a business for malformed input or withdraw on a partial run', async () => {
     const backend = convexTest(schema, convexModules)
+    const admission = await admitFacilitatorDiscoveryItems([{ malformed: true }])
+    expect(admission.admitted).toHaveLength(0)
     const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [JSON.stringify({ malformed: true })],
+      items: [...admission.admitted],
       complete: false,
       deadlineAt: Date.now() + 60_000,
     })
@@ -79,9 +85,13 @@ describe('facilitator discovery reconciliation', () => {
 
   it('performs no writes when the reconciliation deadline has expired', async () => {
     const backend = convexTest(schema, convexModules)
+    const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
+    const item = admission.admitted[0]
+    expect(item).toBeDefined()
+    if (item === undefined) throw new Error('expected recorded discovery admission')
 
     const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: [JSON.stringify(timezoneFixture.paymentRequired)],
+      items: [item],
       complete: true,
       seenPublicationRefs: [],
       deadlineAt: 0,
@@ -108,16 +118,19 @@ describe('facilitator discovery reconciliation', () => {
   it('rejects structural reconciliation limits before any writes', async () => {
     const backend = convexTest(schema, convexModules)
     const deadlineAt = Date.now() + 60_000
-    const rawItem = JSON.stringify(timezoneFixture.paymentRequired)
+    const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
+    const item = admission.admitted[0]
+    expect(item).toBeDefined()
+    if (item === undefined) throw new Error('expected recorded discovery admission')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: Array.from({ length: 101 }, () => rawItem),
+      items: Array.from({ length: 101 }, () => item),
       complete: false,
       deadlineAt,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
-      items: ['"' + 'x'.repeat(262_144) + '"'],
+      items: [{ ...item, sourceImportJson: 'x'.repeat(262_144) }],
       complete: false,
       deadlineAt,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')

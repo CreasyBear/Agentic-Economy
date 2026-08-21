@@ -20,6 +20,7 @@ import {
   dereferenceLocalSchema,
   type FacilitatorDiscoveryAdmittedDraft,
 } from '@/modules/capability-supply/convex'
+import { parseFacilitatorDiscoverySourceImport } from '@/modules/capability-supply/internal/facilitator-discovery-ingest'
 import { isRecord } from '@/modules/common/is-record'
 
 import type { Id } from './_generated/dataModel'
@@ -38,6 +39,32 @@ const MAX_RECONCILE_ITEM_BYTES = 262_144
 const MAX_SEEN_PUBLICATION_REFS = 2_000
 const MAX_PUBLICATION_REF_LENGTH = 240
 const textEncoder = new TextEncoder()
+const exactAmountValue = v.object({
+  currency: v.string(),
+  units: v.string(),
+  exponent: v.number(),
+})
+const facilitatorDiscoveryAdmissionValue = v.object({
+  offering: v.any(),
+  binding: v.any(),
+  execution: v.object({
+    endpoint: v.object({ url: v.string() }),
+    method: v.union(v.literal('GET'), v.literal('POST')),
+    query: v.optional(v.array(v.object({
+      inputPointer: v.string(),
+      parameter: v.string(),
+      required: v.optional(v.boolean()),
+    }))),
+  }),
+  price: v.object({
+    provider: exactAmountValue,
+    platformFee: exactAmountValue,
+    total: exactAmountValue,
+    feeBps: v.literal(1_000),
+  }),
+  sourceImportJson: v.string(),
+  sourceRevision: v.string(),
+})
 const reconcileResult = v.object({
   admitted: v.number(),
   published: v.number(),
@@ -138,7 +165,7 @@ async function withdrawFacilitatorDiscoveryCapability(
 
 export const reconcile = internalMutation({
   args: {
-    items: v.array(v.string()),
+    items: v.array(facilitatorDiscoveryAdmissionValue),
     complete: v.boolean(),
     seenPublicationRefs: v.optional(v.array(v.string())),
     deadlineAt: v.number(),
@@ -147,7 +174,11 @@ export const reconcile = internalMutation({
   handler: async (ctx, args) => {
     if (
       args.items.length > MAX_RECONCILE_ITEMS
-      || args.items.some((item) => textEncoder.encode(item).byteLength > MAX_RECONCILE_ITEM_BYTES)
+      || args.items.some((item) => {
+        const serialized = JSON.stringify(item)
+        return serialized === undefined
+          || textEncoder.encode(serialized).byteLength > MAX_RECONCILE_ITEM_BYTES
+      })
       || (args.seenPublicationRefs?.length ?? 0) > MAX_SEEN_PUBLICATION_REFS
       || args.seenPublicationRefs?.some((ref) => ref.length === 0 || ref.length > MAX_PUBLICATION_REF_LENGTH)
     ) {
@@ -166,14 +197,9 @@ export const reconcile = internalMutation({
     let published = 0
     let skipped = 0
     const seenPublicationRefs = new Set(args.seenPublicationRefs ?? [])
-    const discoveryItems = args.items.map((value) => {
-      try {
-        return JSON.parse(value) as unknown
-      } catch {
-        return undefined
-      }
-    })
-    const admission = await admitFacilitatorDiscoveryItems(discoveryItems)
+    const admission = admitFacilitatorDiscoveryItems(
+      args.items as readonly FacilitatorDiscoveryAdmittedDraft[],
+    )
     const candidates = admission.admitted
     skipped += admission.skipped.length
     let deadlineExceeded = false
@@ -209,7 +235,9 @@ async function reconcileDraft(
   draft: FacilitatorDiscoveryAdmittedDraft,
   now: number,
 ): Promise<'published' | 'skipped'> {
-  const route = routeIdentity(draft)
+  const sourceImport = parseFacilitatorDiscoverySourceImport(draft.sourceImportJson)
+  if (sourceImport === undefined) return 'skipped'
+  const route = routeIdentity(sourceImport)
   if (route === undefined) return 'skipped'
   const business = await ensureProviderBusiness(ctx, route.host, now)
   if (business === undefined) return 'skipped'
@@ -233,12 +261,9 @@ async function reconcileDraft(
     platformFee: draft.price.platformFee,
     paidAmount: draft.price.total,
   }
-  const sourceRevision = `facilitator-discovery:v1:${canonicalDigest({
-    route: { method: draft.execution.method, resourceUrl: route.resourceUrl },
-    source: JSON.stringify(draft.sourceImport),
-  }).slice(7)}`
+  const sourceRevision = draft.sourceRevision
   const prepared = await preparePublicationDraft({
-    source: draft.sourceImport,
+    source: sourceImport,
     sourceRevision,
     pricingConfig,
     offering: draft.offering,
@@ -282,7 +307,7 @@ async function reconcileDraft(
   }
   const result = await refreshFacilitatorDiscoveryCapability(ctx, {
     publication: current,
-    source: draft.sourceImport,
+    source: sourceImport,
     offering: draft.offering,
     binding,
     ...context,
@@ -290,11 +315,13 @@ async function reconcileDraft(
   return result.kind === 'refreshed' ? 'published' : 'skipped'
 }
 
-function routeIdentity(draft: FacilitatorDiscoveryAdmittedDraft): Readonly<{
+function routeIdentity(
+  sourceImport: Readonly<{ resource: unknown }>,
+): Readonly<{
   host: string
   resourceUrl: string
 }> | undefined {
-  const resource = isRecord(draft.sourceImport.resource) ? draft.sourceImport.resource : undefined
+  const resource = isRecord(sourceImport.resource) ? sourceImport.resource : undefined
   const rawUrl = typeof resource?.resourceUrl === 'string' ? resource.resourceUrl : undefined
   if (rawUrl === undefined) return undefined
   try {

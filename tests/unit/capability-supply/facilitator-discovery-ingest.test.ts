@@ -1,9 +1,12 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
+import { admitFacilitatorDiscoveryItems as admitOfficialFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
 import timezonePin from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json";
 import syntheticPost from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/synthetic-post-payment-required.json";
 import {
-  admitFacilitatorDiscoveryItems,
   decideFacilitatorDiscoveryItem,
   FACILITATOR_DISCOVERY_URLS,
   isAllowlistedFacilitatorDiscoveryUrl,
@@ -75,26 +78,26 @@ describe("facilitator discovery ingest", () => {
     ).toBe(false);
   });
 
-  it("skips missing bazaar and MCP instead of falling back to AM parameters", () => {
+  it("skips missing bazaar and MCP instead of falling back to AM parameters", async () => {
     expect(decideFacilitatorDiscoveryItem(noBazaarItem)).toEqual({
       kind: "skip",
       reason: "bazaar_missing",
     });
-    const mcp = decideFacilitatorDiscoveryItem(mcpItem);
-    expect(mcp.kind).toBe("skip");
-    if (mcp.kind !== "skip") throw new Error("expected skip");
-    expect(["transport_unsupported", "source_invalid", "bazaar_discovery_invalid"]).toContain(mcp.reason);
-    const testnet = decideFacilitatorDiscoveryItem(syntheticPost);
-    expect(testnet).toEqual({ kind: "skip", reason: "chain_unsupported" });
+    const mcpAndTestnet = await admitOfficialFacilitatorDiscoveryItems([mcpItem, syntheticPost]);
+    expect(mcpAndTestnet.admitted).toHaveLength(0);
+    expect(mcpAndTestnet.skipped.map((item) => item.reason)).toEqual([
+      "transport_unsupported",
+      "chain_unsupported",
+    ]);
   });
 
-  it("admits at least two recorded bazaar resources through importX402Capability", async () => {
+  it("admits at least two recorded bazaar resources through the Node action boundary", async () => {
     expect(timezonePaymentRequired).toBeDefined();
     const page = parseFacilitatorDiscoveryPage({
       items: [timezonePaymentRequired, mainnetSyntheticPost, noBazaarItem, mcpItem],
     });
     expect(page?.items).toHaveLength(4);
-    const result = await admitFacilitatorDiscoveryItems(page!.items);
+    const result = await admitOfficialFacilitatorDiscoveryItems(page!.items);
     expect(result.admitted).toHaveLength(2);
     expect(result.skipped.length).toBeGreaterThanOrEqual(2);
     const urls = result.admitted.map(
@@ -104,7 +107,7 @@ describe("facilitator discovery ingest", () => {
       "https://402timezones.vercel.app/api/convert-timezone",
       "https://api.example.test/lookup",
     ]);
-    expect(new Set(result.admitted.map((draft) => draft.contract.capabilityId)).size).toBe(
+    expect(new Set(result.admitted.map((draft) => draft.offering.offeringId)).size).toBe(
       2,
     );
     expect(result.admitted[1]?.price).toMatchObject({
@@ -114,7 +117,7 @@ describe("facilitator discovery ingest", () => {
     });
   });
 
-  it("admits a full page but refuses an accept list above 20", () => {
+  it("admits a full page but refuses an accept list above 20", async () => {
     expect(parseFacilitatorDiscoveryPage({ items: Array.from({ length: 100 }, () => noBazaarItem) })?.items)
       .toHaveLength(100);
     expect(parseFacilitatorDiscoveryPage({ items: Array.from({ length: 101 }, () => noBazaarItem) })).toBeUndefined();
@@ -122,9 +125,67 @@ describe("facilitator discovery ingest", () => {
       ...mainnetSyntheticPost,
       accepts: Array.from({ length: 21 }, () => mainnetSyntheticPost.accepts[0]),
     };
-    expect(decideFacilitatorDiscoveryItem(tooManyAccepts)).toEqual({
-      kind: "skip",
-      reason: "payment_terms_invalid",
+    const result = await admitOfficialFacilitatorDiscoveryItems([tooManyAccepts]);
+    expect(result).toMatchObject({
+      admitted: [],
+      skipped: [{ kind: "skip", reason: "payment_terms_invalid" }],
     });
   });
+
+  it("keeps the Bazaar SDK out of the default mutation import tree", () => {
+    const root = resolve(dirname(import.meta.filename), "../../..");
+    const mutationPath = resolve(root, "convex/facilitatorDiscovery.ts");
+    const actionPath = resolve(root, "convex/facilitatorDiscoveryAction.ts");
+    const mutationImports = collectStaticImportTree(mutationPath, root);
+    const actionText = readFileSync(actionPath, "utf8");
+    expect(mutationImports).not.toContain("@x402/extensions/bazaar");
+    expect([...mutationImports].filter((value) => value.startsWith("node:") || NODE_BUILTINS.has(value))).toEqual([]);
+    expect(actionText).toContain("@x402/extensions/bazaar");
+  });
 });
+
+const NODE_BUILTINS = new Set([
+  "assert", "buffer", "child_process", "cluster", "console", "constants", "crypto",
+  "dgram", "diagnostics_channel", "dns", "domain", "events", "fs", "http", "http2",
+  "https", "module", "net", "os", "path", "perf_hooks", "process", "punycode", "querystring",
+  "readline", "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events",
+  "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib",
+]);
+
+function collectStaticImportTree(start: string, root: string): Set<string> {
+  const pending = [start];
+  const visited = new Set<string>();
+  const external = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined || visited.has(current)) continue;
+    visited.add(current);
+    const text = readFileSync(current, "utf8");
+    for (const match of text.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/gu)) {
+      const specifier = match[1];
+      if (specifier === undefined) continue;
+      const matchIndex = match.index ?? 0;
+      const importIndex = Math.max(text.lastIndexOf("import", matchIndex), text.lastIndexOf("export", matchIndex));
+      if (/^(?:import|export)\s+type\b/u.test(text.slice(importIndex, matchIndex).trim())) continue;
+      const local = resolveLocalImport(current, specifier, root);
+      if (local === undefined) external.add(specifier);
+      else pending.push(local);
+    }
+  }
+  return external;
+}
+
+function resolveLocalImport(from: string, specifier: string, root: string): string | undefined {
+  if (!specifier.startsWith("./") && !specifier.startsWith("../") && !specifier.startsWith("@/")) {
+    return undefined;
+  }
+  const base = specifier.startsWith("@/")
+    ? resolve(root, "src", specifier.slice(2))
+    : resolve(dirname(from), specifier);
+  const candidates = [
+    base,
+    `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.mts`, `${base}.mjs`,
+    resolve(base, "index.ts"), resolve(base, "index.tsx"), resolve(base, "index.js"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+}
