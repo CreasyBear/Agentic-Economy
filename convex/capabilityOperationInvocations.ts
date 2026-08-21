@@ -285,7 +285,7 @@ async function finishAutomaticReconciliationHandler(
     await ctx.db.patch(row._id, {
       reconciliation: {
         attemptCount,
-        nextAttemptAt: args.now + RECONCILIATION_BACKOFF_MS[RECONCILIATION_BACKOFF_MS.length - 1]!,
+        nextAttemptAt: args.now + RECONCILIATION_BACKOFF_MS[3],
         disposition: 'manual_review',
         reason,
       },
@@ -293,7 +293,14 @@ async function finishAutomaticReconciliationHandler(
     })
     return { kind: 'manual_review' }
   }
-  const nextAttemptAt = args.now + RECONCILIATION_BACKOFF_MS[attemptCount - 1]!
+  const backoffMs = attemptCount === 1
+    ? RECONCILIATION_BACKOFF_MS[0]
+    : attemptCount === 2
+      ? RECONCILIATION_BACKOFF_MS[1]
+      : attemptCount === 3
+        ? RECONCILIATION_BACKOFF_MS[2]
+        : RECONCILIATION_BACKOFF_MS[3]
+  const nextAttemptAt = args.now + backoffMs
   await ctx.db.patch(row._id, {
     reconciliation: {
       attemptCount,
