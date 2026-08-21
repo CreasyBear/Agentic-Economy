@@ -968,7 +968,13 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           if (options.preparePaymentErrorState !== undefined) {
             throw new Error('x402_payment_attempt_reconciliation_required')
           }
-          return { custodyRef: 'custody:test-worker', authorizationDigest: digest('p') }
+          return {
+            custodyRef: 'custody:test-worker',
+            authorizationDigest: digest('p'),
+            ...(args.custodyBudgetRef === undefined ? {} : { custodyBudgetRef: args.custodyBudgetRef }),
+            ...(args.custodyGeneration === undefined ? {} : { custodyGeneration: args.custodyGeneration }),
+            ...(args.custodyDailyMaximumUnits === undefined ? {} : { custodyDailyMaximumUnits: args.custodyDailyMaximumUnits }),
+          }
         case 'moneyX402PaymentAttempts:markX402PaymentPossiblySubmitted':
           state.payment.mark = args
           return null
