@@ -3,6 +3,10 @@ import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent } from 'undici'
 import {
+  isPaymentSigningIdempotencyKey,
+  type CdpX402PaymentSigningIntent,
+} from '@/modules/capability-supply/internal/cdp-x402-payment-signer'
+import {
   cdpX402CustodyBudgetRef,
   cdpX402CustodyConfigurationFromEnvironment,
   cdpX402RequestFingerprint,
@@ -45,7 +49,9 @@ type PreparedX402AuthorizationWithFingerprint = X402PreparedAuthorization & Read
 }>
 
 type StoredX402Authorization = Readonly<{
-  paymentSignature: string
+  paymentUnsignedMaterialJson: string
+  paymentUnsignedMaterialDigest: string
+  paymentSigningIdempotencyKey: string
   paymentSignatureDigest: string
   paymentPayer: string
   paymentNonce: string
@@ -64,10 +70,13 @@ type X402AttemptMaterial = X402AttemptSnapshotForMoney & Readonly<{
   requestFingerprint?: string
   challengeJson: string
   selectedRequirementJson: string
-  paymentSignature?: string
+  paymentUnsignedMaterialJson?: string
+  paymentUnsignedMaterialDigest?: string
+  paymentSigningIdempotencyKey?: string
   paymentSignatureDigest?: string
   paymentPayer?: string
   paymentNonce?: string
+  paymentSigningClaimedAt?: number
 }>
 
 type ManagedCustodyConfiguration = NonNullable<
@@ -125,14 +134,19 @@ function storedAuthorizationFromMaterial(
 ): StoredX402Authorization | undefined {
   if (
     material === null
-    || material.paymentSignature === undefined
+    || material.paymentUnsignedMaterialJson === undefined
+    || material.paymentUnsignedMaterialDigest === undefined
+    || material.paymentSigningIdempotencyKey === undefined
     || material.paymentSignatureDigest === undefined
     || material.paymentPayer === undefined
     || material.paymentNonce === undefined
     || material.requestFingerprint === undefined
+    || !isPaymentSigningIdempotencyKey(material.paymentSigningIdempotencyKey)
   ) return undefined
   return {
-    paymentSignature: material.paymentSignature,
+    paymentUnsignedMaterialJson: material.paymentUnsignedMaterialJson,
+    paymentUnsignedMaterialDigest: material.paymentUnsignedMaterialDigest,
+    paymentSigningIdempotencyKey: material.paymentSigningIdempotencyKey,
     paymentSignatureDigest: material.paymentSignatureDigest,
     paymentPayer: material.paymentPayer,
     paymentNonce: material.paymentNonce,
@@ -244,7 +258,7 @@ async function signAndRecordSandboxAuthorization(
       selectedRequirement,
     })
     if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
-    await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignature, {
+    await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignatureDigest, {
       custodyRef: material.custodyRef,
       authorizationDigest: material.authorizationDigest,
       paymentSignatureDigest: canonicalDigest(paymentSignature),
@@ -260,13 +274,19 @@ async function signAndCommitManagedAuthorization(
   material: X402AttemptMaterial,
   requestFingerprint: string,
   requestFingerprintContext: CdpX402RequestFingerprintContext,
-): Promise<StoredX402Authorization | undefined> {
+): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(material)
   if (custodyConfiguration === undefined) return undefined
-  const challenge = JSON.parse(material.challengeJson) as X402PaymentSignatureRequest['challenge']
-  const selectedRequirement = JSON.parse(
-    material.selectedRequirementJson,
-  ) as X402PaymentSignatureRequest['selectedRequirement']
+  let challenge: X402PaymentSignatureRequest['challenge']
+  let selectedRequirement: X402PaymentSignatureRequest['selectedRequirement']
+  try {
+    challenge = JSON.parse(material.challengeJson) as X402PaymentSignatureRequest['challenge']
+    selectedRequirement = JSON.parse(
+      material.selectedRequirementJson,
+    ) as X402PaymentSignatureRequest['selectedRequirement']
+  } catch {
+    return undefined
+  }
   if (canonicalDigest(challenge as StableHashValue) !== material.challengeDigest) return undefined
   const request: X402PaymentSignatureRequest = {
     challenge,
@@ -274,7 +294,58 @@ async function signAndCommitManagedAuthorization(
     paymentIdentifier: material.paymentIdentifier,
     selectedRequirement,
   }
-  const paymentSignature = await createCdpEvmX402PaymentSignature(request)
+
+  const intentFields = [
+    material.paymentUnsignedMaterialJson,
+    material.paymentUnsignedMaterialDigest,
+    material.paymentSigningIdempotencyKey,
+    material.paymentPayer,
+    material.paymentNonce,
+  ]
+  const hasPartialIntent = intentFields.some((value) => value !== undefined)
+  const persistedIntent: CdpX402PaymentSigningIntent | undefined = (
+    material.paymentUnsignedMaterialJson !== undefined
+    && material.paymentUnsignedMaterialDigest !== undefined
+    && material.paymentSigningIdempotencyKey !== undefined
+    && material.paymentPayer !== undefined
+    && material.paymentNonce !== undefined
+    && material.requestFingerprint !== undefined
+    && isPaymentSigningIdempotencyKey(material.paymentSigningIdempotencyKey)
+  ) ? {
+    paymentUnsignedMaterialJson: material.paymentUnsignedMaterialJson,
+    paymentUnsignedMaterialDigest: material.paymentUnsignedMaterialDigest,
+    paymentSigningIdempotencyKey: material.paymentSigningIdempotencyKey,
+    paymentPayer: material.paymentPayer,
+    paymentNonce: material.paymentNonce,
+    requestFingerprint: material.requestFingerprint,
+  } : undefined
+  if (
+    persistedIntent === undefined
+    && (hasPartialIntent
+      || material.paymentSignatureDigest !== undefined
+      || material.paymentSigningClaimedAt !== undefined)
+  ) throw new Error('x402_payment_reconciliation_required')
+
+  let committedIntent = persistedIntent
+  const paymentSignature = await createCdpEvmX402PaymentSignature(request, {
+    requestFingerprintContext,
+    ...(persistedIntent === undefined
+      ? {
+          onUnsignedMaterial: async (intent) => {
+            committedIntent = intent
+            await ctx.runMutation(
+              internal.moneyX402PaymentAttempts.recordX402PaymentSigningIntent,
+              {
+                custodyRef: material.custodyRef,
+                authorizationDigest: material.authorizationDigest,
+                ...intent,
+                custodyGeneration: custodyConfiguration.credentialGeneration,
+              },
+            )
+          },
+        }
+      : { persistedIntent }),
+  })
   if (paymentSignature === undefined || paymentSignature.length === 0) return undefined
   const postSignConfiguration = currentManagedCustodyConfiguration(material)
   if (postSignConfiguration === undefined) {
@@ -286,18 +357,22 @@ async function signAndCommitManagedAuthorization(
     requestFingerprintContext,
     requestFingerprint,
   )
-  if (identity === undefined) throw new Error('x402_payment_authorization_invalid')
-  await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignature, {
+  if (
+    identity === undefined
+    || committedIntent === undefined
+    || identity.paymentPayer !== committedIntent.paymentPayer
+    || identity.paymentNonce !== committedIntent.paymentNonce
+  ) throw new Error('x402_payment_authorization_invalid')
+  await ctx.runMutation(internal.moneyX402PaymentAttempts.recordX402PaymentSignatureDigest, {
     custodyRef: material.custodyRef,
     authorizationDigest: material.authorizationDigest,
-    paymentSignature: identity.paymentSignature,
     paymentSignatureDigest: identity.paymentSignatureDigest,
     paymentPayer: identity.paymentPayer,
     paymentNonce: identity.paymentNonce,
     requestFingerprint: identity.requestFingerprint,
-    custodyGeneration: custodyConfiguration.credentialGeneration,
+    custodyGeneration: postSignConfiguration.credentialGeneration,
   })
-  return identity
+  return paymentSignature
 }
 
 async function readOrClaimManagedAuthorization(
@@ -310,11 +385,13 @@ async function readOrClaimManagedAuthorization(
 ): Promise<string | undefined> {
   const custodyConfiguration = currentManagedCustodyConfiguration(material)
   if (custodyConfiguration === undefined) return undefined
-  const stored = storedAuthorizationFromMaterial(material)
-  if (stored !== undefined) {
-    return currentManagedCustodyConfiguration(material) === undefined
-      ? undefined
-      : stored.paymentSignature
+  if (storedAuthorizationFromMaterial(material) !== undefined) {
+    return await signAndCommitManagedAuthorization(
+      ctx,
+      material,
+      requestFingerprint,
+      requestFingerprintContext,
+    )
   }
   const claim = await ctx.runMutation(internal.moneyX402PaymentAttempts.claimX402PaymentAuthorization, {
     custodyRef: prepared.custodyRef,
@@ -323,9 +400,20 @@ async function readOrClaimManagedAuthorization(
     custodyGeneration: custodyConfiguration.credentialGeneration,
   })
   if (claim.kind === 'stored') {
-    return currentManagedCustodyConfiguration(material) === undefined
-      ? undefined
-      : claim.paymentSignature
+    const converged = await readX402AuthorizationMaterial(
+      ctx,
+      prepared,
+      byDigest,
+      requestFingerprint,
+      custodyConfiguration.credentialGeneration,
+    )
+    if (converged === null) throw new Error('x402_payment_reconciliation_required')
+    return await signAndCommitManagedAuthorization(
+      ctx,
+      converged,
+      requestFingerprint,
+      requestFingerprintContext,
+    )
   }
   if (claim.kind === 'pending') {
     const deadline = Date.now() + 1_000
@@ -337,11 +425,13 @@ async function readOrClaimManagedAuthorization(
         requestFingerprint,
         custodyConfiguration.credentialGeneration,
       )
-      const committed = storedAuthorizationFromMaterial(converged)
-      if (committed !== undefined) {
-        return currentManagedCustodyConfiguration(converged!) === undefined
-          ? undefined
-          : committed.paymentSignature
+      if (storedAuthorizationFromMaterial(converged) !== undefined) {
+        return await signAndCommitManagedAuthorization(
+          ctx,
+          converged as X402AttemptMaterial,
+          requestFingerprint,
+          requestFingerprintContext,
+        )
       }
       if (converged === null || converged.state !== 'prepared') {
         throw new Error('x402_payment_reconciliation_required')
@@ -350,13 +440,13 @@ async function readOrClaimManagedAuthorization(
     }
     throw new Error('x402_payment_reconciliation_required')
   }
-  const committed = await signAndCommitManagedAuthorization(
+  const signedHeader = await signAndCommitManagedAuthorization(
     ctx,
     material,
     requestFingerprint,
     requestFingerprintContext,
   )
-  if (committed === undefined) return undefined
+  if (signedHeader === undefined) return undefined
   const reread = await readX402AuthorizationMaterial(
     ctx,
     prepared,
@@ -368,7 +458,7 @@ async function readOrClaimManagedAuthorization(
   if (first === undefined) throw new Error('x402_payment_reconciliation_required')
   return currentManagedCustodyConfiguration(reread!) === undefined
     ? undefined
-    : first.paymentSignature
+    : signedHeader
 }
 
 export function createX402PaymentCallbacks(

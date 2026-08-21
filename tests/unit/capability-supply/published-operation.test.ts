@@ -442,7 +442,7 @@ function preparedX402Custody(
 > {
   const custody = new Map<string, Readonly<{
     authorizationDigest: string
-    paymentSignature: string
+    readAuthorization: () => string
   }>>()
   return {
     prepareX402PaymentAuthorization: async (request) => {
@@ -455,20 +455,20 @@ function preparedX402Custody(
         attemptRef: request.attemptRef,
         effectGeneration: request.effectGeneration,
       })
-      const authorizationDigest = canonicalDigest(paymentSignature)
-      custody.set(custodyRef, { authorizationDigest, paymentSignature })
+      const authorizationDigest = canonicalDigest({ kind: 'test-x402-authorization:v1', custodyRef })
+      custody.set(custodyRef, { authorizationDigest, readAuthorization: () => paymentSignature })
       return { custodyRef, authorizationDigest }
     },
     readX402PaymentAuthorization: async ({ custodyRef, authorizationDigest }) => {
       const prepared = custody.get(custodyRef)
       return prepared?.authorizationDigest === authorizationDigest
-        ? prepared.paymentSignature
+        ? prepared.readAuthorization()
         : undefined
     },
     readX402PaymentAuthorizationByDigest: async ({ custodyRef, authorizationDigest }) => {
       const prepared = custody.get(custodyRef)
       return prepared?.authorizationDigest === authorizationDigest
-        ? prepared.paymentSignature
+        ? prepared.readAuthorization()
         : undefined
     },
     verifyX402Settlement: async () => true,
