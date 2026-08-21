@@ -18,7 +18,7 @@ const key: AgentAccessKeyInventoryItem = {
   applicationRef: 'agentic-economy',
   environment: 'sandbox',
   authorityMode: 'inspect_only',
-  scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
+  scopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
   revoked: false,
   expired: false,
 }

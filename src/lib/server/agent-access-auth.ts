@@ -152,9 +152,6 @@ export async function authenticateAgentAccess(
     }
   }
   const authorityMode = agentAuthorityModeForScopes(admittedScopes, { allowCustomerDefault: true })
-    ?? (requiredScope === null
-      ? undefined
-      : (requiredScope.startsWith('customer_requests:') || requiredScope.startsWith('work_trees:') ? undefined : 'inspect_only'))
   if (authorityMode === undefined) return { kind: 'refused', status: 403, reason: 'scope_required' }
   if (options.requiredMode !== undefined && !agentAuthorityModeAllows(authorityMode, options.requiredMode)) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }

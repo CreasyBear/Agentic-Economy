@@ -6,10 +6,10 @@ import { makeFunctionReference } from 'convex/server'
 import { createCustomerRequestServiceAssertion, toStableHashValue, type CustomerRequestServiceAssertion } from '../src/modules/agent-access/service-auth-envelope'
 import {
   createAgentAccessGrant,
-  defaultAgentAccessPolicy,
   type AgentAccessGrant,
   type AgentAccessGrantInput,
 } from '../src/modules/agent-access/policy'
+import { defaultSandboxAgentAccessPolicy } from '../src/modules/agent-access/sandbox-policy'
 import schema from './schema'
 
 const modules = import.meta.glob('./**/*.ts')
@@ -46,7 +46,7 @@ function grantInput(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccess
     environment: 'sandbox',
     operationAccess: 'all_admitted',
     authorityMode: 'inspect_only',
-    policy: defaultAgentAccessPolicy({ environment: 'sandbox', currency: 'USD', exponent: 2 }),
+    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     lifecycle: 'active',
     generation: 1,
     createdAt: 1_000,

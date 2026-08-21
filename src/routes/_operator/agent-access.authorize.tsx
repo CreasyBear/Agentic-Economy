@@ -21,12 +21,12 @@ const authorityOptions = [
   {
     value: 'approve_each',
     label: 'Ask each time',
-    description: 'Recommended. Paid or consequential work comes back to you first.',
+    description: 'Paid or consequential work comes back to you first.',
   },
   {
     value: 'bounded_mandate',
     label: 'Work within limits',
-    description: 'Set spend, effect, and data limits before the assistant works independently.',
+    description: 'Paid calls up to $1 each, $5 a day, $20 a month.',
   },
 ] as const
 
@@ -95,7 +95,13 @@ function AgentAccessAuthorizeRoute() {
         setGrantRef(details.grantRef)
         setClientName(details.clientName)
         setMode(details.mode)
-        setSelectedMode(details.mode === 'inspect_only' ? 'inspect_only' : 'approve_each')
+        setSelectedMode(
+          details.mode === 'inspect_only'
+            ? 'inspect_only'
+            : details.mode === 'bounded_mandate'
+              ? 'bounded_mandate'
+              : 'approve_each',
+        )
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.name === 'AbortError') return

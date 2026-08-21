@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_KEY_TTL_SECONDS } from '@/modules/agent-access/agent-access'
 
 import {
   approveGrant,
@@ -61,7 +62,7 @@ const authClient: AgentAccessOAuthClient = {
   grantTypes: ['authorization_code'],
 }
 
-const scopes = ['customer_requests:create', 'customer_requests:approve_each']
+const scopes = [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each']
 const issueKey = async () => ({ keyId: 'key_machine' })
 
 async function deviceGrant(store: AgentAccessOAuthStore) {
@@ -77,11 +78,67 @@ describe('Customer Request OAuth state machine', () => {
     const digest = await hashOAuthValue(deviceCode)
     expect(digest).not.toContain(deviceCode)
     expect(userCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)
-    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each')).toEqual({
-      mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:create', 'customer_requests:approve_each'],
+    expect(normalizeRequestedScopes('customer_requests:approve_each')).toEqual({
+      mode: 'approve_each', scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:approve_each'],
+    })
+    expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each')).toBeUndefined()
+    expect(normalizeRequestedScopes(`${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`)).toEqual({
+      mode: 'bounded_mandate',
+      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
     })
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:approve_each customer_requests:full_yolo')).toBeUndefined()
     expect(normalizeRequestedScopes('customer_requests:create customer_requests:standing_authority')).toBeUndefined()
+  })
+
+  it('persists explicit requested access for both flows and the exact default when absent', async () => {
+    const requestedAccess = {
+      environment: 'production' as const,
+      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+      maximumConcurrentInvocations: 2,
+      maximumCallsPerMinute: 10,
+      maximumCallsPerHour: 100,
+      expiresInSeconds: 86_400,
+    }
+    const deviceResult = await beginDeviceGrant(storeFixture(), {
+      client: deviceClient,
+      requestedScopes: scopes,
+      requestedAccess,
+      now: 1_000,
+    })
+    if (deviceResult.kind !== 'ok') throw new Error('device grant did not begin')
+    expect(JSON.stringify(deviceResult.value.grant.requestedAccess)).toBe(JSON.stringify(requestedAccess))
+
+    const authResult = await beginAuthorizationCodeGrant(storeFixture(), {
+      client: authClient,
+      redirectUri: 'http://localhost/callback',
+      requestedScopes: scopes,
+      requestedAccess,
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+      ownerId: 'owner-one',
+      now: 1_000,
+    })
+    if (authResult.kind !== 'ok') throw new Error('authorization grant did not begin')
+    expect(JSON.stringify(authResult.value.grant.requestedAccess)).toBe(JSON.stringify(requestedAccess))
+
+    const expectedDefault = {
+      environment: 'sandbox' as const,
+      expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+    }
+    expect(JSON.stringify((await deviceGrant(storeFixture())).grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
+    const defaultAuthResult = await beginAuthorizationCodeGrant(storeFixture(), {
+      client: authClient,
+      redirectUri: 'http://localhost/callback',
+      requestedScopes: scopes,
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+      ownerId: 'owner-one',
+      now: 1_000,
+    })
+    if (defaultAuthResult.kind !== 'ok') throw new Error('authorization default grant did not begin')
+    expect(JSON.stringify(defaultAuthResult.value.grant.requestedAccess)).toBe(JSON.stringify(expectedDefault))
   })
 
   it('enforces expiry and owner binding inside consent transitions', async () => {

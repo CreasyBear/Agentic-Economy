@@ -11,6 +11,7 @@ import type {
   AgentAccessOAuthClient,
   AgentAccessOAuthGrant,
   AgentAccessOAuthGrantStatus,
+  AgentAccessOAuthRequestedAccess,
   AgentAccessOAuthStore,
 } from '@/modules/agent-access/oauth-state'
 import type {
@@ -31,6 +32,7 @@ type GrantArgs = SourceWriteArgs & {
     flow: 'device_code' | 'authorization_code'
     clientId: string
     requestedScopes: string[]
+    requestedAccess: AgentAccessOAuthRequestedAccess
     status: AgentAccessOAuthGrantStatus
     createdAt: number
     expiresAt: number
@@ -165,6 +167,7 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     flow: grant.flow,
     clientId: grant.clientId,
     requestedScopes: [...grant.requestedScopes],
+    requestedAccess: requestedAccessForConvex(grant.requestedAccess),
     status: grant.status,
     createdAt: grant.createdAt,
     expiresAt: grant.expiresAt,
@@ -182,6 +185,33 @@ function grantForConvex(grant: AgentAccessOAuthGrant): GrantArgs['grant'] {
     ...(grant.nextPollAt === undefined ? {} : { nextPollAt: grant.nextPollAt }),
     ...(grant.deliveryClaimToken === undefined ? {} : { deliveryClaimToken: grant.deliveryClaimToken }),
     ...(grant.denialReason === undefined ? {} : { denialReason: grant.denialReason }),
+  }
+}
+
+function requestedAccessForConvex(
+  requestedAccess: AgentAccessOAuthRequestedAccess,
+): GrantArgs['grant']['requestedAccess'] {
+  return {
+    environment: requestedAccess.environment,
+    expiresInSeconds: requestedAccess.expiresInSeconds,
+    ...(requestedAccess.maximumSpendPerInvocation === undefined
+      ? {}
+      : { maximumSpendPerInvocation: { ...requestedAccess.maximumSpendPerInvocation } }),
+    ...(requestedAccess.maximumDailySpend === undefined
+      ? {}
+      : { maximumDailySpend: { ...requestedAccess.maximumDailySpend } }),
+    ...(requestedAccess.maximumMonthlySpend === undefined
+      ? {}
+      : { maximumMonthlySpend: { ...requestedAccess.maximumMonthlySpend } }),
+    ...(requestedAccess.maximumConcurrentInvocations === undefined
+      ? {}
+      : { maximumConcurrentInvocations: requestedAccess.maximumConcurrentInvocations }),
+    ...(requestedAccess.maximumCallsPerMinute === undefined
+      ? {}
+      : { maximumCallsPerMinute: requestedAccess.maximumCallsPerMinute }),
+    ...(requestedAccess.maximumCallsPerHour === undefined
+      ? {}
+      : { maximumCallsPerHour: requestedAccess.maximumCallsPerHour }),
   }
 }
 

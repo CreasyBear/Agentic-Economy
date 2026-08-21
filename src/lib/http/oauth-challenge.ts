@@ -2,7 +2,6 @@ import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
   agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
@@ -11,7 +10,6 @@ import {
 export const AGENT_ACCESS_BEARER_METHOD = 'header' as const
 export const AGENT_ACCESS_OAUTH_SCOPES = Object.freeze([
   MARKET_OPERATIONS_INVOKE_SCOPE,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
   ...AGENT_ACCESS_AUTHORITY_MODE_VALUES.map(agentAuthorityScopeForMode),
 ])
 

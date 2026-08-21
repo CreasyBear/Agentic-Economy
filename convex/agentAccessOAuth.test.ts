@@ -51,14 +51,41 @@ const grant = {
   grantRef: 'device:convex-cas',
   flow: 'device_code' as const,
   clientId: 'client-convex',
-  requestedScopes: ['customer_requests:create', 'customer_requests:inspect_only'],
+  requestedScopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
+  requestedAccess: {
+    environment: 'production' as const,
+    maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+    maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+    maximumMonthlySpend: { currency: 'USD', units: '5000', exponent: 2 },
+    maximumConcurrentInvocations: 2,
+    maximumCallsPerMinute: 10,
+    maximumCallsPerHour: 100,
+    expiresInSeconds: 86_400,
+  },
   deviceCodeHash: 'device-hash',
   userCodeHash: 'user-hash',
+  authorizationCodeHash: 'authorization-hash',
   status: 'pending' as const,
   createdAt: 1_000,
   expiresAt: 601_000,
   nextPollAt: 1_000,
   displayName: 'Convex persistence test',
+}
+
+const client = {
+  clientId: 'client-convex',
+  clientName: 'Convex persistence client',
+  redirectUris: ['https://ae.example/callback'],
+  grantTypes: [
+    'authorization_code',
+    'urn:ietf:params:oauth:grant-type:device_code',
+  ] satisfies Array<'authorization_code' | 'urn:ietf:params:oauth:grant-type:device_code'>,
+  tokenEndpointAuthMethod: 'none' as const,
+  createdAt: 1_000,
+}
+const cleanupRequestedAccess = {
+  environment: 'sandbox' as const,
+  expiresInSeconds: 600,
 }
 
 describe('Agent Access OAuth Convex persistence adapter', () => {
@@ -81,39 +108,277 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       operationKey: 'oauth:test:unauthenticated-read',
       correlationId: 'oauth:test:unauthenticated-read',
     })).rejects.toThrow('oauth_source_read_rejected')
+    await expect(backend.mutation(api.agentAccessOAuth.insertClient, {
+      client,
+      operationKey: 'oauth:test:unauthenticated-client',
+      correlationId: 'oauth:test:unauthenticated-client',
+    })).rejects.toThrow('agent_access_oauth_source_write_rejected:missing_source_write_admission')
   })
 
-  it('refuses grant writes against unlisted OAuth tables after source admission', async () => {
+  it('inserts and reads a grant by reference and each exact hash index', async () => {
     process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
     const backend = convexTest(schema, modules)
     const insertCommand = {
       grant,
-      operationKey: 'oauth:test:insert',
-      correlationId: 'oauth:test:insert',
+      operationKey: 'oauth:test:insert-read',
+      correlationId: 'oauth:test:insert-read',
     }
-    const insertResult = await backend.mutation(api.agentAccessOAuth.insertGrant, {
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand, 'nonce:oauth:test:insert-read')),
+    })
+
+    const refCommand = {
+      grantRef: grant.grantRef,
+      operationKey: 'oauth:test:read-ref',
+      correlationId: 'oauth:test:read-ref',
+    }
+    await expect(backend.query(api.agentAccessOAuth.getGrantByRef, {
+      ...refCommand,
+      ...(await sourceArgs(refCommand)),
+    })).resolves.toEqual(grant)
+
+    for (const [kind, hash] of [
+      ['device', grant.deviceCodeHash],
+      ['user', grant.userCodeHash],
+      ['authorization', grant.authorizationCodeHash],
+    ] as const) {
+      const readCommand = {
+        kind,
+        hash,
+        operationKey: `oauth:test:read-hash:${kind}`,
+        correlationId: `oauth:test:read-hash:${kind}`,
+      }
+      await expect(backend.query(api.agentAccessOAuth.getGrantByHash, {
+        ...readCommand,
+        ...(await sourceArgs(readCommand)),
+      })).resolves.toEqual(grant)
+    }
+  })
+
+  it('replays exact grants and rejects conflicting references or hashes', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      grant,
+      operationKey: 'oauth:test:grant-replay',
+      correlationId: 'oauth:test:grant-replay',
+    }
+
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand, 'nonce:oauth:test:grant-first')),
+    })
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand, 'nonce:oauth:test:grant-replay')),
+    })
+
+    const rows = await backend.run((ctx) => ctx.db.query('agentAccessOAuthGrants').collect())
+    expect(rows).toHaveLength(1)
+
+    const conflictingRef = {
+      grant: {
+        ...grant,
+        requestedAccess: { ...grant.requestedAccess, expiresInSeconds: grant.requestedAccess.expiresInSeconds + 1 },
+      },
+      operationKey: 'oauth:test:grant-conflicting-ref',
+      correlationId: 'oauth:test:grant-conflicting-ref',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...conflictingRef,
+      ...(await sourceArgs(conflictingRef)),
+    })).rejects.toThrow('agent_access_oauth_grant_conflict')
+
+    const conflictingHash = {
+      grant: { ...grant, grantRef: 'device:convex-hash-conflict', userCodeHash: 'other-user-hash', authorizationCodeHash: 'other-authorization-hash' },
+      operationKey: 'oauth:test:grant-conflicting-hash',
+      correlationId: 'oauth:test:grant-conflicting-hash',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.insertGrant, {
+      ...conflictingHash,
+      ...(await sourceArgs(conflictingHash)),
+    })).rejects.toThrow('agent_access_oauth_grant_conflict')
+  })
+
+  it('applies grant updates with first-writer CAS semantics', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      grant,
+      operationKey: 'oauth:test:cas-insert',
+      correlationId: 'oauth:test:cas-insert',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertGrant, {
       ...insertCommand,
       ...(await sourceArgs(insertCommand)),
     })
-    expect(insertResult).toBeNull()
-    const readCommand = {
+
+    const firstUpdate = {
       grantRef: grant.grantRef,
-      operationKey: 'oauth:test:read',
-      correlationId: 'oauth:test:read',
+      expectedStatus: 'pending' as const,
+      patch: { status: 'approved' as const, ownerId: 'owner:convex', approvedAt: 2_000 },
+      operationKey: 'oauth:test:cas-first',
+      correlationId: 'oauth:test:cas-first',
     }
-    await expect(backend.query(api.agentAccessOAuth.getGrantByRef, {
-      ...readCommand,
-      ...(await sourceArgs(readCommand)),
+    await expect(backend.mutation(api.agentAccessOAuth.updateGrant, {
+      ...firstUpdate,
+      ...(await sourceArgs(firstUpdate)),
+    })).resolves.toMatchObject({
+      grantRef: grant.grantRef,
+      status: 'approved',
+      ownerId: 'owner:convex',
+      approvedAt: 2_000,
+    })
+
+    const staleUpdate = {
+      ...firstUpdate,
+      patch: { status: 'denied' as const, denialReason: 'access_denied' as const },
+      operationKey: 'oauth:test:cas-stale',
+      correlationId: 'oauth:test:cas-stale',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.updateGrant, {
+      ...staleUpdate,
+      ...(await sourceArgs(staleUpdate)),
     })).resolves.toBeNull()
+  })
+
+  it('replays exact clients and rejects conflicting client material', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      client,
+      operationKey: 'oauth:test:client-replay',
+      correlationId: 'oauth:test:client-replay',
+    }
+
+    await backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand, 'nonce:oauth:test:client-first')),
+    })
+    await backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand, 'nonce:oauth:test:client-replay')),
+    })
+
+    await expect(backend.query(api.agentAccessOAuth.getClient, { clientId: client.clientId }))
+      .resolves.toEqual(client)
+    const rows = await backend.run((ctx) => ctx.db.query('agentAccessOAuthClients').collect())
+    expect(rows).toHaveLength(1)
+
+    const conflictingClient = {
+      client: { ...client, clientName: 'Conflicting client material' },
+      operationKey: 'oauth:test:client-conflict',
+      correlationId: 'oauth:test:client-conflict',
+    }
+    await expect(backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...conflictingClient,
+      ...(await sourceArgs(conflictingClient)),
+    })).rejects.toThrow('agent_access_oauth_client_conflict')
   })
 })
 
 describe('Agent Access OAuth grant cleanup', () => {
-  it('no-ops cleanup after OAuth grant tables were unlisted', async () => {
+  it('deletes expired grants across statuses while preserving the one-hour grace window', async () => {
     const backend = convexTest(schema, modules)
-    const now = 10 * 24 * 60 * 60 * 1_000
+    const now = 10_000_000
+    const cutoff = now - 60 * 60 * 1_000
+    const statuses = ['pending', 'approved', 'denied', 'delivery_claimed', 'consumed', 'expired'] as const
+    await backend.run(async (ctx) => {
+      for (const [index, status] of statuses.entries()) {
+        await ctx.db.insert('agentAccessOAuthGrants', {
+          grantRef: `cleanup:expired:${status}`,
+          flow: 'device_code',
+          clientId: 'cleanup-client',
+          requestedScopes: [],
+          requestedAccess: cleanupRequestedAccess,
+          status,
+          createdAt: 1,
+          expiresAt: cutoff - index - 1,
+          displayName: 'Cleanup expired',
+        })
+      }
+      await ctx.db.insert('agentAccessOAuthGrants', {
+        grantRef: 'cleanup:grace',
+        flow: 'device_code',
+        clientId: 'cleanup-client',
+        requestedScopes: [],
+        requestedAccess: cleanupRequestedAccess,
+        status: 'pending',
+        createdAt: 1,
+        expiresAt: cutoff + 1,
+        displayName: 'Cleanup grace',
+      })
+    })
+
     const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 10 })
-    expect(result).toMatchObject({ deleted: 0, rescheduled: false })
-    expect(result.cutoff).toBeLessThan(now)
+    expect(result).toEqual({ deleted: 6, cutoff, rescheduled: false })
+    const remaining = await backend.run((ctx) => ctx.db.query('agentAccessOAuthGrants').collect())
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]).toMatchObject({ grantRef: 'cleanup:grace', expiresAt: cutoff + 1 })
+  })
+
+  it('caps cleanup batches at 200 rows', async () => {
+    const backend = convexTest(schema, modules)
+    const now = 20_000_000
+    const cutoff = now - 60 * 60 * 1_000
+    await backend.run(async (ctx) => {
+      for (let index = 0; index < 205; index += 1) {
+        await ctx.db.insert('agentAccessOAuthGrants', {
+          grantRef: `cleanup:cap:${index}`,
+          flow: 'device_code',
+          clientId: 'cleanup-client',
+          requestedScopes: [],
+          requestedAccess: cleanupRequestedAccess,
+          status: 'pending',
+          createdAt: 1,
+          expiresAt: cutoff - index - 1,
+          displayName: 'Cleanup cap',
+        })
+      }
+    })
+
+    const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 999 })
+    expect(result).toEqual({ deleted: 200, cutoff, rescheduled: true })
+  })
+
+  it('reschedules only when a cleanup batch is full', async () => {
+    const fullBackend = convexTest(schema, modules)
+    const now = 30_000_000
+    const cutoff = now - 60 * 60 * 1_000
+    await fullBackend.run(async (ctx) => {
+      for (let index = 0; index < 2; index += 1) {
+        await ctx.db.insert('agentAccessOAuthGrants', {
+          grantRef: `cleanup:full:${index}`,
+          flow: 'device_code',
+          clientId: 'cleanup-client',
+          requestedScopes: [],
+          requestedAccess: cleanupRequestedAccess,
+          status: 'pending',
+          createdAt: 1,
+          expiresAt: cutoff - index - 1,
+          displayName: 'Cleanup full',
+        })
+      }
+    })
+    await expect(fullBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 2 }))
+      .resolves.toMatchObject({ deleted: 2, rescheduled: true })
+
+    const partialBackend = convexTest(schema, modules)
+    await partialBackend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessOAuthGrants', {
+        grantRef: 'cleanup:partial',
+        flow: 'device_code',
+        clientId: 'cleanup-client',
+        requestedScopes: [],
+        requestedAccess: cleanupRequestedAccess,
+        status: 'pending',
+        createdAt: 1,
+        expiresAt: cutoff - 1,
+        displayName: 'Cleanup partial',
+      })
+    })
+    await expect(partialBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 2 }))
+      .resolves.toMatchObject({ deleted: 1, rescheduled: false })
   })
 })

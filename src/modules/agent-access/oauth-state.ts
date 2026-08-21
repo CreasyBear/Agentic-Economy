@@ -1,6 +1,7 @@
 import { customAlphabet } from 'nanoid'
 
 import { base64Codec } from '@/modules/common/base64-codec'
+import type { ExactAmount } from '@/modules/money/public'
 
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
@@ -9,10 +10,12 @@ import {
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
-  isWorkTreeAgentScope,
-  workTreeScopeAllowedForMode,
   type AgentAccessAuthorityMode,
 } from './contract'
+import {
+  AGENT_ACCESS_KEY_TTL_SECONDS,
+  type AgentAccessEnvironment,
+} from './agent-access'
 
 export const AGENT_ACCESS_GRANT_TTL_SECONDS = 600
 export const AGENT_ACCESS_AUTHORIZATION_CODE_TTL_SECONDS = 60
@@ -60,6 +63,16 @@ export const AGENT_ACCESS_OAUTH_ERROR_DESCRIPTIONS: Readonly<Record<AgentAccessO
 
 export type AgentAccessOAuthFlow = 'device_code' | 'authorization_code'
 export type AgentAccessOAuthGrantStatus = 'pending' | 'approved' | 'denied' | 'delivery_claimed' | 'consumed' | 'expired'
+export type AgentAccessOAuthRequestedAccess = Readonly<{
+  environment: AgentAccessEnvironment
+  maximumSpendPerInvocation?: ExactAmount
+  maximumDailySpend?: ExactAmount
+  maximumMonthlySpend?: ExactAmount
+  maximumConcurrentInvocations?: number
+  maximumCallsPerMinute?: number
+  maximumCallsPerHour?: number
+  expiresInSeconds: number
+}>
 
 export type AgentAccessOAuthGrant = Readonly<{
   grantRef: string
@@ -67,6 +80,7 @@ export type AgentAccessOAuthGrant = Readonly<{
   clientId: string
   redirectUri?: string
   requestedScopes: readonly string[]
+  requestedAccess: AgentAccessOAuthRequestedAccess
   codeChallenge?: string
   codeChallengeMethod?: 'S256'
   deviceCodeHash?: string
@@ -152,19 +166,8 @@ export type AgentAccessOAuthCreatedAuthorizationGrant = Readonly<{
   expiresIn: number
 }>
 
-export function requestedScopesForMode(
-  mode: AgentAccessAuthorityMode,
-  additionalScopes: readonly string[] = [],
-  includeCustomerRequestScope = true,
-): readonly string[] {
-  const extras = [...new Set(additionalScopes)]
-    .filter((scope): scope is string => isWorkTreeAgentScope(scope))
-    .sort()
-  return [
-    MARKET_OPERATIONS_INVOKE_SCOPE,
-    ...(includeCustomerRequestScope ? [CUSTOMER_REQUEST_AGENT_SCOPE, agentAuthorityScopeForMode(mode)] : []),
-    ...extras,
-  ]
+export function requestedScopesForMode(mode: AgentAccessAuthorityMode): readonly string[] {
+  return [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode(mode)]
 }
 
 export function normalizeRequestedScopes(scopeText: string | null | undefined): Readonly<{
@@ -177,14 +180,13 @@ export function normalizeRequestedScopes(scopeText: string | null | undefined): 
   const scopes = rawScopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
     ? rawScopes
     : [MARKET_OPERATIONS_INVOKE_SCOPE, ...rawScopes]
-  const hasCustomerRequestScope = scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)
-  const mode = agentAuthorityModeForScopes(scopes, { allowCustomerDefault: true })
+  if (scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
+  const mode = agentAuthorityModeForScopes(scopes)
   if (mode === undefined) return undefined
-  const modeScope = hasCustomerRequestScope ? agentAuthorityScopeForMode(mode) : undefined
-  const extras = scopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE
-    && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== modeScope)
-  if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, mode))) return undefined
-  return { mode, scopes: requestedScopesForMode(mode, extras, hasCustomerRequestScope) }
+  const modeScope = agentAuthorityScopeForMode(mode)
+  const extras = scopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE && scope !== modeScope)
+  if (extras.length > 0) return undefined
+  return { mode, scopes: requestedScopesForMode(mode) }
 }
 
 export async function hashOAuthValue(value: string): Promise<string> {
@@ -208,7 +210,12 @@ export function createUserCode(): string {
 
 export async function beginDeviceGrant(
   store: AgentAccessOAuthStore,
-  input: Readonly<{ client: AgentAccessOAuthClient; requestedScopes: readonly string[]; now: number }>,
+  input: Readonly<{
+    client: AgentAccessOAuthClient
+    requestedScopes: readonly string[]
+    requestedAccess?: AgentAccessOAuthRequestedAccess
+    now: number
+  }>,
 ): Promise<AgentAccessOAuthTransition<AgentAccessOAuthCreatedDeviceGrant>> {
   if (!input.client.grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code')) return { kind: 'refused', reason: 'invalid_client' }
   const scopes = normalizeRequestedScopes(input.requestedScopes.join(' '))
@@ -220,6 +227,10 @@ export async function beginDeviceGrant(
     flow: 'device_code',
     clientId: input.client.clientId,
     requestedScopes: [...scopes.scopes],
+    requestedAccess: input.requestedAccess ?? {
+      environment: 'sandbox',
+      expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+    },
     deviceCodeHash: await hashOAuthValue(deviceCode),
     userCodeHash: await hashOAuthValue(userCode),
     status: 'pending',
@@ -238,6 +249,7 @@ export async function beginAuthorizationCodeGrant(
     client: AgentAccessOAuthClient
     redirectUri: string
     requestedScopes: readonly string[]
+    requestedAccess?: AgentAccessOAuthRequestedAccess
     codeChallenge: string
     codeChallengeMethod: string
     ownerId: string
@@ -256,6 +268,10 @@ export async function beginAuthorizationCodeGrant(
     clientId: input.client.clientId,
     redirectUri: input.redirectUri,
     requestedScopes: [...scopes.scopes],
+    requestedAccess: input.requestedAccess ?? {
+      environment: 'sandbox',
+      expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS,
+    },
     codeChallenge: input.codeChallenge,
     codeChallengeMethod: 'S256',
     status: 'pending',
@@ -301,12 +317,7 @@ export async function approveGrant(
   const selectedMode = input.authorityMode ?? requested.mode
   if (!AGENT_ACCESS_AUTHORITY_MODE_VALUES.includes(selectedMode)
     || !agentAuthorityModeAllows(requested.mode, selectedMode)) return { kind: 'refused', reason: 'invalid_scope' }
-  const hasCustomerRequestScope = valid.value.requestedScopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)
-  const requestedModeScope = hasCustomerRequestScope ? agentAuthorityScopeForMode(requested.mode) : undefined
-  const extras = valid.value.requestedScopes.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE
-    && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== requestedModeScope)
-  if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, selectedMode))) return { kind: 'refused', reason: 'invalid_scope' }
-  const approvedScopes = requestedScopesForMode(selectedMode, extras, hasCustomerRequestScope)
+  const approvedScopes = requestedScopesForMode(selectedMode)
   let issued: Readonly<{ keyId: string }>
   try {
     issued = await input.issueKey({ ownerId: input.ownerId, grant: { ...valid.value, requestedScopes: approvedScopes } })
