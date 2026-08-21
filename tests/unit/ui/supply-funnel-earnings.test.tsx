@@ -48,7 +48,7 @@ describe("current supply funnel", () => {
 
     expect(
       screen.getByText(
-        "AE records eligible net earnings in a daily payout balance. Live transfers remain held until payout account and provider configuration are ready.",
+        "Payouts become available when your payout account and provider configuration are ready.",
       ),
     ).toBeDefined();
     expect(
