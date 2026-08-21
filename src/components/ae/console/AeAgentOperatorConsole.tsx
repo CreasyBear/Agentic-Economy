@@ -95,7 +95,7 @@ export function AeAgentOperatorConsole({
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       {accessUnavailable ? approvalsSection : (
         <>
-      <section aria-labelledby="credit-title" className="grid gap-4">
+      <section id="fund" aria-labelledby="credit-title" className="grid scroll-mt-6 gap-4">
         <div className="grid gap-1">
           <h2 id="credit-title" className="text-2xl font-semibold tracking-tight text-foreground">Check your balance</h2>
           <p className="block text-muted-foreground">Browsing is free. Paid calls use the credit assigned to each assistant.</p>
@@ -154,7 +154,7 @@ export function AeAgentOperatorConsole({
 
       {approvalsSection}
 
-      <section aria-labelledby="keys-title" className="grid gap-4">
+      <section id="revoke" aria-labelledby="keys-title" className="grid scroll-mt-6 gap-4">
         <div className="grid gap-1">
           <h2 id="keys-title" className="text-2xl font-semibold tracking-tight text-foreground">Manage assistant access</h2>
           <p className="block text-muted-foreground">Review what each assistant can do, its usage, and spend. Revoked or expired access stays visible.</p>

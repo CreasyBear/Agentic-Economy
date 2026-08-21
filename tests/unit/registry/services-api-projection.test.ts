@@ -4,12 +4,46 @@ import type { OfferingPrice } from '@/modules/catalog/public'
 import type { CatalogOfferingOperationMapEntry } from '@/modules/capability-supply/public'
 import type {
   PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   ServiceOperationMap,
 } from '@/modules/registry/public'
-import { projectPublicServicesPage } from '@/modules/registry/public'
+import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
 import { toConsumerSupplyOption } from '@/components/ae/plan/consumer-plan'
 
 describe('agentic.market Service mapping', () => {
+  it('omits businesses without public offerings while preserving page and search cursors', () => {
+    const source = mappingPage()
+    const publishedBusiness = source.page[0]!
+    const emptyBusiness = {
+      ...publishedBusiness,
+      businessId: 'business-empty',
+      slug: 'empty-business',
+      name: 'Empty Business',
+      offerings: [],
+      accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+    }
+    const page: PublicBusinessCatalogApiV2Page = {
+      ...source,
+      page: [emptyBusiness, publishedBusiness],
+    }
+    const projectedPage = projectPublicServicesPage(page)
+    expect(projectedPage.services.map(({ id }) => id)).toEqual(['api-exa-ai'])
+    expect(projectedPage.isDone).toBe(source.isDone)
+    expect(projectedPage.continueCursor).toBe(source.continueCursor)
+
+    const searchPage: PublicBusinessCatalogApiV2SearchPage = {
+      kind: 'ok',
+      schemaVersion: source.schemaVersion,
+      query: 'api',
+      items: [emptyBusiness, publishedBusiness],
+      pagination: { cursor: 'cursor-in', nextCursor: 'cursor-out', limit: 2, total: 2, hasMore: true },
+    }
+    const projectedSearch = projectPublicServicesSearchPage(searchPage)
+    expect(projectedSearch.services.map(({ id }) => id)).toEqual(['api-exa-ai'])
+    expect(projectedSearch.query).toBe('api')
+    expect(projectedSearch.pagination).toEqual(searchPage.pagination)
+  })
+
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {
     const result = projectPublicServicesPage(mappingPage())
 

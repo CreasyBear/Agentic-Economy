@@ -7,7 +7,7 @@ import type { ServiceDto } from '@/modules/registry/public'
 
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
-export const SUPPLY_OFFER_SENTENCE = 'Publish what you do once. Assistants find and share your services. Test it, go live, and prepare for paid work when agents bring you work and payment support is enabled.'
+export const SUPPLY_OFFER_SENTENCE = 'Publish what you do once. Assistants find and share your services. Test it, go live, and review paid terms when agents bring you work and your payment setup is ready.'
 
 export function AeSupplyLanding({
   tools,
@@ -39,30 +39,29 @@ export function AeSupplyLanding({
           )}
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild variant="default" className="min-h-11">
-              <Link to="/claim/form" search={{ source: 'supply' }}>Claim provider identity</Link>
+              <Link to="/owner/supply">Manage operations</Link>
             </Button>
-            <Link to="/claim/form" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">List a local human service</Link>
-            <Link to="/owner/supply" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Manage operations</Link>
+            <Link to="/for-providers" className="min-h-11 px-2 py-3 text-sm font-semibold underline underline-offset-4">Review provider setup</Link>
           </div>
         </div>
       </header>
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-16 sm:px-6">
         <Card className="border-border bg-brand-muted text-foreground">
           <CardContent className="grid gap-3 p-6">
-            <p className="block text-sm font-semibold text-foreground">YOUR PATH TO PAID WORK WHEN ENABLED</p>
-            <p className="block max-w-3xl text-muted-foreground">Publish once, then prepare for paid work when payment support is enabled.</p>
+            <p className="block text-sm font-semibold text-foreground">YOUR PATH TO PAID WORK</p>
+            <p className="block max-w-3xl text-muted-foreground">Publish once, then review paid terms and owner controls as your setup becomes ready.</p>
             <p className="block max-w-3xl text-muted-foreground">Setup and test calls do not create AE-settled earnings or payouts.</p>
           </CardContent>
         </Card>
         <section aria-labelledby="supply-payment-flow" className="grid gap-4">
           <div className="grid gap-1">
             <h2 id="supply-payment-flow" className="text-xl font-semibold text-foreground">Set terms assistants can review</h2>
-            <p className="block max-w-3xl text-muted-foreground">Choose the price for each call. Any fee and total charge are shown before approval; no fixed fee or provider proceeds are promised until payment support is enabled.</p>
+            <p className="block max-w-3xl text-muted-foreground">Choose the price for each call. Any fee and total charge are shown before approval; earnings and payout status reflect your configured payment setup.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <FlowCard label="Your price" detail="The amount you choose for each call." />
             <FlowCard label="Payment terms" detail="Any fee and total charge are shown before approval." />
-            <FlowCard label="Earnings" detail="AE-settled earnings and payouts are unavailable until payment support is enabled." />
+            <FlowCard label="Earnings" detail="Earnings and payouts reflect your configured payment and payout setup." />
           </div>
         </section>
         <AeSupplyAgentProof tools={tools} services={services} />

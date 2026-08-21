@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { listMcpActions, mcpToolName } from '@/modules/actions'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import { operationReconciliationEvidenceSchema } from '@/modules/capability-execution/operation-recovery.actions'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -121,6 +122,22 @@ describe('CLI operation recovery projections', () => {
           }
         }
       }
+      coldLoop: readonly string[]
+      payment: {
+        providerQuotedAmount: { field: string; exact: boolean }
+        agenticEconomyFee: { field: string; rate: string; feeBps: number }
+        totalBuyerAuthorization: { field: string; exact: boolean }
+        network: string
+        asset: { symbol: string; name: string; address: string }
+      }
+      approval: { deviceFlow: string }
+      polling: { oauth: { intervalSeconds: number; waitOn: readonly string[] } }
+      recovery: { statusFirst: boolean; reconcile: string }
+      receipt: { location: readonly string[]; referenceField: string }
+      ownerContinuations: {
+        fund: { path: string; anchor: string; agentCredential: string }
+        revoke: { path: string; anchor: string; agentCredential: string }
+      }
       gateway: {
         idempotency: {
           commandField: string
@@ -148,6 +165,25 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.commands.recover.summary).toContain('not a replay')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
+    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'fund', 'invoke', 'status', 'cancel/recover', 'receipt', 'revoke'])
+    expect(manifest.payment).toMatchObject({
+      providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },
+      agenticEconomyFee: { field: 'commercial.priceBreakdown.agenticEconomyFee', rate: '10%', feeBps: 1_000 },
+      totalBuyerAuthorization: { field: 'commercial.priceBreakdown.totalBuyerAuthorization', exact: true },
+      network: 'eip155:8453',
+      asset: { symbol: 'USDC', name: 'Official USDC on Base', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+    })
+    expect(manifest.approval.deviceFlow).toContain('verification_uri')
+    expect(manifest.polling.oauth).toMatchObject({ intervalSeconds: expect.any(Number), waitOn: ['authorization_pending'] })
+    expect(manifest.recovery).toMatchObject({ statusFirst: true, reconcile: expect.stringContaining('genuinely uncertain') })
+    expect(manifest.receipt).toMatchObject({
+      location: ['invoke.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
+      referenceField: 'receipt.receiptRef',
+    })
+    expect(manifest.ownerContinuations).toMatchObject({
+      fund: { path: '/agent-access', anchor: '#fund', agentCredential: 'not_used' },
+      revoke: { path: '/agent-access', anchor: '#revoke', agentCredential: 'not_used' },
+    })
     expect(manifest.commands.demand.commands.ask.args).toContain('--thread-id')
     expect(manifest.commands.demand.commands.ask.summary).toContain('same thread')
     expect(manifest.commands.demand.commands.ask.guidance.join(' ')).toContain('follow-up')
@@ -166,13 +202,16 @@ describe('CLI operation recovery projections', () => {
     expect(digest).toBe(canonicalDigest(material))
     expect(recovery.digestMaterialRule).toContain('all evidence fields except digest')
     expect(recovery.invocationRefIdentityRule).toContain('evidence.invocationRef')
-    expect(manifest.gateway.oauth.requestedScope).toBe('market_operations:invoke')
+    expect(manifest.gateway.oauth.requestedScope).toBe(
+      AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope,
+    )
     expect(manifest.gateway.oauth.deviceFlow.map(({ order }) => order)).toEqual([1, 2, 3, 4, 5])
     expect(manifest.gateway.oauth.apiKey.result).toContain('access_token')
     expect(manifest.gateway.oauth.apiKey.usage).toContain('AE_API_KEY')
     expect(manifest.gateway.oauth.apiKey.originEnvironmentVariable).toBe('AE_API_KEY_ORIGIN')
     expect(manifest.gateway.oauth.apiKey.originBinding).toContain('new URL(--base-url).origin')
-    expect(manifest.gateway.oauth.revocation).toBe('Revocation is not currently a CLI action.')
+    expect(manifest.gateway.oauth.revocation).toContain('/agent-access#revoke')
+    expect(manifest.gateway.oauth.revocation).toContain('does not revoke through an agent credential')
   })
   it('runs accepted -> status -> terminal with canonical JSON and one stdout value per command', async () => {
     setApiKey('ae-test-caller-key')

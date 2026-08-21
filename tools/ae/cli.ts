@@ -14,7 +14,7 @@
 import { loadEnv } from 'vite'
 
 import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
-import { parseArgs, printUsage, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
+import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
@@ -23,7 +23,7 @@ type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<v
 
 const CLI_ENTRYPOINT = 'npm run -s ae --'
 const JSON_HELP_FLAGS = {
-  '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, or the hosted default.' },
+  '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
   '--limit': { type: 'string', description: 'Search page size from 1 through 20; search only.' },
   '--cursor': { type: 'string', description: 'Opaque search continuation cursor; search only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
@@ -52,19 +52,18 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   compare: ['technical'],
   'inspect-plan': [],
   connect: [],
+  fund: [],
   invoke: ['idempotency-key', 'wait'],
   status: [],
+  cancel: ['idempotency-key'],
   recover: ['idempotency-key'],
+  revoke: [],
   'demand ask': ['thread-id', 'operation-ref', 'candidate-digest'],
   'demand business': [],
   'demand discover': [],
-  'demand enrich': ['suburb'],
-  'demand import': [],
   'demand journey': [],
-  'demand request': [],
   'advanced action': ['allow-write'],
   'advanced actions': [],
-  'advanced cancel': ['idempotency-key'],
   'advanced doctor': [],
   'advanced eval': [
     'allow-write',
@@ -103,7 +102,7 @@ const AUTH_HELP = {
   authenticatedOperations: {
     invoke: commandUsage('invoke'),
     status: commandUsage('status'),
-    cancel: commandUsage('advanced cancel'),
+    cancel: commandUsage('cancel'),
     reconcile: commandUsage('recover'),
   },
   cancelRequirements: 'Cancel requires the AE access key AE_API_KEY plus --idempotency-key, sent as body.idempotencyKey.',
@@ -183,6 +182,65 @@ function printAuthenticatedOperationHelp(): void {
     `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
     `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
   ].join('\n') + '\n')
+}
+
+function printUsage(): void {
+  process.stdout.write(`AE CLI - exercise AE the way an external agent would.
+
+Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
+
+Canonical Operation commands (need a running server; hosted default https://agentic-economy-phi.vercel.app, or http://127.0.0.1:3024 when CONVEX_URL is loopback):
+  ${CLI_ENTRYPOINT} manifest
+  ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
+  ${CLI_ENTRYPOINT} inspect <operation-ref>
+  ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
+  ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
+  ${CLI_ENTRYPOINT} connect
+  ${CLI_ENTRYPOINT} fund
+  ${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]
+  ${CLI_ENTRYPOINT} status <invocation-ref>
+  ${CLI_ENTRYPOINT} cancel <invocation-ref> --idempotency-key <key>
+  ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
+  ${CLI_ENTRYPOINT} revoke
+
+Demand commands:
+  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id>]
+  ${CLI_ENTRYPOINT} demand ask --thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>'
+  ${CLI_ENTRYPOINT} demand business <slug>
+  ${CLI_ENTRYPOINT} demand discover
+  ${CLI_ENTRYPOINT} demand journey "<query>"
+
+Advanced/operator commands:
+  ${CLI_ENTRYPOINT} advanced action <id> ['<json>'] [--allow-write]
+  ${CLI_ENTRYPOINT} advanced actions
+  ${CLI_ENTRYPOINT} advanced doctor
+  ${CLI_ENTRYPOINT} advanced eval ...
+  ${CLI_ENTRYPOINT} advanced policy [test|refine|fidelity]
+
+Flags:
+  --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
+  Credentials:
+  AE_API_KEY <token>          reusable caller credential for credentialed commands
+  AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
+  --json             machine-readable output
+  --limit <1-20>     search page size (search only)
+  --cursor <cursor>  opaque search continuation cursor (search only)
+  --filters '<json>' canonical search filters (search only)
+  --technical        human compare output with operation identity and evidence metadata
+  --allow-write      permit a non read-only action or explicit Braintrust export
+  --idempotency-key <key>  stable replay identity for invoke/cancel/recovery (required; never generated)
+  --wait             bounded invoke wait; timeout returns durable recovery detail
+  --thread-id <id>   conversational ask thread; plain queries load continuation state server-side
+  --operation-ref <ref> exact operation to select in automation mode
+  --candidate-digest <digest> frozen candidate set digest in automation mode
+  --turn-id <id>     explicit finalized answer turn id (repeatable; max 25)
+  --manifest <path>  explicit JSON manifest with bounded turnIds
+  --project <name>   Braintrust project (env: AE_BRAINTRUST_PROJECT)
+  --dataset <name>   Braintrust dataset (env: AE_BRAINTRUST_DATASET)
+  --snapshot-name <name>
+  --update-snapshot  allow replacing an existing snapshot name
+  --help
+`)
 }
 
 function printUsageWithAuthenticatedOperationHelp(): void {
@@ -308,15 +366,14 @@ async function main(): Promise<number> {
     connectCommands,
     discoverCommands,
     doctorCommands,
-    enrichCommands,
     evalCommands,
-    importCommands,
+    fundCommands,
     invokeCommands,
     journeyCommands,
     manifestCommands,
     policyCommands,
     recoverCommands,
-    requestCommands,
+    revokeCommands,
     statusCommands,
   ] = await Promise.all([
     import('./commands/actions'),
@@ -327,30 +384,25 @@ async function main(): Promise<number> {
     import('./commands/connect'),
     import('./commands/discover'),
     import('./commands/doctor'),
-    import('./commands/enrich'),
     import('./commands/eval'),
-    import('./commands/import'),
+    import('./commands/fund'),
     import('./commands/invoke'),
     import('./commands/journey'),
     import('./commands/manifest'),
     import('./commands/policy'),
     import('./commands/recover'),
-    import('./commands/request'),
+    import('./commands/revoke'),
     import('./commands/status'),
   ])
   const demandCommands: Record<string, CommandRunner> = {
     ask: askCommands.runAskCommand,
     business: businessCommands.runBusinessCommand,
     discover: discoverCommands.runDiscoverCommand,
-    enrich: enrichCommands.runEnrichCommand,
-    import: importCommands.runImportCommand,
     journey: journeyCommands.runJourneyCommand,
-    request: requestCommands.runRequestCommand,
   }
   const advancedCommands: Record<string, CommandRunner> = {
     action: actionCommands.runActionCommand,
     actions: actionCommands.runActionsCommand,
-    cancel: cancelCommands.runCancelCommand,
     doctor: doctorCommands.runDoctorCommand,
     eval: evalCommands.runEvalCommand,
     policy: policyCommands.runPolicyCommand,
@@ -375,9 +427,12 @@ async function main(): Promise<number> {
     manifest: manifestCommands.runManifestCommand,
     ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
+    fund: fundCommands.runFundCommand,
     [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
+    cancel: cancelCommands.runCancelCommand,
     recover: recoverCommands.runRecoverCommand,
+    revoke: revokeCommands.runRevokeCommand,
     demand: groupCommand('demand', demandCommands),
     advanced: groupCommand('advanced', advancedCommands),
   }

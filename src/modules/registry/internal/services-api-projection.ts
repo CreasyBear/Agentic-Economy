@@ -64,7 +64,9 @@ export function projectPublicServicesPage(
   return {
     kind: 'ok',
     schemaVersion: PublicServicesApiSchemaVersion,
-    services: page.page.map((business) => projectServiceFromBusinessDto(business, operationMap)),
+    services: page.page
+      .filter((business) => business.offerings.length > 0)
+      .map((business) => projectServiceFromBusinessDto(business, operationMap)),
     isDone: page.isDone,
     continueCursor: page.continueCursor,
   }
@@ -78,7 +80,9 @@ export function projectPublicServicesSearchPage(
     kind: 'ok',
     schemaVersion: PublicServicesApiSchemaVersion,
     ...(page.query === undefined ? {} : { query: page.query }),
-    services: page.items.map((business) => projectServiceFromBusinessDto(business, operationMap)),
+    services: page.items
+      .filter((business) => business.offerings.length > 0)
+      .map((business) => projectServiceFromBusinessDto(business, operationMap)),
     pagination: page.pagination,
   }
 }

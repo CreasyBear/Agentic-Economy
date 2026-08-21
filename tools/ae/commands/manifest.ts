@@ -11,7 +11,10 @@ import {
   AGENT_ACCESS_POLL_INTERVAL_SECONDS,
 } from '@/modules/agent-access/oauth-state'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { operationInvokeResultKindValues } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  operationInvokeReceiptAsset,
+  operationInvokeResultKindValues,
+} from '@/modules/capability-execution/operation-invoke-contracts'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { describeActionForAgent } from '@/modules/common/action'
 import {
@@ -38,6 +41,25 @@ const RECOVERY_EVIDENCE_EXAMPLE = {
   digest: canonicalDigest(RECOVERY_EVIDENCE_MATERIAL),
 }
 
+const OWNER_BROWSER_CONTINUATIONS = {
+  fund: {
+    command: 'fund',
+    surface: 'owner_browser',
+    authentication: 'owner_session',
+    path: '/agent-access',
+    anchor: '#fund',
+    agentCredential: 'not_used',
+  },
+  revoke: {
+    command: 'revoke',
+    surface: 'owner_browser',
+    authentication: 'owner_session',
+    path: '/agent-access',
+    anchor: '#revoke',
+    agentCredential: 'not_used',
+  },
+} as const
+
 export type CommandManifestEntry = Readonly<{
   summary: string
   args: string
@@ -53,8 +75,15 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
   compare: { summary: 'Compare one to four exact current Operation references.', args: '<operationRef> [<operationRef> ...]', json: true },
   'inspect-plan': { summary: 'Inspect a bounded operation plan from one to four exact current Operation references.', args: '<operationRef> [operationRef ...]', json: true },
   connect: { summary: 'Register a public device client or validate the configured AE key.', args: '', json: true },
+  fund: {
+    summary: 'Continue to owner funding controls in the authenticated browser surface; this command never funds.',
+    args: '',
+    json: true,
+    guidance: ['Open the returned /agent-access#fund continuation as the owner. No agent credential is used.'],
+  },
   invoke: { summary: 'Invoke an admitted Market Operation through the authenticated AE gateway.', args: "<operationRef> '<json>' --idempotency-key <key> [--wait]", json: true },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
+  cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
   recover: {
     summary: 'Reconcile a genuinely uncertain invocation with canonical evidence after a real uncertain outcome; this is not a replay.',
     args: "<invocationRef> '<evidence-json>' --idempotency-key <key>",
@@ -63,6 +92,12 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       'Inspect status first and use this only when the invocation outcome remains genuinely uncertain.',
       'Provide canonical evidence for the same invocation and stable idempotency key; recover reconciles the outcome and does not replay a known result.',
     ],
+  },
+  revoke: {
+    summary: 'Continue to owner access revocation in the authenticated browser surface; this command never revokes.',
+    args: '',
+    json: true,
+    guidance: ['Open the returned /agent-access#revoke continuation as the owner. No agent credential is used.'],
   },
   demand: {
     summary: 'Run demand-side workflows; demand ask supports natural-language same-thread continuation.',
@@ -79,10 +114,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
       },
       business: { summary: 'Inspect one local business by slug.', args: '<slug>', json: true },
       discover: { summary: 'Discover local businesses from the registry.', args: '', json: true },
-      enrich: { summary: 'Enrich a local business from its name and optional suburb.', args: '"<business name>" [--suburb X]', json: true },
-      import: { summary: 'Import one business website URL.', args: '<websiteUrl>', json: true },
       journey: { summary: 'Run a demand journey for a natural-language query.', args: '"<query>"', json: true },
-      request: { summary: 'Create or inspect a demand request.', args: 'create "<text>" | get <requestRef> | options <requestRef> | confirm <requestRef> <optionRef>', json: true },
     },
   },
   advanced: {
@@ -92,7 +124,6 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     commands: {
       action: { summary: 'Run one registered action by ID.', args: "<id> ['<json>'] [--allow-write]", json: true },
       actions: { summary: 'List registered actions.', args: '', json: true },
-      cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
       doctor: { summary: 'Inspect local CLI and environment diagnostics.', args: '', json: true },
       eval: { summary: 'Run an advanced evaluation command.', args: '...', json: true },
       policy: { summary: 'Inspect or refine policy evaluation.', args: '[test|refine|fidelity]', json: true },
@@ -149,9 +180,59 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
   printJson({
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
     protocol: 'agentic-economy.operation-terminal.v1',
-    about: 'AE-native Operation loop: discover exact current work, inspect terms, compare or inspect a plan, connect one AE key, invoke idempotently, observe durable status, and reconcile genuinely uncertain outcomes with evidence.',
+    about: 'AE-native Operation loop: discover exact current work, inspect terms, connect one AE key, invoke idempotently, observe durable status, preserve the receipt, and continue owner funding or revocation in the browser.',
     commands: COMMANDS,
-    coldLoop: ['manifest', 'search', 'inspect', 'compare', 'inspect-plan', 'connect', 'invoke', 'status', 'recover'],
+    coldLoop: ['search', 'inspect', 'connect', 'fund', 'invoke', 'status', 'cancel/recover', 'receipt', 'revoke'],
+    payment: {
+      providerQuotedAmount: {
+        field: 'commercial.priceBreakdown.providerQuotedAmount',
+        exact: true,
+        meaning: 'The exact provider quote for the admitted invocation.',
+      },
+      agenticEconomyFee: {
+        field: 'commercial.priceBreakdown.agenticEconomyFee',
+        exact: true,
+        rate: '10%',
+        feeBps: 1_000,
+        calculation: 'ceil(providerQuotedAmount * 1000 / 10000)',
+      },
+      totalBuyerAuthorization: {
+        field: 'commercial.priceBreakdown.totalBuyerAuthorization',
+        exact: true,
+        calculation: 'providerQuotedAmount + agenticEconomyFee',
+      },
+      network: 'eip155:8453',
+      asset: {
+        symbol: 'USDC',
+        name: 'Official USDC on Base',
+        address: operationInvokeReceiptAsset,
+      },
+    },
+    approval: {
+      owner: 'Owner approval is completed in the authenticated /agent-access browser surface; an agent credential cannot fund or revoke owner authority.',
+      deviceFlow: 'Open verification_uri and approve the displayed user_code before polling the token endpoint.',
+      invocation: 'When invoke returns needs_authority, wait for the owner decision in /agent-access before retrying the same invocation identity.',
+    },
+    polling: {
+      oauth: {
+        intervalSeconds: AGENT_ACCESS_POLL_INTERVAL_SECONDS,
+        waitOn: ['authorization_pending'],
+        increaseIntervalOn: ['slow_down'],
+        stopOn: AGENT_ACCESS_OAUTH_ERROR_VALUES.filter((error) => error !== 'authorization_pending' && error !== 'slow_down'),
+      },
+      invokeWait: 'invoke --wait polls status using the gateway retryAfterMs value until a terminal result or bounded timeout; a timeout preserves invocationRef for status.',
+    },
+    recovery: {
+      statusFirst: true,
+      cancel: 'Use root cancel with the same invocationRef and a stable idempotency key when cancellation is supported and the invocation should stop.',
+      reconcile: 'Use root recover only after a genuinely uncertain outcome, with canonical evidence for the same invocationRef and the same idempotency identity; recover never replays a known result.',
+    },
+    receipt: {
+      location: ['invoke.receipt', 'status.receipt', 'status.result.receipt', 'recover.receipt'],
+      referenceField: 'receipt.receiptRef',
+      identityFields: ['providerQuotedAmount', 'agenticEconomyFee', 'totalBuyerAuthorization', 'network', 'asset'],
+    },
+    ownerContinuations: OWNER_BROWSER_CONTINUATIONS,
     anonymous: {
       authentication: 'none',
       routes: operationReads.map(({ route, action }) => ({
@@ -225,9 +306,9 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
           originEnvironmentVariable: 'AE_API_KEY_ORIGIN',
           originBinding: 'AE_API_KEY_ORIGIN must equal new URL(--base-url).origin; credentialed calls require HTTPS except loopback HTTP development.',
           result: 'OAuth token.access_token',
-          usage: 'Send Authorization: Bearer <AE_API_KEY> for invoke, status, and recover only after validating AE_API_KEY_ORIGIN.',
+          usage: 'Send Authorization: Bearer <AE_API_KEY> for invoke, status, cancel, and recover only after validating AE_API_KEY_ORIGIN. Fund and revoke do not use this credential.',
         },
-        revocation: 'Revocation is not currently a CLI action.',
+        revocation: 'Root revoke emits the owner-browser continuation /agent-access#revoke; it does not revoke through an agent credential or an API route.',
         oneTimeSecretDelivery: true,
       },
       credentialBoundary: 'AE resolves provider, endpoint, connection, supplier credential, price, authority, and evidence server-side.',
