@@ -59,6 +59,20 @@ export type HostedOwnerRuntime = Readonly<{
   ) => Promise<GatewayInvocationObservation>;
   readActivity: (invocationRef: string) => Promise<StrictCreditActivityView>;
   readAuthority: (operationRef: string) => Promise<HostedOwnerAuthority>;
+  readWithdrawnOperation: (
+    operationRef: string,
+  ) => Promise<Readonly<{ kind: "refused"; code: "operation_withdrawn" }>>;
+  preflightCredential: () => Promise<void>;
+  revokeCredential: (
+    operationRef: string | undefined,
+    input: Readonly<Record<string, JsonValue>>,
+  ) => Promise<
+    Readonly<{
+      kind: "refused";
+      code: "authentication_required";
+      credentialDigest: string;
+    }>
+  >;
   withdraw: (
     operationRef: string,
   ) => Promise<Readonly<{ kind: "refused"; code: "operation_withdrawn" }>>;
@@ -166,14 +180,13 @@ function ownerOpenApiDocumentForRun(
   return object.data;
 }
 
-export function ownerSourceForRun(
+function ownerSourceForRun(
   options: Readonly<{
     runId: string;
     ownerQuery: string;
     ownerOpenApiDocument: Readonly<Record<string, JsonValue>>;
     ownerOpenApiPath: string;
     ownerOpenApiMethod: "get" | "post";
-    input: Readonly<Record<string, JsonValue>>;
     origin?: Readonly<{
       kind: "catalog_offering";
       offeringRef: string;
@@ -300,7 +313,7 @@ export function ownerSourceForRun(
   };
 }
 
-export async function prepareOwnerPublicationMaterial(
+async function prepareOwnerPublicationMaterial(
   options: Readonly<{
     source: CapabilityPublicationImport;
     sourceRevision: string;
@@ -345,16 +358,13 @@ export function createHostedOwnerRuntime(
     controlBusinessId: string;
     transport: () => Promise<ConvexSourceTransport>;
     context: unknown;
+    preflightCredential: () => Promise<void>;
+    revokeCredential: HostedOwnerRuntime["revokeCredential"];
     readActivity: (
       invocationRef: string,
     ) => Promise<StrictCreditActivityView>;
   }>,
-): Readonly<{
-  owner: HostedOwnerRuntime;
-  readWithdrawnOperation: (
-    operationRef: string,
-  ) => Promise<Readonly<{ kind: "refused"; code: "operation_withdrawn" }>>;
-}> {
+): HostedOwnerRuntime {
   const { context, transport } = options;
   const controlBusinessId = options.controlBusinessId;
   const currentOwnerCatalogQuery = sourceQuery<Record<string, never>, unknown>(
@@ -502,7 +512,6 @@ export function createHostedOwnerRuntime(
         ownerOpenApiDocument: options.ownerOpenApiDocument,
         ownerOpenApiPath: options.ownerOpenApiPath,
         ownerOpenApiMethod: options.ownerOpenApiMethod,
-        input: options.input,
       });
       const currentCatalog = record(
         await (await transport()).query(currentOwnerCatalogQuery, {}),
@@ -639,7 +648,6 @@ export function createHostedOwnerRuntime(
         ownerOpenApiDocument: options.ownerOpenApiDocument,
         ownerOpenApiPath: options.ownerOpenApiPath,
         ownerOpenApiMethod: options.ownerOpenApiMethod,
-        input: options.input,
         origin: {
           kind: "catalog_offering",
           offeringRef,
@@ -1114,8 +1122,11 @@ export function createHostedOwnerRuntime(
     },
     readActivity: options.readActivity,
     readAuthority,
+    readWithdrawnOperation,
+    preflightCredential: options.preflightCredential,
+    revokeCredential: options.revokeCredential,
     withdraw,
     retireOffering,
   };
-  return { owner, readWithdrawnOperation };
+  return owner;
 }

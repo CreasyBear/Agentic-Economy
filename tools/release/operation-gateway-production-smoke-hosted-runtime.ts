@@ -2,6 +2,8 @@ import { createClerkClient } from "@clerk/backend";
 
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from "../../src/modules/agent-access/contract";
 import type { JsonValue } from "../../src/modules/capability-contract/public";
+import { canonicalDigest } from "../../src/modules/common/canonical-digest";
+import { OPERATION_INVOKE_HTTP_PATH } from "../../src/modules/capability-execution/operation-invoke-entry";
 import {
   createAuthenticatedSourceTransport,
   type ConvexSourceTransport,
@@ -10,6 +12,7 @@ import {
   required,
 } from "./operation-gateway-production-smoke-receipt";
 import { GatewaySmokeError } from "./operation-gateway-production-smoke-receipt";
+import { requestJson } from "./operation-gateway-production-smoke-invocation";
 import {
   type HostedMoneySnapshot,
   type StrictCreditActivityView,
@@ -52,7 +55,6 @@ export type {
   HostedOwnerRuntime,
 } from "./operation-gateway-production-smoke-hosted-owner";
 type RunOwnedClerkKeyProof = Readonly<{
-  rawSecret: string;
   credentialId: string;
   ownerUserId: string;
   runId: string;
@@ -120,7 +122,6 @@ export function createHostedRuntimeFromEnvironment(
       )
         throw new GatewaySmokeError("gateway_smoke_api_key_identity_invalid");
       return {
-        rawSecret: options.apiKey,
         credentialId: key.id,
         ownerUserId: key.subject,
         runId: key.name,
@@ -129,6 +130,83 @@ export function createHostedRuntimeFromEnvironment(
       };
     })();
     return await credentialProofPromise;
+  };
+  const record = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value))
+      : undefined;
+  const preflightCredential = async (): Promise<void> => {
+    await credentialProof();
+  };
+  let revokePromise:
+    | Promise<
+        Readonly<{
+          kind: "refused";
+          code: "authentication_required";
+          credentialDigest: string;
+        }>
+      >
+    | undefined;
+  const revokeCredential = async (
+    operationRef: string | undefined,
+    input: Readonly<Record<string, JsonValue>>,
+  ): Promise<
+    Readonly<{
+      kind: "refused";
+      code: "authentication_required";
+      credentialDigest: string;
+    }>
+  > => {
+    revokePromise ??= (async () => {
+      const proof = await credentialProof();
+      const revoked = await clerk.apiKeys.revoke({
+        apiKeyId: proof.credentialId,
+        revocationReason: "Agentic Economy release smoke completed",
+      });
+      const current = await clerk.apiKeys.get(proof.credentialId);
+      if (
+        revoked.id !== proof.credentialId ||
+        !revoked.revoked ||
+        current.id !== proof.credentialId ||
+        !current.revoked
+      ) {
+        throw new GatewaySmokeError(
+          "gateway_smoke_api_key_revocation_unconfirmed",
+        );
+      }
+      if (operationRef !== undefined) {
+        const idempotencyKey = `ae-release-smoke:revoked:${canonicalDigest({ credentialId: proof.credentialId, operationRef })}`;
+        const response = await requestJson(
+          options.fetch,
+          `${options.baseUrl}${OPERATION_INVOKE_HTTP_PATH}`,
+          {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json",
+              authorization: `Bearer ${options.apiKey}`,
+            },
+            body: JSON.stringify({ operationRef, input, idempotencyKey }),
+          },
+          options.apiKey,
+        );
+        const problem = record(response.body);
+        if (
+          response.status !== 401 ||
+          problem?.code !== "authentication_required"
+        ) {
+          throw new GatewaySmokeError("gateway_smoke_revoked_key_not_refused");
+        }
+      }
+      return {
+        kind: "refused",
+        code: "authentication_required",
+        credentialDigest: canonicalDigest({
+          credentialId: proof.credentialId,
+        }),
+      };
+    })();
+    return await revokePromise;
   };
   let transportPromise: Promise<ConvexSourceTransport> | undefined;
   const transport = async () => {
@@ -153,22 +231,16 @@ export function createHostedRuntimeFromEnvironment(
       bodyDigest: "none",
     },
   };
-  let ownerResult: ReturnType<typeof createHostedOwnerRuntime>;
   const money = createHostedMoneyRuntime({
     env: options.env,
     baseUrl: options.baseUrl,
-    apiKey: options.apiKey,
     fetch: options.fetch,
     runId: options.runId,
     approvedAt: options.approvedAt,
-    clerk,
     transport,
-    credentialProof,
     context,
-    readWithdrawnOperation: (operationRef) =>
-      ownerResult.readWithdrawnOperation(operationRef),
   });
-  ownerResult = createHostedOwnerRuntime({
+  const owner = createHostedOwnerRuntime({
     env: options.env,
     baseUrl: options.baseUrl,
     apiKey: options.apiKey,
@@ -182,7 +254,9 @@ export function createHostedRuntimeFromEnvironment(
     controlBusinessId,
     transport,
     context,
+    preflightCredential,
+    revokeCredential,
     readActivity: money.readControlActivity,
   });
-  return { owner: ownerResult.owner, money };
+  return { owner, money };
 }

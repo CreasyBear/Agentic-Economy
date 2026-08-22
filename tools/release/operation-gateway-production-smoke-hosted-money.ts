@@ -1,9 +1,6 @@
-import { createClerkClient } from "@clerk/backend";
 import Stripe from "stripe";
 
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
-import type { JsonValue } from "../../src/modules/capability-contract/public";
-import { OPERATION_INVOKE_HTTP_PATH } from "../../src/modules/capability-execution/operation-invoke-entry";
 import {
   sourceQuery,
   type ConvexSourceTransport,
@@ -59,13 +56,12 @@ import {
   type HostedMoneySnapshot,
   type StrictCreditActivityView,
 } from "./operation-gateway-production-smoke-money";
-import { requestJson } from "./operation-gateway-production-smoke-invocation";
 import { resolveVercelProtectionBypassSecret } from "./vercel-protection-bypass";
 
-export const MAX_TOPUP_EVENT_PAGES = 10;
-export const STRIPE_REQUEST_TIMEOUT_MS = 15_000;
-export const MAX_TOPUP_WEBHOOK_RAW_BODY_BYTES = 256 * 1024;
-export const MAX_TOPUP_WEBHOOK_SIGNATURE_BYTES = 4 * 1024;
+const MAX_TOPUP_EVENT_PAGES = 10;
+const STRIPE_REQUEST_TIMEOUT_MS = 15_000;
+const MAX_TOPUP_WEBHOOK_RAW_BODY_BYTES = 256 * 1024;
+const MAX_TOPUP_WEBHOOK_SIGNATURE_BYTES = 4 * 1024;
 
 export type HostedMoneyRuntime = Readonly<{
   mode: "live";
@@ -98,35 +94,17 @@ export type HostedMoneyRuntime = Readonly<{
   readPayout: (
     input: Readonly<{ payoutRef: string; idempotencyKey: string }>,
   ) => Promise<StrictLivePayoutReceipt>;
-  readWithdrawnOperation: (
-    operationRef: string,
-  ) => Promise<Readonly<{ kind: "refused"; code: "operation_withdrawn" }>>;
-  preflightCredential: () => Promise<void>;
-  revokeCredential: (
-    operationRef: string | undefined,
-    input: Readonly<Record<string, JsonValue>>,
-  ) => Promise<
-    Readonly<{
-      kind: "refused";
-      code: "authentication_required";
-      credentialDigest: string;
-    }>
-  >;
 }>;
 
 export function createHostedMoneyRuntime(
   options: Readonly<{
     env: Record<string, string | undefined>;
     baseUrl: string;
-    apiKey: string;
     fetch: typeof globalThis.fetch;
     runId: string;
     approvedAt: number;
-    clerk: ReturnType<typeof createClerkClient>;
     transport: () => Promise<ConvexSourceTransport>;
-    credentialProof: () => Promise<Readonly<{ credentialId: string }>>;
     context: unknown;
-    readWithdrawnOperation: HostedMoneyRuntime["readWithdrawnOperation"];
   }>,
 ): HostedMoneyRuntime {
   const ownerUserId = required(
@@ -204,10 +182,7 @@ export function createHostedMoneyRuntime(
     timeout: STRIPE_REQUEST_TIMEOUT_MS,
     typescript: true,
   });
-  const { transport, credentialProof, context, clerk } = options;
-  const preflightCredential = async (): Promise<void> => {
-    await credentialProof();
-  };
+  const { transport, context } = options;
   const record = (value: unknown): Record<string, unknown> | undefined =>
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value))
@@ -751,85 +726,11 @@ export function createHostedMoneyRuntime(
     });
   };
 
-  let revokePromise:
-    | Promise<
-        Readonly<{
-          kind: "refused";
-          code: "authentication_required";
-          credentialDigest: string;
-        }>
-      >
-    | undefined;
-  const revokeCredential = async (
-    operationRef: string | undefined,
-    input: Readonly<Record<string, JsonValue>>,
-  ): Promise<
-    Readonly<{
-      kind: "refused";
-      code: "authentication_required";
-      credentialDigest: string;
-    }>
-  > => {
-    revokePromise ??= (async () => {
-      const proof = await credentialProof();
-      const revoked = await clerk.apiKeys.revoke({
-        apiKeyId: proof.credentialId,
-        revocationReason: "Agentic Economy release smoke completed",
-      });
-      const current = await clerk.apiKeys.get(proof.credentialId);
-      if (
-        revoked.id !== proof.credentialId ||
-        !revoked.revoked ||
-        current.id !== proof.credentialId ||
-        !current.revoked
-      ) {
-        throw new GatewaySmokeError(
-          "gateway_smoke_api_key_revocation_unconfirmed",
-        );
-      }
-      if (operationRef !== undefined) {
-        const idempotencyKey = `ae-release-smoke:revoked:${canonicalDigest({ credentialId: proof.credentialId, operationRef })}`;
-        const response = await requestJson(
-          options.fetch,
-          `${options.baseUrl}${OPERATION_INVOKE_HTTP_PATH}`,
-          {
-            method: "POST",
-            headers: {
-              accept: "application/json",
-              "content-type": "application/json",
-              authorization: `Bearer ${options.apiKey}`,
-            },
-            body: JSON.stringify({ operationRef, input, idempotencyKey }),
-          },
-          options.apiKey,
-        );
-        const problem = record(response.body);
-        if (
-          response.status !== 401 ||
-          problem?.code !== "authentication_required"
-        ) {
-          throw new GatewaySmokeError("gateway_smoke_revoked_key_not_refused");
-        }
-      }
-      return {
-        kind: "refused",
-        code: "authentication_required",
-        credentialDigest: canonicalDigest({
-          credentialId: proof.credentialId,
-        }),
-      };
-    })();
-    return await revokePromise;
-  };
-
   const money: HostedMoneyRuntime = {
     mode: "live",
     principalId,
     accountRef,
     businessId: controlBusinessId,
-    readWithdrawnOperation: options.readWithdrawnOperation,
-    preflightCredential,
-    revokeCredential,
     credentialId,
     topupIdempotencyKey,
     topupChargeAmount: chargeAmount,

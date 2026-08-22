@@ -392,7 +392,7 @@ export async function runGatewayProductionSmoke(
   const moneyRuntime = config.money;
   if (moneyRuntime.mode !== "live")
     throw new GatewaySmokeError("stripe_setup_required");
-  await moneyRuntime.preflightCredential();
+  await ownerRuntime.preflightCredential();
   let createdFixture: GatewayOwnerFixtureIdentity | undefined;
   let controlOperationRef: string | undefined;
   let withdrawn:
@@ -837,10 +837,10 @@ export async function runGatewayProductionSmoke(
       createdFixture.operationRef,
     );
     withdrawn = withdrawnReadback;
-    await moneyRuntime.readWithdrawnOperation(createdFixture.operationRef);
+    await ownerRuntime.readWithdrawnOperation(createdFixture.operationRef);
     const cleanupReadback = await ownerRuntime.retireOffering();
     cleanup = cleanupReadback;
-    const revoked = await moneyRuntime.revokeCredential(
+    const revoked = await ownerRuntime.revokeCredential(
       control.operationRef,
       config.input,
     );
@@ -972,7 +972,7 @@ export async function runGatewayProductionSmoke(
   const cleanupFailures: unknown[] = [];
   if (primaryFailure !== undefined) {
     try {
-      await moneyRuntime.revokeCredential(
+      await ownerRuntime.revokeCredential(
         controlOperationRef ?? createdFixture?.operationRef,
         config.input,
       );
@@ -989,7 +989,7 @@ export async function runGatewayProductionSmoke(
       }
     }
     try {
-      await moneyRuntime.readWithdrawnOperation(createdFixture.operationRef);
+      await ownerRuntime.readWithdrawnOperation(createdFixture.operationRef);
     } catch (error) {
       cleanupFailures.push(error);
     }
