@@ -5,6 +5,8 @@ import { z } from 'zod'
 
 import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
+import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 import {
   issueAgentAccessKey,
@@ -133,6 +135,25 @@ const owner = async (): Promise<{ userId: string } | undefined> => {
   return identity.isAuthenticated && identity.userId !== null ? { userId: identity.userId } : undefined
 }
 
+function convexTokenIdentifierFor(userId: string): string | undefined {
+  const issuer = readTrimmedEnv(process.env, 'CLERK_JWT_ISSUER_DOMAIN')
+  if (issuer === undefined || typeof userId !== 'string' || userId.trim().length === 0) return undefined
+  try {
+    const parsed = new URL(issuer)
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+      || parsed.username.length > 0
+      || parsed.password.length > 0
+      || parsed.search.length > 0
+      || parsed.hash.length > 0
+    ) return undefined
+    const canonicalIssuer = trimTrailingSlashes(parsed.href)
+    return canonicalIssuer.length === 0 ? undefined : `${canonicalIssuer}|${userId}`
+  } catch {
+    return undefined
+  }
+}
+
 type ClerkApiKeyLike = Readonly<{
   id: string
   name: string
@@ -240,7 +261,18 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     } catch {
       return { kind: 'error' as const, code: 'invalid_input' as const, retryable: false }
     }
-    const principal = await owner()
+    let principal: { userId: string } | undefined
+    try {
+      principal = await owner()
+    } catch {
+      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    }
+    const tokenIdentifier = principal === undefined
+      ? undefined
+      : convexTokenIdentifierFor(principal.userId)
+    if (tokenIdentifier === undefined) {
+      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    }
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     return await issueAgentAccessKey({
       principal,
@@ -261,8 +293,14 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
       },
       policy,
       api,
-      registerPrincipal: registerAgentAccessPrincipal,
-      registerGrant: async (grant: AgentAccessGrantRegistrationInput) => await registerAgentAccessGrant(grant),
+      registerPrincipal: async (registration: AgentAccessPrincipalRegistration) => await registerAgentAccessPrincipal({
+        ...registration,
+        ownerId: tokenIdentifier,
+      }),
+      registerGrant: async (grant: AgentAccessGrantRegistrationInput) => await registerAgentAccessGrant({
+        ...grant,
+        ownerId: tokenIdentifier,
+      }),
     })
   })
 
