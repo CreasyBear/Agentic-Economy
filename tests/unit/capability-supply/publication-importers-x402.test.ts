@@ -255,6 +255,10 @@ describe("capability publication importers", () => {
     expect(source.resource.paymentRequired.extensions).not.toHaveProperty("bazaar");
     const paymentRequiredJson = discovery.admitted[0]!.binding.adapter.config.paymentRequiredJson;
     const persistedPaymentRequired = validatePaymentRequired(JSON.parse(paymentRequiredJson));
+    expect(persistedPaymentRequired.x402Version).toBe(2);
+    if (persistedPaymentRequired.x402Version !== 2) {
+      throw new Error("expected persisted x402 v2 payment terms");
+    }
     expect(persistedPaymentRequired.extensions).toEqual({
       "builder-code": timezoneFixture.paymentRequired.extensions["builder-code"],
       retained: { info: { source: "test" } },
