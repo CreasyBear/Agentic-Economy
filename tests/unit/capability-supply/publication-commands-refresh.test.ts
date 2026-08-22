@@ -1,26 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  admitPublicationDraft,
   refreshCapabilityCommand,
-  type PublicationCommandPorts,
 } from '@/modules/capability-supply/internal/publication'
 import {
-  capabilityBindingRegistrationHash,
-  capabilityOfferingRegistrationHash,
   capabilityOperationId,
   capabilityPublicationProvenanceDigest,
   createPublicOperationRef,
 } from '@/modules/capability-supply/public'
 import {
-  connectionAuthoritySnapshotFromProviderConnection,
-  type CapabilityBindingRow,
-} from '@/modules/capability-supply/internal/binding'
-import {
   rotateCapabilityTransportBindingAuthority,
   type RotateCapabilityTransportBindingAuthorityPatch,
 } from '@/modules/capability-supply/internal/binding/write'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering'
 import {
   providerConnectionAuthorityDigest,
   type ProviderConnection,
@@ -37,108 +28,32 @@ import {
   encodedFor,
   offeringDraft,
   preparedPublication,
+  publicationFixture,
   publicationSource,
   supplyRows,
+  type PublicationFixture,
 } from './publication-commands-harness'
 
-type RotationFixture = Readonly<{
-  offering: CapabilityOfferingRow
-  binding: CapabilityBindingRow
-  connection: ProviderConnection
-  previousAuthority: NonNullable<CapabilityBindingRow['connectionAuthority']>
+type RotationFixture = PublicationFixture & Readonly<{
+  previousAuthority: NonNullable<PublicationFixture['binding']['connectionAuthority']>
   previousOperationRef: ReturnType<typeof createPublicOperationRef>
   nextOperationRef: ReturnType<typeof createPublicOperationRef>
 }>
 
 async function rotationFixture(): Promise<RotationFixture> {
-  const prepared = await preparedPublication()
-  const admitted = await admitPublicationDraft({ prepared, businessId: 'business-1' })
-  if ('reason' in admitted) throw new Error(`rotation_fixture_refused:${admitted.reason}`)
-  const contractRef = admitted.encoded.contract.ref
-  const previousOperationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(contractRef.capabilityId),
-    publicationRef: admitted.offering.offeringId,
-    publicationRevision: 1,
-    contractRef,
-  })
+  const fixture = await publicationFixture()
   const nextOperationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(contractRef.capabilityId),
-    publicationRef: admitted.offering.offeringId,
-    publicationRevision: 2,
-    contractRef,
+    operationId: capabilityOperationId(fixture.ref.capabilityId),
+    publicationRef: fixture.publication.publicationRef,
+    publicationRevision: fixture.publication.revision + 1,
+    contractRef: fixture.ref,
   })
-  const connectionWithoutDigest: Omit<ProviderConnection, 'authorityDigest'> = {
-    connectionRef: 'connection:demo',
-    businessId: 'business-1',
-    providerRef: 'provider:demo',
-    providerAccountRef: 'account:demo',
-    adapterId: admitted.binding.adapter.adapterId,
-    credentialRef: null,
-    grantedScopes: [],
-    grantedResources: [],
-    authorityGeneration: 1,
-    lifecycle: 'active',
-    observedAt: 1,
-    createdAt: 1,
-    updatedAt: 1,
-    evidenceRefs: ['evidence:connection'],
+  return {
+    ...fixture,
+    previousAuthority: fixture.binding.connectionAuthority!,
+    previousOperationRef: fixture.publication.operationRef,
+    nextOperationRef,
   }
-  const connection: ProviderConnection = {
-    ...connectionWithoutDigest,
-    authorityDigest: providerConnectionAuthorityDigest(connectionWithoutDigest),
-  }
-  const previousAuthority = connectionAuthoritySnapshotFromProviderConnection(
-    connection,
-    previousOperationRef,
-  )
-  const offering: CapabilityOfferingRow = {
-    offeringId: admitted.offering.offeringId,
-    businessId: 'business-1',
-    networkId: admitted.offering.networkId,
-    capabilityId: contractRef.capabilityId,
-    version: contractRef.version,
-    contractDigest: contractRef.contractDigest,
-    presentation: admitted.offering.presentation,
-    searchTerms: admitted.offering.searchTerms,
-    registrationEvidenceRefs: admitted.offering.registrationEvidenceRefs,
-    registrationHash: capabilityOfferingRegistrationHash(admitted.offering),
-    status: 'inactive',
-    admissionEvidenceRefs: [],
-    eligibilityHash: digest,
-    registeredAt: 1,
-    updatedAt: 1,
-  }
-  const binding: CapabilityBindingRow = {
-    _id: 'binding-row',
-    _creationTime: 1,
-    bindingId: admitted.binding.bindingId,
-    offeringId: admitted.binding.offeringId,
-    networkId: admitted.binding.networkId,
-    capabilityId: contractRef.capabilityId,
-    version: contractRef.version,
-    contractDigest: contractRef.contractDigest,
-    endpointUrl: admitted.binding.endpointUrl,
-    authority: admitted.binding.authority,
-    connectionAuthority: previousAuthority,
-    continuation: admitted.binding.continuation,
-    cancellation: admitted.binding.cancellation,
-    adapterId: admitted.binding.adapter.adapterId,
-    configJson: admitted.admittedTransport.transport.configJson,
-    configDigest: admitted.admittedTransport.transport.configDigest,
-    registrationEvidenceRefs: admitted.binding.registrationEvidenceRefs,
-    registrationHash: capabilityBindingRegistrationHash(
-      admitted.binding,
-      admitted.admittedTransport.transport,
-    ),
-    admission: 'not_admitted',
-    conformance: 'not_conformant',
-    admissionEvidenceRefs: [],
-    conformanceEvidenceRefs: [],
-    eligibilityHash: digest,
-    registeredAt: 1,
-    updatedAt: 1,
-  }
-  return { offering, binding, connection, previousAuthority, previousOperationRef, nextOperationRef }
 }
 
 function rotationInput(fixture: RotationFixture) {
@@ -147,9 +62,9 @@ function rotationInput(fixture: RotationFixture) {
     offeringId: fixture.offering.offeringId,
     businessId: fixture.offering.businessId,
     registrationHash: fixture.binding.registrationHash,
-    connectionRef: fixture.connection.connectionRef,
-    providerRef: fixture.connection.providerRef,
-    adapterId: fixture.connection.adapterId,
+    connectionRef: fixture.providerConnection.connectionRef,
+    providerRef: fixture.providerConnection.providerRef,
+    adapterId: fixture.providerConnection.adapterId,
     previousAuthority: fixture.previousAuthority,
     previousOperationRef: fixture.previousOperationRef,
     nextOperationRef: fixture.nextOperationRef,
@@ -159,7 +74,7 @@ function rotationInput(fixture: RotationFixture) {
 function rotationPorts(
   fixture: RotationFixture,
   patches: RotateCapabilityTransportBindingAuthorityPatch[],
-  connection = fixture.connection,
+  connection = fixture.providerConnection,
 ) {
   return {
     loadOfferingByOfferingId: async () => fixture.offering,
@@ -184,20 +99,17 @@ describe('capability-supply publication commands refresh', () => {
     )
     expect(result).toEqual({
       kind: 'rotated',
-      bindingId: fixture.binding.bindingId,
-      previousOperationRef: fixture.previousOperationRef,
-      operationRef: fixture.nextOperationRef,
     })
     expect(patches).toHaveLength(1)
     expect(patches[0]).toMatchObject({
       expectedRegistrationHash: fixture.binding.registrationHash,
       expectedAuthority: fixture.previousAuthority,
       nextAuthority: {
-        connectionRef: fixture.connection.connectionRef,
-        providerRef: fixture.connection.providerRef,
-        adapterId: fixture.connection.adapterId,
-        authorityGeneration: fixture.connection.authorityGeneration,
-        authorityDigest: fixture.connection.authorityDigest,
+        connectionRef: fixture.providerConnection.connectionRef,
+        providerRef: fixture.providerConnection.providerRef,
+        adapterId: fixture.providerConnection.adapterId,
+        authorityGeneration: fixture.providerConnection.authorityGeneration,
+        authorityDigest: fixture.providerConnection.authorityDigest,
         operationRef: fixture.nextOperationRef,
       },
       updatedAt: 10,
@@ -218,7 +130,7 @@ describe('capability-supply publication commands refresh', () => {
     })
     const reauthorized = (overrides: Partial<ProviderConnection>): ProviderConnection => {
       const { authorityDigest: _authorityDigest, ...withoutDigest } = {
-        ...fixture.connection,
+        ...fixture.providerConnection,
         ...overrides,
       }
       return {
@@ -234,12 +146,12 @@ describe('capability-supply publication commands refresh', () => {
       {
         name: 'prior operation',
         input: { ...rotationInput(fixture), previousOperationRef: stalePriorOperation },
-        connection: fixture.connection,
+        connection: fixture.providerConnection,
       },
       {
         name: 'generation',
         input: rotationInput(fixture),
-        connection: reauthorized({ authorityGeneration: fixture.connection.authorityGeneration + 1 }),
+        connection: reauthorized({ authorityGeneration: fixture.providerConnection.authorityGeneration + 1 }),
       },
       {
         name: 'digest',
@@ -386,12 +298,7 @@ describe('capability-supply publication commands refresh', () => {
     const encoded = encodedFor(publication.capabilityId, publication.version)
     const schedule = vi.fn(async () => {})
     const insertPublication = vi.fn(async () => {})
-    const rotate = vi.fn(async (input: Parameters<NonNullable<PublicationCommandPorts['rotateProviderConnectionBindingAuthority']>>[0]) => ({
-      kind: 'rotated' as const,
-      bindingId: input.bindingId,
-      previousOperationRef: input.previousOperationRef,
-      operationRef: input.nextOperationRef,
-    }))
+    const rotate = vi.fn(async () => ({ kind: 'rotated' as const }))
     const result = await refreshCapabilityCommand({
       publication,
       source: publicationSource(publication.capabilityId, publication.version),

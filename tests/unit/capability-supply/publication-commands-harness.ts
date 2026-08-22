@@ -1,18 +1,27 @@
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
+  admitPublicationDraft,
   preparePublicationDraft,
   type PreparedPublicationMaterial,
   type PublicationCommandPorts,
   type PublicationCommandRow,
 } from '@/modules/capability-supply/internal/publication'
 import { publicationSourceDigest } from '@/modules/capability-supply/internal/publication/source'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding/registration'
+import {
+  connectionAuthoritySnapshotFromProviderConnection,
+  type CapabilityBindingRow,
+} from '@/modules/capability-supply/internal/binding/registration'
 import { capabilityContractV2 } from '../../fixtures/capability-contract-v2'
 import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering/registration'
+import { providerConnectionAuthorityDigest, type ProviderConnection } from '@/modules/capability-supply/provider-connection'
 import {
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
   capabilityOperationId,
+  capabilityPublicationProvenanceDigest,
   createPublicOperationRef,
+  type CapabilityContractRef,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
@@ -171,12 +180,6 @@ export function emptyPorts(overrides: Partial<PublicationCommandPorts> = {}): Pu
     insertPublication: async () => {},
     patchPublicationSuperseded: async () => {},
     patchPublicationWithdrawn: async () => {},
-    rotateProviderConnectionBindingAuthority: async (input) => ({
-      kind: 'rotated' as const,
-      bindingId: input.bindingId,
-      previousOperationRef: input.previousOperationRef,
-      operationRef: input.nextOperationRef,
-    }),
     registerContractDocument: async () => ({
       kind: 'registered',
       ref: encodedFor().contract.ref,
@@ -189,6 +192,124 @@ export function emptyPorts(overrides: Partial<PublicationCommandPorts> = {}): Pu
     scheduleReadinessProbe: async () => {},
     ...overrides,
   }
+}
+
+export type PublicationFixture = Readonly<{
+  prepared: PreparedPublicationMaterial
+  publication: PublicationCommandRow
+  offering: CapabilityOfferingRow
+  binding: CapabilityBindingRow
+  providerConnection: ProviderConnection
+  ref: CapabilityContractRef
+}>
+
+export async function publicationFixture(): Promise<PublicationFixture> {
+  const prepared = await preparedPublication()
+  const admitted = await admitPublicationDraft({
+    prepared,
+    businessId: 'business-1',
+  })
+  if ('reason' in admitted) throw new Error(`publication_fixture_refused:${admitted.reason}`)
+  const ref = admitted.encoded.contract.ref
+  const operationRef = createPublicOperationRef({
+    operationId: capabilityOperationId(ref.capabilityId),
+    publicationRef: admitted.offering.offeringId,
+    publicationRevision: 1,
+    contractRef: ref,
+  })
+  const connectionWithoutDigest: Omit<ProviderConnection, 'authorityDigest'> = {
+    connectionRef: 'connection:demo',
+    businessId: 'business-1',
+    providerRef: 'provider:demo',
+    providerAccountRef: 'account:demo',
+    adapterId: admitted.binding.adapter.adapterId,
+    credentialRef: null,
+    grantedScopes: [],
+    grantedResources: [],
+    authorityGeneration: 1,
+    lifecycle: 'active',
+    observedAt: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    evidenceRefs: ['evidence:provider-connection'],
+    lastCommandId: 'command:demo',
+    lastCommandDigest: digest,
+  }
+  const providerConnection: ProviderConnection = {
+    ...connectionWithoutDigest,
+    authorityDigest: providerConnectionAuthorityDigest(connectionWithoutDigest),
+  }
+  const connectionAuthority = connectionAuthoritySnapshotFromProviderConnection(
+    providerConnection,
+    operationRef,
+  )
+  const publication = currentPublication({
+    operationRef,
+    disposition: 'withdrawn',
+    sourceKind: prepared.sourceKind,
+    sourceSelector: prepared.sourceSelector,
+    sourceDescriptorJson: prepared.sourceDescriptorJson,
+    sourceRevision: prepared.sourceRevision,
+    sourceDigest: prepared.sourceDigest,
+    pricingConfigJson: prepared.pricingConfigJson,
+    priceDigest: prepared.priceDigest,
+    contractDigest: ref.contractDigest,
+    provenanceDigest: capabilityPublicationProvenanceDigest({
+      publisherRef: 'owner-1',
+      authorityMode: 'provider_owned',
+      sourceRevision: prepared.sourceRevision,
+      sourceDigest: prepared.sourceDigest,
+    }),
+    connectionAuthority,
+    readinessOutcome: 'healthy',
+    readinessObservedAt: 100,
+    readinessValidUntil: 200,
+  })
+  const offering: CapabilityOfferingRow = {
+    offeringId: admitted.offering.offeringId,
+    businessId: publication.businessId,
+    networkId: admitted.offering.networkId,
+    capabilityId: ref.capabilityId,
+    version: ref.version,
+    contractDigest: ref.contractDigest,
+    presentation: admitted.offering.presentation,
+    searchTerms: admitted.offering.searchTerms,
+    registrationEvidenceRefs: admitted.offering.registrationEvidenceRefs,
+    registrationHash: capabilityOfferingRegistrationHash(admitted.offering),
+    status: 'active',
+    admissionEvidenceRefs: ['evidence:admission'],
+    eligibilityHash: digest,
+    registeredAt: 1,
+    updatedAt: 1,
+  }
+  const binding: CapabilityBindingRow = {
+    _id: 'binding-row',
+    _creationTime: 1,
+    bindingId: admitted.binding.bindingId,
+    offeringId: admitted.binding.offeringId,
+    networkId: admitted.binding.networkId,
+    capabilityId: ref.capabilityId,
+    version: ref.version,
+    contractDigest: ref.contractDigest,
+    endpointUrl: admitted.binding.endpointUrl,
+    authority: admitted.binding.authority,
+    connectionAuthority,
+    continuation: admitted.binding.continuation,
+    cancellation: admitted.binding.cancellation,
+    adapterId: admitted.binding.adapter.adapterId,
+    configJson: admitted.admittedTransport.transport.configJson,
+    configDigest: admitted.admittedTransport.transport.configDigest,
+    registrationEvidenceRefs: admitted.binding.registrationEvidenceRefs,
+    registrationHash: capabilityBindingRegistrationHash(admitted.binding, admitted.admittedTransport.transport),
+    admission: 'admitted',
+    conformance: 'conformant',
+    admissionEvidenceRefs: ['evidence:admission'],
+    conformanceEvidenceRefs: ['evidence:conformance'],
+    eligibilityHash: digest,
+    registeredAt: 1,
+    updatedAt: 1,
+  }
+  return { prepared, publication, offering, binding, providerConnection, ref }
 }
 
 function registrationId(registration: unknown, field: 'offeringId' | 'bindingId'): string {

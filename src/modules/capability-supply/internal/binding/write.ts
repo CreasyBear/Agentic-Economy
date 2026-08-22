@@ -97,12 +97,7 @@ export type RotateCapabilityTransportBindingAuthorityPatch = Readonly<{
 }>
 
 export type RotateCapabilityTransportBindingAuthorityResult =
-  | Readonly<{
-    kind: 'rotated'
-    bindingId: string
-    previousOperationRef: PublicOperationRef
-    operationRef: PublicOperationRef
-  }>
+  | Readonly<{ kind: 'rotated' }>
   | Readonly<{ kind: 'refused'; reason: string }>
 
 type RotateCapabilityTransportBindingAuthorityPorts = Pick<
@@ -157,18 +152,12 @@ export async function rotateCapabilityTransportBindingAuthority(
     return { kind: 'refused', reason: 'connection_authority_stale' }
   }
   const connection = await ports.loadProviderConnection(input.connectionRef)
-  if (
-    connection === undefined
-    || connection.providerRef !== input.providerRef
-    || connection.adapterId !== input.adapterId
-    || String(connection.businessId) !== input.businessId
-    || !connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
-      businessId: input.businessId,
-      operationRef: input.previousOperationRef,
-      adapterId: input.adapterId,
-      now: updatedAt,
-    })
-  ) {
+  if (!connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
+    businessId: input.businessId,
+    operationRef: input.previousOperationRef,
+    adapterId: input.adapterId,
+    now: updatedAt,
+  })) {
     return { kind: 'refused', reason: 'connection_authority_stale' }
   }
   const nextAuthority = connectionAuthoritySnapshotFromProviderConnection(
@@ -181,12 +170,7 @@ export async function rotateCapabilityTransportBindingAuthority(
     nextAuthority,
     updatedAt,
   })
-  return {
-    kind: 'rotated',
-    bindingId: binding.bindingId,
-    previousOperationRef: input.previousOperationRef,
-    operationRef: input.nextOperationRef,
-  }
+  return { kind: 'rotated' }
 }
 
 export type RegisterBindingWriteResult =

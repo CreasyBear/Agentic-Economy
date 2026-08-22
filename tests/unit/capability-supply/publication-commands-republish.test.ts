@@ -1,25 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  admitPublicationDraft,
   republishPreparedCapabilityCommand,
   type PublicationCommandPorts,
-  type PublicationCommandRow,
-  type PreparedPublicationMaterial,
   type RepublishPreparedCapabilityCommandInput,
 } from '@/modules/capability-supply/internal/publication'
-import type { CapabilityBindingRow } from '@/modules/capability-supply/internal/binding/registration'
-import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
-import type { CapabilityOfferingRow } from '@/modules/capability-supply/internal/offering/registration'
-import { providerConnectionAuthorityDigest, type ProviderConnection } from '@/modules/capability-supply/provider-connection'
-import {
-  capabilityBindingRegistrationHash,
-  capabilityOfferingRegistrationHash,
-  capabilityOperationId,
-  capabilityPublicationProvenanceDigest,
-  createPublicOperationRef,
-} from '@/modules/capability-supply/public'
 
 import {
   actor,
@@ -28,130 +14,11 @@ import {
   digest,
   emptyPorts,
   encodedFor,
-  preparedPublication,
+  publicationFixture as republishFixture,
+  type PublicationFixture,
 } from './publication-commands-harness'
 
-type RepublishFixture = Readonly<{
-  prepared: PreparedPublicationMaterial
-  publication: PublicationCommandRow
-  offering: CapabilityOfferingRow
-  binding: CapabilityBindingRow
-  providerConnection: ProviderConnection
-  ref: CapabilityContractRef
-}>
-
-async function republishFixture(): Promise<RepublishFixture> {
-  const prepared = await preparedPublication()
-  const admitted = await admitPublicationDraft({ prepared, businessId: 'business-1' })
-  if ('reason' in admitted) throw new Error(`admission_fixture_refused:${admitted.reason}`)
-  const ref = admitted.encoded.contract.ref
-  const operationRef = createPublicOperationRef({
-    operationId: capabilityOperationId(ref.capabilityId),
-    publicationRef: 'offering:demo:lookup',
-    publicationRevision: 1,
-    contractRef: ref,
-  })
-  const connection = {
-    connectionRef: 'connection:demo',
-    businessId: 'business-1',
-    providerRef: 'provider:demo',
-    providerAccountRef: 'account:demo',
-    adapterId: admitted.binding.adapter.adapterId,
-    credentialRef: null,
-    grantedScopes: [],
-    grantedResources: [],
-    authorityGeneration: 1,
-    authorityDigest: '',
-    lifecycle: 'active' as const,
-    observedAt: 1,
-    evidenceRefs: ['evidence:provider-connection'],
-    createdAt: 1,
-    updatedAt: 1,
-    lastCommandId: 'command:demo',
-    lastCommandDigest: digest,
-  }
-  const providerConnection = {
-    ...connection,
-    authorityDigest: providerConnectionAuthorityDigest(connection),
-  }
-  const connectionAuthority = {
-    connectionRef: connection.connectionRef,
-    providerRef: connection.providerRef,
-    adapterId: connection.adapterId,
-    authorityGeneration: connection.authorityGeneration,
-    authorityDigest: providerConnection.authorityDigest,
-    operationRef,
-    grantedScopes: [],
-    grantedResources: [],
-  }
-  const publication = currentPublication({
-    operationRef,
-    disposition: 'withdrawn',
-    sourceKind: prepared.sourceKind,
-    sourceSelector: prepared.sourceSelector,
-    sourceDescriptorJson: prepared.sourceDescriptorJson,
-    sourceRevision: prepared.sourceRevision,
-    sourceDigest: prepared.sourceDigest,
-    pricingConfigJson: prepared.pricingConfigJson,
-    priceDigest: prepared.priceDigest,
-    contractDigest: ref.contractDigest,
-    provenanceDigest: capabilityPublicationProvenanceDigest({
-      publisherRef: 'owner-1',
-      authorityMode: 'provider_owned',
-      sourceRevision: prepared.sourceRevision,
-      sourceDigest: prepared.sourceDigest,
-    }),
-    connectionAuthority,
-    readinessOutcome: 'healthy',
-    readinessObservedAt: 100,
-    readinessValidUntil: 200,
-  })
-  const offering: CapabilityOfferingRow = {
-    offeringId: admitted.offering.offeringId,
-    businessId: publication.businessId,
-    networkId: admitted.offering.networkId,
-    capabilityId: ref.capabilityId,
-    version: ref.version,
-    contractDigest: ref.contractDigest,
-    presentation: admitted.offering.presentation,
-    searchTerms: admitted.offering.searchTerms,
-    registrationEvidenceRefs: admitted.offering.registrationEvidenceRefs,
-    registrationHash: capabilityOfferingRegistrationHash(admitted.offering),
-    status: 'active',
-    admissionEvidenceRefs: ['evidence:admission'],
-    eligibilityHash: digest,
-    registeredAt: 1,
-    updatedAt: 1,
-  }
-  const binding: CapabilityBindingRow = {
-    _id: 'binding-row',
-    _creationTime: 1,
-    bindingId: admitted.binding.bindingId,
-    offeringId: admitted.binding.offeringId,
-    networkId: admitted.binding.networkId,
-    capabilityId: ref.capabilityId,
-    version: ref.version,
-    contractDigest: ref.contractDigest,
-    endpointUrl: admitted.binding.endpointUrl,
-    authority: admitted.binding.authority,
-    connectionAuthority,
-    continuation: admitted.binding.continuation,
-    cancellation: admitted.binding.cancellation,
-    adapterId: admitted.binding.adapter.adapterId,
-    configJson: admitted.admittedTransport.transport.configJson,
-    configDigest: admitted.admittedTransport.transport.configDigest,
-    registrationEvidenceRefs: admitted.binding.registrationEvidenceRefs,
-    registrationHash: capabilityBindingRegistrationHash(admitted.binding, admitted.admittedTransport.transport),
-    admission: 'admitted',
-    conformance: 'conformant',
-    admissionEvidenceRefs: ['evidence:admission'],
-    conformanceEvidenceRefs: ['evidence:conformance'],
-    eligibilityHash: digest,
-    registeredAt: 1,
-    updatedAt: 1,
-  }
-  return { prepared, publication, offering, binding, providerConnection, ref }
-}
+type RepublishFixture = PublicationFixture
 
 function republishPorts(
   fixture: RepublishFixture,
