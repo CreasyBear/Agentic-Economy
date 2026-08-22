@@ -136,14 +136,14 @@ describe("hosted Operation gateway smoke config", () => {
     const config = gatewaySmokeConfigFromEnvironment(env);
     let failure: unknown;
     try {
-      await config.money.preflightCredential();
+      await config.owner.preflightCredential();
     } catch (error) {
       failure = error;
     }
     expect(String(failure)).toContain("gateway_smoke_api_key_identity_invalid");
     expect(String(failure)).not.toContain(rawSecret);
     await expect(
-      config.money.revokeCredential(undefined, {}),
+      config.owner.revokeCredential(undefined, {}),
     ).rejects.toThrow("gateway_smoke_api_key_identity_invalid");
     expect(apiKeys.verify).toHaveBeenCalledTimes(1);
     expect(apiKeys.revoke).not.toHaveBeenCalled();
@@ -158,10 +158,10 @@ describe("hosted Operation gateway smoke config", () => {
       env.AE_GATEWAY_SMOKE_RUN_ID ?? "",
     );
     const config = gatewaySmokeConfigFromEnvironment(env);
-    await config.money.preflightCredential();
-    await config.money.preflightCredential();
-    const result = await config.money.revokeCredential(undefined, {});
-    await config.money.revokeCredential(undefined, {});
+    await config.owner.preflightCredential();
+    await config.owner.preflightCredential();
+    const result = await config.owner.revokeCredential(undefined, {});
+    await config.owner.revokeCredential(undefined, {});
     expect(apiKeys.verify).toHaveBeenCalledTimes(1);
     expect(apiKeys.revoke).toHaveBeenCalledTimes(1);
     expect(apiKeys.revoke.mock.calls[0]?.[0]).toMatchObject({
