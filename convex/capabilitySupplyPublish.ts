@@ -14,6 +14,8 @@ import {
   validRegistrationContext,
   validEvidenceRefs,
   capabilityPublicationSourceSelectorValue,
+  connectionAuthoritySnapshotsEqual,
+  rotateCapabilityTransportBindingAuthority,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
@@ -32,10 +34,6 @@ import {
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
 import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
-import { connectionAuthoritySnapshotsEqual } from '@/modules/capability-supply/internal/binding'
-import {
-  rotateCapabilityTransportBindingAuthority,
-} from '@/modules/capability-supply/internal/binding/write'
 import {
   registerCapabilityOffering,
   registerCapabilityTransportBinding,

@@ -15,6 +15,7 @@ export { bindingRegistrationAudit } from './audit'
 
 export {
   registerCapabilityTransportBinding,
+  rotateCapabilityTransportBindingAuthority,
   type BindingInsertRow,
   type BindingWritePorts,
   type RegisterBindingWriteResult,

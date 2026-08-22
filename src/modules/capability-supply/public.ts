@@ -363,6 +363,7 @@ export {
 } from './internal/quarantine'
 export {
   registerCapabilityTransportBinding,
+  rotateCapabilityTransportBindingAuthority,
   connectionAuthoritySnapshotFromProviderConnection,
   connectionAuthoritySnapshotIsValid,
   connectionAuthoritySnapshotMatches,
