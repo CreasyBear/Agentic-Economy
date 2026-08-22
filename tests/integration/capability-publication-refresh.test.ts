@@ -13,6 +13,7 @@ import {
   capabilityPublicationInput,
   operationContext,
   preparedPublicationArgs,
+  providerAuthority,
   refreshCapabilityThroughTestSeam,
   registerProviderConnection,
   seedCatalogOffering,
@@ -169,7 +170,10 @@ describe('capability publication refresh', () => {
     if ('reason' in published)
       throw new Error(`publication_refused:${published.reason}`)
     const next = capabilityPublicationInput(businessId, 'compatible-two')
-    await registerProviderConnection(backend, businessId, 'compatible-two')
+    const nextBinding = {
+      ...next.binding,
+      authority: providerAuthority('compatible-one'),
+    }
     const compatibleDocument = capabilityContractV2({
       capabilityId: published.contractRef.capabilityId,
       version: 2,
@@ -184,11 +188,11 @@ describe('capability publication refresh', () => {
         kind: 'ae_envelope',
         documentJson: JSON.stringify(compatibleDocument),
         offering: next.offering,
-        binding: next.binding,
+        binding: nextBinding,
         evidenceRefs: next.evidenceRefs,
       },
       next.offering,
-      next.binding,
+      nextBinding,
       operationContext('refresh-compatible'),
     )
     expect(refreshed).toMatchObject({

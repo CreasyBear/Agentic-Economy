@@ -1,5 +1,6 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -218,6 +219,23 @@ describe('capability publication publish', () => {
                 payTo: '0x0000000000000000000000000000000000000002',
                 routeAmountExponent: 2,
                 assetAmountExponent: 6,
+                paymentRequired: validatePaymentRequired({
+                  x402Version: 2,
+                  resource: {
+                    url: 'https://x402-one.example.test/lookup',
+                  },
+                  accepts: [
+                    {
+                      scheme: 'exact',
+                      network: 'eip155:84532',
+                      amount: '12000000',
+                      asset: '0x0000000000000000000000000000000000000001',
+                      payTo: '0x0000000000000000000000000000000000000002',
+                      maxTimeoutSeconds: 60,
+                      extra: { name: 'USDC', version: '2' },
+                    },
+                  ],
+                }),
               },
               contract,
               commercial: {
