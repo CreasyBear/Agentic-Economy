@@ -4,7 +4,10 @@ import {
   JSONRPCResponseSchema,
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import { NetworkSchemaV2 } from '@x402/core/schemas'
+import {
+  NetworkSchemaV2,
+  validatePaymentRequired,
+} from '@x402/core/schemas'
 import { z } from 'zod'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type {
@@ -234,6 +237,7 @@ const x402FetchConfiguration = z.strictObject({
   assetAmountExponent: z.number().int().min(0).max(18),
   asset: z.string().trim().min(1).max(200),
   payTo: z.string().trim().min(1).max(200),
+  paymentRequired: z.unknown(),
 }).refine((value) => NetworkSchemaV2.safeParse(value.network).success)
   .refine((value) => {
     const segments = value.network.split(':')
@@ -241,6 +245,20 @@ const x402FetchConfiguration = z.strictObject({
   })
   .refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
   .refine((value) => value.method === 'GET' ? (value.query?.length ?? 0) > 0 : value.query === undefined)
+  .superRefine((value, context) => {
+    try {
+      const paymentRequired = validatePaymentRequired(value.paymentRequired)
+      if (paymentRequired.x402Version !== 2) {
+        context.addIssue({
+          code: 'custom',
+          path: ['paymentRequired'],
+          message: 'payment_required_version_unsupported',
+        })
+      }
+    } catch {
+      context.addIssue({ code: 'custom', path: ['paymentRequired'], message: 'payment_required_invalid' })
+    }
+  })
 
 export type TransportAdmissionInput = Readonly<{
   adapterId: string
@@ -298,10 +316,10 @@ export function parseAdmittedTransportCatalogMetadata(
       : undefined
   }
   if (adapterId === 'x402-fetch:v2') {
-    const parsed = x402FetchConfiguration.safeParse(value)
-    return parsed.success
-      ? { method: parsed.data.method, queryInputPointers: parsed.data.query?.map(({ inputPointer }) => inputPointer) ?? [] }
-      : undefined
+    const parsed = parseX402FetchTransportConfiguration(value)
+    return parsed === undefined
+      ? undefined
+      : { method: parsed.method, queryInputPointers: parsed.query?.map(({ inputPointer }) => inputPointer) ?? [] }
   }
   return adapterId === 'mcp-jsonrpc:v1' && mcpJsonRpcConfiguration.safeParse(value).success
     ? { method: 'POST', queryInputPointers: [] }
@@ -339,13 +357,31 @@ export type X402FetchTransportConfiguration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
+  paymentRequired: TransportConfigValue
 }>
+
+type TransportConfigValue =
+  | null
+  | boolean
+  | number
+  | string
+  | Record<string, string | number | boolean | null>
+  | (string | number | boolean | null)[]
+  | Record<string, string | number | boolean | null>[]
 
 export function parseX402FetchTransportConfiguration(
   value: unknown,
 ): X402FetchTransportConfiguration | undefined {
   const parsed = x402FetchConfiguration.safeParse(value)
-  return parsed.success ? parsed.data as X402FetchTransportConfiguration : undefined
+  if (!parsed.success) return undefined
+  try {
+    return {
+      ...parsed.data,
+      paymentRequired: validatePaymentRequired(parsed.data.paymentRequired) as unknown as TransportConfigValue,
+    } as X402FetchTransportConfiguration
+  } catch {
+    return undefined
+  }
 }
 
 export function readHttpJsonProbeConfiguration(
@@ -522,17 +558,17 @@ function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmis
     return { kind: 'refused', reason: 'adapter_config_too_large' }
   }
   const endpoint = validPublicHttpsEndpoint(input.endpointUrl)
-  const configuration = x402FetchConfiguration.safeParse(input.config)
+  const configuration = parseX402FetchTransportConfiguration(input.config)
   if (
     endpoint === undefined
     || !validAuthority(input.authority, false)
     || input.continuation.kind !== 'single_response'
     || input.cancellation.kind !== 'unsupported'
-    || !configuration.success
+    || configuration === undefined
   ) {
     return { kind: 'refused', reason: 'adapter_config_invalid' }
   }
-  const config = configuration.data as JsonValue
+  const config = configuration as unknown as JsonValue
   const configJson = stableStringify(config as StableHashValue)
   return {
     kind: 'admitted',

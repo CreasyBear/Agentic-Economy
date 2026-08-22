@@ -33,13 +33,17 @@ export async function importX402Capability(
   // When the x402-kind submission carries a PaymentRequired (402 challenge) document, it must
   // validate against the canonical @x402/core schema and bind to the admitted payment terms.
   const resource = isRecord(input.resource) ? input.resource : undefined;
-  let paymentRequired: X402ValidatedPaymentRequired | undefined;
-  if (resource !== undefined && resource.paymentRequired !== undefined) {
-    try {
-      paymentRequired = validateX402PaymentRequired(resource.paymentRequired);
-    } catch {
-      return { kind: "refused", reason: "payment_required_invalid" };
-    }
+  if (resource === undefined || resource.paymentRequired === undefined) {
+    return { kind: "refused", reason: "payment_required_invalid" };
+  }
+  let paymentRequired: X402ValidatedPaymentRequired;
+  try {
+    paymentRequired = validateX402PaymentRequired(resource.paymentRequired);
+  } catch {
+    return { kind: "refused", reason: "payment_required_invalid" };
+  }
+  if (paymentRequired.x402Version !== 2) {
+    return { kind: "refused", reason: "payment_required_invalid" };
   }
   const bounded = inspectSource(input.resource);
   if (bounded.kind === "refused") return bounded;
@@ -152,62 +156,34 @@ export async function importX402Capability(
   if (paymentAmount === undefined) {
     return { kind: "refused", reason: "transport_unsupported" };
   }
-  if (paymentRequired !== undefined) {
-    const queryMapped = query !== undefined;
-    const matches =
-      paymentRequired.x402Version === 1
-        ? paymentRequired.accepts.some((candidate) => {
-            if (
-              typeof candidate.resource !== "string" ||
-              !x402ResourceUrlBindsEndpoint(
-                candidate.resource,
-                endpoint,
-                method,
-                queryMapped,
-              ) ||
-              candidate.scheme !== scheme ||
-              candidate.network !== network ||
-              candidate.asset.toLowerCase() !== asset.toLowerCase() ||
-              candidate.payTo.toLowerCase() !== payTo.toLowerCase()
-            )
-              return false;
-            const parsedAmount = exactAmountSchema.safeParse({
-              currency: resourcePrice.data.currency,
-              units: candidate.maxAmountRequired,
-              exponent: assetAmountExponent,
-            });
-            return (
-              parsedAmount.success &&
-              compareExactAmounts(parsedAmount.data, paymentAmount) === 0
-            );
-          })
-        : x402ResourceUrlBindsEndpoint(
-            paymentRequired.resource.url,
-            endpoint,
-            method,
-            queryMapped,
-          ) &&
-          paymentRequired.accepts.some((candidate) => {
-            if (
-              candidate.scheme !== scheme ||
-              candidate.network !== network ||
-              candidate.asset.toLowerCase() !== asset.toLowerCase() ||
-              candidate.payTo.toLowerCase() !== payTo.toLowerCase()
-            )
-              return false;
-            const parsedAmount = exactAmountSchema.safeParse({
-              currency: resourcePrice.data.currency,
-              units: candidate.amount,
-              exponent: assetAmountExponent,
-            });
-            return (
-              parsedAmount.success &&
-              compareExactAmounts(parsedAmount.data, paymentAmount) === 0
-            );
-          });
-    if (!matches)
-      return { kind: "refused", reason: "payment_required_invalid" };
-  }
+  const queryMapped = query !== undefined;
+  const matches =
+    x402ResourceUrlBindsEndpoint(
+      paymentRequired.resource.url,
+      endpoint,
+      method,
+      queryMapped,
+    ) &&
+    paymentRequired.accepts.some((candidate) => {
+      if (
+        candidate.scheme !== scheme ||
+        candidate.network !== network ||
+        candidate.asset.toLowerCase() !== asset.toLowerCase() ||
+        candidate.payTo.toLowerCase() !== payTo.toLowerCase()
+      )
+        return false;
+      const parsedAmount = exactAmountSchema.safeParse({
+        currency: resourcePrice.data.currency,
+        units: candidate.amount,
+        exponent: assetAmountExponent,
+      });
+      return (
+        parsedAmount.success &&
+        compareExactAmounts(parsedAmount.data, paymentAmount) === 0
+      );
+    });
+  if (!matches)
+    return { kind: "refused", reason: "payment_required_invalid" };
   return normalizedFromSchemas({
     source: {
       kind: "x402",
@@ -233,6 +209,7 @@ export async function importX402Capability(
         assetAmountExponent,
         asset,
         payTo,
+        paymentRequired: paymentRequired as unknown as JsonValue,
       },
     },
   });

@@ -1,5 +1,4 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
 import {
@@ -11,10 +10,8 @@ import {
 } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 import {
-  decodeX402PaymentRequiredHeader,
   readX402PaymentPayerAndNonce,
   readX402PaymentResponseHeader,
-  validateX402PaymentRequired,
   type X402SettlementEvidence,
   type X402SettlementResponse,
 } from './x402-payment-signer'
@@ -23,13 +20,17 @@ import {
   verifyX402SignedReceipt,
   type X402VerifiedOffer,
 } from './x402-offer-receipt'
-import type { PaymentRequired } from '@x402/core/types'
-import { isProviderConnectionCredentialRef } from '../provider-connection'
 import type {
-  ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
   RouteTransportRuntime,
 } from './route-transport-invoke'
+import {
+  decodeX402Challenge,
+  preparePinnedX402PaymentAuthorization,
+  prepareX402PaymentMaterial,
+  validateX402ProviderAuthority,
+  type X402Challenge,
+} from './route-transport-x402-payment'
 import {
   boundedString,
   MAX_RESPONSE_BYTES,
@@ -47,7 +48,6 @@ import {
   outboundSensitiveValues,
   providerAuthorityFailure,
   toHeaderRecord,
-  type RouteTransportResponse,
 } from './route-transport-http-json'
 
 export type {
@@ -55,21 +55,6 @@ export type {
   X402SettlementResponse,
   X402SettlementStatus,
 } from './x402-payment-signer'
-
-type X402Challenge = Readonly<{
-  x402Version: 2
-  resource: Readonly<{ url: string; description?: string; mimeType?: string }>
-  accepts: readonly Readonly<{
-    scheme: string
-    network: `${string}:${string}`
-    amount: string
-    asset: string
-    payTo: string
-    maxTimeoutSeconds: number
-    extra: Readonly<Record<string, unknown>>
-  }>[]
-  extensions?: Readonly<Record<string, unknown>>
-}>
 
 export type X402PaymentSignatureRequest = Readonly<{
   challenge: X402Challenge
@@ -141,6 +126,7 @@ export type X402Configuration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
+  paymentRequired: import('@x402/core/types').PaymentRequired
 }>
 
 export function expectedX402Amount(
@@ -167,49 +153,6 @@ export function expectedX402Amount(
   return tokenAmount?.units === rescaled.units ? rescaled : undefined
 }
 
-async function validateX402ProviderAuthority(
-  invocation: RouteTransportInvocation,
-  runtime: RouteTransportRuntime,
-): Promise<string | undefined> {
-  if (invocation.binding.authority.kind !== 'provider_connection')
-    return undefined
-  const validateProviderConnectionAuthority =
-    runtime.validateProviderConnectionAuthority
-  if (validateProviderConnectionAuthority === undefined)
-    return 'connection_authority_validator_unavailable'
-  const authority = invocation.authority
-  if (!isProviderRouteTransportAuthority(authority))
-    return 'connection_authority_snapshot_invalid'
-  let validation: ProviderConnectionAuthorityValidationResult
-  try {
-    validation = await validateProviderConnectionAuthority({
-      connectionRef: invocation.binding.authority.connectionRef,
-      providerRef: invocation.binding.authority.providerRef,
-      adapterId: invocation.binding.adapterId,
-      authorityGeneration: authority.authorityGeneration,
-      authorityDigest: authority.authorityDigest,
-      ...(authority.leaseRef === undefined
-        ? {}
-        : {
-            leaseRef: authority.leaseRef,
-            invocationRef: authority.invocationRef,
-            operationRef: authority.operationRef,
-            grantedScopes: authority.grantedScopes,
-            grantedResources: authority.grantedResources,
-            readinessValidUntil: authority.readinessValidUntil,
-            ...(authority.readinessDigest === undefined
-              ? {}
-              : { readinessDigest: authority.readinessDigest }),
-          }),
-    })
-  } catch {
-    return 'connection_authority_validation_failed'
-  }
-  return validation.kind === 'valid'
-    ? undefined
-    : providerAuthorityFailure(validation.reason)
-}
-
 export async function invokeX402(
   endpoint: URL,
   configuration: X402Configuration,
@@ -218,186 +161,39 @@ export async function invokeX402(
   runtime: X402RouteTransportRuntime,
   preparedTarget: URL | undefined,
 ): Promise<RouteTransportObservation> {
-  const headers = callHeaders(invocation, undefined)
   const target = preparedTarget
   if (target === undefined)
     return refused('x402', requestDigest, false, 'input_invalid')
-  const authorityFailure = await validateX402ProviderAuthority(
-    invocation,
-    runtime,
-  )
-  if (authorityFailure !== undefined)
-    return refused('x402', requestDigest, false, authorityFailure)
-  let first: RouteTransportResponse
-  try {
-    first = await runtime.send(target, {
-      method: configuration.method,
-      redirect: 'manual',
-      signal: AbortSignal.timeout(configuration.requestTimeoutMs),
-      headers,
-      ...(configuration.method === 'POST'
-        ? { body: invocation.inputJson }
-        : {}),
-    })
-  } catch (error) {
-    return unknown(
-      'x402',
-      requestDigest,
-      true,
-      `payment_challenge_${errorName(error)}`,
-    )
-  }
-  if (first.status !== 402) {
-    return await normalizeJsonResponse(
-      'x402',
-      first,
-      requestDigest,
-      true,
-      undefined,
-      undefined,
-      outboundSensitiveValues(invocation),
-    )
-  }
-  await cancelResponseBody(first)
-  const challenge = decodeX402Challenge(first.headers.get('payment-required'))
-  if (challenge === undefined)
-    return refused('x402', requestDigest, false, 'payment_challenge_invalid')
-  const paymentChallengeDigest = canonicalDigest(challenge as StableHashValue)
-  const requirement = challenge.accepts.find(
-    (candidate) =>
-      candidate.scheme === configuration.scheme &&
-      candidate.network === configuration.network &&
-      candidate.asset.toLowerCase() === configuration.asset.toLowerCase() &&
-      candidate.payTo.toLowerCase() === configuration.payTo.toLowerCase(),
-  )
-  if (requirement === undefined)
-    return {
-      ...refused(
-        'x402',
-        requestDigest,
-        false,
-        'payment_requirement_unsupported',
-      ),
-      paymentChallengeDigest,
-    }
-  if (
-    challenge.resource.url !== target.href ||
-    Date.now() + requirement.maxTimeoutSeconds * 1_000 >
-      invocation.authority.expiresAt
-  ) {
-    return {
-      ...refused(
-        'x402',
-        requestDigest,
-        false,
-        'payment_requirement_outside_authority',
-      ),
-      paymentChallengeDigest,
-    }
-  }
-  if (invocation.authority.maximumSpend.currency !== configuration.currency) {
-    return {
-      ...refused('x402', requestDigest, false, 'payment_currency_mismatch'),
-      paymentChallengeDigest,
-    }
-  }
-  const expectedAmount = expectedX402Amount(
-    invocation.authority.maximumSpend,
+  const headers = callHeaders(invocation, undefined)
+  const materialResult = await prepareX402PaymentMaterial(
+    endpoint,
     configuration,
+    invocation,
+    requestDigest,
+    runtime,
+    target,
   )
-  if (expectedAmount === undefined) {
-    return {
-      ...refused('x402', requestDigest, false, 'payment_authority_invalid'),
-      paymentChallengeDigest,
-    }
-  }
-  const parsedPaymentAmount = exactAmountSchema.safeParse({
-    currency: configuration.currency,
-    units: requirement.amount,
-    exponent: configuration.assetAmountExponent,
-  })
-  if (!parsedPaymentAmount.success) {
-    return {
-      ...refused('x402', requestDigest, false, 'payment_challenge_invalid'),
-      paymentChallengeDigest,
-    }
-  }
-  const paymentAmount = parsedPaymentAmount.data
-  const amountComparison = compareExactAmounts(paymentAmount, expectedAmount)
-  if (amountComparison !== 0) {
-    return {
-      ...refused(
-        'x402',
-        requestDigest,
-        false,
-        amountComparison === 1
-          ? 'payment_exceeds_step_ceiling'
-          : 'payment_amount_mismatch',
-      ),
-      paymentChallengeDigest,
-    }
-  }
-  const signedOfferRequired =
-    challenge.extensions !== undefined
-    && Object.prototype.hasOwnProperty.call(
-      challenge.extensions,
-      'offer-receipt',
-    )
-  let verifiedOffer: X402VerifiedOffer | undefined
-  if (signedOfferRequired) {
-    const paymentRequired: PaymentRequired = {
-      x402Version: challenge.x402Version,
-      resource: { ...challenge.resource },
-      accepts: challenge.accepts.map((candidate) => ({
-        ...candidate,
-        extra: { ...candidate.extra },
-      })),
-      ...(challenge.extensions === undefined ? {} : { extensions: { ...challenge.extensions } }),
-    }
-    const offerVerification = await verifyX402SignedOffer({
-      paymentRequired,
-      selectedRequirement: requirement,
-      resourceUrl: target.href,
-      nowSeconds: Math.floor(Date.now() / 1_000),
-    })
-    if (offerVerification.kind !== 'verified') {
-      return {
-        ...refused('x402', requestDigest, false, 'payment_offer_invalid'),
-        paymentChallengeDigest,
-        paymentAuthorizationStatus: 'not_created',
-        paymentSubmissionStatus: 'not_submitted',
-        settlementEvidence: { kind: 'not_submitted' },
-      }
-    }
-    verifiedOffer = offerVerification.context
-  }
-  let paymentCredentialRef: string | undefined
-  try {
-    const configured =
-      runtime.readX402PaymentCredentialRef === undefined
-        ? undefined
-        : await runtime.readX402PaymentCredentialRef()
-    if (isProviderConnectionCredentialRef(configured))
-      paymentCredentialRef = configured
-  } catch {
-    paymentCredentialRef = undefined
-  }
-  if (paymentCredentialRef === undefined) {
-    return refused('x402', requestDigest, false, 'payment_custody_unavailable')
-  }
-  const authorizationIdentity = {
-    paymentIdentifier: invocation.authority.operationKeyDigest,
-    challengeDigest: paymentChallengeDigest,
-    attemptRef: invocation.authority.attemptRef,
-    effectGeneration: invocation.authority.effectGeneration ?? 0,
-    paymentAmount,
-  }
-  const preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
+  if (materialResult.kind === 'refused') return materialResult.observation
+  const {
     challenge,
-    credential: paymentCredentialRef,
-    selectedRequirement: requirement,
-    ...authorizationIdentity,
-  })
+    requirement,
+    paymentChallengeDigest,
+    paymentAmount,
+    paymentCredentialRef,
+    authorizationIdentity,
+    verifiedOffer,
+  } = materialResult.material
+  let preparedAuthorization: X402PreparedAuthorization | undefined
+  try {
+    preparedAuthorization = await runtime.prepareX402PaymentAuthorization({
+      challenge,
+      credential: paymentCredentialRef,
+      selectedRequirement: requirement,
+      ...authorizationIdentity,
+    })
+  } catch {
+    preparedAuthorization = undefined
+  }
   if (preparedAuthorization === undefined) {
     return {
       ...refused('x402', requestDigest, false, 'payment_signature_unavailable'),
@@ -405,6 +201,23 @@ export async function invokeX402(
       paymentAuthorizationStatus: 'not_created',
       paymentSubmissionStatus: 'not_submitted',
       settlementEvidence: { kind: 'not_submitted' },
+    }
+  }
+  if (runtime.beforeX402PaymentAuthorizationRead !== undefined) {
+    let fencePassed = false
+    try {
+      fencePassed = await runtime.beforeX402PaymentAuthorizationRead()
+    } catch {
+      fencePassed = false
+    }
+    if (!fencePassed) {
+      return {
+        ...refused('x402', requestDigest, false, 'payment_submission_fence_failed'),
+        paymentChallengeDigest,
+        paymentAuthorizationStatus: 'created',
+        paymentSubmissionStatus: 'not_submitted',
+        settlementEvidence: { kind: 'not_submitted' },
+      }
     }
   }
   const paymentSignature = await runtime.readX402PaymentAuthorization(
@@ -532,6 +345,48 @@ export async function invokeX402(
         ? { body: invocation.inputJson }
         : {}),
     })
+    if (paid.status === 402) {
+      await cancelResponseBody(paid)
+      const returnedChallenge = decodeX402Challenge(
+        paid.headers.get('payment-required'),
+      )
+      const returnedChallengeDigest = returnedChallenge === undefined
+        ? undefined
+        : canonicalDigest(returnedChallenge as StableHashValue)
+      const challengeMatches = returnedChallengeDigest === paymentChallengeDigest
+      const failureCode = challengeMatches
+        ? 'payment_required_after_submission'
+        : 'payment_provider_requirement_stale'
+      const evidenceRefs = [
+        paymentChallengeDigest,
+        ...(returnedChallengeDigest === undefined ? [] : [returnedChallengeDigest]),
+      ]
+      const settlementEvidence: X402SettlementEvidence = {
+        kind: 'unknown',
+        reason: failureCode,
+        ...(returnedChallengeDigest === undefined
+          ? {}
+          : { digest: returnedChallengeDigest }),
+      }
+      if (observeX402PaymentAttempt !== undefined) {
+        await observeX402PaymentAttempt({
+          ...paymentEvent,
+          settlementEvidence,
+          state: 'reconciliation_required',
+          evidenceRefs,
+        })
+      }
+      return {
+        ...unknown('x402', requestDigest, true, failureCode),
+        paymentChallengeDigest,
+        ...offerEvidence,
+        queryReleaseStatus: 'released',
+        paymentAuthorizationStatus: 'created',
+        paymentSubmissionStatus: 'observed',
+        settlementEvidence,
+        quoteDeliveryStatus: 'unknown',
+      }
+    }
     const normalized = await normalizeJsonResponse(
       'x402',
       paid,
@@ -756,51 +611,6 @@ export async function invokeX402(
       quoteDeliveryStatus: 'unknown',
     }
   }
-}
-
-function decodeX402Challenge(header: string | null): X402Challenge | undefined {
-  if (header === null || header.length > MAX_RESPONSE_BYTES * 2)
-    return undefined
-  try {
-    const decoded = decodeX402PaymentRequiredHeader(header)
-    const parsed = validateX402PaymentRequired(decoded)
-    if (
-      parsed.x402Version !== 2
-      || !boundedString(parsed.resource.url, 2_000)
-      || !Array.isArray(parsed.accepts)
-      || parsed.accepts.length < 1
-      || parsed.accepts.length > 16
-    )
-      return undefined
-    for (const candidate of parsed.accepts) {
-      if (
-        !isRecord(candidate)
-        || !boundedString(candidate.scheme, 100)
-        || !boundedString(candidate.network, 100)
-        || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(candidate.network)
-        || typeof candidate.amount !== 'string'
-        || !/^(?:0|[1-9]\d{0,77})$/.test(candidate.amount)
-        || !boundedString(candidate.asset, 200)
-        || !boundedString(candidate.payTo, 200)
-        || !Number.isSafeInteger(candidate.maxTimeoutSeconds)
-        || candidate.maxTimeoutSeconds <= 0
-        || candidate.maxTimeoutSeconds > 86_400
-        || !isRecord(candidate.extra)
-        || !isSupportedX402TransferMethod(candidate.extra)
-      )
-        return undefined
-    }
-    return parsed as X402Challenge
-  } catch {
-    return undefined
-  }
-}
-
-function isSupportedX402TransferMethod(
-  extra: Readonly<Record<string, unknown>>,
-): boolean {
-  const method = extra.assetTransferMethod
-  return method === undefined || method === 'eip3009' || method === 'permit2'
 }
 
 type X402SettlementCheck =

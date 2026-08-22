@@ -1,4 +1,5 @@
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
+import { validatePaymentRequired } from '@x402/core/schemas'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -144,6 +145,7 @@ export type RouteTransportRuntime = Readonly<{
   prepareX402PaymentAuthorization?: (
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
   ) => Promise<X402PreparedAuthorization | undefined>
+  beforeX402PaymentAuthorizationRead?: () => Promise<boolean>
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,
   ) => Promise<string | undefined>
@@ -210,6 +212,7 @@ const x402Configuration = z
     assetAmountExponent: amountExponent,
     asset: nonBlankString.max(200),
     payTo: nonBlankString.max(200),
+    paymentRequired: z.unknown(),
   })
   .superRefine((value, context) => {
     if (
@@ -217,6 +220,22 @@ const x402Configuration = z
       (value.method === 'POST' && value.query !== undefined)
     ) {
       context.addIssue({ code: 'custom', message: 'method_query_mismatch' })
+    }
+    try {
+      const paymentRequired = validatePaymentRequired(value.paymentRequired)
+      if (paymentRequired.x402Version !== 2) {
+        context.addIssue({
+          code: 'custom',
+          path: ['paymentRequired'],
+          message: 'payment_required_version_unsupported',
+        })
+      }
+    } catch {
+      context.addIssue({
+        code: 'custom',
+        path: ['paymentRequired'],
+        message: 'payment_required_invalid',
+      })
     }
   })
 

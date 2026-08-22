@@ -6,7 +6,6 @@ import {
   encodePaymentSignatureHeader,
 } from '@x402/core/http'
 import {
-  createOfferEIP712,
   createReceiptEIP712,
   type SignTypedDataFn,
 } from '@x402/extensions/offer-receipt'
@@ -22,9 +21,38 @@ import {
   invokeRouteTransport,
   preparedX402Custody,
   providerAuthority,
-  registeredBinding,
+  registeredBinding as registeredBindingFromHarness,
   resolveProviderCredential,
 } from './route-transport-test-harness'
+
+function registeredBinding(
+  adapterId: string,
+  endpointUrl: string,
+  bindingAuthority: typeof providerAuthority,
+  config: Readonly<Record<string, import('@/modules/common/stable-hash').StableHashValue>>,
+) {
+  if (adapterId !== 'x402-fetch:v2' || Object.hasOwn(config, 'paymentRequired')) {
+    return registeredBindingFromHarness(adapterId, endpointUrl, bindingAuthority, config)
+  }
+  return registeredBindingFromHarness(adapterId, endpointUrl, bindingAuthority, {
+    ...config,
+    paymentRequired: {
+      x402Version: 2,
+      resource: { url: endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: config.network,
+        amount: endpointUrl.includes('/signed-paid') || endpointUrl.includes('/cryptocurrency/quotes/latest')
+          ? '10000'
+          : '1250000',
+        asset: config.asset,
+        payTo: config.payTo,
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    } as import('@/modules/common/stable-hash').StableHashValue,
+  })
+}
 
 describe('x402 server credential locator', () => {
   it('accepts only an opaque env locator and never resolves its value', () => {
@@ -57,31 +85,6 @@ describe('registered route transport runtime', () => {
   }
   const providerSigner: SignTypedDataFn = async (input) =>
     await signedProvider.signTypedData(input)
-
-  async function signedChallenge(signature?: string) {
-    const signedOffer = await createOfferEIP712(
-      signedTarget,
-      { acceptIndex: 0, ...signedRequirement, offerValiditySeconds: 30 },
-      providerSigner,
-    )
-    return encodePaymentRequiredHeader({
-      x402Version: 2,
-      resource: { url: signedTarget },
-      accepts: [signedRequirement],
-      extensions: {
-        'offer-receipt': {
-          info: {
-            offers: [
-              signature === undefined
-                ? signedOffer
-                : { ...signedOffer, signature },
-            ],
-          },
-        },
-      },
-    })
-  }
-
   function payerAuthorization(): string {
     return encodePaymentSignatureHeader({
       x402Version: 2,
@@ -131,7 +134,7 @@ describe('registered route transport runtime', () => {
     })
   }
 
-  it('verifies a presented offer and matching receipt around one paid send', async () => {
+  it('sends the first and only origin request with Payment-Signature', async () => {
     const paymentSignature = payerAuthorization()
     const receipt = await createReceiptEIP712(
       {
@@ -150,15 +153,13 @@ describe('registered route transport runtime', () => {
       payer: signedPayer.address,
       extensions: { 'offer-receipt': { info: { receipt } } },
     })
-    const fetch = vi.fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 402,
-        headers: { 'Payment-Required': await signedChallenge() },
-      }))
-      .mockResolvedValueOnce(Response.json(
+    const fetch = vi.fn<RouteTransportFetch>().mockImplementationOnce(async (_url, init) => {
+      expect(init?.headers).toMatchObject({ 'Payment-Signature': paymentSignature })
+      return Response.json(
         { serviceReference: 'service:signed' },
         { headers: { 'Payment-Response': paymentResponse } },
-      ))
+      )
+    })
     const createPayment = vi.fn(async () => paymentSignature)
 
     const observed = await invokeRouteTransport(signedInvocation(), {
@@ -172,23 +173,90 @@ describe('registered route transport runtime', () => {
 
     expect(observed).toMatchObject({
       disposition: 'succeeded',
-      providerOfferDigest: expect.stringMatching(/^sha256:/),
-      providerReceipt: expect.any(String),
       settlementEvidence: { kind: 'settled' },
       outputJson: JSON.stringify({ serviceReference: 'service:signed' }),
     })
     expect(JSON.stringify(observed)).not.toContain(paymentSignature)
     expect(createPayment).toHaveBeenCalledTimes(1)
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses a paid x402 send when the submission marker is missing', async () => {
+  it('reconciles a returned 402 after one signed submit without retrying', async () => {
+    const requirement = {
+      x402Version: 2 as const,
+      resource: { url: 'https://provider.example/paid' },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:84532' as const,
+        amount: '1250000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const createPayment = vi.fn(async () => 'signed-payment')
+    const custody = preparedX402Custody(createPayment)
+    const readAuthorization = vi.fn(custody.readX402PaymentAuthorization)
+    const markX402PaymentPossiblySubmitted = vi.fn()
+    const observeX402PaymentAttempt = vi.fn()
     const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(
       new Response(null, {
         status: 402,
-        headers: { 'Payment-Required': await signedChallenge() },
+        headers: { 'Payment-Required': encodePaymentRequiredHeader(requirement) },
       }),
     )
+    const observed = await invokeRouteTransport(
+      invocation({
+        binding: registeredBinding(
+          'x402-fetch:v2',
+          requirement.resource.url,
+          providerAuthority,
+          {
+            method: 'POST',
+            requestTimeoutMs: 5_000,
+            scheme: 'exact',
+            network: 'eip155:84532',
+            currency: 'USD',
+            routeAmountExponent: 2,
+            assetAmountExponent: 6,
+            asset: requirement.accepts[0]!.asset,
+            payTo: requirement.accepts[0]!.payTo,
+            paymentRequired: requirement,
+          },
+        ),
+      }),
+      {
+        send: fetch,
+        resolveCredential: resolveProviderCredential('credential'),
+        ...custody,
+        readX402PaymentAuthorization: readAuthorization,
+        markX402PaymentPossiblySubmitted,
+        observeX402PaymentAttempt,
+      },
+    )
+    expect(observed).toMatchObject({
+      disposition: 'unknown',
+      failureCode: 'payment_required_after_submission',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'observed',
+      settlementEvidence: {
+        kind: 'unknown',
+        reason: 'payment_required_after_submission',
+      },
+    })
+    expect(createPayment).toHaveBeenCalledTimes(1)
+    expect(readAuthorization).toHaveBeenCalledTimes(1)
+    expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(observeX402PaymentAttempt).toHaveBeenCalledTimes(1)
+    expect(observeX402PaymentAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'reconciliation_required' }),
+    )
+  })
+
+  it('refuses a paid x402 send when the submission marker is missing', async () => {
+    const fetch = vi.fn<RouteTransportFetch>()
     const createPayment = vi.fn(async () => payerAuthorization())
     const observed = await invokeRouteTransport(signedInvocation(), {
       send: fetch,
@@ -205,16 +273,11 @@ describe('registered route transport runtime', () => {
       settlementEvidence: { kind: 'not_submitted' },
     })
     expect(createPayment).toHaveBeenCalledTimes(1)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('refuses a paid x402 send when the submission marker throws', async () => {
-    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(
-      new Response(null, {
-        status: 402,
-        headers: { 'Payment-Required': await signedChallenge() },
-      }),
-    )
+    const fetch = vi.fn<RouteTransportFetch>()
     const createPayment = vi.fn(async () => payerAuthorization())
     const markX402PaymentPossiblySubmitted = vi.fn(() => {
       throw new Error('marker unavailable')
@@ -236,18 +299,11 @@ describe('registered route transport runtime', () => {
     })
     expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledTimes(1)
     expect(createPayment).toHaveBeenCalledTimes(1)
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('refuses an invalid presented offer before custody or paid send', async () => {
-    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(
-      new Response(null, {
-        status: 402,
-        headers: {
-          'Payment-Required': await signedChallenge(`0x${'00'.repeat(65)}`),
-        },
-      }),
-    )
+  it('refuses a paid x402 send when the submission marker is unavailable', async () => {
+    const fetch = vi.fn<RouteTransportFetch>()
     const createPayment = vi.fn(async () => payerAuthorization())
     const observed = await invokeRouteTransport(signedInvocation(), {
       send: fetch,
@@ -257,23 +313,18 @@ describe('registered route transport runtime', () => {
     })
     expect(observed).toMatchObject({
       disposition: 'refused',
-      failureCode: 'payment_offer_invalid',
-      paymentAuthorizationStatus: 'not_created',
+      failureCode: 'payment_submission_fence_unavailable',
+      paymentAuthorizationStatus: 'created',
       paymentSubmissionStatus: 'not_submitted',
       settlementEvidence: { kind: 'not_submitted' },
     })
-    expect(createPayment).not.toHaveBeenCalled()
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(createPayment).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('treats a missing signed receipt as paid-invalid, not unknown', async () => {
+  it('treats a paid response without an offer receipt as a settled response', async () => {
     const paymentSignature = payerAuthorization()
-    const fetch = vi.fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 402,
-        headers: { 'Payment-Required': await signedChallenge() },
-      }))
-      .mockResolvedValueOnce(Response.json(
+    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(Response.json(
         { serviceReference: 'service:unattested' },
         {
           headers: {
@@ -296,12 +347,12 @@ describe('registered route transport runtime', () => {
       observeX402PaymentAttempt: () => undefined,
     })
     expect(observed).toMatchObject({
-      disposition: 'refused',
-      failureCode: 'provider_receipt_invalid',
+      disposition: 'succeeded',
       settlementEvidence: { kind: 'settled' },
-      quoteDeliveryStatus: 'not_delivered',
+      quoteDeliveryStatus: 'delivered',
+      outputJson: JSON.stringify({ serviceReference: 'service:unattested' }),
     })
-    expect(observed).not.toHaveProperty('outputJson')
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('holds an ambiguous paid GET x402 release as outcome unknown', async () => {
@@ -322,27 +373,8 @@ describe('registered route transport runtime', () => {
     }
     const target =
       'https://provider.example/x402/v3/cryptocurrency/quotes/latest?symbol=BTC&convert=USD'
-    const challenge = encodePaymentRequiredHeader({
-      x402Version: 2,
-      resource: { url: target },
-      accepts: [{
-        scheme: 'exact',
-        network: 'eip155:8453',
-        amount: '10000',
-        asset: '0xasset',
-        payTo: '0xrecipient',
-        maxTimeoutSeconds: 60,
-        extra: {},
-      }],
-    })
     const fetch = vi
       .fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 402,
-          headers: { 'Payment-Required': challenge },
-        }),
-      )
       .mockRejectedValueOnce(
         Object.assign(new Error('lost'), { name: 'MockLostAfterRelease' }),
       )
@@ -375,8 +407,7 @@ describe('registered route transport runtime', () => {
       failureCode: 'network_mocklostafterrelease',
     })
     expect(fetch.mock.calls[0]?.[0].href).toBe(target)
-    expect(fetch.mock.calls[1]?.[0].href).toBe(target)
-    expect(fetch.mock.calls[1]?.[1]?.body).toBeUndefined()
+    expect(fetch.mock.calls[0]?.[1]?.body).toBeUndefined()
   })
 
   it('pays an admitted x402 challenge only within the exact step ceiling', async () => {
@@ -399,7 +430,6 @@ describe('registered route transport runtime', () => {
         },
       ],
     }
-    const challenge = encodePaymentRequiredHeader(requirement)
     const settlementProof = encodePaymentResponseHeader({
       success: true,
       transaction: '0xsettled',
@@ -409,12 +439,6 @@ describe('registered route transport runtime', () => {
     })
     const fetch = vi
       .fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 402,
-          headers: { 'Payment-Required': challenge },
-        }),
-      )
       .mockImplementationOnce(async (_url, init) => {
         lifecycle.push('paid-send')
         expect(init?.headers).toMatchObject({
@@ -481,7 +505,11 @@ describe('registered route transport runtime', () => {
 
     expect(createPayment).toHaveBeenCalledWith(
       expect.objectContaining({
-        challenge: requirement,
+        challenge: expect.objectContaining({
+          x402Version: requirement.x402Version,
+          resource: { url: requirement.resource.url },
+          accepts: requirement.accepts,
+        }),
         selectedRequirement: requirement.accepts[0],
         credential: X402_PAYMENT_CREDENTIAL_REF,
         paymentIdentifier: authority.operationKeyDigest,
@@ -545,7 +573,7 @@ describe('registered route transport runtime', () => {
     expect(fetch.mock.calls[0]?.[1]?.headers).not.toHaveProperty(
       'Authorization',
     )
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
   it('holds a provider-asserted x402 settlement until a trusted verifier confirms it', async () => {
     const requirement = {
@@ -563,10 +591,6 @@ describe('registered route transport runtime', () => {
     }
     const fetch = vi
       .fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 402,
-        headers: { 'Payment-Required': encodePaymentRequiredHeader(requirement) },
-      }))
       .mockResolvedValueOnce(Response.json(
         { serviceReference: 'service:unverified' },
         {
@@ -630,7 +654,7 @@ describe('registered route transport runtime', () => {
         reason: 'payment_settlement_unverified',
       },
     })
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
   it('fails closed when a paid x402 response echoes its payment signature', async () => {
     const requirement = {
@@ -656,12 +680,6 @@ describe('registered route transport runtime', () => {
     const paymentSignature = 'signed-payment-secret'
     const fetch = vi
       .fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 402,
-          headers: { 'Payment-Required': challenge },
-        }),
-      )
       .mockImplementationOnce(async (_url, init) => {
         expect(init?.headers).toMatchObject({
           'Payment-Signature': paymentSignature,
@@ -725,7 +743,7 @@ describe('registered route transport runtime', () => {
       failureCode: 'response_output_invalid',
     })
     expect(JSON.stringify(observed)).not.toContain(paymentSignature)
-    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 
   it('refuses missing x402 custody before any provider or paid request', async () => {
@@ -853,7 +871,6 @@ describe('registered route transport runtime', () => {
         },
       ],
     }
-    const challenge = encodePaymentRequiredHeader(requirement)
     const states: string[] = []
     const observed = await invokeRouteTransport(
       invocation({
@@ -871,6 +888,7 @@ describe('registered route transport runtime', () => {
             assetAmountExponent: 6,
             asset: requirement.accepts[0]!.asset,
             payTo: requirement.accepts[0]!.payTo,
+            paymentRequired: requirement,
           },
         ),
         authority: {
@@ -881,12 +899,6 @@ describe('registered route transport runtime', () => {
       {
         send: vi
           .fn<RouteTransportFetch>()
-          .mockResolvedValueOnce(
-            new Response(null, {
-              status: 402,
-              headers: { 'Payment-Required': challenge },
-            }),
-          )
           .mockRejectedValueOnce(new Error('lost_after_send')),
         resolveCredential: resolveProviderCredential('private-material'),
         ...preparedX402Custody(async () => 'must-not-be-persisted'),
@@ -957,6 +969,7 @@ describe('registered route transport runtime', () => {
             assetAmountExponent: 6,
             asset: '0x0000000000000000000000000000000000000001',
             payTo: '0x0000000000000000000000000000000000000002',
+            paymentRequired: requirement,
           },
         ),
       }),
@@ -975,12 +988,11 @@ describe('registered route transport runtime', () => {
       failureCode: 'payment_exceeds_step_ceiling',
     })
     expect(createPayment).not.toHaveBeenCalled()
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('accepts exactly USD 0.007 as 7000 asset units and refuses the first unit above it before signing', async () => {
-    const challengeFor = (amount: string) =>
-      encodePaymentRequiredHeader({
+    const paymentRequiredFor = (amount: string) => ({
         x402Version: 2,
         resource: { url: 'https://provider.example/paid' },
         accepts: [{
@@ -993,7 +1005,7 @@ describe('registered route transport runtime', () => {
           extra: {},
         }],
       })
-    const binding = registeredBinding(
+    const bindingFor = (amount: string) => registeredBinding(
       'x402-fetch:v2',
       'https://provider.example/paid',
       providerAuthority,
@@ -1007,16 +1019,12 @@ describe('registered route transport runtime', () => {
         assetAmountExponent: 6,
         asset: '0x0000000000000000000000000000000000000001',
         payTo: '0x0000000000000000000000000000000000000002',
+        paymentRequired: paymentRequiredFor(amount),
       },
     )
+    const exactBinding = bindingFor('7000')
     const exactFetch = vi
       .fn<RouteTransportFetch>()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 402,
-          headers: { 'Payment-Required': challengeFor('7000') },
-        }),
-      )
       .mockResolvedValueOnce(Response.json(
         { price: 100_000 },
         {
@@ -1034,7 +1042,7 @@ describe('registered route transport runtime', () => {
     const exactSigner = vi.fn(async () => 'sub-cent-signature')
     const exact = await invokeRouteTransport(
       invocation({
-        binding,
+        binding: exactBinding,
         authority: {
           ...authority,
           maximumSpend: { currency: 'USD', units: '7', exponent: 3 },
@@ -1049,18 +1057,20 @@ describe('registered route transport runtime', () => {
     )
     expect(exact).toMatchObject({ disposition: 'succeeded' })
     expect(exactSigner).toHaveBeenCalledTimes(1)
-    expect(exactFetch).toHaveBeenCalledTimes(2)
+    expect(exactFetch).toHaveBeenCalledTimes(1)
+
+    const belowBinding = bindingFor('6999')
 
     const belowFetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(
       new Response(null, {
         status: 402,
-        headers: { 'Payment-Required': challengeFor('6999') },
+        headers: {},
       }),
     )
     const belowSigner = vi.fn(async () => 'below-ceiling-signature')
     const below = await invokeRouteTransport(
       invocation({
-        binding,
+        binding: belowBinding,
         authority: {
           ...authority,
           maximumSpend: { currency: 'USD', units: '70', exponent: 4 },
@@ -1078,18 +1088,20 @@ describe('registered route transport runtime', () => {
       failureCode: 'payment_amount_mismatch',
     })
     expect(belowSigner).not.toHaveBeenCalled()
-    expect(belowFetch).toHaveBeenCalledTimes(1)
+    expect(belowFetch).not.toHaveBeenCalled()
+
+    const aboveBinding = bindingFor('7001')
 
     const aboveFetch = vi.fn<RouteTransportFetch>().mockResolvedValueOnce(
       new Response(null, {
         status: 402,
-        headers: { 'Payment-Required': challengeFor('7001') },
+        headers: {},
       }),
     )
     const aboveSigner = vi.fn(async () => 'must-not-sign')
     const above = await invokeRouteTransport(
       invocation({
-        binding,
+        binding: aboveBinding,
         authority: {
           ...authority,
           maximumSpend: { currency: 'USD', units: '7', exponent: 3 },
@@ -1107,7 +1119,7 @@ describe('registered route transport runtime', () => {
       failureCode: 'payment_exceeds_step_ceiling',
     })
     expect(aboveSigner).not.toHaveBeenCalled()
-    expect(aboveFetch).toHaveBeenCalledTimes(1)
+    expect(aboveFetch).not.toHaveBeenCalled()
   })
   it.each([
     {
@@ -1189,14 +1201,6 @@ describe('registered route transport runtime', () => {
       const fetch = vi
         .fn<RouteTransportFetch>()
         .mockResolvedValueOnce(
-          new Response(null, {
-            status: 402,
-            headers: {
-              'Payment-Required': encodePaymentRequiredHeader(requirement),
-            },
-          }),
-        )
-        .mockResolvedValueOnce(
           Response.json(
             { serviceReference: 'service:settlement-check' },
             {
@@ -1234,7 +1238,7 @@ describe('registered route transport runtime', () => {
         },
       )
       expect(observed).toMatchObject(expected)
-      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(fetch).toHaveBeenCalledTimes(1)
     },
   )
 })

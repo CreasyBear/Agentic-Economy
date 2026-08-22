@@ -358,6 +358,21 @@ export function buildDevelopmentPublishedOperationEvidence() {
     assetAmountExponent: 6,
     asset: '0xmock-usdc',
     payTo: '0xmock-provider-recipient',
+    paymentRequired: {
+      x402Version: 2,
+      resource: {
+        url: `https://provider.example${endpointPath}`,
+      },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '10000',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider-recipient',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    },
   } as const
   const binding = defineCapabilityTransportBindingRegistration({
     bindingId: 'mock:binding:crypto-quotes',

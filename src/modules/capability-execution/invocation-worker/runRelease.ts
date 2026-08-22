@@ -5,6 +5,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
 import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-invocation'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
+import { parsePublishedOperationSnapshot, publishedOperationMaterialMatches } from '@/modules/capability-supply/public'
 import { chargeSettlementOutcome, credentialFromEnvironment, x402PaymentCredentialRefFromEnvironment, type EconomicRail } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { internal } from '../../../../convex/_generated/api'
@@ -143,118 +144,31 @@ export async function releaseInvocationRun(
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'endpoint_not_public')
   }
-  let moneyResult: WorkerAcceptedCharge | undefined
-  let brokeredReservation: BrokeredChargeReservation | undefined
-  if (economicRail === 'ae_internal') {
-    const authorized = await authorizeAeInternalCharge(ctx, {
-      principal,
-      operation,
-      dispatch,
-      authorityMaximumSpend,
-      durableAttemptRef,
-    })
-    if (authorized.kind === 'missing_billing_identity') {
-      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'billing_identity_missing')
-    }
-    if (authorized.kind === 'refused') {
-      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-      return await convergePreRelease(ctx, dispatch, claimed, authorized.code, authorized.retryable)
-    }
-    moneyResult = authorized.charge
-  } else if (economicRail === 'brokered_x402') {
-    const reserved = await reserveBrokeredInvocationCharge(ctx, {
-      principal,
-      operation,
-      dispatch,
-      authorityMaximumSpend,
-      durableAttemptRef,
-    })
-    if (reserved.kind === 'missing_billing_identity') {
-      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'billing_identity_missing')
-    }
-    if (reserved.kind === 'refused') {
-      return await convergePreRelease(ctx, dispatch, claimed, reserved.code, reserved.retryable)
-    }
-    brokeredReservation = reserved.reservation
-    moneyResult = reserved.reservation.charge
-  }
-  const releaseBrokeredBuyerBeforeSubmission = async (): Promise<ChargeSettlementResult> => {
-    if (brokeredReservation === undefined) return { kind: 'settled', outcome: 'not_released' }
-    let externalSettlement: ChargeSettlementResult
-    try {
-      externalSettlement = await releaseX402ExternalSpendBeforeSubmission(ctx, {
-        dispatch,
-        operation,
-        attemptRef: durableAttemptRef,
-        effectGeneration: durableEffectGeneration,
-        evidenceRefs: [preparation.prepared.requestDigest],
-      })
-    } catch {
-      externalSettlement = { kind: 'reconciliation_required' }
-    }
-    if (externalSettlement.kind !== 'settled' || externalSettlement.outcome !== 'not_released') {
-      await markBrokeredInvocationChargeOutcomeUnknown(ctx, brokeredReservation)
-      return { kind: 'reconciliation_required' }
-    }
-    return await releaseBrokeredInvocationCharge(ctx, brokeredReservation)
-  }
-  const reconcileBeforeRelease = async (): Promise<ChargeSettlementResult> => {
-    if (brokeredReservation !== undefined) {
-      return await releaseBrokeredBuyerBeforeSubmission()
-    }
-    if (moneyResult === undefined) {
-      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-      return { kind: 'settled', outcome: 'not_released' }
-    }
-    const settlement = await reconcileAcceptedCharge(ctx, dispatch, operation, moneyResult, durableAttemptRef, 'not_released')
-    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
-    return settlement
-  }
-
-  const beforeRelease = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
-  if (beforeRelease === undefined) return { kind: 'none' }
-  if (beforeRelease.control.control.control.state === 'cancelled') {
-    const settlement = await reconcileBeforeRelease()
-    if (settlement.kind === 'reconciliation_required') {
-      return await convergePreRelease(ctx, dispatch, claimed, 'invocation_cancelled', false, undefined, settlement)
-    }
-    return { kind: 'none' }
-  }
-  if (Date.parse(authorityExpiresAt) <= Date.now()) {
-    const settlement = await reconcileBeforeRelease()
-    return await convergePreRelease(
-      ctx,
-      dispatch,
-      claimed,
-      'authority_required',
-      false,
-      'The accepted authority expired before release.',
-      settlement,
-    )
-  }
   let fenced: CanonicalClaimSnapshot | undefined
-  try {
-    const fencedResult = await persistCanonicalReleaseFence({ snapshot: claimed, recordedAt: new Date().toISOString() }, port)
-    if (fencedResult.kind === 'refused') {
-      const settlement = await reconcileBeforeRelease()
-      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_refused', settlement)
+  const persistBrokeredReleaseFence = async (): Promise<boolean> => {
+    if (fenced !== undefined) return true
+    try {
+      const fencedResult = await persistCanonicalReleaseFence(
+        { snapshot: claimed, recordedAt: new Date().toISOString() },
+        port,
+      )
+      if (fencedResult.kind === 'refused') return false
+      const snapshot = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
+      if (
+        snapshot === undefined
+        || snapshot.control.control.control.state === 'cancelled'
+        || snapshot.control.control.control.state === 'reconciliation_required'
+      ) return false
+      fenced = snapshot
+      return true
+    } catch {
+      return false
     }
-    fenced = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
-  } catch {
-    const settlement = await reconcileBeforeRelease()
-    return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_failed', settlement)
   }
-  if (fenced === undefined) {
-    const settlement = await reconcileBeforeRelease()
-    return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_readback_missing', settlement)
-  }
-  if (
-    fenced.control.control.control.state === 'cancelled'
-    || fenced.control.control.control.state === 'reconciliation_required'
-  ) return { kind: 'none' }
-
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
+  const closeDispatcher = async (): Promise<void> => {
+    await dispatcher.close().catch(() => undefined)
+  }
   const send: RouteTransportFetch = async (target, init) => {
     if (Date.parse(authorityExpiresAt) <= Date.now()) throw new Error('operation_authority_expired')
     return await guardedFetch(target, { ...init, dispatcher })
@@ -342,6 +256,9 @@ export async function releaseInvocationRun(
       readProviderConnectionCredentialRef: readProviderCredential,
     }),
     ...(paymentCallbacks ?? {}),
+    ...(economicRail === 'brokered_x402'
+      ? { beforeX402PaymentAuthorizationRead: persistBrokeredReleaseFence }
+      : {}),
   }
   let finalGrant
   try {
@@ -356,7 +273,8 @@ export async function releaseInvocationRun(
       now: Date.now(),
     })
   } catch {
-    const settlement = await reconcileBeforeRelease()
+    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+    await closeDispatcher()
     return await convergePreRelease(
       ctx,
       dispatch,
@@ -364,13 +282,11 @@ export async function releaseInvocationRun(
       'pre_release_failed',
       true,
       'Grant authority could not be revalidated before release.',
-      settlement,
     )
   }
-  if (
-    !activeGrantMatches(finalGrant, grantValidityExpectation)
-  ) {
-    const settlement = await reconcileBeforeRelease()
+  if (!activeGrantMatches(finalGrant, grantValidityExpectation)) {
+    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+    await closeDispatcher()
     return await convergePreRelease(
       ctx,
       dispatch,
@@ -378,15 +294,170 @@ export async function releaseInvocationRun(
       'grant_generation_stale',
       false,
       'Refresh the agent grant and retry.',
+    )
+  }
+  let currentOperation
+  try {
+    const currentSnapshot = await ctx.runQuery(
+      internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
+      { operationRef: dispatch.operationRef },
+    )
+    currentOperation = currentSnapshot === null
+      ? undefined
+      : parsePublishedOperationSnapshot(currentSnapshot.operationJson)
+  } catch {
+    currentOperation = undefined
+  }
+  if (currentOperation === undefined || !publishedOperationMaterialMatches(operation, currentOperation)) {
+    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+    await closeDispatcher()
+    return await convergePreRelease(
+      ctx,
+      dispatch,
+      claimed,
+      'pre_release_failed',
+      false,
+      'The operation publication or price binding changed before release.',
+    )
+  }
+  let moneyResult: WorkerAcceptedCharge | undefined
+  let brokeredReservation: BrokeredChargeReservation | undefined
+  if (economicRail === 'ae_internal') {
+    const authorized = await authorizeAeInternalCharge(ctx, {
+      principal,
+      operation,
+      dispatch,
+      authorityMaximumSpend,
+      durableAttemptRef,
+    })
+    if (authorized.kind === 'missing_billing_identity') {
+      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'billing_identity_missing')
+    }
+    if (authorized.kind === 'refused') {
+      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, authorized.code, authorized.retryable)
+    }
+    moneyResult = authorized.charge
+  } else if (economicRail === 'brokered_x402') {
+    const reserved = await reserveBrokeredInvocationCharge(ctx, {
+      principal,
+      operation,
+      dispatch,
+      authorityMaximumSpend,
+      durableAttemptRef,
+    })
+    if (reserved.kind === 'missing_billing_identity') {
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'billing_identity_missing')
+    }
+    if (reserved.kind === 'refused') {
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, reserved.code, reserved.retryable)
+    }
+    brokeredReservation = reserved.reservation
+    moneyResult = reserved.reservation.charge
+  }
+  const releaseBrokeredBuyerBeforeSubmission = async (): Promise<ChargeSettlementResult> => {
+    if (brokeredReservation === undefined) return { kind: 'settled', outcome: 'not_released' }
+    let externalSettlement: ChargeSettlementResult
+    try {
+      externalSettlement = await releaseX402ExternalSpendBeforeSubmission(ctx, {
+        dispatch,
+        operation,
+        attemptRef: durableAttemptRef,
+        effectGeneration: durableEffectGeneration,
+        evidenceRefs: [preparation.prepared.requestDigest],
+      })
+    } catch {
+      externalSettlement = { kind: 'reconciliation_required' }
+    }
+    if (externalSettlement.kind !== 'settled' || externalSettlement.outcome !== 'not_released') {
+      await markBrokeredInvocationChargeOutcomeUnknown(ctx, brokeredReservation)
+      return { kind: 'reconciliation_required' }
+    }
+    return await releaseBrokeredInvocationCharge(ctx, brokeredReservation)
+  }
+  const reconcileBeforeRelease = async (): Promise<ChargeSettlementResult> => {
+    if (brokeredReservation !== undefined) {
+      return await releaseBrokeredBuyerBeforeSubmission()
+    }
+    if (moneyResult === undefined) {
+      await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+      return { kind: 'settled', outcome: 'not_released' }
+    }
+    const settlement = await reconcileAcceptedCharge(ctx, dispatch, operation, moneyResult, durableAttemptRef, 'not_released')
+    await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
+    return settlement
+  }
+
+  const beforeRelease = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
+  if (beforeRelease === undefined) {
+    await closeDispatcher()
+    return { kind: 'none' }
+  }
+  if (beforeRelease.control.control.control.state === 'cancelled') {
+    const settlement = await reconcileBeforeRelease()
+    if (settlement.kind === 'reconciliation_required') {
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, 'invocation_cancelled', false, undefined, settlement)
+    }
+    await closeDispatcher()
+    return { kind: 'none' }
+  }
+  if (Date.parse(authorityExpiresAt) <= Date.now()) {
+    const settlement = await reconcileBeforeRelease()
+    await closeDispatcher()
+    return await convergePreRelease(
+      ctx,
+      dispatch,
+      claimed,
+      'authority_required',
+      false,
+      'The accepted authority expired before release.',
       settlement,
     )
   }
+  if (economicRail !== 'brokered_x402') {
+    try {
+      const fencedResult = await persistCanonicalReleaseFence({ snapshot: claimed, recordedAt: new Date().toISOString() }, port)
+      if (fencedResult.kind === 'refused') {
+        const settlement = await reconcileBeforeRelease()
+        await closeDispatcher()
+        return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_refused', settlement)
+      }
+      fenced = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
+    } catch {
+      const settlement = await reconcileBeforeRelease()
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_failed', settlement)
+    }
+    if (fenced === undefined) {
+      const settlement = await reconcileBeforeRelease()
+      await closeDispatcher()
+      return await convergePreRelease(ctx, dispatch, claimed, 'pre_release_failed', false, 'release_fence_readback_missing', settlement)
+    }
+    if (
+      fenced.control.control.control.state === 'cancelled'
+      || fenced.control.control.control.state === 'reconciliation_required'
+    ) {
+      await closeDispatcher()
+      return { kind: 'none' }
+    }
+  }
+
   const beforeSend = await readCanonicalSnapshot(port, dispatch.invocationRef, durableAttemptRef)
-  if (beforeSend === undefined) return { kind: 'none' }
+  if (beforeSend === undefined) {
+    await closeDispatcher()
+    return { kind: 'none' }
+  }
   if (beforeSend.control.control.control.state === 'cancelled') {
     const cancellationSettlement = await reconcileBeforeRelease()
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     if (cancellationSettlement.kind === 'reconciliation_required') {
+      await closeDispatcher()
       return await convergePreRelease(
         ctx,
         dispatch,
@@ -397,9 +468,13 @@ export async function releaseInvocationRun(
         cancellationSettlement,
       )
     }
+    await closeDispatcher()
     return { kind: 'none' }
   }
-  if (beforeSend.control.control.control.state === 'reconciliation_required') return { kind: 'none' }
+  if (beforeSend.control.control.control.state === 'reconciliation_required') {
+    await closeDispatcher()
+    return { kind: 'none' }
+  }
   let acceptedChargeReconciled = moneyResult === undefined
   let finalizationStarted = false
   try {
@@ -415,7 +490,7 @@ export async function releaseInvocationRun(
         operationKeyDigest,
         reservation: brokeredReservation,
         money: moneyResult,
-        fenced,
+        fenced: fenced ?? claimed,
       })
       acceptedChargeReconciled = true
       await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, observation.releaseStarted, durableAttemptRef, durableEffectGeneration)

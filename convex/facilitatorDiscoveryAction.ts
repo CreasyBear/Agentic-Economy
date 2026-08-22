@@ -69,7 +69,7 @@ export async function admitFacilitatorDiscoveryItems(
       result.draft,
       { ...decision, import: sourceImport },
       sourceRevision,
-    ))
+    ) as FacilitatorDiscoveryAdmittedDraft)
   }
   if (items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) {
     skipped.push({ kind: 'skip', reason: 'resource_invalid' })
@@ -83,8 +83,25 @@ function withoutRawBazaarPaymentRequired(
   if (!isRecord(input.resource) || !Object.hasOwn(input.resource, 'paymentRequired')) {
     return input
   }
-  const { paymentRequired: _paymentRequired, ...resource } = input.resource
-  return { ...input, resource }
+  const paymentRequired = input.resource.paymentRequired
+  if (!isRecord(paymentRequired) || !isRecord(paymentRequired.extensions)) {
+    return input
+  }
+  if (!Object.hasOwn(paymentRequired.extensions, 'bazaar')) return input
+  const { bazaar: _bazaar, ...extensions } = paymentRequired.extensions
+  const sanitizedPaymentRequired = Object.keys(extensions).length === 0
+    ? (() => {
+        const { extensions: _extensions, ...withoutExtensions } = paymentRequired
+        return withoutExtensions
+      })()
+    : { ...paymentRequired, extensions }
+  return {
+    ...input,
+    resource: {
+      ...input.resource,
+      paymentRequired: sanitizedPaymentRequired,
+    },
+  }
 }
 
 export const run = internalAction({
@@ -109,7 +126,7 @@ export const run = internalAction({
       const admission = await admitFacilitatorDiscoveryItems(fetchedPage.page.items)
       skipped += admission.skipped.length
       const result = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
-        items: [...admission.admitted],
+        items: JSON.parse(JSON.stringify(admission.admitted)),
         complete: false,
         deadlineAt,
       })

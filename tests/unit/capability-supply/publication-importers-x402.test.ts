@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
+import timezoneFixture from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json";
+
 import type { SchemaDereferencer } from "@/modules/capability-supply/internal/admit-provider-schema";
 import {
   admitRegisteredTransport,
@@ -38,6 +41,21 @@ describe("capability publication importers", () => {
         payTo: "0x0000000000000000000000000000000000000002",
         routeAmountExponent: 2,
         assetAmountExponent: 6,
+        paymentRequired: {
+          x402Version: 2 as const,
+          resource: { url: "https://api.example.test/lookup" },
+          accepts: [
+            {
+              scheme: "exact",
+              network: "eip155:84532",
+              amount: "12000000",
+              asset: "0x0000000000000000000000000000000000000001",
+              payTo: "0x0000000000000000000000000000000000000002",
+              maxTimeoutSeconds: 60,
+              extra: {},
+            },
+          ],
+        },
       },
       contract: contractMetadata("independent.x402-lookup"),
       commercial: commercialInput({
@@ -100,6 +118,21 @@ describe("capability publication importers", () => {
           payTo: "0x0000000000000000000000000000000000000002",
           routeAmountExponent: 2,
           assetAmountExponent: 6,
+          paymentRequired: {
+            x402Version: 2 as const,
+            resource: { url: "https://api.example.test/lookup" },
+            accepts: [
+              {
+                scheme: "exact",
+                network: "eip155:84532",
+                amount: "12000000",
+                asset: "0x0000000000000000000000000000000000000001",
+                payTo: "0x0000000000000000000000000000000000000002",
+                maxTimeoutSeconds: 60,
+                extra: {},
+              },
+            ],
+          },
         },
         contract: contractMetadata(`independent.x402-${method.toLowerCase()}`),
         commercial: commercialInput({
@@ -154,7 +187,7 @@ describe("capability publication importers", () => {
     });
   });
 
-  it("admits a fully matching V1 claim as publication evidence", async () => {
+  it("rejects a V1 claim as an invalid PaymentRequired document", async () => {
     const base = matchingX402Import();
     const result = await importX402Capability({
       ...base,
@@ -181,7 +214,35 @@ describe("capability publication importers", () => {
       },
     });
 
-    expect(result).toMatchObject({ kind: "normalized" });
+    expect(result).toEqual({
+      kind: "refused",
+      reason: "payment_required_invalid",
+    });
+  });
+
+  it("requires PaymentRequired and strips only Bazaar from discovery source material", async () => {
+    const base = matchingX402Import();
+    const { paymentRequired: _paymentRequired, ...withoutPaymentRequired } = base.resource;
+    await expect(
+      importX402Capability({ ...base, resource: withoutPaymentRequired }),
+    ).resolves.toEqual({ kind: "refused", reason: "payment_required_invalid" });
+
+    const discovery = await admitFacilitatorDiscoveryItems([{
+      ...timezoneFixture.paymentRequired,
+      extensions: {
+        ...timezoneFixture.paymentRequired.extensions,
+        retained: { info: { source: "test" } },
+      },
+    }]);
+    expect(discovery.admitted).toHaveLength(1);
+    const source = JSON.parse(discovery.admitted[0]!.sourceImportJson) as {
+      resource: { paymentRequired: { extensions?: Record<string, unknown> } };
+    };
+    expect(source.resource.paymentRequired.extensions).toEqual({
+      "builder-code": timezoneFixture.paymentRequired.extensions["builder-code"],
+      retained: { info: { source: "test" } },
+    });
+    expect(source.resource.paymentRequired.extensions).not.toHaveProperty("bazaar");
   });
 
   it.each([
@@ -295,6 +356,19 @@ describe("capability publication importers", () => {
           inputSchema: inputSchema(),
           outputSchema: outputSchema(),
           price: { currency: "USD", units: "1200", exponent: 2 },
+          paymentRequired: {
+            x402Version: 2 as const,
+            resource: { url: "https://api.example.test/lookup" },
+            accepts: [{
+              scheme: "exact",
+              network: "eip155:84532",
+              amount: "12000000",
+              asset: "0x0000000000000000000000000000000000000001",
+              payTo: "0x0000000000000000000000000000000000000002",
+              maxTimeoutSeconds: 60,
+              extra: {},
+            }],
+          },
         },
         contract: contractMetadata("independent.price-conflict"),
         commercial: commercialInput({ authority: keylessAuthority }),
@@ -486,6 +560,19 @@ describe("capability publication importers", () => {
         payTo: "0x0000000000000000000000000000000000000002",
         routeAmountExponent: 2,
         assetAmountExponent: 2,
+        paymentRequired: {
+          x402Version: 2 as const,
+          resource: { url: "https://api.example.test/lookup" },
+          accepts: [{
+            scheme: "exact",
+            network: "eip155:84532",
+            amount: "7",
+            asset: "0x0000000000000000000000000000000000000001",
+            payTo: "0x0000000000000000000000000000000000000002",
+            maxTimeoutSeconds: 60,
+            extra: {},
+          }],
+        },
       },
       contract: contractMetadata("independent.x402-unrepresentable"),
       commercial: commercialInput({
