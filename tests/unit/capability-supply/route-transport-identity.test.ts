@@ -1,5 +1,6 @@
 import { encodePaymentResponseHeader } from '@x402/core/http'
 import { validatePaymentRequired } from '@x402/core/schemas'
+import type { PaymentRequired } from '@x402/core/types'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -12,7 +13,6 @@ import {
   type X402PaymentSignatureRequest,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 const operationDigestOne = 'sha256:' + '1'.repeat(64)
 const operationDigestTwo = 'sha256:' + '2'.repeat(64)
@@ -28,6 +28,20 @@ const authorityCommon = {
 } as const
 
 function invocation(operationKeyDigest: string, adapterId: 'http-json:v1' | 'x402-fetch:v2'): RouteTransportInvocation {
+  const paymentRequired: PaymentRequired = {
+    x402Version: 2,
+    resource: { url: endpoint },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '10000',
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      maxTimeoutSeconds: 60,
+      extra: { name: 'USDC', version: '2' },
+    }],
+  }
+  validatePaymentRequired(paymentRequired)
   const config = adapterId === 'http-json:v1'
     ? { method: 'POST' as const, requestTimeoutMs: 5_000 }
     : {
@@ -40,19 +54,7 @@ function invocation(operationKeyDigest: string, adapterId: 'http-json:v1' | 'x40
         assetAmountExponent: 6,
         asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
-        paymentRequiredJson: stableStringify(validatePaymentRequired({
-          x402Version: 2,
-          resource: { url: endpoint },
-          accepts: [{
-            scheme: 'exact',
-            network: 'eip155:8453',
-            amount: '10000',
-            asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-            payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
-            maxTimeoutSeconds: 60,
-            extra: { name: 'USDC', version: '2' },
-          }],
-        }) as StableHashValue),
+        paymentRequiredJson: JSON.stringify(paymentRequired),
       }
   return {
     binding: {
@@ -109,19 +111,20 @@ describe('route transport durable identity binding', () => {
     const paymentIdentifiers: string[] = []
     const signedSendCounts: number[] = []
     const run = async (operationKeyDigest: string) => {
-      const challenge = validatePaymentRequired({
-        x402Version: 2 as const,
+      const challenge: PaymentRequired = {
+        x402Version: 2,
         resource: { url: endpoint },
         accepts: [{
           scheme: 'exact',
-          network: 'eip155:8453' as const,
+          network: 'eip155:8453',
           amount: '10000',
           asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
           payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
           maxTimeoutSeconds: 60,
           extra: { name: 'USDC', version: '2' },
         }],
-      })
+      }
+      validatePaymentRequired(challenge)
       const send = vi.fn<RouteTransportFetch>()
         .mockImplementationOnce(async (_target, init) => {
           expect(init?.headers?.['Payment-Signature']).toBe('signed-payment')
