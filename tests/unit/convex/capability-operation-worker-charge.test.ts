@@ -80,6 +80,22 @@ describe('capability operation invocation worker charge/x402', () => {
 
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
     expect(worker.state.transportCalls).toBe(1)
+    expect(worker.state.events).toEqual([
+      'final-grant-revalidation',
+      'current-publication-price-revalidation',
+      'buyer-reserve',
+      'custody-reserve',
+      'custody-prepare',
+      'fence-callback',
+      'authorization-read',
+      'authorization-sign',
+      'mark-possibly-submitted',
+      'send',
+    ])
+    expect(mocks.guardedFetch).toHaveBeenCalledTimes(1)
+    expect(mocks.guardedFetch.mock.calls[0]?.[1]).toMatchObject({
+      headers: { 'Payment-Signature': 'signed:payment' },
+    })
     expect(worker.state.money).toMatchObject({
       amount: { currency: 'USD', units: '2', exponent: 2 },
       rakeBps: 1_000,

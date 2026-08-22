@@ -212,6 +212,7 @@ type WorkerState = {
   money: Record<string, unknown> | undefined
   payment: PaymentState
   transportCalls: number
+  events: string[]
   mutations: string[]
   mutationCalls: Array<{ path: string; args: Record<string, unknown> }>
   records: Record<string, unknown>[]
@@ -478,6 +479,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     money: options.activeCharge === undefined ? undefined : { ...options.activeCharge },
     payment,
     transportCalls: 0,
+    events: [],
     mutations: [],
     mutationCalls: [],
     records: [],
@@ -619,8 +621,17 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   mocks.invokePreparedRouteTransport.mockImplementation(async (_prepared: unknown, runtimeValue: unknown) => {
     const runtime = runtimeValue as X402RouteTransportRuntime
     state.transportCalls += 1
-    await runtime.send(new URL(operation.binding.endpointUrl), { method: 'POST' })
-    if (kind === 'x402') {
+    if (kind !== 'x402') {
+      await runtime.send(new URL(operation.binding.endpointUrl), { method: 'POST' })
+      return options.observation ?? {
+        transport: 'http',
+        disposition: 'succeeded',
+        releaseStarted: true,
+        requestDigest: digest('c'),
+        outputJson: successfulOutputJson,
+      }
+    }
+    {
       const challenge = {
         x402Version: 2 as const,
         resource: { url: operation.binding.endpointUrl },
@@ -676,7 +687,18 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           settlementEvidence: { kind: 'not_submitted' },
         }
       }
-      const signed = await runtime.readX402PaymentAuthorizationByDigest(prepared)
+      const beforeX402PaymentAuthorizationRead = runtime.beforeX402PaymentAuthorizationRead
+      if (environment === 'production') {
+        if (beforeX402PaymentAuthorizationRead === undefined) {
+          throw new Error('x402 release fence callback missing')
+        }
+        state.events.push('fence-callback')
+        if (!await beforeX402PaymentAuthorizationRead()) {
+          throw new Error('x402 release fence refused')
+        }
+      }
+      state.events.push('authorization-read')
+      const signed = await runtime.readX402PaymentAuthorization(prepared)
       if (signed === undefined) {
         return {
           transport: 'x402',
@@ -708,6 +730,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         throw new Error('x402 persistence callbacks missing')
       }
       await markX402PaymentPossiblySubmitted(event)
+      state.events.push('send')
+      await runtime.send(new URL(operation.binding.endpointUrl), {
+        method: 'POST',
+        headers: { 'Payment-Signature': signed },
+      })
       await observeX402PaymentAttempt({
         ...event,
         state: 'settled',
@@ -724,38 +751,31 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         evidenceRefs: ['evidence:test-worker'],
       })
     }
-    return options.observation ?? (kind === 'x402'
-      ? {
-          transport: 'x402',
-          disposition: 'succeeded',
-          releaseStarted: true,
-          requestDigest: digest('c'),
-          outputJson: successfulOutputJson,
-          paymentSubmissionStatus: 'observed',
-          settlementEvidence: {
-            kind: 'settled',
-            response: {
-              success: true,
-              transaction: '0xworker-settled',
-              network: 'eip155:8453',
-              amount: '10000',
-            },
-            digest: digest('s'),
-          },
-        }
-      : {
-          transport: 'http',
-          disposition: 'succeeded',
-          releaseStarted: true,
-          requestDigest: digest('c'),
-          outputJson: successfulOutputJson,
-        })
+    return options.observation ?? {
+      transport: 'x402',
+      disposition: 'succeeded',
+      releaseStarted: true,
+      requestDigest: digest('c'),
+      outputJson: successfulOutputJson,
+      paymentSubmissionStatus: 'observed',
+      settlementEvidence: {
+        kind: 'settled',
+        response: {
+          success: true,
+          transaction: '0xworker-settled',
+          network: 'eip155:8453',
+          amount: '10000',
+        },
+        digest: digest('s'),
+      },
+    }
   })
   const chargeAmount = descriptor.price.kind === 'fixed'
     ? descriptor.price.amount
     : { currency: 'USD', units: '0', exponent: 2 }
   const chargeState: 'free_tier' | 'paid' = chargeAmount.units === '0' ? 'free_tier' : 'paid'
   let activeGrantReads = 0
+  let currentOperationReads = 0
 
   const ctx = {
     runQuery: vi.fn(async (reference: unknown, args?: Record<string, unknown>) => {
@@ -764,15 +784,18 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         case 'agentAccessPrincipals:getAgentPrincipal': return principal
         case 'agentAccessPolicy:readActiveGrant':
           activeGrantReads += 1
+          if (activeGrantReads === 2) state.events.push('final-grant-revalidation')
           if (activeGrantReads > 2 && options.signingBoundaryGrant !== undefined) return options.signingBoundaryGrant
           return activeGrantReads > 1 && options.finalGrant !== undefined ? options.finalGrant : grant
-        case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot': return { operationJson: JSON.stringify(currentOperation) }
+        case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot':
+          currentOperationReads += 1
+          if (currentOperationReads === 2) state.events.push('current-publication-price-revalidation')
+          return { operationJson: JSON.stringify(currentOperation) }
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
         case 'capabilityOperationInvocations:readProviderLeaseAuthority': return providerAuthority
         case 'actionInvocationControl:readControl': return canonicalClaimed ? canonicalControl : undefined
         case 'actionInvocationControl:readAttempt': return canonicalClaimed ? canonicalAttempt : undefined
         case 'capabilityProviderConnections:resolveLeaseCredentialRef': return { kind: 'resolved', credentialRef: providerCredentialRef }
-        case 'moneyX402PaymentAttempts:readX402PaymentAuthorizationByDigest':
         case 'moneyX402PaymentAttempts:readX402PaymentAuthorization': {
           const material = persistedPaymentMaterial(args?.requestFingerprint)
           state.payment.read = material ?? undefined
@@ -848,6 +871,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             ...(chargeState === 'paid' ? { transactionRef: 'transaction:accepted-result' } : {}),
           }
         case 'moneyLedger:reserveBrokeredInvocationCharge':
+          state.events.push('buyer-reserve')
           state.money = args
           if (args.expectedAccountVersion !== actualOperatorAccountVersion) {
             return { kind: 'refused', code: 'ledger_cas_conflict', retryable: true }
@@ -896,6 +920,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           state.unknownCharges.push(args)
           return { kind: 'outcome_unknown', transactionRef: args.transactionRef }
         case 'moneyLedger:reserveExternalInvocationSpend': {
+          state.events.push('custody-reserve')
           const { observedAt, ...facts } = args
           const identity = mintExternalSpendIdentity(facts as ExternalSpendPaymentFacts)
           return {
@@ -991,6 +1016,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return { kind: 'claimed' }
         }
         case 'moneyX402PaymentAttempts:prepareX402PaymentAuthorization':
+          state.events.push('custody-prepare')
           state.payment.prepare = args
           if (typeof args.requestFingerprint === 'string')
             state.payment.authorization.requestFingerprint = args.requestFingerprint
@@ -1006,6 +1032,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
             ...(args.custodyDailyMaximumUnits === undefined ? {} : { custodyDailyMaximumUnits: args.custodyDailyMaximumUnits }),
           }
         case 'moneyX402PaymentAttempts:markX402PaymentPossiblySubmitted':
+          state.events.push('mark-possibly-submitted')
           state.payment.mark = args
           return null
         case 'moneyX402PaymentAttempts:observeX402PaymentAttempt':
@@ -1015,6 +1042,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           if (options.failPaymentObservation) throw new Error('payment_observation_unavailable')
           return null
         case 'moneyX402PaymentAttempts:recordX402PaymentSigningIntent':
+          if (environment === 'production') state.events.push('authorization-sign')
           if (typeof args.requestFingerprint === 'string'
             && state.payment.authorization.requestFingerprint !== undefined
             && args.requestFingerprint !== state.payment.authorization.requestFingerprint) {
