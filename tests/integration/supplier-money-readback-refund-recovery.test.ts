@@ -760,7 +760,16 @@ describe('supplier money readback refund recovery', () => {
     const laterEarningInvocationRef = `invocation:${businessRef}:later-earning`
     const laterEarningAttemptRef = `attempt:${businessRef}:later-earning`
     await backend.run(async (ctx) => {
-      const account = (row: Record<string, unknown>): Promise<unknown> =>
+      const account = (
+        row: Pick<
+          Doc<'moneyAccounts'>,
+          | 'accountRef'
+          | 'accountKind'
+          | 'accountId'
+          | 'businessId'
+          | 'balanceUnits'
+        >,
+      ): Promise<unknown> =>
         ctx.db.insert('moneyAccounts', {
           currency: 'USD',
           exponent: 2,
@@ -783,7 +792,7 @@ describe('supplier money readback refund recovery', () => {
         accountKind: 'provider_earnings',
         businessId: businessRef,
         balanceUnits: '0',
-        version: 2,
+        ...{ version: 2 },
       })
       await account({
         accountRef: accountRefForRake('USD'),
@@ -852,7 +861,20 @@ describe('supplier money readback refund recovery', () => {
         createdAt: 1,
         updatedAt: 3,
       })
-      const entry = (row: Record<string, unknown>): Promise<unknown> =>
+      const entry = (
+        row: Pick<
+          Doc<'moneyLedgerEntries'>,
+          | 'entryRef'
+          | 'accountRef'
+          | 'entryType'
+          | 'direction'
+          | 'amountUnits'
+          | 'principalId'
+          | 'businessId'
+          | 'invocationRef'
+          | 'attemptRef'
+        >,
+      ): Promise<unknown> =>
         ctx.db.insert('moneyLedgerEntries', {
           transactionRef,
           idempotencyKey: transactionRef,
