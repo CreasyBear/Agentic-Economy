@@ -263,7 +263,6 @@ describe('dynamic PublishedOperation Action Invocation paid', () => {
       leaseOwner: acquired.view.control.leaseOwner,
       effectGeneration: acquired.view.control.effectGeneration,
     })
-    const possiblyReleased = mode === 'endpoint_refusal'
     expect(refused.kind === 'accepted' && refused.view).toMatchObject({
       control: { state: 'terminal' },
       observedResolution: { state: 'returned', execution: 'runner_returned' },
@@ -275,12 +274,7 @@ describe('dynamic PublishedOperation Action Invocation paid', () => {
     expect(source.list()[0]?.observedResolution).toEqual(
       refused.kind === 'accepted' ? refused.view.observedResolution : undefined,
     )
-    expect(adapter.exportDevelopmentSnapshot().paymentAuthorizationEvents).toEqual(possiblyReleased
-      ? [expect.objectContaining({
-          queryRelease: 'released',
-          authorization: 'not_created',
-        })]
-      : [])
+    expect(adapter.exportDevelopmentSnapshot().paymentAuthorizationEvents).toEqual([])
     expect(adapter.exportDevelopmentSnapshot().paymentAttempts).toEqual([])
   })
 

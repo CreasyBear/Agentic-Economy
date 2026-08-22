@@ -28,6 +28,7 @@ import {
   encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
 } from '@/modules/capability-supply/server'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -251,7 +252,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
           origin,
           'dynamic:authority:1',
           1,
-          canonicalDigest(developmentChallenge(fixture.operation.binding.endpointUrl)),
+          pinnedPaymentRequiredDigest(fixture.operation.transport.configJson),
           {
             ownerInvocationRef: prepared.invocationRef,
             status: 'completed',
@@ -662,7 +663,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       expectedOrigin,
       'dynamic:authority:1',
       1,
-      canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
+      pinnedPaymentRequiredDigest(rebuiltOperation.transport.configJson),
       {
         ownerInvocationRef: entry.invocationRef,
         status: 'completed',
@@ -740,7 +741,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
           developmentOriginAt(1),
           `semantic:authority:${index + 1}`,
           1,
-          canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
+          pinnedPaymentRequiredDigest(rebuiltOperation.transport.configJson),
           {
             ownerInvocationRef: semanticFirst.invocationRef,
             status: 'completed',
@@ -1008,6 +1009,16 @@ function developmentChallenge(endpoint: string): X402PaymentRequired {
   }
 }
 
+function pinnedPaymentRequiredDigest(configJson: string): string {
+  const config = JSON.parse(configJson) as Readonly<{ paymentRequiredJson?: string }>
+  if (typeof config.paymentRequiredJson !== 'string') {
+    throw new Error('dynamic_published_payment_required_missing')
+  }
+  return canonicalDigest(
+    validatePaymentRequired(JSON.parse(config.paymentRequiredJson)) as StableHashValue,
+  )
+}
+
 function lostResponseRuntime(
   endpoint: string,
   effects: { payment: number; provider: number },
@@ -1018,7 +1029,7 @@ function lostResponseRuntime(
     ...base,
     send: async (url, init) => {
       calls += 1
-      if (calls === 2) {
+      if (calls === 1) {
         effects.provider += 1
         throw new Error('lost_x402_response')
       }

@@ -1,4 +1,5 @@
 import { encodePaymentResponseHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import {
   createDevelopmentDurablePort,
@@ -36,7 +37,8 @@ import type {
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
-import { pricingConfigDigest, type ExactAmount } from '@/modules/money/public'
+import { pricingConfigDigest, rescaleExactAmount, type ExactAmount } from '@/modules/money/public'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   type DynamicPublishedPreparedTransport,
 } from '@/modules/action-invocation/dynamic-published-execution'
@@ -146,6 +148,32 @@ export function createAdapter(
 }
 
 export function paymentPreparedFixture(): DynamicPublishedPreparedTransport {
+  const paymentRequiredJson = stableStringify(validatePaymentRequired({
+    x402Version: 2,
+    resource: { url: 'https://provider.example/paid' },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '10000',
+      asset: '0xmock-usdc',
+      payTo: '0xmock-provider',
+      maxTimeoutSeconds: 30,
+      extra: {},
+    }],
+  }) as StableHashValue)
+  const configuration = {
+    method: 'POST' as const,
+    requestTimeoutMs: 5_000,
+    scheme: 'exact' as const,
+    network: 'eip155:8453',
+    currency: 'USD',
+    routeAmountExponent: 2,
+    assetAmountExponent: 6,
+    asset: '0xmock-usdc',
+    payTo: '0xmock-provider',
+    paymentRequiredJson,
+  }
+  const configJson = stableStringify(configuration as StableHashValue)
   return {
     invocationRef: 'invocation:crash-cut',
     operationKey: 'operation:paid',
@@ -161,8 +189,8 @@ export function paymentPreparedFixture(): DynamicPublishedPreparedTransport {
             connectionRef: 'test:connection:x402',
             providerRef: 'test:provider:x402',
           },
-          configJson: '{}',
-          configDigest: canonicalDigest({}),
+          configJson,
+          configDigest: canonicalDigest(configuration as StableHashValue),
         },
         authority: {
           attemptRef: 'attempt:one',
@@ -181,17 +209,7 @@ export function paymentPreparedFixture(): DynamicPublishedPreparedTransport {
       },
       endpoint: new URL('https://provider.example/paid'),
       target: new URL('https://provider.example/paid'),
-      configuration: {
-        method: 'POST',
-        requestTimeoutMs: 5_000,
-        scheme: 'exact',
-        network: 'eip155:8453',
-        currency: 'USD',
-        routeAmountExponent: 2,
-        assetAmountExponent: 6,
-        asset: '0xmock-usdc',
-        payTo: '0xmock-provider',
-      },
+      configuration,
       requestDigest: canonicalDigest({ request: 'paid' }),
     },
   }
@@ -487,10 +505,27 @@ export function rematerializeFixedPrice(
   }
   const originalConfig = fixture.sourceMaterial.binding.adapter.config
   if (!isRecord(originalConfig)) throw new Error('published_operation_config_invalid')
+  const payment = fixture.operation.identity.payment
+  if (payment.kind !== 'x402') throw new Error('published_operation_payment_invalid')
+  const paymentAmount = rescaleExactAmount(amount, 6)
+  if (paymentAmount === undefined) throw new Error('published_operation_payment_amount_invalid')
   const config = {
     ...originalConfig,
     currency: amount.currency,
     routeAmountExponent: amount.exponent,
+    paymentRequiredJson: stableStringify(validatePaymentRequired({
+      x402Version: 2,
+      resource: { url: fixture.operation.binding.endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: payment.network,
+        amount: paymentAmount.units,
+        asset: payment.asset,
+        payTo: payment.payTo,
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }) as StableHashValue),
   }
   const binding = defineCapabilityTransportBindingRegistration({
     ...fixture.sourceMaterial.binding,
