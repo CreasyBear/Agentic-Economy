@@ -89,7 +89,7 @@ function withoutRawBazaarPaymentRequired(
 
 export const run = internalAction({
   args: {},
-  returns: v.object({ pages: v.number(), admitted: v.number(), complete: v.boolean() }),
+  returns: v.object({ pages: v.number(), admitted: v.number(), skipped: v.number(), complete: v.boolean() }),
   handler: async (ctx) => {
     const deadlineAt = Date.now() + 120_000
     const fetched = await fetchFacilitatorDiscoveryPages({
@@ -97,6 +97,7 @@ export const run = internalAction({
     })
     const seenPublicationRefs = new Set<string>()
     let admitted = 0
+    let skipped = 0
     let complete = fetched.complete && Date.now() < deadlineAt
     let deadlineExceeded = Date.now() >= deadlineAt
     for (const fetchedPage of fetched.pages) {
@@ -106,12 +107,14 @@ export const run = internalAction({
         break
       }
       const admission = await admitFacilitatorDiscoveryItems(fetchedPage.page.items)
+      skipped += admission.skipped.length
       const result = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
         items: [...admission.admitted],
         complete: false,
         deadlineAt,
       })
       admitted += result.admitted
+      skipped += result.skipped
       for (const publicationRef of result.seenPublicationRefs) {
         seenPublicationRefs.add(publicationRef)
       }
@@ -128,10 +131,11 @@ export const run = internalAction({
         seenPublicationRefs: [...seenPublicationRefs].sort(),
         deadlineAt,
       })
+      skipped += result.skipped
       if (result.deadlineExceeded) complete = false
     } else {
       complete = false
     }
-    return { pages: fetched.pages.length, admitted, complete }
+    return { pages: fetched.pages.length, admitted, skipped, complete }
   },
 })

@@ -91,6 +91,12 @@ async function refreshFacilitatorDiscoveryCapability(
   pricingConfig: PricingConfig,
   sourceRevision: string,
 ) {
+  if (
+    input.publication.publisherRef !== FACILITATOR_DISCOVERY_PUBLISHER_REF
+    || input.publication.authorityMode !== 'observed_external'
+  ) {
+    return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+  }
   const result = await refreshCapabilityCommand(input, publicationPorts(ctx))
   if (result.kind !== 'refreshed') return result
   const publication = await ctx.db.query('capabilityPublications')
@@ -98,6 +104,12 @@ async function refreshFacilitatorDiscoveryCapability(
       query.eq('publicationRef', result.publicationRef).eq('revision', result.revision)
     )).unique()
   if (publication === null) throw new Error('facilitator_discovery_publication_missing_after_refresh')
+  if (
+    publication.publisherRef !== FACILITATOR_DISCOVERY_PUBLISHER_REF
+    || publication.authorityMode !== 'observed_external'
+  ) {
+    throw new Error('facilitator_discovery_publication_provenance_invalid')
+  }
   await ctx.db.patch(publication._id, {
     pricingConfigJson: stableStringify(pricingConfig as StableHashValue),
     priceDigest: pricingConfigDigest(pricingConfig),
@@ -139,7 +151,7 @@ async function withdrawFacilitatorDiscoveryCapability(
   }
   if (
     publication.publisherRef !== FACILITATOR_DISCOVERY_PUBLISHER_REF
-    || publication.authorityMode !== 'ae_curated_external'
+    || publication.authorityMode !== 'observed_external'
   ) {
     return {
       kind: 'refused' as const,
@@ -283,6 +295,7 @@ async function reconcileDraft(
   const priceDigest = pricingConfigDigest(pricingConfig)
   if (current !== undefined
     && current.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
+    && current.authorityMode === 'observed_external'
     && current.sourceDigest === prepared.sourceDigest
     && current.priceDigest === priceDigest
     && current.sourceRevision === sourceRevision) return 'skipped'
@@ -300,6 +313,17 @@ async function reconcileDraft(
       businessId: String(business.businessId),
       runtimeEnvironment: 'production',
       prepared: prepared.prepared,
+      publicationMetadata: {
+        sourceRevision: prepared.prepared.sourceRevision,
+        authorityMode: 'observed_external',
+        publisherRef: FACILITATOR_DISCOVERY_PUBLISHER_REF,
+        provenanceDigest: capabilityPublicationProvenanceDigest({
+          publisherRef: FACILITATOR_DISCOVERY_PUBLISHER_REF,
+          authorityMode: 'observed_external',
+          sourceRevision: prepared.prepared.sourceRevision,
+          sourceDigest: prepared.prepared.sourceDigest,
+        }),
+      },
       ...context,
     })
     if (result.kind === 'refused') {

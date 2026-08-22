@@ -12,6 +12,7 @@ import {
   isAllowlistedFacilitatorDiscoveryUrl,
   parseFacilitatorDiscoveryPage,
 } from "@/modules/capability-supply/internal/facilitator-discovery-ingest";
+import { admitBazaarDiscoveryInfo } from "@/modules/capability-supply/internal/publication-importer-x402-bazaar";
 import { isRecord } from "@/modules/common/is-record";
 
 const timezonePaymentRequired = isRecord(timezonePin.paymentRequired)
@@ -65,6 +66,42 @@ const mainnetSyntheticPost = {
 };
 
 describe("facilitator discovery ingest", () => {
+  it("rejects unsupported Bazaar HTTP channels and non-JSON output", () => {
+    const extension = isRecord(timezonePaymentRequired?.extensions)
+      && isRecord(timezonePaymentRequired.extensions.bazaar)
+      ? timezonePaymentRequired.extensions.bazaar
+      : undefined;
+    expect(extension).toBeDefined();
+    if (extension === undefined || !isRecord(extension.info) || !isRecord(extension.info.input)) {
+      throw new Error("expected timezone Bazaar fixture");
+    }
+    const input = extension.info.input;
+    const output = extension.info.output;
+    for (const forbidden of [
+      { pathParams: {} },
+      { headers: {} },
+      { body: {} },
+      { bodyType: "json" },
+    ]) {
+      expect(admitBazaarDiscoveryInfo(extension, {
+        input: { ...input, ...forbidden },
+        output,
+      })).toEqual({ kind: "refused", reason: "transport_unsupported" });
+    }
+    expect(admitBazaarDiscoveryInfo(extension, {
+      input: { type: "http", method: "POST", bodyType: "json", body: {}, queryParams: {} },
+      output,
+    })).toEqual({ kind: "refused", reason: "transport_unsupported" });
+    expect(admitBazaarDiscoveryInfo(extension, {
+      input,
+      output: { type: "text", example: { ok: true } },
+    })).toEqual({ kind: "refused", reason: "schema_missing" });
+    expect(admitBazaarDiscoveryInfo(extension, {
+      input,
+      output: { type: "json", example: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`field${index}`, true])) },
+    })).toEqual({ kind: "refused", reason: "schema_missing" });
+  });
+
   it("allowlists PayAI and CDP REST catalogs only", () => {
     expect(FACILITATOR_DISCOVERY_URLS).toEqual([
       "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources",

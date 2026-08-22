@@ -71,15 +71,21 @@ export function admitBazaarDiscoveryInfo(
   if (method !== "GET" && method !== "POST") {
     return { kind: "refused", reason: "selector_invalid" };
   }
+  if ("pathParams" in input || "headers" in input) {
+    return { kind: "refused", reason: "transport_unsupported" };
+  }
 
   if (method === "GET") {
-    if ("bodyType" in input) {
+    if ("bodyType" in input || "body" in input) {
       return { kind: "refused", reason: "transport_unsupported" };
     }
     if (!isRecord(input.queryParams)) {
       return { kind: "refused", reason: "selector_invalid" };
     }
   } else {
+    if ("queryParams" in input) {
+      return { kind: "refused", reason: "transport_unsupported" };
+    }
     if (!("bodyType" in input) || input.bodyType !== "json") {
       return { kind: "refused", reason: "transport_unsupported" };
     }
@@ -130,7 +136,7 @@ function inputSchemaFromExtension(
 function outputSchemaFromInfo(
   output: unknown,
 ): Readonly<Record<string, JsonValue>> | undefined {
-  if (!isRecord(output) || !isRecord(output.example)) return undefined;
+  if (!isRecord(output) || output.type !== "json" || !isRecord(output.example)) return undefined;
   return isBoundedJsonValue(output.example)
     ? jsonSchemaFromExampleObject(output.example)
     : undefined;
