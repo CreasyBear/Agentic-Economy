@@ -9,10 +9,13 @@ import { internal } from '../../convex/_generated/api'
 import { recordQualifiedUsePayoutAllocation } from '../../convex/moneyQualifiedUsePayout'
 import {
   accountRefForOwner,
+  accountRefForExternalLoss,
+  accountRefForProvider,
   accountRefForRake,
   qualifiedUseMaterialDigest,
   qualifiedUseRef,
 } from '@/modules/money/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('supplier money readback refund recovery', () => {
   it('does not materialize a payout from a released charge until Qualified Use, then replays and applies a refund', async () => {
@@ -706,5 +709,312 @@ describe('supplier money readback refund recovery', () => {
           entry.direction === 'debit',
       ),
     ).toHaveLength(1)
+  })
+
+  it('refunds a brokered external settlement while preserving payout evidence and Stripe ineligibility', async () => {
+    const { backend, owner, businessRef, providerAccountRef } =
+      await createSupplierMoneyOwner('supplier-brokered-dispute')
+    const ownerAccountId = 'user_supplier-brokered-dispute'
+    const principalId = `principal:${businessRef}`
+    const credentialId = `credential:${businessRef}`
+    const transactionRef = `transaction:${businessRef}:brokered-charge`
+    const invocationRef = `invocation:${businessRef}:brokered`
+    const attemptRef = `attempt:${businessRef}:brokered`
+    const usageRef = `usage:${businessRef}:brokered`
+    const qualifiedIdentity = { invocationRef, attemptRef, effectGeneration: 1 }
+    const qualifiedMaterial = {
+      ...qualifiedIdentity,
+      businessId: businessRef,
+      operationRef: `operation:${businessRef}:brokered`,
+      publicationRef: `publication:${businessRef}:brokered`,
+      publicationRevision: 1,
+      contractDigest: 'sha256:brokered-contract',
+      bindingDigest: 'sha256:brokered-binding',
+      principalClass: 'agent_key' as const,
+      requestDigest: 'sha256:brokered-request',
+      responseDigest: 'sha256:brokered-response',
+      evidenceRefs: ['evidence:brokered-qualified'],
+    }
+    const qualifiedRef = qualifiedUseRef(qualifiedIdentity)
+    const materialDigest = qualifiedUseMaterialDigest(qualifiedMaterial)
+    const externalRef = `x402:settlement:${businessRef}:brokered`
+    const payoutIdentity = {
+      format: 'money-brokered-external-payout:v1',
+      chargeTransactionRef: transactionRef,
+      externalRef,
+    }
+    const payoutRef = canonicalDigest(payoutIdentity)
+    const payoutKey = canonicalDigest({
+      ...payoutIdentity,
+      format: 'money-brokered-external-payout-idempotency:v1',
+    })
+    const payoutSource = canonicalDigest({
+      ...payoutIdentity,
+      format: 'money-brokered-external-payout-source:v1',
+    })
+    const payoutEvidence = canonicalDigest({
+      ...payoutIdentity,
+      format: 'money-brokered-external-payout-evidence:v1',
+    })
+    await backend.run(async (ctx) => {
+      const account = (row: Record<string, unknown>): Promise<unknown> =>
+        ctx.db.insert('moneyAccounts', {
+          currency: 'USD',
+          exponent: 2,
+          heldUnits: '0',
+          recoveryDueUnits: '0',
+          version: 1,
+          state: 'active',
+          createdAt: 1,
+          updatedAt: 1,
+          ...row,
+        })
+      await account({
+        accountRef: accountRefForOwner(ownerAccountId, 'USD'),
+        accountKind: 'operator_credit',
+        accountId: ownerAccountId,
+        balanceUnits: '0',
+      })
+      await account({
+        accountRef: providerAccountRef,
+        accountKind: 'provider_earnings',
+        businessId: businessRef,
+        balanceUnits: '0',
+        version: 2,
+      })
+      await account({
+        accountRef: accountRefForRake('USD'),
+        accountKind: 'ae_rake',
+        balanceUnits: '100',
+      })
+      await ctx.db.insert('moneyPayoutAccounts', {
+        businessId: businessRef,
+        currency: 'USD',
+        exponent: 2,
+        stripeAccountId: `acct_${businessRef}`,
+        state: 'ready',
+        detailsSubmitted: true,
+        recipientCapabilityActive: true,
+        requirementsDigest: 'sha256:brokered-requirements',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      const budget = (
+        windowKind: 'day' | 'month' | 'concurrency',
+        windowStart: string,
+        settledUnits: string,
+        reservedCount: number,
+      ): Promise<unknown> =>
+        ctx.db.insert('moneyCredentialBudgetStates', {
+          principalId,
+          credentialId,
+          accountId: ownerAccountId,
+          budgetPolicyRef: `budget:${businessRef}:brokered`,
+          environment: 'production',
+          generation: 1,
+          windowKind,
+          windowStart,
+          currency: 'USD',
+          exponent: 2,
+          settledUnits,
+          reservedUnits: '0',
+          reservedCount,
+          version: 1,
+          updatedAt: 3,
+        })
+      await budget('day', '1970-01-01', '1000', 0)
+      await budget('month', '1970-01', '1000', 0)
+      await budget('concurrency', 'all', '0', 0)
+      await ctx.db.insert('moneyTransactions', {
+        transactionRef,
+        kind: 'charge',
+        idempotencyKey: transactionRef,
+        inputDigest: 'sha256:brokered-input',
+        accountId: ownerAccountId,
+        principalId,
+        currency: 'USD',
+        credentialId,
+        budgetPolicyRef: `budget:${businessRef}:brokered`,
+        budgetGeneration: 1,
+        budgetEnvironment: 'production',
+        budgetDayStart: '1970-01-01',
+        budgetMonthStart: '1970-01',
+        budgetState: 'settled',
+        amountUnits: '1000',
+        exponent: 2,
+        state: 'applied',
+        expectedAccountVersion: 1,
+        settledAt: 3,
+        externalRef,
+        createdAt: 1,
+        updatedAt: 3,
+      })
+      const entry = (row: Record<string, unknown>): Promise<unknown> =>
+        ctx.db.insert('moneyLedgerEntries', {
+          transactionRef,
+          idempotencyKey: transactionRef,
+          sourceDigest: 'sha256:brokered-source',
+          evidenceRefs: ['evidence:brokered-charge'],
+          currency: 'USD',
+          exponent: 2,
+          createdAt: 1,
+          ...row,
+        })
+      await entry({
+        entryRef: `${transactionRef}:charge`,
+        accountRef: accountRefForOwner(ownerAccountId, 'USD'),
+        entryType: 'charge',
+        direction: 'debit',
+        amountUnits: '1000',
+        principalId,
+        invocationRef,
+        attemptRef,
+      })
+      await entry({
+        entryRef: `${transactionRef}:provider`,
+        accountRef: providerAccountRef,
+        entryType: 'payout_accrual',
+        direction: 'credit',
+        amountUnits: '900',
+        businessId: businessRef,
+        invocationRef,
+        attemptRef,
+      })
+      await entry({
+        entryRef: `${transactionRef}:rake`,
+        accountRef: accountRefForRake('USD'),
+        entryType: 'rake',
+        direction: 'credit',
+        amountUnits: '100',
+        businessId: businessRef,
+      })
+      await ctx.db.insert('moneyUsageEvents', {
+        usageRef,
+        principalId,
+        credentialId,
+        currency: 'USD',
+        accountId: ownerAccountId,
+        exponent: 2,
+        serviceRef: `service:${businessRef}:brokered`,
+        offeringRef: `offering:${businessRef}:brokered`,
+        businessId: businessRef,
+        invocationRef,
+        attemptRef,
+        operationKey: qualifiedMaterial.operationRef,
+        priceDigest: 'sha256:brokered-price',
+        chargeState: 'paid',
+        amountUnits: '1000',
+        transactionRef,
+        observedAt: 1,
+      })
+      await ctx.db.insert('qualifiedUseReceipts', {
+        qualifiedUseRef: qualifiedRef,
+        materialDigest,
+        ...qualifiedMaterial,
+        environment: 'production',
+        qualifiedAt: 3,
+        usageRef,
+        transactionRef,
+      })
+      await ctx.db.insert('moneyTransactions', {
+        transactionRef: payoutRef,
+        kind: 'payout_accrual',
+        idempotencyKey: payoutKey,
+        inputDigest: payoutSource,
+        principalId: `business:${businessRef}`,
+        currency: 'USD',
+        amountUnits: '900',
+        exponent: 2,
+        state: 'applied',
+        expectedAccountVersion: 1,
+        externalRef,
+        createdAt: 3,
+        updatedAt: 3,
+      })
+      await ctx.db.insert('moneyLedgerEntries', {
+        entryRef: `${payoutRef}:external-settlement`,
+        accountRef: providerAccountRef,
+        entryType: 'payout_accrual',
+        direction: 'debit',
+        amountUnits: '900',
+        currency: 'USD',
+        exponent: 2,
+        transactionRef: payoutRef,
+        idempotencyKey: payoutKey,
+        businessId: businessRef,
+        sourceDigest: payoutSource,
+        evidenceRefs: [payoutEvidence],
+        createdAt: 3,
+      })
+    })
+    const dispute = {
+      qualifiedUseRef: qualifiedRef,
+      disputeRef: `dispute:${businessRef}:brokered`,
+      sourceDigest: 'sha256:brokered-dispute-source',
+      evidenceRefs: ['evidence:brokered-dispute'],
+      observedAt: 4,
+    }
+    const payoutBefore = await backend.run(async (ctx) => ({
+      transaction: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
+      entry: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
+    }))
+    await expect(
+      backend.mutation(internal.moneyLedger.reverseDisputedQualifiedUse, dispute),
+    ).resolves.toMatchObject({ kind: 'accepted', currency: 'USD' })
+    const readback = await owner.query(readOwnerProviderEarnings, {})
+    expect(readback).toMatchObject({
+      kind: 'available',
+      accounts: [{
+        earnings: {
+          providerNet: { currency: 'USD', units: '900', exponent: 2 },
+          rake: { currency: 'USD', units: '0', exponent: 2 },
+          paidOut: { currency: 'USD', units: '900', exponent: 2 },
+          held: { currency: 'USD', units: '0', exponent: 2 },
+          recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
+        },
+        payout: {
+          accountState: 'ready',
+          providerNet: { currency: 'USD', units: '0', exponent: 2 },
+        },
+      }],
+    })
+    const effects = await backend.run(async (ctx) => ({
+      operator: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForOwner(ownerAccountId, 'USD'))).unique(),
+      provider: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef)).unique(),
+      rake: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForRake('USD'))).unique(),
+      loss: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForExternalLoss('USD'))).unique(),
+      charge: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', transactionRef)).unique(),
+      lossTransaction: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-loss:${qualifiedRef}`)).unique(),
+      refunds: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-refund:${qualifiedRef}`)).take(3),
+    }))
+    expect(effects).toMatchObject({
+      operator: { balanceUnits: '1000' },
+      provider: { balanceUnits: '0', recoveryDueUnits: '0' },
+      rake: { balanceUnits: '0' },
+      loss: { accountKind: 'ae_external_loss', balanceUnits: '900' },
+      charge: { state: 'reversed', budgetState: 'released' },
+      lossTransaction: { kind: 'external_loss', amountUnits: '900' },
+    })
+    expect(effects.refunds).toHaveLength(2)
+    expect(effects.refunds).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entryType: 'refund', direction: 'credit', amountUnits: '1000' }),
+      expect.objectContaining({ entryType: 'refund', direction: 'debit', amountUnits: '100' }),
+    ]))
+    const beforeReplay = await backend.run(async (ctx) => ({
+      accounts: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForExternalLoss('USD'))).unique(),
+      refunds: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-refund:${qualifiedRef}`)).take(3),
+      payout: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
+    }))
+    await expect(
+      backend.mutation(internal.moneyLedger.reverseDisputedQualifiedUse, dispute),
+    ).resolves.toMatchObject({ kind: 'accepted', currency: 'USD' })
+    await expect(backend.run(async (ctx) => ({
+      accounts: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForExternalLoss('USD'))).unique(),
+      refunds: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-refund:${qualifiedRef}`)).take(3),
+      payout: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
+    }))).resolves.toEqual(beforeReplay)
+    await expect(
+      backend.mutation(internal.moneyLedger.reverseDisputedQualifiedUse, { ...dispute, sourceDigest: 'sha256:brokered-conflict' }),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'ledger_idempotency_conflict' })
   })
 })

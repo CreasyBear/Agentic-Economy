@@ -38,6 +38,7 @@ import {
   qualifiedUseAllocationRef,
   type DailyPayoutIdentity,
 } from './moneyQualifiedUsePayout'
+import { reverseBrokeredDisputeLoss } from './moneyBrokeredDisputeLoss'
 
 function principalAllowed(
   identity: { tokenIdentifier?: string } | null,
@@ -876,20 +877,33 @@ export async function reverseDisputedQualifiedUseHandler(
     }
   const sortedEvidenceRefs = [...args.evidenceRefs].sort()
   const refundTransactionRef = `qualified-use-dispute-refund:${receipt.qualifiedUseRef}`
+  const refundInputDigest = canonicalDigest({
+    format: 'qualified-use-dispute-reversal:v1',
+    qualifiedUseRef: receipt.qualifiedUseRef,
+    materialDigest: receipt.materialDigest,
+    disputeRef: args.disputeRef,
+    originalTransactionRef: original.transactionRef,
+    sourceDigest: args.sourceDigest,
+    evidenceRefs: sortedEvidenceRefs,
+  } as StableHashValue)
+  const brokeredResult = await reverseBrokeredDisputeLoss(ctx, {
+    qualifiedUseRef: receipt.qualifiedUseRef,
+    disputeRef: args.disputeRef,
+    sourceDigest: args.sourceDigest,
+    evidenceRefs: sortedEvidenceRefs,
+    refundTransactionRef,
+    refundInputDigest,
+    original,
+    journal,
+    observedAt: args.observedAt,
+  })
+  if (brokeredResult !== undefined) return brokeredResult
   return await appendRefundBody(ctx, {
     principalId: original.principalId,
     originalTransactionRef: original.transactionRef,
     transactionRef: refundTransactionRef,
     idempotencyKey: refundTransactionRef,
-    inputDigest: canonicalDigest({
-      format: 'qualified-use-dispute-reversal:v1',
-      qualifiedUseRef: receipt.qualifiedUseRef,
-      materialDigest: receipt.materialDigest,
-      disputeRef: args.disputeRef,
-      originalTransactionRef: original.transactionRef,
-      sourceDigest: args.sourceDigest,
-      evidenceRefs: sortedEvidenceRefs,
-    } as StableHashValue),
+    inputDigest: refundInputDigest,
     sourceDigest: args.sourceDigest,
     evidenceRefs: sortedEvidenceRefs,
     observedAt: args.observedAt,

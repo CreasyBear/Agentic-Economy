@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   accountRefForOwner,
   accountRefForProvider,
+  accountRefForExternalLoss,
   qualifiedUseRef,
 } from '@/modules/money/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -19,6 +20,79 @@ import {
   transactionRef,
 } from './money-ledger-test-harness'
 import { seedDisputeFixture } from './money-ledger-test-fixtures'
+
+function seedBrokeredExternalSettlementFixture(db: MemoryDb): string {
+  seedDisputeFixture(db, 'key-a', 'key-a')
+  db.remove('moneyPayouts', () => true)
+  const original = db
+    .rows('moneyTransactions')
+    .find((row) => row._id === 'transaction:charge')
+  const provider = db
+    .rows('moneyAccounts')
+    .find((row) => row._id === 'account:provider')
+  if (original === undefined || provider === undefined)
+    throw new Error('brokered_dispute_fixture_missing')
+  const externalRef = 'x402:settlement:dispute'
+  original.externalRef = externalRef
+  original.settledAt = now
+  provider.balanceUnits = '0'
+  provider.version = 2
+  const payoutIdentity = {
+    format: 'money-brokered-external-payout:v1',
+    chargeTransactionRef: transactionRef,
+    externalRef,
+  }
+  const payoutTransactionRef = canonicalDigest(payoutIdentity)
+  const payoutIdempotencyKey = canonicalDigest({
+    ...payoutIdentity,
+    format: 'money-brokered-external-payout-idempotency:v1',
+  })
+  const payoutSourceDigest = canonicalDigest({
+    ...payoutIdentity,
+    format: 'money-brokered-external-payout-source:v1',
+  })
+  const payoutEvidenceRef = canonicalDigest({
+    ...payoutIdentity,
+    format: 'money-brokered-external-payout-evidence:v1',
+  })
+  db.seed('moneyTransactions', {
+    _id: 'transaction:external-payout',
+    transactionRef: payoutTransactionRef,
+    kind: 'payout_accrual',
+    idempotencyKey: payoutIdempotencyKey,
+    inputDigest: payoutSourceDigest,
+    principalId: 'business:business:money',
+    currency: 'USD',
+    amountUnits: '99',
+    exponent: 2,
+    state: 'applied',
+    expectedAccountVersion: 1,
+    externalRef,
+    createdAt: now,
+    updatedAt: now,
+  })
+  db.seed('moneyLedgerEntries', {
+    _id: 'entry:external-payout',
+    entryRef: `${payoutTransactionRef}:external-settlement`,
+    accountRef: accountRefForProvider('business:money', 'USD'),
+    entryType: 'payout_accrual',
+    direction: 'debit',
+    amountUnits: '99',
+    currency: 'USD',
+    exponent: 2,
+    transactionRef: payoutTransactionRef,
+    idempotencyKey: payoutIdempotencyKey,
+    businessId: 'business:money',
+    sourceDigest: payoutSourceDigest,
+    evidenceRefs: [payoutEvidenceRef],
+    createdAt: now,
+  })
+  return qualifiedUseRef({
+    invocationRef,
+    attemptRef,
+    effectGeneration: 1,
+  })
+}
 
 describe('exact invocation money reconciliation', () => {
   it('rejects disputed use when pooled owner credentials differ', async () => {
@@ -511,6 +585,108 @@ describe('exact invocation money reconciliation', () => {
             `qualified-use-dispute-refund:${qualifiedUse}`,
         ),
     ).toHaveLength(3)
+  })
+
+  it('reverses a brokered external settlement without debiting the provider', async () => {
+    const db = new MemoryDb()
+    const qualifiedUse = seedBrokeredExternalSettlementFixture(db)
+    const payoutTransaction = db
+      .rows('moneyTransactions')
+      .find((row) => row.kind === 'payout_accrual')
+    const payoutEntry = db
+      .rows('moneyLedgerEntries')
+      .find((row) => row._id === 'entry:external-payout')
+    const providerBefore = structuredClone(
+      db.rows('moneyAccounts').find((row) => row._id === 'account:provider'),
+    )
+    if (payoutTransaction === undefined || payoutEntry === undefined)
+      throw new Error('brokered_payout_fixture_missing')
+    const dispute = {
+      qualifiedUseRef: qualifiedUse,
+      disputeRef: 'dispute:brokered-external-settlement',
+      sourceDigest: 'sha256:brokered-dispute-source',
+      evidenceRefs: ['evidence:brokered-dispute'],
+      observedAt: now + 1,
+    }
+    await expect(disputeHandler({ db }, dispute)).resolves.toEqual({
+      kind: 'accepted',
+      transactionRef: `qualified-use-dispute-refund:${qualifiedUse}`,
+      currency: 'USD',
+    })
+    expect(db.rows('moneyLedgerEntries')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entryType: 'refund',
+          direction: 'credit',
+          amountUnits: '100',
+          accountRef: accountRefForOwner(ownerId, 'USD'),
+        }),
+        expect.objectContaining({
+          entryType: 'refund',
+          direction: 'debit',
+          amountUnits: '1',
+          accountRef: 'ae:rake:USD',
+        }),
+        expect.objectContaining({
+          entryType: 'external_loss',
+          direction: 'credit',
+          amountUnits: '99',
+          accountRef: accountRefForExternalLoss('USD'),
+        }),
+      ]),
+    )
+    expect(
+      db.rows('moneyLedgerEntries').filter((row) => row.entryType === 'refund'),
+    ).toHaveLength(2)
+    expect(
+      db.rows('moneyTransactions').filter((row) => row.kind === 'external_loss'),
+    ).toHaveLength(1)
+    expect(
+      db.rows('moneyAccounts').find((row) => row._id === 'account:provider'),
+    ).toEqual(providerBefore)
+    expect(
+      db.rows('moneyTransactions').find((row) => row._id === 'transaction:charge'),
+    ).toMatchObject({ state: 'reversed', budgetState: 'released' })
+    expect(
+      db.rows('moneyCredentialBudgetStates'),
+    ).toEqual(expect.arrayContaining([
+      expect.objectContaining({ settledUnits: '0', reservedUnits: '0', reservedCount: 0 }),
+    ]))
+    const payoutBeforeReplay = {
+      transaction: structuredClone(payoutTransaction),
+      entry: structuredClone(payoutEntry),
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+    }
+    await expect(disputeHandler({ db }, dispute)).resolves.toEqual({
+      kind: 'accepted',
+      transactionRef: `qualified-use-dispute-refund:${qualifiedUse}`,
+      currency: 'USD',
+    })
+    expect({
+      transaction: db.rows('moneyTransactions').find((row) => row._id === 'transaction:external-payout'),
+      entry: db.rows('moneyLedgerEntries').find((row) => row._id === 'entry:external-payout'),
+      accounts: db.rows('moneyAccounts'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      entries: db.rows('moneyLedgerEntries'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual(payoutBeforeReplay)
+    await expect(
+      disputeHandler({ db }, { ...dispute, sourceDigest: 'sha256:conflict' }),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'ledger_idempotency_conflict' })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      entries: db.rows('moneyLedgerEntries'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual({
+      accounts: payoutBeforeReplay.accounts,
+      budgets: payoutBeforeReplay.budgets,
+      entries: payoutBeforeReplay.entries,
+      transactions: payoutBeforeReplay.transactions,
+    })
   })
 })
 
