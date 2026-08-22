@@ -756,6 +756,9 @@ describe('supplier money readback refund recovery', () => {
       ...payoutIdentity,
       format: 'money-brokered-external-payout-evidence:v1',
     })
+    const laterEarningRef = `transaction:${businessRef}:later-earning`
+    const laterEarningInvocationRef = `invocation:${businessRef}:later-earning`
+    const laterEarningAttemptRef = `attempt:${businessRef}:later-earning`
     await backend.run(async (ctx) => {
       const account = (row: Record<string, unknown>): Promise<unknown> =>
         ctx.db.insert('moneyAccounts', {
@@ -946,6 +949,49 @@ describe('supplier money readback refund recovery', () => {
         evidenceRefs: [payoutEvidence],
         createdAt: 3,
       })
+      await ctx.db.insert('moneyTransactions', {
+        transactionRef: laterEarningRef,
+        kind: 'charge',
+        idempotencyKey: laterEarningRef,
+        inputDigest: 'sha256:later-earning-input',
+        principalId: `principal:${businessRef}:later-earning`,
+        currency: 'USD',
+        amountUnits: '50',
+        exponent: 2,
+        state: 'applied',
+        expectedAccountVersion: 2,
+        budgetState: 'settled',
+        settledAt: 4,
+        createdAt: 4,
+        updatedAt: 4,
+      })
+      await ctx.db.insert('moneyLedgerEntries', {
+        entryRef: `${laterEarningRef}:provider`,
+        accountRef: providerAccountRef,
+        entryType: 'payout_accrual',
+        direction: 'credit',
+        amountUnits: '50',
+        currency: 'USD',
+        exponent: 2,
+        transactionRef: laterEarningRef,
+        idempotencyKey: laterEarningRef,
+        businessId: businessRef,
+        invocationRef: laterEarningInvocationRef,
+        attemptRef: laterEarningAttemptRef,
+        sourceDigest: 'sha256:later-earning-source',
+        evidenceRefs: ['evidence:later-earning'],
+        createdAt: 4,
+      })
+      const provider = await ctx.db
+        .query('moneyAccounts')
+        .withIndex('by_accountRef', (q) => q.eq('accountRef', providerAccountRef))
+        .unique()
+      if (provider === null) throw new Error('later earning provider missing')
+      await ctx.db.patch(provider._id, {
+        balanceUnits: '50',
+        version: 3,
+        updatedAt: 4,
+      })
     })
     const dispute = {
       qualifiedUseRef: qualifiedRef,
@@ -966,10 +1012,10 @@ describe('supplier money readback refund recovery', () => {
       kind: 'available',
       accounts: [{
         earnings: {
-          providerNet: { currency: 'USD', units: '900', exponent: 2 },
+          providerNet: { currency: 'USD', units: '950', exponent: 2 },
           rake: { currency: 'USD', units: '0', exponent: 2 },
           paidOut: { currency: 'USD', units: '900', exponent: 2 },
-          held: { currency: 'USD', units: '0', exponent: 2 },
+          held: { currency: 'USD', units: '50', exponent: 2 },
           recoveryDue: { currency: 'USD', units: '0', exponent: 2 },
         },
         payout: {
@@ -989,7 +1035,7 @@ describe('supplier money readback refund recovery', () => {
     }))
     expect(effects).toMatchObject({
       operator: { balanceUnits: '1000' },
-      provider: { balanceUnits: '0', recoveryDueUnits: '0' },
+      provider: { balanceUnits: '50', recoveryDueUnits: '0', version: 3 },
       rake: { balanceUnits: '0' },
       loss: { accountKind: 'ae_external_loss', balanceUnits: '900' },
       charge: { state: 'reversed', budgetState: 'released' },
@@ -1001,7 +1047,10 @@ describe('supplier money readback refund recovery', () => {
       expect.objectContaining({ entryType: 'refund', direction: 'debit', amountUnits: '100' }),
     ]))
     const beforeReplay = await backend.run(async (ctx) => ({
-      accounts: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForExternalLoss('USD'))).unique(),
+      accounts: await ctx.db.query('moneyAccounts').take(10),
+      budgets: await ctx.db.query('moneyCredentialBudgetStates').take(10),
+      transactions: await ctx.db.query('moneyTransactions').take(10),
+      entries: await ctx.db.query('moneyLedgerEntries').take(20),
       refunds: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-refund:${qualifiedRef}`)).take(3),
       payout: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
     }))
@@ -1009,7 +1058,10 @@ describe('supplier money readback refund recovery', () => {
       backend.mutation(internal.moneyLedger.reverseDisputedQualifiedUse, dispute),
     ).resolves.toMatchObject({ kind: 'accepted', currency: 'USD' })
     await expect(backend.run(async (ctx) => ({
-      accounts: await ctx.db.query('moneyAccounts').withIndex('by_accountRef', (q) => q.eq('accountRef', accountRefForExternalLoss('USD'))).unique(),
+      accounts: await ctx.db.query('moneyAccounts').take(10),
+      budgets: await ctx.db.query('moneyCredentialBudgetStates').take(10),
+      transactions: await ctx.db.query('moneyTransactions').take(10),
+      entries: await ctx.db.query('moneyLedgerEntries').take(20),
       refunds: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', `qualified-use-dispute-refund:${qualifiedRef}`)).take(3),
       payout: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
     }))).resolves.toEqual(beforeReplay)

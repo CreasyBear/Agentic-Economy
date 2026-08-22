@@ -688,6 +688,44 @@ describe('exact invocation money reconciliation', () => {
       transactions: payoutBeforeReplay.transactions,
     })
   })
+
+  it('refuses a brokered replay when loss provenance is tampered', async () => {
+    const db = new MemoryDb()
+    const qualifiedUse = seedBrokeredExternalSettlementFixture(db)
+    const dispute = {
+      qualifiedUseRef: qualifiedUse,
+      disputeRef: 'dispute:brokered-replay-tamper',
+      sourceDigest: 'sha256:brokered-replay-tamper-source',
+      evidenceRefs: ['evidence:brokered-replay-tamper'],
+      observedAt: now + 1,
+    }
+    await expect(disputeHandler({ db }, dispute)).resolves.toMatchObject({
+      kind: 'accepted',
+      currency: 'USD',
+    })
+    const lossEntry = db
+      .rows('moneyLedgerEntries')
+      .find((row) => row.entryType === 'external_loss')
+    if (lossEntry === undefined) throw new Error('loss_entry_fixture_missing')
+    lossEntry.attemptRef = 'attempt:tampered'
+    const before = {
+      accounts: structuredClone(db.rows('moneyAccounts')),
+      budgets: structuredClone(db.rows('moneyCredentialBudgetStates')),
+      entries: structuredClone(db.rows('moneyLedgerEntries')),
+      transactions: structuredClone(db.rows('moneyTransactions')),
+    }
+    await expect(disputeHandler({ db }, dispute)).resolves.toEqual({
+      kind: 'refused',
+      code: 'charge_reconciliation_required',
+      retryable: false,
+    })
+    expect({
+      accounts: db.rows('moneyAccounts'),
+      budgets: db.rows('moneyCredentialBudgetStates'),
+      entries: db.rows('moneyLedgerEntries'),
+      transactions: db.rows('moneyTransactions'),
+    }).toEqual(before)
+  })
 })
 
 it.each([
