@@ -171,6 +171,12 @@ export function emptyPorts(overrides: Partial<PublicationCommandPorts> = {}): Pu
     insertPublication: async () => {},
     patchPublicationSuperseded: async () => {},
     patchPublicationWithdrawn: async () => {},
+    rotateProviderConnectionBindingAuthority: async (input) => ({
+      kind: 'rotated' as const,
+      bindingId: input.bindingId,
+      previousOperationRef: input.previousOperationRef,
+      operationRef: input.nextOperationRef,
+    }),
     registerContractDocument: async () => ({
       kind: 'registered',
       ref: encodedFor().contract.ref,
@@ -267,6 +273,9 @@ export function supplyRows(publication: PublicationCommandRow): Pick<
       contractDigest: publication.contractDigest,
       endpointUrl: 'https://demo.example.test/lookup',
       authority: { kind: 'provider_connection', connectionRef: 'connection:demo', providerRef: 'provider:demo' },
+      ...(publication.connectionAuthority === undefined
+        ? {}
+        : { connectionAuthority: publication.connectionAuthority }),
       continuation: { kind: 'single_response' as const, evidenceRefs: ['business:response'] },
       cancellation: { kind: 'unsupported' as const, evidenceRefs: ['business:no-cancellation'] },
       adapterId: 'http-json:v1',

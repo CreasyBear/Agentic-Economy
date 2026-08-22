@@ -8,12 +8,14 @@ import {
   defineCapabilityTransportBindingRegistration,
   isPublicOperationRef,
   type CapabilityTransportBindingRegistration,
+  type PublicOperationRef,
 } from '@/modules/capability-supply/public'
 
 import { isProviderConnectionAuthorityCurrent, type ProviderConnection } from '../../provider-connection'
 import {
   connectionAuthoritySnapshotFromProviderConnection,
   connectionAuthoritySnapshotMatches,
+  connectionAuthoritySnapshotsEqual,
   type CapabilityConnectionAuthoritySnapshot,
 } from './registration'
 import { offeringIntegrityIsValid } from '../offering/integrity'
@@ -73,6 +75,119 @@ export type BindingWritePorts = Readonly<{
   loadBindingByBindingId: (bindingId: string) => Promise<CapabilityBindingRow | null>
   insertBinding: (row: BindingInsertRow) => Promise<void>
 }>
+
+export type RotateCapabilityTransportBindingAuthorityInput = Readonly<{
+  bindingId: string
+  offeringId: string
+  businessId: string
+  registrationHash: string
+  connectionRef: string
+  providerRef: string
+  adapterId: string
+  previousAuthority: CapabilityConnectionAuthoritySnapshot
+  previousOperationRef: PublicOperationRef
+  nextOperationRef: PublicOperationRef
+}>
+
+export type RotateCapabilityTransportBindingAuthorityPatch = Readonly<{
+  expectedRegistrationHash: string
+  expectedAuthority: CapabilityConnectionAuthoritySnapshot
+  nextAuthority: CapabilityConnectionAuthoritySnapshot
+  updatedAt: number
+}>
+
+export type RotateCapabilityTransportBindingAuthorityResult =
+  | Readonly<{
+    kind: 'rotated'
+    bindingId: string
+    previousOperationRef: PublicOperationRef
+    operationRef: PublicOperationRef
+  }>
+  | Readonly<{ kind: 'refused'; reason: string }>
+
+type RotateCapabilityTransportBindingAuthorityPorts = Pick<
+  BindingWritePorts,
+  | 'loadOfferingByOfferingId'
+  | 'loadPublishedBusiness'
+  | 'loadProviderConnection'
+  | 'loadBindingByBindingId'
+> & Readonly<{
+  patchBindingConnectionAuthority: (
+    bindingId: string,
+    patch: RotateCapabilityTransportBindingAuthorityPatch,
+  ) => Promise<void>
+}>
+
+export async function rotateCapabilityTransportBindingAuthority(
+  ports: RotateCapabilityTransportBindingAuthorityPorts,
+  input: RotateCapabilityTransportBindingAuthorityInput,
+  updatedAt: number,
+): Promise<RotateCapabilityTransportBindingAuthorityResult> {
+  if (
+    !Number.isSafeInteger(updatedAt)
+    || updatedAt < 0
+    || !isPublicOperationRef(input.previousOperationRef)
+    || !isPublicOperationRef(input.nextOperationRef)
+    || input.previousOperationRef === input.nextOperationRef
+  ) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+  const [offering, binding] = await Promise.all([
+    ports.loadOfferingByOfferingId(input.offeringId),
+    ports.loadBindingByBindingId(input.bindingId),
+  ])
+  if (offering === null || binding === null) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+  if (!offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)) {
+    return { kind: 'refused', reason: 'binding_integrity_failure' }
+  }
+  if (
+    binding.bindingId !== input.bindingId
+    || binding.offeringId !== input.offeringId
+    || binding.registrationHash !== input.registrationHash
+    || String(offering.businessId) !== input.businessId
+    || await ports.loadPublishedBusiness(input.businessId) === null
+    || binding.authority.kind !== 'provider_connection'
+    || binding.authority.connectionRef !== input.connectionRef
+    || binding.authority.providerRef !== input.providerRef
+    || binding.adapterId !== input.adapterId
+    || !connectionAuthoritySnapshotsEqual(binding.connectionAuthority, input.previousAuthority)
+  ) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+  const connection = await ports.loadProviderConnection(input.connectionRef)
+  if (
+    connection === undefined
+    || connection.providerRef !== input.providerRef
+    || connection.adapterId !== input.adapterId
+    || String(connection.businessId) !== input.businessId
+    || !connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
+      businessId: input.businessId,
+      operationRef: input.previousOperationRef,
+      adapterId: input.adapterId,
+      now: updatedAt,
+    })
+  ) {
+    return { kind: 'refused', reason: 'connection_authority_stale' }
+  }
+  const nextAuthority = connectionAuthoritySnapshotFromProviderConnection(
+    connection,
+    input.nextOperationRef,
+  )
+  await ports.patchBindingConnectionAuthority(binding.bindingId, {
+    expectedRegistrationHash: binding.registrationHash,
+    expectedAuthority: binding.connectionAuthority!,
+    nextAuthority,
+    updatedAt,
+  })
+  return {
+    kind: 'rotated',
+    bindingId: binding.bindingId,
+    previousOperationRef: input.previousOperationRef,
+    operationRef: input.nextOperationRef,
+  }
+}
 
 export type RegisterBindingWriteResult =
   | Readonly<{ kind: 'refused'; reason: string }>

@@ -10,6 +10,7 @@ import {
 import { contractRefFromRow } from '../offering/registration'
 import type { CapabilityPublicationImport } from '../publication-importers'
 import type { RegistrationContext } from '../shared/command-envelope'
+import { connectionAuthoritySnapshotsEqual } from '../binding/registration'
 
 import { preparePublicationDraft, pricingConfigForOffering } from './draft'
 import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
@@ -204,6 +205,35 @@ export async function refreshCapabilityCommand(
   const offeringResult = await ports.registerOffering(nextOffering, input.now)
   if (offeringResult.kind === 'refused') {
     throw new Error(`capability_publication_refresh_${offeringResult.reason}`)
+  }
+  if (currentBinding.authority.kind === 'provider_connection') {
+    const nextAuthority = nextBinding.authority
+    if (
+      nextAuthority.kind !== 'provider_connection'
+      || publication.connectionAuthority === undefined
+      || !connectionAuthoritySnapshotsEqual(
+        publication.connectionAuthority,
+        currentBinding.connectionAuthority,
+      )
+      || ports.rotateProviderConnectionBindingAuthority === undefined
+    ) {
+      throw new Error('capability_publication_refresh_connection_authority_stale')
+    }
+    const rotated = await ports.rotateProviderConnectionBindingAuthority({
+      bindingId: currentBinding.bindingId,
+      offeringId: currentBinding.offeringId,
+      businessId: String(currentOffering.businessId),
+      registrationHash: currentBinding.registrationHash,
+      connectionRef: nextAuthority.connectionRef,
+      providerRef: nextAuthority.providerRef,
+      adapterId: nextBinding.adapter.adapterId,
+      previousAuthority: publication.connectionAuthority,
+      previousOperationRef: publication.operationRef,
+      nextOperationRef: operationRef,
+    }, input.now)
+    if (rotated.kind === 'refused') {
+      throw new Error(`capability_publication_refresh_${rotated.reason}`)
+    }
   }
   const bindingResult = await ports.registerBinding(nextBinding, input.now, operationRef)
   if (bindingResult.kind === 'refused') {

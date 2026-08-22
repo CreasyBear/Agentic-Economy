@@ -31,6 +31,11 @@ import {
 } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { capabilitySupplyPublicationPorts } from './capabilitySupplyPublicationPorts'
+import { capabilitySupplyWriterPorts } from './capabilitySupplyWriterPorts'
+import { connectionAuthoritySnapshotsEqual } from '@/modules/capability-supply/internal/binding'
+import {
+  rotateCapabilityTransportBindingAuthority,
+} from '@/modules/capability-supply/internal/binding/write'
 import {
   registerCapabilityOffering,
   registerCapabilityTransportBinding,
@@ -310,7 +315,7 @@ export const readCapabilityPublicationArgs = {
 } as const
 
 export function publicationPorts(ctx: MutationCtx) {
-  return capabilitySupplyPublicationPorts(ctx, {
+  const publicationCommandPorts = capabilitySupplyPublicationPorts(ctx, {
     registerOffering: (registration, now) =>
       registerCapabilityOffering(ctx.db, registration, now),
     registerBinding: (registration, now, expectedOperationRef) =>
@@ -323,6 +328,34 @@ export function publicationPorts(ctx: MutationCtx) {
     setEligibility: (eligibility, now) =>
       setCapabilitySupplyEligibility(ctx.db, eligibility, now),
   })
+  const bindingWritePorts = capabilitySupplyWriterPorts(ctx.db)
+  return {
+    ...publicationCommandPorts,
+    rotateProviderConnectionBindingAuthority: (input: Parameters<typeof rotateCapabilityTransportBindingAuthority>[1], now: number) => (
+      rotateCapabilityTransportBindingAuthority({
+        ...bindingWritePorts,
+        patchBindingConnectionAuthority: async (bindingId, patch) => {
+          const binding = await ctx.db.query('capabilityTransportBindings')
+            .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
+          if (
+            binding === null
+            || binding.registrationHash !== patch.expectedRegistrationHash
+            || !connectionAuthoritySnapshotsEqual(binding.connectionAuthority, patch.expectedAuthority)
+          ) {
+            throw new Error('capability_publication_refresh_connection_authority_stale')
+          }
+          await ctx.db.patch(binding._id, {
+            connectionAuthority: {
+              ...patch.nextAuthority,
+              grantedScopes: [...patch.nextAuthority.grantedScopes],
+              grantedResources: [...patch.nextAuthority.grantedResources],
+            },
+            updatedAt: patch.updatedAt,
+          })
+        },
+      }, input, now)
+    ),
+  }
 }
 
 export async function publishPreparedCapabilityHandler(
