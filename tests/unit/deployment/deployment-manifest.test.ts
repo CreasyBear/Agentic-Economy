@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import convexCrons from '../../../convex/crons'
 import {
   DEPLOYMENT_MANIFEST,
   SOURCE_WRITE_FAMILIES,
@@ -52,6 +53,15 @@ describe('deployment manifest validator', () => {
       'convex-scheduled-jobs',
     ])
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
+  })
+
+  it('keeps the scheduled-job manifest inventory aligned with Convex cron registrations', () => {
+    const scheduledJobs = DEPLOYMENT_MANIFEST.resources.find((resource) => resource.id === 'convex-scheduled-jobs')
+    expect(scheduledJobs).toBeDefined()
+    const registeredJobNames = Object.keys(convexCrons.crons).sort()
+    const manifestJobNames = [...(scheduledJobs as { jobs: readonly string[] }).jobs].sort()
+
+    expect(manifestJobNames).toEqual(registeredJobNames)
   })
 
   it('fails closed for missing core source, auth, canonical, model, and source-write configuration', () => {

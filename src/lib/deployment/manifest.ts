@@ -161,7 +161,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
-    Object.freeze({ id: 'convex-scheduled-jobs', kind: 'convex-cron-set', jobs: Object.freeze(['refresh capability supply readiness', 'cleanup expired source write nonces', 'run daily supplier settlement']) }),
+    Object.freeze({ id: 'convex-scheduled-jobs', kind: 'convex-cron-set', jobs: Object.freeze(['reconcile due facilitator invocations', 'refresh facilitator discovery', 'refresh capability supply readiness', 'cleanup expired source write nonces', 'cleanup expired agent access oauth grants', 'run daily supplier settlement']) }),
   ]),
   readinessProbes: Object.freeze([
     Object.freeze({ id: 'liveness', method: Object.freeze(['GET', 'HEAD']), path: '/api/health', dependencies: Object.freeze([]) }),
