@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { encodePaymentResponseHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -28,6 +30,10 @@ import {
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+
+const BASE_NETWORK = 'eip155:8453' as const
+const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+const IMPORTED_PAY_TO = '0x209693Bc6afc0C5328bA36FaF03C514EF312287C' as const
 
 async function invokeRouteTransport(
   routeInvocation: RouteTransportInvocation,
@@ -192,7 +198,13 @@ describe('published operation materialization', () => {
             },
           },
         },
-      })
+      }, { headers: { 'Payment-Response': encodePaymentResponseHeader({
+        success: true,
+        transaction: 'mock:published-operation-settlement',
+        network: 'eip155:8453',
+        amount: '10000',
+        payer: 'mock:payer',
+      }) } })
     })
     const invocation: RouteTransportInvocation = {
       binding: providerRouteTransportBinding(packet.operation),
@@ -204,7 +216,7 @@ describe('published operation materialization', () => {
         capabilityContractDigest: packet.operation.identity.contractDigest,
         maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
         ...currentProviderAuthority(packet.operation),
-        expiresAt: Date.now() + 60_000,
+        expiresAt: Date.now() + 120_000,
         callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
       },
       inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
@@ -214,6 +226,8 @@ describe('published operation materialization', () => {
       validateProviderConnectionAuthority: () => ({ kind: 'valid' as const }),
       send,
       resolveCredential: () => 'mock-credential',
+      readX402PaymentCredentialRef: async () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+      markX402PaymentPossiblySubmitted: () => undefined,
       ...preparedX402Custody(async () => 'mock:payment-signature'),
     })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
     expect(send).toHaveBeenCalledTimes(1)
@@ -241,7 +255,13 @@ describe('published operation materialization', () => {
               },
             },
           },
-        })
+        }, { headers: { 'Payment-Response': encodePaymentResponseHeader({
+          success: true,
+          transaction: `mock:published-operation-${method}-settlement`,
+          network: BASE_NETWORK,
+          amount: '10000',
+          payer: 'mock:payer',
+        }) } })
       })
       await expect(invokeRouteTransport({
         binding: providerRouteTransportBinding(operation),
@@ -253,7 +273,7 @@ describe('published operation materialization', () => {
           capabilityContractDigest: operation.identity.contractDigest,
           maximumSpend: { currency: 'USD', units: '1', exponent: 2 },
           ...currentProviderAuthority(operation),
-          expiresAt: Date.now() + 60_000,
+          expiresAt: Date.now() + 120_000,
           callIdentity: { keyId: 'mock:key', signature: 'mock:signature' },
         },
         inputJson: JSON.stringify({ symbol: 'BTC', convert: 'USD' }),
@@ -262,6 +282,8 @@ describe('published operation materialization', () => {
         readProviderConnectionCredentialRef: providerCredentialReader(operation),
         send,
         resolveCredential: () => 'mock-credential',
+        readX402PaymentCredentialRef: async () => 'env:AE_X402_PAYMENT_PRIVATE_KEY',
+        markX402PaymentPossiblySubmitted: () => undefined,
         ...preparedX402Custody(async () => 'mock:payment-signature'),
       })).resolves.toMatchObject({ transport: 'x402', disposition: 'succeeded' })
     },
@@ -338,11 +360,28 @@ async function buildImportedOperation(method: 'GET' | 'POST') {
       outputSchema,
       price: { currency: 'USD', units: '1', exponent: 2 },
       scheme: 'exact',
-      network: 'eip155:8453',
-      asset: '0xmock-usdc',
-      payTo: '0xmock-provider-recipient',
+      network: BASE_NETWORK,
+      asset: BASE_USDC,
+      payTo: IMPORTED_PAY_TO,
       routeAmountExponent: 2,
       assetAmountExponent: 6,
+      paymentRequired: validatePaymentRequired({
+        x402Version: 2,
+        resource: {
+          url: method === 'GET'
+            ? `${source.binding.endpointUrl}?symbol=BTC&convert=USD`
+            : source.binding.endpointUrl,
+        },
+        accepts: [{
+          scheme: 'exact',
+          network: BASE_NETWORK,
+          amount: '10000',
+          asset: BASE_USDC,
+          payTo: IMPORTED_PAY_TO,
+          maxTimeoutSeconds: 60,
+          extra: { name: 'USDC', version: '2' },
+        }],
+      }),
     },
     contract: metadata,
     commercial: {

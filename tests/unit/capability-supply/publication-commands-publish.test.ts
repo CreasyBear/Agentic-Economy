@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import {
   publishPreparedCapabilityCommand,
@@ -6,6 +7,7 @@ import {
 } from '@/modules/capability-supply/internal/publication'
 import { publicationSourceDigest } from '@/modules/capability-supply/internal/publication/source'
 import type { OperationKeyRecord } from '@/modules/capability-supply/internal/operation-ledger'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   capabilityOperationId,
   capabilityPublicationProvenanceDigest,
@@ -82,8 +84,21 @@ describe('capability-supply publication commands publish', () => {
         currency: 'USD',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
-        asset: '0x0000000000000000000000000000000000000001',
-        payTo: '0x0000000000000000000000000000000000000002',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+        paymentRequiredJson: stableStringify(validatePaymentRequired({
+          x402Version: 2,
+          resource: { url: prepared.binding.endpointUrl },
+          accepts: [{
+            scheme: 'exact',
+            network: 'eip155:84532',
+            amount: '10000',
+            asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+            maxTimeoutSeconds: 60,
+            extra: { name: 'USDC', version: '2' },
+          }],
+        }) as StableHashValue),
       },
     }
     const publish = (material: PreparedPublicationMaterial) => publishPreparedCapabilityCommand({
@@ -170,8 +185,21 @@ describe('capability-supply publication commands publish', () => {
           currency: 'USD',
           routeAmountExponent: 2,
           assetAmountExponent: 6,
-          asset: '0x0000000000000000000000000000000000000001',
-          payTo: '0x0000000000000000000000000000000000000002',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+          paymentRequiredJson: stableStringify(validatePaymentRequired({
+            x402Version: 2,
+            resource: { url: prepared.binding.endpointUrl },
+            accepts: [{
+              scheme: 'exact',
+              network: 'eip155:84532',
+              amount: '10000',
+              asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+              payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+              maxTimeoutSeconds: 60,
+              extra: { name: 'USDC', version: '2' },
+            }],
+          }) as StableHashValue),
         },
       },
     )

@@ -17,7 +17,7 @@ import {
   type X402PaymentSignatureRequest,
 } from '../../src/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
-import type { StableHashValue } from '../../src/modules/common/stable-hash'
+import { stableStringify, type StableHashValue } from '../../src/modules/common/stable-hash'
 
 import type {
   PaymentPayload,
@@ -193,14 +193,20 @@ export async function runDevelopmentX402LocalCanary(
   const requestUrl = `${localServer.baseUrl}${requestPath}`
   try {
     const client = createDevelopmentX402Client()
-    const unpaidResponse = await fetch(requestUrl, { headers: { accept: 'application/json' } })
-    const unpaid = await client.processResponse(unpaidResponse)
-    if (unpaid.status !== 402 || unpaid.paymentStatus !== 'payment_required' || unpaid.header === undefined) {
-      throw new Error('development_x402_payment_challenge_missing')
-    }
-    if (!('accepts' in unpaid.header)) throw new Error('development_x402_payment_challenge_invalid')
-    const challenge = unpaid.header
-    validatePaymentRequired(challenge)
+    const challenge = validatePaymentRequired({
+      x402Version: 2,
+      resource: { url: requestUrl, description: 'Development-only dynamic x402 quote operation.', mimeType: 'application/json', serviceName: 'development-local-x402-provider' },
+      accepts: [{
+        scheme: 'exact',
+        network: BASE_SEPOLIA_NETWORK,
+        amount: LOCAL_X402_PAYMENT_AMOUNT,
+        asset: BASE_SEPOLIA_USDC,
+        payTo: LOCAL_X402_PAY_TO,
+        maxTimeoutSeconds: 60,
+        extra: { name: 'USDC', version: '2' },
+      }],
+      extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(true) },
+    })
     if (challenge.x402Version !== 2) throw new Error('development_x402_payment_version_unsupported')
     const requirement = challenge.accepts[0]
     if (requirement === undefined) throw new Error('development_x402_payment_requirement_missing')
@@ -277,7 +283,7 @@ async function runDevelopmentX402RouteRuntimeCanary(
   const providerRef = 'provider:development-x402-local'
   const adapterId = 'x402-fetch:v2'
   const authorityGeneration = 1
-  const configuration = {
+    const configuration = {
     method: 'GET' as const,
     query: [{ inputPointer: '/quote', parameter: 'quote', required: true }],
     requestTimeoutMs: 5_000,
@@ -286,9 +292,19 @@ async function runDevelopmentX402RouteRuntimeCanary(
     currency: 'USD',
     routeAmountExponent: 2,
     assetAmountExponent: BASE_SEPOLIA_USDC_DECIMALS,
-    asset: BASE_SEPOLIA_USDC,
-    payTo: LOCAL_X402_PAY_TO,
-  }
+      asset: BASE_SEPOLIA_USDC,
+      payTo: LOCAL_X402_PAY_TO,
+      paymentRequiredJson: stableStringify(validatePaymentRequired({
+        x402Version: 2,
+        resource: { url: `${server.advertisedBaseUrl}${LOCAL_X402_ROUTE_PREFIX}${input.symbol}?quote=${input.quote}` },
+        accepts: [{
+          scheme: 'exact', network: BASE_SEPOLIA_NETWORK, amount: LOCAL_X402_PAYMENT_AMOUNT,
+          asset: BASE_SEPOLIA_USDC, payTo: LOCAL_X402_PAY_TO, maxTimeoutSeconds: 60,
+          extra: { name: 'USDC', version: '2' },
+        }],
+        extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(true) },
+      }) as StableHashValue),
+    }
   const authorityDigest = canonicalDigest({
     kind: 'development-x402-provider-authority',
     connectionRef,

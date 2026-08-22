@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import { admitRegisteredTransport } from '@/modules/capability-supply/public'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 const providerAuthority = {
   kind: 'provider_connection',
   connectionRef: 'connection:capability',
   providerRef: 'provider:capability',
 } as const
 const keylessAuthority = { kind: 'keyless' } as const
+const TEST_X402_ASSET = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+const TEST_X402_PAY_TO = '0x209693Bc6afc0C5328bA36FaF03C514EF312287C'
+function pinnedPaymentRequiredJson(resourceUrl: string): string {
+  return stableStringify(validatePaymentRequired({
+    x402Version: 2,
+    resource: { url: resourceUrl },
+    accepts: [{
+      scheme: 'exact', network: 'eip155:84532', amount: '10000',
+      asset: TEST_X402_ASSET, payTo: TEST_X402_PAY_TO,
+      maxTimeoutSeconds: 60, extra: { name: 'USDC', version: '2' },
+    }],
+  }) as StableHashValue)
+}
 
 
 describe('capability supply transport adapter registry', () => {
@@ -69,8 +84,8 @@ describe('capability supply transport adapter registry', () => {
       config: {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        asset: '0x0000000000000000000000000000000000000001',
-        payTo: '0x0000000000000000000000000000000000000002',
+        asset: TEST_X402_ASSET, payTo: TEST_X402_PAY_TO,
+        paymentRequiredJson: pinnedPaymentRequiredJson('https://example.test/paid'),
       },
     })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
   })
@@ -216,8 +231,8 @@ describe('capability supply transport adapter registry', () => {
       config: {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        asset: '0x0000000000000000000000000000000000000001',
-        payTo: '0x0000000000000000000000000000000000000002',
+        asset: TEST_X402_ASSET, payTo: TEST_X402_PAY_TO,
+        paymentRequiredJson: pinnedPaymentRequiredJson('https://example.test/paid-capability'),
       },
     })).toMatchObject({
       kind: 'admitted', transport: { adapterId: 'x402-fetch:v2' },
@@ -233,8 +248,8 @@ describe('capability supply transport adapter registry', () => {
       config: {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
         currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
-        asset: '0x0000000000000000000000000000000000000001',
-        payTo: '0x0000000000000000000000000000000000000002',
+        asset: TEST_X402_ASSET, payTo: TEST_X402_PAY_TO,
+        paymentRequiredJson: pinnedPaymentRequiredJson('https://api.example.com/paid-capability'),
       },
     }
     expect(admitRegisteredTransport({
