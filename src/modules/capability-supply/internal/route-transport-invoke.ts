@@ -31,7 +31,6 @@ import {
 } from './route-transport-http-json'
 import { isMcpConfiguration, invokeMcp, type McpConfiguration } from './route-transport-mcp'
 import {
-  expectedX402Amount,
   invokeX402,
   type X402Configuration,
   type X402PaymentAttemptEvent,
@@ -40,6 +39,7 @@ import {
   type X402PreparedAuthorization,
   type X402RouteTransportRuntime,
 } from './route-transport-x402'
+import { expectedX402Amount } from './route-transport-x402-payment'
 import type {
   RouteTransportCancellationInvocation,
   RouteTransportCancellationInvocationFor,
@@ -145,7 +145,6 @@ export type RouteTransportRuntime = Readonly<{
   prepareX402PaymentAuthorization?: (
     request: X402PaymentSignatureRequest & X402PaymentAuthorizationIdentity,
   ) => Promise<X402PreparedAuthorization | undefined>
-  beforeX402PaymentAuthorizationRead?: () => Promise<boolean>
   readX402PaymentAuthorization?: (
     prepared: X402PreparedAuthorization,
   ) => Promise<string | undefined>

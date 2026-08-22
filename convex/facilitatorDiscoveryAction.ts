@@ -69,7 +69,7 @@ export async function admitFacilitatorDiscoveryItems(
       result.draft,
       { ...decision, import: sourceImport },
       sourceRevision,
-    ) as FacilitatorDiscoveryAdmittedDraft)
+    ))
   }
   if (items.length > FACILITATOR_DISCOVERY_MAX_PAGE_SIZE) {
     skipped.push({ kind: 'skip', reason: 'resource_invalid' })

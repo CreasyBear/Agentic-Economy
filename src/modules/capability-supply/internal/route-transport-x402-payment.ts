@@ -12,7 +12,6 @@ import type { ExactAmount } from '@/modules/money/public'
 import type { PaymentRequired } from '@x402/core/types'
 import { isProviderConnectionCredentialRef } from '../provider-connection'
 import type {
-  ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
   RouteTransportRuntime,
 } from './route-transport-invoke'
@@ -30,15 +29,9 @@ import {
   refused,
   type RouteTransportObservation,
 } from './route-transport-observation'
-import {
-  isProviderRouteTransportAuthority,
-  providerAuthorityFailure,
-} from './route-transport-http-json'
 import type {
   X402Configuration,
   X402PaymentAuthorizationIdentity,
-  X402PaymentSignatureRequest,
-  X402PreparedAuthorization,
 } from './route-transport-x402'
 
 export type X402Challenge = Readonly<{
@@ -70,49 +63,6 @@ export type X402PaymentMaterialResult =
   | Readonly<{ kind: 'ready'; material: X402PaymentMaterial }>
   | Readonly<{ kind: 'refused'; observation: RouteTransportObservation }>
 
-export async function validateX402ProviderAuthority(
-  invocation: RouteTransportInvocation,
-  runtime: RouteTransportRuntime,
-): Promise<string | undefined> {
-  if (invocation.binding.authority.kind !== 'provider_connection')
-    return undefined
-  const validateProviderConnectionAuthority =
-    runtime.validateProviderConnectionAuthority
-  if (validateProviderConnectionAuthority === undefined)
-    return 'connection_authority_validator_unavailable'
-  const authority = invocation.authority
-  if (!isProviderRouteTransportAuthority(authority))
-    return 'connection_authority_snapshot_invalid'
-  let validation: ProviderConnectionAuthorityValidationResult
-  try {
-    validation = await validateProviderConnectionAuthority({
-      connectionRef: invocation.binding.authority.connectionRef,
-      providerRef: invocation.binding.authority.providerRef,
-      adapterId: invocation.binding.adapterId,
-      authorityGeneration: authority.authorityGeneration,
-      authorityDigest: authority.authorityDigest,
-      ...(authority.leaseRef === undefined
-        ? {}
-        : {
-            leaseRef: authority.leaseRef,
-            invocationRef: authority.invocationRef,
-            operationRef: authority.operationRef,
-            grantedScopes: authority.grantedScopes,
-            grantedResources: authority.grantedResources,
-            readinessValidUntil: authority.readinessValidUntil,
-            ...(authority.readinessDigest === undefined
-              ? {}
-              : { readinessDigest: authority.readinessDigest }),
-          }),
-    })
-  } catch {
-    return 'connection_authority_validation_failed'
-  }
-  return validation.kind === 'valid'
-    ? undefined
-    : providerAuthorityFailure(validation.reason)
-}
-
 export async function prepareX402PaymentMaterial(
   endpoint: URL,
   configuration: X402Configuration,
@@ -130,13 +80,6 @@ export async function prepareX402PaymentMaterial(
       kind: 'refused',
       observation: refused('x402', requestDigest, false, 'input_invalid'),
     }
-  const authorityFailure = await validateX402ProviderAuthority(invocation, runtime)
-  if (authorityFailure !== undefined) {
-    return {
-      kind: 'refused',
-      observation: refused('x402', requestDigest, false, authorityFailure),
-    }
-  }
   const challenge = decodePinnedX402Challenge(configuration.paymentRequired)
   if (challenge === undefined) {
     return {
@@ -290,47 +233,6 @@ export async function prepareX402PaymentMaterial(
   }
 }
 
-export async function preparePinnedX402PaymentAuthorization(
-  endpoint: URL,
-  configuration: X402Configuration,
-  invocation: RouteTransportInvocation,
-  requestDigest: string,
-  runtime: RouteTransportRuntime,
-  target: URL | undefined,
-): Promise<
-  | Readonly<{ kind: 'prepared'; authorization: X402PreparedAuthorization }>
-  | Readonly<{ kind: 'refused'; failureCode: string }>
-> {
-  const materialResult = await prepareX402PaymentMaterial(
-    endpoint,
-    configuration,
-    invocation,
-    requestDigest,
-    runtime,
-    target,
-  )
-  if (materialResult.kind === 'refused') {
-    return {
-      kind: 'refused',
-      failureCode: materialResult.observation.failureCode ?? 'payment_challenge_invalid',
-    }
-  }
-  let authorization: X402PreparedAuthorization | undefined
-  try {
-    authorization = await runtime.prepareX402PaymentAuthorization?.({
-      challenge: materialResult.material.challenge,
-      credential: materialResult.material.paymentCredentialRef,
-      selectedRequirement: materialResult.material.requirement,
-      ...materialResult.material.authorizationIdentity,
-    })
-  } catch {
-    authorization = undefined
-  }
-  return authorization === undefined
-    ? { kind: 'refused', failureCode: 'payment_signature_unavailable' }
-    : { kind: 'prepared', authorization }
-}
-
 export function decodeX402Challenge(header: string | null): X402Challenge | undefined {
   if (header === null || header.length > MAX_RESPONSE_BYTES * 2)
     return undefined
@@ -398,7 +300,7 @@ function paymentRequiredFromChallenge(challenge: X402Challenge): PaymentRequired
   } as PaymentRequired
 }
 
-function expectedX402Amount(
+export function expectedX402Amount(
   routeAmount: ExactAmount,
   configuration: X402Configuration,
 ): ExactAmount | undefined {

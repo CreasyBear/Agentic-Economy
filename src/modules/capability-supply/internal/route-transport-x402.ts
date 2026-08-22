@@ -1,13 +1,6 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { cancelResponseBody } from '@/lib/server/bounded-request-body'
-import {
-  exactAmountSchema,
-  compareExactAmounts,
-  formatExactAmount,
-  parseDecimalExactAmount,
-  rescaleExactAmount,
-} from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
 import {
   readX402PaymentPayerAndNonce,
@@ -21,14 +14,13 @@ import {
   type X402VerifiedOffer,
 } from './x402-offer-receipt'
 import type {
+  ProviderConnectionAuthorityValidationResult,
   RouteTransportInvocation,
   RouteTransportRuntime,
 } from './route-transport-invoke'
 import {
   decodeX402Challenge,
-  preparePinnedX402PaymentAuthorization,
   prepareX402PaymentMaterial,
-  validateX402ProviderAuthority,
   type X402Challenge,
 } from './route-transport-x402-payment'
 import {
@@ -104,6 +96,7 @@ export type X402RouteTransportRuntime = RouteTransportRuntime &
     readX402PaymentAuthorizationByDigest: (
       prepared: X402PreparedAuthorization,
     ) => Promise<string | undefined>
+    beforeX402PaymentAuthorizationRead?: () => Promise<boolean>
     markX402PaymentPossiblySubmitted: (
       event: X402PaymentAttemptEvent,
     ) => Promise<void> | void
@@ -129,30 +122,6 @@ export type X402Configuration = Readonly<{
   paymentRequired: import('@x402/core/types').PaymentRequired
 }>
 
-export function expectedX402Amount(
-  routeAmount: ExactAmount,
-  configuration: X402Configuration,
-): ExactAmount | undefined {
-  if (
-    !exactAmountSchema.safeParse(routeAmount).success ||
-    routeAmount.currency !== configuration.currency
-  )
-    return undefined
-  const rescaled = rescaleExactAmount(
-    routeAmount,
-    configuration.assetAmountExponent,
-  )
-  if (rescaled === undefined) return undefined
-  const decimal = formatExactAmount(routeAmount)
-  if (decimal === undefined) return undefined
-  const tokenAmount = parseDecimalExactAmount(
-    configuration.currency,
-    decimal,
-    configuration.assetAmountExponent,
-  )
-  return tokenAmount?.units === rescaled.units ? rescaled : undefined
-}
-
 export async function invokeX402(
   endpoint: URL,
   configuration: X402Configuration,
@@ -165,6 +134,10 @@ export async function invokeX402(
   if (target === undefined)
     return refused('x402', requestDigest, false, 'input_invalid')
   const headers = callHeaders(invocation, undefined)
+  const authorityFailure = await validateX402ProviderAuthority(invocation, runtime)
+  if (authorityFailure !== undefined) {
+    return refused('x402', requestDigest, false, authorityFailure)
+  }
   const materialResult = await prepareX402PaymentMaterial(
     endpoint,
     configuration,
@@ -611,6 +584,49 @@ export async function invokeX402(
       quoteDeliveryStatus: 'unknown',
     }
   }
+}
+
+async function validateX402ProviderAuthority(
+  invocation: RouteTransportInvocation,
+  runtime: RouteTransportRuntime,
+): Promise<string | undefined> {
+  if (invocation.binding.authority.kind !== 'provider_connection')
+    return undefined
+  const validateProviderConnectionAuthority =
+    runtime.validateProviderConnectionAuthority
+  if (validateProviderConnectionAuthority === undefined)
+    return 'connection_authority_validator_unavailable'
+  const authority = invocation.authority
+  if (!isProviderRouteTransportAuthority(authority))
+    return 'connection_authority_snapshot_invalid'
+  let validation: ProviderConnectionAuthorityValidationResult
+  try {
+    validation = await validateProviderConnectionAuthority({
+      connectionRef: invocation.binding.authority.connectionRef,
+      providerRef: invocation.binding.authority.providerRef,
+      adapterId: invocation.binding.adapterId,
+      authorityGeneration: authority.authorityGeneration,
+      authorityDigest: authority.authorityDigest,
+      ...(authority.leaseRef === undefined
+        ? {}
+        : {
+            leaseRef: authority.leaseRef,
+            invocationRef: authority.invocationRef,
+            operationRef: authority.operationRef,
+            grantedScopes: authority.grantedScopes,
+            grantedResources: authority.grantedResources,
+            readinessValidUntil: authority.readinessValidUntil,
+            ...(authority.readinessDigest === undefined
+              ? {}
+              : { readinessDigest: authority.readinessDigest }),
+          }),
+    })
+  } catch {
+    return 'connection_authority_validation_failed'
+  }
+  return validation.kind === 'valid'
+    ? undefined
+    : providerAuthorityFailure(validation.reason)
 }
 
 type X402SettlementCheck =

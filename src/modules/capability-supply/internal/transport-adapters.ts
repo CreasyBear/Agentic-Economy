@@ -357,17 +357,8 @@ export type X402FetchTransportConfiguration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
-  paymentRequired: TransportConfigValue
+  paymentRequired: ReturnType<typeof validatePaymentRequired>
 }>
-
-type TransportConfigValue =
-  | null
-  | boolean
-  | number
-  | string
-  | Record<string, string | number | boolean | null>
-  | (string | number | boolean | null)[]
-  | Record<string, string | number | boolean | null>[]
 
 export function parseX402FetchTransportConfiguration(
   value: unknown,
@@ -375,10 +366,19 @@ export function parseX402FetchTransportConfiguration(
   const parsed = x402FetchConfiguration.safeParse(value)
   if (!parsed.success) return undefined
   try {
+    const { query: parsedQuery, ...withoutQuery } = parsed.data
+    const query = parsedQuery?.map((item) => ({
+      inputPointer: item.inputPointer,
+      parameter: item.parameter,
+      ...(item.required === undefined ? {} : { required: item.required }),
+      ...(item.style === undefined ? {} : { style: item.style }),
+      ...(item.explode === undefined ? {} : { explode: item.explode }),
+    }))
     return {
-      ...parsed.data,
-      paymentRequired: validatePaymentRequired(parsed.data.paymentRequired) as unknown as TransportConfigValue,
-    } as X402FetchTransportConfiguration
+      ...withoutQuery,
+      ...(query === undefined ? {} : { query }),
+      paymentRequired: validatePaymentRequired(parsed.data.paymentRequired),
+    }
   } catch {
     return undefined
   }
@@ -568,14 +568,14 @@ function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmis
   ) {
     return { kind: 'refused', reason: 'adapter_config_invalid' }
   }
-  const config = configuration as unknown as JsonValue
-  const configJson = stableStringify(config as StableHashValue)
+  const config = configuration as JsonValue
+  const configJson = stableStringify(config)
   return {
     kind: 'admitted',
     transport: {
       adapterId: input.adapterId,
       configJson,
-      configDigest: canonicalDigest(config as StableHashValue),
+      configDigest: canonicalDigest(config),
     },
   }
 }
