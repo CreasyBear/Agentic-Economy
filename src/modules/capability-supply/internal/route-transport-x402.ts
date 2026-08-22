@@ -119,7 +119,7 @@ export type X402Configuration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
-  paymentRequired: import('@x402/core/types').PaymentRequired
+  paymentRequiredJson: string
 }>
 
 export async function invokeX402(

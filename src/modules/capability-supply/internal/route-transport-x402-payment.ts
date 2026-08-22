@@ -9,7 +9,6 @@ import {
   rescaleExactAmount,
 } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
-import type { PaymentRequired } from '@x402/core/types'
 import { isProviderConnectionCredentialRef } from '../provider-connection'
 import type {
   RouteTransportInvocation,
@@ -18,6 +17,7 @@ import type {
 import {
   decodeX402PaymentRequiredHeader,
   validateX402PaymentRequired,
+  type X402PaymentRequired,
 } from './x402-payment-signer'
 import {
   verifyX402SignedOffer,
@@ -293,7 +293,7 @@ function validateX402Challenge(value: unknown): X402Challenge | undefined {
   return value as X402Challenge
 }
 
-function paymentRequiredFromChallenge(challenge: X402Challenge): PaymentRequired {
+function paymentRequiredFromChallenge(challenge: X402Challenge): X402PaymentRequired {
   return {
     x402Version: challenge.x402Version,
     resource: { ...challenge.resource },
@@ -302,7 +302,7 @@ function paymentRequiredFromChallenge(challenge: X402Challenge): PaymentRequired
       extra: { ...candidate.extra },
     })),
     ...(challenge.extensions === undefined ? {} : { extensions: { ...challenge.extensions } }),
-  } as PaymentRequired
+  }
 }
 
 export function expectedX402Amount(
