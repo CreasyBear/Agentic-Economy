@@ -5,6 +5,7 @@ import {
   encodePaymentResponseHeader,
   encodePaymentSignatureHeader,
 } from '@x402/core/http'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   createReceiptEIP712,
   type SignTypedDataFn,
@@ -31,12 +32,12 @@ function registeredBinding(
   bindingAuthority: typeof providerAuthority,
   config: Readonly<Record<string, import('@/modules/common/stable-hash').StableHashValue>>,
 ) {
-  if (adapterId !== 'x402-fetch:v2' || Object.hasOwn(config, 'paymentRequired')) {
+  if (adapterId !== 'x402-fetch:v2' || Object.hasOwn(config, 'paymentRequiredJson')) {
     return registeredBindingFromHarness(adapterId, endpointUrl, bindingAuthority, config)
   }
   return registeredBindingFromHarness(adapterId, endpointUrl, bindingAuthority, {
     ...config,
-    paymentRequired: {
+    paymentRequiredJson: stableStringify({
       x402Version: 2,
       resource: { url: endpointUrl },
       accepts: [{
@@ -50,7 +51,7 @@ function registeredBinding(
         maxTimeoutSeconds: 60,
         extra: {},
       }],
-    } as import('@/modules/common/stable-hash').StableHashValue,
+    } as StableHashValue),
   })
 }
 
@@ -222,7 +223,7 @@ describe('registered route transport runtime', () => {
             assetAmountExponent: 6,
             asset: requirement.accepts[0]!.asset,
             payTo: requirement.accepts[0]!.payTo,
-            paymentRequired: requirement,
+            paymentRequiredJson: stableStringify(requirement as StableHashValue),
           },
         ),
       }),
@@ -888,7 +889,7 @@ describe('registered route transport runtime', () => {
             assetAmountExponent: 6,
             asset: requirement.accepts[0]!.asset,
             payTo: requirement.accepts[0]!.payTo,
-            paymentRequired: requirement,
+            paymentRequiredJson: stableStringify(requirement as StableHashValue),
           },
         ),
         authority: {
@@ -969,7 +970,7 @@ describe('registered route transport runtime', () => {
             assetAmountExponent: 6,
             asset: '0x0000000000000000000000000000000000000001',
             payTo: '0x0000000000000000000000000000000000000002',
-            paymentRequired: requirement,
+            paymentRequiredJson: stableStringify(requirement as StableHashValue),
           },
         ),
       }),
@@ -1019,7 +1020,7 @@ describe('registered route transport runtime', () => {
         assetAmountExponent: 6,
         asset: '0x0000000000000000000000000000000000000001',
         payTo: '0x0000000000000000000000000000000000000002',
-        paymentRequired: paymentRequiredFor(amount),
+        paymentRequiredJson: stableStringify(paymentRequiredFor(amount) as StableHashValue),
       },
     )
     const exactBinding = bindingFor('7000')

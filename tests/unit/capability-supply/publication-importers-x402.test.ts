@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { validatePaymentRequired } from "@x402/core/schemas";
 
 import { admitFacilitatorDiscoveryItems } from "../../../convex/facilitatorDiscoveryAction";
 import timezoneFixture from "../../../src/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json";
 
 import type { SchemaDereferencer } from "@/modules/capability-supply/internal/admit-provider-schema";
+import { isRecord } from "@/modules/common/is-record";
 import {
   admitRegisteredTransport,
   importMcpCapability,
@@ -95,6 +97,14 @@ describe("capability publication importers", () => {
         network: "eip155:84532",
         currency: "AUD",
       });
+      const config = result.draft.binding.adapter.config;
+      if (!isRecord(config) || typeof config.paymentRequiredJson !== "string") {
+        throw new Error("expected persisted x402 payment terms");
+      }
+      const paymentRequiredJson = config.paymentRequiredJson;
+      expect(validatePaymentRequired(JSON.parse(paymentRequiredJson))).toEqual(
+        expect.objectContaining({ x402Version: 2 }),
+      );
     }
   });
 
@@ -243,6 +253,12 @@ describe("capability publication importers", () => {
       retained: { info: { source: "test" } },
     });
     expect(source.resource.paymentRequired.extensions).not.toHaveProperty("bazaar");
+    const paymentRequiredJson = discovery.admitted[0]!.binding.adapter.config.paymentRequiredJson;
+    const persistedPaymentRequired = validatePaymentRequired(JSON.parse(paymentRequiredJson));
+    expect(persistedPaymentRequired.extensions).toEqual({
+      "builder-code": timezoneFixture.paymentRequired.extensions["builder-code"],
+      retained: { info: { source: "test" } },
+    });
   });
 
   it.each([

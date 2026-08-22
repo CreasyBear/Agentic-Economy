@@ -80,7 +80,7 @@ export async function prepareX402PaymentMaterial(
       kind: 'refused',
       observation: refused('x402', requestDigest, false, 'input_invalid'),
     }
-  const challenge = decodePinnedX402Challenge(configuration.paymentRequired)
+  const challenge = decodePinnedX402Challenge(configuration)
   if (challenge === undefined) {
     return {
       kind: 'refused',
@@ -245,9 +245,14 @@ export function decodeX402Challenge(header: string | null): X402Challenge | unde
   }
 }
 
-function decodePinnedX402Challenge(value: unknown): X402Challenge | undefined {
+function decodePinnedX402Challenge(configuration: X402Configuration): X402Challenge | undefined {
+  if (!('paymentRequiredJson' in configuration) || typeof configuration.paymentRequiredJson !== 'string') {
+    return undefined
+  }
   try {
-    return validateX402Challenge(validateX402PaymentRequired(value))
+    return validateX402Challenge(
+      validateX402PaymentRequired(JSON.parse(configuration.paymentRequiredJson)),
+    )
   } catch {
     return undefined
   }

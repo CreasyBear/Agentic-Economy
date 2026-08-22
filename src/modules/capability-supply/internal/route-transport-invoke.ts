@@ -1,5 +1,4 @@
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
-import { validatePaymentRequired } from '@x402/core/schemas'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -211,38 +210,19 @@ const x402Configuration = z
     assetAmountExponent: amountExponent,
     asset: nonBlankString.max(200),
     payTo: nonBlankString.max(200),
-    paymentRequired: z.unknown(),
+    paymentRequiredJson: z.string().min(2).max(65_536),
   })
-  .superRefine((value, context) => {
-    if (
-      (value.method === 'GET' && value.query === undefined) ||
-      (value.method === 'POST' && value.query !== undefined)
-    ) {
-      context.addIssue({ code: 'custom', message: 'method_query_mismatch' })
-    }
-    try {
-      const paymentRequired = validatePaymentRequired(value.paymentRequired)
-      if (paymentRequired.x402Version !== 2) {
-        context.addIssue({
-          code: 'custom',
-          path: ['paymentRequired'],
-          message: 'payment_required_version_unsupported',
-        })
-      }
-    } catch {
-      context.addIssue({
-        code: 'custom',
-        path: ['paymentRequired'],
-        message: 'payment_required_invalid',
-      })
-    }
-  })
+  .refine((value) => (
+    (value.method === 'GET' && value.query !== undefined)
+    || (value.method === 'POST' && value.query === undefined)
+  ), 'method_query_mismatch')
 
 function isX402Configuration(
   value: Readonly<Record<string, unknown>>,
 ): value is X402Configuration {
   return x402Configuration.safeParse(value).success
 }
+
 
 function isX402RouteTransportRuntime(
   runtime: RouteTransportRuntime,

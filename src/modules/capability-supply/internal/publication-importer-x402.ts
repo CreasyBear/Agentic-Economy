@@ -1,5 +1,6 @@
 import type { JsonValue } from "@/modules/capability-contract/public";
 import { isRecord } from "@/modules/common/is-record";
+import { stableStringify, type StableHashValue } from "@/modules/common/stable-hash";
 import {
   compareExactAmounts,
   exactAmountSchema,
@@ -209,7 +210,7 @@ export async function importX402Capability(
         assetAmountExponent,
         asset,
         payTo,
-        paymentRequired: paymentRequired as unknown as JsonValue,
+        paymentRequiredJson: stableStringify(paymentRequired as StableHashValue),
       },
     },
   });

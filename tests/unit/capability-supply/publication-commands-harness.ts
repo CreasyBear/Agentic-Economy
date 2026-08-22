@@ -1,4 +1,5 @@
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
+import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import { pricingConfigDigest } from '@/modules/money/public'
 import {
   admitPublicationDraft,
@@ -21,7 +22,6 @@ import {
   capabilityOperationId,
   capabilityPublicationProvenanceDigest,
   createPublicOperationRef,
-  type CapabilityContractRef,
   type CapabilityPublicationBindingDraft,
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,

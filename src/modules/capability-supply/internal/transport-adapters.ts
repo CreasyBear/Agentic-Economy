@@ -237,7 +237,7 @@ const x402FetchConfiguration = z.strictObject({
   assetAmountExponent: z.number().int().min(0).max(18),
   asset: z.string().trim().min(1).max(200),
   payTo: z.string().trim().min(1).max(200),
-  paymentRequired: z.unknown(),
+  paymentRequiredJson: z.string().min(2).max(MAX_ADAPTER_CONFIG_BYTES),
 }).refine((value) => NetworkSchemaV2.safeParse(value.network).success)
   .refine((value) => {
     const segments = value.network.split(':')
@@ -246,17 +246,9 @@ const x402FetchConfiguration = z.strictObject({
   .refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
   .refine((value) => value.method === 'GET' ? (value.query?.length ?? 0) > 0 : value.query === undefined)
   .superRefine((value, context) => {
-    try {
-      const paymentRequired = validatePaymentRequired(value.paymentRequired)
-      if (paymentRequired.x402Version !== 2) {
-        context.addIssue({
-          code: 'custom',
-          path: ['paymentRequired'],
-          message: 'payment_required_version_unsupported',
-        })
-      }
-    } catch {
-      context.addIssue({ code: 'custom', path: ['paymentRequired'], message: 'payment_required_invalid' })
+    const paymentRequired = parsePinnedX402PaymentRequiredJson(value.paymentRequiredJson)
+    if (paymentRequired === undefined) {
+      context.addIssue({ code: 'custom', path: ['paymentRequiredJson'], message: 'payment_required_invalid' })
     }
   })
 
@@ -357,7 +349,7 @@ export type X402FetchTransportConfiguration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
-  paymentRequired: ReturnType<typeof validatePaymentRequired>
+  paymentRequiredJson: string
 }>
 
 export function parseX402FetchTransportConfiguration(
@@ -365,22 +357,17 @@ export function parseX402FetchTransportConfiguration(
 ): X402FetchTransportConfiguration | undefined {
   const parsed = x402FetchConfiguration.safeParse(value)
   if (!parsed.success) return undefined
-  try {
-    const { query: parsedQuery, ...withoutQuery } = parsed.data
-    const query = parsedQuery?.map((item) => ({
-      inputPointer: item.inputPointer,
-      parameter: item.parameter,
-      ...(item.required === undefined ? {} : { required: item.required }),
-      ...(item.style === undefined ? {} : { style: item.style }),
-      ...(item.explode === undefined ? {} : { explode: item.explode }),
-    }))
-    return {
-      ...withoutQuery,
-      ...(query === undefined ? {} : { query }),
-      paymentRequired: validatePaymentRequired(parsed.data.paymentRequired),
-    }
-  } catch {
-    return undefined
+  const { query: parsedQuery, ...withoutQuery } = parsed.data
+  const query = parsedQuery?.map((item) => ({
+    inputPointer: item.inputPointer,
+    parameter: item.parameter,
+    ...(item.required === undefined ? {} : { required: item.required }),
+    ...(item.style === undefined ? {} : { style: item.style }),
+    ...(item.explode === undefined ? {} : { explode: item.explode }),
+  }))
+  return {
+    ...withoutQuery,
+    ...(query === undefined ? {} : { query }),
   }
 }
 
@@ -483,9 +470,9 @@ export function parseAdmittedX402CatalogPayment(
 ): X402CatalogPayment | undefined {
   if (adapterId !== 'x402-fetch:v2') return undefined
   try {
-    const configuration = x402FetchConfiguration.safeParse(JSON.parse(configJson))
-    if (!configuration.success) return undefined
-    const { network, asset, currency, routeAmountExponent, assetAmountExponent } = configuration.data
+    const configuration = parseX402FetchTransportConfiguration(JSON.parse(configJson))
+    if (configuration === undefined) return undefined
+    const { network, asset, currency, routeAmountExponent, assetAmountExponent } = configuration
     return { network, asset, currency, routeAmountExponent, assetAmountExponent }
   } catch {
     return undefined
@@ -568,15 +555,28 @@ function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmis
   ) {
     return { kind: 'refused', reason: 'adapter_config_invalid' }
   }
-  const config = configuration as JsonValue
-  const configJson = stableStringify(config)
+  const configJson = stableStringify(configuration)
   return {
     kind: 'admitted',
     transport: {
       adapterId: input.adapterId,
       configJson,
-      configDigest: canonicalDigest(config),
+      configDigest: canonicalDigest(configuration),
     },
+  }
+}
+
+export function parsePinnedX402PaymentRequiredJson(
+  value: unknown,
+): ReturnType<typeof validatePaymentRequired> | undefined {
+  if (typeof value !== 'string' || encoder.encode(value).byteLength > MAX_ADAPTER_CONFIG_BYTES) {
+    return undefined
+  }
+  try {
+    const paymentRequired = validatePaymentRequired(JSON.parse(value))
+    return paymentRequired.x402Version === 2 ? paymentRequired : undefined
+  } catch {
+    return undefined
   }
 }
 

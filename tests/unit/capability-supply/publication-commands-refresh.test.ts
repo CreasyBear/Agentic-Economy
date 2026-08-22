@@ -189,11 +189,13 @@ describe('capability-supply publication commands refresh', () => {
       now: 10,
     }, emptyPorts({
       ...rows,
-      loadBindingByBindingId: async () => ({
-        ...persistedBinding,
-        authority: { kind: 'keyless' as const },
-        connectionAuthority: undefined,
-      }),
+      loadBindingByBindingId: async () => {
+        const { connectionAuthority: _connectionAuthority, ...persistedWithoutAuthority } = persistedBinding
+        return {
+          ...persistedWithoutAuthority,
+          authority: { kind: 'keyless' as const },
+        }
+      },
       getExactRegisteredContract: async () => ({
         kind: 'found',
         contract: encoded.contract,

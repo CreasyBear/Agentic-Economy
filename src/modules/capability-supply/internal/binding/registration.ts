@@ -75,7 +75,7 @@ export function connectionAuthoritySnapshotMatches(
   snapshot: CapabilityConnectionAuthoritySnapshot | undefined,
   connection: ProviderConnection | null | undefined,
   expected: Readonly<{ businessId: string; operationRef: string; adapterId: string; now: number }>,
-): boolean {
+): connection is ProviderConnection {
   return connectionAuthoritySnapshotIsValid(snapshot)
     && connection != null
     && Number.isSafeInteger(expected.now)
