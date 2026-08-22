@@ -371,11 +371,11 @@ export async function listPendingOperationApprovalsHandler(
   ctx: QueryCtx,
 ): Promise<PendingApprovalView[]> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity === null || identity.subject.trim().length === 0) return []
+  if (identity === null || identity.tokenIdentifier.trim().length === 0) return []
   const now = Date.now()
   const rows = await ctx.db.query('capabilityOperationInvocations')
     .withIndex('by_ownerId_and_state_and_createdAt', (query) => (
-      query.eq('ownerId', identity.subject).eq('state', 'pending')
+      query.eq('ownerId', identity.tokenIdentifier).eq('state', 'pending')
     ))
     .order('desc')
     .take(50)
@@ -397,13 +397,13 @@ export async function decideOperationApprovalHandler(
   args: { invocationRef: string; decision: 'approve' | 'deny' },
 ): Promise<ApprovalDecisionResult> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity === null || identity.subject.trim().length === 0) {
+  if (identity === null || identity.tokenIdentifier.trim().length === 0) {
     return { kind: 'refused', code: 'authentication_required' }
   }
   const row = await ctx.db.query('capabilityOperationInvocations')
     .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
     .unique()
-  if (row === null || row.ownerId !== identity.subject) {
+  if (row === null || row.ownerId !== identity.tokenIdentifier) {
     return { kind: 'refused', code: 'invocation_not_found' }
   }
   if (
@@ -529,7 +529,7 @@ export async function decideOperationApprovalHandler(
       kind: 'approve_each',
       authorityRef: `owner-approval:${canonicalDigest({
         invocationRef: row.invocationRef,
-        ownerId: identity.subject,
+        ownerId: row.ownerId,
       }).slice(7)}`,
     },
     expiresAt: new Date(grant.expiresAt).toISOString(),

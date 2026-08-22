@@ -159,11 +159,11 @@ async function authorizeOwnerRecovery(
   const identity = await ctx.auth.getUserIdentity()
   if (
     identity === null
-    || identity.subject.trim().length === 0
+    || identity.tokenIdentifier.trim().length === 0
     || (idempotencyKey !== undefined && idempotencyKey.trim().length === 0)
   ) return null
   const row = await ctx.runQuery(internal.capabilityOperationInvocations.readOwnerRecovery, { invocationRef })
-  return row === null || row.ownerId !== identity.subject ? null : row
+  return row === null || row.ownerId !== identity.tokenIdentifier ? null : row
 }
 
 export async function invokeHandler(
