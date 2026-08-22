@@ -53,6 +53,7 @@ function workflowSteps(workflow: Workflow): WorkflowStep[] {
 describe('green release baseline', () => {
   it('executes every required source sub-gate through gate:release', () => {
     const chain = releaseCommandChain('gate:release')
+    expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
     for (const subGate of [
       'check:convex-codegen',
       'lint',
@@ -139,6 +140,7 @@ describe('green release baseline', () => {
     const uploadIndex = live?.steps?.findIndex((step) => step.name === 'Upload the validated strict opt-in paid gateway receipt') ?? -1
     const manifestIndex = live?.steps?.findIndex((step) => step.name === 'Verify production deployment manifest before live smoke') ?? -1
     expect(manifestIndex).toBeGreaterThanOrEqual(0)
+    expect(live?.steps?.[manifestIndex]?.run).toBe('npm run verify:deployment-manifest -- --environment production')
     expect(manifestIndex).toBeLessThan(prepareIndex)
     expect(prepareIndex).toBeLessThan(preparationUploadIndex)
     expect(preparationUploadIndex).toBeLessThan(completeIndex)
