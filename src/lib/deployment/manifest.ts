@@ -58,7 +58,7 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
   { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
-  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
   { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
 ]
 
