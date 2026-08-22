@@ -137,6 +137,7 @@ export async function rotateCapabilityTransportBindingAuthority(
   if (!offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)) {
     return { kind: 'refused', reason: 'binding_integrity_failure' }
   }
+  const expectedAuthority = binding.connectionAuthority
   if (
     binding.bindingId !== input.bindingId
     || binding.offeringId !== input.offeringId
@@ -147,12 +148,13 @@ export async function rotateCapabilityTransportBindingAuthority(
     || binding.authority.connectionRef !== input.connectionRef
     || binding.authority.providerRef !== input.providerRef
     || binding.adapterId !== input.adapterId
-    || !connectionAuthoritySnapshotsEqual(binding.connectionAuthority, input.previousAuthority)
+    || expectedAuthority === undefined
+    || !connectionAuthoritySnapshotsEqual(expectedAuthority, input.previousAuthority)
   ) {
     return { kind: 'refused', reason: 'connection_authority_stale' }
   }
   const connection = await ports.loadProviderConnection(input.connectionRef)
-  if (!connectionAuthoritySnapshotMatches(binding.connectionAuthority, connection, {
+  if (!connectionAuthoritySnapshotMatches(expectedAuthority, connection, {
     businessId: input.businessId,
     operationRef: input.previousOperationRef,
     adapterId: input.adapterId,
@@ -166,7 +168,7 @@ export async function rotateCapabilityTransportBindingAuthority(
   )
   await ports.patchBindingConnectionAuthority(binding.bindingId, {
     expectedRegistrationHash: binding.registrationHash,
-    expectedAuthority: binding.connectionAuthority!,
+    expectedAuthority,
     nextAuthority,
     updatedAt,
   })
