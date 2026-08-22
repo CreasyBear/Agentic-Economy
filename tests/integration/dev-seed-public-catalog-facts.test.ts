@@ -43,7 +43,7 @@ type CatalogRow = {
  * demonstrates all four states through the real public read.
  */
 describe('dev-seeded public catalog decision facts', () => {
-  it('publishes an empty cluster-free catalog', async () => {
+  it('publishes a catalog without retired seed rows', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)
@@ -57,7 +57,7 @@ describe('dev-seeded public catalog decision facts', () => {
     expect(rows).toEqual([])
   })
 
-  it('has no cluster rows to republish after eviction', async () => {
+  it('has no retired seed rows to republish after eviction', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await runOfferingCutover(backend)

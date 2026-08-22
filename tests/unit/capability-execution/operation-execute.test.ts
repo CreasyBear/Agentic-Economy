@@ -477,8 +477,8 @@ describe('operation.execute executor (pure, DB-driven)', () => {
   })
 })
 
-describe('keyless seed source after cluster eviction', () => {
-  it('does not fabricate cluster descriptors', async () => {
+describe('keyless seed source after retired seed eviction', () => {
+  it('does not fabricate retired seed descriptors', async () => {
     expect(await deriveKeylessDescriptors()).toEqual([])
     expect(await seededKeylessSeeds()).toEqual([])
     expect(await seededDescriptorFor(FX.operationRef)).toBeUndefined()

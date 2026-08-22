@@ -50,8 +50,6 @@
     "test:ui-contract": "AE_SCAN_MODE=clean node tools/dev/run-with-cleanup.mjs vitest run tests/ui-contract",
     "test:all": "npm run typecheck && npm run check:convex-codegen && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:seo && npm run test:ui-contract && npm run build",
     "doctor": "npm exec --offline -- react-doctor",
-    "test:quality:gate": "node tools/dev/run-with-cleanup.mjs npx tsx eval/quality/gate.ts",
-    "test:quality:gate:live": "node tools/dev/run-with-cleanup.mjs npx tsx eval/quality/gate.ts --live",
     "test:eval:braintrust:local": "node tools/dev/run-with-cleanup.mjs tsx eval/braintrust/answer.eval.ts",
     "test:eval:braintrust:remote": "node tools/dev/run-with-cleanup.mjs tsx eval/braintrust/answer.eval.ts --remote"
   },

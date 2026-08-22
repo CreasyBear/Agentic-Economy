@@ -9,8 +9,8 @@ import {
 } from '../../src/modules/capability-supply/public'
 
 /**
- * Product catalog is facilitator-admitted, not Cluster A/B/C. Tests that need
- * a descriptor construct one locally; this source stays empty.
+ * Product catalog is facilitator-admitted; the retired seed catalog is empty.
+ * Tests that need a descriptor construct one locally.
  */
 export async function deriveKeylessDescriptors(): Promise<OperationExecutableDescriptor[]> {
   return []

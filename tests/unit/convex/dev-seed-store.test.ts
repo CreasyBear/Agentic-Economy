@@ -7,7 +7,7 @@ import { DEV_SEED_BUSINESS_FIXTURES, buildDevSeedCatalogState } from '../../../s
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
 describe('dev seed Convex store', () => {
-  it('persists an empty catalog after cluster eviction', async () => {
+  it('persists an empty catalog after retired seed eviction', async () => {
     const backend = convexTest(schema, modules)
     const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
 
