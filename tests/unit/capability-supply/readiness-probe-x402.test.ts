@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
-import { encodeX402PaymentRequiredHeader } from '@/modules/capability-supply/server'
+import { encodeX402PaymentRequiredHeader, type X402PaymentRequired } from '@/modules/capability-supply/server'
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import timezoneX402PaymentRequiredPin from '@/modules/dev/internal/x402-timezone-payment-required-2026-08-19.json'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
@@ -15,9 +17,17 @@ function colonSeparatedNetwork(value: string): `${string}:${string}` {
   return `${value.slice(0, separator)}:${value.slice(separator + 1)}`
 }
 
+function pinPaymentRequired(value: unknown): string {
+  const paymentRequired = validatePaymentRequired(value)
+  if (paymentRequired.x402Version !== 2) {
+    throw new Error('x402_payment_required_v2_expected')
+  }
+  return stableStringify(paymentRequired as StableHashValue)
+}
+
 describe('capability readiness probe', () => {
   it('validates an x402 PaymentRequired challenge and exact amount', async () => {
-    const challenge = encodeX402PaymentRequiredHeader({
+    const paymentRequired: X402PaymentRequired = {
       x402Version: 2,
       resource: { url: target.endpointUrl },
       accepts: [{
@@ -29,7 +39,8 @@ describe('capability readiness probe', () => {
         maxTimeoutSeconds: 30,
         extra: {},
       }],
-    })
+    }
+    const challenge = encodeX402PaymentRequiredHeader(paymentRequired)
     const send = vi.fn(async (request: Request) => {
       expect(request.method).toBe('POST')
       await expect(request.json()).resolves.toMatchObject({ operation: 'quote' })
@@ -44,6 +55,7 @@ describe('capability readiness probe', () => {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact',
         network: 'eip155:8453', currency: 'USD', routeAmountExponent: 2,
         assetAmountExponent: 6, asset: '0xasset', payTo: '0xpayee',
+        paymentRequiredJson: pinPaymentRequired(paymentRequired),
       }),
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
@@ -69,6 +81,19 @@ describe('capability readiness probe', () => {
   })
 
   it('rejects an x402 challenge with a mismatched payee or amount', async () => {
+    const intendedPaymentRequired = {
+      x402Version: 2,
+      resource: { url: target.endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '12000000',
+        asset: '0xasset',
+        payTo: '0xpayee',
+        maxTimeoutSeconds: 30,
+        extra: {},
+      }],
+    } as const
     const challenge = encodeX402PaymentRequiredHeader({
       x402Version: 2,
       resource: { url: target.endpointUrl },
@@ -90,6 +115,7 @@ describe('capability readiness probe', () => {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact',
         network: 'eip155:8453', currency: 'USD', routeAmountExponent: 2,
         assetAmountExponent: 6, asset: '0xasset', payTo: '0xpayee',
+        paymentRequiredJson: pinPaymentRequired(intendedPaymentRequired),
       }),
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
@@ -106,6 +132,19 @@ describe('capability readiness probe', () => {
     expect(result.evidenceRefs).toContain('probe:x402_payment_required_mismatch')
   })
   it('rejects a malformed x402 PaymentRequired header', async () => {
+    const paymentRequired = {
+      x402Version: 2,
+      resource: { url: target.endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '12000000',
+        asset: '0xasset',
+        payTo: '0xpayee',
+        maxTimeoutSeconds: 30,
+        extra: {},
+      }],
+    } as const
     const result = await runCapabilityReadinessProbe({
       ...target,
       authority: keylessAuthority,
@@ -114,6 +153,7 @@ describe('capability readiness probe', () => {
         method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact',
         network: 'eip155:8453', currency: 'USD', routeAmountExponent: 2,
         assetAmountExponent: 6, asset: '0xasset', payTo: '0xpayee',
+        paymentRequiredJson: pinPaymentRequired(paymentRequired),
       }),
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact', network: 'eip155:8453', asset: '0xasset', payTo: '0xpayee',
@@ -131,6 +171,8 @@ describe('capability readiness probe', () => {
   })
 
   it('matches a GET x402 PaymentRequired resource URL that includes the probe query', async () => {
+    const paymentRequired = validatePaymentRequired(timezoneX402PaymentRequiredPin.paymentRequired)
+    if (paymentRequired.x402Version !== 2) throw new Error('pin missing v2')
     const accepted = timezoneX402PaymentRequiredPin.paymentRequired.accepts[0]
     if (accepted === undefined) throw new Error('pin missing accepts')
     const challenge = encodeX402PaymentRequiredHeader({
@@ -177,6 +219,7 @@ describe('capability readiness probe', () => {
         assetAmountExponent: 6,
         asset: accepted.asset,
         payTo: accepted.payTo,
+        paymentRequiredJson: pinPaymentRequired(paymentRequired),
       }),
       expectedPaymentJson: JSON.stringify({
         scheme: 'exact',

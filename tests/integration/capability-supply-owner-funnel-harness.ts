@@ -1,4 +1,5 @@
 import type { FunctionArgs } from 'convex/server'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
@@ -192,6 +193,22 @@ export function x402Source(): Extract<
   { kind: 'x402' }
 > {
   const endpoint = 'https://provider.example/paid-lookup'
+  const price = { currency: 'USD', units: '100', exponent: 2 }
+  const asset = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+  const payTo = '0xbA667287B8Ef89565F8fD7AcD4d22Ce98E0f39cd'
+  const paymentRequired = validatePaymentRequired({
+    x402Version: 2,
+    resource: { url: endpoint },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '1000000',
+      asset,
+      payTo,
+      maxTimeoutSeconds: 60,
+      extra: { name: 'USD Coin', version: '2' },
+    }],
+  })
   const contract = contractMetadata('owner.x402.lookup')
   return {
     kind: 'x402',
@@ -203,13 +220,14 @@ export function x402Source(): Extract<
       ),
       outputSchema: objectSchema({ result: { type: 'string' } }, ['result']),
       method: 'POST',
-      price: { currency: 'AUD', units: '100', exponent: 2 },
+      price,
       scheme: 'exact',
       network: 'eip155:8453',
-      asset: '0xasset',
-      payTo: '0xpayee',
+      asset,
+      payTo,
       routeAmountExponent: 2,
       assetAmountExponent: 6,
+      paymentRequired,
     },
     contract: {
       ...contract,
@@ -231,7 +249,7 @@ export function x402Source(): Extract<
       ],
     },
     commercial: {
-      offering: ownerOffering(),
+      offering: ownerOffering(undefined, price),
       bindingId: 'binding:owner:x402-lookup',
       authority: {
         kind: 'provider_connection',
@@ -342,6 +360,11 @@ function ownerOffering(
   origin: NonNullable<CapabilityPublicationOfferingDraft['origin']> = {
     kind: 'standalone',
   },
+  price: { currency: string; units: string; exponent: number } = {
+    currency: 'AUD',
+    units: '100',
+    exponent: 2,
+  },
 ): CapabilityPublicationOfferingDraft {
   return {
     offeringId: 'offering:owner:lookup',
@@ -352,7 +375,7 @@ function ownerOffering(
       summary: 'Returns one owner-provided result.',
       price: {
         kind: 'fixed' as const,
-        amount: { currency: 'AUD', units: '100', exponent: 2 },
+        amount: price,
       },
       materialTerms: [],
       commercialRelationship: {
