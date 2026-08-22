@@ -40,7 +40,6 @@ import {
   requestJson,
   type GatewayInvocationObservation,
 } from "./operation-gateway-production-smoke-invocation";
-import type { StrictCreditActivityView } from "./operation-gateway-production-smoke-money";
 
 export type GatewayOwnerFixtureIdentity = Omit<
   z.infer<typeof fixtureSchema>,
@@ -57,7 +56,6 @@ export type HostedOwnerRuntime = Readonly<{
     operation: PublicOperationDescriptor,
     idempotencyKey: string,
   ) => Promise<GatewayInvocationObservation>;
-  readActivity: (invocationRef: string) => Promise<StrictCreditActivityView>;
   readAuthority: (operationRef: string) => Promise<HostedOwnerAuthority>;
   readWithdrawnOperation: (
     operationRef: string,
@@ -360,9 +358,6 @@ export function createHostedOwnerRuntime(
     context: unknown;
     preflightCredential: () => Promise<void>;
     revokeCredential: HostedOwnerRuntime["revokeCredential"];
-    readActivity: (
-      invocationRef: string,
-    ) => Promise<StrictCreditActivityView>;
   }>,
 ): HostedOwnerRuntime {
   const { context, transport } = options;
@@ -1120,7 +1115,6 @@ export function createHostedOwnerRuntime(
         operation.operationRef,
       );
     },
-    readActivity: options.readActivity,
     readAuthority,
     readWithdrawnOperation,
     preflightCredential: options.preflightCredential,

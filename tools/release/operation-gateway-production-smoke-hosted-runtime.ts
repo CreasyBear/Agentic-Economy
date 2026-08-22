@@ -256,7 +256,6 @@ export function createHostedRuntimeFromEnvironment(
     context,
     preflightCredential,
     revokeCredential,
-    readActivity: money.readControlActivity,
   });
   return { owner, money };
 }

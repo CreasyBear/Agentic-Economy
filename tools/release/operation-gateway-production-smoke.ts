@@ -583,7 +583,7 @@ export async function runGatewayProductionSmoke(
     );
     const afterOwner = await moneyRuntime.readSnapshot();
     const ownerActivity = CreditActivityViewSchema.parse(
-      await ownerRuntime.readActivity(ownerInitial.invocationRef),
+      await moneyRuntime.readControlActivity(ownerInitial.invocationRef),
     );
     const ownerReplay = requireCompletedInvocation(
       await pollGatewayOperation(
