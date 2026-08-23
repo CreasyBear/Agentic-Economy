@@ -9,9 +9,7 @@ import {
   type X402SettlementResponse,
 } from './x402-payment-signer'
 import {
-  verifyX402SignedOffer,
   verifyX402SignedReceipt,
-  type X402VerifiedOffer,
 } from './x402-offer-receipt'
 import type {
   ProviderConnectionAuthorityValidationResult,
@@ -24,8 +22,6 @@ import {
   type X402Challenge,
 } from './route-transport-x402-payment'
 import {
-  boundedString,
-  MAX_RESPONSE_BYTES,
   refused,
   unknown,
   type RouteTransportObservation,

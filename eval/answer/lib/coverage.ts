@@ -1,6 +1,5 @@
 import { parse } from 'yaml'
 import { z } from 'zod'
-import { sameStringList } from '../../../src/modules/common/same-string-list'
 import {
   ANSWER_EVAL_COVERAGE_REQUIREMENTS,
   ANSWER_HARNESS_EVAL_ASSERTIONS,
@@ -204,15 +203,6 @@ export function auditPromptfooAnswerConfig(configText: string): AnswerEvalCovera
   }
 
   return issues
-}
-
-function hasString(values: readonly string[], expected: string): boolean {
-  for (const value of values) {
-    if (value === expected) {
-      return true
-    }
-  }
-  return false
 }
 
 function auditTurnCaseShape(
@@ -568,4 +558,3 @@ function parsePromptfooAnswerEntries(configText: string): PromptfooAnswerEntry[]
 function hasLocationSignal(value: string): boolean {
   return /location=/i.test(value)
 }
-

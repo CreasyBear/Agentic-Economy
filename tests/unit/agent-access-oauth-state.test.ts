@@ -15,7 +15,6 @@ import {
   hashOAuthValue,
   normalizeRequestedScopes,
   pollDeviceGrant,
-  readGrantForConsent,
   resetGrantDelivery,
   type AgentAccessOAuthClient,
   type AgentAccessOAuthGrant,

@@ -1,4 +1,4 @@
-import type { Action, ActionContext, ActionResult } from '@/modules/common/action'
+import type { ActionContext, ActionResult } from '@/modules/common/action'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import type {
@@ -71,14 +71,14 @@ export type DurableActionInvocationTracer<Input, Result extends ActionResult> =
 
 export function createDurableActionInvocationTracer<Input, Result extends ActionResult>(
   options: DurableTracerOptions<Input, Result>,
-  initialSnapshot?: InMemoryControlSnapshot<Input, Result>,
+  initialSnapshot?: InMemoryControlSnapshot<Result>,
 ): DurableActionInvocationTracer<Input, Result> {
   return createDurableActionInvocationTracerWithSnapshot(options, initialSnapshot)
 }
 
 function createDurableActionInvocationTracerWithSnapshot<Input, Result extends ActionResult>(
   options: DurableTracerOptions<Input, Result>,
-  resumed?: InMemoryControlSnapshot<Input, Result>,
+  resumed?: InMemoryControlSnapshot<Result>,
 ): DurableActionInvocationTracer<Input, Result> {
   const makeMemory = (snapshot = resumed) => createInMemoryActionInvocationTracer({
     ...options,
@@ -499,10 +499,10 @@ function createDurableActionInvocationTracerWithSnapshot<Input, Result extends A
   }
 }
 
-async function reconstructSnapshot<Input, Result extends ActionResult>(
+async function reconstructSnapshot<Result extends ActionResult>(
   port: DurableActionInvocationPort<Result>,
   invocationRef: string,
-): Promise<InMemoryControlSnapshot<Input, Result>> {
+): Promise<InMemoryControlSnapshot<Result>> {
   const rawRow = await port.readControl(invocationRef)
   if (rawRow === undefined) throw new Error(`Missing durable invocation ${invocationRef}.`)
   const row = rawRow

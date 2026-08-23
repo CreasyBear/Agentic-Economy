@@ -46,8 +46,6 @@ import {
   type GatewayPayoutProviderTransferReadback,
   type GatewayTopupObservation,
   type GatewayTopupPreparationArtifact,
-  type GatewayTopupProviderEvent,
-  type GatewayTopupWebhookReplay,
   type HostedTopupReadback,
 } from "./operation-gateway-production-smoke-receipt";
 import {

@@ -8,7 +8,6 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   ActionInvocationOrigin,
   InvocationActor,
-  PreparedInvocation,
 } from './contracts'
 
 export function materialDigest(input: unknown, paths: readonly string[]): string {

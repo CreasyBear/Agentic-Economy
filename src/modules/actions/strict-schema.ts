@@ -1,8 +1,6 @@
 import type { JSONSchema } from '@tanstack/ai'
 import { isRecord } from '@/modules/common/is-record'
 
-type JsonSchemaRecord = Record<string, unknown>
-
 export type StrictSchemaViolation = {
   path: string
   reason: string

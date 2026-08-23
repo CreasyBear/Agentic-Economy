@@ -5,7 +5,6 @@ import { AeSupplyPublisherHome } from '@/components/ae/supply/AeSupplyPublisherH
 import { readOwnerOfferingSupplyServer } from '@/components/ae/offerings/owner-offering.functions'
 import { readOwnerConnectReadinessServer } from '@/modules/money/server'
 import { readOwnerProviderConnectionsServer, readOwnerProviderEarningsServer, readOwnerSupplyFunnelServer } from '@/modules/capability-supply/supply-funnel.functions'
-import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/_operator/owner/supply')({
   loader: async () => {

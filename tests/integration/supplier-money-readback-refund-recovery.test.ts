@@ -10,7 +10,6 @@ import { recordQualifiedUsePayoutAllocation } from '../../convex/moneyQualifiedU
 import {
   accountRefForOwner,
   accountRefForExternalLoss,
-  accountRefForProvider,
   accountRefForRake,
   qualifiedUseMaterialDigest,
   qualifiedUseRef,
@@ -1022,10 +1021,6 @@ describe('supplier money readback refund recovery', () => {
       evidenceRefs: ['evidence:brokered-dispute'],
       observedAt: 4,
     }
-    const payoutBefore = await backend.run(async (ctx) => ({
-      transaction: await ctx.db.query('moneyTransactions').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
-      entry: await ctx.db.query('moneyLedgerEntries').withIndex('by_transactionRef', (q) => q.eq('transactionRef', payoutRef)).unique(),
-    }))
     await expect(
       backend.mutation(internal.moneyLedger.reverseDisputedQualifiedUse, dispute),
     ).resolves.toMatchObject({ kind: 'accepted', currency: 'USD' })

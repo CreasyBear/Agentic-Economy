@@ -20,12 +20,10 @@ import { uniq } from 'es-toolkit/array'
 import type {
   HarnessEventCounters,
   HarnessRunReport,
-  HarnessRunStatus,
   HarnessToolCounters,
   HarnessToolStatus,
 } from '@/modules/harness/public'
 import type {
-  HarnessRunViewerAccess,
   HarnessRunViewerDetail,
   HarnessRunViewerDetailAccessInput,
   HarnessRunViewerDetailAllowed,
@@ -45,7 +43,6 @@ import type {
   HarnessRunViewerPublicProjectionDiff,
   HarnessRunViewerRawJson,
   HarnessRunViewerRunOverview,
-  HarnessRunViewerRunSource,
   HarnessRunViewerStatusFilter,
   HarnessRunViewerToolRow,
 } from '../run-viewer.schema'
@@ -641,6 +638,3 @@ function formatJsonString(value: string): string {
   const parsed = parseBoundedJson(value)
   return parsed === undefined ? value : JSON.stringify(parsed, null, 2) ?? value
 }
-
-
-

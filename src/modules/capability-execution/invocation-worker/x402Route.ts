@@ -8,7 +8,7 @@ import type { ExactAmount } from '@/modules/money/public'
 import { env, type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'
 import type { OpenDispatch } from '../../../../convex/capabilityOperationInvocationProjection'
-import type { ConnectionAuthority, ProviderLeaseAuthority } from './lease'
+import type { ConnectionAuthority } from './lease'
 import { createX402PaymentCallbacks } from './x402Authorization'
 import type { X402PaymentCallbacks } from './x402Authorization'
 

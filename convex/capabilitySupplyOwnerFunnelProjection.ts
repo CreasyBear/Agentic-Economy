@@ -399,19 +399,7 @@ export async function readOwnerSupplyFunnelProjection(
         resolveOfferingJoin(offering),
       ]),
     )
-    const currentPublicationIdentities = offeringRows.flatMap((offering) => {
-      const publication = offeringJoins.get(offering.offeringRef)?.publication
-      return publication?.disposition !== 'current'
-        ? []
-        : [
-            {
-              offeringRef: offering.offeringRef,
-              publicationRef: publication.publicationRef,
-              publicationRevision: publication.revision,
-              operationRef: publication.operationRef,
-            },
-          ]
-    })
+
     const testObservedEventRows: Array<Array<{ publicationRef?: string }>> = []
     const activityRows: Array<{
       eventKind: string

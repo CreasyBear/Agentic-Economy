@@ -20,7 +20,6 @@ import {
   type CapabilityPublicationImport,
   type CapabilityPublicationOfferingDraft,
   type PreparePublicationDraftRefusal,
-  type PreparedPublicationMaterial,
   type PublishPreparedCapabilityCommandInput,
   type PublishPreparedCapabilityCommandResult,
   type PublishPreparedCapabilityRefusal,
@@ -41,8 +40,6 @@ import {
 } from './capabilitySupplyCommands'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { createX402ProviderConnection, isCanonicalCredentiallessX402ProviderConnection } from '@/modules/capability-supply/provider-connection'
-import { toDomain, toRow } from './capabilityProviderConnectionLifecycle'
 import {
   authorityValue,
   cancellationValue,
@@ -169,64 +166,6 @@ const preparedPublicationRefusalValue = v.union(
   v.literal('registration_changed'),
   v.literal('connection_authority_stale'),
 )
-function preparedSourceSelector(
-  selector: Infer<typeof capabilityPublicationSourceSelectorValue>,
-): PreparedPublicationMaterial['sourceSelector'] {
-  if (
-    'path' in selector &&
-    typeof selector.path === 'string' &&
-    (selector.method === 'get' || selector.method === 'post')
-  ) {
-    return { path: selector.path, method: selector.method }
-  }
-  if (
-    'serverName' in selector &&
-    typeof selector.serverName === 'string' &&
-    'toolName' in selector &&
-    typeof selector.toolName === 'string' &&
-    'protocolVersion' in selector &&
-    typeof selector.protocolVersion === 'string'
-  ) {
-    return {
-      serverName: selector.serverName,
-      toolName: selector.toolName,
-      protocolVersion: selector.protocolVersion,
-    }
-  }
-  if (
-    'toolName' in selector &&
-    typeof selector.toolName === 'string' &&
-    'protocolVersion' in selector &&
-    typeof selector.protocolVersion === 'string'
-  ) {
-    return {
-      toolName: selector.toolName,
-      protocolVersion: selector.protocolVersion,
-    }
-  }
-  if ('resourceUrl' in selector && typeof selector.resourceUrl === 'string') {
-    return { resourceUrl: selector.resourceUrl }
-  }
-  return {}
-}
-
-function preparedPublicationMaterialFromConvex(
-  material: Infer<typeof preparedPublicationMaterialValue>,
-): PreparedPublicationMaterial {
-  return {
-    sourceKind: material.sourceKind,
-    sourceSelector: preparedSourceSelector(material.sourceSelector),
-    sourceDescriptorJson: material.sourceDescriptorJson,
-    sourceRevision: material.sourceRevision,
-    sourceDigest: material.sourceDigest,
-    documentJson: material.documentJson,
-    offering: material.offering,
-    binding: material.binding,
-    evidenceRefs: material.evidenceRefs,
-    pricingConfigJson: material.pricingConfigJson,
-    priceDigest: material.priceDigest,
-  }
-}
 export const preparedPublicationResultValue = v.union(
   v.object({
     kind: v.union(v.literal('published'), v.literal('replayed')),

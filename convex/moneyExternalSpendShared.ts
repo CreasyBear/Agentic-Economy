@@ -19,7 +19,6 @@ import {
   settleCredentialBudget,
   type ExternalSpendIdentity,
   type ExternalSpendMutationResult,
-  type ExternalSpendPaymentFacts,
   type ExternalSpendRefusalCode,
   type ExternalSpendReservation,
 } from '../src/modules/money/public'

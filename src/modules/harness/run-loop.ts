@@ -1,4 +1,4 @@
-import type { ActionContext, ActionSurface } from '@/modules/common/action'
+import type { ActionContext } from '@/modules/common/action'
 import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { isRecord } from '@/modules/common/is-record'
 import { runWithAbortAndTimeout } from '@/modules/common/transport-timeout'
@@ -614,7 +614,7 @@ export class HarnessRunLoop {
     }
   }
 
-  private modelEventAccounting<Result>(
+  private modelEventAccounting(
     input: {
       seq?: number
       provider?: string
@@ -730,4 +730,3 @@ function createToolCallId(toolId: string): string {
 function normalizeErrorCode(value: string): string {
   return value.trim().replaceAll(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()
 }
-

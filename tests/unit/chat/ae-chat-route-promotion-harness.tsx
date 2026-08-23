@@ -188,7 +188,7 @@ export function readStoredDraft(): Record<string, unknown> | null {
   return raw === null ? null : JSON.parse(raw) as Record<string, unknown>
 }
 
-export async function submitQuery(query: string, placeholder = 'Search the operation market') {
+export async function submitQuery(query: string, _placeholder = 'Search the operation market') {
   const input = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
   await waitFor(() => {
     expect(input.disabled).toBe(false)

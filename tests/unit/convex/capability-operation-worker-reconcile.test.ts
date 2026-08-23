@@ -337,7 +337,7 @@ describe('scheduled capability invocation reconciliation worker', () => {
       runQuery: vi.fn(async (reference: unknown) => (
         functionPath(reference).endsWith(':listExpiredPreparedX402PaymentAttempts') ? [] : candidates
       )),
-      runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+      runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
         const path = functionPath(reference)
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: 'principal', credentialId: 'credential' }

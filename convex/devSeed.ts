@@ -6,8 +6,6 @@ import { v } from 'convex/values'
 import {
   buildDevSeedCatalogState,
   DEV_SEED_BUSINESS_FIXTURES,
-  DEV_SEED_OWNER_CLERK_USER_ID,
-  type DevSeedBusinessFixture,
 } from '../src/modules/dev/public'
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
@@ -22,7 +20,6 @@ import {
   rebuildBusinessSupplyProjectionSnapshotCommand,
   reviseBusinessOfferingCommand,
   upsertOfferingAccessPathCommand,
-  withdrawOfferingAccessPathCommand,
 } from './catalog'
 
 type SeedDevCatalogResult = Readonly<{

@@ -52,7 +52,7 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
   const store = createAnswerThreadTestStore()
   const resetThreadPort = installAnswerThreadTestPort(store)
   const resetRegistryPort = installEvalRegistrySeed(testCase.registrySeed)
-  const previousApiKey = process.env.OPENROUTER_API_KEY
+
   delete process.env.OPENROUTER_API_KEY
   delete process.env.CONVEX_URL
   delete process.env.VITE_CONVEX_URL

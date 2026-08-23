@@ -3,7 +3,6 @@ import { dirname, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 
 import { canonicalDigest } from "../../src/modules/common/canonical-digest";
-import { PublicServicesApiSchemaVersion } from "../../src/modules/registry/public";
 import {
   CreditAccountViewSchema,
   CreditActivityViewSchema,

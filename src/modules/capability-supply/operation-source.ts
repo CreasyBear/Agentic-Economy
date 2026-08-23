@@ -1,15 +1,10 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 
 import {
-  compareCapabilityOperations,
-  detailCapabilityOperation,
-  inspectCapabilityOperationPlan,
-  searchCapabilityOperations,
   deserializeOperationCompareResult,
   deserializeOperationDetailResult,
   deserializeOperationSearchResult,
   deserializeInspectPlanResult,
-  type CapabilityOperationSourcePort,
   type CatalogOfferingOperationMapEntry,
   type InspectPlanInput,
   type InspectPlanResult,

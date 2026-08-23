@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { api, internal } from '../../convex/_generated/api'
+import { api } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { convexModules as modules } from '../helpers/convex-fixtures'
 import {

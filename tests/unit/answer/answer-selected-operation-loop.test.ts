@@ -9,7 +9,6 @@ import {
   completedToolCallIds,
   executionMocks,
   operationRoute,
-  resolutionForDescriptor,
   selectedCandidateSetDigest,
   selectedDescriptor,
   selectedExecuteInput,
@@ -28,7 +27,7 @@ import {
   runAnswerToolUseAgent,
   type AnswerToolUseAgentCheckpoint,
 } from '@/modules/answer/internal/answer-tool-use-agent'
-import type { KeylessExecutableSourcePort, KeylessExecutableToolDescriptor } from '@/modules/capability-execution'
+import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -608,23 +607,8 @@ describe('selected keyless operation answer loop', () => {
   })
 
   it('executes one native array batch for all ordered intents without a second effect', async () => {
-    const arrayDescriptor: KeylessExecutableToolDescriptor = {
-      ...selectedDescriptor,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          values: {
-            type: 'array',
-            items: { type: 'string' },
-            minItems: 2,
-            maxItems: 2,
-          },
-        },
-        required: ['values'],
-        additionalProperties: false,
-      },
-    }
-    const arrayResolution = resolutionForDescriptor(arrayDescriptor)
+
+
     executionMocks.executeKeylessOperation.mockResolvedValue({
       kind: 'ok' as const,
       operationRef: selectedDescriptor.operationRef,

@@ -25,7 +25,6 @@ import {
   type ExactAmount,
 } from '../src/modules/money/public'
 import {
-  payoutAccountAfterReservationMatches,
   payoutAttemptMaterialIsFrozen,
   payoutAuthorityAllowed,
   payoutFromRow,

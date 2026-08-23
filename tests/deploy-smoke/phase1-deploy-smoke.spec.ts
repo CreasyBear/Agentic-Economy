@@ -24,8 +24,7 @@ type RouteExpectation = {
 
 const config = readSmokeConfig()
 
-const privateDataPattern =
-  /\/admin\/|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
+
 
 const privateSurfacePattern =
   /\/admin\/|\/owner\/status|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i

@@ -48,7 +48,7 @@ import {
 import {
   type ConnectionAuthority,
 } from './lease'
-import { routeCallSigningKey, routeInvocation } from './x402Route'
+import { routeCallSigningKey } from './x402Route'
 
 export async function prepareInvocationRun(
   ctx: ActionCtx,

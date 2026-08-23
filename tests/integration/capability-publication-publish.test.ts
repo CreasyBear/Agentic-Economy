@@ -253,7 +253,7 @@ describe('capability publication publish', () => {
               },
               evidenceRefs: ['business:x402-description'],
             }
-      const published = await owner.mutation(
+      await owner.mutation(
         api.capabilitySupply.publishPreparedCapability,
         await preparedPublicationArgs(backend, {
           businessId,

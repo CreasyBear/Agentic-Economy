@@ -1,7 +1,6 @@
 import type { InvalidationIntent } from '@/modules/observability/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 import {
-  DiscoveryStatusValues,
   type DiscoveryStatus,
 } from './internal/schema-values'
 export {

@@ -30,7 +30,7 @@ const positiveSafeInteger = z.number().int().safe().positive()
 const nonNegativeSafeInteger = z.number().int().safe().nonnegative()
 const money = exactAmountSchema
 const environment = z.enum(AGENT_ACCESS_ENVIRONMENT_VALUES)
-const authorityMode = z.enum(AGENT_ACCESS_AUTHORITY_MODE_VALUES)
+
 
 export const agentAccessBudgetPolicySchema = z.strictObject({
   budgetPolicyRef: identifier,

@@ -6,7 +6,6 @@ import { readRequiredConvexUrl } from '@/lib/server/convex-source'
 import { convexKeylessExecutableSource } from '@/modules/capability-execution'
 import {
   DEFAULT_POLICY,
-  enforcePolicy,
   fidelityReport,
   refinePolicy,
   runPolicySuite,

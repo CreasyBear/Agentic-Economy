@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
-import { createLocalE2eRegistrySourceState, installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
+import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 
 import { emptyRegistrySourceState } from '../fixtures/source-state'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -16,7 +16,6 @@ import {
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
 import type {
-  PublicBusinessCatalogApiV2Page,
   RegistrySourceState,
 } from '@/modules/registry/public'
 import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
@@ -27,7 +26,6 @@ import {
   optionalMaxPrice,
 } from '@/routes/api.businesses.search'
 import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
 import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
 
 const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
@@ -703,12 +701,6 @@ function addPublishedCatalogClone(
     sourceHash: offeringSourceHash,
     createdAt: revision.createdAt + state.revisions.length,
   })
-}
-
-async function jsonBody(
-  response: Promise<Response>,
-): Promise<PublicBusinessCatalogApiV2Page> {
-  return (await response).json() as Promise<PublicBusinessCatalogApiV2Page>
 }
 
 function createDurablePublishedRegistryState(input: {

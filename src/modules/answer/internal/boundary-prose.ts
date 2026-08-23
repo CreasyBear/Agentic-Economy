@@ -16,7 +16,7 @@ export function buildBoundarySummary(providers: readonly AnswerSource[]): string
   ].join(' ')
 }
 
-export function buildBoundaryNextStep(providers: readonly AnswerSource[]): string {
+export function buildBoundaryNextStep(_providers: readonly AnswerSource[]): string {
   return 'Inspect another Operation or refine your search, then connect with the supplier when you find a match.'
 }
 
@@ -36,7 +36,7 @@ export function buildUnsupportedSummary(providers: readonly AnswerSource[]): str
   ].join(' ')
 }
 
-export function buildUnsupportedNextStep(providers: readonly AnswerSource[]): string {
+export function buildUnsupportedNextStep(_providers: readonly AnswerSource[]): string {
   return 'Open an Operation to inspect its available access route.'
 }
 

@@ -9,7 +9,7 @@
     "no-debugger": "error",
     "no-control-regex": "off",
     "no-underscore-dangle": "off",
-    "no-unused-vars": "off",
+    "no-unused-vars": "error",
     "no-useless-escape": "off",
     "typescript/triple-slash-reference": "off"
   },

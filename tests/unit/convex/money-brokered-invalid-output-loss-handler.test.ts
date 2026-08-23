@@ -12,7 +12,6 @@ import {
 } from '@/modules/capability-supply/public'
 import {
   recordBrokeredInvalidOutputLossHandler,
-  type BrokeredInvalidOutputLossArgs,
 } from '../../../convex/moneyBrokeredInvalidOutputLoss'
 import {
   markBrokeredInvocationChargeOutcomeUnknown,
@@ -23,7 +22,6 @@ import {
   authorizationArgs,
   authorizationAuthorityMaterial,
   authorizationOperation,
-  now,
   type Row,
 } from './money-ledger-test-harness'
 import { seedAuthorizationFixture } from './money-ledger-test-fixtures'

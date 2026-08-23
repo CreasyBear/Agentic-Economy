@@ -1,6 +1,5 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
-  BusinessContext,
   BusinessContextRecord,
   BusinessRecord,
   BusinessSourceState,

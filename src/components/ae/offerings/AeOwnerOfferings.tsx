@@ -42,7 +42,7 @@ import type {
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
 import type { OfferingRef } from '@/modules/common/ids'
-import { clearStoredOfferingDraft, emptyOwnerOfferingEditorValue, publishGateRefusal, readStoredOfferingDraft, writeStoredOfferingDraft } from './AeOwnerOfferings.exports'
+import { clearStoredOfferingDraft, publishGateRefusal, readStoredOfferingDraft, writeStoredOfferingDraft } from './AeOwnerOfferings.exports'
 
 export type OwnerOfferingSummary = Readonly<{
   offering: BusinessOfferingProjection

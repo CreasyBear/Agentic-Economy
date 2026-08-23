@@ -181,10 +181,7 @@ export function createDynamicPublishedActionInvocationAdapter(input: Readonly<{
     expiresAt: number
   }>) => Promise<DynamicPublishedExecutionToken['providerLease']>
   durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
-  initialSnapshot?: InMemoryControlSnapshot<
-    DynamicPublishedInvocationInput,
-    DynamicPublishedInvocationResult
-  >
+  initialSnapshot?: InMemoryControlSnapshot<DynamicPublishedInvocationResult>
   developmentSnapshot?: DevelopmentDurableState<DynamicPublishedInvocationResult>
   developmentTimeoutSignal?: DevelopmentTimeoutSignal
   inputWork?: readonly InvocationInputWork[]

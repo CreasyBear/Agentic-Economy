@@ -26,8 +26,6 @@ import type {
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import {
   externalSpendIdentityFromReservation,
-  type ExactAmount,
-  type ExternalSpendIdentity,
 } from '@/modules/money/public'
 import { type ActionCtx } from '../../../../convex/_generated/server'
 import { internal } from '../../../../convex/_generated/api'

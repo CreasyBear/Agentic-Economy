@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
-import { identifier, jsonValueSchema, type CapabilityContractRef, type JsonValue } from '@/modules/capability-contract/public'
+import { identifier, jsonValueSchema, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 

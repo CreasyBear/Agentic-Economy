@@ -60,13 +60,7 @@ import type {
 import {
   pendingDecisionFor,
   selectedInputDigestFor,
-  latestPriorOperationPresentation,
-  priorTurnOperation,
-  priorTurnStatus,
   readOperationInputFromToolCalls,
-  readPriorContinuationState,
-  readPriorOperationInput,
-  readPriorSearchContext,
 } from './answer-continuation-state'
 import {
   createLiveAnswerHarnessOperation,

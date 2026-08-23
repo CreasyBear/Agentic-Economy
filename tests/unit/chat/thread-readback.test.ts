@@ -4,23 +4,7 @@ import { buildAnswerTurnProblem } from '@/lib/errors'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 import { readAnswerThreadProjection } from '@/components/ae/chat/thread-readback'
 
-const provider = {
-  citationIndex: 1,
-  slug: 'plumber-one',
-  name: 'Plumber One',
-  category: 'Plumbing',
-  suburb: 'Perth',
-  stateTerritory: 'WA',
-  serviceArea: 'Perth',
-  hoursLabel: 'Open today',
-  availabilityLabel: 'Available',
-  trustLabel: 'Listed',
-  responseTimeLabel: 'Replies today',
-  trustCue: 'Published profile',
-  nextStepLabel: 'Request a quote',
-  detailUrl: '/business/plumber-one',
-  services: [{ name: 'Blocked drain', category: 'Plumbing', summary: 'Drain clearing' }],
-}
+
 
 const completeTurn = {
   turnId: 'turn:1',

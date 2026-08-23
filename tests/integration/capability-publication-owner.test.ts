@@ -26,7 +26,7 @@ describe('capability publication owner', () => {
       'lifecycle-one',
     )
     await seedCatalogOffering(backend, businessId, 'lifecycle-one')
-    const observer = await ownerAdmin(
+    await ownerAdmin(
       backend,
       'user_capability_publication_observer',
     )

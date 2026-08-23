@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { emptyDiscoverySourceState } from '../../fixtures/source-state'
 import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
-import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   evaluateDiscoveryProjectionGate,
   mapDeveloperDiscoveryRouteExecutions,
@@ -295,15 +294,6 @@ describe('developer discovery route readback', () => {
     )
   })
 })
-
-function firstBusiness(state: DiscoverySourceState) {
-  const business = state.businesses.at(0)
-  if (business === undefined) {
-    throw new Error('Expected default discovery source state to include a business.')
-  }
-
-  return business
-}
 
 function routeSnapshotWithBusiness(input: {
   slug: string

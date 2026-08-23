@@ -21,13 +21,6 @@ type PatternRule = {
   pattern: RegExp;
 };
 
-type PhaseNumber = 2 | 3 | 4 | 5 | 6;
-
-type CopyClaimRule = PatternRule & {
-  allowedPhases?: readonly PhaseNumber[];
-  negativeOnly?: boolean;
-};
-
 const defaultExtensions = [
   ".ts",
   ".tsx",

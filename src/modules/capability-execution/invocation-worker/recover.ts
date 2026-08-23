@@ -58,7 +58,6 @@ import {
 import { buildBrokeredX402Receipt } from './brokeredX402'
 import {
   externalSpendPaymentFactsFromDispatch,
-  finalizeX402ExternalSpend,
   readX402EvmReceipt,
 } from './x402Route'
 
@@ -744,7 +743,7 @@ export async function recoverCapabilityOperationInvocation(
     await projectRecoveryOuter(ctx, recovered, required, 'reconciliation_required')
     return required
   }
-  const result = projectPureOperationInvocationStatus(recovered, reconciliation.status)
+
   if (evidence.resolution === 'released') {
     const outcome = reconciliationResult(
       recovered,

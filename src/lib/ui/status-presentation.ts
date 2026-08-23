@@ -743,14 +743,6 @@ export function offeringAccessToAeStatus(
   return accessPaths.length > 0 ? 'listed' : 'not_queued'
 }
 
-function firstRequestModeLabel(mode: FirstRequestMode): string {
-  if (mode === 'quote_request_available') {
-    return 'Contact details supplied'
-  }
-
-  return 'No contact option published yet'
-}
-
 /**
  * Plain, human-surface availability pill label for a provider. Derived ONLY from
  * real catalog fields. Never invents freshness, "available today", or a response

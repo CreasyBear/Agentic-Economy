@@ -1,7 +1,6 @@
 import type { AnswerTurnRecord } from '@/modules/answer-thread/answer-thread.schema'
 import type {
   AnswerTurnStatus,
-  FollowUpIntent,
   PublicThreadTurn,
 } from '@/modules/answer-thread/public'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/harness'

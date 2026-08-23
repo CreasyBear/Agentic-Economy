@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  HarnessRunLoop,
-  type HarnessRuntimeEvent,
-} from '@/modules/harness/public'
-import {
   runAnswerToolCall,
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/internal/tool-runner'

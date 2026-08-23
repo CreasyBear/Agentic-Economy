@@ -11,7 +11,6 @@ import type { CliOptions } from '../lib/args'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import {
   MAX_STATUS_WAIT_MS,
-  operationStatusPath,
   pendingDelay,
   readOperationStatus,
   requireAgentAccessKey,

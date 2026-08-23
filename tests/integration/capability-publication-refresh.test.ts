@@ -36,7 +36,7 @@ describe('capability publication refresh', () => {
     )
     if ('reason' in published)
       throw new Error(`publication_refused:${published.reason}`)
-    const observer = await ownerAdmin(
+    await ownerAdmin(
       backend,
       'user_capability_publication_observer',
     )

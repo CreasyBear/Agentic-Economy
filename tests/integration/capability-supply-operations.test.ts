@@ -69,7 +69,7 @@ async function publishKeyless(
   )
   if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
 
-  const observer = await ownerAdmin(backend, `user_capability_operations_observer_${suffix}`)
+  await ownerAdmin(backend, `user_capability_operations_observer_${suffix}`)
   const hashes = await backend.run(async (ctx) => {
     const offering = await ctx.db.query('capabilityOfferings')
       .withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId))

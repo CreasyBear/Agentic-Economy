@@ -28,7 +28,6 @@ import {
 import { projectDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type {
-  RouteTransportRuntime,
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import {

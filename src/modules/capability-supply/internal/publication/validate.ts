@@ -47,7 +47,7 @@ export async function validateCapabilityPublication(
   source: CapabilityPublicationAdmissionSource,
   derefSchema?: SchemaDereferencer,
 ): Promise<CapabilityPublicationValidation> {
-  const { sourceRevision, ...serializedSource } = source
+  const { ...serializedSource } = source
   const importSource = decodeConvexPublicationSource(serializedSource)
   let normalized
   try {

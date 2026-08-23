@@ -1,9 +1,6 @@
 import { getPublicBusinessCatalog } from '@/modules/catalog/public'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { brandNonEmpty } from '@/modules/common/ids'
 import type {
   BusinessId,
-  OfferingRef,
   Slug,
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
@@ -153,75 +150,6 @@ function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusiness
     }
   }
   return catalogs.sort(compareCatalogs)
-}
-
-
-function appendPublishedOffering(
-  state: RegistrySourceState,
-  input: {
-    businessId: BusinessId
-    offeringRef: OfferingRef
-    facts: {
-      name: string
-      category: string
-      summary: string
-      serviceAreaSummary?: string
-      availabilitySummary?: string
-      pricingSummary?: string
-    }
-    accessPaths?: readonly {
-      channel: 'phone' | 'website'
-      disclosure: string
-    }[]
-    now: number
-  },
-): void {
-  const sourceHash = canonicalDigest({
-    businessId: input.businessId,
-    offeringRef: input.offeringRef,
-    revision: 1,
-    ...input.facts,
-  })
-  state.offerings.push({
-    offeringRef: input.offeringRef,
-    businessId: input.businessId,
-    currentRevision: 1,
-    status: 'published',
-    createdAt: input.now,
-    updatedAt: input.now,
-  })
-  state.revisions.push({
-    offeringRef: input.offeringRef,
-    businessId: input.businessId,
-    revision: 1,
-    ...input.facts,
-    sourceHash,
-    createdAt: input.now,
-  })
-  for (const [index, accessPath] of (input.accessPaths ?? []).entries()) {
-    const descriptor = {
-      kind: 'human_request' as const,
-      channel: accessPath.channel,
-      disclosure: accessPath.disclosure,
-    }
-    const accessPathRef = `access:${input.offeringRef}:human:${index + 1}`
-    state.accessPaths.push({
-      accessPathRef: brandNonEmpty(accessPathRef, 'AccessPathRef'),
-      businessId: input.businessId,
-      offeringRef: input.offeringRef,
-      offeringRevision: 1,
-      offeringSourceHash: sourceHash,
-      status: 'published',
-      descriptor,
-      sourceHash: canonicalDigest({
-        accessPathRef,
-        offeringSourceHash: sourceHash,
-        descriptor,
-      }),
-      createdAt: input.now,
-      updatedAt: input.now,
-    })
-  }
 }
 function paginateCatalogs(
   items: readonly PublicBusinessCatalogApiV2Dto[],

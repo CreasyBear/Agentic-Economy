@@ -22,7 +22,7 @@ import type {
   RegistrationContext,
 } from '@/modules/capability-supply/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
- 
+
 
 async function runEligibility(
   backend: ConvexFixtureBackend,
@@ -153,7 +153,7 @@ describe('capability publication security', () => {
       await preparedPublicationArgs(backend, input),
     )
     if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
-    const admin = await ownerAdmin(backend, 'user_capability_publication_observer')
+    await ownerAdmin(backend, 'user_capability_publication_observer')
     const hashes = await backend.run(async (ctx) => {
       const offering = await ctx.db.query('capabilityOfferings')
         .withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId))

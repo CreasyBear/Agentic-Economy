@@ -35,7 +35,6 @@ import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-compa
 import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'
 import {
   actor,
-  candidate,
   nowMs,
   nowIso,
   qualificationPorts,

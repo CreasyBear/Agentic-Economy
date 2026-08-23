@@ -1,6 +1,5 @@
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
-import { isRecord } from '@/modules/common/is-record'
 
 import {
   bootstrapOwnerAdmin,

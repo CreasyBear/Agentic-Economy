@@ -113,7 +113,7 @@ export async function rebuildBusinessSupplyProjectionSnapshotCommand(input: {
   support: Readonly<Record<string, OfferingSupportProjection>>
   now: number
 }): Promise<{ kind: 'ok'; sourceDigest: string } | { kind: 'error'; code: string }> {
-  const { db, sourceDb, businessId, support, now } = input
+  const { db, businessId, support, now } = input
   const projection = await readLiveBusinessSupplyProjection({ db, businessId, support, now })
   if (projection === null) return markPending(db, businessId, 'business_not_public', now)
   const businessRow = await db.get(businessId)
@@ -480,82 +480,6 @@ function readInterfaceDescription(value: unknown): { format: string; url?: strin
   return { format: requiredString(value, 'format'), ...(url === undefined ? {} : { url }) }
 }
 
-function toPersistedProjection(projection: BusinessSupplyProjection, businessId: Id<'businesses'>) {
-  return {
-    business: {
-      businessId,
-      slug: projection.business.slug,
-      name: projection.business.name,
-      category: projection.business.category,
-      businessContext: projection.business.businessContext,
-      publicUrl: projection.business.publicUrl,
-      trustTier: projection.business.trustTier,
-      ...(projection.business.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: projection.business.responseTimeMinutes }),
-      ...(projection.business.photos === undefined ? {} : { photos: projection.business.photos.map((photo) => ({ url: photo.url, alt: photo.alt })) }),
-    },
-    offerings: projection.offerings.map((entry) => ({
-      offering: {
-        offeringRef: entry.offering.offeringRef,
-        revision: entry.offering.revision,
-        name: entry.offering.name,
-        category: entry.offering.category,
-        summary: entry.offering.summary,
-        ...(entry.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: entry.offering.serviceAreaSummary }),
-        ...(entry.offering.availabilitySummary === undefined ? {} : { availabilitySummary: entry.offering.availabilitySummary }),
-        ...(entry.offering.pricingSummary === undefined ? {} : { pricingSummary: entry.offering.pricingSummary }),
-        ...(entry.offering.price === undefined ? {} : { price: { ...entry.offering.price } }),
-      },
-      accessPaths: entry.accessPaths.map((path) => ({
-        accessPathRef: path.accessPathRef,
-        offeringRevision: path.offeringRevision,
-        offeringSourceHash: path.offeringSourceHash,
-        sourceHash: path.sourceHash,
-        descriptor: toPersistedDescriptor(path.descriptor),
-      })),
-      support: {
-        integrated: entry.support.integrated,
-        routeable: entry.support.routeable,
-        reasons: [...entry.support.reasons],
-        ...(entry.support.observedAt === undefined ? {} : { observedAt: entry.support.observedAt }),
-        ...(entry.support.validUntil === undefined ? {} : { validUntil: entry.support.validUntil }),
-      },
-    })),
-    sourceRevision: projection.sourceRevision,
-    sourceDigest: projection.sourceDigest,
-    observedAt: projection.observedAt,
-    disposition: projection.disposition,
-  }
-}
-
-function toPersistedDescriptor(descriptor: OfferingAccessPathDescriptor) {
-  if (descriptor.kind === 'human_request') {
-    return {
-      kind: descriptor.kind,
-      channel: descriptor.channel,
-      disclosure: descriptor.disclosure,
-      ...(descriptor.url === undefined ? {} : { url: descriptor.url }),
-    }
-  }
-  const interfaceDescription = descriptor.interfaceDescription === undefined
-    ? undefined
-    : {
-        format: descriptor.interfaceDescription.format,
-        ...(descriptor.interfaceDescription.url === undefined ? {} : { url: descriptor.interfaceDescription.url }),
-      }
-  return {
-    kind: descriptor.kind,
-    name: descriptor.name,
-    summary: descriptor.summary,
-    url: descriptor.url,
-    ...(descriptor.method === undefined ? {} : { method: descriptor.method }),
-    ...(descriptor.documentationUrl === undefined ? {} : { documentationUrl: descriptor.documentationUrl }),
-    ...(interfaceDescription === undefined ? {} : { interfaceDescription }),
-    ...(descriptor.authenticationSummary === undefined ? {} : { authenticationSummary: descriptor.authenticationSummary }),
-    ...(descriptor.pricingSummary === undefined ? {} : { pricingSummary: descriptor.pricingSummary }),
-    provenance: descriptor.provenance,
-  }
-}
-
 function requiredString<Row extends object>(row: Row, field: keyof Row): string {
   const value = row[field]
   if (typeof value !== 'string') throw new Error(`invalid_projection_${String(field)}`)
@@ -582,25 +506,9 @@ function optionalNumber<Row extends object>(row: Row, field: keyof Row): number 
   return value
 }
 
-function readBoolean<Row extends object>(row: Row, field: keyof Row): boolean {
-  const value = row[field]
-  if (typeof value !== 'boolean') throw new Error(`invalid_projection_${String(field)}`)
-  return value
-}
-
 function readLiteral<Value extends string>(value: unknown, values: readonly Value[], field: string): Value {
   if (typeof value !== 'string') throw new Error(`invalid_projection_${field}`)
   const match = values.find((candidate) => candidate === value)
   if (match === undefined) throw new Error(`invalid_projection_${field}`)
   return match
-}
-
-function optionalPhotos<Row extends object>(row: Row, field: keyof Row): readonly Readonly<{ url: string; alt: string }>[] | undefined {
-  const value = row[field]
-  if (value === undefined) return undefined
-  if (!Array.isArray(value)) throw new Error(`invalid_projection_${String(field)}`)
-  return value.map((entry) => {
-    if (!isRecord(entry)) throw new Error(`invalid_projection_${String(field)}`)
-    return { url: requiredString(entry, 'url'), alt: requiredString(entry, 'alt') }
-  })
 }

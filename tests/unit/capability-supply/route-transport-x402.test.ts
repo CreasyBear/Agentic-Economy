@@ -658,26 +658,8 @@ describe('registered route transport runtime', () => {
     expect(fetch).toHaveBeenCalledTimes(1)
   })
   it('fails closed when a paid x402 response echoes its payment signature', async () => {
-    const requirement = {
-      x402Version: 2 as const,
-      resource: {
-        url: 'https://provider.example/paid',
-        description: 'Resolve service',
-        mimeType: 'application/json',
-      },
-      accepts: [
-        {
-          scheme: 'exact',
-          network: 'eip155:84532' as const,
-          amount: '1250000',
-          asset: '0x0000000000000000000000000000000000000001',
-          payTo: '0x0000000000000000000000000000000000000002',
-          maxTimeoutSeconds: 60,
-          extra: {},
-        },
-      ],
-    }
-    const challenge = encodePaymentRequiredHeader(requirement)
+
+
     const paymentSignature = 'signed-payment-secret'
     const fetch = vi
       .fn<RouteTransportFetch>()
@@ -1186,19 +1168,7 @@ describe('registered route transport runtime', () => {
   ] as const)(
     'keeps $label Payment-Response separate from transport success',
     async ({ responseHeader, expected }) => {
-      const requirement = {
-        x402Version: 2 as const,
-        resource: { url: 'https://provider.example/paid' },
-        accepts: [{
-          scheme: 'exact',
-          network: 'eip155:84532' as const,
-          amount: '1250000',
-          asset: '0x0000000000000000000000000000000000000001',
-          payTo: '0x0000000000000000000000000000000000000002',
-          maxTimeoutSeconds: 60,
-          extra: {},
-        }],
-      }
+
       const fetch = vi
         .fn<RouteTransportFetch>()
         .mockResolvedValueOnce(

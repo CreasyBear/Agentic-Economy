@@ -13,7 +13,6 @@ import type {
   SupplyFunnelStep,
   SupplyFunnelStepCompletion,
 } from '@/modules/capability-supply/supply-funnel.functions'
-import type { PreparedPublicationMaterial } from '@/modules/capability-supply/public'
 import {
   AeSupplyEndpointConfigStep,
   type SupplyAuthorityOption,
@@ -365,23 +364,6 @@ function maintenanceMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'r
   if (result.kind === 'withdrawn') return 'The current publication is withdrawn. Its evidence remains immutable history.'
   if (result.kind === 'republished') return `Publication revision ${result.revision} was created and readiness is unobserved until a fresh check succeeds.`
   return `Publication revision ${result.revision} was scheduled for a fresh readiness check.`
-}
-
-function readinessWindow(offering: OwnerSupplyOfferingReadback): string {
-  const observedAt = offering.publication?.readiness.observedAt ?? offering.readiness.observedAt
-  const validUntil = offering.publication?.readiness.validUntil ?? offering.readiness.validUntil
-  if (observedAt === undefined && validUntil === undefined) return 'Unobserved'
-  const age = observedAt === undefined ? undefined : Math.max(0, Date.now() - observedAt)
-  const observed = age === undefined ? 'Unobserved' : `Observed ${formatAge(age)} ago`
-  return validUntil === undefined ? observed : `${observed}; valid until ${new Date(validUntil).toISOString()}`
-}
-
-function formatAge(milliseconds: number): string {
-  const minutes = Math.floor(milliseconds / 60_000)
-  if (minutes < 1) return 'less than a minute'
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`
-  const hours = Math.floor(minutes / 60)
-  return `${hours} hour${hours === 1 ? '' : 's'}`
 }
 
 function refusalMessage(refusal: SupplyFunnelRefusal | string): string {

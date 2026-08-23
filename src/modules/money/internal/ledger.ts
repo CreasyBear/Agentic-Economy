@@ -26,7 +26,6 @@ import {
   accountRefForOwner,
   accountRefForProvider,
   accountRefForRake,
-  accountRefForExternalLoss,
 } from './account-ref'
 import {
   sameEvidenceRefs,

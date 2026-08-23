@@ -11,7 +11,6 @@ import {
   providerOperationActor,
   providerOperationInput,
   cancellationInput,
-  developmentProviderOperationNowMs,
 } from './development-provider-operation-fixture'
 import { projectDurableRun } from './development-provider-operation-packet'
 import { createDevelopmentProviderOperationProvider } from './development-provider-operation-provider'

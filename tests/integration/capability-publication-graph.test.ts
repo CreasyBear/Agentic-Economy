@@ -22,7 +22,7 @@ describe('capability publication graph', () => {
     const second = await publishedBusinessOwner(backend, 'graph-two')
     await seedCatalogOffering(backend, first.businessId, 'graph-one')
     await seedCatalogOffering(backend, second.businessId, 'graph-two')
-    const observer = await ownerAdmin(
+    await ownerAdmin(
       backend,
       'user_capability_publication_observer',
     )

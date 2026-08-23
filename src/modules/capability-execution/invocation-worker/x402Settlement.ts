@@ -13,7 +13,6 @@ import type {
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import {
   exactAmountSchema,
-  externalSpendIdentityFromReservation,
   externalSpendIdentityMatchingReservationRef,
   type ExactAmount,
   type ExternalSpendIdentity,

@@ -90,7 +90,6 @@ export function evaluateAnswerTurnExpectations(input: {
     modelRequestCount,
     modelToolRunCount,
     toolRunCount,
-    usage,
     estimatedUsd,
     costUnavailableReasons,
     snapshot,

@@ -2,18 +2,8 @@ import type {
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
 } from './internal/search'
-import type {
-  ServiceEndpointDto,
-  ServiceOfferingDto,
-} from './internal/service-projection'
 import {
-  IndexStatusValues,
-  IndexTargetTypeValues,
-  RegistryProjectionKindValues,
   RegistryProjectionSourceVersion as RegistryProjectionSourceVersionValue,
-  RegistryProjectionStatusValues,
-  RegistryRepairActionValues,
-  RegistryRepairResultValues,
   RegistrySearchDocumentSourceVersion as RegistrySearchDocumentSourceVersionValue,
   type IndexStatus,
   type IndexTargetType,

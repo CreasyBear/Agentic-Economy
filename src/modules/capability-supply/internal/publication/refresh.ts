@@ -17,7 +17,6 @@ import { INITIAL_PUBLICATION_LIFECYCLE } from './lifecycle'
 import type { PublicationCommandPorts, PublicationCommandRow } from './ports'
 import {
   capabilityPublicationProvenanceDigest,
-  type CapabilityPublicationAuthorityMode,
   type CapabilityPublicationProvenance,
 } from './provenance'
 

@@ -30,7 +30,7 @@ export type PaidOperationReadPort<Result extends ActionResult> = Readonly<{
   }>): PaidOperationPaymentAttemptSnapshot | undefined
 }>
 
-export type PaidOperationInterpretation<Result extends ActionResult> = Readonly<{
+export type PaidOperationInterpretation = Readonly<{
   operation: PaidOperationSemantics['operation']
   presentation: PaidOperationSemantics['presentation']
   maximumAuthorizedCharge: PaidOperationSemantics['maximumAuthorizedCharge']
@@ -40,7 +40,7 @@ export type PaidOperationInterpretation<Result extends ActionResult> = Readonly<
 }>
 
 export type PaidOperationInterpreter<Result extends ActionResult> = Readonly<{
-  interpret(view: ActionInvocationView<Result>): PaidOperationInterpretation<Result>
+  interpret(view: ActionInvocationView<Result>): PaidOperationInterpretation
 }>
 
 export type PaidOperationProjection = Readonly<{

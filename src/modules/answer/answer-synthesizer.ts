@@ -8,7 +8,6 @@ import type {
   AnswerArtifact,
 } from './answer-schema'
 
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { WebDiscoveryClaim } from '@/modules/storefront/public'
 import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
 

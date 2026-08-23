@@ -23,8 +23,6 @@ import {
   prepareRegisteredRouteTransportInvocation,
   type RouteTransportFetch,
   type RouteTransportInvocation,
-  type X402PaymentAuthorizationIdentity,
-  type X402PaymentSignatureRequest,
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 

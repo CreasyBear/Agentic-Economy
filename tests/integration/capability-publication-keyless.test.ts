@@ -40,7 +40,7 @@ describe('capability publication keyless', () => {
       '/price',
       'GET',
     )
-    const observer = await ownerAdmin(
+    await ownerAdmin(
       backend,
       'user_capability_publication_observer',
     )

@@ -28,7 +28,7 @@ import {
   type PublishedOperation,
 } from '@/modules/capability-supply/public'
 import { isPublicOperationRef } from '@/modules/capability-supply/public'
-import { assertJsonObject, type AdmitArgs, type OperationInvokePrincipal } from './capabilityOperationAdmission'
+import { type AdmitArgs, type OperationInvokePrincipal } from './capabilityOperationAdmission'
 
 type OperationInvocationRow = Doc<'capabilityOperationInvocations'>
 type OperationResult = Infer<typeof operationResultValue>

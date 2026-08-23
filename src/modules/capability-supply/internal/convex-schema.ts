@@ -62,31 +62,8 @@ export const readinessOutcomeValue = v.union(
   v.literal('response_too_large'),
   v.literal('response_invalid'),
 )
-const capabilitySupplyOpenApiPreflightOutcomeValue = v.union(
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.literal('executable'),
-  }),
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.literal('credential_required'),
-    credential: v.object({
-      kind: v.union(v.literal('api_key'), v.literal('http_bearer')),
-      location: v.optional(v.union(v.literal('query'), v.literal('header'))),
-      name: v.optional(v.string()),
-    }),
-  }),
-  v.object({
-    selector: v.object({ path: v.string(), method: v.string() }),
-    kind: v.union(v.literal('unsupported_shape'), v.literal('unsafe')),
-    reason: v.string(),
-  }),
-)
-const capabilitySupplyOpenApiPreflightValue = v.object({
-  sourceDigest: v.string(),
-  outcomes: v.array(capabilitySupplyOpenApiPreflightOutcomeValue),
-  truncated: v.boolean(),
-})
+
+
 const price = v.union(
   v.object({ kind: v.literal('fixed'), amount: exactAmount }),
   v.object({

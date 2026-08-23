@@ -180,7 +180,7 @@ export function createDynamicPublishedAction(input: Readonly<{
       reconciliationEvidenceSource: `published-operation:${operation.operationId}`,
     },
     projectInvocationPreparation: {
-      project: (value: DynamicPublishedInvocationInput) => ({
+      project: (_value: DynamicPublishedInvocationInput) => ({
         dataUse: {
           fields: descriptor.dataUse.map(({ inputPointer }) => inputPointer),
           limits: {

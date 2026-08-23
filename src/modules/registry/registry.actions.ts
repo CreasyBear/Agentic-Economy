@@ -8,20 +8,8 @@ import { exactAmountSchema } from '@/modules/money/public'
 import { TrustTierValues, type BusinessContext } from '@/modules/business/public'
 import {
   type CatalogOfferingOperationMapEntry,
-  type InspectPlanInput,
-  type InspectPlanResult,
-  type OperationCompareInput,
-  type OperationCompareResult,
-  type OperationDetailInput,
-  type OperationDetailResult,
-  type OperationSearchInput,
-  type OperationSearchResult,
 } from '@/modules/capability-supply/public'
 import {
-  readCapabilityOperationCompare,
-  readCapabilityOperationDetail,
-  readCapabilityOperationInspectPlan,
-  readCapabilityOperationSearch,
   readCatalogOfferingOperationMap,
 } from '@/modules/capability-supply/operation-source'
 import { defineAction, type ActionParameter } from '@/modules/common/action'

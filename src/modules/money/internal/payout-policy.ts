@@ -2,7 +2,6 @@ import type {
   MoneyPayout,
   MoneyPayoutAccount,
   PayoutAccountState,
-  PayoutState,
 } from '../public'
 import { addExactAmounts, compareExactAmounts } from './exact-amount'
 

@@ -7,6 +7,10 @@ const orchestratorSource = readFileSync(
   'src/modules/answer-thread/internal/turn-orchestrator.ts',
   'utf8',
 )
+const turnPhasesSource = readFileSync(
+  'src/modules/answer-thread/internal/answer-turn-phases.ts',
+  'utf8',
+)
 const turnsRoot = 'src/modules/answer-thread/internal/turns'
 
 const movedFunctionSymbols = [
@@ -66,14 +70,15 @@ describe('answer-thread turn-path thinness', () => {
   })
 
   it('keeps continuation/frozen-evidence helpers imported from continuation state', () => {
-    const continuationImport =
-      orchestratorSource.match(
+    const continuationImports = [orchestratorSource, turnPhasesSource]
+      .map((source) => source.match(
         /import\s+\{([\s\S]*?)\}\s+from\s+['"]\.\/answer-continuation-state['"]/,
-      )?.[1] ?? ''
-    expect(continuationImport).not.toBe('')
+      )?.[1] ?? '')
+      .join('\n')
+    expect(continuationImports).not.toBe('')
 
     for (const symbol of continuationHelpers) {
-      expect(continuationImport).toContain(symbol)
+      expect(continuationImports).toContain(symbol)
       expect(orchestratorSource).not.toMatch(
         new RegExp(`(?:^|\\n)(?:export\\s+)?function\\s+${symbol}\\b`),
       )

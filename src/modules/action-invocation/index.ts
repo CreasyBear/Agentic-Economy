@@ -22,9 +22,9 @@ export type {
   X402PaymentReconciliationEvidenceMaterial,
   X402PaymentReconciliationEvidenceVerifier,
 } from './x402-payment-reconciliation-evidence'
-export function roundTripControlSnapshot<Input, Result extends ActionResult>(
-  snapshot: InMemoryControlSnapshot<Input, Result>,
-): InMemoryControlSnapshot<Input, Result> {
+export function roundTripControlSnapshot<Result extends ActionResult>(
+  snapshot: InMemoryControlSnapshot<Result>,
+): InMemoryControlSnapshot<Result> {
   return structuredClone(snapshot)
 }
 export {

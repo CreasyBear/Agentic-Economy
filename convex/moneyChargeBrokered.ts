@@ -21,7 +21,6 @@ import {
 import {
   applyPreparedCanonicalMoneyAccount,
   canonicalMoneyAccountPreview,
-  prepareCanonicalMoneyAccount,
 } from './moneyCanonicalAccounts'
 import {
   admitInvocationCharge,

@@ -636,16 +636,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     ...material,
     fixture: projectDevelopmentPublishedOperationEvidence(packet.fixture),
   }
-  const recomputedSource = canonicalDigest({
-    operation: packet.fixture.operation,
-    descriptor: {
-      id: packet.fixture.descriptor.id,
-      version: packet.fixture.descriptor.version,
-      target: packet.fixture.descriptor.target,
-      inputSchema: packet.fixture.descriptor.inputSchema,
-      outputSchema: packet.fixture.descriptor.outputSchema,
-    },
-  })
+
   const separatelyResumed = packet.cases.every((entry, index) => {
     const expectedOrigin = developmentOrigins[index]
     if (expectedOrigin === undefined) return false

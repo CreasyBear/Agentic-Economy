@@ -13,7 +13,6 @@ import {
   type InspectPlanResult,
   type OperationComparisonFact,
 } from '@/modules/registry/public'
-import { AnswerProseSchema } from './answer-prose'
 import type { AnswerSource } from './answer-synthesizer'
 export const WebDiscoveryClaimSchema = z.strictObject({
   businessName: z.string(),

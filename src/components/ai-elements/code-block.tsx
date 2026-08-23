@@ -1,13 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useClipboardCopy } from "@/hooks/use-clipboard-copy";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -467,4 +460,3 @@ export const CodeBlockCopyButton = ({
     </Button>
   );
 };
-

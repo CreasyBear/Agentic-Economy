@@ -3,7 +3,6 @@ import type {
   AnswerArtifact,
   AnswerEvent,
   AnswerWorkStep,
-  AnswerSource,
 } from '@/modules/answer/public'
 import { mergeAnswerArtifact } from '@/modules/answer/public'
 import type { AnswerTurnProblem } from '@/lib/errors'
@@ -318,20 +317,6 @@ function applyDurableTurn(state: AnswerTurnUiState, turn: PublicThreadTurn): Ans
       return next
     }
   }
-}
-
-function providersForSourcesEvent(
-  state: AnswerTurnUiState,
-  providers: readonly AnswerSource[],
-): readonly AnswerSource[] {
-  const budget = state.plan?.artifactBudget
-  if (budget === undefined) {
-    return providers
-  }
-  if (!budget.allowedKinds.includes('provider-cards') || budget.maxProviderCards <= 0) {
-    return []
-  }
-  return providers.slice(0, budget.maxProviderCards)
 }
 
 function artifactForPlan(

@@ -3,7 +3,6 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 
 import type { InMemoryControlSnapshot } from './contracts'
 import type {
-  DynamicPublishedInvocationInput,
   DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
 import type {
@@ -64,10 +63,7 @@ export function loadDynamicPublishedAdapterSnapshot(
 ): Readonly<{
   durablePort: DurableActionInvocationPort<DynamicPublishedInvocationResult>
   developmentSnapshot: DevelopmentDurableState<DynamicPublishedInvocationResult>
-  initialSnapshot: InMemoryControlSnapshot<
-    DynamicPublishedInvocationInput,
-    DynamicPublishedInvocationResult
-  >
+  initialSnapshot: InMemoryControlSnapshot<DynamicPublishedInvocationResult>
   sourceRows: Map<string, DynamicPublishedSourceRow>
   semanticClaims: readonly DynamicPublishedSemanticClaim[]
   inputWork: readonly InvocationInputWork[]
@@ -89,10 +85,7 @@ export function loadDynamicPublishedAdapterSnapshot(
     })
     durableState.commandMaterials.set(command.commandId, command.value.material)
   }
-  const initialSnapshot: InMemoryControlSnapshot<
-    DynamicPublishedInvocationInput,
-    DynamicPublishedInvocationResult
-  > = {
+  const initialSnapshot: InMemoryControlSnapshot<DynamicPublishedInvocationResult> = {
     format: 'action-invocation-control:development:v1',
     records: verified.controls.map((row) => ({
       sourceRef: row.sourceRef,

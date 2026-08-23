@@ -1,5 +1,5 @@
-import { decodePaymentSignatureHeader, encodePaymentSignatureHeader } from '@x402/core/http'
-import { declarePaymentIdentifierExtension, extractPaymentIdentifier } from '@x402/extensions/payment-identifier'
+import { decodePaymentSignatureHeader } from '@x402/core/http'
+import { declarePaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 import { privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -165,7 +165,7 @@ describe('CDP x402 custody signer', () => {
         intent = captured
       },
     })
-    fixture.signTypedData.mockImplementation(async (input: SignTypedDataInput) => {
+    fixture.signTypedData.mockImplementation(async (_input: SignTypedDataInput) => {
       order.push('cdp')
       return { signature: SIGNATURE }
     })
@@ -339,27 +339,3 @@ describe('CDP x402 custody signer', () => {
     }
   })
 })
-
-function authorizationHeader(
-  overrides: Readonly<{
-    accepted?: Readonly<Record<string, unknown>>
-    authorization?: Readonly<Record<string, unknown>>
-  }> = {},
-): string {
-  return encodePaymentSignatureHeader({
-    x402Version: 2,
-    accepted: { ...requirement, ...overrides.accepted },
-    payload: {
-      authorization: {
-        from: account.address,
-        to: requirement.payTo,
-        value: requirement.amount,
-        validAfter: '0',
-        validBefore: '9999999999',
-        nonce: `0x${'11'.repeat(32)}`,
-        ...overrides.authorization,
-      },
-      signature: SIGNATURE,
-    },
-  })
-}

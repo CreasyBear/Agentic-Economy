@@ -7,7 +7,6 @@ import {
   AnswerOperationSelectionSchema,
   AnswerRequestedIntentsSchema,
   AnswerRequestInterpretationSchema,
-  answerOperationCandidateSetDigest,
 } from '@/modules/answer/answer-schema'
 import { isValidFrozenAnswerOperationArtifacts } from '@/modules/answer/answer-event-schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -31,7 +30,7 @@ export const MAX_ANSWER_TURN_CHECKPOINT_BYTES = 256 * 1024
 const MAX_CHECKPOINT_TOOL_CALLS = 16
 const MAX_CHECKPOINT_TOOL_DIGESTS = 16
 const MAX_CHECKPOINT_MODEL_REQUESTS = 16
-const MAX_CHECKPOINT_PROVIDERS = 25
+
 const MAX_CHECKPOINT_MESSAGES = 32
 const MAX_CHECKPOINT_OPERATION_CANDIDATES = ANSWER_OPERATION_CANDIDATE_LIMIT
 const encoder = new TextEncoder()
