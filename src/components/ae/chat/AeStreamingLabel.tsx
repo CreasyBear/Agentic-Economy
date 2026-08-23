@@ -1,5 +1,7 @@
-import { Shimmer } from '@/components/ai-elements/shimmer'
+import type { CSSProperties } from 'react'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
+
+import { cn } from '@/lib/utils'
 
 export type AeStreamingLabelProps = {
   children: string
@@ -15,10 +17,14 @@ export function AeStreamingLabel({
   className = 'text-muted-foreground',
   duration = 2,
 }: AeStreamingLabelProps) {
+  const Component = as
   return (
-    <Shimmer as={as} className={className} duration={duration}>
+    <Component
+      className={cn('ae-text-shimmer', className)}
+      style={{ '--ae-shimmer-duration': `${duration}s` } as CSSProperties}
+    >
       {children}
-    </Shimmer>
+    </Component>
   )
 }
 
