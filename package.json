@@ -9,7 +9,6 @@
     "parity:check": "node eval/parity/check-parity.mjs",
     "audit:actions": "node scripts/audit-action-surfaces.mjs",
     "dev": "vite dev --host 127.0.0.1",
-    "papercut": "node tools/dev/papercut.mjs",
     "dev:local": "node tools/dev/local-dev.mjs",
     "build": "vite build",
     "typecheck": "tsc --noEmit",

@@ -1,12 +1,7 @@
 /**
- * Brand-core voice strings — the managed source for surfaces that carry the
- * brand's primary voice. Governed by `.planning/BRAND.md` (LOCKED authority):
- * change that file first, then express here once.
- *
- * Scope: ONLY strings with brand-voice weight on primary public surfaces.
- * Functional labels, aria plumbing, and machine descriptors stay with their
- * owners (see `.planning/COPY-MAP.md`). Example asks are furniture — swap
- * them here without a rebrand.
+ * Brand-core voice strings for primary public surfaces.
+ * Functional labels, accessibility copy, and machine descriptors stay with
+ * their owning feature modules. Example asks can change independently.
  */
 
 /** Canonical category sentence, kept for public metadata rather than the person-facing hero. */
