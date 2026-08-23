@@ -1,4 +1,5 @@
 import { isRecord } from '@/modules/common/is-record'
+import { randomUUID } from 'node:crypto'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   operationInvokeInputSchema,
@@ -69,10 +70,7 @@ function waitTimeoutFailure(
 function resolveIdempotencyKey(options: CliOptions): string {
   const explicit = options.idempotencyKey?.trim()
   if (explicit !== undefined && explicit.length > 0) return explicit
-  throw new CliFailure('Invoke requires an explicit --idempotency-key so a restarted process can recover the same invocation.', {
-    kind: 'INVALID_ARGUMENT',
-    code: 'idempotency-key-required',
-  })
+  return randomUUID()
 }
 
 function invokeOutput(
@@ -83,7 +81,7 @@ function invokeOutput(
   const nextCommand = invocationRef === undefined
     ? undefined
     : result.kind === 'reconciliation_required'
-      ? `npm run -s ae -- recover ${invocationRef} '<evidence-json>' --idempotency-key ${idempotencyKey}`
+      ? `ae recover ${invocationRef} '<evidence-json>' --idempotency-key ${idempotencyKey}`
       : statusCommandFor(invocationRef)
   return {
     ...result,
@@ -135,17 +133,23 @@ async function waitForOperationResult(
 export async function runInvokeCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
   if (
-    args.length !== 2
+    args.length !== 1
     || operationRef === undefined
     || operationRef.length === 0
   ) {
-    throw new CliFailure("Usage: npm run -s ae -- invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]", {
+    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
       kind: 'INVALID_ARGUMENT',
-      code: 'invoke-usage',
+      code: 'call-usage',
     })
   }
 
-  const rawInput = args[1]!.trim()
+  const rawInput = options.input?.trim()
+  if (rawInput === undefined || rawInput.length === 0) {
+    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
+      kind: 'INVALID_ARGUMENT',
+      code: 'call-usage',
+    })
+  }
   let input: unknown
   try {
     input = JSON.parse(rawInput)
@@ -163,7 +167,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
       code: 'invoke-input',
     })
   }
-  if (!options.json) process.stderr.write(`Invocation identity: operationRef=${operationRef} idempotencyKey=<redacted>\n`)
+  if (!options.json) process.stderr.write(`Call prepared: operationRef=${operationRef}. A durable retry identity has been retained.\n`)
 
   const apiKey = requireAgentAccessKey('invoke', options)
 
@@ -212,7 +216,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
   line(JSON.stringify(rendered, undefined, 2))
 }
 export const invokeCommandDescriptor = {
-  command: 'invoke',
+  command: 'call',
   actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   path: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,

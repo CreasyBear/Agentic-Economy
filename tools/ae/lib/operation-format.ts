@@ -26,6 +26,16 @@ export function formatOperationPrice(value: unknown): string {
   return JSON.stringify(value)
 }
 
+export function formatOperationTotalPrice(operation: PublicOperationDescriptor): string {
+  const total = operation.commercial.priceBreakdown?.totalBuyerAuthorization
+  return total === undefined ? formatOperationPrice(operation.commercial.price) : formatCurrencyAmount(total)
+}
+
+export function formatOperationVerification(operation: PublicOperationDescriptor): string {
+  const observedAt = operation.availability.observedAt ?? operation.commercial.priceEvidence?.observedAt
+  return observedAt === undefined ? 'not published' : new Date(observedAt).toISOString()
+}
+
 export function formatOperationAvailability(value: unknown): string {
   if (!isRecord(value)) return String(value)
   const posture =

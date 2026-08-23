@@ -94,7 +94,7 @@ describe('operation surface conformance', () => {
     const invokeRoute = operationRouteDescriptors.find((route) => route.actionId === invokeId)
     expect(invokeRoute).toBeDefined()
     if (invokeRoute === undefined) return
-    expect(invokeCommandDescriptor.command).toBe('invoke')
+    expect(invokeCommandDescriptor.command).toBe('call')
     expect(invokeCommandDescriptor.actionId).toBe(invoke.id)
     expect(invokeCommandDescriptor.actionId).toBe(invokeRoute.actionId)
     expect(invokeCommandDescriptor.path).toBe(invokeRoute.path)
@@ -112,4 +112,3 @@ describe('operation surface conformance', () => {
     }
   })
 })
-

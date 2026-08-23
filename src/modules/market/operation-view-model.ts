@@ -25,6 +25,9 @@ export type OperationCardViewModel = Readonly<{
   capability: string;
   category: MarketCategory;
   price: string;
+  authentication: string;
+  lastVerifiedAt?: number;
+  callLabel: string;
   readiness: OperationReadiness;
   readinessLabel: string;
   trustFact: string;
@@ -66,6 +69,7 @@ export function toOperationCardViewModel(
       : operation.availability.posture === "integrated"
         ? "Integrated"
         : "Unavailable";
+  const lastVerifiedAt = operation.availability.observedAt ?? operation.commercial.priceEvidence?.observedAt;
 
   return {
     operationRef: operation.operationRef,
@@ -78,6 +82,9 @@ export function toOperationCardViewModel(
     capability: capabilityLabel(operation.contract.capabilityId),
     category: evidence.category,
     price: operationPrice(operation),
+    authentication: operationAuthentication(operation),
+    ...(lastVerifiedAt === undefined ? {} : { lastVerifiedAt }),
+    callLabel: operationCallLabel(readiness),
     readiness,
     readinessLabel: readinessLabels[readiness],
     trustFact: readinessFacts[readiness],
@@ -123,6 +130,11 @@ const marketFallbackCategory: MarketCategory = {
 };
 
 function operationPrice(operation: PublicOperationDescriptor): string {
+  if (operation.commercial.priceBreakdown !== undefined) {
+    return exactIsZero(operation.commercial.priceBreakdown.totalBuyerAuthorization)
+      ? "Free"
+      : formatCurrencyAmount(operation.commercial.priceBreakdown.totalBuyerAuthorization);
+  }
   const price = operation.commercial.price;
   if (price.kind === "on_request") return "Price on request";
   if (price.kind === "fixed")
@@ -131,6 +143,22 @@ function operationPrice(operation: PublicOperationDescriptor): string {
       : formatCurrencyAmount(price.amount);
   if (exactIsZero(price.minimum) && exactIsZero(price.maximum)) return "Free";
   return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`;
+}
+
+function operationAuthentication(operation: PublicOperationDescriptor): string {
+  const authentication = operation.authentication;
+  if (authentication.kind === "keyless") return "No provider key";
+  if (authentication.kind === "x402") return "x402 payment";
+  if (authentication.kind === "platform_credential") {
+    return authentication.scheme === "bearer" ? "Bearer connection" : "API key connection";
+  }
+  return "Check access";
+}
+
+function operationCallLabel(readiness: OperationReadiness): string {
+  if (readiness === "Routeable") return "Use capability";
+  if (readiness === "Integrated") return "Setup required";
+  return "Not available";
 }
 
 function capabilityLabel(value: string): string {

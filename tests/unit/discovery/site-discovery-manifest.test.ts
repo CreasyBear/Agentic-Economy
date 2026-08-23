@@ -308,7 +308,7 @@ describe('Site discovery manifest', () => {
   })
 
   it('carries the listing boundary and claims no capability AE withholds', () => {
-    expect(manifest.boundary).toContain('never select or invoke an Operation')
+    expect(manifest.boundary).toContain('Only independently callable Operations appear')
     expect(manifest.unsupportedCapabilities.map((capability) => capability.label)).toContain(
       'Commercial or owner-action authority'
     )

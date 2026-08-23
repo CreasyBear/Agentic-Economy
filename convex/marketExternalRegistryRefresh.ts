@@ -30,10 +30,21 @@ export const run = internalAction({
       startedAt,
     });
     try {
-      const [agenticMarket, treg] = await Promise.all([
-        fetchAgenticMarketCatalog({ jobTimeoutMs: 300_000 }),
-        fetchTregCatalog({ jobTimeoutMs: 300_000 }),
-      ]);
+      let insertedEntries = 0;
+      const agenticMarket = await fetchAgenticMarketCatalog({
+        jobTimeoutMs: 300_000,
+        onEntries: async (sourceEntries) => {
+          const written = await ctx.runMutation(
+            internal.marketExternalRegistry.writeBatch,
+            {
+              generation,
+              entries: sourceEntries.map(toPersistedEntry),
+            },
+          );
+          insertedEntries += written.inserted;
+        },
+      });
+      const treg = await fetchTregCatalog({ jobTimeoutMs: 300_000 });
       if (!agenticMarket.complete || !treg.complete) {
         const reason = [
           ...(agenticMarket.complete
@@ -50,22 +61,19 @@ export const run = internalAction({
         });
         return { kind: "preserved" as const, generation, entries: 0, reason };
       }
-      const entries = deduplicateEntries([
-        ...agenticMarket.entries,
-        ...treg.entries,
-      ]);
-      for (let offset = 0; offset < entries.length; offset += WRITE_BATCH_SIZE) {
-        await ctx.runMutation(internal.marketExternalRegistry.writeBatch, {
+      for (let offset = 0; offset < treg.entries.length; offset += WRITE_BATCH_SIZE) {
+        const written = await ctx.runMutation(internal.marketExternalRegistry.writeBatch, {
           generation,
-          entries: entries
+          entries: treg.entries
             .slice(offset, offset + WRITE_BATCH_SIZE)
             .map(toPersistedEntry),
         });
+        insertedEntries += written.inserted;
       }
       await ctx.runMutation(internal.marketExternalRegistry.finalize, {
         generation,
         completedAt: Date.now(),
-        expectedEntries: entries.length,
+        expectedEntries: insertedEntries,
         agenticMarketReported: agenticMarket.sourceReportedCount,
         agenticMarketFetched: agenticMarket.fetchedServiceCount ?? 0,
         tregReported: treg.sourceReportedCount,
@@ -74,7 +82,7 @@ export const run = internalAction({
       return {
         kind: "refreshed" as const,
         generation,
-        entries: entries.length,
+        entries: insertedEntries,
       };
     } catch (error) {
       const reason = publicFailureReason(error);
@@ -88,23 +96,6 @@ export const run = internalAction({
   },
 });
 
-function deduplicateEntries(
-  entries: readonly RegistrySourceEntry[],
-): RegistrySourceEntry[] {
-  const byDocumentId = new Map<string, RegistrySourceEntry>();
-  for (const entry of entries) {
-    const documentId = registryDocumentId(entry);
-    const existing = byDocumentId.get(documentId);
-    if (existing !== undefined && existing.sourceDigest !== entry.sourceDigest) {
-      throw new Error("external_registry_source_identity_conflict");
-    }
-    byDocumentId.set(documentId, entry);
-  }
-  return [...byDocumentId.values()].sort((left, right) =>
-    registryDocumentId(left).localeCompare(registryDocumentId(right)),
-  );
-}
-
 function toPersistedEntry(entry: RegistrySourceEntry) {
   return {
     documentId: registryDocumentId(entry),
@@ -112,21 +103,30 @@ function toPersistedEntry(entry: RegistrySourceEntry) {
     upstreamServiceId: entry.upstreamServiceId,
     upstreamEndpointId: entry.upstreamEndpointId,
     sourceUrl: entry.sourceUrl,
-    ...(entry.endpointUrl === undefined ? {} : { endpointUrl: entry.endpointUrl }),
+    ...(entry.providerUrl === undefined ? {} : { providerUrl: entry.providerUrl }),
+    endpointUrl: entry.endpointUrl,
     ...(entry.docsUrl === undefined ? {} : { docsUrl: entry.docsUrl }),
+    routeIdentity: entry.routeIdentity,
     name: entry.name,
     summary: entry.summary,
     provider: entry.provider,
     category: entry.category,
     ...(entry.capability === undefined ? {} : { capability: entry.capability }),
-    ...(entry.method === undefined ? {} : { method: entry.method }),
+    method: entry.method,
     tags: [...entry.tags],
     networks: [...entry.networks],
-    ...(entry.priceLabel === undefined ? {} : { priceLabel: entry.priceLabel }),
+    priceLabel: entry.priceLabel,
+    exactPrice: entry.exactPrice,
     access: entry.access,
-    ...(entry.sourceCheckedAt === undefined
+    credentialRequirements: [...entry.credentialRequirements],
+    readiness: entry.readiness,
+    lastObservedAt: entry.lastObservedAt,
+    ...(entry.lastVerifiedAt === undefined
       ? {}
-      : { sourceCheckedAt: entry.sourceCheckedAt }),
+      : { lastVerifiedAt: entry.lastVerifiedAt }),
+    inputSchemaJson: entry.inputSchemaJson,
+    exampleInvocation: entry.exampleInvocation,
+    quality: "callable" as const,
     ...(entry.sourceCalls30d === undefined
       ? {}
       : { sourceCalls30d: entry.sourceCalls30d }),
@@ -156,6 +156,10 @@ function searchDocument(entry: RegistrySourceEntry): string {
     entry.category,
     entry.capability,
     entry.method,
+    entry.routeIdentity,
+    entry.exactPrice.currency,
+    entry.exactPrice.network,
+    ...entry.credentialRequirements,
     entry.upstreamServiceId,
     entry.upstreamEndpointId,
     ...entry.tags,

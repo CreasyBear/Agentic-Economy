@@ -1,10 +1,7 @@
 import { z } from "zod";
 
 import { readBoundedRequestText } from "@/lib/server/bounded-request-body";
-import type { JsonValue } from "@/modules/capability-contract/public";
-import { parseBoundedJson } from "@/modules/common/bounded-json";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
-import { isRecord } from "@/modules/common/is-record";
 
 import type {
   RegistrySourceEntry,
@@ -20,6 +17,7 @@ const MAX_TOTAL_ENTRIES = 50_000;
 const MAX_AGENTIC_MARKET_SERVICES = 5_000;
 const MAX_AGENTIC_MARKET_PAGES = 120;
 const MAX_AGENTIC_MARKET_SWEEPS = 10;
+const MIN_AGENTIC_MARKET_SERVICE_COVERAGE = 0.95;
 const MAX_TREG_SHELVES = 120;
 
 type SourceFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -28,8 +26,12 @@ const boundedText = (max: number) => z.string().max(max);
 const nullableText = boundedText(2_000).nullable();
 const safeCount = z.number().int().nonnegative().safe();
 const httpUrl = z.url().max(2_000).refine((value) => {
-  const protocol = new URL(value).protocol;
-  return protocol === "https:" || protocol === "http:";
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
 }, "Only HTTP(S) URLs are allowed");
 
 const agenticPricing = z.strictObject({
@@ -52,8 +54,8 @@ const agenticParameter = z.strictObject({
 });
 const agenticQuality = z
   .strictObject({
-    l30DaysTotalCalls: boundedText(80),
-    l30DaysUniquePayers: boundedText(80),
+    l30DaysTotalCalls: z.string().regex(/^\d+$/u).max(80),
+    l30DaysUniquePayers: z.string().regex(/^\d+$/u).max(80),
   })
   .nullable();
 const agenticEndpoint = z.strictObject({
@@ -175,6 +177,7 @@ export async function fetchAgenticMarketCatalog(
     maxSweeps?: number;
     timeoutMs?: number;
     jobTimeoutMs?: number;
+    onEntries?: (entries: readonly RegistrySourceEntry[]) => Promise<void>;
   }> = {},
 ): Promise<RegistrySourceFetchResult> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
@@ -195,9 +198,12 @@ export async function fetchAgenticMarketCatalog(
     MAX_AGENTIC_MARKET_SWEEPS,
     Math.max(1, input.maxSweeps ?? MAX_AGENTIC_MARKET_SWEEPS),
   );
-  const services = new Map<string, z.infer<typeof agenticService>>();
+  const serviceIds = new Set<string>();
+  const entries: RegistrySourceEntry[] = [];
   let pages = 0;
   let sourceReportedCount = 0;
+  let sourceEndpointCount = 0;
+  let admittedCount = 0;
   let incompleteReason: RegistrySourceFetchResult["incompleteReason"];
 
   for (let sweep = 0; sweep < maxSweeps; sweep += 1) {
@@ -212,7 +218,7 @@ export async function fetchAgenticMarketCatalog(
         incompleteReason = "page_ceiling_reached";
         break;
       }
-      if (services.size >= maxServices) {
+      if (serviceIds.size >= maxServices) {
         incompleteReason = "entry_ceiling_reached";
         break;
       }
@@ -223,12 +229,30 @@ export async function fetchAgenticMarketCatalog(
         await fetchBoundedJson(fetchImpl, url.toString(), input.timeoutMs),
       );
       pages += 1;
-      if (pages === 1) sourceReportedCount = page.total;
-      else if (sourceReportedCount !== page.total) {
-        incompleteReason = "source_count_mismatch";
-        break;
+      // The public catalogue has no snapshot cursor and can grow while a sweep
+      // is in progress. Preserve the highest advertised target and continue;
+      // a changing total is not itself evidence of an incomplete traversal.
+      sourceReportedCount = Math.max(sourceReportedCount, page.total);
+      for (const service of page.services) {
+        if (serviceIds.has(service.id)) continue;
+        serviceIds.add(service.id);
+        sourceEndpointCount += service.endpoints.length;
+        const admitted = agenticEntries(service, fetchedAt);
+        const remaining = maxEntries - admittedCount;
+        const bounded = admitted.slice(0, Math.max(0, remaining));
+        admittedCount += bounded.length;
+        if (input.onEntries === undefined) entries.push(...bounded);
+        else {
+          for (let offset = 0; offset < bounded.length; offset += 50) {
+            await input.onEntries(bounded.slice(offset, offset + 50));
+          }
+        }
+        if (bounded.length !== admitted.length) {
+          incompleteReason = "entry_ceiling_reached";
+          break;
+        }
       }
-      for (const service of page.services) services.set(service.id, service);
+      if (incompleteReason !== undefined) break;
       rowsThisSweep += page.services.length;
       offset += page.services.length;
       if (page.services.length === 0) {
@@ -236,21 +260,24 @@ export async function fetchAgenticMarketCatalog(
         break;
       }
     }
-    if (incompleteReason !== undefined || services.size >= sourceReportedCount) break;
+    if (incompleteReason !== undefined || serviceIds.size >= sourceReportedCount) break;
   }
-  if (incompleteReason === undefined && services.size !== sourceReportedCount) {
+  if (
+    incompleteReason === undefined &&
+    sourceReportedCount > 0 &&
+    serviceIds.size / sourceReportedCount < MIN_AGENTIC_MARKET_SERVICE_COVERAGE
+  ) {
     incompleteReason = "source_count_mismatch";
   }
-  const allEntries = [...services.values()].flatMap(agenticEntries);
-  const entries = allEntries.slice(0, maxEntries);
-  if (entries.length !== allEntries.length) incompleteReason = "entry_ceiling_reached";
   return {
     source: "agentic_market",
     fetchedAt,
     complete: incompleteReason === undefined,
     ...(incompleteReason === undefined ? {} : { incompleteReason }),
     sourceReportedCount,
-    fetchedServiceCount: services.size,
+    admittedCount,
+    excludedCount: sourceEndpointCount - admittedCount,
+    fetchedServiceCount: serviceIds.size,
     entries,
   };
 }
@@ -276,6 +303,7 @@ export async function fetchTregCatalog(
   );
   const entries = new Map<string, RegistrySourceEntry>();
   let fetchedShelfCount = 0;
+  let evaluatedEndpointCount = 0;
   let incompleteReason: RegistrySourceFetchResult["incompleteReason"];
   const shelves = index.platforms.slice(0, maxShelves);
   if (shelves.length !== index.platforms.length) incompleteReason = "page_ceiling_reached";
@@ -303,11 +331,13 @@ export async function fetchTregCatalog(
       ...shelf.extended.map((endpoint) => ({ endpoint, capability: undefined })),
     ];
     for (const pair of endpointPairs) {
+      evaluatedEndpointCount += 1;
       if (entries.size >= maxEntries) {
         incompleteReason = "entry_ceiling_reached";
         break;
       }
-      const entry = tregEntry(platform, pair.endpoint, pair.capability);
+      const entry = tregEntry(platform, pair.endpoint, pair.capability, fetchedAt);
+      if (entry === undefined) continue;
       const existing = entries.get(entry.upstreamEndpointId);
       if (existing !== undefined && existing.sourceDigest !== entry.sourceDigest) {
         throw new Error("treg_catalog_duplicate_identity_conflict");
@@ -326,6 +356,8 @@ export async function fetchTregCatalog(
     complete: incompleteReason === undefined,
     ...(incompleteReason === undefined ? {} : { incompleteReason }),
     sourceReportedCount,
+    admittedCount: entries.size,
+    excludedCount: evaluatedEndpointCount - entries.size,
     fetchedShelfCount,
     entries: [...entries.values()],
   };
@@ -335,7 +367,7 @@ async function fetchBoundedJson(
   fetchImpl: SourceFetch,
   url: string,
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
-): Promise<JsonValue> {
+): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -348,9 +380,11 @@ async function fetchBoundedJson(
     if (!response.ok) throw new Error(`external_registry_http_${response.status}`);
     const body = await readBoundedRequestText(response, MAX_RESPONSE_BYTES);
     if (!body.ok) throw new Error("external_registry_response_too_large");
-    const parsed = parseBoundedJson(body.text);
-    if (parsed === undefined) throw new Error("external_registry_response_invalid_json");
-    return parsed;
+    try {
+      return JSON.parse(body.text) as unknown;
+    } catch {
+      throw new Error("external_registry_response_invalid_json");
+    }
   } finally {
     clearTimeout(timer);
   }
@@ -358,56 +392,83 @@ async function fetchBoundedJson(
 
 function agenticEntries(
   service: z.infer<typeof agenticService>,
+  fetchedAt: number,
 ): RegistrySourceEntry[] {
-  const endpoints =
-    service.endpoints.length === 0
-      ? [undefined]
-      : service.endpoints;
-  return endpoints.map((endpoint) => {
-    const method = endpoint?.method.trim().toUpperCase();
-    const upstreamEndpointId =
-      endpoint === undefined ? `service:${service.id}` : `${method}:${endpoint.url}`;
-    const declaredPrice = priceLabel(endpoint?.pricing ?? service.priceSummary);
+  return service.endpoints.flatMap((endpoint) => {
+    const method = callableMethod(endpoint.method);
+    const exactPrice = exactX402Price(endpoint.pricing);
+    const name = cleanRequiredText(endpoint.serviceName || service.name);
+    const summary = cleanRequiredText(endpoint.description || service.description);
+    const provider = cleanRequiredText(
+      endpoint.providerName || service.provider || service.domain,
+    );
+    const endpointUrl = canonicalHttpUrl(endpoint.url);
+    if (
+      method === undefined ||
+      exactPrice === undefined ||
+      name === undefined ||
+      summary === undefined ||
+      provider === undefined ||
+      endpointUrl === undefined
+    ) {
+      return [];
+    }
+    const inputContract = inputContractFor(endpoint.parameters, endpointUrl, method);
+    if (inputContract === undefined) return [];
+    const providerUrl = canonicalHttpUrl(service.providerUrl);
+    const upstreamEndpointId = `${method}:${endpointUrl}`;
+    const routeIdentity = `${method} ${endpointUrl}`;
+    const observedAt = new Date(fetchedAt).toISOString();
     const digestInput = {
       source: "agentic_market",
       serviceId: service.id,
       endpointId: upstreamEndpointId,
-      name: endpoint?.serviceName || service.name,
-      description: endpoint?.description || service.description,
-      provider: endpoint?.providerName || service.provider || service.domain,
+      routeIdentity,
+      name,
+      description: summary,
+      provider,
       category: service.category,
-      method: method ?? null,
-      endpointUrl: endpoint?.url ?? null,
-      tags: uniqueBounded([...(endpoint?.tags ?? []), ...service.tags]),
+      method,
+      endpointUrl,
+      tags: uniqueBounded([...endpoint.tags, ...service.tags]),
       networks: uniqueBounded(service.networks),
-      pricing: endpoint?.pricing ?? service.priceSummary,
-      quality: endpoint?.quality ?? null,
+      pricing: exactPrice,
+      inputSchemaJson: inputContract.inputSchemaJson,
+      quality: endpoint.quality,
     };
-    return {
+    return [{
       kind: "registry_source_entry",
       source: "agentic_market",
       upstreamServiceId: service.id,
       upstreamEndpointId,
       sourceUrl: `https://agentic.market/services/${encodeURIComponent(service.id)}`,
-      ...(endpoint === undefined ? {} : { endpointUrl: endpoint.url }),
-      name: cleanText(endpoint?.serviceName || service.name, "Unnamed service"),
-      summary: cleanText(endpoint?.description || service.description, "No source description."),
-      provider: cleanText(endpoint?.providerName || service.provider || service.domain, "Unknown provider"),
+      ...(providerUrl === undefined ? {} : { providerUrl }),
+      endpointUrl,
+      routeIdentity,
+      name,
+      summary,
+      provider,
       category: cleanText(service.category, "Uncategorised"),
-      ...(method === undefined || method === "" ? {} : { method }),
-      tags: uniqueBounded([...(endpoint?.tags ?? []), ...service.tags]),
-      networks: uniqueBounded(service.networks),
-      ...(declaredPrice === undefined ? {} : { priceLabel: declaredPrice }),
+      method,
+      tags: uniqueBounded([...endpoint.tags, ...service.tags]),
+      networks: uniqueBounded([exactPrice.network, ...service.networks]),
+      exactPrice,
+      priceLabel: `${exactPrice.currency} ${exactPrice.amount}`,
       access: "x402",
-      ...(endpoint?.quality?.l30DaysTotalCalls
+      credentialRequirements: ["x402_payment"],
+      readiness: "source_declared_callable",
+      lastObservedAt: observedAt,
+      inputSchemaJson: inputContract.inputSchemaJson,
+      exampleInvocation: inputContract.exampleInvocation,
+      ...(endpoint.quality?.l30DaysTotalCalls
         ? { sourceCalls30d: endpoint.quality.l30DaysTotalCalls }
         : {}),
-      ...(endpoint?.quality?.l30DaysUniquePayers
+      ...(endpoint.quality?.l30DaysUniquePayers
         ? { sourcePayers30d: endpoint.quality.l30DaysUniquePayers }
         : {}),
       authority: "source_metadata_only",
       sourceDigest: canonicalDigest(digestInput),
-    };
+    }];
   });
 }
 
@@ -415,95 +476,189 @@ function tregEntry(
   platform: z.infer<typeof tregPlatform>,
   endpoint: z.infer<typeof tregEndpoint>,
   capability: string | undefined,
-): RegistrySourceEntry {
-  const observed = isRecord(endpoint.observed) ? endpoint.observed : undefined;
-  const docsUrl = safeHttpUrl(endpoint.docs_url);
-  const declaredPrice = priceLabel(endpoint.cost);
-  const medianLatency = safeNonnegativeNumber(observed?.p50_ms);
-  const p95Latency = safeNonnegativeNumber(observed?.p95_ms);
-  const sampleSize = safeNonnegativeNumber(observed?.samples);
-  const digestInput = {
-    source: "treg",
-    platform: platform.slug,
-    endpointId: endpoint.id,
-    name: endpoint.name,
-    summary: endpoint.summary,
-    provider: endpoint.provider_display || endpoint.provider,
-    category: platform.category,
-    capability: capability ?? null,
-    method: endpoint.method,
-    path: endpoint.path,
-    scope: endpoint.scope,
-    cost: endpoint.cost,
-    checkedAt: endpoint.verified,
-    observed: observed ?? null,
-  };
-  return {
-    kind: "registry_source_entry",
-    source: "treg",
-    upstreamServiceId: platform.slug,
-    upstreamEndpointId: endpoint.id,
-    sourceUrl: `https://treg.to/catalog/endpoints/${encodeURIComponent(endpoint.id)}`,
-    ...(docsUrl === undefined ? {} : { docsUrl }),
-    name: cleanText(endpoint.name, "Unnamed endpoint"),
-    summary: cleanText(endpoint.summary, "No source description."),
-    provider: cleanText(endpoint.provider_display || endpoint.provider, "Unknown provider"),
-    category: cleanText(platform.category, "Uncategorised"),
-    ...(capability === undefined || capability === "" ? {} : { capability }),
-    ...(endpoint.method === "" ? {} : { method: endpoint.method.toUpperCase() }),
-    tags: uniqueBounded([endpoint.kind, endpoint.domain, endpoint.tier]),
-    networks: [],
-    ...(declaredPrice === undefined ? {} : { priceLabel: declaredPrice }),
-    access: "provider_account",
-    ...(endpoint.verified === null || endpoint.verified === ""
-      ? {}
-      : { sourceCheckedAt: endpoint.verified }),
-    ...(medianLatency === undefined ? {} : { sourceMedianLatencyMs: medianLatency }),
-    ...(p95Latency === undefined ? {} : { sourceP95LatencyMs: p95Latency }),
-    ...(sampleSize === undefined ? {} : { sourceSampleSize: sampleSize }),
-    authority: "source_metadata_only",
-    sourceDigest: canonicalDigest(digestInput),
-  };
-}
-
-function priceLabel(value: unknown): string | undefined {
-  if (!isRecord(value)) return undefined;
-  const type = typeof value.type === "string" ? value.type : undefined;
-  if (type === "free") return "Free";
-  const amount = scalarText(value.amount) ?? scalarText(value.value);
-  const min = scalarText(value.minAmount);
-  const max = scalarText(value.maxAmount);
-  const currency = scalarText(value.currency);
-  if (min !== undefined && max !== undefined && min !== max) {
-    return `${currency === undefined ? "" : `${currency} `}${min}–${max}`.trim();
-  }
-  const chosen = amount ?? min ?? max;
-  return chosen === undefined
-    ? undefined
-    : `${currency === undefined ? "" : `${currency} `}${chosen}`.trim();
-}
-
-function scalarText(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed === "" || trimmed.length > 120 ? undefined : trimmed;
-  }
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-    return String(value);
-  }
+  _fetchedAt: number,
+): RegistrySourceEntry | undefined {
+  void platform;
+  void endpoint;
+  void capability;
+  // Shelf records expose relative paths but no canonical provider base URL or
+  // authoritative credential binding. They remain source references until an
+  // independent adapter can prove a callable route and credential contract.
   return undefined;
 }
 
-function safeNonnegativeNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? value
+const callableMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const);
+type CallableMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+
+function callableMethod(value: string): CallableMethod | undefined {
+  const normalized = value.trim().toUpperCase();
+  return callableMethods.has(normalized as CallableMethod)
+    ? (normalized as CallableMethod)
     : undefined;
 }
 
-function safeHttpUrl(value: string): string | undefined {
-  if (value === "") return undefined;
+function canonicalHttpUrl(value: string): string | undefined {
   const parsed = httpUrl.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) return undefined;
+  const url = new URL(parsed.data);
+  url.hash = "";
+  return url.toString();
+}
+
+function exactX402Price(
+  pricing: z.infer<typeof agenticPricing>,
+): RegistrySourceEntry["exactPrice"] | undefined {
+  const amount = pricing.amount.trim();
+  const currency = pricing.currency.trim();
+  const network = pricing.network.trim();
+  if (
+    pricing.scheme.trim().toLowerCase() !== "exact" ||
+    !/^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(amount) ||
+    !/[1-9]/u.test(amount) ||
+    currency === "" ||
+    network === ""
+  ) {
+    return undefined;
+  }
+  return { scheme: "exact", amount, currency, network };
+}
+
+function cleanRequiredText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed.length >= 3 ? trimmed : undefined;
+}
+
+function inputContractFor(
+  parameters: readonly z.infer<typeof agenticParameter>[],
+  endpointUrl: string,
+  method: CallableMethod,
+): Readonly<{ inputSchemaJson: string; exampleInvocation: string }> | undefined {
+  const groups: Record<string, Record<string, unknown>> = {};
+  const requiredByGroup: Record<string, string[]> = {};
+  const url = new URL(endpointUrl);
+  const body: Record<string, unknown> = {};
+  const headers: Array<readonly [string, string]> = [];
+
+  for (const parameter of parameters) {
+    const group = normalizeParameterGroup(parameter.group);
+    const name = parameter.name.trim();
+    if (group === undefined || name === "" || name.length > 160) return undefined;
+    if (group === "headers" && isCredentialHeader(name)) return undefined;
+    const example = parameterExample(parameter);
+    if (parameter.required && example === undefined) return undefined;
+    const schema = parameterSchema(parameter, example);
+    (groups[group] ??= {})[name] = schema;
+    if (parameter.required) (requiredByGroup[group] ??= []).push(name);
+    if (example === undefined) continue;
+    if (group === "query") appendQueryValue(url, name, example);
+    else if (group === "path" && !replacePathValue(url, name, example)) return undefined;
+    else if (group === "body") body[name] = example;
+    else if (group === "headers") headers.push([name, scalarInvocationValue(example)]);
+  }
+
+  const groupSchemas = Object.fromEntries(
+    Object.entries(groups).map(([group, properties]) => [
+      group,
+      {
+        type: "object",
+        properties,
+        ...(requiredByGroup[group]?.length
+          ? { required: requiredByGroup[group] }
+          : {}),
+        additionalProperties: false,
+      },
+    ]),
+  );
+  const inputSchemaJson = JSON.stringify({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: groupSchemas,
+    additionalProperties: false,
+  });
+  if (inputSchemaJson.length > 12_000) return undefined;
+
+  const command = [
+    `curl --request ${method}`,
+    `--url '${url.toString()}'`,
+    ...headers.map(([name, value]) => `--header '${name}: ${value.replaceAll("'", "")}'`),
+    ...(Object.keys(body).length === 0
+      ? []
+      : [
+          "--header 'content-type: application/json'",
+          `--data '${JSON.stringify(body).replaceAll("'", "")}'`,
+        ]),
+  ].join(" \\\n  ");
+  return { inputSchemaJson, exampleInvocation: command };
+}
+
+function normalizeParameterGroup(value: string): "path" | "query" | "body" | "headers" | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "path" || normalized === "pathparams") return "path";
+  if (normalized === "query" || normalized === "queryparams") return "query";
+  if (normalized === "body" || normalized === "json") return "body";
+  if (normalized === "header" || normalized === "headers") return "headers";
+  return undefined;
+}
+
+function isCredentialHeader(value: string): boolean {
+  return /authorization|api[-_ ]?key|token|secret|credential/iu.test(value);
+}
+
+function parameterExample(
+  parameter: z.infer<typeof agenticParameter>,
+): unknown | undefined {
+  const candidates = [parameter.example, parameter.default, parameter.enumValues[0]];
+  return candidates.find((candidate) =>
+    candidate !== undefined &&
+    candidate !== null &&
+    JSON.stringify(candidate).length <= 2_000
+  );
+}
+
+function parameterSchema(
+  parameter: z.infer<typeof agenticParameter>,
+  example: unknown | undefined,
+): Record<string, unknown> {
+  const type = parameter.type.trim().toLowerCase();
+  const jsonType = type.includes("bool")
+    ? "boolean"
+    : type.includes("int") || type.includes("number") || type.includes("float")
+      ? "number"
+      : type.includes("array") || type.includes("list")
+        ? "array"
+        : type.includes("object") || type.includes("json")
+          ? "object"
+          : "string";
+  return {
+    type: jsonType,
+    ...(parameter.description.trim() === ""
+      ? {}
+      : { description: parameter.description.trim() }),
+    ...(parameter.enumValues.length === 0 ? {} : { enum: parameter.enumValues }),
+    ...(example === undefined ? {} : { examples: [example] }),
+  };
+}
+
+function appendQueryValue(url: URL, name: string, value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) url.searchParams.append(name, scalarInvocationValue(item));
+    return;
+  }
+  url.searchParams.set(name, scalarInvocationValue(value));
+}
+
+function replacePathValue(url: URL, name: string, value: unknown): boolean {
+  const encoded = encodeURIComponent(scalarInvocationValue(value));
+  const replaced = url.pathname
+    .replaceAll(`{${name}}`, encoded)
+    .replaceAll(`:${name}`, encoded);
+  if (replaced === url.pathname) return false;
+  url.pathname = replaced;
+  return true;
+}
+
+function scalarInvocationValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function cleanText(value: string, fallback: string): string {
@@ -512,7 +667,10 @@ function cleanText(value: string, fallback: string): string {
 }
 
 function uniqueBounded(values: readonly string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
-    .sort()
-    .slice(0, 50);
+  const unique = new Set<string>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (trimmed !== "") unique.add(trimmed);
+  }
+  return [...unique].sort().slice(0, 50);
 }

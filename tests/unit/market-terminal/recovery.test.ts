@@ -116,11 +116,6 @@ describe('CLI operation recovery projections', () => {
     const manifest = JSON.parse(output.read()) as {
       commands: {
         recover: { summary: string; guidance: readonly string[] }
-        demand: {
-          commands: {
-            ask: { args: string; summary: string; guidance: readonly string[] }
-          }
-        }
       }
       coldLoop: readonly string[]
       payment: {
@@ -165,7 +160,7 @@ describe('CLI operation recovery projections', () => {
     expect(manifest.commands.recover.summary).toContain('not a replay')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('genuinely uncertain')
     expect(manifest.commands.recover.guidance.join(' ')).toContain('canonical evidence')
-    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'fund', 'invoke', 'status', 'cancel/recover', 'receipt', 'revoke'])
+    expect(manifest.coldLoop).toEqual(['search', 'inspect', 'connect', 'call', 'receipt', 'reuse'])
     expect(manifest.payment).toMatchObject({
       providerQuotedAmount: { field: 'commercial.priceBreakdown.providerQuotedAmount', exact: true },
       agenticEconomyFee: { field: 'commercial.priceBreakdown.agenticEconomyFee', rate: '10%', feeBps: 1_000 },
@@ -184,9 +179,6 @@ describe('CLI operation recovery projections', () => {
       fund: { path: '/agent-access', anchor: '#fund', agentCredential: 'not_used' },
       revoke: { path: '/agent-access', anchor: '#revoke', agentCredential: 'not_used' },
     })
-    expect(manifest.commands.demand.commands.ask.args).toContain('--thread-id')
-    expect(manifest.commands.demand.commands.ask.summary).toContain('same thread')
-    expect(manifest.commands.demand.commands.ask.guidance.join(' ')).toContain('follow-up')
     expect(manifest.gateway.idempotency).toMatchObject({
       commandField: 'idempotencyKey',
       commandFieldRequired: true,
@@ -233,7 +225,7 @@ describe('CLI operation recovery projections', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:test', '{}'], { ...baseOptions, idempotencyKey: 'idem:one', wait: true })
+      await runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one', wait: true })
     } finally {
       output.restore()
     }
@@ -241,7 +233,7 @@ describe('CLI operation recovery projections', () => {
     expect(JSON.parse(output.read())).toEqual({
       ...completed,
       idempotencyKey: 'idem:one',
-      nextCommand: 'npm run -s ae -- status invocation:one',
+      nextCommand: 'ae status invocation:one',
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
@@ -278,7 +270,7 @@ describe('CLI operation recovery projections', () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('socket timeout'))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:test', '{}'], { ...baseOptions, idempotencyKey: 'idem:one' })).rejects.toMatchObject({
+    await expect(runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:one' })).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
       code: 'operation-transport-unknown',
       detail: {
@@ -351,7 +343,7 @@ describe('CLI operation recovery projections', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:test', '{}'], { ...baseOptions, idempotencyKey: 'idem:503' }))
+    await expect(runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}', idempotencyKey: 'idem:503' }))
       .rejects.toMatchObject({
         kind: 'UNAVAILABLE',
         code: 'provider_unavailable',
@@ -361,26 +353,22 @@ describe('CLI operation recovery projections', () => {
   })
 
 
-  it('requires an explicit idempotency key for human and JSON invoke without random fallback', async () => {
+  it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(completed), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }))
     vi.stubGlobal('fetch', fetchMock)
-    const randomUuid = vi.spyOn(globalThis.crypto, 'randomUUID')
-
-    await expect(runInvokeCommand(['operation:v1:test', '{}'], baseOptions)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'idempotency-key-required',
-    } satisfies Partial<CliFailure>)
-    await expect(runInvokeCommand(['operation:v1:test', '{}'], { ...baseOptions, json: false })).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'idempotency-key-required',
-    } satisfies Partial<CliFailure>)
-
-    expect(randomUuid).not.toHaveBeenCalled()
-    expect(fetchMock).not.toHaveBeenCalled()
+    const output = capture(process.stdout)
+    try {
+      await runInvokeCommand(['operation:v1:test'], { ...baseOptions, input: '{}' })
+    } finally {
+      output.restore()
+    }
+    const result = JSON.parse(output.read()) as { idempotencyKey: string }
+    expect(result.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('recovers through the canonical root command with positional evidence', async () => {

@@ -25,41 +25,36 @@ export const DiscoveryPublicSurfacePaths = [
 
 /** Published business portfolios remain facts only; Operation execution has a separate exact-detail boundary. */
 export const DiscoveryListingBoundaryLine =
-  'Business facts never select or invoke an Operation. Search and inspect current Operations; use anonymous MCP execution only when exact detail advertises it, otherwise use the authenticated gateway.'
+  'Provider and publication facts are supporting metadata. Only independently callable Operations appear in the capability catalogue.'
 
 export const RegistryEntryBoundaryLine =
   'Registry Entries are discovery metadata, not Operations. Invoke through Agentic Economy only when a separate admitted Operation exists; otherwise inspect the entry source URL.'
 
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
-  'Anonymous reads: search, detail, compare, inspect-plan. Qualified no-key execution: operation.execute through MCP for an exact current free, keyless, read-only Operation. Authenticated: invoke, status, cancel, reconcile.'
+  'Public: search and inspect. Connected: call, status, cancel, and recover through one origin-bound key.'
 export const OperationMarketIdempotencyLine =
-  'The request JSON body field `idempotencyKey` is required for invoke, cancel, and reconcile; choose it once for the intended invocation and retain it.'
+  'The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.'
 export const OperationMarketInvokeScopeLine = `Required invoke scope: \`${OPERATION_INVOKE_ROUTE_CONTRACT.scope}\`.`
 
 /** Public route order and authority boundary for the machine-readable index. */
 export function operationMarketLines(canonicalBaseUrl: string): readonly string[] {
-  const { invoke, status, cancel, reconcile } = OPERATION_INVOKE_ROUTE_CONTRACT
-  const cli = 'npm run -s ae --'
+  const { invoke, status } = OPERATION_INVOKE_ROUTE_CONTRACT
+  const cli = 'ae'
   return [
-    '## Operation market loop',
+    '## Capability market loop',
     '',
     `Registry: \`GET ${canonicalBaseUrl}/api/v1/registry?query=weather%20forecast&access=all&limit=5\`; entries are discovery-only.`,
-    `1. No-install Step 1: \`GET ${canonicalBaseUrl}/.well-known/ucp\`.`,
-    `2. Search a job anonymously (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`): \`curl -sS '${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}' -H 'content-type: application/json' --data '{"query":"weather forecast","limit":5}'\`.`,
-    `3. Inspect one exact result (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`): \`curl -sS '${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}' -H 'content-type: application/json' --data '{"operationRef":"operation:v1:…"}'\`.`,
-    `4. Optional anonymous reads: compare (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_COMPARE_PATH}\`) and inspect-plan (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`).`,
-    '5. After exact detail, use MCP `operation.execute` only when current navigation advertises no-auth execute; otherwise connect.',
-    `6. Set \`AE_CLI_BASE_URL=${canonicalBaseUrl}\`, then run \`${cli} connect --json\` for the controlled market path.`,
-    `7. Invoke with \`${cli} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`).`,
-    `8. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`).`,
-    `9. Cancel with \`${cli} advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${cancel.method} ${canonicalBaseUrl}${cancel.path}\`).`,
-    `10. Reconcile uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.method} ${canonicalBaseUrl}${reconcile.path}\`).`,
+    `1. Connect once: \`npx ae connect --base-url "${canonicalBaseUrl}" --mcp\`.`,
+    `2. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`).`,
+    `3. Inspect one exact result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`).`,
+    `4. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`).`,
+    `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',
-    OperationMarketAnonymousBoundaryLine,
+    'Search and inspection are public. Calls use one owner-approved AE key stored by connect.',
     'The AE key identifies the caller. It never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
-    'Cancellation requires the AE access key `AE_API_KEY` plus the request JSON body field `idempotencyKey`.',
+    'The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.',
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
     '',
     'Retry only when retryable=true; unknown outcomes require status then reconcile.',

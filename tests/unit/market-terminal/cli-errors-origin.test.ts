@@ -7,15 +7,15 @@ import { spawnCli, spawnCliSync } from './cli-errors-harness'
 describe('market-terminal CLI error contracts', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('routes root invoke through the invoke runner before network access', async () => {
-    const result = await spawnCli(['invoke', '--json'])
+  it('routes root call through the call runner before network access', async () => {
+    const result = await spawnCli(['call', '--json'])
 
     expect(result.status).toBe(1)
     expect(result.signal).toBeNull()
     expect(result.stderr).toBe('')
     expect(JSON.parse(result.stdout)).toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'invoke-usage',
+      code: 'call-usage',
     })
   }, 15_000)
 
@@ -28,7 +28,7 @@ describe('market-terminal CLI error contracts', () => {
 
     expect(result.status).toBe(1)
     expect(result.stdout).toBe('')
-    expect(result.stderr).toContain('Usage: npm run -s ae -- search "<job>"')
+    expect(result.stderr).toContain('Usage: ae search "<job>"')
   }, 15_000)
 
   it('rejects an invalid base URL as a canonical JSON argument error', () => {

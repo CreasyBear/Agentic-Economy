@@ -41,6 +41,7 @@ import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as OperatorAgentAccessRouteImport } from './routes/_operator/agent-access'
+import { Route as OperatorActivityRouteImport } from './routes/_operator/activity'
 import { Route as DotwellKnownUcpRouteImport } from './routes/[.]well-known/ucp'
 import { Route as DotwellKnownOauthProtectedResourceRouteImport } from './routes/[.]well-known/oauth-protected-resource'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known/oauth-authorization-server'
@@ -245,6 +246,11 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
 const OperatorAgentAccessRoute = OperatorAgentAccessRouteImport.update({
   id: '/agent-access',
   path: '/agent-access',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorActivityRoute = OperatorActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
   getParentRoute: () => OperatorRoute,
 } as any)
 const DotwellKnownUcpRoute = DotwellKnownUcpRouteImport.update({
@@ -514,6 +520,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/activity': typeof OperatorActivityRoute
   '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
@@ -592,6 +599,7 @@ export interface FileRoutesByTo {
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/activity': typeof OperatorActivityRoute
   '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
@@ -672,6 +680,7 @@ export interface FileRoutesById {
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/_operator/activity': typeof OperatorActivityRoute
   '/_operator/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
@@ -752,6 +761,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/activity'
     | '/agent-access'
     | '/api/$'
     | '/api/businesses'
@@ -830,6 +840,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/activity'
     | '/agent-access'
     | '/api/$'
     | '/api/businesses'
@@ -909,6 +920,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/_operator/activity'
     | '/_operator/agent-access'
     | '/api/$'
     | '/api/businesses'
@@ -1245,6 +1257,13 @@ declare module '@tanstack/react-router' {
       path: '/agent-access'
       fullPath: '/agent-access'
       preLoaderRoute: typeof OperatorAgentAccessRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/activity': {
+      id: '/_operator/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof OperatorActivityRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/.well-known/ucp': {
@@ -1626,6 +1645,7 @@ const OperatorOwnerSupplyRouteWithChildren =
   OperatorOwnerSupplyRoute._addFileChildren(OperatorOwnerSupplyRouteChildren)
 
 interface OperatorRouteChildren {
+  OperatorActivityRoute: typeof OperatorActivityRoute
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
@@ -1638,6 +1658,7 @@ interface OperatorRouteChildren {
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
+  OperatorActivityRoute: OperatorActivityRoute,
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,

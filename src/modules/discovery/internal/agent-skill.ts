@@ -37,16 +37,16 @@ export function buildPublicAgentSkillMarkdown(options: {
   const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
   const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
   const authenticatedToolNames = new Set(routes.map(({ route }) => route.mcpToolName).filter((name): name is string => name !== undefined))
-  const anonymousToolNames = listMcpActions()
-    .filter((action) => action.readOnly && action.credentialAdmission === undefined)
-    .map(mcpToolName)
+  const anonymousToolNames = listMcpActions().flatMap((action) =>
+    action.readOnly && action.credentialAdmission === undefined ? [mcpToolName(action)] : [],
+  )
   const operationMcpToolNames = [...authenticatedToolNames]
   const invokeInputExample = JSON.stringify(invoke.example.actionInput)
   const invokeHttpExample = JSON.stringify(invoke.example.http.body ?? {})
   const invokeInputSchema = JSON.stringify(invoke.route.inputJsonSchema ?? {})
   const operationOutcomes = operationInvokeResultKindValues.join(' | ')
   const operationStatusStates = operationInvokeStatusStateValues.join(' | ')
-  const cli = 'npm run -s ae --'
+  const cli = 'ae'
   return [
     '---',
     'name: agentic-economy',
@@ -107,12 +107,12 @@ export function buildPublicAgentSkillMarkdown(options: {
     `Device flow: \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\` → owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. An existing \`AE_API_KEY\` is validated; a nonempty string is not proof.`,
     '',
     'The AE key identifies the caller. It never contains or grants a provider credential, endpoint override, payment approval, or silent consequential authority.',
+    `Use \`${cli} connect --mcp\` to write an importable Streamable HTTP MCP connection alongside the origin-bound key.`,
     '',
-    '## 5. Invoke with one required stable idempotency key',
+    '## 5. Call the capability',
     '',
     '```sh',
-    'export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"',
-    `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json`,
     '```',
     '',
     `HTTP: \`${invoke.route.method} ${base}${invoke.route.path}\` with \`Authorization: Bearer $AE_API_KEY\`, \`Content-Type: ${OPERATION_INVOKE_ROUTE_CONTRACT.media.request}\`, and only schema-valid material in the body.`,
@@ -144,9 +144,9 @@ export function buildPublicAgentSkillMarkdown(options: {
     '- A timeout, `outcome_unknown`, or `reconciliation_required` is not a terminal success and is not permission to create a new invocation; read status, then recover.',
     '- Do not retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',
     '',
-    '## Advanced only',
+    '## Safe recovery',
     '',
-    `Cancellation is an advanced operator action; use \`${cli} advanced cancel\` only when the manifest and current status direct you there. Use the root \`${cli} recover\` command for reconciliation.`,
+    `Use \`${cli} cancel\` only when the current receipt offers cancellation. Use \`${cli} recover\` only when that receipt requires reconciliation.`,
     '',
     '## MCP projection',
     '',

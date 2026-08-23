@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
@@ -114,16 +117,25 @@ describe('market terminal manifest OAuth contract', () => {
         expires_in: 60,
         interval: 1,
       })
-      return Response.json({ access_token: 'token-test' })
+      if (calls.length === 3) return Response.json({ access_token: 'token-test' })
+      return Response.json({
+        kind: 'refused',
+        invocationRef: 'invocation:v1:connect-validation',
+        code: 'invocation_not_found',
+        retryable: false,
+      })
     })
     const output = captureStdout()
+    const configDirectory = mkdtempSync(join(tmpdir(), 'ae-cli-manifest-'))
     vi.stubEnv('AE_API_KEY', '')
+    vi.stubEnv('AE_CONFIG_DIR', configDirectory)
     try {
       await runConnectCommand([], cliOptions)
     } finally {
       output.restore()
       fetch.mockRestore()
       vi.unstubAllEnvs()
+      rmSync(configDirectory, { recursive: true, force: true })
     }
 
     const connectRequest = JSON.parse(String(calls[0]?.init?.body)) as unknown

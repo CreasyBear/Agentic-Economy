@@ -95,6 +95,7 @@ describe('operator navigation', () => {
       'Browse marketplace',
       'Publishing',
       'Access & usage',
+      'Activity',
       'Settings',
     ])
   })

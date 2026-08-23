@@ -25,6 +25,7 @@ import {
   toOperationCardViewModel,
   type OperationCardViewModel,
 } from "./operation-view-model";
+import type { RegistryExactPrice } from "./registry-source-contracts";
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -57,8 +58,10 @@ export type MarketAccess = RegistryAccessFilter | "agentic_economy";
 export type RegistryCardViewModel = Readonly<{
   documentId: string;
   sourceUrl: string;
+  providerUrl?: string;
   endpointUrl?: string;
   docsUrl?: string;
+  routeIdentity: string;
   name: string;
   summary: string;
   provider: string;
@@ -68,7 +71,14 @@ export type RegistryCardViewModel = Readonly<{
   tags: readonly string[];
   networks: readonly string[];
   priceLabel?: string;
+  exactPrice: RegistryExactPrice;
   access: "x402" | "provider_account" | "unknown";
+  credentialRequirements: readonly string[];
+  readiness: "source_declared_callable";
+  lastObservedAt: string;
+  lastVerifiedAt?: string;
+  inputSchemaJson: string;
+  exampleInvocation: string;
   sourceCheckedAt?: string;
   sourceCalls30d?: string;
   sourcePayers30d?: string;

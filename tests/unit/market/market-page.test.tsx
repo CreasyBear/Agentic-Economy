@@ -40,6 +40,9 @@ const projection: MarketRouteProjection = {
           description: "Verification and compliance checks.",
         },
         price: "USD 0.25",
+        authentication: "API key connection",
+        lastVerifiedAt: Date.parse(generatedAt),
+        callLabel: "Use capability",
         readiness: "Routeable",
         readinessLabel: "Ready now",
         trustFact: "Ready to run through Agentic Economy",
@@ -80,6 +83,9 @@ const projection: MarketRouteProjection = {
           description: "Verification and compliance checks.",
         },
         price: "USD 0.18",
+        authentication: "Bearer connection",
+        lastVerifiedAt: Date.parse(generatedAt),
+        callLabel: "Setup required",
         readiness: "Integrated",
         readinessLabel: "Integration available",
         trustFact: "Connected, but not currently ready to run",
@@ -117,7 +123,9 @@ const projection: MarketRouteProjection = {
       {
         documentId: "registry:exa",
         sourceUrl: "https://agentic.market/services/api-exa-ai",
+        providerUrl: "https://exa.ai",
         endpointUrl: "https://api.exa.ai/search",
+        routeIdentity: "POST https://api.exa.ai/search",
         name: "Exa search",
         summary: "Search the web and return structured results.",
         provider: "Exa",
@@ -126,7 +134,19 @@ const projection: MarketRouteProjection = {
         tags: ["search"],
         networks: ["Base"],
         priceLabel: "USDC 0.007",
+        exactPrice: {
+          scheme: "exact",
+          amount: "0.007",
+          currency: "USDC",
+          network: "eip155:8453",
+        },
         access: "x402",
+        credentialRequirements: ["x402_payment"],
+        readiness: "source_declared_callable",
+        lastObservedAt: generatedAt,
+        inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
+        exampleInvocation:
+          "curl --request POST --url 'https://api.exa.ai/search'",
         sourceCalls30d: "3503",
         sourcePayers30d: "90",
         authority: "registry_metadata_only",
@@ -172,7 +192,7 @@ describe("market page", () => {
 
     expect(screen.queryByText("Exa search")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Inspect Company registry search" }),
+      screen.getByRole("link", { name: "Use Company registry search" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("heading", { level: 3, name: "Company Search" }),
@@ -181,6 +201,8 @@ describe("market page", () => {
     expect(screen.getByText("4.8 (24)")).toBeTruthy();
     expect(screen.getByText("842 completed calls")).toBeTruthy();
     expect(screen.getByText("420 ms")).toBeTruthy();
+    expect(screen.getByText("API key connection")).toBeTruthy();
+    expect(screen.getByText("Use capability")).toBeTruthy();
     expect(
       screen.getAllByRole("link", { name: "Set up an agent" }),
     ).toHaveLength(2);

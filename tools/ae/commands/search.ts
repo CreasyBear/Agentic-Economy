@@ -10,7 +10,8 @@ import {
   formatOperationAuthentication,
   formatOperationAvailability,
   formatOperationInputs,
-  formatOperationPrice,
+  formatOperationTotalPrice,
+  formatOperationVerification,
   operationLabel,
 } from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
@@ -18,7 +19,7 @@ import { throwOperationReadFailure } from '../lib/operation-read-failure'
 export async function runSearchCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const query = args.join(' ').trim()
   if (query.length === 0) {
-    throw new CliFailure('Usage: npm run -s ae -- search "<job>"', {
+    throw new CliFailure('Usage: ae search "<job>"', {
       kind: 'INVALID_ARGUMENT',
       code: 'search-usage',
     })
@@ -82,9 +83,10 @@ export async function runSearchCommand(args: readonly string[], options: CliOpti
     line(`     ref: ${operation.operationRef}`)
     line(
       `     ${formatOperationAvailability(operation.availability)} · `
-      + `${formatOperationPrice(operation.commercial.price)} · `
+      + `total ${formatOperationTotalPrice(operation)} · `
       + `${formatOperationAuthentication(operation)}`,
     )
+    line(`     last verified: ${formatOperationVerification(operation)}`)
     line(`     inputs: ${formatOperationInputs(operation)}`)
   }
   line(

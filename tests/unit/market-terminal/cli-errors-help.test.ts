@@ -4,7 +4,7 @@ import { parseArgs } from '../../../tools/ae/lib/args'
 import { spawnCliSync } from './cli-errors-harness'
 
 describe('market-terminal CLI error contracts', () => {
-  it('keeps secondary commands behind explicit demand and advanced namespaces', () => {
+  it('exposes one operation command family and rejects removed legacy namespaces', () => {
     const help = spawnCliSync(['help', '--json'])
     expect(help.status).toBe(0)
     expect(help.stderr).toBe('')
@@ -24,35 +24,32 @@ describe('market-terminal CLI error contracts', () => {
       'inspect-plan',
       'connect',
       'fund',
-      'invoke',
+      'call',
       'status',
       'cancel',
       'recover',
       'revoke',
-      'demand',
-      'advanced',
     ])
     expect(Object.keys(helpBody.auth.authenticatedOperations)).toEqual([
-      'invoke',
+      'call',
       'status',
       'cancel',
       'reconcile',
     ])
-    expect(helpBody.auth.authenticatedOperations.cancel).toContain(' ae -- cancel ')
+    expect(helpBody.auth.authenticatedOperations.cancel).toContain('ae cancel ')
     expect(helpBody.auth.authenticatedOperations.reconcile).toContain(' recover ')
     expect(helpBody.auth.cancelRequirements).toContain('AE_API_KEY')
     expect(helpBody.auth.cancelRequirements).toContain('--idempotency-key')
     expect(helpBody.auth.cancelRequirements).toContain('body.idempotencyKey')
-    for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'doctor', 'business']) {
+    for (const legacy of ['feeds', 'run', 'study', 'reconcile', 'action', 'doctor', 'business', 'demand', 'advanced']) {
       expect(commands).not.toHaveProperty(legacy)
     }
-    expect((commands.advanced as { commands: Record<string, unknown> }).commands).not.toHaveProperty('cancel')
 
     const textHelp = spawnCliSync(['help'])
     expect(textHelp.status).toBe(0)
     expect(textHelp.stderr).toBe('')
     expect(textHelp.stdout).toContain('Authenticated Operation actions:')
-    expect(textHelp.stdout).toContain('invoke:')
+    expect(textHelp.stdout).toContain('call:')
     expect(textHelp.stdout).toContain('status:')
     expect(textHelp.stdout).toContain('cancel:')
     expect(textHelp.stdout).toContain('reconcile:')
@@ -119,22 +116,6 @@ describe('market-terminal CLI error contracts', () => {
     }
   }, 15_000)
 
-  it('keeps --turn-id repeatable at the parser boundary', () => {
-    const parsed = parseArgs([
-      '--base-url',
-      'http://127.0.0.1:3000',
-      'advanced',
-      'eval',
-      'export',
-      '--turn-id',
-      'turn:first',
-      '--turn-id',
-      'turn:second',
-    ])
-
-    expect(parsed.options.turnIds).toEqual(['turn:first', 'turn:second'])
-  })
-
   it('rejects options that the selected command does not consume', () => {
     const result = spawnCliSync(['manifest', '--limit', '3', '--json'])
 
@@ -148,23 +129,18 @@ describe('market-terminal CLI error contracts', () => {
     })
   }, 15_000)
 
-  it('parses plain conversational continuation and technical output flags', () => {
+  it('parses technical comparison output flags', () => {
     const parsed = parseArgs([
       '--technical',
-      'demand',
-      'ask',
-      '--thread-id',
-      'thread:prior',
-      'What about ethereum in USD?',
+      'compare',
+      'operation:v1:first',
+      'operation:v1:second',
     ])
 
     expect(parsed.options).toMatchObject({
       technical: true,
-      threadId: 'thread:prior',
     })
-    expect(parsed.options).not.toHaveProperty('operationRef')
-    expect(parsed.options).not.toHaveProperty('candidateDigest')
-    expect(parsed.positionals).toEqual(['ask', 'What about ethereum in USD?'])
+    expect(parsed.positionals).toEqual(['operation:v1:first', 'operation:v1:second'])
   })
 
   it('emits one machine-readable JSON help envelope and keeps root text help usable', () => {
@@ -195,7 +171,7 @@ describe('market-terminal CLI error contracts', () => {
       if (command === 'connect') {
         expect(envelope.auth.guidance).toEqual(expect.arrayContaining([
           expect.stringContaining('verification URI'),
-          expect.stringContaining('AE_API_KEY_ORIGIN'),
+          expect.stringContaining('user-only file permissions'),
         ]))
         expect(JSON.stringify(envelope)).not.toContain('/oauth/grant')
       } else {
@@ -220,7 +196,6 @@ describe('market-terminal CLI error contracts', () => {
 
   it('scopes valid command help, keeps text and JSON aligned, and rejects typo paths', () => {
     for (const [args, command] of [
-      [['demand', 'ask', '--json', '--help'], 'demand ask'],
       [['recover', '--json', '--help'], 'recover'],
       [['inspect-plan', '--json', '--help'], 'inspect-plan'],
     ] as const) {
@@ -248,11 +223,6 @@ describe('market-terminal CLI error contracts', () => {
       expect(text.stderr).toBe('')
       expect(text.stdout).toContain(`Usage: ${envelope.usage}`)
       expect(text.stdout).toContain(envelope.summary)
-      if (command === 'demand ask') {
-        expect(envelope.usage).toContain('--thread-id')
-        expect(envelope.summary).toContain('same thread')
-        expect(text.stdout).toContain('--thread-id')
-      }
       if (command === 'recover') {
         expect(envelope.summary).toContain('uncertain')
         expect(envelope.summary).toContain('not a replay')
@@ -265,8 +235,8 @@ describe('market-terminal CLI error contracts', () => {
     for (const [args, code] of [
       [['typo', '--json', '--help'], 'unknown-command'],
       [['help', 'typo', '--json'], 'unknown-command'],
-      [['demand', 'typo', '--json', '--help'], 'demand-subcommand'],
-      [['help', 'advanced', 'typo', '--json'], 'advanced-subcommand'],
+      [['demand', 'typo', '--json', '--help'], 'unknown-command'],
+      [['help', 'advanced', 'typo', '--json'], 'unknown-command'],
     ] as const) {
       const result = spawnCliSync(args)
       expect(result.status).toBe(1)
@@ -278,9 +248,5 @@ describe('market-terminal CLI error contracts', () => {
       })
     }
 
-    const textTypo = spawnCliSync(['demand', 'typo', '--help'])
-    expect(textTypo.status).toBe(1)
-    expect(textTypo.stdout).toBe('')
-    expect(textTypo.stderr).toContain('demand <subcommand>')
   }, 30_000)
 })

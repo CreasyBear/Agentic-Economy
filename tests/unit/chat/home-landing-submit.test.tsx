@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
+import { HOME } from '@/content/brand-copy'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 
 const routeState = vi.hoisted(() => {
@@ -13,7 +13,7 @@ const routeState = vi.hoisted(() => {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: undefined as string | undefined },
     // Supply facets are derived from published listings by the route loader.
-    loaderData: { coldStart: { facets: [], businessCount: 0, stateCount: 0 } },
+    loaderData: { kind: 'ok' as const, operations: [], matchedCount: 0 },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -67,8 +67,8 @@ describe('catalogue-first home', () => {
 
     renderHomeRoute()
 
-    expect(screen.getByRole('searchbox', { name: 'Search tools' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Search market' })).toBeTruthy()
+    expect(screen.getByRole('searchbox', { name: 'Search capabilities' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search capabilities' })).toBeTruthy()
     expect(screen.queryByText('Expand the network for this ask')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -78,7 +78,7 @@ describe('catalogue-first home', () => {
 
     expect(screen.getByRole('heading', { name: HOME.heroHeading })).toBeTruthy()
     expect(screen.getByText(HOME.heroSubhead)).toBeTruthy()
-    const examples = screen.getByRole('navigation', { name: 'Example asks' })
+    const examples = screen.getByRole('navigation', { name: 'Popular searches' })
     const exampleLinks = Array.from(examples.querySelectorAll('a'))
     expect(exampleLinks.length).toBe(HOME.exampleAsks.length)
     expect(screen.getByRole('link', { name: HOME.exampleAsks[0] })).toBeTruthy()
@@ -87,17 +87,13 @@ describe('catalogue-first home', () => {
     const firstAsk = HOME.exampleAsks[0]
     expect(exampleLinks.map((link) => link.getAttribute('href')))
       .toContain(`/market?${new URLSearchParams({ window: '30d', query: firstAsk }).toString()}`)
-    expect(screen.getByRole('link', { name: AGENT_DOOR.cta }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getByRole('link', { name: BUSINESS_DOOR.cta }).getAttribute('href')).toBe('/for-providers')
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
   })
 
-  it('uses semantic door headings and touch-sized category links', () => {
+  it('uses touch-sized popular-search links', () => {
     renderHomeRoute()
 
-    expect(screen.getByRole('heading', { level: 2, name: AGENT_DOOR.heading })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: BUSINESS_DOOR.heading })).toBeTruthy()
-    const categories = screen.getByRole('navigation', { name: 'Example asks' })
+    const categories = screen.getByRole('navigation', { name: 'Popular searches' })
     for (const link of categories.querySelectorAll('a')) {
       expect(link.classList.contains('min-h-11')).toBe(true)
     }
@@ -106,24 +102,24 @@ describe('catalogue-first home', () => {
   it.each(['', '   '])('keeps an empty search on home and announces the required message', (query) => {
     renderHomeRoute()
 
-    const searchbox = screen.getByRole('searchbox', { name: 'Search tools' })
+    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' })
     fireEvent.change(searchbox, { target: { value: query } })
     fireEvent.submit(screen.getByRole('search'))
 
     expect(routeState.navigate).not.toHaveBeenCalled()
-    const message = screen.getByText('Enter a tool or capability to search the market.')
+    const message = screen.getByText('Enter an API, capability, or provider.')
     expect(message.getAttribute('aria-live')).toBe('polite')
     expect(searchbox.getAttribute('aria-invalid')).toBe('true')
 
     fireEvent.change(searchbox, { target: { value: 'Find a local electrician' } })
-    expect(screen.queryByText('Enter a tool or capability to search the market.')).toBeNull()
+    expect(screen.queryByText('Enter an API, capability, or provider.')).toBeNull()
     expect(searchbox.getAttribute('aria-invalid')).toBeNull()
   })
 
   it('keeps example asks available while a query is present', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    expect(screen.getByRole('navigation', { name: 'Example asks' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Popular searches' })).toBeTruthy()
   })
 
   it('keeps the ask label stable while editing a submitted query', () => {
@@ -132,7 +128,7 @@ describe('catalogue-first home', () => {
 
     renderHomeRoute('Find a printer for 200 cards by Friday')
 
-    const composer = screen.getByRole('searchbox', { name: 'Search tools' }) as HTMLInputElement
+    const composer = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
     expect(composer.value).toBe('Find a printer for 200 cards by Friday')
     fireEvent.change(composer, { target: { value: 'Find a local printer for Monday' } })
     expect(composer.value).toBe('Find a local printer for Monday')
@@ -149,14 +145,14 @@ describe('catalogue-first home', () => {
     if (form === null) throw new Error('The market search must be a form.')
     expect(form).toBeTruthy()
     expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Search market' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search capabilities' })).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('keeps a submitted query in the ask box without speculative result copy', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    const searchbox = screen.getByRole('searchbox', { name: 'Search tools' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
     expect(searchbox.value).toBe('Moon dentist in Adelaide')
     expect(screen.queryByRole('heading', { name: 'Expand the network for this ask' })).toBeNull()
     expect(document.body.textContent?.match(/available now|guaranteed availability/gi)).toBeNull()
@@ -168,7 +164,7 @@ describe('catalogue-first home', () => {
     renderHomeRoute()
 
     const query = 'q'.repeat(length)
-    const searchbox = screen.getByRole('searchbox', { name: 'Search tools' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
     expect(searchbox.maxLength).toBe(-1)
     fireEvent.change(searchbox, { target: { value: query } })
     expect(searchbox.value).toBe(query)

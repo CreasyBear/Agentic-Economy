@@ -21,6 +21,8 @@ export type CliOptions = {
   limit?: string | number
   cursor?: string
   filters?: string | Record<string, unknown>
+  input?: string
+  mcp?: boolean
 }
 
 export type ParsedArgs = {
@@ -33,7 +35,7 @@ export type ParsedArgs = {
 const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
 const LOCAL_DEV_BASE_URL = 'http://127.0.0.1:3024'
 export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
-const CLI_ENTRYPOINT = 'npm run -s ae --'
+const CLI_ENTRYPOINT = 'ae'
 
 export function safeOriginForDiagnostics(value: unknown): string {
   if (typeof value !== 'string') return INVALID_BASE_URL_PLACEHOLDER
@@ -110,6 +112,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       limit: { type: 'string' },
       cursor: { type: 'string' },
       filters: { type: 'string' },
+      input: { type: 'string' },
+      mcp: { type: 'boolean' },
     },
     allowPositionals: true,
     tokens: true,
@@ -149,6 +153,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
     ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
+    ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
+    mcp: parsed.values.mcp ?? false,
   }
   const [command, ...positionals] = parsed.positionals
   return {
@@ -171,24 +177,9 @@ Canonical Operation commands (need a running server; hosted default ${HOSTED_DEF
   ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} connect
-  ${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]
+  ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
   ${CLI_ENTRYPOINT} status <invocation-ref>
   ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
-
-Demand commands:
-  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id>]
-  ${CLI_ENTRYPOINT} demand ask --thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>'
-  ${CLI_ENTRYPOINT} demand business <slug>
-  ${CLI_ENTRYPOINT} demand discover
-  ${CLI_ENTRYPOINT} demand journey "<query>"
-
-Advanced/operator commands:
-  ${CLI_ENTRYPOINT} advanced action <id> ['<json>'] [--allow-write]
-  ${CLI_ENTRYPOINT} advanced actions
-  ${CLI_ENTRYPOINT} advanced cancel <invocation-ref> --idempotency-key <key>
-  ${CLI_ENTRYPOINT} advanced doctor
-  ${CLI_ENTRYPOINT} advanced eval ...
-  ${CLI_ENTRYPOINT} advanced policy [test|refine|fidelity]
 
 Flags:
   --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
@@ -200,18 +191,8 @@ Flags:
   --cursor <cursor>  opaque search continuation cursor (search only)
   --filters '<json>' canonical search filters (search only)
   --technical        human compare output with operation identity and evidence metadata
-  --allow-write      permit a non read-only action or explicit Braintrust export
-  --idempotency-key <key>  stable replay identity for invoke/recovery (required; never generated)
-  --wait                   bounded invoke wait; timeout returns durable recovery detail
-  --thread-id <id>     conversational ask thread; plain queries load continuation state server-side
-  --operation-ref <ref> exact operation to select in automation mode (requires --thread-id and --candidate-digest)
-  --candidate-digest <digest> frozen candidate set digest in automation mode (requires --thread-id and --operation-ref)
-  --turn-id <id>     explicit finalized answer turn id (repeatable; max 25)
-  --manifest <path>  explicit JSON manifest with bounded turnIds
-  --project <name>   Braintrust project (env: AE_BRAINTRUST_PROJECT)
-  --dataset <name>   Braintrust dataset (env: AE_BRAINTRUST_DATASET)
-  --snapshot-name <name>
-  --update-snapshot  allow replacing an existing snapshot name
+  --idempotency-key <key>  optional stable retry identity; call generates one when omitted
+  --wait                   wait for a bounded call result; timeout preserves recovery detail
   --help
 `)
 }

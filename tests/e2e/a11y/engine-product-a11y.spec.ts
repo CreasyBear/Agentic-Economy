@@ -14,16 +14,29 @@ test.describe('market product accessibility', () => {
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
-    await expect(page.getByRole('search', { name: 'Search the tool market' })).toBeVisible()
-    await expect(page.getByRole('searchbox', { name: 'Search tools' })).toBeVisible()
+    await expect(page.getByRole('search', { name: 'Search the capability market' })).toBeVisible()
+    await expect(page.getByRole('searchbox', { name: 'Search capabilities' })).toBeVisible()
+    const compact = (page.viewportSize()?.width ?? 1280) < 768
+    if (compact) {
+      const menu = page.getByRole('button', { name: 'Open public menu' })
+      await menu.focus()
+      await expect(menu).toBeFocused()
+      await menu.press('Enter')
+    }
+    const primary = page.getByRole('navigation', {
+      name: compact ? 'Public navigation' : 'Primary',
+    })
+    await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Connections' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
   })
 
   test('literal tool search is labelled, keyboard reachable, and continues into the market', async ({ page }) => {
     await gotoSettled(page, '/')
-    const searchbox = page.getByRole('searchbox', { name: 'Search tools' })
+    const searchbox = page.getByRole('searchbox', { name: 'Search capabilities' })
     await searchbox.fill('company registry search')
     await expect(searchbox).toHaveValue('company registry search')
-    const submit = page.getByRole('button', { name: 'Search market' })
+    const submit = page.getByRole('button', { name: 'Search capabilities' })
     await submit.focus()
     await expect(submit).toBeFocused()
     await submit.click()

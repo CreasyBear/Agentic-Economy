@@ -66,6 +66,7 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
     items: [
       { href: '/owner/supply', label: 'Publishing', icon: UploadCloud, tier: 'core' },
       { href: '/agent-access', label: 'Access & usage', icon: KeyRound, tier: 'core' },
+      { href: '/activity', label: 'Activity', icon: Activity, tier: 'core' },
       { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
     ],
   },

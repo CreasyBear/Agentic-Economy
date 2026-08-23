@@ -81,7 +81,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     json: true,
     guidance: ['Open the returned /agent-access#fund continuation as the owner. No agent credential is used.'],
   },
-  invoke: { summary: 'Invoke an admitted Market Operation through the authenticated AE gateway.', args: "<operationRef> '<json>' --idempotency-key <key> [--wait]", json: true },
+  call: { summary: 'Call one available capability through the authenticated AE gateway.', args: "<operationRef> --input '<json>' [--wait]", json: true },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
   cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
   recover: {
@@ -98,36 +98,6 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     args: '',
     json: true,
     guidance: ['Open the returned /agent-access#revoke continuation as the owner. No agent credential is used.'],
-  },
-  demand: {
-    summary: 'Run demand-side workflows; demand ask supports natural-language same-thread continuation.',
-    args: '<subcommand> ...',
-    json: true,
-    commands: {
-      ask: {
-        summary: 'Ask a natural-language question; --thread-id continues the same thread with server-side continuation state.',
-        args: '"<question>" [--thread-id <thread-id>] | --thread-id <thread-id> --operation-ref <operation-ref> --candidate-digest <digest> \'<input-json>\'',
-        json: true,
-        guidance: [
-          'Pass --thread-id with a follow-up question to continue the existing thread; omit it to start a new ask.',
-        ],
-      },
-      business: { summary: 'Inspect one local business by slug.', args: '<slug>', json: true },
-      discover: { summary: 'Discover local businesses from the registry.', args: '', json: true },
-      journey: { summary: 'Run a demand journey for a natural-language query.', args: '"<query>"', json: true },
-    },
-  },
-  advanced: {
-    summary: 'Run operator-only actions; these are not part of the root cold path.',
-    args: '<subcommand> ...',
-    json: true,
-    commands: {
-      action: { summary: 'Run one registered action by ID.', args: "<id> ['<json>'] [--allow-write]", json: true },
-      actions: { summary: 'List registered actions.', args: '', json: true },
-      doctor: { summary: 'Inspect local CLI and environment diagnostics.', args: '', json: true },
-      eval: { summary: 'Run an advanced evaluation command.', args: '...', json: true },
-      policy: { summary: 'Inspect or refine policy evaluation.', args: '[test|refine|fidelity]', json: true },
-    },
   },
 } as const
 
@@ -180,9 +150,9 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
   printJson({
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
     protocol: 'agentic-economy.operation-terminal.v1',
-    about: 'AE-native Operation loop: discover exact current work, inspect terms, connect one AE key, invoke idempotently, observe durable status, preserve the receipt, and continue owner funding or revocation in the browser.',
+    about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
     commands: COMMANDS,
-    coldLoop: ['search', 'inspect', 'connect', 'fund', 'invoke', 'status', 'cancel/recover', 'receipt', 'revoke'],
+    coldLoop: ['search', 'inspect', 'connect', 'call', 'receipt', 'reuse'],
     payment: {
       providerQuotedAmount: {
         field: 'commercial.priceBreakdown.providerQuotedAmount',
@@ -298,7 +268,7 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
             },
             result: 'access_token',
           },
-          { order: 5, action: 'Set AE_API_KEY to access_token and AE_API_KEY_ORIGIN to the exact server origin printed by connect.' },
+          { order: 5, action: 'Validate the access token against the exact server origin, then store it with user-only file permissions.' },
         ],
         existingKey: 'When AE_API_KEY is already set, connect validates it before issuing another credential; AE_API_KEY_ORIGIN must parse and exactly match the configured server origin before Authorization is sent.',
         apiKey: {
@@ -306,10 +276,10 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
           originEnvironmentVariable: 'AE_API_KEY_ORIGIN',
           originBinding: 'AE_API_KEY_ORIGIN must equal new URL(--base-url).origin; credentialed calls require HTTPS except loopback HTTP development.',
           result: 'OAuth token.access_token',
-          usage: 'Send Authorization: Bearer <AE_API_KEY> for invoke, status, cancel, and recover only after validating AE_API_KEY_ORIGIN. Fund and revoke do not use this credential.',
+          usage: 'The CLI sends the stored origin-bound key for call, status, cancel, and recover. AE_API_KEY remains an explicit automation override.',
         },
         revocation: 'Root revoke emits the owner-browser continuation /agent-access#revoke; it does not revoke through an agent credential or an API route.',
-        oneTimeSecretDelivery: true,
+        oneTimeSecretDelivery: false,
       },
       credentialBoundary: 'AE resolves provider, endpoint, connection, supplier credential, price, authority, and evidence server-side.',
     },

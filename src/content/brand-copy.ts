@@ -34,11 +34,11 @@ export const AGENT_DOOR = {
 export const AGENT_PAGE = {
   metaTitle: 'Connect your agent | Agentic Economy',
   metaDescription:
-    'Search and inspect current Market Operations anonymously, then connect one caller key to invoke and recover work idempotently.',
-  eyebrow: 'Agent setup',
-  heading: 'Give your agent access to the market.',
+    'Connect once, find a live capability, inspect its total price and inputs, call it, and retain one durable receipt.',
+  eyebrow: 'Connections',
+  heading: 'Connect once. Use the whole market.',
   subhead:
-    'Browse and compare tools without an account. Connect one caller key only when your agent is ready to invoke a selected Operation.',
+    'One command stores a bounded agent key and configures MCP. Search, inspect, call, and recover through one catalogue and one receipt.',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */

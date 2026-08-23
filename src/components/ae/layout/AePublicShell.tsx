@@ -88,12 +88,12 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
 function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Public navigation" className="grid gap-2 p-4">
-      <Link to="/" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</Link>
-      <Link to="/market" search={{ window: '30d' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Catalog</Link>
-      <Link to="/for-agents" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Agent setup</Link>
-      <Link to="/for-providers" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a tool</Link>
+      <Link to="/market" search={{ window: '30d' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
+      <Link to="/for-agents" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
+      <Link to="/activity" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
+      <div className="my-1 border-t" aria-hidden="true" />
       <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
-      <Button asChild className="min-h-11"><Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Start free</Link></Button>
+      <Button asChild className="min-h-11"><Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Create account</Link></Button>
     </nav>
   )
 }
@@ -107,20 +107,16 @@ function PublicNavActions({
 }) {
   return (
     <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
-      <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
-        Catalog
-      </Link>
-      <Link to="/for-agents" className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex">
-        Agent setup
-      </Link>
-      <Link to="/for-providers" className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex">
-        List a tool
-      </Link>
+      <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+        <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
+        <Link to="/for-agents" className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
+        <Link to="/activity" className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
+      </nav>
       <Link to="/sign-in/$" params={{ _splat: '' }} className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
         Sign in
       </Link>
       <Button asChild size="sm" className="hidden md:inline-flex">
-        <Link to="/sign-up/$" params={{ _splat: '' }}>Start free</Link>
+        <Link to="/sign-up/$" params={{ _splat: '' }}>Create account</Link>
       </Button>
       <SheetTrigger asChild>
         <Button type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
@@ -163,8 +159,10 @@ function PublicFooter() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6 md:text-sm">
         <div className="flex items-center gap-2 font-mono text-foreground"><img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-7" /><span>agentic economy</span></div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-1">
-          <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Catalog</Link>
-          <Link to="/for-agents" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Agent setup</Link>
+          <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
+          <Link to="/for-agents" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
+          <Link to="/activity" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
+          <Link to="/for-providers" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a capability</Link>
           <a href="/llms.txt" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">llms.txt</a>
           <a href="/SKILL.md" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">SKILL.md</a>
           <Link to="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>

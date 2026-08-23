@@ -9,6 +9,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
+import { formatUtcTimestamp } from "@/lib/ui/format-time";
 
 const readinessVariants = {
   Routeable: "success",
@@ -31,7 +32,7 @@ export function AeOperationCard({
         <Link
           to="/operations/$operationRef"
           params={{ operationRef: operation.operationRef }}
-          aria-label={`Inspect ${operation.title}`}
+          aria-label={`${operation.readiness === "Routeable" ? "Use" : "Inspect"} ${operation.title}`}
         >
           <ItemContent className="min-w-0 basis-full md:basis-auto">
             <ItemTitle className="max-w-full flex-wrap gap-2">
@@ -56,13 +57,24 @@ export function AeOperationCard({
 
           <AeFactList
             density="compact"
-            className="w-full grid-cols-2 sm:grid-cols-4 md:w-auto"
+            className="w-full grid-cols-2 sm:grid-cols-3 md:w-auto"
             facts={[
               {
-                label: "Price",
+                label: "Total price",
                 value: operation.price,
                 mono: true,
-                definition: "Published price for this exact Operation.",
+                definition: "Maximum total buyer authorization for this capability.",
+              },
+              {
+                label: "Authentication",
+                value: operation.authentication,
+                definition: "Provider authentication required to call this capability.",
+              },
+              {
+                label: "Last verified",
+                value: operation.lastVerifiedAt === undefined ? "Not reported" : `${formatUtcTimestamp(operation.lastVerifiedAt)} UTC`,
+                muted: operation.lastVerifiedAt === undefined,
+                definition: "Most recent published readiness or price observation.",
               },
               {
                 label: "Rating",
@@ -81,6 +93,12 @@ export function AeOperationCard({
                 value: operation.latency.display,
                 muted: operation.latency.kind === "insufficient_sample",
                 definition: operation.latency.definition,
+              },
+              {
+                label: "Call",
+                value: operation.callLabel,
+                muted: operation.readiness !== "Routeable",
+                definition: operation.trustFact,
               },
             ]}
           />

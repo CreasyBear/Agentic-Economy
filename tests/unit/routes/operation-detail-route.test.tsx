@@ -101,6 +101,13 @@ const sourceRecord = {
     summary: 'Structured invoice data.',
   },
   price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
+  priceBreakdown: {
+    providerQuotedAmount: { currency: 'USD', units: '100', exponent: 2 },
+    agenticEconomyFee: { currency: 'USD', units: '25', exponent: 2 },
+    totalBuyerAuthorization: { currency: 'USD', units: '125', exponent: 2 },
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  },
   priceEvidence: {
     sourceRef: 'pricing:invoice@4',
     priceDigest: 'digest:current-price',
@@ -146,7 +153,15 @@ describe('/operations/$operationRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Ledger Labs' })[0]?.getAttribute('href')).toBe('/ledger-labs')
-    expect(screen.getByText('USD 1.25')).toBeTruthy()
+    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { level: 3, name: 'Example input' })).toBeTruthy()
+    expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { level: 3, name: 'Example output' })).toBeTruthy()
+    expect(screen.getByText(/No example output is published/)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 3, name: 'Exact price breakdown' })).toBeTruthy()
+    expect(screen.getByText('USD 1.00')).toBeTruthy()
+    expect(screen.getByText('USD 0.25')).toBeTruthy()
+    expect(screen.getByText('eip155:8453', { exact: false })).toBeTruthy()
     fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('Per accepted extraction')).toBeTruthy()
@@ -160,15 +175,21 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByText('pricing:invoice@4')).toBeTruthy()
     expect(screen.getByText('evidence:pricing')).toBeTruthy()
 
-    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect an MCP client' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke the MCP tool' })).toBeTruthy()
-    expect(within(execution).getByText(/market-operations\/detail/)).toBeTruthy()
-    expect(within(execution).getByText(/ae_operation_invoke/)).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect once' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Call capability' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '4. Open the receipt' })).toBeTruthy()
+    expect(within(execution).getByText(/ae inspect/)).toBeTruthy()
+    expect(within(execution).getAllByText(/ae connect/).length).toBeGreaterThan(0)
+    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
     expect(within(execution).getByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeTruthy()
     expect(within(execution).queryByText(/AE_INPUT_JSON/)).toBeNull()
-    expect(within(execution).getByText(/ae_operation_status/)).toBeTruthy()
-    expect(within(execution).getByText(/Save it securely/i)).toBeTruthy()
+    expect(within(execution).getByText(/ae status <invocation-ref>/)).toBeTruthy()
+    expect(within(execution).getByText(/stores and validates one origin-bound agent key/i)).toBeTruthy()
+    expect(within(execution).getByText(/generates a durable retry identity/i)).toBeTruthy()
+    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
+    expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
+    expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -187,7 +208,7 @@ describe('/operations/$operationRef', () => {
       operation: freeKeylessOperation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
     expect(within(execution).getByText('ae_operation_execute', { exact: false })).toBeTruthy()
     expect(within(execution).getByText(`operationRef=${freeKeylessOperation.operationRef}`, { exact: false })).toBeTruthy()
     expect(within(execution).getByText(/input=\{"documentUrl":"https:\/\/docs\.example\/invoice\.pdf","includeTax":true\}/)).toBeTruthy()
@@ -213,10 +234,12 @@ describe('/operations/$operationRef', () => {
       operation: x402Operation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect an MCP client' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke the MCP tool' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '4. Read status' })).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect once' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Call capability' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '4. Open the receipt' })).toBeTruthy()
+    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
+    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -233,15 +256,14 @@ describe('/operations/$operationRef', () => {
 
     renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: integratedOperation })
 
-    expect(screen.getByText('USD 1.25')).toBeTruthy()
+    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('provider owned')).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: 'Setup required before invocation' })).toBeTruthy()
-    expect(screen.getByText(/This Operation is setup required/i)).toBeTruthy()
+    const access = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(access).getByText(/Setup is required before invocation/i)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to market' })).toBeTruthy()
-    expect(screen.queryByRole('complementary', { name: 'Call this Operation' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
@@ -275,7 +297,7 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByText('digest:current-price')).toBeNull()
-    expect(screen.queryByRole('complementary', { name: 'Call this Operation' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()

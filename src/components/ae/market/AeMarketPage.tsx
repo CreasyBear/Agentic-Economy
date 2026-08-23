@@ -366,7 +366,68 @@ export function AeMarketPage({
         </div>
       </section>
 
+      <MarketActivity catalog={catalog} registry={registry} />
       <MarketParticipation />
+    </div>
+  );
+}
+
+function MarketActivity({
+  catalog,
+  registry,
+}: Readonly<{
+  catalog: MarketRouteProjection["catalog"];
+  registry: MarketRouteProjection["registry"];
+}>) {
+  return (
+    <section
+      id="activity"
+      aria-labelledby="market-activity-heading"
+      className="scroll-mt-24 border-t bg-card/40"
+    >
+      <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-6 md:px-6">
+        <div className="grid gap-1">
+          <h2 id="market-activity-heading" className="text-xl font-semibold">
+            Activity
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Current registry coverage and callable supply.
+          </p>
+        </div>
+        <dl className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-3">
+          <ActivityFact
+            label="Indexed APIs"
+            value={registry.kind === "ok" ? registry.coverage.entries.toLocaleString() : "Unavailable"}
+          />
+          <ActivityFact
+            label="Entries shown"
+            value={
+              registry.kind === "ok"
+                ? registry.page.length.toLocaleString()
+                : catalog.kind === "unavailable"
+                  ? "Unavailable"
+                  : catalog.matchedCount.toLocaleString()
+            }
+          />
+          <ActivityFact
+            label="Registry updated"
+            value={
+              registry.kind === "ok"
+                ? registryDateFormatter.format(registry.coverage.completedAt)
+                : "Unavailable"
+            }
+          />
+        </dl>
+      </div>
+    </section>
+  );
+}
+
+function ActivityFact({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <div className="grid gap-1 border-b px-4 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="font-mono text-sm font-medium tabular-nums">{value}</dd>
     </div>
   );
 }

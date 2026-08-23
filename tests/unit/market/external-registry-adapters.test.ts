@@ -43,14 +43,24 @@ describe("registry origin adapters", () => {
       fetchedServiceCount: 3,
       fetchedAt: 1_000,
     });
-    expect(result.entries).toHaveLength(4);
+    expect(result.entries).toHaveLength(3);
+    expect(result.excludedCount).toBe(0);
     expect(result.entries[0]).toMatchObject({
       kind: "registry_source_entry",
       source: "agentic_market",
       upstreamServiceId: "alpha",
       upstreamEndpointId: "POST:https://api.alpha.example/route-0",
+      routeIdentity: "POST https://api.alpha.example/route-0",
       method: "POST",
       access: "x402",
+      exactPrice: {
+        scheme: "exact",
+        amount: "0.01",
+        currency: "USDC",
+        network: "eip155:8453",
+      },
+      credentialRequirements: ["x402_payment"],
+      readiness: "source_declared_callable",
       authority: "source_metadata_only",
     });
   });
@@ -65,6 +75,95 @@ describe("registry origin adapters", () => {
     expect(result.complete).toBe(false);
     expect(result.incompleteReason).toBe("entry_ceiling_reached");
     expect(result.sourceReportedCount).toBe(2);
+  });
+
+  it("admits only routes with a standard method, exact positive price, safe credentials, schema, and example", async () => {
+    const service = agenticService("quality", 1);
+    const valid = service.endpoints[0]!;
+    const result = await fetchAgenticMarketCatalog({
+      fetch: async () =>
+        json(
+          agenticMarketPage(
+            [{
+              ...service,
+              endpoints: [
+                valid,
+                { ...valid, url: "https://api.quality.example/compound", method: "GET, POST" },
+                {
+                  ...valid,
+                  url: "https://api.quality.example/unpriced",
+                  pricing: { ...valid.pricing, amount: "" },
+                },
+                {
+                  ...valid,
+                  url: "https://api.quality.example/credential-leak",
+                  parameters: [{
+                    group: "headers",
+                    name: "Authorization",
+                    type: "string",
+                    description: "Provider token",
+                    example: "Bearer secret",
+                    enumValues: [],
+                    default: null,
+                    required: true,
+                  }],
+                },
+                {
+                  ...valid,
+                  url: "https://api.quality.example/no-example",
+                  parameters: [{
+                    group: "query",
+                    name: "query",
+                    type: "string",
+                    description: "Search query",
+                    example: null,
+                    enumValues: [],
+                    default: null,
+                    required: true,
+                  }],
+                },
+              ],
+            }],
+            1,
+            200,
+            0,
+          ),
+        ),
+      now: () => Date.parse("2026-08-23T00:00:00.000Z"),
+    });
+
+    expect(result.complete).toBe(true);
+    expect(result.excludedCount).toBe(4);
+    expect(result.entries).toHaveLength(1);
+    expect(JSON.parse(result.entries[0]!.inputSchemaJson)).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+    });
+    expect(result.entries[0]!.exampleInvocation).toContain(
+      "curl --request POST",
+    );
+    expect(result.entries[0]!.lastObservedAt).toBe(
+      "2026-08-23T00:00:00.000Z",
+    );
+  });
+
+  it("streams admitted entries without retaining the catalogue in action memory", async () => {
+    const batches: string[][] = [];
+    const result = await fetchAgenticMarketCatalog({
+      fetch: async () =>
+        json(agenticMarketPage([agenticService("streamed", 2)], 1, 200, 0)),
+      onEntries: async (entries) => {
+        batches.push(entries.map((entry) => entry.routeIdentity));
+      },
+    });
+
+    expect(result.complete).toBe(true);
+    expect(result.admittedCount).toBe(2);
+    expect(result.entries).toEqual([]);
+    expect(batches.flat()).toEqual([
+      "POST https://api.streamed.example/route-0",
+      "POST https://api.streamed.example/route-1",
+    ]);
   });
 
   it("deduplicates repeated Agentic Market sweeps because offset ordering is unstable", async () => {
@@ -129,18 +228,8 @@ describe("registry origin adapters", () => {
       sourceReportedCount: 3,
       fetchedAt: 2_000,
     });
-    expect(result.entries.map((entry) => entry.upstreamEndpointId)).toEqual([
-      "companies.search",
-      "companies.extended",
-      "stocks.search",
-      "stocks.extended",
-    ]);
-    expect(result.entries[0]).toMatchObject({
-      source: "treg",
-      sourceUrl: "https://treg.to/catalog/endpoints/companies.search",
-      access: "provider_account",
-      authority: "source_metadata_only",
-    });
+    expect(result.entries).toEqual([]);
+    expect(result.excludedCount).toBe(4);
   });
 
   it("rejects wrapper drift and unsafe source URLs", async () => {
@@ -158,7 +247,7 @@ describe("registry origin adapters", () => {
     ).rejects.toThrow();
   });
 
-  it("fails closed on timeouts and conflicting duplicate origin identities", async () => {
+  it("fails closed on timeouts and excludes duplicate non-callable origin rows", async () => {
     await expect(
       fetchAgenticMarketCatalog({
         fetch: async () => {
@@ -167,8 +256,7 @@ describe("registry origin adapters", () => {
       }),
     ).rejects.toThrow();
 
-    await expect(
-      fetchTregCatalog({
+    const result = await fetchTregCatalog({
         fetch: async (url) => {
           if (url.endsWith("/catalog/platforms")) {
             return json({ platforms: [tregPlatform("companies", 1)] });
@@ -180,8 +268,9 @@ describe("registry origin adapters", () => {
           };
           return json({ ...shelf, extended: [duplicate] });
         },
-      }),
-    ).rejects.toThrow("treg_catalog_duplicate_identity_conflict");
+      });
+    expect(result.entries).toEqual([]);
+    expect(result.excludedCount).toBe(2);
   });
 });
 

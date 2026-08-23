@@ -69,16 +69,11 @@ describe('Offering llms.txt index', () => {
   it('teaches the ordered Operation path before the published business catalog', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
     const markers = [
-      '1. No-install Step 1:',
-      '2. Search a job anonymously',
+      '1. Connect once:',
+      '2. Search by outcome:',
       '3. Inspect one exact result',
-      '4. Optional anonymous reads',
-      '5. After exact detail',
-      '6. Set `AE_CLI_BASE_URL=',
-      '7. Invoke with `npm run -s ae -- invoke',
-      '8. Read `npm run -s ae -- status',
-      '9. Cancel with `npm run -s ae -- advanced cancel',
-      '10. Reconcile uncertain work with `npm run -s ae -- recover',
+      '4. Call it:',
+      '5. Keep the receipt:',
       'Published businesses (business catalog; never Agent Services):',
     ]
     let previous = -1
@@ -89,14 +84,14 @@ describe('Offering llms.txt index', () => {
     }
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/detail`)
-    expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
-    expect(body).toContain(`AE_CLI_BASE_URL=${canonicalBaseUrl}`)
+    expect(body).toContain(`npx ae connect --base-url "${canonicalBaseUrl}" --mcp`)
+    expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
   })
 
   it('makes anonymous and authenticated boundaries explicit', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
 
-    expect(body).toContain('Anonymous reads: search, detail, compare, inspect-plan. Qualified no-key execution: operation.execute through MCP')
+    expect(body).toContain('Search and inspection are public')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')

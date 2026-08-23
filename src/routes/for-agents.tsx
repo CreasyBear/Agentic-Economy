@@ -35,7 +35,7 @@ function operationMarketRoute(path: string): string {
   return `${route.method} ${route.pathTemplate}`
 }
 
-const CLI_ENTRYPOINT = 'npm run -s ae --'
+const CLI_ENTRYPOINT = 'ae'
 
 function curlCommand(base: string, path: string, body: string): string {
   return `curl -sS '${base}${path}' -H 'content-type: application/json' --data '${body}'`
@@ -81,14 +81,14 @@ function anonymousReads(canonicalBaseUrl: string) {
 
 function authenticatedCalls(canonicalBaseUrl: string) { return [
   {
-    command: `${CLI_ENTRYPOINT} connect --base-url "${canonicalBaseUrl}" --json`,
+    command: `npx ae connect --base-url "${canonicalBaseUrl}" --mcp`,
     route: `POST ${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization} · POST ${AGENT_ACCESS_OAUTH_PATHS.token}`,
     description: 'Obtain one owner-approved AE caller key through the OAuth device flow or validate the configured key against the gateway.',
   },
   {
-    command: `${CLI_ENTRYPOINT} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "<key>" --base-url "${canonicalBaseUrl}" --json`,
+    command: `${CLI_ENTRYPOINT} call "<operationRef>" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`,
     route: `${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method} ${OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path}`,
-    description: 'Invoke the inspected Operation with one explicit stable idempotency key.',
+    description: 'Call the inspected Operation; AE creates and retains the safe retry identity.',
   },
   {
     command: `${CLI_ENTRYPOINT} status "<invocationRef>" --base-url "${canonicalBaseUrl}" --json`,
@@ -122,26 +122,27 @@ function ForAgentsRoute() {
 
         <section aria-labelledby="agent-instruction" className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)] sm:items-center sm:p-5">
           <div className="grid gap-1">
-            <h2 id="agent-instruction" className="font-semibold">Give one bounded instruction to your agent</h2>
-            <p className="text-sm leading-6 text-muted-foreground">This points it to the machine contract, permits public inspection, and makes the stop boundary explicit.</p>
+            <h2 id="agent-instruction" className="font-semibold">Give this to your agent</h2>
+            <p className="text-sm leading-6 text-muted-foreground">It can connect, find the capability, inspect the exact terms, and make the call through the same public workflow.</p>
           </div>
           <AeCopyCommand
             compact
             label="agent setup instruction"
-            code="Read this site’s /llms.txt. Search and inspect a tool, then stop before any paid or consequential call."
-            copyText="Read $ORIGIN/llms.txt and set up Agentic Economy. Search for a tool, inspect its price and inputs, then stop before any paid or consequential call."
+            code="Connect to Agentic Economy, find the best capability for my task, show me its total price and inputs, then use it."
+            copyText="Read $ORIGIN/llms.txt. Connect to Agentic Economy, find the best capability for my task, show me its total price and inputs, then use it."
           />
         </section>
 
-        <section aria-labelledby="agent-quickstart" className="grid overflow-hidden rounded-lg border bg-card md:grid-cols-3">
-          <h2 id="agent-quickstart" className="sr-only">Three-step agent quickstart</h2>
-          <AeAgentQuickstartStep number="01" title="Search" access="No key" command={searchCommand(canonicalBaseUrl)} body="Find current Operations with the public HTTP API." />
-          <AeAgentQuickstartStep number="02" title="Inspect" access="No key" command={detailCommand(canonicalBaseUrl)} body="Replace the example reference with a search result to read exact price, inputs and evidence." />
-          <AeAgentQuickstartStep number="03" title="Call through MCP" access="Key only when required" command={`${canonicalBaseUrl}/mcp`} body="Connect one MCP client. The exact Operation detail says whether a key is required." />
+        <section aria-labelledby="agent-quickstart" className="grid overflow-hidden rounded-lg border bg-card md:grid-cols-4">
+          <h2 id="agent-quickstart" className="sr-only">Four-step agent quickstart</h2>
+          <AeAgentQuickstartStep number="01" title="Connect" access="Once" command={`npx ae connect --base-url "${canonicalBaseUrl}" --mcp`} body="Browser approval stores and verifies one bounded key." />
+          <AeAgentQuickstartStep number="02" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find current capabilities by the outcome you need." />
+          <AeAgentQuickstartStep number="03" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
+          <AeAgentQuickstartStep number="04" title="Call" access="Connected" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Get one durable execution receipt." />
         </section>
 
         <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <div><p className="font-semibold">The catalogue is public.</p><p className="text-sm leading-6 text-muted-foreground">Search, inspect, compare and plan without an account. Provider credentials never travel in your caller key.</p></div>
+          <div><p className="font-semibold">The catalogue is public.</p><p className="text-sm leading-6 text-muted-foreground">Search and inspect without an account. Connect only to call; provider credentials stay behind AE.</p></div>
           <Button asChild variant="outline"><Link to="/.well-known/ucp">Open machine manifest</Link></Button>
         </div>
 
@@ -154,7 +155,7 @@ function ForAgentsRoute() {
           <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-5 font-semibold marker:content-none">API and MCP reference <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">⌄</span></summary>
           <div className="grid gap-7 border-t p-5">
             <AeAgentReferenceList title="Anonymous catalogue reads" items={anonymousReads(canonicalBaseUrl)} />
-            <AeAgentReferenceList title="Source-checkout CLI for authenticated calls" items={authenticatedCalls(canonicalBaseUrl)} />
+            <AeAgentReferenceList title="Authenticated calls" items={authenticatedCalls(canonicalBaseUrl)} />
             <section aria-labelledby="mcp-lifecycle" className="grid gap-2 border-t pt-5">
               <h2 id="mcp-lifecycle" className="font-semibold">MCP connection</h2>
               <p className="max-w-3xl text-sm leading-6 text-muted-foreground">Connect a Streamable HTTP client to <code>{canonicalBaseUrl}/mcp</code> using protocol <code>{MCP_LATEST_PROTOCOL_VERSION}</code>. Initialize the session before <code>tools/list</code> or <code>tools/call</code>, then close the transport when finished.</p>

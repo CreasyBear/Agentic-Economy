@@ -15,14 +15,22 @@ const accessValue = v.union(
   v.literal("provider_account"),
   v.literal("unknown"),
 );
+const exactPriceValue = v.object({
+  scheme: v.literal("exact"),
+  amount: v.string(),
+  currency: v.string(),
+  network: v.string(),
+});
 const entryInputValue = v.object({
   documentId: v.string(),
   source: sourceValue,
   upstreamServiceId: v.string(),
   upstreamEndpointId: v.string(),
   sourceUrl: v.string(),
+  providerUrl: v.optional(v.string()),
   endpointUrl: v.optional(v.string()),
   docsUrl: v.optional(v.string()),
+  routeIdentity: v.string(),
   name: v.string(),
   summary: v.string(),
   provider: v.string(),
@@ -32,7 +40,15 @@ const entryInputValue = v.object({
   tags: v.array(v.string()),
   networks: v.array(v.string()),
   priceLabel: v.optional(v.string()),
+  exactPrice: exactPriceValue,
   access: accessValue,
+  credentialRequirements: v.array(v.literal("x402_payment")),
+  readiness: v.literal("source_declared_callable"),
+  lastObservedAt: v.string(),
+  lastVerifiedAt: v.optional(v.string()),
+  inputSchemaJson: v.string(),
+  exampleInvocation: v.string(),
+  quality: v.literal("callable"),
   sourceCheckedAt: v.optional(v.string()),
   sourceCalls30d: v.optional(v.string()),
   sourcePayers30d: v.optional(v.string()),
@@ -46,8 +62,10 @@ const entryInputValue = v.object({
 const publicEntryValue = v.object({
   documentId: v.string(),
   sourceUrl: v.string(),
+  providerUrl: v.optional(v.string()),
   endpointUrl: v.optional(v.string()),
   docsUrl: v.optional(v.string()),
+  routeIdentity: v.string(),
   name: v.string(),
   summary: v.string(),
   provider: v.string(),
@@ -57,7 +75,14 @@ const publicEntryValue = v.object({
   tags: v.array(v.string()),
   networks: v.array(v.string()),
   priceLabel: v.optional(v.string()),
+  exactPrice: exactPriceValue,
   access: accessValue,
+  credentialRequirements: v.array(v.literal("x402_payment")),
+  readiness: v.literal("source_declared_callable"),
+  lastObservedAt: v.string(),
+  lastVerifiedAt: v.optional(v.string()),
+  inputSchemaJson: v.string(),
+  exampleInvocation: v.string(),
   sourceCheckedAt: v.optional(v.string()),
   sourceCalls30d: v.optional(v.string()),
   sourcePayers30d: v.optional(v.string()),
@@ -160,9 +185,6 @@ export const writeBatch = internalMutation({
         )
         .unique();
       if (existing !== null) {
-        if (existing.sourceDigest !== entry.sourceDigest) {
-          throw new Error("external_registry_generation_identity_conflict");
-        }
         replayed += 1;
         continue;
       }
@@ -381,7 +403,10 @@ export const search = query({
         entries: generation.ingestedCount,
         completedAt: generation.completedAt ?? generation.startedAt,
       },
-      page: page.page.map(publicEntry),
+      page: page.page.flatMap((row) => {
+        const entry = publicEntry(row);
+        return entry === undefined ? [] : [entry];
+      }),
       isDone: page.isDone,
       continueCursor: page.continueCursor,
     };
@@ -417,28 +442,55 @@ export const entry = query({
           .eq("documentId", args.documentId),
       )
       .unique();
-    return row === null
+    if (row === null) return { kind: "not_found" as const };
+    const projected = publicEntry(row);
+    return projected === undefined
       ? { kind: "not_found" as const }
-      : { kind: "found" as const, entry: publicEntry(row) };
+      : { kind: "found" as const, entry: projected };
   },
 });
 
 function publicEntry(row: Doc<"marketExternalRegistryEntries">) {
+  if (
+    row.quality !== "callable" ||
+    row.endpointUrl === undefined ||
+    row.routeIdentity === undefined ||
+    row.method === undefined ||
+    row.exactPrice === undefined ||
+    row.credentialRequirements === undefined ||
+    row.readiness === undefined ||
+    row.lastObservedAt === undefined ||
+    row.inputSchemaJson === undefined ||
+    row.exampleInvocation === undefined
+  ) {
+    return undefined;
+  }
   return {
     documentId: row.documentId,
     sourceUrl: row.sourceUrl,
-    ...(row.endpointUrl === undefined ? {} : { endpointUrl: row.endpointUrl }),
+    ...(row.providerUrl === undefined ? {} : { providerUrl: row.providerUrl }),
+    endpointUrl: row.endpointUrl,
     ...(row.docsUrl === undefined ? {} : { docsUrl: row.docsUrl }),
+    routeIdentity: row.routeIdentity,
     name: row.name,
     summary: row.summary,
     provider: row.provider,
     category: row.category,
     ...(row.capability === undefined ? {} : { capability: row.capability }),
-    ...(row.method === undefined ? {} : { method: row.method }),
+    method: row.method,
     tags: row.tags,
     networks: row.networks,
     ...(row.priceLabel === undefined ? {} : { priceLabel: row.priceLabel }),
+    exactPrice: row.exactPrice,
     access: row.access,
+    credentialRequirements: row.credentialRequirements,
+    readiness: row.readiness,
+    lastObservedAt: row.lastObservedAt,
+    ...(row.lastVerifiedAt === undefined
+      ? {}
+      : { lastVerifiedAt: row.lastVerifiedAt }),
+    inputSchemaJson: row.inputSchemaJson,
+    exampleInvocation: row.exampleInvocation,
     ...(row.sourceCheckedAt === undefined ? {} : { sourceCheckedAt: row.sourceCheckedAt }),
     ...(row.sourceCalls30d === undefined ? {} : { sourceCalls30d: row.sourceCalls30d }),
     ...(row.sourcePayers30d === undefined ? {} : { sourcePayers30d: row.sourcePayers30d }),
@@ -470,20 +522,71 @@ async function scheduleGenerationCleanup(
 function validEntry(entry: {
   documentId: string;
   sourceDigest: string;
+  endpointUrl?: string;
+  routeIdentity: string;
+  method?: string;
+  exactPrice: { scheme: "exact"; amount: string; currency: string; network: string };
+  credentialRequirements: string[];
+  readiness: "source_declared_callable";
+  lastObservedAt: string;
+  inputSchemaJson: string;
+  exampleInvocation: string;
+  quality: "callable";
   tags: string[];
   networks: string[];
   searchText: string;
 }): boolean {
   const serialized = JSON.stringify(entry);
   return (
-    entry.documentId.length > 0 &&
-    entry.documentId.length <= 1_000 &&
+    /^registry:[0-9a-f]{64}$/u.test(entry.documentId) &&
     /^sha256:[0-9a-f]{64}$/u.test(entry.sourceDigest) &&
+    validHttpUrl(entry.endpointUrl) &&
+    entry.routeIdentity === `${entry.method} ${entry.endpointUrl}` &&
+    /^(?:GET|POST|PUT|PATCH|DELETE|HEAD)$/u.test(entry.method ?? "") &&
+    entry.exactPrice.scheme === "exact" &&
+    /^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(entry.exactPrice.amount) &&
+    /[1-9]/u.test(entry.exactPrice.amount) &&
+    entry.exactPrice.currency.length > 0 &&
+    entry.exactPrice.network.length > 0 &&
+    entry.credentialRequirements.length === 1 &&
+    entry.credentialRequirements[0] === "x402_payment" &&
+    entry.readiness === "source_declared_callable" &&
+    Number.isFinite(Date.parse(entry.lastObservedAt)) &&
+    validJsonSchemaDocument(entry.inputSchemaJson) &&
+    entry.exampleInvocation.length > 0 &&
+    entry.exampleInvocation.length <= 16_000 &&
+    entry.quality === "callable" &&
     entry.tags.length <= 50 &&
     entry.networks.length <= 40 &&
     entry.searchText.length <= 8_000 &&
     encoder.encode(serialized).byteLength <= MAX_ENTRY_BYTES
   );
+}
+
+function validHttpUrl(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function validJsonSchemaDocument(value: string): boolean {
+  if (value.length < 2 || value.length > 12_000) return false;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed) &&
+      "type" in parsed &&
+      parsed.type === "object"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function validCoverage(args: {

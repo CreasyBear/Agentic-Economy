@@ -6,7 +6,6 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AGENT_DOOR, BUSINESS_DOOR } from '@/content/brand-copy'
 import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
 
 const routeState = vi.hoisted(() => ({
@@ -21,7 +20,9 @@ vi.mock('@tanstack/react-router', () => ({
       ...options,
       options,
       useSearch: () => ({}),
-      useLoaderData: () => undefined,
+      useLoaderData: () => path === '/'
+        ? { kind: 'ok', operations: [], matchedCount: 0 }
+        : undefined,
       useNavigate: () => vi.fn(),
     }
   },
@@ -74,20 +75,18 @@ describe('public semantic comfort', () => {
   it('gives homepage example asks a comfortable standalone target', () => {
     renderRoute('/')
 
-    const examples = screen.getByRole('navigation', { name: 'Example asks' })
+    const examples = screen.getByRole('navigation', { name: 'Popular searches' })
     const links = within(examples).getAllByRole('link')
     expect(links).toHaveLength(AE_CATALOG_EXAMPLE_ASKS.length)
     for (const link of links) expect(link.classList.contains('min-h-11')).toBe(true)
   })
 
-  it('gives the home agent and supplier links comfortable standalone targets', () => {
+  it('gives the home catalogue action a comfortable standalone target', () => {
     renderRoute('/')
 
-    for (const door of [AGENT_DOOR, BUSINESS_DOOR]) {
-      const link = screen.getByRole('link', { name: door.cta })
-      expect(link.classList.contains('min-h-11')).toBe(true)
-      expect(link.classList.contains('inline-flex')).toBe(true)
-    }
+    const link = screen.getByRole('link', { name: 'Discover all capabilities' })
+    expect(link.classList.contains('min-h-11')).toBe(true)
+    expect(link.classList.contains('inline-flex')).toBe(true)
   })
 
   it('renders the thinking thread as a list and keeps the provenance trigger a comfortable native button', () => {

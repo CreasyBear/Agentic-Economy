@@ -16,12 +16,12 @@ describe('public agent skill', () => {
     expect(body).toMatch(/^---\nname: agentic-economy\ndescription: .+\n---\n/u)
     const commands = [
       'curl -fsSL https://ae.example/.well-known/ucp',
-      'npm run -s ae -- search "weather forecast" --json',
-      'npm run -s ae -- inspect "$AE_OPERATION_REF" --json',
-      'npm run -s ae -- connect --json',
-      'npm run -s ae -- invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
-      'npm run -s ae -- status "$AE_INVOCATION_REF" --json',
-      'npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
+      'ae search "weather forecast" --json',
+      'ae inspect "$AE_OPERATION_REF" --json',
+      'ae connect --json',
+      'ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json',
+      'ae status "$AE_INVOCATION_REF" --json',
+      'ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
     ]
     let previous = -1
     for (const command of commands) {
@@ -52,7 +52,7 @@ describe('public agent skill', () => {
     expect(body).toContain('POST https://ae.example/api/v1/operations/call')
     expect(body).toContain('GET https://ae.example/api/v1/operations/{invocationRef}')
     expect(body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/reconcile')
-    expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
+    expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('ae connect --json'))
   })
 
   it('keeps the single caller key boundary explicit', () => {
@@ -95,7 +95,7 @@ describe('public agent skill', () => {
     expect(body).not.toMatch(/\bae (?:feeds|run|study)\b/u)
     expect(body).not.toMatch(/Services API|\/api\/v1\/services|\/api\/businesses/u)
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
-    expect(body).not.toMatch(/\bae (?:cancel|reconcile)\b/u)
+    expect(body).not.toMatch(/\bae reconcile\b/u)
   })
 
   it('stays under the 8 KB budget for a cold fetch', () => {
@@ -115,8 +115,8 @@ describe('public agent skill', () => {
       const text = await response.text()
       canonicalText ??= text
       expect(text).toBe(canonicalText)
-      expect(text).toContain('npm run -s ae -- manifest --json')
-      expect(text).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+      expect(text).toContain('ae manifest --json')
+      expect(text).toContain('ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
     }
   })
 })

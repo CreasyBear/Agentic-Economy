@@ -64,6 +64,8 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
       : operation.navigation.some(({ relation }) => relation === 'invoke')
         ? 'authenticated_invoke'
         : 'inspect_only'
+  const lastVerifiedAt = operation.availability.observedAt
+    ?? operation.commercial.priceEvidence?.observedAt
   return (
     <AePublicShell>
       <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8">
@@ -74,7 +76,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
         </nav>
         <header className="grid max-w-4xl gap-4 border-b border-border pb-6">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Operation</Badge>
+            <Badge variant="outline">Capability</Badge>
             <Badge variant={operation.availability.posture === 'routeable' ? 'success' : 'warning'}>
               {label(operation.availability.posture)}
             </Badge>
@@ -85,10 +87,11 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
             <p className="max-w-3xl text-base leading-7 text-muted-foreground">{operation.summary}</p>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Fact label="Supplier"><BusinessLink operation={operation} /></Fact>
-            <Fact label="Price" value={formatPrice(operation.commercial.price)} />
+            <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
+            <Fact label="Total price" value={totalPrice(operation)} />
             <Fact label="Readiness" value={label(operation.availability.posture)} />
-            <Fact label="Access" value={authenticationLabel(operation)} />
+            <Fact label="Authentication" value={authenticationLabel(operation)} />
+            <TimeFact label="Last verified" value={lastVerifiedAt} />
           </dl>
         </header>
 
@@ -105,7 +108,22 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
               )}
             </Section>
 
-            <Section title="Price and terms" description="Commercial facts published for this exact current Operation.">
+            <Section title="Example input and output" description="Published examples only. Missing examples are never inferred.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Example
+                  title="Example input"
+                  value={inputExample?.input}
+                  empty="No example input is published. Use the input schema below."
+                />
+                <Example
+                  title="Example output"
+                  empty="No example output is published. Validate the response against the output schema below."
+                />
+              </div>
+            </Section>
+
+            <Section title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
+              <PriceBreakdown operation={operation} />
               <dl className="grid gap-3 sm:grid-cols-2">
                 {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
                   <TimeFact label="Price observed" value={operation.commercial.priceEvidence.observedAt} />
@@ -114,13 +132,16 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   <TimeFact label="Price valid until" value={operation.commercial.priceEvidence.validUntil} />
                 )}
                 <Fact label="Commercial relationship" value={`${label(operation.commercial.relationship.kind)} — ${operation.commercial.relationship.summary}`} />
-                <Fact label="Supplier"><BusinessLink operation={operation} /></Fact>
+                <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
               </dl>
               <TermList terms={operation.commercial.materialTerms} />
             </Section>
 
-            <Section title="Evidence and reliability" description="Named completion evidence and recovery behavior. No usage is inferred from publication alone.">
+            <Section title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
               <dl className="grid gap-3 sm:grid-cols-2">
+                <Fact label="Status" value={label(operation.availability.posture)} />
+                <TimeFact label="Readiness verified" value={operation.availability.observedAt} />
+                <TimeFact label="Readiness valid until" value={operation.availability.validUntil} />
                 <Fact label="Idempotency" value={label(operation.recovery.idempotency)} />
                 <Fact label="Recovery" value={label(operation.recovery.recovery)} />
                 <Fact label="Cancellation" value={label(operation.cancellation.kind)} />
@@ -201,18 +222,18 @@ function OperationAccessSidecard({
 }>) {
   if (accessMode === 'anonymous_execute') {
     return (
-      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
+      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
         <Card className="gap-4 p-4">
           <CardHeader>
-            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Call this Operation</h2>
-            <CardDescription>Free and keyless. Inspect the contract, then call it through MCP.</CardDescription>
+            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
+            <CardDescription>Ready now with no provider key. Inspect the contract, then call it through MCP.</CardDescription>
           </CardHeader>
           <CardContent>
             <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect" code={inspectCommand(operation.operationRef)} />
+              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
               <CommandStep
                 number={2}
-                title="Call the MCP tool"
+                title="Call capability"
                 code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=${mcpInput}`}
               />
             </ol>
@@ -227,22 +248,27 @@ function OperationAccessSidecard({
 
   if (accessMode === 'authenticated_invoke') {
     return (
-      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
+      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
         <Card className="gap-4 p-4">
           <CardHeader>
-            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Call this Operation</h2>
-            <CardDescription>Connect once, invoke with a stable idempotency key, then follow the returned invocation reference.</CardDescription>
+            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
+            <CardDescription>Connect once, call this capability, then follow the returned receipt. The CLI keeps the credential and retry identity for you.</CardDescription>
           </CardHeader>
           <CardContent>
+            <Button asChild className="min-h-11 w-full">
+              <Link to="/for-agents">Connect an agent</Link>
+            </Button>
+          </CardContent>
+          <CardContent>
             <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect" code={inspectCommand(operation.operationRef)} />
-              <CommandStep number={2} title="Connect an MCP client" code="$ORIGIN/mcp" />
-              <CommandStep number={3} title="Invoke the MCP tool" code={`ae_operation_invoke\noperationRef=${operation.operationRef}\ninput=${invokeInput}\nidempotencyKey=$AE_IDEMPOTENCY_KEY`} />
-              <CommandStep number={4} title="Read status" code={'ae_operation_status\ninvocationRef=$AE_INVOCATION_REF'} />
+              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
+              <CommandStep number={2} title="Connect once" code="ae connect" />
+              <CommandStep number={3} title="Call capability" code={`ae call '${operation.operationRef}' --input ${invokeInput}`} />
+              <CommandStep number={4} title="Open the receipt" code="ae status <invocation-ref>" />
             </ol>
           </CardContent>
           <CardContent className="border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground">Connect may reveal a caller key once. Save it securely. Recovery preserves the original invocation identity and cannot create a second call.</p>
+            <p className="text-sm text-muted-foreground"><code>ae connect</code> stores and validates one origin-bound agent key with user-only permissions. <code>ae call</code> generates a durable retry identity when one is not supplied.</p>
           </CardContent>
         </Card>
       </aside>
@@ -250,14 +276,12 @@ function OperationAccessSidecard({
   }
 
   return (
-    <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="availability-title">
+    <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="availability-title">
       <Card className="gap-4 p-4">
         <CardHeader>
-          <h2 id="availability-title" className="text-lg font-semibold text-foreground">
-            {operation.availability.posture === 'integrated' ? 'Setup required before invocation' : 'Currently unavailable'}
-          </h2>
+          <h2 id="availability-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
           <CardDescription>
-            This Operation is {label(operation.availability.reason ?? operation.availability.posture)}. You can still inspect its price and contract, but it cannot be called now.
+            {operation.availability.posture === 'integrated' ? 'Setup is required before invocation.' : 'This capability is currently unavailable.'} You can still inspect its price and contract, but it cannot be called now.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -305,8 +329,8 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
 function OperationDetailPending() {
   return (
     <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true">
-        <p className="text-muted-foreground">Checking the exact current Operation…</p>
+      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true" aria-live="polite">
+        <p role="status" className="text-muted-foreground">Checking the current capability…</p>
       </section>
     </AePublicShell>
   )
@@ -370,6 +394,43 @@ function TermList({ terms }: Readonly<{ terms: PublicOperationDescriptor['commer
   return <dl className="grid gap-3 sm:grid-cols-2">{terms.map((term) => <Fact key={`${term.label}:${term.value}`} label={term.label} value={term.value} />)}</dl>
 }
 
+function PriceBreakdown({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+  const breakdown = operation.commercial.priceBreakdown
+  if (breakdown === undefined) {
+    return (
+      <div className="grid gap-1 rounded-lg border bg-muted/20 p-4">
+        <p className="text-xs font-medium text-muted-foreground">Total price</p>
+        <p className="font-mono text-lg font-semibold tabular-nums">{totalPrice(operation)}</p>
+        <p className="text-xs text-muted-foreground">No separate fee breakdown is published for this capability.</p>
+      </div>
+    )
+  }
+  return (
+    <section aria-labelledby="price-breakdown-heading" className="grid gap-3 rounded-lg border bg-muted/20 p-4">
+      <h3 id="price-breakdown-heading" className="font-semibold text-foreground">Exact price breakdown</h3>
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <Fact label="Provider price" value={formatCurrencyAmount(breakdown.providerQuotedAmount)} />
+        <Fact label="Agentic Economy fee" value={formatCurrencyAmount(breakdown.agenticEconomyFee)} />
+        <Fact label="Total authorization" value={formatCurrencyAmount(breakdown.totalBuyerAuthorization)} />
+        <Fact label="Payment network" value={`Base (${breakdown.network})`} />
+        <Fact label="Payment asset" value={`USDC (${breakdown.asset})`} />
+      </dl>
+      <p className="text-xs text-muted-foreground">The total authorization is the maximum charged for this call.</p>
+    </section>
+  )
+}
+
+function Example({ title, value, empty }: Readonly<{ title: string; value?: unknown; empty: string }>) {
+  return (
+    <section className="grid min-w-0 content-start gap-2 rounded-lg border bg-card p-4">
+      <h3 className="font-semibold text-foreground">{title}</h3>
+      {value === undefined
+        ? <p className="text-sm leading-6 text-muted-foreground">{empty}</p>
+        : <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre>}
+    </section>
+  )
+}
+
 function Schema({ title, value }: Readonly<{ title: string; value: Readonly<Record<string, unknown>> }>) {
   return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
 }
@@ -379,13 +440,19 @@ function CommandStep({ number, title, code }: Readonly<{ number: number; title: 
 }
 
 function inspectCommand(operationRef: string): string {
-  return `curl -sS '$ORIGIN/api/v1/market-operations/detail' -H 'content-type: application/json' --data '${JSON.stringify({ operationRef })}'`
+  return `ae inspect '${operationRef}'`
 }
 
 function formatPrice(price: PublicOperationPrice): string {
   if (price.kind === 'on_request') return 'On request'
   if (price.kind === 'fixed') return formatCurrencyAmount(price.amount)
   return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`
+}
+
+function totalPrice(operation: PublicOperationDescriptor): string {
+  return operation.commercial.priceBreakdown === undefined
+    ? formatPrice(operation.commercial.price)
+    : formatCurrencyAmount(operation.commercial.priceBreakdown.totalBuyerAuthorization)
 }
 
 function authenticationLabel(operation: PublicOperationDescriptor): string {

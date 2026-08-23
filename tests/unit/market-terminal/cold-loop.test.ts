@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
@@ -92,12 +95,21 @@ function setApiKey(value: string, origin = options.baseUrl): void {
   process.env.AE_API_KEY_ORIGIN = new URL(origin).origin
 }
 
+let testConfigDirectory = ''
+
+beforeEach(() => {
+  testConfigDirectory = mkdtempSync(join(tmpdir(), 'ae-cli-cold-loop-'))
+  process.env.AE_CONFIG_DIR = testConfigDirectory
+})
+
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
+  delete process.env.AE_CONFIG_DIR
+  rmSync(testConfigDirectory, { recursive: true, force: true })
 })
 
 describe('external-agent Market Operation cold loop', () => {
@@ -409,8 +421,8 @@ describe('external-agent Market Operation cold loop', () => {
       return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>
     }
     const pending = await readJsonOutput(() => runInvokeCommand(
-      [operationRef, JSON.stringify(initialInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef, idempotencyKey })
 
@@ -424,19 +436,19 @@ describe('external-agent Market Operation cold loop', () => {
     })
 
     const replay = await readJsonOutput(() => runInvokeCommand(
-      [operationRef, JSON.stringify(initialInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(replay).toEqual({
       ...completedResult,
       idempotencyKey,
-      nextCommand: `npm run -s ae -- status ${invocationRef}`,
+      nextCommand: `ae status ${invocationRef}`,
     })
     expect(status.result).toEqual(completedResult)
 
     await expect(runInvokeCommand(
-      [operationRef, JSON.stringify(changedInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(changedInput) },
     )).rejects.toMatchObject({
       kind: 'ALREADY_EXISTS',
       code: 'idempotency_conflict',
@@ -475,16 +487,22 @@ describe('external-agent Market Operation cold loop', () => {
     ])
   })
 
-  it('requires an explicit stable idempotency key before invoke network work', async () => {
+  it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'pending', invocationRef: 'invocation:generated', operationRef: 'operation:v1:current', retryAfterMs: 100,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:current', '{}'], options)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'idempotency-key-required',
-    } satisfies Partial<CliFailure>)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const output = captureStdout()
+    try {
+      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}' })
+    } finally {
+      output.restore()
+    }
+    const result = JSON.parse(output.read()) as { idempotencyKey: string }
+    expect(result.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('returns pending with a reusable key and status continuation without --wait', async () => {
@@ -499,7 +517,7 @@ describe('external-agent Market Operation cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:current', '{}'], { ...options, idempotencyKey: 'idem-stable' })
+      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}', idempotencyKey: 'idem-stable' })
     } finally {
       output.restore()
     }
@@ -518,7 +536,7 @@ describe('external-agent Market Operation cold loop', () => {
       operationRef: 'operation:v1:current',
       retryAfterMs: 100,
       idempotencyKey: 'idem-stable',
-      nextCommand: 'npm run -s ae -- status invocation:current',
+      nextCommand: 'ae status invocation:current',
     })
     expect(fetchMock).toHaveBeenCalledOnce()
   })
@@ -613,6 +631,12 @@ describe('external-agent Market Operation cold loop', () => {
         scope: 'market_operations:invoke customer_requests:bounded_mandate',
         expires_in: 604800,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        kind: 'refused',
+        invocationRef: 'invocation:v1:connect-validation',
+        code: 'invocation_not_found',
+        retryable: false,
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     try {
@@ -636,9 +660,11 @@ describe('external-agent Market Operation cold loop', () => {
     expect(String(token[1]?.body)).toContain('device_code=device-code')
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'connected',
-      access_token: 'ae-issued-secret',
+      credential: 'origin_bound_agent_key',
+      credentialStored: true,
       apiKeyOrigin: 'https://market.example',
     })
+    expect(output.read()).not.toContain('ae-issued-secret')
   })
 
   it('refuses an existing key origin mismatch before connect validation fetch', async () => {
@@ -677,7 +703,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-existing-secret')
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'connected',
-      credential: 'AE_API_KEY',
+      credential: 'origin_bound_agent_key',
       source: 'validated_environment',
       apiKeyOrigin: 'https://market.example',
     })

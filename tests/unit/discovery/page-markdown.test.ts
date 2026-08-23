@@ -56,34 +56,31 @@ const pricedOffering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
 describe('site brief markdown', () => {
   const body = buildSiteBriefMarkdown(options)
 
-  it('starts with the no-install raw handshake and then uses the repo-local CLI', () => {
-    expect(body).toContain('curl -fsSL https://ae.example/.well-known/ucp')
-    expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
-    expect(body).toContain('npm run -s ae -- inspect "$AE_OPERATION_REF" --json')
-    expect(body).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
-    expect(body).toContain('AE_CLI_BASE_URL=https://ae.example')
+  it('starts with one-command connection and the canonical call loop', () => {
+    expect(body).toContain('npx ae connect --base-url "https://ae.example" --mcp')
+    expect(body.indexOf('npx ae connect')).toBeLessThan(body.indexOf('ae search "<job>"'))
+    expect(body).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
+    expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
     expect(body).toContain('https://ae.example/agent-access/authorize?user_code=...')
     expect(body).toContain('https://ae.example/oauth/device_authorization')
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
-    expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
-    expect(body).toContain('The request JSON body field `idempotencyKey` is required for invoke, cancel, and reconcile; choose it once for the intended invocation and retain it.')
-    expect(body).toContain('Authenticated: invoke, status, cancel, reconcile.')
-    expect(body).toContain('qualified direct-keyless MCP execution does not')
-    expect(body).toContain('Business reads are business-only')
+    expect(body).toContain('If the receipt explicitly requires reconciliation')
+    expect(body).toContain('the CLI creates and retains it automatically')
+    expect(body).toContain('Search and inspection are public')
+    expect(body).toContain('Provider and publication records are supporting metadata')
   })
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
     const guide = buildForAgentsMarkdown(options)
-    expect(guide).toContain('curl -fsSL https://ae.example/.well-known/ucp')
+    expect(guide).toContain('npx ae connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
-    expect(guide).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
-    expect(guide).toContain('export AE_CLI_BASE_URL="https://ae.example"')
-    expect(guide).toContain('npm run -s ae -- advanced cancel')
-    expect(guide).not.toContain('npm run -s ae -- advanced reconcile')
+    expect(guide).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
+    expect(guide).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(guide).not.toContain('advanced')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
     expect(guide).toContain('`initialize` then `notifications/initialized`')
   })

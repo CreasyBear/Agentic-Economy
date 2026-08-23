@@ -24,6 +24,9 @@ describe("Agentic Economy registry public projection", () => {
           {
             documentId: "entry-1",
             sourceUrl: "https://agentic.market/services/api-exa-ai",
+            providerUrl: "https://exa.ai",
+            endpointUrl: "https://api.exa.ai/search",
+            routeIdentity: "POST https://api.exa.ai/search",
             name: "Exa search",
             summary: "Search the web.",
             provider: "Exa",
@@ -31,7 +34,20 @@ describe("Agentic Economy registry public projection", () => {
             method: "POST",
             tags: ["search"],
             networks: ["Base"],
+            priceLabel: "USDC 0.01",
+            exactPrice: {
+              scheme: "exact",
+              amount: "0.01",
+              currency: "USDC",
+              network: "eip155:8453",
+            },
             access: "x402",
+            credentialRequirements: ["x402_payment"],
+            readiness: "source_declared_callable",
+            lastObservedAt: "2026-08-23T00:00:00.000Z",
+            inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
+            exampleInvocation:
+              "curl --request POST --url 'https://api.exa.ai/search'",
             authority: "registry_metadata_only",
           },
         ],
@@ -46,6 +62,17 @@ describe("Agentic Economy registry public projection", () => {
       schemaVersion: "api-registry:v1",
       access: "x402",
       kind: "ok",
+    });
+    expect(body.page[0]).toMatchObject({
+      routeIdentity: "POST https://api.exa.ai/search",
+      exactPrice: {
+        scheme: "exact",
+        amount: "0.01",
+        currency: "USDC",
+        network: "eip155:8453",
+      },
+      credentialRequirements: ["x402_payment"],
+      readiness: "source_declared_callable",
     });
     expect(JSON.stringify(body)).not.toContain("operationRef");
     expect(JSON.stringify(body)).not.toContain("invocationRef");

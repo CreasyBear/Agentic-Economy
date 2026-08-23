@@ -219,12 +219,16 @@ describe("Agentic Economy registry generations", () => {
 });
 
 function entry(source: "agentic_market" | "treg", id: string) {
+  const endpointUrl = `https://api.example.com/${id}`;
   return {
     documentId: `registry:${(id === "alpha" ? "a" : "b").repeat(64)}`,
     source,
     upstreamServiceId: "service",
     upstreamEndpointId: id,
     sourceUrl: `https://example.com/${id}`,
+    providerUrl: "https://example.com",
+    endpointUrl,
+    routeIdentity: `GET ${endpointUrl}`,
     name: `${id} search`,
     summary: "Search public data",
     provider: `${id} provider`,
@@ -232,7 +236,20 @@ function entry(source: "agentic_market" | "treg", id: string) {
     method: "GET",
     tags: ["search"],
     networks: [],
-    access: source === "agentic_market" ? ("x402" as const) : ("provider_account" as const),
+    exactPrice: {
+      scheme: "exact" as const,
+      amount: "0.01",
+      currency: "USDC",
+      network: "eip155:8453",
+    },
+    priceLabel: "USDC 0.01",
+    access: "x402" as const,
+    credentialRequirements: ["x402_payment" as const],
+    readiness: "source_declared_callable" as const,
+    lastObservedAt: "2026-08-23T00:00:00.000Z",
+    inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
+    exampleInvocation: `curl --request GET --url '${endpointUrl}'`,
+    quality: "callable" as const,
     authority: "source_metadata_only" as const,
     sourceDigest: `sha256:${"a".repeat(64)}`,
     searchText: `${id} search public data provider`,
