@@ -35,7 +35,7 @@ describe('/agent-access/authorize consent loading', () => {
     await waitFor(() => expect(screen.getByText('Access request unavailable')).toBeTruthy())
 
     expect(screen.queryByText('Loading access request')).toBeNull()
-    expect(screen.getByText('It may have expired. Start a new request from your assistant.')).toBeTruthy()
+    expect(screen.getByText('It may have expired. Start a new request from your agent.')).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledWith(
       '/oauth/authorize?user_code=BAD-CODE',
       expect.objectContaining({ credentials: 'same-origin' }),
@@ -77,6 +77,6 @@ describe('/agent-access/authorize consent loading', () => {
     const request = fetchMock.mock.calls[1]?.[1]
     expect(String(request?.body)).toContain('decision=approve')
     expect(String(request?.body)).toContain('authority_mode=bounded_mandate')
-    expect(await screen.findByText('Access approved — return to your assistant')).toBeTruthy()
+    expect(await screen.findByText('Access approved — return to your agent')).toBeTruthy()
   })
 })

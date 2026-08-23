@@ -282,18 +282,20 @@ export async function reconcileInvocationChargeHandler(
     args.sourceDigest.length === 0
   )
     return { kind: 'reconciliation_required' as const }
-  const usageRows = await ctx.db
-    .query('moneyUsageEvents')
-    .withIndex('by_invocationRef', (q) =>
-      q.eq('invocationRef', args.invocationRef),
-    )
-    .take(20)
-  const transaction = await ctx.db
-    .query('moneyTransactions')
-    .withIndex('by_transactionRef', (q) =>
-      q.eq('transactionRef', args.transactionRef),
-    )
-    .unique()
+  const [usageRows, transaction] = await Promise.all([
+    ctx.db
+      .query('moneyUsageEvents')
+      .withIndex('by_invocationRef', (q) =>
+        q.eq('invocationRef', args.invocationRef),
+      )
+      .take(20),
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_transactionRef', (q) =>
+        q.eq('transactionRef', args.transactionRef),
+      )
+      .unique(),
+  ])
   if (usageRows.length === 0)
     return transaction === null
       ? { kind: 'none' as const }

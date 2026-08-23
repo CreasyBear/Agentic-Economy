@@ -28,14 +28,14 @@ export function OperationOutcome({
   const rawOutput = view.output === undefined ? undefined : boundedOutcomeJson(view.output)
 
   return (
-    <section className={cn(REVEAL_ENTER, 'grid min-w-0 gap-4 rounded-md border border-border bg-card p-4')} aria-label="Operation outcome">
+    <section className={cn(REVEAL_ENTER, 'grid min-w-0 gap-3 rounded-md border border-border bg-card p-3')} aria-label="Operation outcome">
       <header className="grid gap-1">
         <p className="text-sm font-semibold text-foreground">{view.stateLabel}</p>
         {presentation === undefined ? null : (
           <h2
             dir="auto"
             style={{ unicodeBidi: 'isolate' }}
-            className="break-words font-heading text-lg font-semibold text-foreground"
+            className="break-words text-base font-semibold text-foreground"
           >
             {neutralizeBidiFormattingControls(presentation.operationLabel)}
           </h2>
@@ -83,7 +83,7 @@ export function OperationOutcome({
         <p className="break-words text-muted-foreground">
           {presentation === undefined
             ? 'Runtime actor and time were not recorded.'
-            : `Run by AE runtime · ${formatObservedAt(presentation.observedAt)}`}
+            : `Runtime execution · ${formatObservedAt(presentation.observedAt)}`}
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export function OperationOutcome({
             <Link
               to="/operations/$operationRef"
               params={{ operationRef: outcome.operationRef }}
-              className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-xs text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-xs text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{outcome.operationRef}</code>
             </Link>
@@ -105,7 +105,7 @@ export function OperationOutcome({
                 to="/operations/invocations/$invocationRef"
                 params={{ invocationRef: result.invocationRef }}
                 aria-label="View current status"
-                className="inline-flex min-h-6 w-fit items-center text-sm font-semibold text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex min-h-6 w-fit items-center text-sm font-semibold text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <code dir="ltr" style={{ unicodeBidi: 'isolate' }}>{result.invocationRef}</code>
               </Link>
@@ -208,7 +208,7 @@ function ResultValue({
         target="_blank"
         rel="noopener noreferrer"
         referrerPolicy="no-referrer"
-        className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-brand underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex min-h-6 w-fit max-w-full items-center break-all text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {neutralizeBidiFormattingControls(annotation.label)}
       </a>

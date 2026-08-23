@@ -51,15 +51,15 @@ export function AeThreadTurnCollapsed({
     <Collapsible className="flex flex-col gap-2" data-turn-status={turn.status}>
       <Message align="end" className="has-[[data-state=open]]:hidden">
         <MessageContent>
-          <Bubble align="end" variant="muted">
+          <Bubble align="end" variant="muted" className="max-w-[42rem]">
             <BubbleContent className="p-0">
               <CollapsibleTrigger asChild>
                 <Button
                   type="button"
                   variant="ghost"
-                  className="grid h-auto w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-3xl bg-transparent px-3 py-2.5 text-left font-normal whitespace-normal hover:bg-transparent"
+                  className="grid h-auto w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-md bg-transparent px-3 py-2.5 text-left font-normal whitespace-normal hover:bg-transparent"
                 >
-                  <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="col-start-1 font-heading text-sm font-semibold text-foreground">{label.text}</span>
+                  <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="col-start-1 text-sm font-semibold text-foreground">{label.text}</span>
                   <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="col-start-1 truncate text-sm text-muted-foreground">{oneLine}</span>
                   {statusCopy === null ? null : <span className="col-start-1 text-xs text-muted-foreground">{statusCopy}</span>}
                   <span className={`col-start-2 ${statusCopy === null ? 'row-span-2' : 'row-span-3'} self-center text-xs text-muted-foreground`}>Expand</span>
@@ -106,7 +106,7 @@ export function AeThreadTurnCollapsed({
                             {problemCopy === null ? null : <p>{problemCopy}</p>}
                             <div className="flex flex-wrap gap-2 pt-2">
                               <Button asChild size="sm" variant="ghost">
-                                <Link to="/">New chat</Link>
+                                <Link to="/">New search</Link>
                               </Button>
                             </div>
                           </>

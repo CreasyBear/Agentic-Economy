@@ -27,6 +27,9 @@ export const businessTables = {
     publicStatus: literalUnion(PublicStatusValues),
     trustTier: literalUnion(TrustTierValues),
     sourceHash: v.string(),
+    // Legacy development rows may retain the pre-publicStatus claim field.
+    // Keep it optional until every deployment has completed the data migration.
+    claimStatus: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     suppressedAt: v.optional(v.number()),

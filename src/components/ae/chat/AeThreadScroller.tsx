@@ -29,7 +29,7 @@ export function AeThreadScroller({
   showJumpButton = true,
   className,
   contentClassName,
-  'aria-label': ariaLabel = 'Chat',
+  'aria-label': ariaLabel = 'Search results',
 }: AeThreadScrollerProps) {
   return (
     <MessageScrollerProvider
@@ -42,10 +42,10 @@ export function AeThreadScroller({
         aria-label={ariaLabel}
         className={cn('min-h-0 flex-1', className)}
       >
-        <MessageScrollerViewport aria-label="Chat transcript">
+        <MessageScrollerViewport aria-label="Search transcript">
           <MessageScrollerContent
             className={cn(
-              'w-full gap-6 px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6',
+              'mx-auto w-full max-w-[56rem] gap-5 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6',
               contentClassName,
             )}
           >

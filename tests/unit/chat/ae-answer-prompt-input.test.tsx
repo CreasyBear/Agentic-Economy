@@ -18,7 +18,7 @@ describe('AeAnswerPromptInput submission', () => {
     })
 
     render(<AeAnswerPromptInput onSubmit={onSubmit} examples={[]} showTiming={false} />)
-    searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
     fireEvent.change(searchbox, { target: { value: query } })
     fireEvent.submit(screen.getByRole('search'))
 
@@ -32,7 +32,7 @@ describe('AeAnswerPromptInput submission', () => {
   ])('does not clear an invalid query: %j', (query) => {
     const onSubmit = vi.fn()
     render(<AeAnswerPromptInput onSubmit={onSubmit} examples={[]} showTiming={false} />)
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
 
     fireEvent.change(searchbox, { target: { value: query } })
     fireEvent.submit(screen.getByRole('search'))
@@ -47,7 +47,7 @@ describe('AeAnswerPromptInput submission', () => {
       throw new Error('submission failed')
     })
     render(<AeAnswerPromptInput onSubmit={onSubmit} examples={[]} showTiming={false} />)
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
 
     fireEvent.change(searchbox, { target: { value: query } })
     const errors: ErrorEvent[] = []

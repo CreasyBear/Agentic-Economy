@@ -188,8 +188,8 @@ export function readStoredDraft(): Record<string, unknown> | null {
   return raw === null ? null : JSON.parse(raw) as Record<string, unknown>
 }
 
-export async function submitQuery(query: string, placeholder = 'What do you need done?') {
-  const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+export async function submitQuery(query: string, placeholder = 'Search the operation market') {
+  const input = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
   await waitFor(() => {
     expect(input.disabled).toBe(false)
   })
@@ -201,7 +201,7 @@ export async function submitQuery(query: string, placeholder = 'What do you need
 }
 
 export function expectComposerCopy(placeholder: string, loopHint?: string) {
-  const input = screen.getByRole('searchbox', { name: 'What do you need done?' })
+  const input = screen.getByRole('searchbox', { name: 'Search the operation market' })
   expect(input.getAttribute('placeholder')).toBe(placeholder)
   if (loopHint !== undefined) {
     expect(screen.getByText(loopHint)).toBeTruthy()

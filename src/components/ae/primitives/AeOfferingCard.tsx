@@ -48,7 +48,7 @@ export function AeOfferingCard({ offering, actions, className, source, tag }: Ae
             </CardTitle>
             <p className="block text-muted-foreground">{offering.summary}</p>
           </div>
-          {source === undefined ? null : <ProvenanceBadge />}
+          {source === undefined ? null : <ProvenanceBadge source={source} />}
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 p-5 pt-0">

@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 
 export type AeOperatorQueueBadge = {
   label: string
-  variant?: 'default' | 'secondary' | 'destructive' | 'outline'
+  variant?: 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info'
 }
 
 export type AeOperatorQueueAction = {
@@ -138,4 +138,3 @@ function AeOperatorQueueItem({ row, maxFacts }: { row: AeOperatorQueueRow; maxFa
     </Item>
   )
 }
-

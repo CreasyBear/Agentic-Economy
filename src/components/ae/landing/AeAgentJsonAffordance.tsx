@@ -63,14 +63,14 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
         <DialogTrigger asChild>
       <Button type="button" variant="secondary" size="sm" onClick={() => void openPreview()}>
         <CodeIcon aria-hidden="true" />
-        Data for AI assistants
+        Agent-readable data
       </Button>
         </DialogTrigger>
         <DialogContent
           className="max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto"
         >
           <DialogHeader>
-            <DialogTitle>Data for AI assistants</DialogTitle>
+            <DialogTitle>Agent-readable data</DialogTitle>
             <DialogDescription>Check the fields and values before you copy them.</DialogDescription>
           </DialogHeader>
           {preview.status === 'loading' ? <p role="status" className="text-muted-foreground">Loading data preview...</p> : null}
@@ -80,7 +80,7 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
           {preview.status === 'ready' ? (
             <>
               <p className="text-sm text-muted-foreground">Fields: {preview.fields.join(', ') || 'none'}</p>
-              <pre aria-label="Assistant data" className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-4 font-mono text-sm text-foreground">{preview.text}</pre>
+              <pre aria-label="Agent-readable data" className="max-h-[50dvh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-background p-4 font-mono text-sm text-foreground">{preview.text}</pre>
             </>
           ) : null}
           <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -99,7 +99,7 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
             </Button>
           </DialogFooter>
           <span className="sr-only" role="status" aria-live="polite">
-            {copied ? `Assistant data for ${query} copied to clipboard` : ''}
+            {copied ? `Agent-readable data for ${query} copied to clipboard` : ''}
           </span>
         </DialogContent>
       </Dialog>

@@ -61,6 +61,7 @@ describe('site brief markdown', () => {
     expect(body.indexOf('/api/v1/market-operations/search')).toBeLessThan(body.indexOf('npm run -s ae -- connect --json'))
     expect(body).toContain('npm run -s ae -- inspect "$AE_OPERATION_REF" --json')
     expect(body).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
+    expect(body).toContain('AE_CLI_BASE_URL=https://ae.example')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -80,6 +81,7 @@ describe('site brief markdown', () => {
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
     expect(guide).toContain('npm run -s ae -- inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json')
+    expect(guide).toContain('export AE_CLI_BASE_URL="https://ae.example"')
     expect(guide).toContain('npm run -s ae -- advanced cancel')
     expect(guide).not.toContain('npm run -s ae -- advanced reconcile')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)

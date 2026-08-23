@@ -221,21 +221,23 @@ export async function readKeyUsageHandler(
       code: 'billing_identity_missing',
       items: [] as const,
     }
-  const principal = await ctx.db
-    .query('agentAccessPrincipals')
-    .withIndex('by_principalId', (q) =>
-      q.eq('principalId', args.principalId),
-    )
-    .unique()
-  const summary = await ctx.db
-    .query('moneyCredentialUsageSummaries')
-    .withIndex('by_principalId_and_credentialId_and_currency', (q) =>
-      q
-        .eq('principalId', args.principalId)
-        .eq('credentialId', args.credentialId)
-        .eq('currency', args.currency),
-    )
-    .unique()
+  const [principal, summary] = await Promise.all([
+    ctx.db
+      .query('agentAccessPrincipals')
+      .withIndex('by_principalId', (q) =>
+        q.eq('principalId', args.principalId),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyCredentialUsageSummaries')
+      .withIndex('by_principalId_and_credentialId_and_currency', (q) =>
+        q
+          .eq('principalId', args.principalId)
+          .eq('credentialId', args.credentialId)
+          .eq('currency', args.currency),
+      )
+      .unique(),
+  ])
   const account =
     principal === null
       ? null

@@ -105,7 +105,7 @@ describe('thread turn replay', () => {
     expect(retry.getAttribute('data-size')).toBe('sm')
     fireEvent.click(retry)
     expect(onRetry).toHaveBeenCalledOnce()
-    const newChat = screen.getByRole('link', { name: 'New chat' })
+    const newChat = screen.getByRole('link', { name: 'New search' })
     expect(newChat.getAttribute('href')).toBe('/')
     expect(newChat.getAttribute('data-variant')).toBe('ghost')
     expect(newChat.getAttribute('data-size')).toBe('sm')
@@ -128,7 +128,7 @@ describe('thread turn replay', () => {
     )
 
     expect(screen.getByText('This response is no longer available.')).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: 'New chat' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'New search' })).toHaveLength(1)
   })
 
   it('uses the fallback recovery in an expanded collapsed error turn', () => {
@@ -149,7 +149,7 @@ describe('thread turn replay', () => {
     fireEvent.click(screen.getByRole('button', { name: /Expand/ }))
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(screen.getByText('Unable to finish this response.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'New chat' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'New search' }).getAttribute('href')).toBe('/')
   })
 
   it.each(['stopped', 'already_settled'] as const)('clears Stopping after the durable %s result', async (kind) => {

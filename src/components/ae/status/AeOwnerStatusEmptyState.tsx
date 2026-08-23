@@ -15,10 +15,10 @@ export function AeOwnerStatusEmptyState({ kind }: AeOwnerStatusEmptyStateProps) 
   return (
     <Empty className="border border-border bg-card p-5">
       <EmptyHeader>
-        <EmptyTitle>{isNotFound ? 'No service page yet' : 'Status unavailable'}</EmptyTitle>
+        <EmptyTitle>{isNotFound ? 'No supplier profile yet' : 'Status unavailable'}</EmptyTitle>
         <EmptyDescription>
           {isNotFound
-            ? 'Set up your provider profile to publish a page customers and assistants can read.'
+            ? 'Set up your supplier profile to publish Operations agents can inspect.'
             : 'Try again in a moment. If this keeps happening, contact support through corrections.'}
         </EmptyDescription>
       </EmptyHeader>
@@ -26,7 +26,7 @@ export function AeOwnerStatusEmptyState({ kind }: AeOwnerStatusEmptyStateProps) 
         <div className="flex flex-wrap justify-center gap-3">
           {isNotFound ? (
             <Button asChild variant="default">
-              <a href="/for-providers"><ArrowRightIcon aria-hidden="true" />Review provider setup</a>
+              <a href="/for-providers"><ArrowRightIcon aria-hidden="true" />Review supplier setup</a>
             </Button>
           ) : (
             <Button asChild variant="secondary">

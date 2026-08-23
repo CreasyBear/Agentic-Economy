@@ -39,7 +39,7 @@ export function AeThreadHeader({
 
 
   return (
-    <header className="h-14 border-b border-border bg-background">
+    <header className="h-12 border-b border-border bg-background">
       <div className="flex h-full w-full min-w-0 items-center gap-2 px-4 md:px-6">
         {showSidebarButton && onOpenMobileSidebar !== undefined ? (
           <Button
@@ -47,7 +47,7 @@ export function AeThreadHeader({
             variant="ghost"
             size="icon"
             className="min-h-11 min-w-11 lg:hidden"
-            aria-label="Open recent chats"
+            aria-label="Open recent searches"
             onClick={onOpenMobileSidebar}
             aria-controls="ae-thread-mobile-sidebar"
             aria-expanded={mobileSidebarOpen}
@@ -61,7 +61,7 @@ export function AeThreadHeader({
             variant="ghost"
             size="icon"
             className="hidden min-h-11 min-w-11 lg:inline-flex"
-            aria-label={desktopSidebarExpanded ? 'Hide recent chats' : 'Show recent chats'}
+            aria-label={desktopSidebarExpanded ? 'Hide recent searches' : 'Show recent searches'}
             onClick={onToggleDesktopSidebar}
             aria-controls="ae-thread-sidebar"
             aria-expanded={desktopSidebarExpanded}
@@ -73,7 +73,7 @@ export function AeThreadHeader({
           <p
             dir="auto"
             style={{ unicodeBidi: 'isolate' }}
-            className="min-w-0 flex-1 truncate font-heading text-sm text-foreground md:text-lg"
+            className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
           >
             {displayTitle}
           </p>
@@ -81,18 +81,18 @@ export function AeThreadHeader({
           <h1
             dir="auto"
             style={{ unicodeBidi: 'isolate' }}
-            className="min-w-0 flex-1 truncate font-heading text-sm text-foreground md:text-lg"
+            className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
           >
             {displayTitle}
           </h1>
         )}
         {onNewQuestion === undefined ? (
           <Button asChild variant="secondary" size="sm">
-            <a href="/">New chat</a>
+            <a href="/">New search</a>
           </Button>
         ) : (
           <Button type="button" variant="secondary" size="sm" onClick={onNewQuestion}>
-            New chat
+            New search
           </Button>
         )}
         {threadId === undefined ? null : <AeThreadShareActions key={threadId} threadId={threadId} />}
@@ -136,7 +136,7 @@ function AeThreadShareActions({ threadId }: { threadId: string }) {
           type="button"
           variant="ghost"
           size="icon"
-          aria-label="Chat actions"
+          aria-label="Search actions"
           aria-busy={shareBusy !== null}
         >
           <EllipsisVerticalIcon aria-hidden="true" />
@@ -144,7 +144,7 @@ function AeThreadShareActions({ threadId }: { threadId: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel className="whitespace-normal text-xs font-normal leading-relaxed text-muted-foreground">
-          This chat is private unless you share it. Shared links are read-only until you revoke the link or delete the chat.
+          This search is private unless you share it. Shared links are read-only until you revoke the link or delete the search.
         </DropdownMenuLabel>
         <DropdownMenuGroup>
           <DropdownMenuItem onSelect={() => void copyShareLink()} disabled={shareBusy !== null}>

@@ -27,7 +27,7 @@ export function AeTurnContextLine({ intent, seq, artifacts }: AeTurnContextLineP
 
   return (
     <div
-      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-md border border-border bg-muted px-3 py-2 text-xs leading-snug text-muted-foreground"
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 border-l-2 border-border-strong py-1 pl-3 text-xs leading-snug text-muted-foreground"
       data-intent={intent}
       aria-label="Turn context"
     >

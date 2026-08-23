@@ -461,24 +461,26 @@ export async function finalizeBrokeredInvocationChargeHandler(
   )
   if (budgetTransition === undefined || budgetTransition.kind !== 'apply')
     return brokeredRefusal('budget_reconciliation_required')
-  const operatorRow = await ctx.db
-    .query('moneyAccounts')
-    .withIndex('by_accountRef', (query) =>
-      query.eq('accountRef', admitted.operatorAccountRef),
-    )
-    .unique()
-  const providerRow = await ctx.db
-    .query('moneyAccounts')
-    .withIndex('by_accountRef', (query) =>
-      query.eq('accountRef', admitted.providerAccountRef),
-    )
-    .unique()
-  const rakeRow = await ctx.db
-    .query('moneyAccounts')
-    .withIndex('by_accountRef', (query) =>
-      query.eq('accountRef', admitted.rakeAccountRef),
-    )
-    .unique()
+  const [operatorRow, providerRow, rakeRow] = await Promise.all([
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', admitted.operatorAccountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', admitted.providerAccountRef),
+      )
+      .unique(),
+    ctx.db
+      .query('moneyAccounts')
+      .withIndex('by_accountRef', (query) =>
+        query.eq('accountRef', admitted.rakeAccountRef),
+      )
+      .unique(),
+  ])
   if (operatorRow === null || providerRow === null || rakeRow === null)
     return brokeredRefusal('billing_identity_missing')
   const held = heldBrokeredAmount(operatorRow)

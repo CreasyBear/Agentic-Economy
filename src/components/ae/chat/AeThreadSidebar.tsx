@@ -70,19 +70,19 @@ export function AeThreadSidebar({
 
   const sidebarClassName =
     layout === 'desktop'
-      ? 'hidden h-full min-h-0 flex-col gap-3 overflow-hidden border-r border-border bg-muted px-1 py-2 lg:flex'
+      ? 'hidden h-full min-h-0 flex-col gap-2 overflow-hidden border-r border-border bg-background px-1 py-2 lg:flex'
       : 'flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-background px-1 py-2'
 
   return (
-    <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent chats">
-      <div className="flex flex-col gap-3 p-1">
+    <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent searches">
+      <div className="flex flex-col gap-2 p-1">
         <div className="flex min-h-7 items-center justify-between gap-2">
-          <span className="truncate font-mono text-xs font-medium uppercase leading-tight tracking-wider text-muted-foreground">Recent chats</span>
+          <span className="truncate font-mono text-xs font-medium uppercase leading-tight tracking-wider text-muted-foreground">Recent searches</span>
           <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-card font-mono text-xs leading-none tabular-nums text-muted-foreground" data-numeric>{threads.length}</span>
         </div>
         <Button variant="secondary" size="sm" className="min-h-11 w-full" onClick={onNewQuestion} data-ae-sidebar-primary>
           <PlusIcon aria-hidden="true" />
-          New chat
+          New search
         </Button>
       </div>
       {isStructuredAnswerModeEnabled() ? (
@@ -92,7 +92,7 @@ export function AeThreadSidebar({
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5">
         {threads.length === 0 ? (
-          <p className="m-1 p-3 text-sm leading-snug text-muted-foreground">No chats yet. Start a new chat to see it here.</p>
+          <p className="m-1 p-3 text-sm leading-snug text-muted-foreground">No searches yet. Start a new search to see it here.</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {threads.map((thread) => (
@@ -150,7 +150,7 @@ function AnswerModelSelector() {
           <Button
             type="button"
             variant="ghost"
-            className="h-auto min-h-9 max-sm:min-h-9 gap-1.5 border border-border-strong bg-card px-3 py-0 text-xs text-foreground transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="h-auto min-h-9 max-sm:min-h-9 gap-1.5 border border-border-strong bg-card px-3 py-0 text-xs text-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label="Choose answer model"
             aria-labelledby={`${listboxId}-label`}
           >
@@ -281,19 +281,19 @@ function AeThreadSidebarRow({
   return (
     <li
       className={cn(
-        'group/row grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-lg border transition-colors',
-        active ? 'border-brand bg-brand-muted' : 'border-transparent hover:border-border-strong hover:bg-card',
+        'group/row grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-md border transition-colors',
+        active ? 'border-border bg-accent' : 'border-transparent hover:border-border hover:bg-muted',
       )}
     >
       <AlertDialog>
       <Link
         to="/t/$threadId"
         params={{ threadId: thread.threadId }}
-        className="flex min-h-[2.875rem] min-w-0 flex-col gap-1 rounded-lg px-3 py-2 no-underline"
+        className="flex min-h-[2.875rem] min-w-0 flex-col gap-1 rounded-md px-3 py-2 no-underline"
         aria-current={active ? 'page' : undefined}
         onClick={onNavigate}
       >
-        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className={cn('truncate text-sm leading-snug', active ? 'text-brand-strong' : 'text-foreground')}>{displayTitle}</span>
+        <span dir="auto" style={{ unicodeBidi: 'isolate' }} className="truncate text-sm leading-snug text-foreground">{displayTitle}</span>
         <ClientRelativeTime timestamp={thread.updatedAt} />
       </Link>
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
@@ -305,7 +305,7 @@ function AeThreadSidebarRow({
             aria-label={`Actions for ${displayTitle}`}
             className={cn(
               'min-h-11 min-w-11 self-center transition-opacity hover:text-foreground',
-              active ? 'text-brand-strong' : 'text-muted-foreground',
+              'text-muted-foreground',
               layout === 'mobile'
                 ? 'opacity-100'
                 : 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
@@ -322,7 +322,7 @@ function AeThreadSidebarRow({
               onNavigate?.()
             }}
           >
-            Open chat
+            Open search
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void copyShareLink()} disabled={shareBusy !== null}>
             <CopyIcon aria-hidden="true" />
@@ -340,28 +340,28 @@ function AeThreadSidebarRow({
               onNavigate?.()
             }}
           >
-            New chat
+            New search
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <AlertDialogTrigger asChild>
             <DropdownMenuItem>
               <TrashIcon aria-hidden="true" />
-              Delete chat
+              Delete search
             </DropdownMenuItem>
           </AlertDialogTrigger>
         </DropdownMenuContent>
       </DropdownMenu>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this search?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the chat and stops its share links from working.
+              This removes the search and stops its share links from working.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => void handleDelete()}>
-              Delete chat
+              Delete search
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

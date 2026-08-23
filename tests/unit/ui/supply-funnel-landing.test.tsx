@@ -7,19 +7,19 @@ import { describe, expect, it } from "vitest";
 import { AeSupplyLanding } from "@/components/ae/supply/AeSupplyLanding";
 
 describe("supply landing", () => {
-  it("leads with the business outcome and generated service rows", () => {
+  it("leads with the supplier path and published Operation rows", () => {
     renderWithRouter(<AeSupplyLanding tools={[tool]} services={[service]} />);
     expect(
-      screen.getByRole("heading", { name: /AI assistants/i }),
+      screen.getByRole("heading", { name: "List your tool or API." }),
     ).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "Manage operations" })
+        .getByRole("link", { name: "Manage listings" })
         .getAttribute("href"),
     ).toBe("/owner/supply");
-    expect(screen.getByText(/agents bring you work/i)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();
     expect(screen.getByText("Quote API")).toBeDefined();
-    expect(screen.getByText(/configured payment setup/i)).toBeDefined();
+    expect(screen.getByText(/AUD 0\.00/i)).toBeDefined();
     expect(screen.queryByText(/payment support is enabled|unavailable until payment support/i)).toBeNull();
     expect(screen.queryByText(/\b[0-9]+ actions available/i)).toBeNull();
     expect(
@@ -29,6 +29,6 @@ describe("supply landing", () => {
 
   it("renders the honest empty state", () => {
     renderWithRouter(<AeSupplyLanding tools={[]} services={[]} />);
-    expect(screen.getByText("No services are listed yet.")).toBeDefined();
+    expect(screen.getByText("No Operations are listed yet.")).toBeDefined();
   });
 });

@@ -32,7 +32,7 @@ describe('owner offering editor is draft-first', () => {
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
     // Dirty the form without filling any of the previously required fields.
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
     fireEvent.click(screen.getByRole('button', { name: /Save draft/i }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -48,10 +48,10 @@ describe('owner offering editor is draft-first', () => {
       />,
     )
 
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
-    fireEvent.click(screen.getByRole('button', { name: /Publish service/i }))
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.click(screen.getByRole('button', { name: /Publish Operation/i }))
 
-    await waitFor(() => expect(screen.getAllByText(/Add a service name before publishing/i).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText(/Add an Operation name before publishing/i).length).toBeGreaterThan(0))
     expect(onSave).not.toHaveBeenCalled()
   })
 
@@ -69,7 +69,7 @@ describe('owner offering editor is draft-first', () => {
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} draftKey="business-1" />)
     await waitFor(() => expect(screen.getByDisplayValue('Burst pipe repair')).toBeDefined())
 
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
     fireEvent.click(screen.getByRole('button', { name: /Save draft/i }))
     await waitFor(() => expect(readStoredOfferingDraft('business-1')).toBeUndefined())
   })
@@ -84,7 +84,7 @@ describe('owner offering editor is draft-first', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText('Instructions for customers'), {
+    fireEvent.change(screen.getByLabelText('Access instructions'), {
       target: { value: 'Call during business hours.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
@@ -99,7 +99,7 @@ describe('owner offering editor is draft-first', () => {
     if (localDraftKey === undefined) throw new Error('local access-path draft key missing')
 
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
-    fireEvent.change(screen.getByLabelText('Service area'), { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getByLabelText('Coverage'), { target: { value: 'Adelaide' } })
     view.rerender(
       <AeOwnerOfferingEditor
         initialValue={emptyOwnerOfferingEditorValue}
@@ -237,7 +237,7 @@ describe('owner offering editor publishes the external operation contract', () =
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
-    choose('Add a contact route', 'Assistant request')
+    choose('Add a contact route', 'Agent request')
     fireEvent.change(screen.getByLabelText('What this request does'), { target: { value: 'Run a quote query.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
     fireEvent.change(screen.getByLabelText('Request name'), { target: { value: 'Quote query API' } })
@@ -272,7 +272,7 @@ describe('owner offering editor publishes the external operation contract', () =
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
-    choose('Add a contact route', 'Assistant request')
+    choose('Add a contact route', 'Agent request')
     fireEvent.change(screen.getByLabelText('What this request does'), { target: { value: 'Run a quote query.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
 
@@ -285,7 +285,7 @@ describe('owner offering editor publishes the external operation contract', () =
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave.mock.calls[0]?.[0]?.accessPaths[0]?.descriptor).toEqual({
       kind: 'external_operation',
-      name: 'Assistant request',
+      name: 'Agent request',
       summary: 'Run a quote query.',
       url: 'https://example.com/api/quote',
       provenance: 'business_declared',

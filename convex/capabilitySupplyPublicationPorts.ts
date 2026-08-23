@@ -14,6 +14,7 @@ import {
 } from './capabilityContractDocuments'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
+import { syncMarketOperationPresence } from './marketPresence'
 export function capabilitySupplyPublicationPorts(
   ctx: MutationCtx,
   writers: Pick<OperationLedgerPorts, 'registerOffering' | 'registerBinding' | 'setEligibility'>,
@@ -127,16 +128,32 @@ export function capabilitySupplyPublicationPorts(
       })
     },
     patchPublicationSuperseded: async (publicationId, updatedAt) => {
-      await ctx.db.patch(publicationId as Id<'capabilityPublications'>, {
+      const id = publicationId as Id<'capabilityPublications'>
+      const publication = await ctx.db.get(id)
+      await ctx.db.patch(id, {
         disposition: 'superseded',
         updatedAt,
       })
+      if (publication !== null) await syncMarketOperationPresence(ctx, {
+        operationRef: publication.operationRef,
+        businessId: publication.businessId,
+        active: false,
+        now: updatedAt,
+      })
     },
     patchPublicationWithdrawn: async (publicationId, updatedAt) => {
-      await ctx.db.patch(publicationId as Id<'capabilityPublications'>, {
+      const id = publicationId as Id<'capabilityPublications'>
+      const publication = await ctx.db.get(id)
+      await ctx.db.patch(id, {
         disposition: 'withdrawn',
         withdrawnAt: updatedAt,
         updatedAt,
+      })
+      if (publication !== null) await syncMarketOperationPresence(ctx, {
+        operationRef: publication.operationRef,
+        businessId: publication.businessId,
+        active: false,
+        now: updatedAt,
       })
     },
     registerContractDocument: (documentJson, now) => (

@@ -17,6 +17,7 @@ import { registryTables } from '../src/modules/registry/internal/schema'
 import { securityTables } from '../src/modules/security/internal/schema'
 import { moneyTables } from '../src/modules/money/internal/convex-schema'
 import { externalRunTables } from '../src/modules/external-run/internal/convex-schema'
+import { marketTables } from '../src/modules/market/internal/convex-schema'
 
 export default defineSchema({
   ...actionInvocationTables,
@@ -35,4 +36,5 @@ export default defineSchema({
   ...securityTables,
   ...moneyTables,
   ...externalRunTables,
+  ...marketTables,
 })

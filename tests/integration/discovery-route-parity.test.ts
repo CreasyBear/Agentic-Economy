@@ -37,6 +37,7 @@ import { Route as MarketOperationCompareRoute } from '@/routes/api.v1.market-ope
 import { Route as MarketOperationDetailRoute } from '@/routes/api.v1.market-operations.detail'
 import { Route as MarketOperationInspectPlanRoute } from '@/routes/api.v1.market-operations.inspect-plan'
 import { Route as MarketOperationSearchRoute } from '@/routes/api.v1.market-operations.search'
+import { handleApiRegistryRequest } from '@/routes/api.v1.registry'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
@@ -186,6 +187,7 @@ describe('discovery route parity', () => {
       OPERATION_MARKET_DETAIL_PATH,
       OPERATION_MARKET_COMPARE_PATH,
       OPERATION_MARKET_INSPECT_PLAN_PATH,
+      '/api/v1/registry',
     ].sort()
 
     expect(apiPaths.sort()).toEqual(expectedApiPaths)
@@ -396,6 +398,15 @@ async function resolveAdvertisedRoute(route: AdvertisedRoute, state: DiscoverySo
       paginationOpts: { cursor: null, numItems: 20 },
     })
     return route.method === 'GET' && registryListAction.outputSchema.safeParse(body).success
+  }
+
+  if (path === '/api/v1/registry') {
+    const response = await handleApiRegistryRequest(
+      new Request(route.url),
+      false,
+      async () => ({ kind: 'unavailable' }),
+    )
+    return route.method === 'GET' && response.status === 200
   }
 
   const detailMatch = /^\/api\/businesses\/([^/]+)$/u.exec(path)

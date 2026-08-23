@@ -1,6 +1,6 @@
 ---
 # ADR-030: Registry-to-engine machine contract
-Status: Accepted
+Status: Accepted for the registry-to-invocation contract; general engine destination superseded by ADR-036
 Date: 2026-08-03
 Depends on: ADR-026, ADR-028, ADR-029
 Issues: #202, #203, #204

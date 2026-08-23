@@ -9,6 +9,7 @@ import {
   x402PaymentEventArgs,
   x402PaymentSettlementStatusValue,
 } from './moneyX402PaymentAttemptsShared'
+import { recordMarketEvidenceFact } from './marketEvidence'
 
 export const observeX402PaymentAttemptArgs = {
   ...x402PaymentEventArgs,
@@ -149,6 +150,12 @@ export async function observeX402PaymentAttemptHandler(
     observedAt: Date.now(),
     evidenceRefs: args.evidenceRefs,
   })
+  if (args.settlementStatus === 'settled') {
+    await recordMarketEvidenceFact(ctx, 'ae_settlement', `${row.attemptRef}:${row.effectGeneration}`, Date.now())
+  }
+  if (args.settlementStatus === 'unknown') {
+    await recordMarketEvidenceFact(ctx, 'ae_reconciliation_required', `${row.attemptRef}:${row.effectGeneration}`, Date.now())
+  }
   return null
 }
 
@@ -209,6 +216,12 @@ export async function recordX402PaymentObservationHandler(
     ...(args.paymentResponseDigest === undefined ? {} : { paymentResponseDigest: args.paymentResponseDigest }),
     observedAt: args.observedAt,
   })
+  if (args.settlementStatus === 'settled') {
+    await recordMarketEvidenceFact(ctx, 'ae_settlement', `${args.attemptRef}:${args.effectGeneration}`, args.observedAt)
+  }
+  if (args.settlementStatus === 'unknown') {
+    await recordMarketEvidenceFact(ctx, 'ae_reconciliation_required', `${args.attemptRef}:${args.effectGeneration}`, args.observedAt)
+  }
   return null
 }
 
@@ -253,5 +266,8 @@ export async function reconcileX402PaymentAttemptHandler(
     paymentResponseDigest: args.paymentResponseDigest,
     state: 'observed',
   })
+  if (args.settlementStatus === 'settled') {
+    await recordMarketEvidenceFact(ctx, 'ae_settlement', `${args.attemptRef}:${args.effectGeneration}`, args.observedAt)
+  }
   return { kind: 'settled', settlementStatus: args.settlementStatus }
 }

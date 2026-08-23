@@ -16,11 +16,11 @@ describe('AeQueryPanel', () => {
   it('composes the canonical restrained welcome roles', () => {
     render(<AeChatWelcome />)
 
-    const heading = screen.getByRole('heading', { level: 1, name: 'What do you need done?' })
+    const heading = screen.getByRole('heading', { level: 1, name: 'Search the operation market' })
     expect(heading.getAttribute('data-slot')).toBe('empty-title')
     expect(heading.parentElement?.getAttribute('data-slot')).toBe('empty-header')
     expect(
-      screen.getByText('Ask about a task, a service, or current information.')
+      screen.getByText('Describe the task. Compare exact Operations by price, readiness, and evidence.')
         .getAttribute('data-slot'),
     ).toBe('empty-description')
   })
@@ -30,7 +30,7 @@ describe('AeQueryPanel', () => {
 
     expect(
       screen.getAllByText(
-        'Answers can use published business information or available live data.',
+        'Results use published Operation contracts and available live evidence.',
       ),
     ).toHaveLength(1)
     expect(screen.queryByText('Answers based on business information.')).toBeNull()
@@ -86,9 +86,9 @@ describe('AeQueryPanel', () => {
     view.rerender(panel(false))
     expect(screen.getByRole('combobox', { name: 'When do you need this?' }).textContent).toContain('This week')
 
-    const input = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    const input = screen.getByRole('searchbox', { name: 'Search the operation market' })
     fireEvent.change(input, { target: { value: 'Emergency plumber Brunswick' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
       expect(submitted).toEqual([['Emergency plumber Brunswick', 'this_week', undefined]])
     })
@@ -146,13 +146,13 @@ describe('AeQueryPanel', () => {
       />,
     )
 
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' })
-    const send = screen.getByRole('button', { name: 'Send' })
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' })
+    const send = screen.getByRole('button', { name: 'Search' })
     await waitFor(() => expect(send.hasAttribute('disabled')).toBe(false))
     fireEvent.click(send)
 
     expect(
-      screen.getByText('Enter a question or describe what you need before sending.'),
+      screen.getByText('Describe the task before searching.'),
     ).toBeTruthy()
     expect(searchbox.getAttribute('aria-invalid')).toBe('true')
     expect(document.activeElement).toBe(searchbox)
@@ -169,7 +169,7 @@ describe('AeQueryPanel', () => {
       />,
     )
 
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
     expect(screen.queryByText(`0 / ${QUERY_MAX_LENGTH} characters`)).toBeNull()
     expect(searchbox.maxLength).toBe(-1)
 
@@ -184,12 +184,12 @@ describe('AeQueryPanel', () => {
       screen.getByText(`${QUERY_MAX_LENGTH + 1} / ${QUERY_MAX_LENGTH} characters`),
     ).toBeTruthy()
 
-    const send = screen.getByRole('button', { name: 'Send' })
+    const send = screen.getByRole('button', { name: 'Search' })
     await waitFor(() => expect(send.hasAttribute('disabled')).toBe(false))
     fireEvent.click(send)
 
     const error = screen.getByText(
-      `Your question is too long. Keep it to ${QUERY_MAX_LENGTH} characters or fewer.`,
+      `Your search is too long. Keep it to ${QUERY_MAX_LENGTH} characters or fewer.`,
     )
     expect(error.classList.contains('text-destructive')).toBe(true)
     expect(searchbox.getAttribute('aria-invalid')).toBe('true')
@@ -208,7 +208,7 @@ describe('AeQueryPanel', () => {
     )
 
     const query = 'q'.repeat(length)
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
     fireEvent.change(searchbox, { target: { value: query } })
     expect(screen.getByText(`${length} / ${QUERY_MAX_LENGTH} characters`)).toBeTruthy()
     fireEvent.submit(searchbox.closest('form')!)
@@ -228,7 +228,7 @@ describe('AeQueryPanel', () => {
       />,
     )
 
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    const searchbox = screen.getByRole('searchbox', { name: 'Search the operation market' })
     fireEvent.change(searchbox, { target: { value: '東京' } })
     fireEvent.compositionStart(searchbox)
     fireEvent.keyDown(searchbox, { key: 'Enter' })
@@ -257,9 +257,9 @@ describe('AeQueryPanel', () => {
 
     fireEvent.click(chip)
     expect(
-      (screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement).value,
+      (screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement).value,
     ).toBe('What admitted operations can I inspect?')
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(submitted).toEqual([
@@ -288,7 +288,7 @@ describe('AeQueryPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Local weather' }))
     expect(
-      (screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement).value,
+      (screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement).value,
     ).toBe('What is the current weather in Footscray?')
   })
 })

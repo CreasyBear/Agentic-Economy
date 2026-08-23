@@ -24,8 +24,15 @@ import {
   type OperationExecutableDescriptor,
   type OperationExecuteResult,
 } from '@/modules/capability-execution/operation-execute.functions'
-import { convexKeylessExecutableSource } from '@/modules/capability-execution/operation-execute.actions'
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import {
+  convexKeylessExecutableSource,
+  type KeylessExecutableSourcePort,
+} from '@/modules/capability-execution/operation-execute.actions'
+import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
+import {
+  isPublicOperationRef,
+  type PublicOperationDescriptor,
+} from '@/modules/capability-supply/public'
 import {
   deriveKeylessDescriptors,
   seededDescriptorFor,
@@ -56,6 +63,17 @@ const FX = {
   },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'openapi_http' },
 } as const satisfies OperationExecutableDescriptor
+
+function ineligibleSource(
+  authentication: PublicOperationDescriptor['authentication'],
+): KeylessExecutableSourcePort {
+  return {
+    list: async () => [],
+    search: async () => [],
+    read: async () => null,
+    readPublic: async () => ({ authentication }) as PublicOperationDescriptor,
+  }
+}
 
 type FetchFn = NonNullable<Parameters<typeof executeOperation>[1]['fetchImpl']>
 
@@ -474,6 +492,41 @@ describe('operation.execute executor (pure, DB-driven)', () => {
 
     expect(result).toMatchObject({ kind: 'refused', reason: 'operation_not_executable' })
     expect(fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('operation.execute public refusal explainability', () => {
+  it('distinguishes a known keyed Operation from an unknown reference', async () => {
+    const result = await executeKeylessOperation(
+      { operationRef: FX.operationRef, input: {} },
+      ineligibleSource({
+        kind: 'platform_credential',
+        scheme: 'api_key',
+        in: 'query',
+        name: 'api_key',
+      }),
+      { fetchImpl: vi.fn(), isPublicTarget: vi.fn() },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_keyless',
+    })
+  })
+
+  it('distinguishes a known ineligible keyless Operation from an unknown reference', async () => {
+    const result = await executeKeylessOperation(
+      { operationRef: FX.operationRef, input: {} },
+      ineligibleSource({ kind: 'keyless' }),
+      { fetchImpl: vi.fn(), isPublicTarget: vi.fn() },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_executable',
+    })
   })
 })
 

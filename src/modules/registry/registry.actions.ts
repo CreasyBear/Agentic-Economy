@@ -357,7 +357,7 @@ const serviceOutputSchema = z.strictObject({
       observedAt: z.number().describe('Source observation time for freshness context'),
       disposition: z.enum(['current', 'partial', 'stale']).describe('Catalog disposition'),
       source: z.literal('business_published').describe('Published business listing provenance'),
-      offerings: z.array(serviceOfferingOutputSchema).describe('Local business offering view'),
+      offerings: z.array(serviceOfferingOutputSchema).describe('Supplier Operation portfolio view'),
       links: z
         .strictObject({
           business: z.string().describe('Provider business detail link'),
@@ -365,7 +365,7 @@ const serviceOutputSchema = z.strictObject({
         })
         .describe('Related public discovery links'),
     })
-    .describe('AE-local business portfolio and Publication provenance metadata'),
+    .describe('Agentic Economy supplier portfolio and Publication source metadata'),
 }) as z.ZodType<ServiceDto>
 
 const servicesPageOutputSchema = z.strictObject({

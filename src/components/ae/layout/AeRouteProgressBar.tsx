@@ -24,10 +24,8 @@ export function RouteProgressBar() {
       aria-hidden="true"
       className={cn('pointer-events-none fixed inset-x-0 top-0 z-30 h-0.5 overflow-hidden transition-opacity duration-200 ease-out motion-reduce:transition-none', visible ? 'opacity-100' : 'opacity-0')}
     >
-      {/* `bg-brand`, not `bg-accent`: `accent` is now shadcn's near-white hover
-          surface, which made this bar invisible against the page. */}
       <div
-        className={cn('h-full w-full origin-left bg-brand transition-transform duration-300 ease-out motion-reduce:transition-none', visible ? 'scale-x-100' : 'scale-x-0')}
+        className={cn('h-full w-full origin-left bg-foreground transition-transform duration-300 ease-out motion-reduce:transition-none', visible ? 'scale-x-100' : 'scale-x-0')}
       />
     </div>
   )

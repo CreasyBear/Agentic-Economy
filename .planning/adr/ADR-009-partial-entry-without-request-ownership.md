@@ -73,6 +73,5 @@ customer value or production safety.
 
 The inquiry-first and later booking-specific plans were implementation
 experiments. Founder direction replaced booking as the mandatory evidence
-adapter with a generic PublishedOperation. The complete pre-hardening ADR and
-amendment history is preserved at
-[`ADR-009 pre-hardening`](../archive/adr-009-010-pre-hardening/adrs/ADR-009-partial-entry-without-request-ownership.md).
+adapter with a generic PublishedOperation. Git history preserves the complete
+pre-hardening ADR and amendment history.

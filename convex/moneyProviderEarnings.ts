@@ -286,13 +286,15 @@ async function readProviderEarningsForAccount(
       kind: 'refused' as const,
       code: 'payout_reconciliation_required' as const,
     }
-  const transactionRefs = await readTransactionRefs(ctx, rows)
-  const businessTransactions = await ctx.db
-    .query('moneyTransactions')
-    .withIndex('by_principalId_and_createdAt', (query) =>
-      query.eq('principalId', `business:${businessId}`),
-    )
-    .take(101)
+  const [transactionRefs, businessTransactions] = await Promise.all([
+    readTransactionRefs(ctx, rows),
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_principalId_and_createdAt', (query) =>
+        query.eq('principalId', `business:${businessId}`),
+      )
+      .take(101),
+  ])
   if (businessTransactions.length > 100)
     return {
       kind: 'refused' as const,

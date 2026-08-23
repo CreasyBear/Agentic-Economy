@@ -590,7 +590,7 @@ describe('thread turn stream lifecycle', () => {
     expect(retry.getAttribute('data-size')).toBe('sm')
     fireEvent.click(retry)
     expect(onRetry).toHaveBeenCalledOnce()
-    const newChat = screen.getByRole('link', { name: 'New chat' })
+    const newChat = screen.getByRole('link', { name: 'New search' })
     expect(newChat.getAttribute('href')).toBe('/')
     expect(newChat.getAttribute('data-variant')).toBe('ghost')
     expect(newChat.getAttribute('data-size')).toBe('sm')

@@ -56,7 +56,7 @@ export const Route = createFileRoute('/_operator/owner/status')({
   },
   head: () => ({
     meta: [
-      { title: 'Business page | Agentic Economy' },
+      { title: 'Supplier profile | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -70,8 +70,8 @@ function OwnerStatusRoute() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Business page"
-      description="Preview what customers and agents can see, then keep your Offerings and contact paths current."
+      title="Supplier profile"
+      description="Preview the Operations agents can find, then keep their access and public facts current."
       currentPath="/owner/status"
     >
       <div className="grid gap-6">
@@ -81,7 +81,7 @@ function OwnerStatusRoute() {
           <>
             <AeStatusCard readback={readback} />
             <div className="flex flex-wrap gap-3">
-              <Button asChild variant="default"><Link to="/owner/offerings">Manage Offerings</Link></Button>
+              <Button asChild variant="default"><Link to="/owner/offerings">Manage Operations</Link></Button>
             </div>
             <AeCapabilityList catalog={readback.catalog} />
           </>

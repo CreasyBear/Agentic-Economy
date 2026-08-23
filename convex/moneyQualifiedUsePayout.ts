@@ -617,7 +617,7 @@ async function validateQualifiedUseAllocationReplay(
       0
   )
     return qualifiedUsePayoutFailure()
-  const [payout, providerAccount] = await Promise.all([
+  const [payout, providerAccount, composition] = await Promise.all([
     ctx.db
       .query('moneyPayouts')
       .withIndex('by_payoutRef', (query) =>
@@ -633,14 +633,14 @@ async function validateQualifiedUseAllocationReplay(
         ),
       )
       .unique(),
+    readDailyPayoutComposition(
+      ctx,
+      period,
+      allocation.businessId,
+      allocation.currency,
+      allocation.exponent,
+    ),
   ])
-  const composition = await readDailyPayoutComposition(
-    ctx,
-    period,
-    allocation.businessId,
-    allocation.currency,
-    allocation.exponent,
-  )
   const currentGross =
     payout === null
       ? undefined
@@ -854,19 +854,21 @@ export async function recordQualifiedUsePayoutAllocation(
     amounts.currency,
     receipt.qualifiedAt,
   )
-  const payout = await ctx.db
-    .query('moneyPayouts')
-    .withIndex('by_payoutRef', (query) =>
-      query.eq('payoutRef', period.payoutRef),
-    )
-    .unique()
-  const composition = await readDailyPayoutComposition(
-    ctx,
-    period,
-    amounts.businessId,
-    amounts.currency,
-    amounts.exponent,
-  )
+  const [payout, composition] = await Promise.all([
+    ctx.db
+      .query('moneyPayouts')
+      .withIndex('by_payoutRef', (query) =>
+        query.eq('payoutRef', period.payoutRef),
+      )
+      .unique(),
+    readDailyPayoutComposition(
+      ctx,
+      period,
+      amounts.businessId,
+      amounts.currency,
+      amounts.exponent,
+    ),
+  ])
   if (payout === null) {
     if (composition.rows.length > 0)
       return qualifiedUsePayoutFailure()

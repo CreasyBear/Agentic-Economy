@@ -12,16 +12,16 @@ type AePageHeaderProps = {
 }
 
 const headerContainer = cva('mx-auto w-full max-w-6xl px-4', {
-  variants: { density: { public: 'py-12 md:px-6 md:py-16', operator: 'py-6 md:px-6 md:py-8' } },
+  variants: { density: { public: 'py-8 md:px-6 md:py-10', operator: 'py-5 md:px-6 md:py-6' } },
 })
 const headerLayout = cva('flex flex-col', {
-  variants: { density: { public: 'gap-6', operator: 'gap-3' } },
+  variants: { density: { public: 'gap-4', operator: 'gap-3' } },
 })
 const headerTitle = cva('font-semibold tracking-tight text-balance text-foreground', {
-  variants: { density: { public: 'text-4xl leading-[1.02] sm:text-5xl md:text-7xl', operator: 'text-3xl' } },
+  variants: { density: { public: 'text-3xl leading-tight sm:text-4xl', operator: 'text-2xl' } },
 })
 const headerDescription = cva('block text-pretty text-muted-foreground', {
-  variants: { density: { public: 'text-lg', operator: '' } },
+  variants: { density: { public: 'max-w-2xl text-base', operator: 'text-sm' } },
 })
 
 export function AePageHeader({ eyebrow, title, description, actions, density = 'public' }: AePageHeaderProps) {

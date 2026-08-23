@@ -1,9 +1,7 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { convexTestWithWorkers } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   createPublishedBusinessOwner,
@@ -14,7 +12,7 @@ import {
 
 describe('owner capability withdraw and republish', () => {
   it('does not reuse owner test evidence across publication revisions', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithWorkers()
     const { businessId, owner } = await createPublishedBusinessOwner(
       backend,
       'owner-test-revision',

@@ -136,6 +136,10 @@ export class MemoryDb {
 export type HandlerContext = {
   db: MemoryDb
   auth?: { getUserIdentity: () => Promise<{ tokenIdentifier: string } | null> }
+  runMutation?: (
+    reference: unknown,
+    args: Record<string, unknown>,
+  ) => Promise<unknown>
 }
 type Handler = (
   ctx: HandlerContext,
@@ -154,7 +158,12 @@ export const markerHandler = markerExport._handler
 export const accountVersionHandler = accountVersionExport._handler
 export const reconcileHandler = reconcileExport._handler
 export const disputeHandler = disputeExport._handler
-export const qualifiedUseHandler = qualifiedUseExport._handler
+const rawQualifiedUseHandler = qualifiedUseExport._handler
+export const qualifiedUseHandler: Handler = async (ctx, args) =>
+  await rawQualifiedUseHandler(
+    { ...ctx, runMutation: async () => undefined },
+    args,
+  )
 export const completionHandler = completionExport._handler
 export const invocationRef = 'operation-invocation:test-money'
 export const principalId = 'principal:test-money'

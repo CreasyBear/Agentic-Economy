@@ -42,14 +42,14 @@ export function OperationCandidateList({
   return (
     <section className={cn(REVEAL_ENTER, 'grid gap-3')} aria-label="Operation candidates">
       <header className="grid gap-0.5">
-        <h2 className="font-heading text-base font-semibold text-foreground">
-          Choose an operation
+        <h2 className="text-sm font-semibold text-foreground">
+          Matching Operations
         </h2>
         <p className="text-sm text-muted-foreground">
           Compare the published requirements and select the exact operation to continue.
         </p>
       </header>
-      <ul className="grid gap-3" aria-label="Matching operations">
+      <ul className="grid gap-2" aria-label="Matching operations">
         {candidates.map((candidate) => (
           <OperationCandidateCard
             key={candidate.operationRef}
@@ -136,14 +136,14 @@ function OperationCandidateCard({
 
   return (
     <li>
-      <Card className="grid gap-4 rounded-lg border-border p-4 shadow-none" data-selected={selected ? 'true' : 'false'}>
-        <header className="grid min-w-0 gap-1">
+      <Card className="grid gap-0 overflow-hidden rounded-md border-border py-0 shadow-none data-[selected=true]:border-border-strong" data-selected={selected ? 'true' : 'false'}>
+        <header className="grid min-w-0 gap-1 p-3">
           <div className="flex min-w-0 items-start justify-between gap-3">
             <div className="grid min-w-0 gap-0.5">
               <h3
                 dir="auto"
                 style={{ unicodeBidi: 'isolate' }}
-                className="line-clamp-2 break-words font-heading text-base font-semibold text-foreground"
+                className="line-clamp-2 break-words text-sm font-semibold text-foreground"
               >
                 {businessName}
               </h3>
@@ -164,14 +164,14 @@ function OperationCandidateCard({
           </p>
         </header>
 
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <dl className="grid border-y border-border text-sm sm:grid-cols-2 [&>*]:p-3 sm:[&>*:nth-child(odd)]:border-r sm:[&>*:nth-child(n+3)]:border-t">
           <CandidateFact label="Why it matches" value={matchReason} />
           <CandidateFact label="Price" value={operationPriceLabel(candidate)} />
           <CandidateFact label="Availability / readiness" value={availability} />
           <CandidateFact label="Authority" value={authority} />
         </dl>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 border-b border-border p-3 sm:grid-cols-3">
           <CandidateList
             label="Required inputs"
             items={requiredParameters.map(parameterLabel)}
@@ -194,7 +194,7 @@ function OperationCandidateCard({
           />
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 p-3 sm:flex-row">
           <Button asChild className="min-h-11 w-full sm:w-fit">
             <Link
               to="/operations/$operationRef"
@@ -213,12 +213,12 @@ function OperationCandidateCard({
             aria-controls={selectionUnavailable ? undefined : inputId}
             aria-label={
               selected && retryable
-                ? `Retry ${candidateLabel} from this answer`
+                ? `Retry ${candidateLabel} from these results`
                 : selected
-                  ? `Selected ${candidateLabel} from this answer`
+                  ? `Selected ${candidateLabel} from these results`
                   : executionAvailabilityReason === undefined
-                    ? `Run ${candidateLabel} from this answer`
-                    : `Not executable from this answer: ${candidateLabel}`
+                    ? `Run ${candidateLabel} from these results`
+                    : `Not executable from these results: ${candidateLabel}`
             }
             onClick={selectionUnavailable ? undefined : () => setComposing((current) => !current)}
           >
@@ -229,22 +229,22 @@ function OperationCandidateCard({
               : selected
                 ? 'Selected operation'
                 : executionAvailabilityReason !== undefined
-                  ? 'Not executable from this answer'
+                  ? 'Not executable here'
                   : onOperationSelect === undefined
                     ? 'Run unavailable in replay'
                     : composing
                       ? 'Close input'
-                      : 'Run from this answer'}
+                      : 'Run Operation'}
           </Button>
         </div>
         {executionAvailabilityReason === undefined ? null : (
-          <p className="text-sm text-muted-foreground" role="note">
+          <p className="px-3 pb-3 text-sm text-muted-foreground" role="note">
             {executionAvailabilityReason}
           </p>
         )}
 
         {composing && !selectionUnavailable ? (
-          <form className="grid gap-3 border-t border-border pt-4" onSubmit={submitOperation}>
+          <form className="grid gap-3 border-t border-border p-3" onSubmit={submitOperation}>
             <div className="grid gap-1.5">
               <label htmlFor={inputId} className="text-sm font-medium text-foreground">Input JSON</label>
               <p className="text-xs text-muted-foreground">
@@ -385,9 +385,9 @@ function operationExecutionAvailabilityReason(
     case 'routeable':
       return undefined
     case 'integrated':
-      return 'Not executable from this answer: integrated availability requires review on the operation page.'
+      return 'Not executable here: integrated availability requires review on the Operation page.'
     case 'unavailable':
-      return `Not executable from this answer: ${formatMachineLabel(availability.reason ?? 'unavailable')}.`
+      return `Not executable here: ${formatMachineLabel(availability.reason ?? 'unavailable')}.`
     default: {
       const _exhaustive: never = availability.posture
       return _exhaustive

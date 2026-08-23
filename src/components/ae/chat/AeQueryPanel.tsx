@@ -53,8 +53,8 @@ export function AeQueryPanel({
         <p className="text-sm leading-snug text-muted-foreground">{loopHint}</p>
       ) : null}
       {showExamples ? (
-        <p className="text-sm leading-snug text-muted-foreground">
-          Answers can use published business information or available live data.
+        <p className="text-xs leading-snug text-muted-foreground">
+          Results use published Operation contracts and available live evidence.
         </p>
       ) : null}
     </div>

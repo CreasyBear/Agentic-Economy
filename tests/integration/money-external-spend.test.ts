@@ -1,8 +1,6 @@
-import { convexTest } from 'convex-test'
 import { anyApi } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
-import schema from '../../convex/schema'
 import {
   externalSpendIdentityFromReservation,
   mintExternalSpendIdentity,
@@ -10,7 +8,7 @@ import {
   type ExternalSpendMutationResult,
   type ExternalSpendPaymentFacts,
 } from '@/modules/money/public'
-import { convexModules as modules } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
 
 const reserve = anyApi.moneyLedger?.reserveExternalInvocationSpend
 const finalize = anyApi.moneyLedger?.finalizeExternalInvocationSpend
@@ -69,7 +67,7 @@ function acceptedIdentity(result: ExternalSpendMutationResult): ExternalSpendIde
 }
 
 async function seeded(options: SeedOptions = {}) {
-  const backend = convexTest(schema, modules)
+  const backend = convexTestWithMarketComponents()
   const facts = options.facts ?? baseFacts
   const maximumSpendPerInvocation =
     options.maximumSpendPerInvocation ?? facts.amount

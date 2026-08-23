@@ -22,7 +22,7 @@ describe('AeChat route promotion readback', () => {
     })
 
     render(<AeChat threadId="thread-recovered" initialProjection={null} />)
-    expect(screen.queryByText('Chat unavailable')).toBeNull()
+    expect(screen.queryByText('Search unavailable')).toBeNull()
     await waitFor(() => {
       expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-recovered')
     })
@@ -37,10 +37,10 @@ describe('AeChat route promotion readback', () => {
     ))
 
     render(<AeChat threadId="thread-missing" initialProjection={null} />)
-    expect(await screen.findByRole('heading', { level: 1, name: 'Chat unavailable' })).toBeTruthy()
-    expect(screen.getByText('This chat couldn’t be loaded. Start a new chat to continue.')).toBeTruthy()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Search unavailable' })).toBeTruthy()
+    expect(screen.getByText('This search couldn’t be loaded. Start a new search to continue.')).toBeTruthy()
     expect(screen.queryByRole('searchbox')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Start a new chat' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: 'Start a new search' })).toHaveLength(1)
     expect(testState.latestScrollerProps).toMatchObject({
       showJumpButton: true,
       contentClassName: 'justify-center',

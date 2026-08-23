@@ -217,7 +217,7 @@ describe('AeChat route promotion draft', () => {
     } satisfies Storage)
     render(<AeChat />)
 
-    const input = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLTextAreaElement
+    const input = screen.getByRole('searchbox', { name: 'Search the operation market' }) as HTMLTextAreaElement
     fireEvent.change(input, { target: { value: 'businesses in Perth' } })
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
 

@@ -33,10 +33,10 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
     <section aria-labelledby="business-offerings-title" className="grid gap-4">
       <div className="flex items-end justify-between gap-4 border-b border-border pb-3">
         <div className="grid gap-1">
-          <h2 id="business-offerings-title" className="text-xl font-semibold text-foreground">Services and prices</h2>
-          <p className="block text-sm text-muted-foreground">See what this business does, what it costs, and how to start.</p>
+          <h2 id="business-offerings-title" className="text-xl font-semibold text-foreground">Operations and prices</h2>
+          <p className="block text-sm text-muted-foreground">Compare this supplier's tools, prices, readiness, and access routes.</p>
         </div>
-        {offerings.length === 0 ? null : <p className="shrink-0 text-sm text-muted-foreground">{offerings.length} {offerings.length === 1 ? 'service' : 'services'} listed</p>}
+        {offerings.length === 0 ? null : <p className="shrink-0 font-mono text-xs text-muted-foreground">{offerings.length} {offerings.length === 1 ? 'Operation' : 'Operations'}</p>}
       </div>
 
       {disposition === 'current' ? null : (
@@ -53,14 +53,14 @@ export function AeOfferingSupplyList({ offerings, disposition = 'current', obser
       {offerings.length === 0 ? (
         <Card className="p-5">
           <div className="grid gap-2">
-            <p className="block font-semibold text-foreground">No services are published yet</p>
+            <p className="block font-semibold text-foreground">No Operations are published yet</p>
             <p className="block text-muted-foreground">
-              The business page remains available while the business prepares its services.
+              The supplier profile remains available while Operations are prepared.
             </p>
           </div>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {offerings.map((offering) => <OfferingCard key={offering.offering.offeringRef} offering={offering} showTechnicalDetails={showTechnicalDetails} />)}
         </div>
       )}
@@ -74,7 +74,7 @@ function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOffe
     : formatOfferingPrice(offering.offering.price)
 
   return (
-    <Card className="grid min-w-0 gap-5 border border-border p-5" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
+    <article className="grid min-w-0 gap-5 border-b border-border p-5 last:border-b-0" aria-labelledby={`offering-${offering.offering.offeringRef}`}>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
         <div className="grid min-w-0 gap-1">
           <h3 id={`offering-${offering.offering.offeringRef}`} className="text-lg font-semibold text-foreground">{plainLanguageCopy(offering.offering.name)}</h3>
@@ -99,16 +99,16 @@ function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOffe
 
       {offering.offering.serviceAreaSummary === undefined && offering.offering.availabilitySummary === undefined ? null : (
         <dl className="grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
-          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Service area" value={offering.offering.serviceAreaSummary} />}
+          {offering.offering.serviceAreaSummary === undefined ? null : <OptionalFact icon={<MapPinIcon aria-hidden="true" />} label="Coverage" value={offering.offering.serviceAreaSummary} />}
           {offering.offering.availabilitySummary === undefined ? null : <OptionalFact icon={<CalendarClockIcon aria-hidden="true" />} label="Availability" value={offering.offering.availabilitySummary} />}
         </dl>
       )}
 
       <div className="grid gap-2 border-t border-border pt-4">
-        <h4 className="block font-semibold text-foreground">How to start this service</h4>
-        <p className="block text-sm text-muted-foreground">For a quote, the business reviews your request and confirms the price and timing.</p>
+        <h4 className="block font-semibold text-foreground">Access</h4>
+        <p className="block text-sm text-muted-foreground">For a quote, the supplier reviews the request and confirms price and timing.</p>
         {offering.accessPaths.length === 0 ? (
-          <p className="block text-muted-foreground">No phone, website, or message route is listed for this service.</p>
+          <p className="block text-muted-foreground">No access route is listed for this Operation.</p>
         ) : (
           <ul className="m-0 grid list-none divide-y divide-border p-0">
             {offering.accessPaths.map((path) => <AccessPathItem key={path.accessPathRef} path={path} showTechnicalDetails={showTechnicalDetails} />)}
@@ -122,7 +122,7 @@ function OfferingCard({ offering, showTechnicalDetails }: { offering: PublicOffe
           <p className="block text-sm text-muted-foreground">{support.detail}</p>
         </div>
       )}
-    </Card>
+    </article>
   )
 }
 

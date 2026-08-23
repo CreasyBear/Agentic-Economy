@@ -1,6 +1,6 @@
 {
   "schemaVersion": "ae-product-frontier:v2",
-  "capturedAt": "2026-08-17",
+  "capturedAt": "2026-08-19",
   "evidenceClass": "source-local",
   "requiredActionIds": [
     "registry.search",
@@ -105,10 +105,8 @@
     }
   ],
   "requiredE2eSpecs": [
-    "tests/e2e/chat-discovery-inquiry-loop.spec.ts",
     "tests/e2e/code-block-hit-target.spec.ts",
     "tests/e2e/developer-discovery.spec.ts",
-    "tests/e2e/governed-send-review-record.spec.ts",
     "tests/e2e/landing-answer.spec.ts",
     "tests/e2e/local-auth-boundary.spec.ts",
     "tests/e2e/paid-operation-development-surface.spec.ts",
@@ -118,29 +116,62 @@
     "tests/e2e/thread-first.spec.ts"
   ],
   "requiredConformancePaths": [
-    "tests/unit/action-invocation/durable-action-invocation.test.ts",
-    "tests/unit/action-invocation/dynamic-published-operation.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-transact.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-lease.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-release.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-cancel.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-observation.test.ts",
+    "tests/unit/action-invocation/durable-action-invocation-result.test.ts",
+    "tests/unit/action-invocation/dynamic-published-operation-adapter.test.ts",
+    "tests/unit/action-invocation/dynamic-published-operation-paid.test.ts",
+    "tests/unit/action-invocation/dynamic-published-operation-recovery.test.ts",
+    "tests/unit/action-invocation/dynamic-published-operation-snapshot.test.ts",
     "tests/unit/action-invocation/paid-operation-provider-selection.test.ts",
     "tests/unit/action-invocation/x402-payment-reconciliation.test.ts",
-    "tests/unit/capability-execution/operation-invoke.test.ts",
+    "tests/unit/capability-execution/operation-invoke-admit.test.ts",
+    "tests/unit/capability-execution/operation-invoke-dispatch.test.ts",
+    "tests/unit/capability-execution/operation-invoke-recover.test.ts",
     "tests/unit/capability-execution/operation-recovery-actions.test.ts",
     "tests/unit/convex/capability-operation-recovery.test.ts",
-    "tests/unit/convex/capability-operation-worker.test.ts",
+    "tests/unit/convex/capability-operation-worker-run.test.ts",
+    "tests/unit/convex/capability-operation-worker-recover.test.ts",
+    "tests/unit/convex/capability-operation-worker-charge.test.ts",
+    "tests/unit/convex/capability-operation-worker-lease.test.ts",
     "tests/integration/capability-operation-workpool.test.ts",
     "tests/unit/server/operation-invoke-api.test.ts",
     "tests/unit/capability-supply/provider-connection.test.ts",
-    "tests/unit/capability-supply/route-transport-runtime.test.ts",
-    "tests/unit/capability-supply/readiness-probe.test.ts",
+    "tests/unit/capability-supply/route-transport-mcp.test.ts",
+    "tests/unit/capability-supply/route-transport-x402.test.ts",
+    "tests/unit/capability-supply/route-transport-invoke.test.ts",
+    "tests/unit/capability-supply/route-transport-http-json.test.ts",
+    "tests/unit/capability-supply/route-transport-cancel.test.ts",
+    "tests/unit/capability-supply/route-transport-observation.test.ts",
+    "tests/unit/capability-supply/readiness-probe-http-json.test.ts",
+    "tests/unit/capability-supply/readiness-probe-mcp.test.ts",
+    "tests/unit/capability-supply/readiness-probe-x402.test.ts",
+    "tests/unit/capability-supply/readiness-probe-quote.test.ts",
     "tests/unit/capability-supply/eligible-supply.test.ts",
-    "tests/unit/capability-supply/publication-importers.test.ts",
+    "tests/unit/capability-supply/publication-importers-openapi.test.ts",
+    "tests/unit/capability-supply/publication-importers-mcp.test.ts",
+    "tests/unit/capability-supply/publication-importers-x402.test.ts",
     "tests/unit/capability-supply/provider-approval.test.ts",
     "tests/unit/capability-supply/published-operation-provider-conformance.test.ts",
     "tests/unit/capability-supply/provider-conformance-evidence.test.ts",
-    "tests/integration/capability-supply-owner-funnel.test.ts",
-    "tests/unit/answer-thread/answer-harness-operation.test.ts",
+    "tests/integration/capability-supply-owner-funnel-publish.test.ts",
+    "tests/integration/capability-supply-owner-funnel-read.test.ts",
+    "tests/integration/capability-supply-owner-funnel-run-test.test.ts",
+    "tests/integration/capability-supply-owner-funnel-withdraw-republish.test.ts",
+    "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
+    "tests/unit/answer-thread/answer-harness-operation-reserve.test.ts",
+    "tests/unit/answer-thread/answer-harness-operation-report.test.ts",
+    "tests/unit/answer-thread/answer-harness-operation-persist.test.ts",
     "tests/unit/answer-thread/answer-turn-checkpoint.test.ts",
     "tests/unit/answer-thread/answer-turn-finalization-convergence.test.ts",
-    "tests/integration/answer-thread-source-write.test.ts",
+    "tests/integration/answer-thread-source-write-reserve.test.ts",
+    "tests/integration/answer-thread-source-write-checkpoint.test.ts",
+    "tests/integration/answer-thread-source-write-stop.test.ts",
+    "tests/integration/answer-thread-source-write-reads.test.ts",
+    "tests/integration/answer-thread-source-write-finalize.test.ts",
     "tests/unit/deployment/deployment-manifest.test.ts",
     "tests/unit/server/diagnostic-routes.test.ts",
     "tests/unit/server/request-correlation.test.ts",
@@ -159,10 +190,12 @@
     "public-copy-boundary",
     "public-copy-safety-scan",
     "agent-json-link",
-    "frozen-evidence-follow-up",
+    "execute-ref-from-detail",
     "multi-turn-boundary",
     "broad-catalog-scale",
-    "capability-tool-execution"
+    "capability-tool-execution",
+    "compare-when-ambiguous",
+    "keyed-execute-refused"
   ],
   "activeFrontierTables": [
     "externalRunManifests",
@@ -178,9 +211,7 @@
     "capabilityProviderConnections"
   ],
   "protectedModules": [
-    "src/modules/study",
     "src/modules/external-run",
-    "src/modules/work-tree",
     "src/modules/capability-execution",
     "src/modules/capability-supply",
     "src/modules/money",
@@ -204,32 +235,12 @@
     ],
     "person": [
       "landing-ask-to-cited-answer",
-      "discovery-compare-listing-inquiry",
+      "discovery-compare-listing",
       "protected-owner-action",
       "developer-discovery"
     ]
   },
   "parkedCapabilities": {
-    "workTreeWeeklyMemo": {
-      "status": "parked-owned",
-      "successor": "notification-outbox (work-tree-weekly-memo template)",
-      "successorDecisionRequired": false,
-      "paths": [
-        "src/modules/work-tree/internal/memo.tsx",
-        "src/modules/work-tree/internal/memo-notification.ts"
-      ],
-      "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#1-worktree-weekly-memo--async-re-entry"
-    },
-    "projectSpine": {
-      "status": "parked",
-      "successor": "consuming-agent planning and orchestration",
-      "successorDecisionRequired": false,
-      "paths": [
-        "src/modules/project-spine",
-        "convex/projectSpine.ts"
-      ],
-      "decisionRef": ".planning/evidence/product-frontier-baseline/PARKED-CAPABILITY-DECISIONS.md#2-project-spine-wayfinding--chase"
-    },
     "routingKernelHistory": {
       "status": "deferred-post-proof",
       "paths": [
@@ -256,14 +267,49 @@
       "retiredAt": "2026-08-18",
       "paths": [],
       "successor": "consuming-agent planning and orchestration",
-      "evidenceDisposition": "exported-then-unlisted; studies and studyEvents unlisted from schema, module retained"
+      "evidenceDisposition": "exported-then-unlisted; module deleted 2026-08-19"
     },
     {
       "id": "customer-request-tables",
       "retiredAt": "2026-08-18",
       "paths": [],
       "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile",
-      "evidenceDisposition": "TypeScript module deleted; tombstone actions remain in product-frontier; remaining tables unlisted from schema"
+      "evidenceDisposition": "TypeScript module deleted; HTTP tombstones deleted 2026-08-19; customer_requests:bounded_mandate authority scope retained"
+    },
+    {
+      "id": "study-module",
+      "retiredAt": "2026-08-19",
+      "paths": ["src/modules/study", "convex/studies.ts"],
+      "successor": "consuming-agent planning and orchestration",
+      "evidenceDisposition": "deleted"
+    },
+    {
+      "id": "work-tree-module",
+      "retiredAt": "2026-08-19",
+      "paths": ["src/modules/work-tree", "convex/workTrees.ts"],
+      "successor": "consuming-agent planning and orchestration",
+      "evidenceDisposition": "deleted"
+    },
+    {
+      "id": "project-spine",
+      "retiredAt": "2026-08-19",
+      "paths": ["src/modules/project-spine", "convex/projectSpine.ts"],
+      "successor": "consuming-agent planning and orchestration",
+      "evidenceDisposition": "deleted"
+    },
+    {
+      "id": "demand-observation",
+      "retiredAt": "2026-08-19",
+      "paths": ["src/modules/demand", "convex/demand.ts", "convex/searchGap.ts"],
+      "successor": "none; market search remains registry.operations.search",
+      "evidenceDisposition": "deleted"
+    },
+    {
+      "id": "inquiries",
+      "retiredAt": "2026-08-19",
+      "paths": ["src/modules/inquiries", "convex/inquiries.ts"],
+      "successor": "none; paid door is POST /api/v1/operations/call",
+      "evidenceDisposition": "hashed export then deleted; customer_requests:bounded_mandate authority scope retained"
     }
   ],
   "dirtyTreePathCount": 0,
@@ -283,64 +329,7 @@
     "livePaymentLane": "ae-brokered",
     "providerDirectX402": "discovery-metadata-only"
   },
-  "quarantineFamilies": [
-    {
-      "id": "customer-request",
-      "status": "tombstoned-unlisted",
-      "evidenceDisposition": "exported-then-unlisted",
-      "successor": "registry.operations.* + operation.invoke/status/cancel/reconcile for atomic market work; no replacement for legacy planning/problem/repeat/assistant orchestration",
-      "actionIds": [
-        "customerRequest.confirm",
-        "customerRequest.run",
-        "customerRequest.cancel",
-        "customerRequest.reportProblem",
-        "customerRequest.replyProblem",
-        "customerRequest.inspectEvidence",
-        "customerRequest.allowRepeatPermission",
-        "customerRequest.useRepeatPermission",
-        "customerRequest.inspectRepeatPermission",
-        "customerRequest.planPreview",
-        "customerRequest.listConnectedAssistants",
-        "customerRequest.withdrawRepeatPermission"
-      ]
-    },
-    {
-      "id": "inquiries",
-      "status": "approved-pending-deprecation",
-      "evidenceDisposition": "retain-read-only",
-      "successor": "published provider contact channels",
-      "actionIds": [
-        "inquiry.submit",
-        "inquiry.readCustomerRecord"
-      ]
-    },
-    {
-      "id": "study",
-      "status": "tombstoned-unlisted",
-      "evidenceDisposition": "exported-then-unlisted",
-      "successor": "consuming-agent planning and orchestration",
-      "actionIds": [
-        "study.start",
-        "study.inspect"
-      ]
-    },
-    {
-      "id": "work-tree",
-      "status": "tombstoned-unlisted",
-      "evidenceDisposition": "exported-then-unlisted",
-      "successor": "consuming-agent planning and orchestration",
-      "actionIds": [
-        "workTree.create",
-        "workTree.inspect",
-        "workTree.apply",
-        "workTree.decide",
-        "workTree.reserveRepeatUse",
-        "workTree.finalizeRepeatUse",
-        "workTree.reconcileRepeatUse",
-        "workTree.inspectRepeatUse"
-      ]
-    }
-  ],
+  "quarantineFamilies": [],
   "businessServicesPolicy": {
     "expansion": "frozen",
     "publicUrls": "retain-measured",

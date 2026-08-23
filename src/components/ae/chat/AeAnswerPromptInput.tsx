@@ -59,7 +59,7 @@ export const AE_CHAT_MARKET_EXAMPLES: readonly AeSuggestionItem[] = AE_CATALOG_E
 // Stable accessible name for the query field. The visible placeholder rotates
 // with context (examples, follow-up prompts), but the searchbox's name must not
 // - a shifting accessible name is hostile to screen readers and test targeting.
-const SEARCHBOX_LABEL = 'What do you need done?'
+const SEARCHBOX_LABEL = 'Search the operation market'
 
 export function AeAnswerPromptInput({
   defaultValue = '',
@@ -94,10 +94,10 @@ function AeAnswerPromptInputInner({
   busy = false,
   showTiming = true,
   compact: compactOverride,
-  placeholder = 'Get a solar installation quote',
+  placeholder = 'Find an operation for current weather data',
   inputLabel = SEARCHBOX_LABEL,
-  ariaLabel = 'Ask a question or describe what you need done',
-  submitLabel = 'Send',
+  ariaLabel = 'Search for an operation or describe a task',
+  submitLabel = 'Search',
   focusOnMount = false,
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples' | 'initialTiming' | 'initialTimingDate'> & {
   inputId: string
@@ -175,13 +175,13 @@ function AeAnswerPromptInputInner({
         className="w-full min-w-0"
         onSubmit={handleFormSubmit}
       >
-        <InputGroup className="overflow-hidden">
+        <InputGroup className="overflow-hidden bg-card shadow-none">
           <span id={placeholderId} className="sr-only">{placeholder}</span>
           <InputGroupTextarea
             id={inputId}
             name="message"
             className={cn(
-              'min-w-0 w-full flex-1 overflow-y-auto p-3.5 text-base leading-snug text-foreground placeholder:text-muted-foreground',
+              'min-w-0 w-full flex-1 overflow-y-auto p-3 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
               compact ? 'max-h-24 min-h-11 sm:min-h-9' : 'max-h-36 min-h-12',
             )}
             placeholder={placeholder}
@@ -291,10 +291,10 @@ function AeAnswerPromptInputInner({
         role={queryError !== null ? 'alert' : undefined}
       >
         {queryError === 'empty'
-          ? 'Enter a question or describe what you need before sending.'
+          ? 'Describe the task before searching.'
           : queryError === 'too-long'
-            ? `Your question is too long. Keep it to ${QUERY_MAX_LENGTH} characters or fewer.`
-          : `Add a location if it matters. ${QUERY_MAX_LENGTH} characters max.`}
+            ? `Your search is too long. Keep it to ${QUERY_MAX_LENGTH} characters or fewer.`
+          : `Include constraints that affect the match. ${QUERY_MAX_LENGTH} characters max.`}
       </p>
 
       {examples.length > 0 ? (

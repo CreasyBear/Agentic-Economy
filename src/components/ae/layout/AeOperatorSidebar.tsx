@@ -45,18 +45,18 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
 
   return (
-    <Sidebar collapsible="icon" role="complementary" aria-label="Operator navigation">
+    <Sidebar collapsible="icon" role="complementary" aria-label="Workspace navigation">
       <nav id="operator-sidebar-navigation" aria-label="Operator navigation" className="flex min-h-0 flex-1 flex-col">
         <SidebarHeader className="border-b border-border p-3">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy">
-                <a href={roleHomeHref[operatorRole]} aria-label="Agentic Economy home">
-                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-md bg-card text-xs font-semibold text-foreground">
+              <SidebarMenuButton asChild size="lg" tooltip="Agentic Economy workspace">
+                <a href={roleHomeHref[operatorRole]} aria-label={`${roleLabel[operatorRole]} home`}>
+                  <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent font-mono text-[0.6875rem] font-semibold tracking-tight text-sidebar-foreground">
                     AE
                   </span>
                   <span className={isCollapsed ? 'sr-only' : 'grid min-w-0 gap-0.5'}>
-                    <span className="truncate text-sm font-semibold text-foreground">Agentic Economy</span>
+                    <span className="truncate text-sm font-semibold text-sidebar-foreground">Agentic Economy</span>
                     <span className="truncate text-xs text-muted-foreground">{roleLabel[operatorRole]}</span>
                   </span>
                 </a>
@@ -104,7 +104,7 @@ export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY
         </SidebarContent>
         <SidebarFooter className="border-t border-border p-3">
           <SidebarGroupLabel asChild>
-            <span>Public</span>
+            <span>Resources</span>
           </SidebarGroupLabel>
           <SidebarMenu>
             {utilityItems.map((item) => {

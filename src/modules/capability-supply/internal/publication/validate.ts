@@ -21,7 +21,7 @@ import {
  * whether it *would* be accepted — without admitting, writing to any store, or
  * requiring a `businessId`. It is side-effect-free and idempotent.
  *
- * Reference: .planning/research/2026-08-05-tiered-capability-admission-onboarding.md
+ * Authority: ADR-028 admission and ADR-029 publication/readiness boundaries.
  * §8.3(4) (pre-flight validate endpoint) + §7 (named per-rule refusals over the blanket
  * `schema_profile_unsupported`).
  */

@@ -16,6 +16,7 @@ export const DiscoveryPublicSurfacePaths = [
   '/privacy/remove-business',
   '/.well-known/ucp',
   '/api/businesses',
+  '/api/v1/registry',
   OPERATION_MARKET_SEARCH_PATH,
   OPERATION_MARKET_DETAIL_PATH,
   OPERATION_MARKET_COMPARE_PATH,
@@ -25,6 +26,9 @@ export const DiscoveryPublicSurfacePaths = [
 /** Published business portfolios remain facts only; Operation execution has a separate exact-detail boundary. */
 export const DiscoveryListingBoundaryLine =
   'Business facts never select or invoke an Operation. Search and inspect current Operations; use anonymous MCP execution only when exact detail advertises it, otherwise use the authenticated gateway.'
+
+export const RegistryEntryBoundaryLine =
+  'Registry Entries are discovery metadata, not Operations. Invoke through Agentic Economy only when a separate admitted Operation exists; otherwise inspect the entry source URL.'
 
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
@@ -40,23 +44,25 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
   return [
     '## Operation market loop',
     '',
+    `Registry: \`GET ${canonicalBaseUrl}/api/v1/registry?query=weather%20forecast&access=all&limit=5\`; entries are discovery-only.`,
     `1. No-install Step 1: \`GET ${canonicalBaseUrl}/.well-known/ucp\`.`,
-    `2. Search a job anonymously: \`${cli} search "<job>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`.`,
-    `3. Inspect one exact result: \`${cli} inspect "<operationRef>" --json\` or \`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`.`,
+    `2. Search a job anonymously (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`): \`curl -sS '${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}' -H 'content-type: application/json' --data '{"query":"weather forecast","limit":5}'\`.`,
+    `3. Inspect one exact result (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`): \`curl -sS '${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}' -H 'content-type: application/json' --data '{"operationRef":"operation:v1:…"}'\`.`,
     `4. Optional anonymous reads: compare (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_COMPARE_PATH}\`) and inspect-plan (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`).`,
     '5. After exact detail, use MCP `operation.execute` only when current navigation advertises no-auth execute; otherwise connect.',
-    `6. Run \`${cli} connect --json\` for the controlled market path.`,
+    `6. Set \`AE_CLI_BASE_URL=${canonicalBaseUrl}\`, then run \`${cli} connect --json\` for the controlled market path.`,
     `7. Invoke with \`${cli} invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`).`,
     `8. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`).`,
-    `9. Cancel with \`${cli} advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${cancel.method} ${canonicalBaseUrl}${cancel.path}\`). Cancellation requires the AE access key \`AE_API_KEY\` plus the request JSON body field \`idempotencyKey\`.`,
+    `9. Cancel with \`${cli} advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${cancel.method} ${canonicalBaseUrl}${cancel.path}\`).`,
     `10. Reconcile uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.method} ${canonicalBaseUrl}${reconcile.path}\`).`,
     '',
     OperationMarketAnonymousBoundaryLine,
     'The AE key identifies the caller. It never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
+    'Cancellation requires the AE access key `AE_API_KEY` plus the request JSON body field `idempotencyKey`.',
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
     '',
-    'Errors use application/problem+json. Retry only when retryable=true; preserve the operation, input, and key. Unknown outcomes require status then reconcile.',
+    'Retry only when retryable=true; unknown outcomes require status then reconcile.',
   ]
 }
 

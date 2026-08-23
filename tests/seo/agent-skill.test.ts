@@ -16,7 +16,7 @@ describe('public agent skill', () => {
     expect(body).toMatch(/^---\nname: agentic-economy\ndescription: .+\n---\n/u)
     const commands = [
       'curl -fsSL https://ae.example/.well-known/ucp',
-      'npm run -s ae -- search "extract line items from a supplier invoice" --json',
+      'npm run -s ae -- search "weather forecast" --json',
       'npm run -s ae -- inspect "$AE_OPERATION_REF" --json',
       'npm run -s ae -- connect --json',
       'npm run -s ae -- invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
@@ -65,6 +65,7 @@ describe('public agent skill', () => {
     expect(body).toMatch(/silent consequential authority/u)
     expect(body).toContain('The request JSON body field `idempotencyKey` is required')
     expect(body).toMatch(/same key with identical material replays the original state/u)
+    expect(body).toContain('export AE_CLI_BASE_URL="https://ae.example"')
   })
 
   it('documents the MCP projection from the registered action graph', () => {

@@ -36,8 +36,8 @@ export function AeThreadStreamingIndicator({ streaming }: AeThreadStreamingIndic
   }
 
   return (
-    <p className="pointer-events-none absolute bottom-24 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
-      <AeStreamingLabel as="span">Answer still streaming below.</AeStreamingLabel>
+    <p className="pointer-events-none absolute bottom-24 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground">
+      <AeStreamingLabel as="span">Results are still loading below.</AeStreamingLabel>
     </p>
   )
 }

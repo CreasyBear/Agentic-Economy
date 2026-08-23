@@ -6,7 +6,8 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { CreditPaymentSession } from '@/modules/money/public'
@@ -87,11 +88,12 @@ describe('assistant access components', () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
-    expect(screen.getByRole('heading', { name: 'From a job to a durable result' })).toBeTruthy()
-    expect(screen.getByText(/POST https:\/\/ae\.example\/api\/v1\/market-operations\/search/u)).toBeTruthy()
-    expect(screen.getByText(/POST https:\/\/ae\.example\/api\/v1\/market-operations\/detail/u)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Connect an agent' })).toBeTruthy()
+    expect(screen.getByText(/curl -fsSL https:\/\/ae\.example\/\.well-known\/ucp/u)).toBeTruthy()
+    expect(screen.getByText(/npm run -s ae -- search/u)).toBeTruthy()
+    expect(screen.getByText(/npm run -s ae -- inspect/u)).toBeTruthy()
     expect(screen.getByText(/npm run -s ae -- compare/u)).toBeTruthy()
-    expect(screen.getByText(/npm run -s ae -- connect --json/u)).toBeTruthy()
+    expect(screen.getByText(/npm run -s ae -- connect --base-url "https:\/\/ae\.example" --json/u)).toBeTruthy()
     expect(screen.getByText(/npm run -s ae -- recover/u)).toBeTruthy()
     expect(screen.getByText(/does not contain provider credentials or silently approve/iu)).toBeTruthy()
     const directKeylessLane = screen.getByRole('heading', { name: /direct-keyless MCP lane/i }).closest('li')
@@ -301,7 +303,7 @@ describe('assistant access components', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: 'Waiting for your approval' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Waiting for approval' })).toBeTruthy()
     expect(screen.getByText('market.email.send:v1')).toBeTruthy()
     expect(screen.getByText('Sends a communication')).toBeTruthy()
     expect(screen.getByText('USD 1.25')).toBeTruthy()

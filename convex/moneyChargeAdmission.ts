@@ -667,16 +667,18 @@ export async function admitInvocationCharge(
       code: 'billing_identity_mismatch' as const,
       retryable: false,
     }
-  const existingUsage = await ctx.db
-    .query('moneyUsageEvents')
-    .withIndex('by_usageRef', (q) => q.eq('usageRef', `${invocation.invocationRef}:${durableAttemptRef}:${invocation.operationRef}`))
-    .unique()
-  const prior = await ctx.db
-    .query('moneyTransactions')
-    .withIndex('by_idempotencyKey', (q) =>
-      q.eq('idempotencyKey', expectedTransactionRef),
-    )
-    .unique()
+  const [existingUsage, prior] = await Promise.all([
+    ctx.db
+      .query('moneyUsageEvents')
+      .withIndex('by_usageRef', (q) => q.eq('usageRef', `${invocation.invocationRef}:${durableAttemptRef}:${invocation.operationRef}`))
+      .unique(),
+    ctx.db
+      .query('moneyTransactions')
+      .withIndex('by_idempotencyKey', (q) =>
+        q.eq('idempotencyKey', expectedTransactionRef),
+      )
+      .unique(),
+  ])
   if (prior !== null) {
     if (
       prior.transactionRef !== expectedTransactionRef

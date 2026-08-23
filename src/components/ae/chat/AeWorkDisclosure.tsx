@@ -65,7 +65,7 @@ export function AeWorkDisclosure({
       {thread.length > 0 ? (
         <ol
           className="grid gap-1 text-xs text-muted-foreground"
-          aria-label="Answer thinking"
+          aria-label="Search progress"
           data-ae-work-thinking
         >
           {thread.map((label, index) => {
@@ -101,18 +101,18 @@ export function AeWorkDisclosure({
           </SheetTrigger>
           <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-md">
             <SheetHeader className="border-b border-border">
-              <SheetTitle className="font-heading text-base">
+              <SheetTitle className="text-base font-semibold">
                 How this was checked
               </SheetTitle>
               <SheetDescription className="sr-only">
-                The steps and checks behind this answer.
+                The searches and checks behind these results.
               </SheetDescription>
             </SheetHeader>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {workSteps.length > 0 ? (
                 <ol
                   className="divide-y divide-border"
-                  aria-label="Answer work steps"
+                  aria-label="Search work steps"
                 >
                   {workSteps.map((step) => (
                     <WorkStep key={step.id} step={step} />
@@ -236,7 +236,7 @@ function CheckSummaryFacts({ summary }: { summary: PublicAnswerCheckSummary }) {
   return (
     <dl
       className="grid grid-cols-3 gap-2 pt-2 text-xs"
-      aria-label="Answer check summary"
+      aria-label="Search check summary"
       data-ae-work-check-summary
     >
       <div className="grid gap-0.5">

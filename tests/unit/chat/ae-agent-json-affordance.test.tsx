@@ -31,14 +31,14 @@ describe('AeAgentJsonAffordance', () => {
 
     render(<AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={executedQuery} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Data for AI assistants' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agent-readable data' }))
 
     expect(fetchPayload).toHaveBeenCalledOnce()
     expect(fetchPayload).toHaveBeenCalledWith(agentJsonUrl)
     expect(writeText).not.toHaveBeenCalled()
 
-    const dialog = screen.getByRole('dialog', { name: 'Data for AI assistants' })
-    const payloadPreview = await within(dialog).findByLabelText('Assistant data')
+    const dialog = screen.getByRole('dialog', { name: 'Agent-readable data' })
+    const payloadPreview = await within(dialog).findByLabelText('Agent-readable data')
     const previewText = payloadPreview.textContent
 
     expect(within(dialog).getByText('Fields: query, providers, resultCount, evidence')).toBeTruthy()
@@ -51,4 +51,3 @@ describe('AeAgentJsonAffordance', () => {
     expect(writeText).toHaveBeenCalledWith(previewText)
   })
 })
-

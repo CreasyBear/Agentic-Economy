@@ -1,10 +1,8 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -24,7 +22,7 @@ import {
 
 describe('V2 capability supply registration — eligibility', () => {
   it('replays durable success without rerunning mutable gates and supports audited revocation', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -97,7 +95,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('rejects blank and oversized eligibility authority material before persistence', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -132,7 +130,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('revokes one binding without hiding an eligible sibling for the same offering', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
@@ -187,7 +185,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('keeps offering and binding audit identities distinct when their text IDs are equal', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -214,7 +212,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('refuses cross-offering revocation without writes or false audit evidence', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId: firstBusinessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -266,7 +264,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('fails eligibility closed for stale hashes, retired contracts and newly suppressed businesses', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -310,7 +308,7 @@ describe('V2 capability supply registration — eligibility', () => {
   })
 
   it('fails eligibility replay closed when its committed transition audit is tampered', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')

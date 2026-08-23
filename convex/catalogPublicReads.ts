@@ -65,6 +65,7 @@ export const externalAccessPathArg = v.object({
 const publicOfferingAccessPathResult = v.union(
   v.object({
     accessPathRef: v.string(),
+    offeringRevision: v.number(),
     kind: v.literal('human_request'),
     channel: v.union(v.literal('phone'), v.literal('website')),
     disclosure: v.string(),
@@ -72,6 +73,7 @@ const publicOfferingAccessPathResult = v.union(
   }),
   v.object({
     accessPathRef: v.string(),
+    offeringRevision: v.number(),
     kind: v.literal('external_operation'),
     name: v.string(),
     summary: v.string(),

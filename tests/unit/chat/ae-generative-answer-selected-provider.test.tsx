@@ -43,7 +43,7 @@ describe('AeGenerativeAnswer kernel transcript', () => {
     expect(screen.getByText(/Use the returned test quote/)).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Sources' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Selected business' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Data for AI assistants' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Agent-readable data' })).toBeTruthy()
   })
 
   it('leads terminal errors with one alert and keeps durable work collapsed', () => {
@@ -69,7 +69,7 @@ describe('AeGenerativeAnswer kernel transcript', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(screen.getByText('Unable to finish this response.')).toBeTruthy()
     expect(screen.getByText('The provider timed out.')).toBeTruthy()
-    expect(screen.queryByText("Checking what's available")).toBeNull()
+    expect(screen.queryByText("Searching operations")).toBeNull()
 
     const trigger = screen.getByRole('button', { name: 'How this was checked' })
     expect(container.querySelector('[data-ae-work-step]')).toBeNull()

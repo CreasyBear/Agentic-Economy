@@ -215,7 +215,7 @@ const businessManifestPath = '/{slug}/ucp' as const
 
 const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/': 'Human entry point',
-  '/for-agents': 'Guide for AI assistants',
+  '/for-agents': 'Agent setup guide',
   '/for-providers': 'Guide for operation providers',
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',

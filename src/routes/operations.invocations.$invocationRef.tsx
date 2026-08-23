@@ -203,15 +203,15 @@ function StatusFound({
 }: Readonly<{ result: FoundInvocationStatus; actions?: InvocationStatusPageActions }>) {
   return (
     <AePublicShell>
-      <article className="mx-auto grid w-full max-w-4xl gap-8 px-4 py-8 md:px-6 md:py-12">
+      <article className="mx-auto grid w-full max-w-4xl gap-6 px-4 py-6 md:px-6 md:py-8">
         <header className="grid gap-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Current invocation</Badge>
+            <Badge variant="outline">Invocation</Badge>
             <Badge variant="secondary">{machineLabel(result.state)}</Badge>
           </div>
           <div className="grid gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Invocation status</h1>
-            <p className="max-w-3xl text-muted-foreground">This owner-scoped record reports the current state exactly as stored. It does not infer completion.</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation status</h1>
+            <p className="max-w-3xl text-muted-foreground">Track this call, its charge, its evidence, and any recovery action. Only the recorded state is shown.</p>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
             <Fact label="Invocation reference"><Ref value={result.invocationRef} /></Fact>
@@ -236,7 +236,7 @@ function StatusFound({
         {result.usage === undefined ? null : <UsageDetails usage={result.usage} />}
         {result.result === undefined ? (
           <section className="grid gap-2 border-t border-border pt-8" aria-labelledby="current-result-title">
-            <h2 id="current-result-title" className="text-2xl font-semibold tracking-tight text-foreground">Current result</h2>
+            <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
             <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
           </section>
         ) : <ResultDetails result={result.result} />}
@@ -270,10 +270,10 @@ function InvocationRecoveryActions({
   if (!canRefreshNow && !canCancelNow && !canReconcileNow && !hasReconciliationBlocker && actions?.feedback === undefined) return null
 
   return (
-    <section className="grid gap-3 border-t border-border pt-8" aria-labelledby="recovery-actions-title">
+    <section className="grid gap-3 border-t border-border pt-6" aria-labelledby="recovery-actions-title">
       <div className="grid gap-1">
-        <h2 id="recovery-actions-title" className="text-2xl font-semibold tracking-tight text-foreground">Recovery actions</h2>
-        <p className="text-sm text-muted-foreground">Actions are explicit and refresh this exact owner-scoped status record once.</p>
+        <h2 id="recovery-actions-title" className="text-xl font-semibold tracking-tight text-foreground">Resolve this invocation</h2>
+        <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact invocation.</p>
       </div>
       <StatusFeedback feedback={actions?.feedback} />
       {hasReconciliationBlocker ? (
@@ -440,9 +440,9 @@ function recoveryRefusalMessage(code: string): string {
 
 function UsageDetails({ usage }: Readonly<{ usage: OperationInvokeUsageSummary }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-8" aria-labelledby="usage-title">
+    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="usage-title">
       <div className="grid gap-1">
-        <h2 id="usage-title" className="text-2xl font-semibold tracking-tight text-foreground">Usage and charge</h2>
+        <h2 id="usage-title" className="text-xl font-semibold tracking-tight text-foreground">Usage and charge</h2>
         <p className="text-sm text-muted-foreground">Recorded usage facts for this exact invocation.</p>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2">
@@ -460,9 +460,9 @@ function UsageDetails({ usage }: Readonly<{ usage: OperationInvokeUsageSummary }
 
 function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-8" aria-labelledby="current-result-title">
+    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="current-result-title">
       <div className="grid gap-1">
-        <h2 id="current-result-title" className="text-2xl font-semibold tracking-tight text-foreground">Current result</h2>
+        <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
         <p className="text-sm text-muted-foreground">Canonical result facts as recorded, without changing the current state above.</p>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2">
@@ -530,7 +530,7 @@ function StatusRefused({
       <section className="mx-auto grid w-full max-w-3xl gap-6 px-4 py-16 md:px-6">
         <div className="grid gap-3">
           <Badge variant="outline">Status refused</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Invocation status is unavailable</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation status is unavailable</h1>
           <p className="text-muted-foreground">AE cannot return a current owner-scoped record for this reference. No state or completion is claimed.</p>
           <Ref value={result.invocationRef} />
           {result.code === 'invocation_not_found' ? (
@@ -569,7 +569,7 @@ function StatusUnavailable({
     <AePublicShell>
       <section className="mx-auto grid w-full max-w-3xl gap-3 px-4 py-16 md:px-6" role="alert">
         <Badge variant="outline">Source unavailable</Badge>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Current status is unavailable</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Current status is unavailable</h1>
         <p className="text-muted-foreground">AE could not read the owner-scoped status source. No invocation state or completion is claimed.</p>
         <Ref value={result.invocationRef} />
         {actions?.onRefresh === undefined ? null : <RefreshStatusButton actions={actions} />}
@@ -629,7 +629,7 @@ function InvocationStatusError() {
   return (
     <AePublicShell>
       <section className="mx-auto grid w-full max-w-3xl gap-3 px-4 py-16 md:px-6" role="alert">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Current status is unavailable</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Current status is unavailable</h1>
         <p className="text-muted-foreground">AE could not present the owner-scoped status. No invocation state or completion is claimed.</p>
       </section>
     </AePublicShell>

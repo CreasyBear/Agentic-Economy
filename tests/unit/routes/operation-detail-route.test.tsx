@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
@@ -147,6 +147,7 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Ledger Labs' })[0]?.getAttribute('href')).toBe('/ledger-labs')
     expect(screen.getByText('USD 1.25')).toBeTruthy()
+    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('Per accepted extraction')).toBeTruthy()
     expect(screen.getAllByText('documentUrl').length).toBeGreaterThan(0)
@@ -159,15 +160,15 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByText('pricing:invoice@4')).toBeTruthy()
     expect(screen.getByText('evidence:pricing')).toBeTruthy()
 
-    const execution = screen.getByRole('complementary', { name: 'Use this exact Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke' })).toBeTruthy()
-    expect(within(execution).getByText(`npm run -s ae -- inspect '${operation.operationRef}' --json`)).toBeTruthy()
-    expect(within(execution).getByText(new RegExp(`invoke '${operation.operationRef}'`))).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect an MCP client' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke the MCP tool' })).toBeTruthy()
+    expect(within(execution).getByText(/market-operations\/detail/)).toBeTruthy()
+    expect(within(execution).getByText(/ae_operation_invoke/)).toBeTruthy()
     expect(within(execution).getByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeTruthy()
     expect(within(execution).queryByText(/AE_INPUT_JSON/)).toBeNull()
-    expect(within(execution).getByText(/status "\$AE_INVOCATION_REF"/)).toBeTruthy()
-    expect(within(execution).getByText(/never receives, stores, or displays that secret/i)).toBeTruthy()
+    expect(within(execution).getByText(/ae_operation_status/)).toBeTruthy()
+    expect(within(execution).getByText(/Save it securely/i)).toBeTruthy()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -186,9 +187,11 @@ describe('/operations/$operationRef', () => {
       operation: freeKeylessOperation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Run through direct-keyless MCP' })
+    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
     expect(within(execution).getByText('ae_operation_execute', { exact: false })).toBeTruthy()
     expect(within(execution).getByText(`operationRef=${freeKeylessOperation.operationRef}`, { exact: false })).toBeTruthy()
+    expect(within(execution).getByText(/input=\{"documentUrl":"https:\/\/docs\.example\/invoice\.pdf","includeTax":true\}/)).toBeTruthy()
+    expect(within(execution).queryByText(/JSON matching the published schema/)).toBeNull()
     expect(within(execution).queryByRole('heading', { level: 3, name: /Connect$/ })).toBeNull()
     expect(within(execution).queryByRole('heading', { level: 3, name: /Invoke$/ })).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- status/)).toBeNull()
@@ -210,10 +213,10 @@ describe('/operations/$operationRef', () => {
       operation: x402Operation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Use this exact Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '4. Status' })).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Call this Operation' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect an MCP client' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke the MCP tool' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '4. Read status' })).toBeTruthy()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -231,13 +234,14 @@ describe('/operations/$operationRef', () => {
     renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: integratedOperation })
 
     expect(screen.getByText('USD 1.25')).toBeTruthy()
+    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('provider owned')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 2, name: 'Setup required before invocation' })).toBeTruthy()
-    expect(screen.getByText(/AE reports setup required/i)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Search current Operations' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to Ask' })).toBeTruthy()
-    expect(screen.queryByRole('complementary', { name: 'Use this exact Operation' })).toBeNull()
+    expect(screen.getByText(/This Operation is setup required/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to market' })).toBeTruthy()
+    expect(screen.queryByRole('complementary', { name: 'Call this Operation' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
@@ -268,10 +272,10 @@ describe('/operations/$operationRef', () => {
     renderWithRouter(result)
 
     expect(screen.getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Search current Operations' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByText('digest:current-price')).toBeNull()
-    expect(screen.queryByRole('complementary', { name: 'Use this exact Operation' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Call this Operation' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()

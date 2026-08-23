@@ -104,7 +104,7 @@ describe('AeWorkDisclosure', () => {
 
     const list = container.querySelector('[data-ae-work-thinking]')
     expect(list).toBeTruthy()
-    expect(list?.getAttribute('aria-label')).toBe('Answer thinking')
+    expect(list?.getAttribute('aria-label')).toBe('Search progress')
     // Deduped thread: accumulated label plus the live label.
     const items = list?.querySelectorAll('li') ?? []
     expect(items).toHaveLength(2)

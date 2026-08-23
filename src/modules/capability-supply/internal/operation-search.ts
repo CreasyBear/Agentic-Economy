@@ -63,13 +63,19 @@ function rankOperationSearchCandidates<T>(
   const matches =
     tokens.length === 0 || exactMatches.length > 0
       ? exactMatches
-      : candidates.filter(({ searchText }) =>
-          tokens.some((token) =>
-            searchableText(searchText).some(
-              (term) => term === token || term.startsWith(token),
-            ),
-          ),
-        );
+      : candidates.filter(({ searchText }) => {
+          const terms = searchableText(searchText);
+          const matchedTokens = tokens.filter((token) =>
+            terms.some((term) => term === token || term.startsWith(token)),
+          ).length;
+          const currencyTokenCount = tokens.filter((token) =>
+            SEARCH_CURRENCY_CODES.has(token),
+          ).length;
+          const minimumMatches = currencyTokenCount >= 2
+            ? 1
+            : Math.max(2, Math.ceil(tokens.length / 2));
+          return matchedTokens >= minimumMatches;
+        });
   return matches
     .map((candidate) => ({
       ...candidate,
@@ -132,6 +138,9 @@ const MAX_SOURCE = 256;
 const MAX_QUERY = 200;
 const MAX_CURSOR = 512;
 const MAX_LIMIT = 20;
+const SEARCH_CURRENCY_CODES = new Set(
+  Intl.supportedValuesOf("currency").map((currency) => currency.toLowerCase()),
+);
 const SEARCH_STOP_WORDS = new Set([
   "a",
   "an",
@@ -288,7 +297,11 @@ function normalizeSearch(input: OperationSearchInput):
       filters: OperationSearchFilters;
     }>
   | undefined {
-  if (typeof input.query !== "string" || input.query.trim().length > MAX_QUERY)
+  if (
+    typeof input.query !== "string" ||
+    input.query.trim().length > MAX_QUERY ||
+    containsConcreteSensitiveInput(input.query)
+  )
     return undefined;
   const limit = input.limit ?? MAX_LIMIT;
   if (
@@ -333,6 +346,12 @@ function normalizeSearch(input: OperationSearchInput):
         : { maximumPrice: { ...filters.maximumPrice } }),
     },
   };
+}
+
+function containsConcreteSensitiveInput(query: string): boolean {
+  const emailAddress = /\b[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\b/i;
+  const usSocialSecurityNumber = /\b\d{3}[- ]\d{2}[- ]\d{4}\b/;
+  return emailAddress.test(query) || usSocialSecurityNumber.test(query);
 }
 function matchesFilters(
   operation: PublicOperationDescriptor,

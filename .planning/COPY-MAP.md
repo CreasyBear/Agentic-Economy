@@ -1,14 +1,11 @@
 # Copy Map — where copy lives and how it is managed
 
-**Status:** active register (2026-08-08). Companion to `.planning/BRAND.md` (voice authority).
-Inventory sources: `history://HumanCopyInventory`, `history://MachineCopyInventory` (full tables).
+**Status:** active register (2026-08-23). Companion to `.planning/BRAND.md` (voice authority).
 
 ## Category rebaseline — 2026-08-08
 
 The current category and product language is authoritative in
-[`PROJECT.md`](PROJECT.md), [`VISION-conceptual-map.md`](VISION-conceptual-map.md),
-[`wayfinder/MAP.md`](wayfinder/MAP.md), and the
-[Agent Services Market category thesis](research/2026-08-08-agent-services-market-category-thesis.md):
+[`PROJECT.md`](PROJECT.md) and [`wayfinder/MAP.md`](wayfinder/MAP.md):
 Agentic Economy is the market and controlled transaction layer where authorized
 agents discover, buy and invoke admitted third-party Market Operations, and
 suppliers are paid after contract-valid delivery. The Principal owns authority
@@ -29,13 +26,13 @@ them teach the market category.
 
 | Residue | Current source | Required treatment |
 | --- | --- | --- |
-| Brand-core local-business promise | `src/content/brand-copy.ts`: `CORE_SENTENCE`, `HOME`, `AGENT_DOOR`, `AGENT_PAGE`, `BUSINESS_DOOR`, `DIALOG_WELCOME` | **Resolved 2026-08-08:** the managed strings now use the canonical category sentence, Principal/agent ownership, supplier-hosted Market Operations, and category-aligned door copy. |
-| Local-service prompt copy | `src/components/ae/chat/AeAnswerPromptInput.tsx`: `Find local service businesses`, `Local service need`, and `Cited answers from published business details` | Remove or explicitly label as subordinate demo copy; it must not be the market entry language. |
-| Local-service discovery heuristics | `src/modules/answer-thread/internal/answer-response-planner.ts`: `hasAnswerServiceSignal`, `isBroadLocalBrowseQuery`, `isLocatorOnlyBrowseQuery`, `extractAnswerRequestedLocation`/Parramatta normalization, `missing_place` clarification | Remove or isolate behind the subordinate demand-demo boundary; these heuristics are not canonical Market Operation eligibility/discovery. |
-| Australian trade/business onboarding | `src/components/ae/claim/ClaimFormSections.tsx`: `Trade or service type`, suburb/state, Australian phone, service-area and customer-job descriptions | Remove or label as a subordinate Australian demo; do not imply Australian SMBs are the ICP or supply category. |
-| Australian business offering defaults | `src/components/ae/offerings/AeOwnerOfferings.tsx`: business/service/customer copy, Australian-dollar price prose, `ownerOfferingPriceCurrency = 'AUD'`, and `AE supply is Australian` | Remove or label as subordinate demo; supplier-hosted Operations and declared contract pricing are canonical. |
+| Brand-core market promise | `src/content/brand-copy.ts`: `CORE_SENTENCE`, `HOME`, `AGENT_DOOR`, `AGENT_PAGE`, `BUSINESS_DOOR` | **Resolved 2026-08-23:** the managed strings use literal market language and one label per destination. |
+| Local-service prompt copy | `src/components/ae/chat/AeAnswerPromptInput.tsx`, `src/modules/answer/catalog-example-asks.ts` | **Resolved 2026-08-19:** landing chips and empty-state recovery prompts share concrete catalog asks (EUR/USD, reference rates, weather). Meta “what can I run?” copy is gone. `snapshot-artifacts.ts` is deleted. |
+| Local-service discovery heuristics | `src/modules/answer-thread/internal/answer-response-planner.ts` | **Resolved 2026-08-19:** `planAnswerTurn` and trade/place gates (`hasAnswerServiceSignal`, `missing_place`, Perth confirmation) are gone. The file only holds layout budgets and pending-operation clarification. Chat is the market tool loop. |
+| Australian trade/business onboarding | `src/components/ae/claim/ClaimFormSections.tsx`, `src/routes/claim.tsx`, `src/components/ae/claim/AeFindMyBusiness.tsx` | **Resolved 2026-08-19:** claim copy uses provider/offering language; find-business placeholder is a catalog provider; phone copy labels AU numbers as a place-bound listing constraint, not the ICP. |
+| Australian business offering defaults | `src/components/ae/offerings/AeOwnerOfferings.tsx` | **Resolved 2026-08-19:** default owner offering currency is USD; AUD remains a supported currency. |
 | Default business/listing presentation | `src/components/ae/artifacts/AeGenerativeAnswer.tsx`, `src/components/ae/chat/AeSuggestionChips.tsx`, `src/components/ae/chat/composer-copy.ts`, `src/components/ae/chat/session-context.ts`, `src/components/ae/chat/session-journey.ts`, `src/components/ae/chat/turn-context.ts` | Treat business/listing/service-area defaults as subordinate application furniture; replace category-facing wording with Market Operation/Supplier language when each surface is next touched. |
-| Australian local demo supply | `src/lib/dev/local-e2e-business-fixtures.ts` (`Demo Plumbing`, Joondalup/Fremantle/Adelaide fixtures and local-area summaries) | Keep only as labelled development/demo fixtures; never cite as current supply, ICP, category, or demand proof. |
+| Australian local demo supply | `tests/helpers/local-e2e-business-fixtures.ts`, `publicOwnerDefaultClaimInput` | **Resolved 2026-08-19:** default in-memory claim and local e2e listings are generic listed/inquiry providers. Trade synonym expansion (`TRADE_VOCABULARY`) is gone. Historical sandbox retirement in `convex/devSeed.ts` still looks up leftover `adelaide-dental-clinic` rows. |
 
 
 ## Change protocol
@@ -55,10 +52,9 @@ them teach the market category.
 | --- | --- | --- |
 | Brand-core voice | BRAND.md → `src/content/brand-copy.ts` | home hero/meta/example asks, agent+business doors, dialog welcome |
 | Surface prose (person) | BRAND.md rules, owned in place | claim funnel, listing pages, inquiry confirmation, privacy/terms framing, chat states, worklog titles |
-| Server-emitted person prose | BRAND.md rules, owned in module | `answer-thread/internal/{answer-response-planner,public-projection,follow-up-chips}.ts`, `turns/*` recovery prose |
+| Server-emitted person prose | BRAND.md rules, owned in module | `answer-thread/internal/{answer-response-planner,public-projection}.ts`, `turns/*` recovery prose |
 | Machine descriptors | exactness (guardrails skill) | all `defineAction` descriptors (~25 across 15 files), `dynamic-published-contract.ts`, `agent-entry.ts` |
 | Generated discovery docs | exactness + shared constants | `discovery/internal/discovery-files.ts` (llms.txt, sitemap, robots), `agent-skill.ts` (/SKILL.md), `.well-known/ucp` |
-| Split human/machine constants | keep split, align semantically | `customer-request/public-comprehension.ts` (HUMAN vs MACHINE blocks) |
 | Owner/admin operational | functional, no brand voice | `_operator/admin.*`, `_operator/owner.*`, agent-access |
 | Legal/consent | counsel-stable | `$slug.inquiry.tsx` consent lines, privacy/terms bodies |
 
@@ -90,7 +86,7 @@ body hands over the generated agent surfaces (`/llms.txt`, `/SKILL.md`, `/api/bu
    brand-copy constant when claim is next touched.
 4. Repeated empty-state phrase family "No listed businesses …" across 8+ files
    (`public-projection.ts:141`, `turns/types.ts:195`, `retrieval-first.ts:254`,
-   `answer-tool-use-agent.ts:484`, `follow-up-compact-prose.ts:83`, `insufficient-frozen.ts:30`,
+   `answer-tool-use-agent.ts:484`, `insufficient-frozen.ts:30`,
    `proposal.ts:482-503`, `build-message-parts.ts:137`) — single-source before the next recovery-copy
    change (T24 will touch exactly these).
 5. Machine/human shared phrases ("start work", "natural-language request", listing boundary line) —

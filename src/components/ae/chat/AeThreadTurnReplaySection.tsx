@@ -64,7 +64,7 @@ export function AeThreadTurnReplaySection({
               </Button>
             )}
             <Button asChild size="sm" variant="ghost">
-              <Link to="/">New chat</Link>
+              <Link to="/">New search</Link>
             </Button>
           </div>
         </>

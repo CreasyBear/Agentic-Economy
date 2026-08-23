@@ -94,6 +94,16 @@ const durableTables = [
   'externalRunManifests',
   'externalRunStarts',
   'externalRunGateDecisions',
+  'marketActiveOperations',
+  'marketActiveSuppliers',
+  'marketAggregateBackfills',
+  'marketEvidenceFacts',
+  'marketExternalRegistryEntries',
+  'marketExternalRegistryGenerations',
+  'marketExternalRegistryState',
+  'marketExternalSnapshots',
+  'marketOperationCategories',
+  'marketOperationRatings',
 ] as const
 
 const requiredIndexes = {
@@ -230,7 +240,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(53)
+    expect(durableTables).toHaveLength(63)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

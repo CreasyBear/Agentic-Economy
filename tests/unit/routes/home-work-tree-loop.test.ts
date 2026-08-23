@@ -6,7 +6,6 @@ import {
   validateRootSearch,
   Route,
 } from '@/routes/index'
-import { validateNewThreadSearch } from '@/routes/t.new'
 
 const BAS_ASK = 'My BAS is overdue and my books are a mess'
 const ORDINARY_ASK = 'dentist near Adelaide'
@@ -19,7 +18,7 @@ describe('root route readback', () => {
     await expect(loadRootRoute({ q: query })).resolves.toBeUndefined()
   })
 
-  it('redirects a query to a new answer thread even when a project param is present', () => {
+  it('redirects a query to the market even when a project param is present', () => {
     const beforeLoad = Route.options.beforeLoad
     if (beforeLoad === undefined) throw new Error('root query redirect is unavailable')
 
@@ -32,10 +31,10 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
   })
 
-  it('redirects a query without a project to a new answer thread', () => {
+  it('redirects a query without a project to the market', () => {
     const beforeLoad = Route.options.beforeLoad
     if (beforeLoad === undefined) throw new Error('root query redirect is unavailable')
 
@@ -48,10 +47,10 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
   })
 
-  it('preserves a 173-character query through home and new-thread validation', () => {
+  it('preserves a 173-character query through home and market navigation', () => {
     const query = 'x'.repeat(173)
     const beforeLoad = Route.options.beforeLoad
     if (beforeLoad === undefined) {
@@ -70,8 +69,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: query } })
-    expect(validateNewThreadSearch({ q: query })).toEqual({ q: query })
+    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query } })
   })
 
   it('ignores an explicit project reference without reading WorkTree', async () => {

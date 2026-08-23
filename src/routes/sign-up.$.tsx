@@ -28,10 +28,10 @@ function SignUpRoute() {
   const { redirect } = Route.useSearch()
   const isLocalE2E = isLocalE2EAuthBypassEnabled()
   const isAgentAccessFlow = redirect?.startsWith('/agent-access') ?? false
-  const contextHeading = isAgentAccessFlow ? 'Create an account to connect your assistant' : 'Almost there'
+  const contextHeading = isAgentAccessFlow ? 'Create an account to connect an agent' : 'Create a supplier account'
   const contextText = isAgentAccessFlow
-    ? 'After you create your account, you’ll return to assistant access.'
-    : 'After you create your account, you’ll continue straight to your listing.'
+    ? 'After you create your account, you’ll return to Access and create a caller identity.'
+    : 'After you create your account, you’ll continue to the Operation publishing workspace.'
 
   return (
     <AePublicShell>
@@ -40,15 +40,15 @@ function SignUpRoute() {
           {isLocalE2E ? (
             <div className="grid gap-4">
               <div className="grid gap-1">
-                <h1 id="sign-up-context-heading" className="text-4xl font-semibold leading-tight tracking-tight text-balance text-foreground">Local preview sign-up is off</h1>
+                <h1 id="sign-up-context-heading" className="text-3xl font-semibold leading-tight tracking-tight text-balance text-foreground">Local preview sign-up is off</h1>
                 <p className="block text-muted-foreground">This browser journey does not connect a Clerk account. Nothing is signed in or authorized.</p>
               </div>
-              <Button asChild variant="default" className="min-h-11 justify-self-start"><Link to="/">Browse the local demo</Link></Button>
+              <Button asChild variant="default" className="min-h-11 justify-self-start"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse the catalog</Link></Button>
             </div>
           ) : (
             <>
               <div className="grid gap-1">
-                <h1 id="sign-up-context-heading" className="text-4xl font-semibold leading-tight tracking-tight text-balance text-foreground">{contextHeading}</h1>
+                <h1 id="sign-up-context-heading" className="text-3xl font-semibold leading-tight tracking-tight text-balance text-foreground">{contextHeading}</h1>
                 <p className="block text-muted-foreground">{contextText}</p>
               </div>
               <SignUp fallbackRedirectUrl={redirect ?? '/owner/supply'} signInUrl="/sign-in" />

@@ -28,5 +28,10 @@ const app = defineApp({
 app.use(workpool)
 app.use(rateLimiter)
 app.use(aggregate, { name: 'ownerActivationByStage' })
+app.use(aggregate, { name: 'marketEvidence' })
+app.use(aggregate, { name: 'marketOperationEvidence' })
+app.use(aggregate, { name: 'marketOperationRatings' })
+app.use(aggregate, { name: 'marketActiveOperations' })
+app.use(aggregate, { name: 'marketActiveSuppliers' })
 
 export default app

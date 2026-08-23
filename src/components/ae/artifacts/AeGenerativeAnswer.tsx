@@ -57,7 +57,7 @@ export type AeGenerativeAnswerProps = {
   errorMessage?: ReactNode | null
   /** Thread this answer belongs to, if one exists yet. Lets provider links carry a "back to answer" origin instead of always falling back to home. */
   threadId?: string
-  /** Real engine work steps rendered as a compact "Worked" disclosure above the answer prose. */
+  /** Real search and verification steps rendered as a compact disclosure above the result. */
   workSteps?: readonly AnswerWorkStep[]
   /** Accumulated thinking labels folded into the disclosure's "Thought" cell. */
   thinkingSteps?: readonly string[]
@@ -106,7 +106,7 @@ export function AeGenerativeAnswer({
   // one-line so the lead answer text does not resize as it settles. The first
   // substantive answer leads with the heading scale; follow-ups read at body.
   const headlineSize = isFirstTurnProfile
-    ? 'font-heading text-2xl leading-snug text-balance'
+    ? 'text-lg font-semibold leading-snug text-balance'
     : 'text-base font-medium leading-snug'
   const summaryPart = parts.find(
     (part): part is Extract<AnswerMessagePart, { kind: 'prose' }> =>
@@ -114,7 +114,7 @@ export function AeGenerativeAnswer({
   )
   return (
     <section
-      className="grid gap-4"
+      className="grid gap-3"
       data-phase={phase}
       data-profile={profile}
       data-empty={empty ? 'true' : 'false'}
@@ -146,9 +146,9 @@ export function AeGenerativeAnswer({
               dir="auto"
               style={{ unicodeBidi: 'isolate' }}
               className={cn('min-w-0 flex-1 text-muted-foreground', headlineSize)}
-              aria-label="Checking what's available"
+              aria-label="Searching operations"
             >
-              {busy ? <AeStreamingLabel as="span">Checking what's available</AeStreamingLabel> : 'Checking what\'s available'}
+              {busy ? <AeStreamingLabel as="span">Searching operations</AeStreamingLabel> : 'Searching operations'}
             </p>
           )}
 
@@ -218,7 +218,7 @@ function retryableExecutionOperationRef(parts: readonly AnswerMessagePart[]): st
   return operationRef
 }
 
-/** Flowing Perplexity-style body: split the streamed summary into a quiet reading column. */
+/** Split the streamed summary into a compact, readable market-workbench column. */
 function ProseBody({ text }: { text: string }) {
   const paragraphs = text
     .split(/\n\s*\n+/)
@@ -226,13 +226,13 @@ function ProseBody({ text }: { text: string }) {
     .filter((paragraph) => paragraph.length > 0)
 
   return (
-    <div className={cn(REVEAL_ENTER, 'grid gap-3')}>
+    <div className={cn(REVEAL_ENTER, 'grid gap-2.5')}>
       {paragraphs.map((paragraph, index) => (
         <p
           key={index}
           dir="auto"
           style={{ unicodeBidi: 'isolate' }}
-          className="max-w-[68ch] text-pretty text-base leading-relaxed text-foreground"
+          className="max-w-[72ch] text-pretty text-sm leading-relaxed text-foreground"
           aria-live="off"
         >
           {paragraph}

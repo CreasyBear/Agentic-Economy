@@ -111,7 +111,7 @@ const conditional: readonly RequirementGroup[] = [
 const optionalNames = Object.freeze([
   'AE_ANSWER_EVAL_PASSED', 'AE_LLM_MODEL', 'AE_LLM_MODELS', 'VITE_AE_ANSWER_MODE', 'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
-  'AE_SITE_URL', 'SITE_URL', 'VITE_GOOGLE_MAPS_API_KEY', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
+  'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
   'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
@@ -142,7 +142,7 @@ const knownNames = Object.freeze([
   'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_MAX_ATOMIC',
   'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
-  'POSTHOG_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
+  'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
   'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL', 'AE_BRAINTRUST_PROJECT', 'AE_BRAINTRUST_DATASET',
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
@@ -161,7 +161,22 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
-    Object.freeze({ id: 'convex-scheduled-jobs', kind: 'convex-cron-set', jobs: Object.freeze(['reconcile due facilitator invocations', 'refresh facilitator discovery', 'refresh capability supply readiness', 'cleanup expired source write nonces', 'cleanup expired agent access oauth grants', 'run daily supplier settlement']) }),
+    Object.freeze({
+      id: 'convex-scheduled-jobs',
+      kind: 'convex-cron-set',
+      jobs: Object.freeze([
+        'cleanup expired agent access oauth grants',
+        'cleanup expired source write nonces',
+        'continue market aggregate backfill',
+        'reconcile due facilitator invocations',
+        'refresh Agentic Economy API registry',
+        'refresh Agentic Market snapshots',
+        'refresh capability supply readiness',
+        'refresh current market presence',
+        'refresh facilitator discovery',
+        'run daily supplier settlement',
+      ]),
+    }),
   ]),
   readinessProbes: Object.freeze([
     Object.freeze({ id: 'liveness', method: Object.freeze(['GET', 'HEAD']), path: '/api/health', dependencies: Object.freeze([]) }),
@@ -392,7 +407,6 @@ function present(environment: DeploymentEnvironmentInput, name: string): string 
 function isSecretDeploymentName(name: string): boolean {
   if (
     name === 'VITE_CLERK_PUBLISHABLE_KEY'
-    || name === 'VITE_GOOGLE_MAPS_API_KEY'
     || name === 'VITE_SENTRY_DSN'
     || name === 'VITE_POSTHOG_KEY'
     || name === 'VITE_STRIPE_PUBLISHABLE_KEY'

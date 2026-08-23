@@ -7,7 +7,6 @@
 }
 
 html {
-  min-width: 320px;
   background: var(--ae-bg);
   color: var(--ae-fg);
   font-family: var(--ae-font-sans);
@@ -16,19 +15,15 @@ html {
   text-rendering: optimizeLegibility;
   scroll-behavior: smooth;
   scrollbar-gutter: stable both-edges;
+  font-size: 14px;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100dvh;
   background: var(--ae-bg);
   color: var(--ae-fg);
-}
-
-img {
-  outline: 1px solid var(--ae-image-outline);
-  outline-offset: -1px;
+  line-height: 1.5;
 }
 
 [data-numeric] {

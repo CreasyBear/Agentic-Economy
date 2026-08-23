@@ -39,9 +39,9 @@ describe('AeSharedThreadView', () => {
   it('renders a sanitized read-only transcript without owner controls', () => {
     render(<AeSharedThreadView projection={projection} />)
 
-    const note = screen.getByText('Shared read-only answer')
+    const note = screen.getByText('Shared read-only search')
     expect(note.getAttribute('role')).toBe('note')
-    expect((screen.getByRole('link', { name: 'Ask your own question' }) as HTMLAnchorElement).getAttribute('href')).toBe('/t/new')
+    expect((screen.getByRole('link', { name: 'Start a search' }) as HTMLAnchorElement).getAttribute('href')).toBe('/t/new')
     expect(screen.getByTestId('shared-transcript')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /copy share link|revoke share link|stop/i })).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
@@ -50,8 +50,8 @@ describe('AeSharedThreadView', () => {
   it('keeps an unavailable share link actionable without exposing a transcript', () => {
     render(<AeSharedThreadView projection={null} />)
 
-    expect(screen.getByRole('heading', { name: 'Shared answer unavailable' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Shared search unavailable' })).toBeTruthy()
     expect(screen.queryByTestId('shared-transcript')).toBeNull()
-    expect(screen.getAllByRole('link', { name: 'Ask your own question' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: 'Start a search' })).toHaveLength(2)
   })
 })

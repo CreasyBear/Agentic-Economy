@@ -21,8 +21,8 @@ export function AeThreadTurnQueryHeader({ query, intent, seq, actions }: AeThrea
     <header>
       <Message align="end">
         <MessageContent>
-          <Bubble align="end" variant="muted">
-            <BubbleContent>
+          <Bubble align="end" variant="muted" className="max-w-[42rem]">
+            <BubbleContent className="rounded-md px-3 py-2">
               <p
                 dir="auto"
                 style={{ unicodeBidi: 'isolate' }}

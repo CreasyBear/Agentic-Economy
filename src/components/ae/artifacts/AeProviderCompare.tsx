@@ -35,25 +35,25 @@ export function ProviderCompareTable({
 
   return (
     <section
-      className={cn(REVEAL_ENTER, 'grid gap-0 overflow-hidden rounded-lg border border-border bg-card')}
-      aria-label="Business comparison"
+      className={cn(REVEAL_ENTER, 'grid gap-0 overflow-hidden rounded-md border border-border bg-card')}
+      aria-label="Listing comparison"
     >
-      <header className="flex items-start justify-between gap-3 border-b border-border p-4">
+      <header className="flex items-start justify-between gap-3 border-b border-border p-3">
         <div className="grid gap-1">
           <p className="block text-sm font-medium text-muted-foreground">Compare</p>
-          <p className="font-heading text-base text-foreground">Published details, side by side</p>
+          <p className="text-sm font-semibold text-foreground">Published details, side by side</p>
         </div>
         <p className="shrink-0 font-mono text-xs text-muted-foreground">{listingCountLabel(providers.length)}</p>
       </header>
       <Table className="min-w-[44rem] border-collapse">
-        <TableCaption className="sr-only">Comparison based on published business details.</TableCaption>
+        <TableCaption className="sr-only">Comparison based on published listing details.</TableCaption>
         <TableHeader>
           <TableRow>
             <TableHead
               scope="col"
               className="sticky left-0 z-10 h-auto w-[13.5rem] border-b border-border bg-card px-4 py-3 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground"
             >
-              Business
+              Listing
             </TableHead>
             {fields.map((field) => (
               <TableHead
@@ -131,7 +131,7 @@ function compareFieldLabel(field: AnswerCompareField): string {
     case 'hours':
       return 'Hours'
     case 'trust':
-      return 'Published detail'
+      return 'Evidence'
     case 'freshness':
       return 'Updated'
     case 'nextStep':

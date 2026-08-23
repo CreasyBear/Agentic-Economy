@@ -13,31 +13,31 @@ describe('AeChat route promotion sidebar', () => {
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 
     expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('false')
-    const toggle = screen.getByRole('button', { name: 'Show recent chats' })
+    const toggle = screen.getByRole('button', { name: 'Show recent searches' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.click(toggle)
 
-    const openToggle = screen.getByRole('button', { name: 'Hide recent chats' })
+    const openToggle = screen.getByRole('button', { name: 'Hide recent searches' })
     expect(openToggle.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByTestId('thread-sidebar').getAttribute('data-visible')).toBe('true')
     await waitFor(() => expect(document.activeElement?.textContent).toBe('First recent chat'))
 
     fireEvent.click(openToggle)
-    expect(screen.getByRole('button', { name: 'Show recent chats' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Show recent searches' }).getAttribute('aria-expanded')).toBe('false')
   })
-  it('restores focus to the Recent chats opener after Escape closes the controlled dialog', async () => {
+  it('restores focus to the Recent searches opener after Escape closes the controlled dialog', async () => {
     render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
 
-    const opener = within(screen.getByRole('banner')).getByRole('button', { name: 'Open recent chats' })
+    const opener = within(screen.getByRole('banner')).getByRole('button', { name: 'Open recent searches' })
     opener.focus()
     fireEvent.click(opener)
 
-    const dialog = await screen.findByRole('dialog', { name: 'Recent chats' })
+    const dialog = await screen.findByRole('dialog', { name: 'Recent searches' })
     fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Recent chats' })).toBeNull()
+      expect(screen.queryByRole('dialog', { name: 'Recent searches' })).toBeNull()
       expect(document.activeElement).toBe(opener)
     })
   })

@@ -23,7 +23,7 @@ export function SelectedSource({ provider, threadId }: { provider: AnswerSource;
   // Protocol-relative `//host` is external; only a rooted path is router-owned.
   const detailIsInternal = provider.detailUrl.startsWith('/') && !provider.detailUrl.startsWith('//')
   const threadSearch = threadId === undefined || threadId.length === 0 ? {} : { from: 'thread' as const, id: threadId }
-  const selectionScope = threadId === undefined ? 'in this answer' : 'from this thread'
+  const selectionScope = threadId === undefined ? 'in these results' : 'from this search'
   const basis = [provider.category.trim(), (provider.serviceArea || provider.suburb).trim()]
     .map(neutralizeBidiFormattingControls)
     .filter((part) => part.length > 0)
@@ -33,8 +33,8 @@ export function SelectedSource({ provider, threadId }: { provider: AnswerSource;
 
   return (
     <section
-      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-lg border border-border bg-card p-4')}
-      aria-label="Selected business"
+      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-md border border-border bg-card p-3')}
+      aria-label="Selected listing"
     >
       <div className="flex items-center gap-3">
         <span
@@ -44,8 +44,8 @@ export function SelectedSource({ provider, threadId }: { provider: AnswerSource;
           {initial}
         </span>
         <div className="grid min-w-0 flex-1 gap-0.5">
-          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recommended</p>
-          <p className="truncate font-heading text-base font-medium leading-snug text-foreground">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">First match</p>
+          <p className="truncate text-sm font-semibold leading-snug text-foreground">
             {detailIsInternal ? (
               <Link
                 to="/$slug"
@@ -73,22 +73,22 @@ export function SelectedSource({ provider, threadId }: { provider: AnswerSource;
           </p>
         </div>
         <span
-          className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-xs text-muted-foreground"
+          className="hidden w-fit shrink-0 items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-xs text-muted-foreground sm:inline-flex"
           data-tone="review"
         >
           <CheckIcon className="size-3" aria-hidden="true" />
-          Review this business first
+          Review first
         </span>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Review the business page and use the published phone number or website it provides.
+        Inspect the published details before continuing outside the market.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="default" size="sm">
           {detailIsInternal ? (
-            <Link to="/$slug" params={{ slug: provider.slug }} search={threadSearch}>Review business</Link>
+            <Link to="/$slug" params={{ slug: provider.slug }} search={threadSearch}>Inspect listing</Link>
           ) : (
-            <a href={provider.detailUrl}>Review business</a>
+            <a href={provider.detailUrl}>Inspect listing</a>
           )}
         </Button>
       </div>
@@ -111,10 +111,10 @@ export function SourcesList({
       <header className="grid gap-0.5">
         <p className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
         <p className="text-sm text-muted-foreground">
-          {listingCountLabel(providers.length)} compared on published area, response, and next step.
+          {listingCountLabel(providers.length)} from published listing data.
         </p>
       </header>
-      <ul className="grid gap-2 sm:grid-cols-2" aria-label="Sources for this answer">
+      <ul className="grid gap-1.5" aria-label="Sources for these results">
         {providers.map((source) => (
           <SourceCard key={source.slug} source={source} threadId={threadId} />
         ))}

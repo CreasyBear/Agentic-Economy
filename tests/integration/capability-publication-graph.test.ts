@@ -1,10 +1,8 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -19,7 +17,7 @@ import {
 
 describe('capability publication graph', () => {
   it('projects two independent publications through one generic graph path', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const first = await publishedBusinessOwner(backend, 'graph-one')
     const second = await publishedBusinessOwner(backend, 'graph-two')
     await seedCatalogOffering(backend, first.businessId, 'graph-one')

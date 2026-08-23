@@ -60,12 +60,12 @@ describe("current supply funnel", () => {
     ).toBeDefined();
     expect(screen.getByText(/not production proof/i)).toBeDefined();
     expect(screen.getByText("Showing the 50 most recent activity records.")).toBeDefined();
-    expect(screen.getByRole("heading", { name: "Provider connections" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Supplier connections" })).toBeDefined();
     expect(screen.getByText("Connection active")).toBeDefined();
     expect(screen.getByText("https://provider.example/quote")).toBeDefined();
     expect(screen.getByRole("button", { name: "Refresh authority" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Revoke" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Connect provider" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Connect supplier" })).toBeDefined();
   });
 
   it("renders an incomplete owner readback as a repair state", () => {
@@ -78,7 +78,7 @@ describe("current supply funnel", () => {
 
     expect(screen.getByText("Operations need repair")).toBeDefined();
     expect(
-      screen.getByRole("link", { name: "Reload services" }),
+      screen.getByRole("link", { name: "Reload Operations" }),
     ).toBeDefined();
     expect(screen.queryByText("No operations yet.")).toBeNull();
   });

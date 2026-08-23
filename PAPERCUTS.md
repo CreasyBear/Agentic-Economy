@@ -3,7 +3,26 @@
 Small frictions logged from the service-DTO / agentic.market consolidation
 (2026-08-07), each one: what I was doing → what got in the way.
 
-## This session
+## Recurring (do not re-log)
+
+`npm run papercut` **appends**; it does not dedupe. Check this section first.
+
+- **Missing cargo env:** `~/.zshenv` used to source `~/.cargo/env` unconditionally. Every zsh tool call printed `.zshenv:.:1: no such file or directory`. Guard with `[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"`. Canonical ledger entry: #157. Later repeats were removed on 2026-08-20.
+
+## Close-loop-then-cut (2026-08-19/20)
+
+Unique cut-session traps, kept once in the numbered ledger:
+
+- Isolate Convex cannot import `capability-supply/server` (transport observation).
+- Dev seed `contract_identity_conflict` / `offering_identity_conflict` when a live 402 pin collides with dummy v1.
+- zsh treats `$slug` in unquoted globs as a variable — quote `'$slug.inquiry'` (#258).
+- First tsc errors hide later deleted-module imports; isolate one missing import at a time (#259).
+- `vitest.config` listed `tests/setup/no-search-gap-writes.ts` after demand was deleted — drop the setup file, do not restore a stub (#255–256).
+- `npm run dev:local` / `convex codegen` restore deleted Convex files from the last push; a parallel Codex sandbox in the same tree recopied `convex/inquiries.ts`. Stop the local stack before cutting Convex modules, and quote `inquiry*` under zsh `nomatch` (#263, #266).
+- `git rm` without `-f` refuses files that have local modifications during a cut.
+- Unquoted `ls tests/unit/convex/inquiry*` with zsh `nullglob` and no matches becomes bare `ls` of the repo root.
+
+## Ledger
 
 1. Building the W1 origin seam: I expected `origin` on the capability offering
    alone to enrich `Service.endpoints[]`, but the seam needs **two** things —
@@ -89,7 +108,6 @@ Small frictions logged from the service-DTO / agentic.market consolidation
 19. All three UI-specialist subagents failed before editing with OpenRouter
     `402 Insufficient credits`; the same file-scoped contracts had to be
     re-dispatched to general workers.
-
 
 20. Broad migration subagents can silently park without yielding even after
     landing partial edits. The work-tree cutover required cancelling the stuck
@@ -670,10 +688,15 @@ Deduplicated disposition for this appended campaign: **25 unique rows, all open*
 Ordered repair sequence:
 
 1. Stabilize the `/for-providers` loader boundary (SG-001), preserving a supplier shell, retry, and sign-in/entry path when source readback fails.
+
 2. Split the supplier entry from local-business claim and publish the hierarchy/auth recovery (SG-002–SG-005): provider/business identity, service/offering, and API supplier route must be understandable before sign-in; retain the production auth gate.
+
 3. Align the endpoint form with the authoritative endpoint/admission contract and make the form fail closed (SG-006–SG-011): source-kind schemas, authority, JSON/HTTPS/timeout checks, field errors/focus/live regions, and no ignored generic fields.
+
 4. Persist and hydrate endpoint/pricing/readiness state, then expose maintenance controls from the owner listing (SG-012, SG-016, SG-017).
+
 5. Separate admission, publication, readiness, and live availability and project every authoritative refusal (SG-013–SG-014) before polishing copy.
+
 6. Remove Australian-only pricing assumptions and clean public proof/monetisation/accessibility/fixture teaching surfaces (SG-015, SG-018–SG-025) using the existing projections and native disclosure semantics.
 
 97. openai-codex/gpt-5.6-sol: The approved remove-faux-runtime-surfaces plan file still contained 'Discovery in progress' placeholders after approval, forcing execution to rely on the preserved conversation plan.
@@ -899,11 +922,17 @@ Ordered repair sequence:
 ### Ordered repair sequence
 
 1. Close authority/security exposure, monotonic answer checkpoints, and provider-revocation convergence.
+
 2. Restore the current answer source behind ENV-001 and persist failed manually entered asks across reload.
+
 3. Make generated UCP access/execution, MCP names, OAuth shapes, and REST recovery guidance mechanically match registered DTOs, tools, validators, and routes.
+
 4. Surface idempotency keys before POST and add status/cancel/reconcile identities and actions to CLI and operator workflows.
+
 5. Require exact per-invocation gateway usage, unmetered replay, valid JSON receipts, and revision-bound proof; then rerun runtime-derived closes.
+
 6. Consolidate PROJECT status authority, refresh derived wayfinding, and retain clone-available ledger evidence.
+
 7. Only after the thin lane completes should AE certify real hosted payment, provider payout, and end-to-end value exchange.
 
 ### Remit clarification — 2026-08-11
@@ -1194,19 +1223,25 @@ deployment-manifest validation, and hosted certification remains blocked. The
 1. Keep live money disabled. Separate x402 from AE-internal charging
    (PRA-001), validate output before economic finalization (PRA-002), and close
    payout periods before transfer (PRA-003).
+
 2. Bind Answer effects to tool ordinal (PRA-004), abandon replayed workless
    reservations (PRA-005), and persist the initial provider cleanup attempt
    (SG-017).
+
 3. Gate ExternalRun reads with existing authority (PRA-006) and align the
    shared SSRF deny-list/parity tests (PRA-007).
+
 4. Converge every uncaught Answer failure before emitting a terminal frame and
    make New question use canonical stop/navigation/recovery semantics
    (`#2/#3`).
+
 5. Repair generated Service execution/access and OAuth registration guidance
    from canonical schemas/contracts (WGA-002, WGA-004).
+
 6. Make the x402 Test complete from honest challenge-readiness evidence and
    expose the existing connection lifecycle mutations in one owner panel
    (SG-011, SG-016).
+
 7. Bind Checkout preparation to exact Vercel and Convex deployment identities
    (WGA-015), then run one exact-revision hosted discover → invoke → validate
    → settle → recover → payout proof. Only that receipt can close SG-024.
@@ -1380,8 +1415,6 @@ workstreams, duplicate observations, and explicit remediation status.
 
 167. composer-2.5: A combined 'git diff --check; wc -l' command masked the diff-check failure because the shell returned wc's status; unrelated pre-existing whitespace errors were present. Run scoped diff-check separately or chain with && when status matters.
 
-168. gpt-5.6-sol-low: While inventorying the review diff, every zsh command emitted '/Users/joelchan/.zshenv:.:1: no such file or directory: /Users/joelchan/.cargo/env'; the shell bootstrap should guard sourcing the optional Cargo env file.
-
 169. gpt-5.6-sol-low: During the goblin CLI campaign, stopping npm run dev:local left Vite listening on 3024 while Convex was gone; the next managed startup failed on the occupied port and served only 503s. Supervisor shutdown must reap the detached Vite tree and verify its ports close.
 
 170. gpt-5.6-sol-low: During the goblin CLI campaign, dev:local reseeding failed with curated_provider_connection_refused:connection:exa:invalid_transition against existing local state. The development seed must be idempotent across routine restarts or repair stale curated connection state explicitly.
@@ -1426,19 +1459,13 @@ workstreams, duplicate observations, and explicit remediation status.
 
 190. opus-5: npm ci exits EUSAGE on main: package.json and package-lock.json are out of sync (~25 missing entries incl. gcp-metadata, @vercel/functions, jose, zod). Clean installs, CI, fresh clones and new worktrees all fail at install; needs an npm install to resync the lock.
 
-191. gpt-5.6: While running research commands, every login shell emitted a missing ~/.cargo/env warning from ~/.zshenv; the stale source line adds noise to every tool result and should be guarded with a file-exists check.
-
 192. gpt-5.6: While applying the Aecon vault update, an exact-context patch missed because the actively edited Hermes Brand System had changed between read and write; use narrower section anchors or re-read immediately before patching shared vault files.
-
-193. gpt-5.6: Running repo research commands emits /Users/joelchan/.zshenv: no such file or directory for /Users/joelchan/.cargo/env on every shell invocation; the stale source line should be guarded or removed.
 
 194. gpt-5.6: qmd result URIs normalize spaces to hyphens and are not literal filesystem paths; attempting to open the displayed URI failed until the real filename was found with find.
 
 195. gpt-5.6: Spawning a typed GSD researcher with fork_turns=all failed because full-history forks inherit the parent agent type; the tool schema permits both fields but this combination is rejected only at runtime. Retrying with a bounded fork worked.
 
 196. gpt-5.6: Google Trends blocked the direct comparison request with HTTP 429 and pytrends is not installed, so relative keyword volume could not be verified from Trends in this pass; autocomplete can establish query families but not volume.
-
-197. gpt-5.6: While reading the grilling skill and inspecting the product workspace, every login shell printed a missing /Users/joelchan/.cargo/env error from .zshenv. Commands still run, but the stale shell startup reference adds noise and can obscure real failures.
 
 198. gpt-5.6: While filing an Obsidian note, qmd returned a normalized resource path whose spaces/hyphens did not match the actual vault filename, causing the first direct read to fail. Search results should expose the exact filesystem path or clearly label normalized URIs.
 
@@ -1447,10 +1474,6 @@ workstreams, duplicate observations, and explicit remediation status.
 200. gpt-5.6: While spawning a research subagent with full-history inheritance, the orchestration API rejected an explicit default agent_type even though the requested type matched the parent. The schema permits the field but the runtime requires it omitted for full-history forks.
 
 201. gpt-5.6: A second gsd-ai-researcher dispatch failed because full-history forks cannot specify a specialist role. The orchestration interface makes role selection and context inheritance appear independently selectable; it should reject this combination earlier or document that specialist agents require fork_turns none/limited.
-
-202. gpt-5.6: Every login-shell command emits duplicate missing /Users/joelchan/.cargo/env warnings from .zshenv, adding noise to otherwise successful vault and verification commands; guard the source with a file-exists check.
-
-203. Cursor Grok 4.6: Every zsh command prints '/Users/joelchan/.zshenv:.:1: no such file or directory: /Users/joelchan/.cargo/env' before real output — .zshenv sources a rustup file that is not installed, which pollutes git/gsd receipts.
 
 204. Cursor Grok 4.6: gsd-map-codebase full refresh spawned four parallel generalPurpose mapper agents; all four failed immediately with resource_exhausted and wrote nothing. Sequential in-session mapping is the working fallback on this host.
 
@@ -1486,4 +1509,882 @@ workstreams, duplicate observations, and explicit remediation status.
 
 220. cursor-grok-4.6: Green-close prune: leftover moneyFreeTierCounters stub was hardcoded { callsUsed: 1 } so every $0 invoke refused credit_topup_required. Drop the missing-table counter check and persist $0 via moneyUsageEvents + moneyTransactions.
 
-221. cursor-grok-4.6: Every shell in this workspace prints .zshenv: no such file .cargo/env before the command. Harmless noise; the zshenv sources a missing cargo env file.
+222. Cursor Grok 4.6: Rewriting an OpenRouter integration test, I left two const server declarations in one it() after a partial replace. oxc failed the whole file transform, so Vitest reported a suite error instead of the test I was fixing.
+
+223. Cursor Grok 4.6: After dropping host location injection, local e2e registry.search for query 'emergency plumber Parramatta' returns items:[]. The same listing still matches query 'parramatta' or the old near_me+location=Parramatta tool args. Easy to read as a host-filter regression when it is catalog token matching.
+
+224. Cursor Grok 4.6: Played local chat (ae demand ask + POST /api/answer/turn) with the landing EUR/USD and Berlin weather asks. Both complete in 25–35s with 'let me fetch / one moment' and work-log 'No live operation was needed yet' — no operation.execute. Anonymous MCP ae_operation_execute for Frankfurter EUR/USD returned rate 1.1576 + evidenceHash in 0.7s.
+
+224. Cursor Grok 4.6: Berlin weather chat invented coordinates in prose ('approximately 52.52°N, 13.405°E') with no execute record this turn. The listed Open-Meteo operation only accepts latitude/longitude, while landing/composer copy asks for 'weather in Berlin' with no geocode tool.
+
+224. Cursor Grok 4.6: CLI machine-selected follow-up (demand ask --operation-ref --candidate-digest '<input-json>') now posts that envelope as the user query. After the host planner prune, the model still does not call execute; the Ask heading is a 250-character JSON blob and the work log still says no live operation was needed.
+
+225. Cursor Grok 4.6: After an FX ask, complete.answer.agentJsonUrl is /api/businesses/search?q=What+is+the+EUR+to+USD… — a business-directory URL, not operations search/detail. Chat stream events are still plan/one-line/summary-delta/complete with no kernel tool JSON, so CLI cannot print operationRef or evidenceHash from a chat turn.
+
+226. Cursor Grok 4.6: ae search --json for 'current weather' is ~27kB for one routeable listing because navigation embeds full HTTP action schemas; items have summary but no top-level name. Fine for agents, noisy when playing by hand.
+
+227. Cursor Grok 4.6: Home still advertises category chips (crypto price, search the web, geocode, wikipedia) and example asks (bitcoin, convert 500 USD, Wikipedia, cat photo) while the chat composer placeholders are EUR/USD ECB and Berlin weather. Curl of / does not include those composer labels; they only hydrate in the /t/new client.
+
+228. Cursor Grok 4.6: Two-phase answer loop: OpenRouter contract helper treated tools-on requests without json_schema as tool rounds and threw unexpected_unstructured_tool_request when the model stopped with no planned call. That stop is now a legitimate end of the tool loop before a separate AnswerProse generateText.
+
+229. Cursor Grok 4.6: $gsd-map-codebase: gsd-tools query agent-skills gsd-codebase-mapper returned empty; Cursor Task has no gsd-codebase-mapper type so I injected ~/.codex/agents/gsd-codebase-mapper.md into generalPurpose agents. Then gsd-tools commit --files reported nothing_to_commit because the eight map files were still unstaged — git add was required first.
+
+230. Cursor Grok 4.6: Inquiry Convex load returned claims: [] after the claims table was unlisted, while admission still required state.claims and FakeDb still seeded a claims table. Project published claim proofs from listed businesses instead of querying an unlisted table.
+
+231. grok-4.6: Hoisted exact-amount helpers into money/public then left Convex aliases (readAmount = readExactAmount). Next peel renamed every call site; deleting the aliases first would have avoided a 30-site find-replace.
+
+232. grok-4.6: WebFetch of docs.cdp.coinbase.com/x402/bazaar timed out; had to use search snippets plus AE's installed @x402/core import path instead of the first-party HTML.
+
+233. Cursor Grok 4.6: Splitting money-ledger-reconciliation.test.ts by the provided approximate 1-indexed ranges cut off the closing }) of the last it in two slices (2448 vs 2449, 3448 vs 3449), which produced parse errors until those closers were included.
+
+234. Cursor Grok 4.6: Splitting a vitest file by line range dropped imports that only the extracted tests used (attemptRef). After a mechanical split, grep the new file for unbound names before running.
+
+235. Cursor Grok 4.6: New charge-contract.ts imported account refs and evidence helpers from ledger.ts, which imported charge-contract — a runtime-safe cycle that still broke SelectedChargeEntries in the ledger type scope. Put account-ref.ts and charge-entry helpers under charge-contract so ledger only imports one way.
+
+236. Cursor Grok 4.6: Splitting owner-payout-server.test.ts: export const sourceMocks = vi.hoisted(...) in a shared harness fails with 'Cannot export hoisted variable'. Plain vi.fn() objects plus vi.mock in the helper work if each test file imports the harness before the SUT.
+
+239. Cursor Grok 4.6: Admitting a live GET x402 402 failed until origin+pathname bind: PaymentRequired.resource.url includes the example query, while importX402Capability compared it byte-equal to the path-only resourceUrl.
+
+240. Cursor Grok 4.6: Splitting turn-orchestrator: tests/unit/answer-thread/turn-path-thinness.test.ts requires function buildStreamAnswerTurnPhases plus literal agentTurnPath.run( / boundaryTurnPath.run( in the orchestrator source, so the phases extraction has to keep a thin wrapper there instead of a pure re-export.
+
+241. Cursor Grok 4.6: PRA-001 proof test could not load: convex/capabilityOperationInvocationWorker.ts re-exports identity/projection helpers and still locally exports the same names, so Vitest/Rolldown fails on duplicated exports.
+
+242. grok-4.6: Write tool rejected a ~700-line new file with 'path: Required' even though path was set; splitting the write then StrReplace-appending the rest worked.
+
+243. Cursor Grok 4.6: Peeling moneyLedger.ts by line-range extract left a trailing mutation `},` on the extracted handler, which is a syntax error until you drop the Convex wrapper.
+
+244. Cursor Grok 4.6: After moving readDailyPayoutComposition off moneyLedger, beginPayoutTransfer still called it inside try/catch and surfaced payout_not_ready instead of a missing-symbol error.
+
+246. Cursor Grok 4.6: Splitting answer-selected-operation-loop tests: exporting vi.hoisted() mocks from a shared harness fails with 'Cannot export hoisted variable'; dropping hoisted then hits 'Cannot access before initialization' in the vi.mock factory. Keep hoisted private and export wrapper objects that hold the same vi.fn() refs.
+
+247. Cursor Grok 4.6: Peeling capabilityOperationInvocations, a parallel uncommitted edit in agent-access/contract.ts referenced CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE before its const, so vitest failed with a TDZ until that binding was declared first.
+
+248. Cursor Grok 4.6: Peeling convex/catalog.ts: importing business/public from the registered catalog.ts module (or having catalogOfferingMutations import catalogPublicReads) triggered a TDZ in agent-access/contract.ts via the Convex glob load order. Keep businessContextArg on the unregistered helper that already imports it, and keep loadOfferingSourceState on catalogOfferingMutations so public reads depend on mutations, not the reverse.
+
+249. Cursor Grok 4.6: Splitting route-transport-runtime.test.ts left package.json test:conformance and product-frontier-manifest.json pointing at the deleted path. After splitting a conformance-listed test file, grep package.json and the frontier manifest in the same turn.
+
+250. Cursor Grok 4.6: I put sandbox spend and production $0 in the same defaultAgentAccessPolicy behind environment === sandbox. Split them: sandbox-policy.ts vs production-policy.ts, shared policy.ts is only the builder.
+
+252. Cursor Grok 4.6: Launching 8 parallel generalPurpose subagents plus thermo-nuclear hit resource_exhausted immediately; none started work. Retry in 2-at-a-time waves.
+
+253. Cursor Grok 4.6: Reached for a node script to split god files after subagents resource_exhausted. User rule is subagents only — restore and retry thinner waves, never a mechanical splitter.
+
+254. grok-4.6: Replacing the ~500-line authorize write path with StrReplace was impractical (one giant handler body, no seam), so a one-shot Python splice was needed to swap the tail. A ChargePlan persist helper is the cut that makes the next edit local.
+
+255. Cursor Grok 4.6: Running vitest for money external-spend: vitest.config setupFiles still lists tests/setup/no-search-gap-writes.ts after demand.functions (setSearchGapRecorderForTests) was deleted, so every vitest run fails before tests load. Restored a no-op stub at that path.
+
+256. Cursor Grok 4.6: reservationRef agent restored a no-op tests/setup/no-search-gap-writes.ts so vitest could load. Deleted the stub and dropped it from vitest.config setupFiles instead — demand recorder is gone.
+
+257. Cursor Grok 4.6: Payout, topup, and connect all returned refusedTopup() in moneyLedger.ts, so a global replace could not introduce refusedPayout without also rewriting Connect. Line-range replacement was needed because the three seams share the same { kind: refused } shape without local helpers.
+
+258. Composer: Closing the cut: zsh glob/grep against route files named $slug.tsx treats $ as a variable unless quoted, so the listing/inquiry route search missed files until I quoted the pattern.
+
+259. Composer: Isolating one missing import at a time (public-inquiry-projection, customer-options-api, verify-customer-request-release) was faster than a full tsc dump — the first errors hid that those modules were already deleted.
+
+260. Composer: Dev seed still wants the business owner clerkUserId on access-path upsert; a system actor ref fails with wrong_owner / identity conflict, same trap as earlier curated seed work.
+
+261. Cursor Grok 4.6: tests/integration/supplier-money-readback.test.ts first case fails at reconcileCharge (kind: refused) before any earnings read: the fixture has charge/provider/rake entries but no moneyUsageEvents, and the working-tree readPayoutAccrualAmounts now goes through validateChargeJournal which requires usage. Unrelated to projectProviderEarnings; the five bounded-scan/paidOut/recovery tests pass.
+
+263. Cursor Grok 4.6: Deleting inquiry Convex files while npm run dev:local / convex codegen was running restored them from the last push; a ChatGPT Codex sandbox in the same working tree also recreated convex/inquiries.ts. Stop the local stack before cutting Convex modules, and quote inquiry* globs under zsh nomatch.
+
+264. Cursor Grok 4.6: Wrappers-first peel of capabilitySupply.ts: thinness tests grep function bodies and fromModule calls inside convex/capabilitySupply.ts, so moving handlers to siblings fails until those tests read the family files. Cause: judo thinness assumed the host would keep the wrapper bodies.
+
+266. Cursor Grok 4.6: Peeling convex/inquiries.ts while a parallel cut deleted convex/inquir*.ts between turns; wrappers had to be recopied after git checkout of support files.
+
+267. Cursor Grok 4.6: Splitting a vitest file into a shared harness: exporting vi.hoisted() directly fails with 'Cannot export hoisted variable'. Wrap the hoisted object and import the harness first in each consumer test file.
+
+268. Composer: Extracting security.ts handlers: literalUnion() is typed as GenericValidator, so mutationGeneric infers reasonCode as optional any and an explicit handler args type must mark it optional (then assert) to assign.
+
+269. Cursor Grok 4.6: Wrappers-first peel of capabilitySupplyOperations.ts: moving v.any() validators out of that file required updating a hardcoded filename allowlist in src/lib/ui/contract-scans.ts (isDocumentedJsonBoundary). The JSON-boundary exception is path-pinned, so any peel of those validators fails ts-standards until the allowlist is edited.
+
+270. Cursor Grok 4.6: Wrappers-first peel of harnessSessions: extracted handlers failed tsc because literalUnion() returns GenericValidator, so Convex infers kind/intent as optional any. Handler args need those fields optional unknown plus | undefined for exactOptionalPropertyTypes — same as the catalog/answerThreads peel, just more literalUnion args here.
+
+271. Cursor Grok 4.6: harness-sessions-runtime admin private-payload test still seeds adminMemberships and expects kind allowed, but readActiveAdminMembership has returned undefined since the 60-table unlist. Peel did not change that path; the denied result is pre-existing.
+
+273. Cursor Grok 4.6: run-with-cleanup.mjs vitest ENOENT: spawn vitest is not on PATH in this environment; ./node_modules/.bin/vitest works.
+
+274. Cursor Grok 4.6: Glob tests/integration/capability-publication-*.test.ts also matched the pre-existing capability-publication-security.test.ts, so a split-suite vitest run needs explicit new-file paths or a tighter glob.
+
+275. Cursor Grok 4.6: capability-contract-boundaries.test.ts concatenated every from-import in file order and failed as soon as internals split (relative paths + duplicated common imports). Unique-sort external specifiers and skip ./ so the allowlist survives module peels.
+
+277. Cursor Grok 4.6: Splitting supplier-money-readback: a harness that vi.mock's money/public cannot re-export that module's named bindings — test files got non-functions (accountRefForProvider, internal). Import money/public and convex internal from each test after the harness side-effect import.
+
+278. Cursor Grok 4.6: inspectBindingControlState always returns authorization_denied in convex-test because readActiveAdminMembership is a stub after adminMemberships was unlisted, and ownerAdmin no longer inserts a membership. Quarantine tests have to compute bindingObservedRowDigest via backend.run instead.
+
+279. Cursor Grok 4.6: Peeling capabilityOperationInvocationWorker: wrapping a 12-arg helper signature across lines left off two commas; oxc failed the whole vitest import at the next identifier. Keep the original single-line param list or comma-check before the first test run.
+
+280. Cursor Grok 4.6: Splitting supply-funnel.test.tsx: exporting vi.hoisted() mocks from a harness threw 'Cannot export hoisted variable'. Use a plain exported vi.fn() object plus vi.mock in the harness, like owner-payout-server-harness, and import the harness first.
+
+283. grok-4.6: Peeling CREDIT TOPUP from moneyLedger.ts: ctx.runMutation(internal.moneyLedger.applyCreditTopup, args) failed exactOptionalPropertyTypes because BillingSourceWriteArgs used sourceWrite?: unknown. Had to Infer the source-write validators and conditional-spread optional fields instead of passing args through.
+
+284. Cursor Grok 4.6: Splitting operation-invoke tests: package.json test:conformance is one long line and a parallel readiness-probe split had already replaced readiness-probe.test.ts before I re-read it. Re-read that script immediately before the replace so you do not revert a sibling listing update.
+
+287. Cursor Grok 4.6: Splitting capability-operation-worker tests into a harness: export const mocks = vi.hoisted(...) fails with Cannot export hoisted variable. Keep const mocks = vi.hoisted(...), re-export with export { mocks }, and import the harness before vitest in each test file.
+
+288. Cursor Grok 4.6: Splitting answer-harness-operation tests: exporting vi.hoisted() directly from the shared harness failed with 'Cannot export hoisted variable'. Wrapping the hoisted fns in a plain exported object (same as answer-selected-operation-loop-harness) fixed it.
+
+289. Cursor Grok 4.6: Direct run-with-cleanup.mjs vitest spawn ENOENT because PATH lacks node_modules/.bin (npm scripts inject it); had to call ./node_modules/.bin/vitest.
+
+291. Cursor Grok 4.6: Re-exporting imported functions from a vitest harness that also has vi.mock made those bindings undefined at runtime. Import constructors in each .test.ts instead of re-exporting them from the harness.
+
+292. Cursor Grok 4.6: A harness action-tool test that used inquiry.submit as the fixture id was asserting the public_inquiry special-case (write_requires_source_admission). A generic fixture.qualifiedWrite id gets write_source_admission_not_declared instead — keep inquiry.submit only in tests that mean that leftover harness map.
+
+293. Cursor Grok 4.6: After the inquiry cut, npx tsc --noEmit is still red on pre-existing money/recover peel errors (price_unavailable, reserveConnectAccountHandler, supplier-money-readback). Filter tsc for inquir before treating the cut as a typecheck regression.
+
+294. grok-4.6: Adding Convex validators onto moneyCreditTopup (already 949) immediately crossed 1000 unless the existing TS arg/result types were replaced with Infer from v.object validators, and the shared Stripe webhook event union had to live in moneyLedgerValues with accountUpdated because Connect also uses that shape.
+
+295. grok-4.6: Splitting ae-chat-route-promotion: Vitest refuses export const x = vi.hoisted(...). Keep the hoisted binding unexported and re-export a wrapper that aliases the same arrays/getters.
+
+296. grok-4.6: vi.mock in a shared chat test harness only applies if the harness is imported before AeChat. Importing the component first left the real TanStack Link in place (useRouter / isServer null).
+
+297. Cursor Grok 4.6: Grep of importers of dynamic-published-adapter.ts for a split also ran convex-schema.test.ts, whose keep-60 table census fails independently of the adapter. That file both pins durableTables and constructs an adapter later, so importer-based test selection is a noisy gate.
+
+298. Cursor Grok 4.6: Split capability-supply-registration tests: 15/16 fail with contract registration authorization_denied because ownerAdmin no longer inserts adminMemberships (table unlisted) and readActiveAdminMembership always returns undefined. Missing-contract case still passes because it never registers a contract.
+
+299. Cursor Grok 4.6: convex codegen on Node 25.2.1 failed with DeploymentNotConfiguredForNodeActions; PATH to nvm v22.22.0 succeeded. recover.ts/x402Route.ts import undici and must carry use node because Convex still registers convex/_capabilityOperationInvocation/* as modules.
+
+300. Cursor Grok 4.6: git mv of convex/_capabilityOperationInvocation helpers failed because those files were untracked; plain mv worked. Next time check git ls-files before git mv on new Convex modules.
+
+301. Cursor Grok 4.6: Counting TanStack file routes: globbing src/routes/**/*.{ts,tsx} includes __root.tsx which uses createRootRoute, not createFileRoute — grep createFileRoute for the census (88 + root), do not treat the glob file count as the createFileRoute count.
+
+302. gpt-5: Read-only x402 runtime probe used nested shell quotes and failed before running; simpler quoting avoids the zsh parse error.
+
+303. gpt-5: A second read-only import probe repeated the same zsh quote failure; the repo probe should use a literal pattern without nested quote syntax.
+
+304. gpt-5: Read-only auth probe used a no-match zsh glob and stopped before rg; explicit Convex file paths avoid the shell expansion failure.
+
+305. gpt-5: Read-only money-gate probe accidentally called the outer orchestration helper from inside itself; direct command execution is required for nested probes.
+
+306. gpt-5.6-sol: While inventorying the production facilitator surface, one combined read produced a truncated result because repo status and skill docs were too large; use smaller targeted reads for dirty worktrees.
+
+307. gpt-5.6-sol: Agent Reach's documented Exa code-context command is unavailable in the configured MCP server (tool not found); its web-search fallback remains available.
+
+308. gpt-5.6-sol: A collaboration wait requested below the supported minimum and was clamped to 10 seconds; use minute-scale waits for agent inventories.
+
+309. gpt-5: While beginning the A1a Convex access-policy task, an exploratory combined read included a placeholder path and produced a noisy missing-file error; use explicit known paths for repo inspection.
+
+310. gpt-5.6-luna: Installing the required CDP SDK succeeded, but npm emitted an EBADENGINE warning because the workspace requires Node 22 while this environment is running Node 25.2.1; the install still completed.
+
+311. gpt-5.6-luna: The CDP SDK's @coinbase/cdp-sdk/x402 entrypoint statically imports optional peer @x402/svm; this repo only installs @x402/core/@x402/evm, so importing fromCdpEvmAccount failed before tests could run. The adapter needs a narrower SDK subpath or the optional peer must be installed.
+
+312. gpt-5.6-luna: The working tree is already heavily modified across unrelated areas; I had to inspect owned files and preserve those changes before implementing the accounting card.
+
+313. gpt-5.6-luna: Adding the CDP SDK's required optional @x402/svm peer emitted repeated npm ERESOLVE override warnings and changed 42 transitive packages because the workspace lockfile has unrelated dependency removals; install completed but the lockfile needs a coherence check.
+
+314. gpt-5.6-luna: The required full TypeScript check remains red on unrelated capability-supply, money, discovery, Convex worker, and integration-test files already modified outside this custody card; the new custody files produced no type errors in that run.
+
+315. gpt-5.6-luna: npm ci --dry-run cannot resolve the new CDP dependency tree under the repo's TypeScript 6.0.3: @solana/kit 5.5.1 (pulled by @coinbase/cdp-sdk 1.53.0) declares optional typescript ^5.0.0. A clean install therefore needs a lock/peer strategy beyond the successful npm install override.
+
+316. gpt-5.6-luna: While dispatching the requested read-only Wave 2 roast, a previously errored subagent still consumed the thread slot and caused agent thread limit reached; reusing errored agents should be documented or slots should release automatically.
+
+317. gpt-5.6-luna: npm install unexpectedly appended npm-init metadata (description, main, repository, keywords, author, license, bugs, homepage) to package.json while adding the CDP packages; those unrelated fields are being removed to keep the package manifest focused.
+
+318. gpt-5.6-luna: Running the focused Vitest command emitted npm's Unknown cli config '--reporter' warning; the test run still passed, but the repository/package tooling appears to retain an obsolete npm config.
+
+319. gpt-5.6-luna: The one-line tsx inspection failed because tsx evaluated top-level await as CommonJS; wrapping the probe in an async IIFE is required.
+
+320. gpt-5.6-luna: A standalone tsx probe of Convex money handlers failed before execution because @tanstack/ai exposes no CommonJS main/exports entry; the Vitest path remains usable, so the direct probe should use the repository test runner or a package-compatible loader.
+
+321. gpt-5.6-sol: While splitting facilitator discovery into a Node-only action, Convex codegen still bundled @x402/extensions because the isolate mutation imported a publisher-ref constant from the ingest module; isolate-safe modules must avoid even small runtime imports from Node-tainted barrels/files.
+
+322. gpt-5.6-sol: While checking isolate-safe x402 imports, a zsh unmatched glob aborted the inspection before ripgrep ran; quote optional globs or enumerate with rg --files first.
+
+323. gpt-5.6-sol: Convex codegen bundling passed after isolating x402, but the local deployment rejected Node actions because the shell was on Node 25 while the repo pins Node 22; run codegen under the repo-pinned supported runtime.
+
+324. gpt-5.6-sol: A root validation run overlapped a subagent's worker refactor and hit a transient unmatched try/catch parse error; coordinate a writer checkpoint before running shared-file tests.
+
+325. gpt-5: While inspecting the user-supplied outbid.lol URL, the web page reader rejected the HTTPS URL as unsafe before loading it. Search indexing is the fallback; the error gives no actionable reason for a normal public domain.
+
+326. gpt-5.6-luna: Receipt contract test initially used provider_output_invalid, but the existing public refusal enum intentionally exposes only result_invalid/provider_refused; adjusted the fixture to the existing narrow contract.
+
+327. gpt-5.6-luna: Convex codegen bundled the changed files but the local deployment rejected the push because its Node actions runtime is not configured, reporting Node.js 20/22/24 unavailable despite the repository's Node 22 requirement.
+
+328. gpt-5.6-luna: O1 filtered typecheck is clean for owned receipt/projection files; the repository-wide check still reports pre-existing unrelated dev-seed, discovery duplicate, integration harness, and chat/fixture diagnostics.
+
+329. gpt-5.6-luna: The named agent-access authorization UI suite passed but emitted non-blocking useRouter-outside-RouterProvider warnings and an invalid --localstorage-file warning from the test harness; no source failure resulted.
+
+330. gpt-5.6-luna: The repository-wide TypeScript check still reports pre-existing errors in dev-seed/discovery and unrelated integration/chat tests, while filtering for all Wave 1B/P1 owned files is clean.
+
+331. gpt-5.6-luna: Targeted ESLint invocation failed because the repo has no eslint.config.* for the installed ESLint 10; use the repository's package script/configured checker instead.
+
+332. gpt-5.6-luna: While running the W1A-A filtered typecheck, the zsh helper used the reserved read-only variable name status and aborted after tsc; use a task-specific variable name for shell exit handling.
+
+333. gpt-5: While verifying the live Pact production health endpoint for primary-source market research, curl failed during the TLS handshake even though pact.sh documentation loaded normally; status checks need either a documented fallback or clearer edge/TLS behavior.
+
+334. gpt-5.6-luna: While extending the held-units migration harness, the migration returned a raw numeric account cursor after completing a transaction subpage, but its decoder only accepts the prefixed cursor format; the next bounded page restarted from the beginning instead of advancing.
+
+335. gpt-5.6-sol: While inspecting BTNOMB's live bounty API, I assumed the response wrapped items under a bounties key; it actually returns a top-level array, so the first jq query failed and needed a schema check.
+
+336. gpt-5.6-sol: While tightening the research note, I sent an apply_patch hunk against a heading with the wrong Markdown prefix, so the patch did not match; using exact nearby text avoids the retry.
+
+337. gpt-5.6-sol: While searching installed ABI sources for AuthorizationUsed, a mixed-quote rg pattern triggered zsh unmatched-quote parsing; use a literal fixed-string search or put the pattern in a file-safe quoting form.
+
+338. gpt-5.6-luna: While inspecting the invocation route, I initially followed the internal/route-transport-runtime path from the nearby imports; the runtime contract actually lives at capability-supply/route-transport-runtime.ts, so the first read missed the file and required a retry.
+
+339. gpt-5.6-luna: A full TypeScript check was blocked by an existing parse error in capability-supply/internal/x402-settlement-verifier.ts at line 47; the focused W1A tests and owned-file oxlint remained green, so no unrelated settlement edits were made.
+
+340. gpt-5.6-luna: Replacing the unavailable viem encodeEventLog fixture helper exposed a verifier test mismatch: a standard ERC-20 Transfer produces three topics (signature + indexed from/to), while the in-flight verifier currently admits only four; the fixture cannot be both canonical and green until that boundary is aligned.
+
+341. gpt-5.6-sol: While auditing Agentic Market, the documented GET /v1/services endpoint did not return JSON to a plain request, so jq failed immediately. The endpoint may require content negotiation or currently redirect to a bot/security response; the official markdown/API docs should state the required headers or response behavior.
+
+342. gpt-5.6-luna: While reading the W2A dispatch card, a shell inspection used a duplicated /Users path and failed before running; rerun from the repository root.
+
+343. gpt-5.6-sol: While ranking Agentic Market endpoints by 30-day payer breadth, a missing parenthesis in a dense jq object caused all paginated requests to terminate with broken-pipe errors. Keep the catalogue audit query in a checked script or split transformations into smaller filters to make retries less noisy.
+
+344. gpt-5.5: While summarising the 2,285-record Agentic Market snapshot, a dense inline jq object failed on nested quoting/brackets; split catalogue statistics into smaller filters or keep reusable jq in a checked script.
+
+345. gpt-5.6-luna: W2A-C route consensus test setup: configured RPC values are read through generated Convex env (process.env), so tests must restore stubbed environment after each case to avoid cross-file leakage.
+
+346. gpt-5.6-sol: While dispatching a short-lived read-only W3B scout alongside one active writer, the agent runtime reported 'agent thread limit reached' even though listed capacity remained; stale pending_init agents appear to consume slots. This prevents the requested bounded parallel wave and needs clearer slot cleanup/status.
+
+347. gpt-5.5: While searching the live catalogue for MCP job-system names, zsh parsed a double-quoted regex immediately following \u0024term as array arithmetic; delimit shell variables with braces or pass the pattern as a separate argument.
+
+348. gpt-5.6-luna: The focused lint invocation appended file arguments after the repository script's fixed oxlint flags, so oxlint rejected --no-warn-ignored as an unexpected context; use the repo lint script without extra arguments for validation.
+
+349. gpt-5.6-luna: Owned focused ESLint invocation could not run because ESLint 10 found no eslint.config.*; repository lint configuration is not discoverable by the direct command.
+
+350. gpt-5.5: While probing Agentic Market APIs in zsh, using the loop variable name 'path' overwrote zsh's special PATH array and made every command appear missing; avoid zsh-reserved  and use a task-specific name.
+
+352. gpt-5.6-luna: Focused owned lint invocation failed because the installed ESLint 10 expects eslint.config.js while this WIP repo has no flat config; use the repository lint script or document as environment setup.
+
+353. gpt-5.6-luna: Repository lint script delegates to oxlint and rejects the ESLint-style --no-fix flag; rerun the script with its native options.
+
+354. gpt-5.6-luna: Owned W3A-B tests and source pass focused checks, but repository typecheck still stops on pre-existing unrelated WIP errors in dev seed, discovery duplicate export, integration fixtures, and other x402 test typing.
+
+355. gpt-5.5: While rechecking the live Agentic Market transaction API, I assumed the top-level key was items; the response wraps records under transactions. Inspect response keys before piping into a nested jq selector.
+
+356. gpt-5.5: The Agentic Market overview API silently accepts timeframe=30d but returns the 7-day aggregate; the dashboard actually sends numeric timeframe=30. The lack of validation can make a research snapshot confidently mislabel seven-day data as 30-day data.
+
+357. gpt-5.6-luna: Focused Vitest invocation was retried with Jest's --runInBand flag; this repo's Vitest CLI rejects that option, so use a plain file-scoped vitest run.
+
+358. gpt-5.6-sol: While adding official signed-offer transport fixtures, the first focused run hit a parser error from a missing closing brace in nested x402 extension data. Deep inline protocol fixture literals are easy to misbalance; formatter/parser preflight before the full test would surface this faster.
+
+359. gpt-5.6-luna: Validation card typecheck filter used zsh's read-only status variable and had to be retried with a different variable name; use rc/resultCode for shell pipeline status in zsh.
+
+360. gpt-5.6-sol: Competitive-landscape skill requires solana-new catalogues under ~/.claude/skills/data/catalogs, but all three documented JSON files are missing; the skill provides a live-research fallback, though its advertised local catalogue counts cannot be reproduced.
+
+361. gpt-5.6-sol: While running check:convex-codegen, the local Convex backend reached deploy start_push but rejected Node actions because the shell runtime is not Node 20/22/24. The check should preflight and explain the supported bundled Node path before starting a local push.
+
+362. gpt-5.6-sol: Running the production facilitator conformance gate exposed two stale integration fixtures: one publishes an adapter config now rejected by validation, and one reuses a principal identity that now conflicts. The failures appear outside the focused facilitator matrix and need narrowly updated fixtures.
+
+363. gpt-5.6-sol: A validation shell snippet used 'status' for the command exit code, but zsh reserves it as read-only. Use a task-specific name such as typecheck_rc in repo-side diagnostic snippets.
+
+364. gpt-5.6-sol: While updating the skill-generated landscape, a multi-hunk patch failed because one expected sentence omitted a word present in the file; splitting the update into exact smaller hunks avoids losing the otherwise-valid edits.
+
+365. gpt-5.6-sol: The available xmllint HTML validator treats standard HTML5 semantic elements (main, section, footer) as invalid because it uses an older HTML parser; diff checks pass, so those warnings are not actionable HTML5 errors.
+
+366. gpt-5: Running git diff --check for the owned fixture changes was blocked by pre-existing blank lines at EOF in convex/devSeedStore.ts and tests/unit/routes/home-work-tree-loop.test.ts; neither file is in this task's scope.
+
+367. gpt-5.4: While extracting first-party page text for a source audit, the expected BeautifulSoup parser was unavailable (ModuleNotFoundError: bs4); use Python's built-in html.parser or document the available parsing environment.
+
+368. gpt-5.6-sol: The validation skill recommends bird.fast for live X evidence, but neither a bird binary nor an invokable local npx package is available; X's oEmbed exposed only the first truncated post, so thread-level evidence requires another first-party access path.
+
+369. gpt-5: A read-only authority inspection failed because the working directory path was mistyped with a duplicated /Users segment; rerunning with the repository path fixed it.
+
+370. gpt-5: While running the focused brokered replay test, the Vitest command rejected the unsupported --runInBand flag; rerun without that Jest-only option.
+
+371. gpt-5: While inspecting brokered replay rows with an ad-hoc tsx snippet, top-level await was compiled as CommonJS and failed; use the focused Vitest harness instead.
+
+372. gpt-5.6-sol: Running the expanded facilitator Vitest suite emitted a Node --localstorage-file warning with no valid path even though all tests passed; the shared test environment likely injects an empty local-storage option and should omit it when unset.
+
+373. gpt-5.6-sol: The full integration run completed a capability publication test but then a scheduled readiness probe tried to import undici after Vitest teardown; convex-test fixtures should drain or cancel scheduled functions before environment disposal.
+
+374. gpt-5.6-sol: The action-surface audit confirms 14 registered actions but also reports live operation HTTP actions as unreferenced because routes bind through contract/adaptor indirection; the grep heuristic should recognize route-contract references to avoid false alarms.
+
+375. gpt-5: While restoring the security admin split, the task's HEAD reference still contained intentionally unlisted-table stubs; the complete source behavior was only available in ancestor e22c8726, so I had to reconcile the historical implementation with current Record-based types.
+
+376. gpt-5: Running the Convex codegen dry-run for schema validation reached the local deployment push, then failed because Node.js actions were not configured (DeploymentNotConfiguredForNodeActions / supported Node version missing); this blocks using codegen as a validation signal.
+
+377. gpt-5: A one-line tsx probe using top-level await failed because tsx eval defaults to CommonJS; wrapping the probe in an async IIFE is required.
+
+378. gpt-5: The standalone convex-test probe could not discover the Convex _generated module root because import.meta.glob is only available in the Vitest/Vite harness; use the existing schema test harness for runtime probes.
+
+379. gpt-5: The direct Convex-test persistence probe initially passed the whole mutation context instead of ctx.db and returned db.query is not a function; the corrected probe reaches the intended schema error.
+
+380. gpt-5: Focused worker tests passed, but full TypeScript checking is currently noisy with unrelated pre-existing errors across dev fixtures, discovery, integration harnesses, and worker test typings.
+
+381. gpt-5: Convex codegen dry-run attempted a deployment push and failed because the local deployment is not configured for use-node actions (supported Node.js runtime missing).
+
+382. gpt-5: While adding required x402 fixture callbacks, a multi-file patch missed one fixture's slightly different validator context and had to be split into narrow per-file patches; the code was unchanged by the failed attempt.
+
+383. gpt-5: The ponytail skill alias was initially resolved against the global ~/.agents path, but this workspace provides ponytail under its project-local .agents/skills root; use the workspace skill root for this task.
+
+384. gpt-5.6-luna: The first combined guidance/skill read used an unquoted workspace path containing spaces and failed before reading; retrying with quoted paths.
+
+385. gpt-5.6-sol: While dispatching short-lived facilitator review/fix cards, completed and interrupted subagent threads remained counted against the thread limit, forcing unrelated follow-up reuse; terminal threads should release delegation capacity predictably.
+
+386. gpt-5.6-luna: Focused Vitest invocation was retried with --runInBand, but this Vitest version rejects that option; use its default runner flags instead.
+
+387. gpt-5.6-sol: Final facilitator hygiene scan referenced a stale provider-routes directory and had to be rerun against the actual invocation-worker layout; keeping feature-path guidance current would avoid noisy false misses.
+
+388. gpt-5.6-sol: A broad security validation batch mixed the restored admin schema with retired observability-table tests and an incomplete suppression FakeDb, producing unrelated red noise around a single relevant stale admin fixture; narrower source-owned test groupings would make authz regressions easier to isolate.
+
+389. gpt-5.6-sol: Removing the obsolete ignored browser-authority payload hit a stale expected test snippet and required re-reading the current fixture before patching; authz compatibility cleanup is harder to apply safely when fixture shapes drift without a named seam.
+
+390. gpt-5.6: Starting a short-lived read-only legacy cleanup review failed because stale pending/errored agent slots still count against the task thread limit. Completed agents should be recyclable or pending_init slots should be cancellable so bounded review waves do not require local fallback.
+
+391. gpt-5.6: While filtering typecheck output I used bash-style PIPESTATUS indexing in zsh; the diagnostic command ended with an unrelated 'unknown condition' even though TypeScript output was complete. Prefer a plain redirected run or zsh's pipestatus array conventions in repo validation snippets.
+
+392. gpt-5.6: Running Convex codegen without --dry-run unexpectedly attempted a local deployment push and failed because the local backend cannot find Node 20/22/24, even though the project shell is running Node. The repo needs a documented generated-reference command that updates types without requiring a deploy-capable local backend.
+
+393. gpt-5.6-sol: While applying the current UCP identity cleanup, apply_patch rejected two update blocks for the same file. Combine same-file hunks into one update block; the tool does not coalesce repeated targets.
+
+394. gpt-5.6-sol: While validating the compatibility cleanup, green-release-baseline still required deleted hosted request/retirement scripts and artifact names. The test is coupled to retired release topology; update it to assert only current production gateway release paths.
+
+395. ox-alpha: Parallel GSD mapper subagents: 2 of 4 background subagents hung at startup (transcript idle ~37min right after first Read, no result event) and had to be interrupted + relaunched fresh; resume-without-interrupt was rejected while they were wedged.
+
+396. gpt-5.6-sol: Running the focused Vitest cleanup suite emits repeated --localstorage-file warnings with no valid path in every worker; the shared test runtime appears to inject an empty Node option and obscures otherwise clean output.
+
+397. gpt-5.6-sol: A source audit command failed because a backtick inside a double-quoted zsh regex triggered shell parsing. Keep audit patterns in single quotes or split literal route searches into separate rg arguments.
+
+398. gpt-5.6-sol: Convex codegen fails under the repo shell's Node 25 because the local backend only accepts Node 20/22/24. Prepending the Codex bundled Node 24 path makes dry-run and real codegen succeed; the project script should pin or discover a supported runtime.
+
+399. gpt-5.6-sol: Running the full Vitest suite mixes source verification with deleted .planning graph/map artifacts and unrelated stale expectations, producing 38 failures despite green facilitator conformance. Split planning-artifact checks from the source gate and publish a failure manifest by owned surface.
+
+400. gpt-5: Read-only audit search initially failed because the workspace path was mistyped with a duplicated /Users segment; corrected the path and reran.
+
+401. gpt-5.6: Running the full Vitest suite emitted a convex-test EnvironmentTeardownError while a scheduled capabilitySupplyReadiness probe was still importing undici after the test environment closed. The scheduled job should be drained or canceled in the fixture teardown so unrelated test output stays trustworthy.
+
+402. gpt-5.6: Dispatching three short audit reconciliation agents was blocked because an earlier errored subagent still counted against the thread limit. Errored agent slots should be reclaimable so bounded review waves do not silently lose planned coverage.
+
+403. gpt-5.6-sol: Running Convex codegen from a subagent used the ambient unsupported Node version instead of the workspace runtime; the repository should expose a version-pinned codegen script so delegated checks do not depend on shell PATH.
+
+404. gpt-5.6-sol: While capturing a deployment-manifest exit code under zsh, using the conventional variable name status failed because zsh reserves it as read-only; repository command examples should use a task-specific exit variable for shell portability.
+
+405. gpt-5.6-sol: While integrating an isolated worktree commit, feeding a standard unified diff directly into apply_patch failed because this patch parser does not accept conventional range headers; converting the change into one full-file update hunk worked.
+
+406. gpt-5: While inspecting the bounded facilitator-discovery card, the worktree had no node_modules, so the locked @x402/extensions API could not be read until dependencies were restored; use the pinned Node 22/npm setup before validation.
+
+407. gpt-5: Restoring the locked worktree under Node 22 failed at npm ci because the existing TypeScript 6.0.3 declaration conflicts with @solana/kit's optional TypeScript ^5 peer; legacy-peer resolution is needed for this repository's current lockfile.
+
+408. gpt-5: After switching to the canonical node_modules symlink, a quick @x402/extensions version probe failed because its package.json subpath is intentionally not exported; inspect the package declaration or absolute package file instead.
+
+409. gpt-5: Replacing one owned Bazaar adapter file initially used delete+add hunks in a single apply_patch call, which the patch tool rejected as multiple operations on one path; split the replacement into separate delete and add calls.
+
+410. gpt-5: The owned-file commit succeeded, but the repository pre-commit React Doctor hook warned it could not scan staged files because unrelated package.json/vite/vitest configuration differs between index and worktree; the hook did not block the commit.
+
+411. gpt-5: While running the focused Vitest market-terminal/services/UI suite, the local vitest dependency was absent; npx tried vitest@4.1.11 but the repo config then failed to resolve vitest/config. The worktree needs its pinned dependencies restored before focused tests can run.
+
+412. gpt-5: After the missing vitest binary, npm ci --dry-run also refused before installation because the current package graph has a pre-existing TypeScript 6 versus @solana/kit TypeScript 5 peer conflict. Validation needs the repository's existing legacy-peer-deps install path or a clean dependency lock.
+
+413. gpt-5.6-luna: The worktree had no node_modules, while the generic home-level dependency directory lacked @x402/evm; using the configured main workspace dependency directory through the requested disposable symlink resolved the setup mismatch.
+
+414. gpt-5.6-luna: The commit hook warned that react-doctor could not scan staged files because package.json, vite.config.ts, and vitest.config.ts differ between the index and worktree; those unrelated files were intentionally not staged for the bounded commit.
+
+415. gpt-5.6-sol: While atomically committing the integrated X402 custody slice, git commit --only rejected newly created owned files as unknown pathspecs; bounded commit instructions should explicitly stage new files first, then retain the path-limited commit.
+
+416. gpt-5.6-luna max: While inspecting the installed CDP x402 SDK, requiring its package.json failed because the package export map blocks that subpath; inspect package-manager metadata or exposed source declarations instead.
+
+417. gpt-5.6-luna max: The commit hook unexpectedly resolved and added 209 packages while checking staged files in an isolated worktree; staged validation hooks should not mutate dependency state.
+
+418. gpt-5.6-luna: Running the bounded Vitest card from the isolated worktree with the main node_modules via NODE_PATH failed because ESM config resolution did not honor NODE_PATH for vitest/config; invoke the main workspace test binary directly with its own workspace root.
+
+419. gpt-5.6-sol: While inspecting a published-operation fixture with tsx, loading the fixture transitively hit @tanstack/ai's export-map restriction before the target value could be printed; small fixture inspection currently requires a narrower module seam or the test harness.
+
+420. gpt-5.6-luna: While tracing the discovery import tree, a zsh regex search failed because nested quote patterns were parsed by the shell; separate literal searches avoid the quoting trap.
+
+421. gpt-5.6-luna: The isolated discovery worktree could not run Convex codegen because CONVEX_DEPLOYMENT was unset; final deployment validation must run from the configured main workspace.
+
+422. gpt-5.6-luna: The workspace .env.local is not shell-sourceable because a literal multiline value causes a parse error; extract only the required non-secret environment line rather than sourcing the file.
+
+423. gpt-5.6-luna: A Convex import-tree probe used esbuild's synchronous API with an async alias plugin and failed before analysis; plugin-backed probes require the asynchronous API.
+
+424. gpt-5.6-luna: An inline esbuild probe mixed require with top-level await and triggered Node's ambiguous module-format rule; wrapping it in an async function fixes the runner.
+
+425. gpt-5.6-luna: The local esbuild alias probe did not mirror TypeScript extensionless and directory resolution, so it could not produce a complete import metafile; repository-native codegen is the authoritative boundary check.
+
+426. gpt-5.6-luna: The commit hook could not scan staged files because package.json, vite.config.ts, and vitest.config.ts differ between index and worktree; inherited concurrent changes should not block bounded non-React commits.
+
+427. gpt-5.6-luna: The worktree-local .agents/skills/convex path was absent, so bounded tasks must use the explicitly provided main-workspace absolute skill path.
+
+428. gpt-5.6-luna: The commit hook could not scan the test-only slice because inherited package.json, vite.config.ts, and vitest.config.ts differ between index and worktree; it still created the bounded commit.
+
+429. gpt-5.6-luna: A combined reconciliation-sweep inspection exceeded the output budget and was truncated; targeted per-file reads preserve the validation evidence.
+
+430. gpt-5.6-luna: The bundled dependency symlink lacked vite/client and used an incompatible TypeScript configuration; switching to the configured main workspace Node 22 dependency tree restored typecheck.
+
+431. gpt-5.6-luna: Convex codegen could not run in the isolated reconciliation worktree because deployment configuration was absent; the configured main workspace completed codegen successfully after integration.
+
+432. gpt-5.6-luna: React Doctor could not inspect the reconciliation commit because inherited package.json, vite.config.ts, and vitest.config.ts differ between index and worktree; the bounded commit still completed.
+
+433. gpt-5.6-sol: Creating a bounded Codex worktree task failed because the tool schema rendering made the projectId placement ambiguous; retrying with projectId only inside target.
+
+434. gpt-5.6-sol: The previously noted Node 22 PATH (/opt/homebrew/opt/node@22/bin) was stale on this host, so the focused suite silently used Node 25; the installed runtime is /Users/joelchan/.nvm/versions/node/v22.22.0/bin.
+
+435. gpt-5.6-luna: Focused expiry projection test initially expected alphabetic keys in the wrong order after sorting; corrected the assertion to match JavaScript sort order.
+
+436. gpt-5.6-luna: The requested Convex codegen check stopped before codegen because the disposable worktree had no CONVEX_DEPLOYMENT; main-checkout validation is required.
+
+437. gpt-5.6-luna: The Convex codegen check reached the CLI after supplying the main workspace deployment, but the selected project rejected worktree access; final codegen validation must run from the configured main checkout.
+
+438. gpt-5.6-luna: A path-limited staging command used git add --only, which this Git version does not support; explicit owned paths preserve the intended staging boundary.
+
+439. gpt-5.6-luna: The R4-A handoff named project-local Convex/Ponytail SKILL.md paths that are absent in the isolated worktree; bounded task cards should provide the resolved absolute skill paths or the actual .agents/rules/ponytail.md location.
+
+440. gpt-5.6-luna: The focused quarantine integration test initially resolved Vitest through /Users/joelchan/node_modules, where vitest/config is missing; isolated worktrees need the configured main workspace dependency tree.
+
+441. gpt-5.6-luna: Node 22 npm ci could not resolve the current lockfile because @coinbase/cdp-sdk pulls @solana/kit with optional TypeScript 5 peer constraints while the repo pins TypeScript 6.0.3; legacy-peer resolution is currently required.
+
+442. gpt-5.6-luna: Typechecking the strengthened quarantine test showed that toMatchObject does not narrow a discriminated union; an explicit kind guard is required before reading eligibilityHash.
+
+443. gpt-5.6-luna: Convex codegen in the isolated quarantine worktree had no CONVEX_DEPLOYMENT; final configured validation must run from the main checkout or a provisioned local deployment.
+
+444. gpt-5.6-luna: An anonymous local Convex fallback required a non-secret CLERK_JWT_ISSUER_DOMAIN before codegen could prepare functions; the worktree-local ignored configuration succeeded after setting a dummy issuer.
+
+445. gpt-5.6-luna: The bounded quarantine commit hook could not scan staged files because unrelated package.json, vite.config.ts, and vitest.config.ts differ between index and worktree; it warned but committed only owned paths.
+
+446. gpt-5.6-luna: The focused canonical Convex registry test initially resolved a parent node_modules tree without vitest/config; isolated worktrees need the configured main dependency tree for Node 22 verification.
+
+447. gpt-5.6-luna: A repository-wide diff check was blocked by a pre-existing whitespace error in tests/unit/routes/home-work-tree-loop.test.ts:84 outside the registry card; path-scoped checks are required in this dirty worktree.
+
+448. gpt-5.6-luna: The registry worktree could not run Convex codegen because CONVEX_DEPLOYMENT was unset; the configured main checkout completed the authoritative check.
+
+449. gpt-5.6-sol: While checking facilitator progress, an unscoped git status expanded the repository-wide rationalisation into a truncated 1,000-line result; future status checks should use owned path filters or a repo helper that summarizes by work card.
+
+450. gpt-5.6-luna: While starting R4-C, the listed skill alias path was not directly filesystem-resolvable; using the expanded installed-plugin path fixed the lookup.
+
+451. gpt-5.6-luna: The focused Convex test runner started under Node v25.2.1 instead of the requested Node 22 and could not resolve the local vitest package; runtime/dependency availability needs checking before the test can run.
+
+452. gpt-5.6-luna: Typechecking the Convex fixture rewrite exposed that a readonly evidenceRefs helper type does not satisfy Convex's generated mutable array argument; the test helper type must match the generated mutation boundary.
+
+453. gpt-5.6-luna: While checking why the local Convex deployment was unavailable from the worktree, a shell grouping form was invalid in zsh; rerunning the same read-only diagnostic with the workdir set directly avoids the parse error.
+
+454. gpt-5.6-luna: Convex codegen dry-run is environment-scoped in this isolated worktree because its local deployment configuration is unavailable; authoritative codegen must run from the configured main checkout after integration.
+
+455. gpt-5.6-luna: Node 22 focused Vitest validation could not start because vitest was unresolved from the worktree config; the configured main checkout dependency tree was required.
+
+456. gpt-5.6-luna: The prescribed Node 22 Vitest binary started from the isolated worktree, but four suites could not load because worktree dependency/source state lagged the configured checkout; authoritative focused validation passed after integration on main.
+
+457. gpt-5.6-sol: Fast-forwarding a detached worktree commit with git update-ref left the main checkout index at the old tree, staging reverse changes for the integrated paths; resetting only those verified paths to the new HEAD restored the index while preserving unrelated staged work.
+
+458. gpt-5.6-luna: While checking validation scripts, an unmatched eslint.config.* shell glob made zsh abort a combined inspection; guard optional globs before using them in this checkout.
+
+459. gpt-5.6-sol: While atomically integrating a bounded subtask with a temporary Git index, the safety layer rejected a cleanup command containing rm -f before execution. Use a dedicated mktemp directory and exact unlink/rmdir cleanup for this repository workflow.
+
+460. gpt-5.6-sol: While isolating a one-file subtask from pre-existing overlapping working-tree edits, a hand-written temporary-index patch failed as corrupt because a hunk count drifted. Prefer temporarily restoring the known user hunks with apply_patch, commit the exact task delta, then reapply those user hunks.
+
+461. gpt-5: While tracing receipt-module consumers, a shell search command failed because nested quote syntax was malformed; simplified the search pattern and retried.
+
+462. gpt-5.6-sol: Facilitator-focused type, lint, conformance, unit, and integration gates were green, but the release source gate later exposed import-boundary violations. Consider surfacing test:imports earlier in the facilitator validation loop; the full unit run also emits existing React key/router warnings that obscure otherwise clean output.
+
+463. gpt-5: While reviewing facilitator discovery, the inspection wrapper used a nonexistent exec alias and returned no output; rerun with the repository command tool.
+
+464. gpt-5: Running npm run test:imports before the native-seam edits failed on unrelated concurrent backup/import and private-import violations (facilitator discovery and x402 authorization files), so the baseline is dirty and focused verification must isolate this card's paths.
+
+465. gpt-5: After the native-seam edits, npm run test:imports still fails only on six unrelated concurrent violations: five capability-supply facilitator imports and the x402Authorization signer import, plus two reviewed SDK-handshake imports; the owned card's violations are gone.
+
+466. gpt-5: While inspecting Bazaar boundary files, a read-only command used a duplicated /Users path and failed before execution; reran with the workspace path.
+
+467. gpt-5: Focused discovery tests via the repository cleanup wrapper failed before running because the wrapper could not resolve the local Vitest binary (spawn vitest ENOENT); invoking Vitest through the package manager is the working fallback.
+
+468. gpt-5.6-sol: A clean-checkout typecheck exposed many tracked modules importing untracked rationalisation splits, while the dirty working tree typecheck was green. Add a clean-tree source gate or tracked-import check so local untracked files cannot make release validation falsely pass.
+
+469. gpt-5: While committing the capability-execution split, the React Doctor hook could not scan staged files because package.json, vite.config.ts, and vitest.config.ts differed between the index and worktree; it warned but allowed the commit. The hook should handle unrelated unstaged configuration drift more clearly.
+
+470. gpt-5: While inspecting split files, a shell loop using echo === was parsed by zsh as a command (zsh: ==convex/... not found); use safer labels without leading equals to avoid this inspection friction.
+
+471. gpt-5: The commit hook ran react-doctor --staged and warned it could not scan because package.json, vite.config.ts, and vitest.config.ts differ between index and worktree; the security commit still completed, so the hook should tolerate unrelated unstaged configuration churn or explain this as non-blocking.
+
+472. gpt-5: Commit hook warned that React Doctor could not scan staged files because package.json, vite.config.ts, and vitest.config.ts differ between the index and worktree; it still completed the commit. Aggregate validation should stage or restore those config files before running react-doctor --staged.
+
+473. GPT-5: Answer split tracking: the task names src/modules/answer/answer-tool-use-agent.ts and answer-selected-operation-loop.ts, but those paths are absent in the current tree; only a differently nested internal answer-tool-use-agent.ts exists, so the named facades could not be staged.
+
+474. GPT-5: Commit hook friction: react-doctor --staged could not scan because package.json, vite.config.ts, and vitest.config.ts differ between the index and worktree; it warned about staged regressions but did not block the requested commit.
+
+475. gpt-5: While running the focused catalog/discovery/storefront tests directly, run-with-cleanup could not resolve the repository-local vitest binary (ENOENT); the package scripts work because npm supplies node_modules/.bin on PATH.
+
+476. gpt-5: While loading the required Convex skill guidance, the advertised short skill-root path did not resolve; the project-local .agents/skills path was needed instead.
+
+477. gpt-5: The commit hook ran React Doctor in staged mode but could not scan cleanly because unrelated package.json, vite.config.ts, and vitest.config.ts worktree edits were unstaged; it emitted a warning while allowing the scoped commit.
+
+478. gpt-5: While beginning the harness/artifact split tracking, an explicit cleanup of temporary guidance files was rejected by the environment's destructive-command guard; the worktree files themselves remained accessible and unchanged.
+
+479. gpt-5: The scoped harness/artifact commit hook again reported that staged React Doctor scanning was limited by unrelated unstaged package.json, vite.config.ts, and vitest.config.ts edits; the commit itself completed successfully.
+
+480. gpt-5: The clustered-discovery retirement commit hook again could not fully stage-scan React Doctor because unrelated package.json, vite.config.ts, and vitest.config.ts edits remained unstaged; the scoped commit completed.
+
+481. gpt-5: Running npm exec vitest with Vitest flags emitted repeated npm warnings that --file-parallelism, --test-timeout, and --reporter are unknown npm config keys before Vitest ran; invoke the local binary directly to avoid the wrapper warning noise.
+
+482. gpt-5: Initial repository status inventory was truncated because the worktree has a very large parallel change set; filtered status by the owned test paths was needed to avoid missing split files.
+
+483. gpt-5: The repository cleanup test runner assumes vitest is on PATH, but this shell does not include node_modules/.bin; invoking the local node_modules/.bin/vitest path is required.
+
+484. gpt-5: While inventorying deleted paths, an awk ERE filter failed because slash-containing character classes were not escaped correctly; use a simpler filter or a null-delimited parser.
+
+485. gpt-5.6-sol: A deletion-only retirement card staged zero files because its newline-based path filter mishandled porcelain output. Prefer explicit git add -u path scopes plus a cached diff-filter verification for bounded deletion commits.
+
+486. gpt-5: While staging the requested legacy deletions, a zsh glob for src/lib/server/business-tool* matched no paths and aborted git add; use quoted/guarded patterns or enumerate exact deleted files.
+
+487. gpt-5: Committing the scoped core rationalisation triggered the React Doctor hook warning because package.json, vite.config.ts, and vitest.config.ts differed between index and worktree; the hook still allowed the commit, but the warning is noisy for parallel scoped commits.
+
+488. gpt-5: While running the focused answer/thread/chat suite through run-with-cleanup, the wrapper spawned vitest directly and failed with ENOENT because the npm-managed bin path was not available; invoke the wrapper with npx vitest (or npm test) instead.
+
+489. gpt-5: The commit hook's staged React Doctor scan could not compare staged files because unrelated package.json, vite.config.ts, and vitest.config.ts edits remain unstaged; the hook still allowed the scoped commit after reporting the warning.
+
+490. gpt-5: Running the focused route/catalog/UI/server suite through tools/dev/run-with-cleanup.mjs directly failed with spawn vitest ENOENT because the direct shell PATH lacks the npm-provided vitest binary; invoke via npm exec or an npm script instead.
+
+491. gpt-5: The rerun via npm exec reached Vitest, but zsh passed the newline-separated rg file list as one filter argument, yielding No test files found; use a zsh array or explicit test-file arguments.
+
+492. gpt-5: Running the cleanup wrapper directly for bounded Vitest tests failed with spawn vitest ENOENT; npm-script PATH injection is required for the local binary.
+
+493. gpt-5: A zsh staging loop used the variable name path, which is tied to PATH; it shadowed the executable search path and made git/awk/wc unavailable. Use a neutral loop variable such as file.
+
+494. gpt-5: While verifying the facilitator package lock with npm install --package-lock-only --ignore-scripts --dry-run, npm 11.7 rejected the existing @coinbase/cdp-sdk -> @solana/kit peer optional TypeScript ^5 requirement against the repository's TypeScript 6.0.3 pin; the check could not resolve without legacy-peer-deps/force.
+
+495. gpt-5: While inspecting emitted Convex validator types, a temporary declaration command was rejected because the shell guard disallows rm-style cleanup even under /tmp; use a unique temp directory or avoid destructive cleanup.
+
+496. gpt-5: Replacing the x402/Bazaar double casts exposed a TypeScript declaration mismatch: direct assertion to the official DiscoveryExtension is rejected because a parsed Record<string, unknown> lacks the SDK's required info/schema shape; the existing CdpClientLike seam accepts a direct single assertion. Typecheck also reports unrelated pre-existing facilitator draft origin errors.
+
+497. gpt-5: The requested focused Vitest command through tools/dev/run-with-cleanup.mjs failed immediately with spawn vitest ENOENT, even though dependencies are present; retrying via the package runner is required.
+
+498. gpt-5: Searching the installed @x402 package with a broad recursive ripgrep traversed large bundled node_modules output and was truncated; narrowing by package declarations/implementation was needed to inspect the official Bazaar API.
+
+499. gpt-5: Running the requested repository typecheck while the shared worktree contains unrelated facilitator-discovery edits failed on offering.origin optionality errors in convex/facilitatorDiscoveryAction.ts and tests/integration/facilitator-discovery.test.ts; the focused client/ingest and TS standards checks remain green.
+
+500. gpt-5: The focused facilitator discovery test command failed with spawn vitest ENOENT when invoking run-with-cleanup directly; npm's PATH setup is required for the local Vitest binary.
+
+501. gpt-5: After removing the obsolete facilitator discovery admission shim, typecheck still failed because src/modules/capability-supply/convex.ts re-exported the removed function; the boundary barrel must be updated alongside the shim retirement.
+
+502. gpt-5: Running the focused Vitest file through the cleanup wrapper directly failed with spawn ENOENT because npm's local bin PATH is only present via an npm script; rerunning through npm exec is required.
+
+503. gpt-5.6: Running Convex codegen from a Node 22 shell failed because the local deployment at 127.0.0.1:3210 reported no supported Node runtime. The deployment process likely started with a stale PATH; restart it with the project Node 22 path before source validation.
+
+504. gpt-5: The TypeScript-standards command via node tools/dev/run-with-cleanup.mjs could not spawn vitest (ENOENT) when run directly; invoking it through npm should provide node_modules/.bin on PATH.
+
+505. gpt-5: Running the focused Vitest command through npm exec emitted an npm warning that --file-parallelism was treated as an unknown npm config; the tests still passed, but Vitest flags may need an explicit npm exec separator.
+
+506. gpt-5: The final git diff check initially failed before execution because the workspace path was mistyped as /Users/Users/...; correcting the path allowed the check to run.
+
+507. gpt-5.6-sol: Freezing the facilitator dependencies required npm's forced peer resolution because @solana/kit@5.5.1 still declares TypeScript ^5 while the repo pins TypeScript 6; align that peer range or document the expected install flag.
+
+508. gpt-5: While running focused UI/answer Vitest suites, Node repeatedly warned that --localstorage-file was provided without a valid path even though the suites passed; the shared test setup likely supplies an empty or malformed local-storage path and obscures otherwise clean review output.
+
+509. gpt-5: While inspecting the TanStack route named src/routes/$slug.tsx, an unquoted shell path expanded $slug and produced src/routes/.tsx; route filenames with shell metacharacters need literal quoting in review commands.
+
+510. gpt-5: While probing an answer UI contract with npx tsx -e under the current Node 25 runtime, module loading failed on @tanstack/ai with ERR_PACKAGE_PATH_NOT_EXPORTED before project code ran; use the repo's Vitest harness or pinned Node 22 for standalone TypeScript probes.
+
+511. gpt-5: While inspecting the hosted runtime, a read command failed because the working-directory path was mistyped; retrying with the exact workspace path resolved it.
+
+512. gpt-5: The first generated apply_patch hunk for moving the large lifecycle failed because an all-deletion hunk lacked stable context; I’m retrying with the surrounding construction lines included.
+
+513. gpt-5: The typecheck session completed without output, and a follow-up poll then reported an unknown process id; treating the silent completion as success and validating with a direct exit-status check.
+
+514. gpt-5: The initial focused smoke run used the shell default Node v25.2.1 despite the repository's Node 22 engine; an installed v22.22.0 binary was found and used explicitly for the required rerun.
+
+515. gpt-5.5: While loading UI workflow skills, the catalogue's r1 alias looked project-relative but actually resolves to /Users/joelchan/.agents/skills, causing an avoidable failed lookup. Showing expanded absolute skill paths in the session context would prevent this.
+
+516. gpt-5: While verifying the hosted-runtime split, I appended --runInBand to npm run test:imports; the listed-vitest wrapper interpreted it as a missing test path, so the suite must be run with the exact script arguments.
+
+517. gpt-5.5: While assembling the UI rationalisation skill set, similarly named skills lived under mixed catalogue roots (r1 versus r9), causing another failed absolute-path lookup. The rendered skill list should show expanded roots or group skills by resolved location.
+
+518. gpt-5: Node 22 focused test command initially omitted /bin from PATH, so npm could not spawn sh; adding /bin fixes the environment.
+
+519. gpt-5.6-sol: Running focused maturity tests under the ambient Node 25 emitted repeated '--localstorage-file was provided without a valid path' warnings; use the repository's Node 22 runtime for release validation or make the cleanup runner supply a valid path.
+
+520. gpt-5.6-sol: Passing focused test paths to 'npm run test:unit -- ...' still prepends the entire tests/unit directory, unexpectedly launching the full unit suite; use the underlying cleanup runner/Vitest directly or add a dedicated focused-test script.
+
+521. gpt-5.6-sol: A read-only hosted readiness check assumed curl, but curl is absent from the workspace shell; use Node's built-in fetch for repository diagnostics or document the minimal toolchain.
+
+522. gpt-5.6-sol: The production build passes but emits COMMONJS_VARIABLE_IN_ESM for @jsdevtools/ono/esm/index.js via the JSON-schema parser dependency; the warning is third-party noise that can obscure future actionable build diagnostics.
+
+523. gpt-5.6-sol: The gateway receipt validator accepts one positional receipt path while the smoke producer uses a receipt flag, so their invocation shapes are easy to confuse and the first validation attempt failed with requires_one_path.
+
+524. gpt-5.6-sol: Adding official shadcn Chart/Pagination failed because npm re-resolved the existing TypeScript 6 / @solana/kit TypeScript 5 peer conflict. The registry dependency install needs legacy peer resolution even though the app already builds with this graph.
+
+525. gpt-5.6-sol: While rerunning focused facilitator tests after Wave 1, @x402/svm could not resolve @solana/sysvars because it was nested under @solana/kit; concurrent package and lock changes made the shared install non-reproducible.
+
+526. gpt-5.6-sol: After the shadcn/Recharts install used legacy peer resolution, Convex bundling lost the optional @solana/sysvars transitive dependency required by @x402/svm. The project should pin the Solana runtime packages it imports transitively so unrelated UI installs cannot make codegen fail.
+
+527. gpt-5.6-sol: While using the requested agent-reach GitHub path, an unquoted gh API URL containing a question mark was expanded by zsh; quote GitHub API paths with query strings.
+
+528. gpt-5: While verifying the market UI, repository-wide lint and typecheck were obscured by a concurrently added untracked moneyBrokeredDisputeLoss module with unreachable-code and narrowing errors. A changed-files verification script would make parallel work safer and keep unrelated work from masking local quality signals.
+
+529. gpt-5: Reading the ponytail skill initially failed because the repository path contains spaces and the absolute path was not quoted; retrying with a quoted path.
+
+530. gpt-5.6: While inspecting hosted smoke flags, an ripgrep alternation beginning with --help was parsed as an option; pass -- before patterns that can begin with a dash.
+
+531. gpt-5: Running the required Node22 targeted tests reached the integration suite, but the unit suite failed during shared fixture import with adapter_config_invalid in buildDevelopmentPublishedOperationEvidence; this appears unrelated to the dispute modules and likely reflects current fixture/config drift.
+
+532. gpt-5: The workspace default node is v25 despite package engine node 22.x; use npm exec --yes --package=node@22 -- node ... to run the required validation under Node 22.
+
+533. gpt-5: The owned-file commit succeeded, but the repository commit hook invoked react-doctor and warned it could not scan staged files because package.json differs between index and worktree; unrelated package work is intentionally unstaged.
+
+534. gpt-5: Running the owned approval and recovery Convex tests under Node 22 hit a pre-existing adapter_config_invalid from the shared development published-operation fixture before approval tests and in three recovery cases; the canonical identity changes themselves passed the remaining recovery cases.
+
+535. gpt-5: Retrying the focused Node 22 tests through the cleanup wrapper with both local bin directories prepended exceeded zsh's command-length limit because the inherited PATH is already very long; direct Vitest invocation with Node 22 worked.
+
+536. gpt-5.6: While committing a selectively staged backend identity fix in a dirty shared tree, react-doctor --staged reported it could not scan because package.json differed between index and worktree, yet still labelled the result as staged regressions and allowed the commit; the hook should distinguish an unscannable state from an actual regression.
+
+537. gpt-5: While running the focused publication refresh/republish tests after collapsing the rotation fixture, the refresh test failed to parse because the createPublicOperationRef call was missing its closing parenthesis; fixed in the next edit.
+
+538. gpt-5: The first patch attempt used an incorrect placeholder path while fixing the focused test parse error and was rejected; the actual edit targeted the refresh test directly.
+
+539. gpt-5: The repository shell defaulted to Node v25.2.1 despite the package requiring Node 22; the installed Node v22.22.0 binary had to be selected explicitly for focused verification.
+
+540. gpt-5.6-sol: Running focused deployment-manifest tests in the shared worktree picked up unrelated uncommitted market cron and package/config work, making committed-slice validation misleading. Use a detached clean HEAD worktree for release truth when concurrent feature work is present.
+
+541. gpt-5: While inspecting the dispute accounting path, one read-only command failed because the workspace path was mistyped (/Users/Users/...); the corrected path worked.
+
+542. gpt-5.6-sol: A clean Node 22 npm ci fails after the dependency-freeze commit because committed TypeScript 6.0.3 conflicts with @coinbase/cdp-sdk 1.55.0's @solana/kit peer requirement (^5.0.0). The release gate needs a lockfile-consistent TypeScript 5.x pin; force/legacy-peer-deps would hide the incompatibility.
+
+543. gpt-5.6-sol: Integrating a generated clean-lock patch into a shared dirty package-lock staged cleanly in the index, but the same patch could not apply to the user-modified worktree lock. Regenerating the worktree lock normally preserves current user manifest additions while the index retains the exact committed baseline patch.
+
+544. gpt-5: While reviewing /market locally, Vite started successfully but the configured local Convex backend still exposed the pre-market function set even after codegen reported uploading functions. The dev command does not make it obvious that a separate long-running Convex dev process is required for new server functions.
+
+545. gpt-5.6-sol: Facilitator discovery unit tests accepted official PaymentRequired objects, but Convex integration rejects nested extension keys such as  before the mutation handler. The transport contract needs a lossless JSON-string persistence boundary with official x402 validation after parsing; a TypeScript cast does not solve the runtime boundary.
+
+546. gpt-5.6-sol: Correction: Convex rejects dollar-prefixed schema keys inside official PaymentRequired extensions before the mutation handler. Shell interpolation removed the literal key name from the prior papercut; avoid dollar/backtick literals in papercut command arguments.
+
+547. gpt-5: The workspace reports Node v25.2.1 although the project engine and task require Node 22; the focused x402 transport fixture also omits the now-required pinned PaymentRequired and fails before the serialization change.
+
+548. gpt-5: While checking the market refactor, npx eslint silently fetched ESLint 10 because the repo has no local ESLint binary, then failed because the project has no eslint.config file. The verification docs should point contributors to the repo's actual lint command instead of generic ESLint.
+
+549. gpt-5: The requested TypeScript check is blocked before project diagnostics because TypeScript 5.9 rejects the existing deprecated baseUrl option without ignoreDeprecations; the disjoint tsconfig owner is expected to address it.
+
+550. gpt-5.6-sol: Sourcing .env.local as shell syntax failed on an embedded newline and also contaminated deployment-manifest validation with unrelated development keys. Parse dotenv format and export only CONVEX_DEPLOYMENT for clean codegen/release validation.
+
+551. gpt-5: While tracing the migrated owner x402 fixture, an npx tsx inline probe failed because top-level await is unsupported in its default CJS eval mode; wrap the probe in an async function (the repository's normal Vitest path is unaffected). The workspace default Node is v25.2.1 despite the task requesting Node22.
+
+552. gpt-5: A second inline tsx importer probe failed before execution because the workspace CJS resolver rejects @tanstack/ai's package exports; use the Vitest suite or a direct fixture-only probe instead of importing the full harness in tsx eval.
+
+553. gpt-5: An ESM tsx inline probe also failed before importer evaluation because Convex's Vite-only import.meta.glob is unavailable under plain Node; targeted Vitest remains the valid execution path.
+
+554. gpt-5: Running Node 22 typecheck after the pinned x402 development-evidence migration stops in the unrelated readiness-probe-x402 test: its readonly accepts tuple is not assignable to the mutable PaymentRequired accepts array; the test is outside this task's owned files.
+
+555. gpt-5: The requested Node22 typecheck reached unrelated existing market UI edits and failed because src/routes/market.tsx imports missing src/components/ae/market/AeMarketPage; the migrated x402 fixture files had no reported type errors.
+
+556. gpt-5.6-sol: A clean release command tried to require dotenv before npm ci installed dependencies, leaving CONVEX_DEPLOYMENT empty even though conformance passed. Use Node 22 native env-file parsing for the single codegen deployment value.
+
+557. gpt-5.6-sol: A detached clean checkout had the local CONVEX_DEPLOYMENT name but not the ignored .convex local deployment configuration, so codegen could not load it. Clean release validation needs the existing local Convex context linked into the temporary worktree.
+
+558. gpt-5: While refining the market metric selector, the shared TabsList primitive's hidden max-sm:!h-13 rule collapsed a deliberate two-row mobile tab grid over the chart. Component-level responsive grids must explicitly override it with max-sm:!h-auto; the primitive should avoid imposing an important mobile height.
+
+559. gpt-5: While committing the fixture migration, the staged React Doctor hook warned that package.json and tsconfig.json differed between the index and worktree because of unrelated user edits; the commit still completed, but the hook could not scan the staged files.
+
+560. gpt-5: While inspecting the in-app browser viewport, I used setViewport from memory even though this runtime exposes set(); the browser skill docs could call out the exact capability method more prominently.
+
+561. gpt-5.6-sol: While creating a detached release worktree, npm ci ran in the invoking checkout because git worktree add does not change the shell directory; the isolated gate then failed with tsx not found. Run install with the worktree as the command working directory or explicitly cd before validation.
+
+562. gpt-5: While checking token usage, placing rg's -- end-of-options marker before --glob made the glob flags parse as paths; repository docs could include one copy-pasteable rg pattern for searches beginning with --.
+
+563. gpt-5: During the market UI verification, the repository-wide typecheck was blocked by unrelated PaymentRequirements typing errors in route-transport-identity.test.ts and x402-local-canary.ts; scoped UI checks are needed so unrelated canary drift does not obscure a visual refactor.
+
+564. gpt-5: During the 320px reflow check, a browser locator evaluation timed out before dispatch even though screenshots remained responsive; a lightweight viewport-metrics helper would make overflow diagnosis less brittle.
+
+565. gpt-5: The production build succeeds but emits COMMONJS_VARIABLE_IN_ESM from @jsdevtools/ono; this dependency warning adds noise to every verification run and should be upstreamed, pinned, or filtered once its runtime safety is confirmed.
+
+566. gpt-5: While reviewing Agentic Market as a UI donor, the app links to /services even though that route currently returns its 404 page. The external-service footer URL in our market UI may be stale and should be verified or changed to the marketplace root.
+
+567. gpt-5.6-luna: Running the requested Node 22 integration tests through run-with-cleanup failed because direct invocation did not add node_modules/.bin to PATH; rerun with the repository bin directory explicitly prepended.
+
+568. gpt-5.6-luna: The publication fixture migration now passes four of five assertions; the remaining refresh test fails before its assertion because convex-test does not register the existing marketActiveOperations component used by syncMarketOperationPresence. This is outside the two-file fixture card and prevents a green pair run.
+
+569. gpt-5: While visually checking the market at a desktop breakpoint, the browser helper did not expose the expected setViewportSize method; the viewport override API is non-obvious and should be documented alongside screenshot examples.
+
+570. gpt-5.6-luna: The focused Vitest command used run-with-cleanup.mjs with a bare vitest executable and failed with spawn ENOENT because node_modules/.bin was not on PATH; rerun through npm exec or the package script so npm resolves local binaries.
+
+571. gpt-5.6-luna: The scoped commit passed but the repository hook reported React Doctor could not scan staged files because unrelated package.json and tsconfig.json differ between index and worktree; the hook still created the requested two-file commit and no unrelated files were staged.
+
+572. gpt-5.6-luna: The bounded binding authority change was blocked by the clean TypeScript standards scan finding an existing inexact Convex return contract in user-owned src/modules/market/agentic-market-source.ts; the finding is outside this card and must be resolved by its owner.
+
+573. gpt-5.6-luna: The focused vitest wrapper reported spawn vitest ENOENT even though node_modules/.bin/vitest and its package were present; invoking the Vitest entrypoint directly succeeded, suggesting the wrapper inherits a PATH issue in this shared checkout.
+
+574. gpt-5.6-luna: Focused binding/publication refresh tests ran 10 cases with 8 passing; two integration cases failed in unrelated market presence setup because convex-test had no registered marketActiveOperations component, before the binding authority path was exercised.
+
+575. gpt-5.6-luna: The exact one-file commit completed, but the commit hook's staged React Doctor scan could not run because unrelated user-dirty package.json and tsconfig.json differ between index and worktree; the hook reported this without blocking the commit.
+
+576. gpt-5.6-sol: During the clean release source gate, three subprocess-heavy unit tests (CLI help, connection-refused diagnostics, papercut logger) timed out after passing in the prior clean run; concurrent full-suite process load appears to starve spawned CLIs. The release runner needs bounded subprocess concurrency or isolated subprocess-heavy shards, not larger per-test timeouts.
+
+577. gpt-5: While visually researching x402 marketplace patterns, the in-app browser timed out navigating to agent402.tools even though the site is publicly reachable through normal web fetches; external navigation readiness is less reliable than local-page inspection.
+
+578. gpt-5: While inspecting a long competitor page, browser locators lacked the expected scrollIntoViewIfNeeded method; the supported scrolling recipe is not discoverable from the browser examples.
+
+579. gpt-5.6-luna: Read-only trace used an unquoted zsh glob for a test path, which failed before rg ran; quoting the search pattern avoids shell expansion errors.
+
+580. gpt-5.6-luna: The exact two-file deployment commit triggered a non-blocking React Doctor staged-scan warning because unrelated package.json and tsconfig.json worktree edits differ from the index; the commit still completed successfully.
+
+581. gpt-5.6-luna: The shell defaulted to Node v25.2.1 while this release card requires Node 22; use the pinned NVM Node v22.22.0 binary explicitly for validation.
+
+582. gpt-5.4: While loading the declared design/research skills, the catalog paths looked project-relative but research and design-an-interface actually live under the user skill root; documenting resolved absolute paths would avoid a failed first lookup.
+
+583. gpt-5.4: Reading the operation detail route failed because the shell expanded the  segment in the filename; quote route paths containing $ when inspecting them.
+
+584. gpt-5.5: While validating the live /market screen, the ambient browser showed localhost:3000 open but no dev server was actually reachable; ambient URL state does not indicate server health.
+
+585. gpt-5.6-sol: Driving the CLI malformed-JSON redaction smoke: assigning the payload inline and expanding it in the same shell command produced an empty argument because shell expansion happens before that temporary assignment. Use a predeclared task-specific variable or a literal single-quoted argument for this probe.
+
+586. gpt-5: Installing unlazy globally succeeded for Codex but also reported a failure for unrelated PromptScript because the installer targets multiple detected agents; the summary makes a successful Codex install look partially failed.
+
+587. gpt-5: Convex codegen generated component definitions but then tried to push to the local backend, which reported no supported Node 20/22/24 runtime even though the workspace runs Node 22; dry code generation should not be coupled to this local deployment check.
+
+588. gpt-5: Starting the UI succeeds, but dev startup warns that VERCEL_OIDC_TOKEN expired weeks ago and that @stylexjs/stylex is listed in optimizeDeps.include without being installed; both warnings obscure whether the server is healthy even though Vite becomes ready.
+
+589. gpt-5.6-sol: Dispatching the requested second short-lived goblin wave: a stale pending_init agent still consumed the task thread limit, so the independent catalogue scout could not spawn despite completed agents being idle. Reusing a completed Luna agent for one bounded read-only turn is the only available workaround.
+
+590. gpt-5.6-sol: Reconstructing the current product model: reopened historical planning tickets read like active requirements and conflicted with the current source-owned Operation market architecture. Treat working-tree source, tests, and deployed surfaces as current truth and label historical tickets more clearly.
+
+591. gpt-5.4: While replacing stale durable product-context documents, apply_patch rejected a single patch containing delete-and-add operations for the same path. Split whole-file replacements into separate delete and add patches.
+
+592. gpt-5.4: While correcting the product-memory files against commit history, the untracked CONTEXT.md created earlier disappeared between read and patch in the shared dirty worktree. Re-check path existence immediately before patching and do not recreate deleted untracked context files without confirming ownership.
+
+593. gpt-5.4: While writing executable gates for the market rebuild, I assumed tests/unit/routes/market-route.test.ts existed; it does not. Gate authoring should resolve candidate test paths with rg --files before freezing commands.
+
+594. gpt-5: While reconnecting to the in-app browser after context compaction, the retained browser binding had no actionable method metadata and two reasonable navigation calls failed. Preserve the browser documentation or a callable-method synopsis across compaction.
+
+595. gpt-5.6-sol: Auditing the referenced Treg repository in a disposable directory: the command sandbox rejected a trap-based cleanup because it classified removal of a freshly created temporary directory as unsafe. The audit must either leave a temporary clone behind or use GitHub API reads only.
+
+596. gpt-5: The production build passes but emits a >500 kB chunk warning plus Shiki WASM fallback and @jsdevtools/ono ESM/CommonJS warnings. These are non-blocking dependency/bundling noise that obscures new build regressions.
+
+597. gpt-5.6-sol: Dispatching the requested Treg mapping wave: the collaboration runtime again reported its agent thread limit after only two new short-lived mappers, because a stale pending-init slot remains counted. Architecture and quality cards must wait for a mapper slot instead of running in the intended parallel wave.
+
+598. gpt-5: The in-app browser exposes a fixed 1280px viewport and no responsive emulation control; a data-URL iframe audit was correctly blocked by browser policy. This makes 375/768 visual gates unavailable even when responsive CSS can be reviewed statically.
+
+599. gpt-5: Live route probe with zsh failed because an unquoted query-string URL was treated as a glob; quote URL arguments in shell probes.
+
+600. gpt-5: Live probe retry failed because zsh reserves the variable name status and the shell could not resolve curl in that loop; use a non-reserved variable and an absolute curl path.
+
+601. gpt-5: Live route probe loop used zsh's tied path variable, so assigning route to path values overwrote PATH and hid head/tr/sed; avoid loop variable name path in zsh.
+
+602. gpt-5.6-sol: While inspecting the bundled Computer History binary for Skysight payload limits, the expected swift-demangle utility was unavailable. A documented alternative path or bundled Swift symbol tool would make local diagnostics smoother.
+
+603. gpt-5.6-sol: While measuring Treg's live visual tokens, the first browser probe assumed a semantic header element and failed because the page shell uses a different DOM wrapper; make visual-token probes null-safe before calling getComputedStyle.
+
+604. gpt-5.6-sol: Installing the replacement mono font changed several lockfile packages and npm reported 9 existing dependency vulnerabilities after removing Newsreader; the brand cutover itself is unaffected, but dependency hygiene needs a separate non-breaking audit rather than an automatic force fix.
+
+605. gpt-5.6-sol: While replacing the global theme, apply_patch rejected a delete-and-add of the same path in one patch; split whole-file replacement into a delete patch and a separate add patch.
+
+606. gpt-5.6-sol: Targeted Vitest failures dumped thousands of DOM lines and truncated the useful summary; rerunning with --reporter=dot made the public-surface gate readable.
+
+607. gpt-5.6-sol: During live review, Vite briefly failed to fetch the /for-agents split module while that route was being rewritten concurrently; wait for the leaf edit to settle and hard-reload before treating a dev-server dynamic-import miss as a product regression.
+
+608. gpt-5.6-sol: Live-checking /for-providers exposed duplicate React keys in AeSupplyAgentProof when two endpoint rows share URL and description; key should include a stable endpoint discriminator or index.
+
+609. gpt-5.6-sol: A follow-up patch to replace a nested main missed because the public worker had already corrected the landmark before the patch landed; in concurrent UI work, re-read the exact owned lines after worker completion before applying cleanup edits.
+
+610. gpt-5.6-sol: While cleaning the Wayfinder map, concatenated command output made skill-reference lines look like part of MAP.md, so an otherwise valid patch missed its context. Separate multi-file reads with file labels or inspect exact tails before patching.
+
+611. gpt-5.6: While rerunning targeted Vitest files, the familiar --reporter=basic flag was treated as a custom module in Vitest 4 and failed startup. Use the default reporter or a supported built-in reporter name for this repo.
+
+612. gpt-5.6-sol: While live-checking the rebuilt routes, the in-app Browser tab did not support the familiar Playwright waitForTimeout method. Use the Browser plugin's supported goto/domSnapshot methods rather than assuming a raw Page API.
+
+613. gpt-5.6-sol: During live visual verification, an Operation detail loaded from the market but its linked supplier profile rendered the bounded 'supplier catalogue unavailable' recovery state. The local market and supplier projections appear to rely on different source availability, which makes end-to-end catalogue inspection harder.
+
+614. gpt-5.6-sol: After fixing a Convex return validator, the existing local dev watcher did not immediately redeploy and  could not run because the watcher already owns port 3210. A documented way to inspect or nudge the active local Convex session would avoid stopping healthy dev state.
+
+615. gpt-5.6-sol: While logging a papercut, backticks inside a shell command were evaluated as command substitution and stripped the intended tool name from the note. Avoid Markdown backticks in terminal arguments; pass plain text instead.
+
+616. gpt-5.6-sol: The responsive accessibility gate ran parallel browser projects against a freshly optimizing Vite server, so dependency-triggered reloads stole focus and navigation mid-assertion. Serializing the gate and waiting for a settled reload made the same ten checks deterministic.
+
+617. gpt-5.6-sol: The in-app browser wrapper does not expose Playwright waitForSelector even though its namespace suggests familiar Playwright methods. A DOM snapshot was the reliable readiness check.
+
+618. gpt-5.6-sol: The in-app browser documentation lists networkidle as a load state, but the active backend rejects it. DOM content plus a short settled wait was required for visual comparison.
+
+619. gpt-5.6-sol: During black-box product QA, .superstack/idea-context.md still described an unresolved Solana pivot while UBIQUITOUS_LANGUAGE.md defines the current Atomic Operation Market. Skill-driven reviews can be misdirected unless stale product context is retired or regenerated.
+
+620. gpt-5.6-sol: While rechecking the in-app operation detail after a live change, the browser tab object did not support the familiar waitForLoadState method; the browser control skill should name the supported navigation wait primitive.
+
+621. gpt-5.6-sol: During the production verification build, @jsdevtools/ono emitted COMMONJS_VARIABLE_IN_ESM even though the build succeeded; the dependency warning adds noise and obscures new build regressions.
+
+622. gpt-5.6-sol: While rerunning the live search attack matrix after a server-module edit, the first requests still used the prior matcher for about a second before Vite HMR settled, briefly mimicking a regression. Live QA needs an explicit server-ready/settled signal before comparison.
+
+623. gpt-5.6-sol: While capturing the final build tail, I used zsh's read-only status variable for the exit code, so the wrapper failed before reporting the build. Use a task-specific variable name such as ae_build_exit.
+
+624. gpt-5.6: While probing upstream registry routes in zsh, a lowercase loop variable named path overwrote zsh's special command-search array, making curl and jq appear missing. Use a task-specific variable such as route instead.
+
+625. gpt-5.6: A collaboration wait requested for 1 second was silently clamped to the 10-second minimum. Use wait_agent only with documented 10-second-or-longer timeouts.
+
+626. gpt-5.6: A one-line tsx live adapter probe failed because tsx eval emits CommonJS and does not support top-level await, despite the project being ESM. Wrap eval probes in an async IIFE.
+
+627. gpt-5.6-sol: While validating a new local-model Codex profile, codex doctor rejected --profile even though normal runtime commands accept it. The profile must be validated through a runtime command or via direct config inspection instead.
+
+628. gpt-5.6-sol: While downloading a 20.47 GB Hugging Face GGUF through lms get, the transfer timed out at about 40% despite sustained throughput and left a resumable .part file. Large downloads need a longer CLI timeout or more transparent automatic resume behavior.
+
+629. gpt-5: Live registry validation exposed stale defensive caps: real public service records exceed 100 endpoints and 50 tags, so the strict adapter rejected an otherwise valid bounded page. Measure observed maxima before setting documented higher ceilings.
+
+630. gpt-5.6-sol: After lms get downloaded a concrete GGUF, lms load rejected the repository/file path even though the docs say to use the model key from lms ls; the list only displayed a shortened generated key without showing the file-to-key mapping. Using the displayed key qwen3.8-27b-obliterated is required.
+
+631. gpt-5: The one-shot Convex deploy refuses to run while the repository's local backend already owns port 3210. In an active dev session, use codegen/upload against the running backend rather than trying to start a second one.
+
+632. gpt-5.6-sol: While launching a read-only local-model smoke test, codex exec --help advertised --ask-for-approval but codex exec rejected that long flag as unexpected. The short -a form or placing the global option before the subcommand may be required.
+
+633. gpt-5.6-sol: While adapting an existing local-model profile, strict config validation rejected an mcp_servers.node_repl table that only set enabled=false because profile layers require a transport even when disabling an MCP server. Redundant disable-only MCP tables should either inherit transport cleanly or produce a clearer profile-layer message.
+
+634. gpt-5: The in-app browser's documented waitForLoadState type lists networkidle, but this browser backend rejects it. Use domcontentloaded plus a visible-result locator for local app verification.
+
+635. gpt-5.6-sol: Strict validation on Codex CLI 0.149.0 rejected model_supports_reasoning_summaries even though the current official configuration reference lists that key. The local CLI and current docs are version-skewed; the model catalog can carry the equivalent capability flag.
+
+636. gpt-5.6-sol: Strict validation on Codex CLI 0.149.0 rejected the tools.view_image and tools.web_search overrides copied from an existing local profile. Model-catalog capability flags are the compatible way to keep this text-only profile lean.
+
+637. gpt-5.6-sol: While combining profile updates with deletion of a now-unused instruction file, an apply_patch hunk boundary was malformed and the patch was rejected before changing files. Separate update/delete hunks avoid the ambiguous boundary.
+
+638. gpt-5: Production build succeeds but emits a CommonJS-in-ESM warning from @jsdevtools/ono/esm/index.js. Track or pin the transitive dependency so clean release output does not normalize a real module-format hazard.
+
+639. gpt-5.6-sol: Codex via LM Studio failed against the checkpoint's bundled Qwen chat template because LM Studio maps Codex developer messages to system after the top-level instructions, while the template permits a system message only at the beginning. Removing the separate Codex instructions block lets the developer message become the single initial system message and restores Responses compatibility.
+
+640. gpt-5.6-sol: Even with include_skills_usage_instructions=false and skill_search=false in the local profile, codex exec still injected the skills catalog and emitted an item error that 149 skills exceeded the context budget. The turn succeeds, but this adds about 9k input tokens and roughly 30 seconds of prompt processing to a tiny local-model task.
+
+641. gpt-5.6-sol: Searching LM Studio's installed app bundle for a prompt-template config key traversed a huge minified webpack file and produced tens of megabytes of noisy output before truncation. Restrict searches to structured extension/config files or exclude app webpack bundles.
+
+642. gpt-5: A final build wrapper reused zsh's read-only status parameter and failed after the build command. Use a task-specific exit variable name when capturing command status in this shell.
+
+643. qwen3.8-27b-obliterated: During the local Codex planning eval, the model attempted read_mcp_resource against an unconfigured 'filesystem' MCP server before recovering with a shell read. The model-visible tool descriptions appear to suggest a filesystem resource path that is not actually registered.
+
+644. qwen3.8-27b-obliterated: A read-only planning eval on the 27B Q5 model ran for 6m22s, made 16 mostly broad file-reading calls without reaching a final answer, and made the 36GB Mac noticeably sluggish. Future local-agent evals need strict tool-call/time budgets, smaller context, and targeted reads.
+
+645. gpt-5: The available-skills catalogue exposed ponytail-review under the project skill root, but an initial global-path assumption missed it. Resolve the listed skill-root alias before opening skill instructions.
+
+646. gpt-5: The project E2E cleanup wrapper invokes 'playwright' without resolving the local package binary, so the documented script fails with spawn ENOENT while npx playwright works. Resolve the binary through npm exec or node_modules/.bin.
+
+647. gpt-5: Refreshing the generated package lock runs under Node 25 although package.json requires Node 22, producing an engine warning; the install also reports existing audit findings. Pin or auto-select the project Node runtime for workspace commands.
+
+648. gpt-5: A timed-out direct Playwright run briefly left its port-3020 dev server behind; by the time the validated PID was stopped it had already exited. The E2E runner should own cleanup reliably even when the parent command times out.
+
+649. gpt-5: The a11y dev server passes but emits TanStack Start import-protection warnings because request-correlation and operation-execute server modules remain reachable from the client route graph. Split those imports at a true server-only boundary to keep the client bundle clean.
+
+650. gpt-5.6: While visually checking the local market, the in-app browser API advertised networkidle as a load state but rejected it at runtime. Use domcontentloaded/load for this browser backend or align the documentation and implementation.
+
+651. gpt-5.6: A multi-file UI patch missed because Prettier had split the registry freshness line differently from the earlier source snapshot. Keep visual patches smaller or re-read the exact local block immediately before applying.
+
+652. gpt-5.6: The in-app browser read-only evaluator exposes document but not the standard window.performance API, so lightweight navigation/resource timing checks fail unexpectedly. Document the evaluator sandbox or expose performance entries for local UI profiling.
+
+653. gpt-5.6: The visual polish pass initially used inline arbitrary inset-shadow values; the UI-contract scanner correctly rejected them. Named interaction-shadow tokens are required even for small tactile refinements.
+
+654. gpt-5.6: The accessibility dev server warns that @stylexjs/stylex is listed in Vite optimizeDeps.include but is not installed. Remove the stale include or restore the dependency so local startup is quiet and deterministic.
+
+655. gpt-5.6: Housekeeping kickoff loaded several skill manuals together and truncated the output, making it impossible to verify each playbook end-to-end; read selected skills individually or in bounded chunks.
+
+656. gpt-5.6: A housekeeping inspection used printf with a format string beginning in dashes inside sh and produced repeated illegal-option noise; use printf '%s\n' with the label passed as data.
+
+657. gpt-5.6: A compact loop for checking shadcn primitive imports mixed quote syntax and triggered zsh arithmetic parsing; prefer separate literal rg queries for shell-sensitive patterns.
+
+658. gpt-5.6: The patch tool rejected delete-and-readd operations for the same ADR path in one patch; split full-file replacements into a delete patch followed by an add patch.
+
+659. gpt-5.6: Repository closeout docs used Markdown hard-break spaces, but git diff --check rejects them; use ordinary line breaks in planning metadata.
+
+660. gpt-5.6: The market cron additions passed focused feature tests but the deployment manifest's scheduled-job inventory was not updated, so the repository consistency test caught four missing jobs during closeout; update the manifest at the same write seam as cron registration.
+
+661. gpt-5.6: New market aggregate components were mounted in Convex but not registered by older convex-test harnesses, so the full conformance gate failed while focused market tests passed; shared test setup must register every mounted component.
+
+662. gpt-5.6-sol: While establishing the React Doctor baseline, a combined repository-status inspection was truncated because the dirty worktree spans hundreds of files. Running narrower commands separately avoids losing package and instruction details.
+
+663. gpt-5.6-sol: Running the full gsd-map-codebase workflow → its documented four-agent parallel fan-out exceeded Codex's four-thread limit because the orchestrator counts as one; one mapper must be queued until a slot opens.
+
+664. gpt-5.6: While loading project skill indexes, a zsh unmatched .codex/skills glob aborted the loop because that directory is absent. Use find-based enumeration or null_glob for optional skill roots.
+
+665. gpt-5.6: Running the release gate from a fresh shell resolved Node 25 even though `.nvmrc`, `package.json`, and the deployment manifest pin Node 22. The verification entrypoint should select or clearly enforce the repository runtime before doing work.
+
+666. gpt-5.6: While listing small common helper files for the ponytail audit, a zsh glob spanning *.ts and *.tsx aborted because no TSX files matched. Quote globs or use find/rg --files so an empty extension set does not fail the whole read-only scan.
+
+667. gpt-5.4: While scanning external imports, a mixed single/double-quote rg expression was parsed by zsh as an unmatched quote. Split import and environment scans into simpler expressions or place complex patterns in a file-safe form.
+
+668. gpt-5.4: While locating composed Convex schema fragments, zsh aborted because an optional convex/*Schema.ts glob had no matches. Build candidate lists with rg --files/find or enable null_glob instead of passing optional raw globs.
+
+669. gpt-5.6-sol: During full React Doctor triage, canonical prompt URLs for all four deslop rules returned 404, while react-doctor 0.7.7 also reported them as unknown to 'rules explain'. This leaves dead-code diagnostics without the playbook's required version-matched guidance; publish bundled deslop prompts or make the local explainer recognize them.
+
+670. gpt-5.6: While checking optional convention files, one missing .editorconfig made a chained ls exit nonzero and skipped the existing .oxlintrc.json and RULES.MD reads. Check optional files independently or avoid && after a mixed-existence ls.
+
+671. gpt-5.6-sol: During the React Doctor baseline/final validation, the same full Vitest command produced 21 failures initially but only 4 on rerun; transient Convex component-registration and environment-teardown failures disappeared without related edits. The full suite has order/concurrency-sensitive setup, so diagnostic comparisons should rely on stable failure fingerprints or serial component tests.
+
+672. gpt-5.6: While committing a path-isolated dead-feature prune in an already-dirty worktree, the React Doctor hook refused staged scanning because package.json, tsconfig.json, and vite.config.ts differed between index and worktree. The hook should evaluate staged source against the worktree config or degrade cleanly for path-isolated commits.
+
+673. gpt-5.6: A repository-wide Markdown link check found three pre-existing broken relative links inside .agents/skills/legacy-shadcn-do-not-use. The legacy skill should be removed or its references repaired; it is outside the current planning cleanup.

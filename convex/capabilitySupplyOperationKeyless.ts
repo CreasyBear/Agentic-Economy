@@ -625,12 +625,14 @@ export async function readCurrentPublishedOperation(
     ))
     .unique()
   if (publication === null) return undefined
-  const offeringDoc = await ctx.db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
-    .unique()
-  const bindingDoc = await ctx.db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
-    .unique()
+  const [offeringDoc, bindingDoc] = await Promise.all([
+    ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
+      .unique(),
+    ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', publication.bindingId))
+      .unique(),
+  ])
   if (offeringDoc === null || bindingDoc === null) return undefined
   const contractResult = await getExactRegisteredCapabilityContract(ctx.db, {
     capabilityId: publication.capabilityId,

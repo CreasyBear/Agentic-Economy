@@ -8,11 +8,10 @@ import {
 } from '../../convex/capabilitySupplyProjection'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import schema from '../../convex/schema'
 import { bindingObservedRowDigest } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
 import {
@@ -58,7 +57,7 @@ async function readProjectedSupport(
 
 describe('capability publication projected support', () => {
   it('rebuilds capability-owned support after publication and eligibility transitions', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'catalog-origin-one',

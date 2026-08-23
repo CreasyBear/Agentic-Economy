@@ -21,10 +21,10 @@ export function AeOperatorCommandMenu({ operatorRole }: AeOperatorCommandMenuPro
         group: group.label,
         ...(hint === undefined ? {} : { hint }),
         icon: item.icon,
-        keywords: [item.href],
+        keywords: [item.href, group.label, item.label],
       }
     }),
   )
 
-  return <AeRouteCommandMenu label="Jump to" destinations={destinations} triggerClassName="hidden md:inline-flex" />
+  return <AeRouteCommandMenu label="Go to" destinations={destinations} triggerClassName="hidden md:inline-flex" />
 }

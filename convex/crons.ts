@@ -19,6 +19,34 @@ crons.interval(
 )
 
 crons.interval(
+  'refresh Agentic Market snapshots',
+  { minutes: 5 },
+  internal.marketExternalRefresh.run,
+  {},
+)
+
+crons.interval(
+  'refresh Agentic Economy API registry',
+  { hours: 24 },
+  internal.marketExternalRegistryRefresh.run,
+  {},
+)
+
+crons.interval(
+  'continue market aggregate backfill',
+  { hours: 1 },
+  internal.marketAggregateBackfill.run,
+  {},
+)
+
+crons.interval(
+  'refresh current market presence',
+  { minutes: 5 },
+  internal.marketPresence.refresh,
+  { cursor: null },
+)
+
+crons.interval(
   'refresh capability supply readiness',
   { minutes: 1 },
   internal.capabilitySupply.scheduleDueCapabilityProbes,

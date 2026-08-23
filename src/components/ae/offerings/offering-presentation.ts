@@ -79,10 +79,10 @@ export function offeringApiDtoToSupplyView(dto: PublicBusinessCatalogApiV2Dto): 
 
 export function plainLanguageCopy(value: string): string {
   return value
-    .replace(/\bpublished offering\b/giu, 'published service')
-    .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo provider')
+    .replace(/\bpublished offering\b/giu, 'published Operation')
+    .replace(/\b(?:labelled\s+)?sandbox provider\b/giu, 'demo supplier')
     .replace(/\bsandbox\b/giu, 'demo')
-    .replace(/\bcapabilities?\b/giu, 'service options')
+    .replace(/\bcapabilities?\b/giu, 'Operations')
     .replace(/\bprovenance\b/giu, 'source')
     .replace(/\bendpoint\b/giu, 'web address')
     .replace(/\bslugs?\b/giu, 'page address')
@@ -96,7 +96,7 @@ export type OfferingAccessPresentation = Readonly<{
   detail: string
   href?: string
   external: boolean
-  provenance?: 'Published by the business' | 'Found in public information'
+  provenance?: 'Published by the supplier' | 'Found in public information'
   price?: string
   technical?: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }>
@@ -121,7 +121,7 @@ export function presentOfferingAccessPath(path: PublicOfferingAccessPathView): O
     href: descriptor.documentationUrl ?? descriptor.url,
     external: true,
     provenance: descriptor.provenance === 'business_declared'
-      ? 'Published by the business'
+      ? 'Published by the supplier'
       : 'Found in public information',
     ...(descriptor.pricingSummary === undefined ? {} : { price: descriptor.pricingSummary }),
     ...(technical.length === 0 ? {} : { technical }),
@@ -133,17 +133,17 @@ export function offeringSupportCopy(
 ): Readonly<{ label: string; detail: string }> | undefined {
   if (support.routeable) {
     return {
-      label: 'An AI assistant can start this service',
+      label: 'Ready for agent calls',
       detail: support.validUntil === undefined
-        ? 'An assistant can send this request now.'
-        : `An assistant can send this request until ${formatDate(support.validUntil)}.`,
+        ? 'An agent can send this request now.'
+        : `An agent can send this request until ${formatDate(support.validUntil)}.`,
     }
   }
   if (!support.integrated) {
     return undefined
   }
   return {
-    label: 'An AI assistant cannot start this service right now',
+    label: 'Agent calls are unavailable',
     detail: support.observedAt === undefined
       ? 'Use the phone or website listed above instead.'
       : `Last checked ${formatDate(support.observedAt)}. Use the phone or website listed above instead.`,
@@ -175,4 +175,3 @@ function externalOperationTechnicalFacts(
       : [{ label: 'Authentication', value: descriptor.authenticationSummary }]),
   ]
 }
-

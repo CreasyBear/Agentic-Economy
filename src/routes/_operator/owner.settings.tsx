@@ -12,7 +12,7 @@ export const Route = createFileRoute('/_operator/owner/settings')({
   head: () => ({
     meta: [
       { title: 'Owner settings | Agentic Economy' },
-      { name: 'description', content: 'Owner account and business page settings.' },
+      { name: 'description', content: 'Supplier account and Operation settings.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -24,7 +24,7 @@ function OwnerSettingsRoute() {
     <AeOperatorShell
       operatorRole="owner"
       title="Settings"
-      description="Manage your AE account profile and business page links."
+      description="Manage your account, supplier profile, and Operations."
       currentPath="/owner/settings"
     >
       <div className="grid gap-6">

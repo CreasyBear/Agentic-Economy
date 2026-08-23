@@ -1,8 +1,6 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import type {
   KeylessExecutableSourcePort,
   KeylessExecutableToolDescriptor,
@@ -16,7 +14,7 @@ import {
 } from '@/modules/capability-supply/public'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -30,7 +28,7 @@ import {
 
 describe('capability publication keyless', () => {
   it('finds a novel keyless GET after more than 1024 prior publications, executes it, and withdraws it fail closed', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'xyz-current-price',

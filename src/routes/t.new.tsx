@@ -5,7 +5,7 @@ import { AeChat } from '@/components/ae/chat/AeChat'
 type NewThreadRouteSearch = { q?: string }
 
 /**
- * Fresh-thread entry (Perplexity-style home composer -> live answer):
+ * Fresh-thread entry for the surviving market workbench:
  * mounts AeChat with threadId={null} so the blank-welcome state is reachable
  * from a URL, and the initial query auto-starts a live SSE turn that creates
  * the thread and navigates to /t/$threadId. Transient entry: noindex.

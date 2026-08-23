@@ -60,7 +60,7 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
     expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
 
-    const recovery = screen.getByRole('link', { name: 'Back to assistant access' })
+    const recovery = screen.getByRole('link', { name: 'Back to access & usage' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 })

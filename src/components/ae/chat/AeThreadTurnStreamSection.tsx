@@ -107,7 +107,7 @@ export function AeThreadTurnStreamSection({
                         </Button>
                       ) : null}
                       <Button asChild size="sm" variant="ghost">
-                        <Link to="/">New chat</Link>
+                        <Link to="/">New search</Link>
                       </Button>
                     </div>
                   </>
@@ -138,4 +138,3 @@ function buildErrorMessage(state: AnswerTurnUiState): string | null {
   }
   return null
 }
-

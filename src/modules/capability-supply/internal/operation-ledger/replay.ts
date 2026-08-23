@@ -139,8 +139,10 @@ export async function recoverEligibilityReplayDesired(
   command: Readonly<{ actor: SupplyCommandActor; eligibility: EligibilityInput; context: RegistrationContext }>,
 ): Promise<DesiredEligibility> {
   if (replay.effectRefs.length !== 2) throw new Error('capability_supply_operation_integrity_failure')
-  const offering = await ports.loadOfferingByOfferingId(command.eligibility.offeringId)
-  const binding = await ports.loadBindingByBindingId(command.eligibility.bindingId)
+  const [offering, binding] = await Promise.all([
+    ports.loadOfferingByOfferingId(command.eligibility.offeringId),
+    ports.loadBindingByBindingId(command.eligibility.bindingId),
+  ])
   if (
     offering === null
     || binding === null

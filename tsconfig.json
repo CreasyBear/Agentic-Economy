@@ -20,7 +20,6 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
       "@/routes/owner.*": ["./src/routes/_operator/owner.*"],
       "@/routes/admin.*": ["./src/routes/_operator/admin.*"],

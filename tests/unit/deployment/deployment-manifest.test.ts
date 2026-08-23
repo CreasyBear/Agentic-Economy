@@ -281,7 +281,7 @@ describe('deployment manifest validator', () => {
     expect(rotatedResult.fingerprint).toBe(result.fingerprint)
 
     const modeChanged = validateDeploymentManifest({ ...first, VITE_AE_ANSWER_MODE: 'structured' }, { nodeMajor: 22 })
-    const presenceChanged = validateDeploymentManifest({ ...first, VITE_GOOGLE_MAPS_API_KEY: 'maps-public-key' }, { nodeMajor: 22 })
+    const presenceChanged = validateDeploymentManifest({ ...first, VITE_SENTRY_DSN: 'https://public@sentry.example/1' }, { nodeMajor: 22 })
     expect(modeChanged.fingerprint).not.toBe(result.fingerprint)
     expect(presenceChanged.fingerprint).not.toBe(result.fingerprint)
   })

@@ -25,6 +25,7 @@ import {
   type OperationInvokeGrant,
   type OperationInvokeIdempotencyReservation,
 } from '@/modules/capability-execution/operation-invoke'
+import { recordMarketEvidenceFact } from './marketEvidence'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
   if (!isRecord(value) || !isBoundedJsonValue(value)) throw new Error('operation_invocation_json_invalid')
@@ -327,6 +328,9 @@ export async function reserveHandler(
     state: 'pending',
     createdAt: args.now,
     updatedAt: args.now,
+  })
+  await recordMarketEvidenceFact(ctx, 'ae_invocation', reservation.invocationRef, args.now, {
+    operationRef: reservation.operationRef,
   })
 
   return { kind: 'reserved', reservation }

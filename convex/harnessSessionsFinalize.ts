@@ -212,15 +212,17 @@ export async function finalizeReservedAnswerTurnHandler(
     }
   }
 
-  const turn = await ctx.db
-    .query('answerTurns')
-    .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
-    .unique()
-  const existingTools = await ctx.db
-    .query('answerToolCalls')
-    .withIndex('by_turn_seq', (query) => query.eq('turnId', args.turnId))
-    .order('asc')
-    .take(ANSWER_FINALIZATION_TOOL_LIMIT)
+  const [turn, existingTools] = await Promise.all([
+    ctx.db
+      .query('answerTurns')
+      .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
+      .unique(),
+    ctx.db
+      .query('answerToolCalls')
+      .withIndex('by_turn_seq', (query) => query.eq('turnId', args.turnId))
+      .order('asc')
+      .take(ANSWER_FINALIZATION_TOOL_LIMIT),
+  ])
   const incomingTools = args.toolCalls.map((call) => ({
     toolCallId: call.toolCallId,
     seq: call.seq,

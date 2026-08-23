@@ -65,8 +65,10 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
       >
         Skip to content
       </a>
-      <header className={immersive ? 'flex-none border-b border-border bg-card' : 'border-b border-border bg-card'}>
-        <div className="flex min-h-16 w-full items-center gap-3 px-4 md:px-6">
+      <header className={immersive ? 'flex-none border-b border-border bg-card' : 'sticky top-0 z-30 px-3 pt-3'}>
+        <div className={immersive
+          ? 'flex min-h-13 w-full items-center gap-3 px-4 md:px-5'
+          : 'mx-auto flex min-h-13 w-full max-w-6xl items-center gap-3 rounded-nav border border-border bg-card/90 px-3 shadow-float backdrop-blur-md sm:px-4'}>
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <PublicNavActions mobileNavOpen={mobileNavOpen} onMobileNavOpenChange={setMobileNavOpen} />
@@ -86,9 +88,12 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
 function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Public navigation" className="grid gap-2 p-4">
-      <Link to="/" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</Link>
-      <Link to="/for-providers" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For providers</Link>
+      <Link to="/" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Home</Link>
+      <Link to="/market" search={{ window: '30d' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Catalog</Link>
+      <Link to="/for-agents" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Agent setup</Link>
+      <Link to="/for-providers" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a tool</Link>
       <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
+      <Button asChild className="min-h-11"><Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Start free</Link></Button>
     </nav>
   )
 }
@@ -102,12 +107,21 @@ function PublicNavActions({
 }) {
   return (
     <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
-      <Link to="/for-providers" className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-semibold text-brand hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
-        For providers
+      <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-xs font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm">
+        Catalog
+      </Link>
+      <Link to="/for-agents" className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex">
+        Agent setup
+      </Link>
+      <Link to="/for-providers" className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:inline-flex">
+        List a tool
       </Link>
       <Link to="/sign-in/$" params={{ _splat: '' }} className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
         Sign in
       </Link>
+      <Button asChild size="sm" className="hidden md:inline-flex">
+        <Link to="/sign-up/$" params={{ _splat: '' }}>Start free</Link>
+      </Button>
       <SheetTrigger asChild>
         <Button type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
           <MenuIcon data-icon="inline-start" aria-hidden="true" />
@@ -134,10 +148,10 @@ function PublicNavActions({
 
 function PublicBrandLink() {
   return (
-    <Link to="/" aria-label="Agentic Economy home" className="flex min-h-11 min-w-11 items-center gap-3 no-underline">
-      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand font-mono text-sm font-semibold text-on-brand">AE</span>
+    <Link to="/" aria-label="Agentic Economy home" className="flex min-h-11 min-w-11 items-center gap-2.5 no-underline">
+      <img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-8 shrink-0" />
       <span className="hidden min-w-0 sm:block">
-        <span className="font-semibold text-foreground">Agentic Economy</span>
+        <span className="font-mono text-sm font-medium tracking-[-0.02em] text-foreground">agentic economy</span>
       </span>
     </Link>
   )
@@ -145,11 +159,14 @@ function PublicBrandLink() {
 
 function PublicFooter() {
   return (
-    <footer className="border-t border-border bg-card">
-      <div className="flex w-full items-center justify-center gap-3 px-4 py-3 text-xs leading-5 text-muted-foreground md:px-6 md:py-4 md:text-sm">
-        <nav aria-label="Footer" className="flex flex-wrap justify-center gap-x-3 gap-y-1 md:gap-x-4">
-          <Link to="/for-agents" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">For agents</Link>
-          <a href="/llms.txt" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Assistants</a>
+    <footer className="mt-10 border-t border-border bg-card">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6 md:text-sm">
+        <div className="flex items-center gap-2 font-mono text-foreground"><img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-7" /><span>agentic economy</span></div>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-1">
+          <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Catalog</Link>
+          <Link to="/for-agents" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Agent setup</Link>
+          <a href="/llms.txt" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">llms.txt</a>
+          <a href="/SKILL.md" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">SKILL.md</a>
           <Link to="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>
           <Link to="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</Link>
         </nav>

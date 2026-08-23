@@ -88,38 +88,38 @@ describe('PublicBusinessNotFound copy', () => {
   it('does not assert that a business exists when no record was found', () => {
     renderWithRouter(<PublicBusinessNotFound data={{ reason: 'no_such_business' }} isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('No business page at this address')).toBeTruthy()
+    expect(screen.getByText('No supplier at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
 
-    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'Browse catalog' }).getAttribute('href')).toContain('/market')
   })
 
   it('does not revive claim framing when a real business page is withheld', () => {
     renderWithRouter(<PublicBusinessNotFound data={{ reason: 'not_public' }} isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('Business page unavailable')).toBeTruthy()
-    expect(screen.getByText('This page is not visible right now.')).toBeTruthy()
+    expect(screen.getByText('Supplier profile unavailable')).toBeTruthy()
+    expect(screen.getByText('This supplier is not published in the catalogue right now.')).toBeTruthy()
     expect(screen.queryByText(/claim or review/)).toBeNull()
-    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('/market')
   })
 
   it('falls back to the no-such-business copy when the boundary carries no reason', () => {
     renderWithRouter(<PublicBusinessNotFound isNotFound routeId="/$slug" />)
 
-    expect(screen.getByText('No business page at this address')).toBeTruthy()
+    expect(screen.getByText('No supplier at this address')).toBeTruthy()
     expect(screen.queryByText(/may need to claim or review it/)).toBeNull()
   })
 })
 
 describe('ProviderListingError copy', () => {
-  it('returns to Ask without internal terminology and keeps recovery links at 44px', () => {
+  it('returns to the catalogue without internal terminology and keeps recovery links at 44px', () => {
     const ErrorComponent = Route.options.errorComponent as ComponentType
     renderWithRouter(<ErrorComponent />)
 
-    expect(screen.getByText("This listing didn't load")).toBeTruthy()
+    expect(screen.getByText('This supplier didn’t load')).toBeTruthy()
     expect(screen.queryByText(/registry/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Try again' }).classList.contains('min-h-11')).toBe(true)
-    expect(screen.getByRole('link', { name: 'Back to Ask' }).getAttribute('href')).toBe('/')
-    expect(screen.getByRole('link', { name: 'Back to Ask' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).getAttribute('href')).toContain('/market')
+    expect(screen.getByRole('link', { name: 'Back to catalog' }).classList.contains('min-h-11')).toBe(true)
   })
 })

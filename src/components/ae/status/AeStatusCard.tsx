@@ -35,8 +35,8 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
   const accessStatus = offeringStatuses.some(({ access }) => access === 'listed') ? 'listed' : 'not_queued'
 
   return (
-    <Card className="p-6" aria-labelledby={titleId}>
-      <div className="grid gap-6">
+    <Card className="p-5 shadow-none" aria-labelledby={titleId}>
+      <div className="grid gap-5">
         <div className="grid gap-4">
           <div className="grid gap-1">
             <h2 className="block text-lg font-semibold text-foreground" id={titleId}>{readback.catalog.name}</h2>
@@ -61,7 +61,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         </div>
         <Separator />
         <div className="grid gap-4">
-          <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
+          <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
             <li><AeStatusBadge status={dispositionToAeStatus(readback.catalog.disposition)} /></li>
             <li><AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} /></li>
             <li><AeStatusBadge status={supportStatus} /></li>
@@ -70,7 +70,7 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
           {hasUnavailableCapabilities ? (
             <ul className="m-0 grid list-none gap-3 p-0">
               {readback.unavailableCapabilities.map((capability) => (
-                <li key={capability.label} className="rounded-lg border border-border bg-muted/40 p-3">
+                <li key={capability.label} className="border-b border-border py-3 last:border-b-0">
                   <p className="block font-medium text-foreground">{capability.label}</p>
                   <p className="block text-sm text-muted-foreground">{capability.explanation}</p>
                 </li>

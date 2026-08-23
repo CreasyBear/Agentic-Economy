@@ -96,7 +96,7 @@ describe("current supply funnel", () => {
     await waitFor(() =>
       expect(
         screen.getByRole("heading", {
-          name: "Tell AE where your service runs",
+          name: "Connect the Operation",
         }),
       ).toBeDefined(),
     );
@@ -126,7 +126,7 @@ describe("current supply funnel", () => {
     expect(admit.mock.calls[0]).toHaveLength(1);
 
     nextStep = "test";
-    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check readiness" }));
     await waitFor(() =>
       expect(
         screen.getByRole("heading", { name: "Run a real test" }),
@@ -255,7 +255,7 @@ describe("current supply funnel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Check and continue" }));
     expect(
-      (await screen.findAllByText(/provider connection is unavailable/i))
+      (await screen.findAllByText(/supplier connection is unavailable/i))
         .length,
     ).toBeGreaterThan(0);
     expect(preflight).not.toHaveBeenCalled();

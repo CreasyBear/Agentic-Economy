@@ -43,7 +43,7 @@ function openActionsMenu() {
 
 function openDeleteConfirmation() {
   openActionsMenu()
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete chat' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete search' }))
 }
 
 describe('AeThreadSidebar', () => {
@@ -53,19 +53,19 @@ describe('AeThreadSidebar', () => {
     vi.unstubAllGlobals()
   })
 
-  it('uses recent-chat vocabulary and keeps New chat as the marked first control', () => {
+  it('uses recent-chat vocabulary and keeps New search as the marked first control', () => {
     render(<AeThreadSidebar threads={[]} visible onNewQuestion={vi.fn()} />)
 
-    const sidebar = screen.getByRole('complementary', { name: 'Recent chats' })
-    expect(within(sidebar).getByText('Recent chats')).toBeTruthy()
-    expect(within(sidebar).getByText('No chats yet. Start a new chat to see it here.')).toBeTruthy()
+    const sidebar = screen.getByRole('complementary', { name: 'Recent searches' })
+    expect(within(sidebar).getByText('Recent searches')).toBeTruthy()
+    expect(within(sidebar).getByText('No searches yet. Start a new search to see it here.')).toBeTruthy()
 
-    const newChat = within(sidebar).getByRole('button', { name: 'New chat' })
+    const newChat = within(sidebar).getByRole('button', { name: 'New search' })
     expect(within(sidebar).getAllByRole('button')[0]).toBe(newChat)
     expect(newChat.hasAttribute('data-ae-sidebar-primary')).toBe(true)
   })
 
-  it('keeps mobile actions visible and gives the selected chat the full brand surface', () => {
+  it('keeps mobile actions visible and marks the selected search with the neutral active surface', () => {
     const view = render(
       <AeThreadSidebar
         threads={[thread]}
@@ -75,13 +75,13 @@ describe('AeThreadSidebar', () => {
       />,
     )
 
-    expect(screen.getByText('Recent chats').className).toContain('tracking-wider')
+    expect(screen.getByText('Recent searches').className).toContain('tracking-wider')
 
     const selectedLink = screen.getByRole('link', { name: /Find a plumber/ })
     const selectedRow = selectedLink.closest('li')
-    expect(selectedRow?.className).toContain('border-brand')
-    expect(selectedRow?.className).toContain('bg-brand-muted')
-    expect(screen.getByText('Find a plumber').className).toContain('text-brand-strong')
+    expect(selectedRow?.className).toContain('border-border')
+    expect(selectedRow?.className).toContain('bg-accent')
+    expect(screen.getByText('Find a plumber').className).toContain('text-foreground')
 
     const actionTrigger = screen.getByRole('button', { name: 'Actions for Find a plumber' })
     expect(actionTrigger.className).toContain('min-h-11')
@@ -104,14 +104,14 @@ describe('AeThreadSidebar', () => {
     render(<AeThreadSidebar threads={[thread]} visible onDelete={onDelete} />)
 
     openActionsMenu()
-    expect(screen.getByRole('menuitem', { name: 'Open chat' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'New chat' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Open search' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'New search' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete chat' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete search' }))
 
     const confirmation = screen.getByRole('alertdialog')
-    expect(within(confirmation).getByRole('heading', { name: 'Delete this chat?' })).toBeTruthy()
-    expect(within(confirmation).getByText('This removes the chat and stops its share links from working.')).toBeTruthy()
+    expect(within(confirmation).getByRole('heading', { name: 'Delete this search?' })).toBeTruthy()
+    expect(within(confirmation).getByText('This removes the search and stops its share links from working.')).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
     expect(onDelete).not.toHaveBeenCalled()
 
@@ -130,14 +130,14 @@ describe('AeThreadSidebar', () => {
     const view = render(<AeThreadSidebar threads={[thread]} visible onDelete={onDelete} />)
 
     openDeleteConfirmation()
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete chat' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete search' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/answer/threads/thread%3A1', { method: 'DELETE' }))
     expect(onDelete).not.toHaveBeenCalled()
 
     view.rerender(<AeThreadSidebar threads={[thread]} visible onDelete={onDelete} />)
     openDeleteConfirmation()
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete chat' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete search' }))
 
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith('thread:1'))
     expect(fetchMock).toHaveBeenCalledTimes(2)

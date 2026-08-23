@@ -111,6 +111,14 @@ class MemoryDb {
     this.seed(table, { ...row, _id: id })
     return id
   }
+
+  async get(id: string): Promise<Row | null> {
+    for (const rows of this.tables.values()) {
+      const row = rows.find((candidate) => candidate._id === id)
+      if (row !== undefined) return row
+    }
+    return null
+  }
 }
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>

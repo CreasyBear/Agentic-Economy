@@ -61,9 +61,11 @@ export function AeThreadTranscript({
     : (operationRef: string, input: Record<string, unknown>, candidateSetDigest: string) => {
         onFollowUp(JSON.stringify({ operationRef, input, candidateSetDigest }))
       }
-  const latestStatusSnapshot = latestProjectedTurn === undefined
+  const latestTurnId = latestProjectedTurn?.turnId
+  const latestTurnStatus = latestProjectedTurn?.status
+  const latestStatusSnapshot = latestTurnId === undefined || latestTurnStatus === undefined
     ? null
-    : { turnId: latestProjectedTurn.turnId, status: latestProjectedTurn.status }
+    : { turnId: latestTurnId, status: latestTurnStatus }
   const latestTerminalKey = latestStatusSnapshot === null
     ? null
     : terminalAnnouncementKey(latestStatusSnapshot)
@@ -97,7 +99,7 @@ export function AeThreadTranscript({
         : terminalAnnouncementForStatus(currentLiveStatus) ?? (
           currentLiveStatus === 'pending'
             ? 'Answer is still pending.'
-            : 'Working on your answer…'
+            : 'Searching operations…'
         )
       : latestStatusSnapshot?.status === 'pending'
         ? 'Answer is still pending.'
@@ -113,14 +115,16 @@ export function AeThreadTranscript({
       liveGenerationRef.current = null
       settledLiveTurnRef.current = null
     }
-    previousTurnRef.current = latestStatusSnapshot
+    previousTurnRef.current = latestTurnId === undefined || latestTurnStatus === undefined
+      ? null
+      : { turnId: latestTurnId, status: latestTurnStatus }
     if (currentLiveTerminalKey !== null) {
       announcedTerminalRef.current = currentLiveTerminalKey
     }
     if (terminalTransition && latestTerminalKey !== null) {
       announcedTerminalRef.current = latestTerminalKey
     }
-  }, [currentLiveTerminalKey, latestStatusSnapshot?.status, latestStatusSnapshot?.turnId, latestTerminalKey, liveTurn, terminalTransition])
+  }, [currentLiveTerminalKey, latestTerminalKey, latestTurnId, latestTurnStatus, liveTurn, terminalTransition])
 
   function handleSettledTurn(turn: PublicThreadTurn, generation: number): void {
     settledLiveTurnRef.current = { turnId: turn.turnId, status: turn.status }

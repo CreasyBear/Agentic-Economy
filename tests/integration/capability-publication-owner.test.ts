@@ -1,11 +1,9 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -22,7 +20,7 @@ import {
 
 describe('capability publication owner', () => {
   it('fails closed across readiness, stale health, and withdrawal transitions', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'lifecycle-one',
@@ -134,7 +132,7 @@ describe('capability publication owner', () => {
     ).resolves.toMatchObject({ lifecycle: { state: 'withdrawn' } })
   })
   it('replays owner maintenance responses and schedules refresh once', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'maintenance-replay',

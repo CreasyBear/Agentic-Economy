@@ -49,7 +49,7 @@ limit requires a new mandate or principal step-up.
   exposure-release, fallback and process-recovery evals;
 - malformed mandate and reservation material now fails closed under the
   completed hardening contract; customer exposure remains blocked by the
-  product-projection contract in proposed ADR-020.
+  market product contract in ADR-036.
 
 This ADR establishes product direction and control semantics. It does not prove
 public reachability, deployment, provider fulfilment, settlement, customer
@@ -66,6 +66,5 @@ result or receipt into transferable authority.
 
 The original accepted ADR selected booking as the first consequential evidence
 target. Founder direction replaced that implementation target with a generic
-business-published operation while preserving all authority-mode rules. The
-complete prior text is archived at
-[`ADR-019 pre-hardening`](../archive/adr-009-010-pre-hardening/adrs/ADR-019-authority-modes-and-consequential-operations-target.md).
+business-published operation while preserving all authority-mode rules. Git
+history preserves the complete prior text.

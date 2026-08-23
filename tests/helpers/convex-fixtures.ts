@@ -1,6 +1,7 @@
 import { convexTest, type TestConvex } from 'convex-test'
 import { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
+import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import { components } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
@@ -26,12 +27,22 @@ export type ConvexTestWithWorkersOptions = Readonly<{
   pauseWorkpool?: boolean
 }>
 
+export function convexTestWithMarketComponents() {
+  const backend = convexTest(schema, convexModules)
+  registerRateLimiter(backend)
+  registerAggregate(backend, 'marketEvidence')
+  registerAggregate(backend, 'marketOperationEvidence')
+  registerAggregate(backend, 'marketOperationRatings')
+  registerAggregate(backend, 'marketActiveOperations')
+  registerAggregate(backend, 'marketActiveSuppliers')
+  return backend
+}
+
 export function convexTestWithWorkers(
   options: ConvexTestWithWorkersOptions = {},
 ) {
-  const backend = convexTest(schema, convexModules)
+  const backend = convexTestWithMarketComponents()
   registerWorkpool(backend)
-  registerRateLimiter(backend)
   if (options.pauseWorkpool === true) {
     void backend.run(async (ctx) => {
       await ctx.runMutation(components.workpool.config.update, {

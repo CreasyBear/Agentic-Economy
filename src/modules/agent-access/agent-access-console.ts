@@ -5,7 +5,7 @@ import { listCreditActivity, readCreditAccount, readKeyUsage, type MoneyQueryPor
 import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.functions'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
-import type { AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
+import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 
 export type AgentAccessConsoleReadback = readonly AgentOperatorKeyReadback[]
 const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly AgentAccessOwnerGrantReadback[]>(

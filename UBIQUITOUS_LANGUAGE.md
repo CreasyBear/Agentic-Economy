@@ -1,158 +1,198 @@
 # Agentic Economy
 
-Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.
-Developers host implementations wherever they choose; AE owns admission, invocation identity, authority and policy, evidence, Qualified Use metering, and payment reconciliation—not runtime hosting. The existing ask → Customer Request → authority → execution → evidence product remains a first-party demand application and proving ground, not the category definition.
-**Category guardrail:** Trades, Australian small businesses, BAS and human-service coordination may be future suppliers/use cases; they are not the category, ICP, wedge or default product frame.
+Agentic Economy is the market and controlled transaction layer where authorized agents discover,
+buy, and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid
+delivery.
 
-**Creator/UGC analogy guardrail:** Instagram/YouTube-style creator/UGC vocabulary describes the supplier economy's operating-model analogy only; it never replaces canonical terms. Map creator → Supplier/Provider; post/asset → immutable, versioned Market Operation; feed/search/recommendation → agent discovery and distribution; passive view/impression/exposure → distribution observation, not invocation; active use → invocation; qualifying engagement/conversion → Qualified Use only when it is a non-owner, contract-valid production invocation with required evidence and exclusions. Qualified Use is independent of payment settlement; creator earnings → supplier accrual/settlement only after Qualified Use plus separately authoritative reconciled economic settlement. Admission/publication/eligibility use the exact contract, provenance, authorization/ownership, license/derivation rights and immutable lineage; readiness is a later independent routeability gate, and Principal/execution authority is a later independent invocation gate. Authorized licensed or materially derived supply is allowed and distinguished from unauthorized copy/republication; anti-copy/unauthorized-republication controls do not ban authorized source use; provenance/validity never proves semantic truth. Supplier-generated Operations are consumed by agents; AE does not host content or supplier runtimes. Agent runtimes are not Principals, and owner traffic, invalid/refused/failed/unknown calls, stars, likes, rankings or popularity are not Qualified Use. This destination analogy is not proof of independent supply, production settlement, recommendation quality or a functioning flywheel.
+Developers host implementations wherever they choose. AE discovers supply from official x402
+facilitator/Bazaar sources and direct publication, then owns Operation admission, pinned payment
+terms, invocation identity, bounded agent access, evidence, Qualified Use metering, and payment
+reconciliation—not runtime hosting or the consuming agent's plan.
 
+The current product is the **Atomic Operation Market**. Consuming agents own planning and
+orchestration. Historical Customer Request, WorkTree, demand, project-spine, study, inquiry,
+Bundle, RoutePlan, workflow-gate, and mission language does not describe the active product.
 
-## Language
+## Market language
+
 **Agent Service**:
-The market-facing representation of one admitted third-party Market Operation that an authorized Consuming Agent can discover, buy and invoke under a typed contract, declared price and evidence policy. Its implementation is supplier-hosted anywhere; AE owns the market and controlled transaction boundary, not runtime hosting.
-_Avoid_: Skill, repository, whole Supplier portfolio, agent-as-principal framing, local-business/trades category framing
-
-**Principal**:
-The human or organization that owns budget and authority for a transaction and delegates bounded authority to a Consuming Agent. The Principal remains accountable for spend, data use and effects.
-_Avoid_: Consuming Agent as principal, ambient or unbounded authority, Supplier
-
-**Consuming Agent**:
-The software agent acting as the Principal's delegated shopper and distribution interface: it discovers, compares, buys and invokes admitted Market Operations only within the Principal's authority and policy. It cannot make itself the Principal, expand spend, or authorize its own effects.
-_Avoid_: Agent as Principal, budget owner, supplier-hosted implementation, autonomous authority
-
-**Agent Runtime Microservice**:
-A supplier-hosted, remotely callable implementation behind one registered Capability’s Operation: bounded typed input, bounded work, and a typed result/evidence. It becomes market supply only through an admitted callable Operation and evidence path.
-_Avoid_: Skill as supply, repository as service, AE-hosted by default
+The familiar market-facing class for one admitted third-party Market Operation that an authorized
+Consuming Agent can discover, compare, buy, and invoke under a typed contract, declared price, and
+evidence policy.
+_Avoid_: Skill, repository, whole Supplier portfolio, mission, workflow
 
 **Market Operation**:
-The competitive unit of the market: one admitted third-party Operation under an immutable contract, existing Capability and Provider identities, keyed by the existing opaque `operationRef`. An authorized Consuming Agent discovers, compares, buys and invokes it through AE; contract-valid delivery is the boundary for supplier payment.
-_Avoid_: New operation identity, capability slug, provider rollup, schema conformance as semantic correctness
-
-**Supplier**:
-A market-facing portfolio rollup for one existing Provider (the registered Business) and its Market Operations. Supplier metrics aggregate member Market Operations; Supplier does not replace Provider identity or attribute individual execution.
-_Avoid_: Operation, endpoint identity, marketplace-wide provider
-
-
-**Customer Request**:
-The durable statement of the outcome a Principal wants, including known facts, hard constraints, preferences, substitution boundaries, completion requirements, and revision history.
-_Avoid_: Prompt, household intent, job post
-
-**Imported Claim**:
-A fact, offer, commitment, status or other assertion supplied by a caller about work that may have occurred outside AE. AE preserves its source, observation time and freshness without upgrading it to AE-verified truth.
-_Avoid_: Imported fact, confirmed external state
-
-**Publisher**:
-The authenticated AE identity authorized to submit a capability Publication. A Publisher may be the Provider's authorized owner or an AE curator preserving an external source; publication authority is not execution authority.
-_Avoid_: Provider by inference, catalog operator, endpoint owner
-
-**Provider**:
-The registered Business that can fulfil an Operation. Provider identity is the existing Business identity and is independent of who published the source record.
-_Avoid_: Publisher, marketplace listing, transport host
-
-**Capability**:
-A stable customer/domain ability represented by one or more registered Operations. It is not a service page, endpoint, provider, adapter, or model label.
-_Avoid_: API, listing category, provider feature
+The competitive unit of the market: one admitted third-party Operation under an immutable contract,
+existing Capability and Provider identities, and an opaque `operationRef`.
+_Avoid_: New operation identity, provider rollup, endpoint listing, schema conformance as semantic truth
 
 **Operation**:
-One executable member of a Capability, identified independently of its Provider and bound to one immutable contract version. Engines resolve registered Operation identity and typed semantics, never provider-specific routing logic.
-_Avoid_: Endpoint, tool name, provider branch
+One executable member of a Capability, identified independently of its Provider and bound to one
+immutable contract version. Engines resolve registered Operation identity and typed semantics,
+never provider-specific routing logic.
+_Avoid_: Endpoint, tool name, provider branch, task, mission
+
+**Capability**:
+A stable domain ability represented by one or more registered Operations. It is not a page,
+endpoint, provider, adapter, model label, or orchestration plan.
+_Avoid_: API listing, category, provider feature
+
+**Supplier**:
+The market-facing portfolio rollup for one existing Provider and its Market Operations. Supplier
+metrics may aggregate member Operations; Supplier never replaces Provider identity or attributes
+individual execution.
+_Avoid_: Operation, publisher, endpoint identity
+
+**Provider**:
+The registered Business that can fulfil an Operation. Provider identity is independent of who
+published the source record.
+_Avoid_: Publisher, marketplace listing, transport host
+
+**Publisher**:
+The authenticated AE identity authorized to submit a Capability Publication. Publication authority
+is not Provider identity or execution authority.
+_Avoid_: Provider by inference, endpoint owner
+
+## Authority and consumption
+
+**Principal**:
+The human or organization that owns budget and authority for a transaction and delegates bounded
+authority to a Consuming Agent. This is an internal policy and money term, not the public market
+proposition.
+_Avoid_: Agent as budget owner, ambient authority, marketplace persona
+
+**Consuming Agent**:
+Software acting within a Principal's bounded authority to discover, compare, buy, and invoke
+admitted Market Operations. It owns its planning and orchestration; AE does not.
+_Avoid_: Principal, Supplier, AE-hosted orchestrator
+
+**Agent Runtime Microservice**:
+A supplier-hosted, remotely callable implementation behind a registered Operation: bounded typed
+input, bounded work, and a typed result or evidence. It becomes market supply only through an
+admitted callable Operation.
+_Avoid_: Skill as supply, repository as service, AE-hosted runtime
+
+**Agent Access Key**:
+A revocable AE caller credential issued through the device flow after owner approval. It identifies
+one Consuming Agent and carries a narrower grant than the owning account's aggregate authority and
+funds. It never contains or replaces supplier credentials.
+_Avoid_: Provider credential, wallet private key, ambient account authority
+
+**Brokered x402 Invocation**:
+An authenticated Operation invocation in which AE enforces the caller grant and credit boundary,
+pins the exact x402 terms before release, signs through configured server-side custody, records
+payment and delivery evidence separately, and reconciles uncertain outcomes.
+_Avoid_: Direct wallet call, proof of useful delivery, safe blind retry
+
+## Supply lifecycle
 
 **Capability Contract**:
-The immutable semantic version of an Operation: strict input/output schemas, customer annotations, data use, effects, evidence requirements, and lifecycle semantics, identified by an exact digest.
+The immutable semantic version of an Operation: strict input/output schemas, annotations, data use,
+effects, evidence requirements, and lifecycle semantics, identified by an exact digest.
 _Avoid_: OpenAPI document, prompt schema, mutable descriptor
 
 **Capability Offering**:
-An execution-grade registration of one exact catalog Offering revision against one exact Capability Contract. Catalog owns the commercial facts; capability supply binds their source reference and derived hashes for execution without copying or upgrading them.
-_Avoid_: Second commercial record, operation contract, transport binding
+An execution-grade registration of one exact catalog Offering revision against one exact Capability
+Contract. Catalog owns commercial facts; capability supply binds their source reference and hashes.
+_Avoid_: Second commercial record, Operation contract, transport binding
 
 **Capability Binding**:
-One admitted private transport target for a Capability Offering and exact contract, including adapter/config digest, endpoint or resource, credential reference, continuation/cancellation posture, and evidence.
+One admitted private transport target for a Capability Offering and exact contract, including its
+adapter/config digest, endpoint or resource, credential reference, recovery posture, and evidence.
 _Avoid_: Public endpoint, authority, provider-specific engine
 
 **Capability Publication**:
-A revisioned assertion that an exact Capability Contract, catalog Offering revision, execution Offering, and Binding were admitted from one exact source revision and digest. Publication is independent of eligibility, current readiness, and execution authority.
-_Avoid_: Ready operation, verified provider, route permission
+A revisioned assertion that an exact Capability Contract, Offering revision, execution Offering,
+and Binding were admitted from one exact source revision and digest. Publication is independent of
+eligibility, readiness, and invocation authority.
+_Avoid_: Ready Operation, verified Provider, route permission
+
+**Facilitator-Discovered Publication**:
+A bootstrap Capability Publication imported from an official x402 facilitator/Bazaar discovery
+source under a system publisher. Its source provenance, schemas, and payment terms are input to AE
+admission; discovery presence alone does not confer identity, readiness, route authority, or
+semantic quality.
+_Avoid_: Verified listing, passive catalog mirror, supplier ownership proof
 
 **Capability Eligibility**:
-A durable policy and admission result for an exact Business, Capability Offering, or Capability Binding. Eligibility is independent of publication, current readiness, and route authority.
+A durable policy and admission result for an exact Business, Capability Offering, or Capability
+Binding. Eligibility is independent of publication, current readiness, and invocation authority.
 _Avoid_: Readiness probe, publication status, ranking
 
 **Capability Qualification**:
-A deterministic evaluation of one exact candidate tuple against its current contract, publication, eligibility, Binding integrity, credentials, and Readiness. Its digest records evaluated facts; its validity cannot outlive the included Readiness observation.
-_Avoid_: Fourth lifecycle, permanent approval, provider score
+A deterministic evaluation of one exact candidate tuple against its contract, publication,
+eligibility, Binding integrity, credentials, and Readiness. It is bounded by the included readiness
+observation.
+_Avoid_: Permanent approval, provider score, semantic quality judgment
 
 **Capability Source Revision**:
-The source-owned immutable revision label plus canonical digest of the descriptor material admitted for one Capability Publication revision. Changed source material cannot replay under the same admission operation key.
+The source-owned immutable revision label plus canonical digest of descriptor material admitted for
+one Capability Publication revision.
 _Avoid_: Fetch timestamp, mutable URL, marketplace row ID
 
+**Registry Entry**:
+An Agentic Economy discovery record normalized from public API metadata. It is browseable and
+inspectable but is not an admitted Operation and carries no AE routeability, delivery, settlement,
+Qualified Use, or verification claim. Its origin is provenance, not product taxonomy.
+_Avoid_: Operation, verified listing, executable service, Capability Publication
+
+**Registry Origin**:
+The internal provenance record for metadata imported into a Registry Entry. Agentic Economy retains
+its upstream identifier, URL, timestamps, and refresh state for traceability, but does not expose the
+origin as a marketplace category or co-brand.
+_Avoid_: Provider, Publisher, public filter, AE admission authority
+
 **Capability Readiness**:
-An expiring observation that one exact current Capability Binding may be considered for routing. Expiry removes routeability without withdrawing history.
+An expiring observation that one exact current Capability Binding may be considered for invocation.
+Expiry removes routeability without withdrawing history.
 _Avoid_: Publication, permanent availability, successful fulfilment
 
 **Capability Withdrawal**:
-The terminal disposition of one Capability Publication revision. It removes current routeability and projection while preserving historical plans, attempts, receipts, and evidence.
-_Avoid_: Delete provider, revoke prior evidence, readiness failure
+The terminal disposition of one Capability Publication revision. It removes current routeability
+and projection while preserving historical invocations, receipts, and evidence.
+_Avoid_: Delete Provider, revoke prior evidence, readiness failure
 
-**Bundle**:
-A versioned composition of independently meaningful tasks, their declared dependencies, branches and completion conditions. A Principal or Consuming Agent may complete one task, continue progressively, or ask AE to coordinate the remaining Bundle. A Bundle does not own a separate authority, attempt, evidence or recovery lifecycle.
-_Avoid_: Wedge-specific engine, mandatory end-to-end journey
+## Invocation and evidence
 
 **Action Invocation**:
-The durable reference for one independently resumable use of one registered action and action version. It may stand alone or belong to a Customer Request or Bundle. It preserves control and continuity while the action-specific record remains authoritative for business facts and results. An Action Invocation is not authority.
-_Avoid_: Universal task, Economic Operation, synthetic Customer Request
-
-**Workflow Cohort**:
-A labelled set of Customer Requests that exercise the same economic job and completion boundary across varied customers, businesses, capability chains, authority decisions, and recovery conditions. A cohort is an evaluation class, not a kernel or product branch.
-_Avoid_: Vertical mode, hard-coded journey, persona
-
-**Request Understanding**:
-AE's untrusted, revisable interpretation of a Customer Request. It is decision material, never authority.
-_Avoid_: Final intent, approved plan
-
-**Plan Revision**:
-An untrusted proposal composed only from registered capability contracts and typed inputs, bound to one Customer Request revision.
-_Avoid_: Execution plan, authorization
-
-**RoutePlan**:
-An exact, immutable proposal for one or more ordered registered capability steps that can satisfy a Customer Request revision. It binds the selected businesses, capability contracts, costs, data use, effects, evidence, cancellation posture, recovery, expiry, and fallback choices. A RoutePlan is never authority.
-_Avoid_: Execution permission, provider-specific workflow, approved route
-
-**RouteMandate**:
-Independently authenticated, expiring authority bound to one exact selected RoutePlan and its material limits. A different route, fallback, generation, recipient, purpose, effect, price ceiling, or expiry requires a new RouteMandate.
-_Avoid_: Signed identity, blanket consent, reusable approval
-
-**Decision-Changing Information**:
-Missing information whose answer changes which registered options are viable or comparable at the current decision point.
-_Avoid_: Required form field, collect everything upfront
-
-**Commitment-Only Information**:
-Information required only after viable options exist and the customer is approaching commitment. It remains deferred until that boundary.
-_Avoid_: Missing planning data
-
-**Completion Requirement**:
-The registered evidence role and value type that must be produced for AE to claim the requested outcome reached its defined completion point.
-_Avoid_: Tool success, run completed
-
-**Action Preparation**:
-The durable pre-route state for one exact Plan Revision action. It binds current Request and capability semantics, missing commitment information, disclosure review, and reserved preparation authority before any concrete business release or option exists.
-_Avoid_: Prepared Action, quote, provider option
-
-**Prepared Action**:
-An exact, expiring business option with bound provider, cost, data use, terms, cancellation posture, evidence, and comparison context, ready for a customer decision.
-_Avoid_: Plan, quote preview
-
-**Preparation Authority**:
-Independently verified, expiring customer permission for AE to share named data categories with bounded connected businesses for a declared comparison purpose. It may be single-use or standing, but always has cumulative recipient, exposure, and operation limits.
-_Avoid_: Caller grant, consent flag, signed identity
-
-**Preparation Disclosure Allocation**:
-A durable, value-redacted reservation binding one preparation release to a concrete business, field set, purpose, Request revision, and idempotent operation before protected values cross the provider boundary.
-_Avoid_: Post-call disclosure record, provider log
-
-**Approval Grant**:
-Legacy single-action authority bound to one exact Prepared Action and its material consequences. It does not authorize a composite RoutePlan; new route authority uses a RouteMandate.
-_Avoid_: Confirmation flag, model approval
+The durable reference for one independently resumable use of one registered action and version. It
+preserves exactly-once control and continuity while the action-specific record remains authoritative
+for business facts and results. It is not authority or an orchestration task.
+_Avoid_: Universal task, Customer Request, workflow step
 
 **Action Attempt**:
-The durable lifecycle of releasing one approved action to a provider, including uncertainty, reconciliation, cancellation, and outcome evidence.
+The durable lifecycle of releasing one authorized invocation to a Provider, including uncertainty,
+reconciliation, cancellation, and outcome evidence.
 _Avoid_: API call, execution result
+
+**Imported Claim**:
+A fact, offer, commitment, status, or assertion supplied by a caller about activity outside AE. AE
+preserves source, observation time, and freshness without upgrading it to AE-verified truth.
+_Avoid_: Confirmed external state, verified fact
+
+**Qualified Use**:
+A non-owner, contract-valid production invocation with its required evidence and exclusions. It is
+independent of payment settlement and is never inferred from a view, search, refusal, failure, or
+external x402 transfer.
+_Avoid_: Popularity, traffic, payment, verification
+
+## Discovery evidence
+
+**Operation Category**:
+A canonical editorial grouping used to browse published Operations. It may be explicitly assigned;
+otherwise the market domain derives a conservative fallback from the Capability identifier.
+_Avoid_: Free-form tag, component label
+
+**Operation Rating**:
+An authenticated one-to-five evaluation of one exact published Operation version. It does not
+transfer automatically to a later revision.
+_Avoid_: Verification, trust score
+
+**Operation Popularity**:
+Completed AE invocations for one published Operation within an explicitly named window.
+_Avoid_: Trending, best, total demand
+
+**Operation Latency**:
+Admitted-to-completed elapsed time for one published Operation within an explicitly named window.
+Public summaries require a bounded minimum sample.
+_Avoid_: Provider SLA, response-time promise

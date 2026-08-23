@@ -48,7 +48,7 @@ describe("current supply funnel", () => {
 
     expect(
       screen.getByText(
-        "Payouts become available when your payout account and provider configuration are ready.",
+        "Payouts become available when your payout account and supplier configuration are ready.",
       ),
     ).toBeDefined();
     expect(

@@ -1,11 +1,9 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -22,7 +20,7 @@ import {
 
 describe('capability publication refresh', () => {
   it('keeps an incompatible refresh observable and fail closed', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'refresh-one',
@@ -155,7 +153,7 @@ describe('capability publication refresh', () => {
   })
 
   it('preserves lineage when a validated compatible revision replaces current supply', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
       backend,
       'compatible-one',

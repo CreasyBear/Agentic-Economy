@@ -4,7 +4,8 @@ export type ProvenanceBadgeProps = Readonly<{
   source?: string
 }>
 
-/** Buyer-facing badge for published business evidence. */
-export function ProvenanceBadge(_props: ProvenanceBadgeProps) {
-  return <Badge variant="default">Verified</Badge>
+/** Source label only. It never asserts verification. */
+export function ProvenanceBadge({ source }: ProvenanceBadgeProps) {
+  if (source === undefined || source.trim().length === 0) return null
+  return <Badge variant="outline">Source: {source}</Badge>
 }

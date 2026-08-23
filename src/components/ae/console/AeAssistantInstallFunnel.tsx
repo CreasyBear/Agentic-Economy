@@ -58,21 +58,21 @@ export function AeAssistantInstallFunnel({
       title: 'Search by job',
       access: 'Anonymous read',
       description: `Use the repo-local CLI after reading the handshake. Search current Operations through ${operationMarketRoute(baseUrl, OPERATION_MARKET_SEARCH_PATH)}.`,
-      code: `${cli} search "extract line items from a supplier invoice" --json`,
+      code: `${cli} search "weather forecast" --base-url "${baseUrl}" --json`,
     },
     {
       id: 'inspect',
       title: 'Inspect one exact Operation',
       access: 'Anonymous read',
       description: `Read its current inputs, terms, price, effects, and evidence through ${operationMarketRoute(baseUrl, OPERATION_MARKET_DETAIL_PATH)}.`,
-      code: `${cli} inspect "$AE_OPERATION_REF" --json`,
+      code: `${cli} inspect "$AE_OPERATION_REF" --base-url "${baseUrl}" --json`,
     },
     {
       id: 'compare',
       title: 'Compare exact candidates',
       access: 'Anonymous read',
       description: `When search returns more than one viable Operation, compare two to four exact references through ${operationMarketRoute(baseUrl, OPERATION_MARKET_COMPARE_PATH)}.`,
-      code: `${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
+      code: `${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --base-url "${baseUrl}" --json`,
     },
     {
       id: 'direct-keyless',
@@ -86,7 +86,7 @@ export function AeAssistantInstallFunnel({
       title: 'Authenticated lane: connect one AE caller key',
       access: 'Only when required',
       description: 'Connect before invoking through the authenticated gateway. Complete the OAuth device flow, or validate an existing AE_API_KEY against the authenticated gateway. A nonempty environment string is never treated as connected. The caller key identifies the caller at AE; it does not contain provider credentials or silently approve spending.',
-      code: `${cli} connect --json`,
+      code: `${cli} connect --base-url "${baseUrl}" --json`,
     },
     {
       id: 'invoke',
@@ -94,21 +94,21 @@ export function AeAssistantInstallFunnel({
       access: 'Authenticated',
       description: 'Use input that matches the inspected schema. The idempotency key is required; choose it once and keep it with this invocation.',
       code: `export AE_IDEMPOTENCY_KEY='invoice-extract-2026-08-11-001'
-${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --base-url "${baseUrl}" --json`,
     },
     {
       id: 'status',
       title: 'Read the recorded status',
       access: 'Authenticated',
       description: 'Use the invocation reference returned by invoke. Do not start replacement work while the outcome is uncertain.',
-      code: `${cli} status "$AE_INVOCATION_REF" --json`,
+      code: `${cli} status "$AE_INVOCATION_REF" --base-url "${baseUrl}" --json`,
     },
     {
       id: 'recover',
       title: 'Recover uncertain work',
       access: 'Authenticated',
       description: 'Recover the same invocation with bounded evidence and the same stable key. Never create a replacement invocation to guess at an uncertain outcome.',
-      code: `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+      code: `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --base-url "${baseUrl}" --json`,
     },
   ] as const
   const keyCommand = issuedSecret === undefined ? undefined : `export AE_API_KEY='${issuedSecret.replaceAll("'", "'\\''")}'
@@ -131,9 +131,9 @@ export AE_API_KEY_ORIGIN='${apiKeyOrigin}'`
   }
 
   return (
-    <Card className="gap-5 border-border bg-card">
+    <Card className="gap-5 border-border bg-card shadow-none">
       <CardHeader>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">From a job to a durable result</h2>
+        <h2 className="text-lg font-semibold text-foreground">Connect an agent</h2>
         <CardDescription>
           Read and compare without a key. Eligible direct-keyless Operations can run through anonymous MCP; connect only when you need the authenticated invoke, status, or recovery lane.
         </CardDescription>

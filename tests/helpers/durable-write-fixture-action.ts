@@ -22,9 +22,9 @@ const durableWriteFixtureInputSchema = z.object({
 
 type DurableWriteFixtureInput = z.infer<typeof durableWriteFixtureInputSchema>
 
-const durableWriteFixtureOutputSchema = z.object({
+const durableWriteFixtureOutputSchema = z.looseObject({
   kind: z.string(),
-}).passthrough()
+})
 
 function contactFieldKeys(contact: DurableWriteFixtureInput['contact']): readonly string[] {
   return [

@@ -13,6 +13,7 @@ import {
   operationResultValue,
   usageValue,
 } from '@/modules/capability-execution/convex'
+import { recordMarketEvidenceFact } from './marketEvidence'
 
 export const OPERATION_INVOKE_RETRY_AFTER_MS = 1_000
 
@@ -327,6 +328,16 @@ export async function finalizeDispatchHandler(
     dispatchState: normalizedProjection.dispatchState,
     updatedAt: Date.now(),
   })
+  if (normalizedProjection.state === 'completed') {
+    const completedAt = Date.now()
+    await recordMarketEvidenceFact(ctx, 'ae_invocation_completed', row.invocationRef, completedAt, {
+      operationRef: row.operationRef,
+      durationMs: Math.max(0, completedAt - row.createdAt),
+    })
+  }
+  if (normalizedProjection.state === 'reconciliation_required') {
+    await recordMarketEvidenceFact(ctx, 'ae_reconciliation_required', row.invocationRef, Date.now())
+  }
   return {
     kind: canonicalResult.kind,
     attemptRef: attempt.attemptRef,

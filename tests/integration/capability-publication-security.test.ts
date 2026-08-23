@@ -4,14 +4,13 @@ import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import schema from '../../convex/schema'
 import {
   rebuildCapabilityOriginSupplyProjection,
   setCapabilitySupplyEligibilityCommand,
 } from '../../convex/capabilitySupply'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   prepareCapabilityPublicationMutation,
   publishedBusinessOwner,
@@ -64,7 +63,7 @@ async function preparedPublicationArgs(
 
 describe('capability publication security', () => {
   it('refuses anonymous publication without persisting any publication state', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId } = await publishedBusinessOwner(backend, 'security-owner')
     await seedCatalogOffering(backend, businessId, 'owner')
 
@@ -76,7 +75,7 @@ describe('capability publication security', () => {
     await expect(publicationRows(backend)).resolves.toEqual({ contracts: [], offerings: [], bindings: [] })
   })
   it('refuses an authenticated owner when the server write admission is missing', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(backend, 'security-source-write')
     await seedCatalogOffering(backend, businessId, 'source-write')
     await registerProviderConnection(backend, businessId)
@@ -90,7 +89,7 @@ describe('capability publication security', () => {
     await expect(publicationRows(backend)).resolves.toEqual({ contracts: [], offerings: [], bindings: [] })
   })
   it('refuses a different business owner without persisting any publication state', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const target = await publishedBusinessOwner(backend, 'security-target')
     const attacker = await publishedBusinessOwner(backend, 'security-attacker')
     await seedCatalogOffering(backend, target.businessId, 'target')
@@ -104,7 +103,7 @@ describe('capability publication security', () => {
   })
 
   it('leaves no partial contract when a later offering identity check refuses publication', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(backend, 'security-atomic')
     await seedCatalogOffering(backend, businessId, 'atomic')
     await registerProviderConnection(backend, businessId)
@@ -130,7 +129,7 @@ describe('capability publication security', () => {
     await expect(publicationRows(backend)).resolves.toEqual(before)
   })
   it('denies anonymous reads of keyless executable descriptors carrying fixed query values', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(backend, 'security-fixed-query')
     await seedCatalogOffering(backend, businessId, 'fixed-query')
     const baseline = publicationArgs(businessId, 'fixed-query')

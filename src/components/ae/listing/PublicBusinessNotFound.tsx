@@ -17,26 +17,26 @@ export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
         {reason === 'not_public' ? (
           <Empty className="border border-border bg-card p-5">
             <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">Business page unavailable</h1>
-              <EmptyDescription>This page is not visible right now.</EmptyDescription>
+              <h1 className="text-lg font-medium tracking-tight">Supplier profile unavailable</h1>
+              <EmptyDescription>This supplier is not published in the catalogue right now.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button asChild variant="default" className="min-h-11"><Link to="/for-providers">Publish an operation</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+                <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
               </div>
             </EmptyContent>
           </Empty>
         ) : (
           <Empty className="border border-border bg-card p-5">
             <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">No business page at this address</h1>
-              <EmptyDescription>Nothing is published here. Check the address, or return to Ask.</EmptyDescription>
+              <h1 className="text-lg font-medium tracking-tight">No supplier at this address</h1>
+              <EmptyDescription>Nothing is published here. Check the address, or browse the catalogue.</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Ask a question</Link></Button>
+                <Button asChild variant="default" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
+                <Button asChild variant="secondary" className="min-h-11"><Link to="/for-providers">Publish an Operation</Link></Button>
               </div>
             </EmptyContent>
           </Empty>

@@ -24,7 +24,7 @@ export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   loader: () => readCanonicalBaseUrlServer(),
   head: () => ({ meta: [
-    { title: 'Assistant access | Agentic Economy' },
+    { title: 'Agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessRoute,
@@ -70,7 +70,7 @@ function AgentAccessHome() {
       setItems(await readConsole())
       setError(undefined)
     } catch {
-      setError('Your assistant access and balance are temporarily unavailable.')
+      setError('Agent access and balance are temporarily unavailable.')
     } finally {
       setLoading(false)
     }
@@ -126,7 +126,7 @@ function AgentAccessHome() {
     try {
       const result = await issueKey({
         data: {
-          name: 'Default assistant',
+          name: 'Default agent',
           idempotencyKey: issuanceKey.current,
           environment: 'sandbox',
         },
@@ -188,15 +188,15 @@ function AgentAccessHome() {
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Assistant access"
-      description="Connect and manage your AI: review permission, usage, credit, and access."
+      title="Agent access"
+      description="Connect an agent, review its permissions, and manage keys, usage, and credit."
       currentPath="/agent-access"
-      eyebrow="YOUR ASSISTANT"
+      eyebrow="ACCESS"
     >
       {localE2E ? (
         <div className="grid gap-3">
           <Alert>
-            <AlertTitle>Local preview — no assistant is connected</AlertTitle>
+            <AlertTitle>Local preview — no agent is connected</AlertTitle>
             <AlertDescription>
               <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
               <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
@@ -206,7 +206,7 @@ function AgentAccessHome() {
       ) : null}
       {error === undefined ? null : (
         <Alert variant="destructive">
-          <AlertTitle>Assistant access unavailable</AlertTitle>
+          <AlertTitle>Agent access unavailable</AlertTitle>
           <AlertDescription>
             <p>{error}</p>
             <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
@@ -258,7 +258,7 @@ function issueErrorCopy(code: 'missing_auth' | 'invalid_input' | 'idempotency_co
 
 function operationApprovalErrorCopy(code: 'authentication_required' | 'invocation_not_found' | 'authority_not_pending' | 'grant_not_current' | 'invocation_invalid'): string {
   if (code === 'authentication_required') return 'Sign in as the access owner, then try again.'
-  if (code === 'grant_not_current') return 'This assistant grant changed. Review current access before trying again.'
+  if (code === 'grant_not_current') return 'This agent grant changed. Review current access before trying again.'
   if (code === 'invocation_not_found') return 'This waiting operation is no longer available. Refresh the list.'
   if (code === 'authority_not_pending') return 'This operation no longer needs a decision. Refresh the list.'
   return 'This operation could not be verified. Refresh the list before deciding.'

@@ -27,7 +27,7 @@ export function AeSupplyEarningsCard({
   onStatusRefreshed?: () => void | Promise<void>;
 }>) {
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader className="p-5 pb-0">
         <CardTitle>
           <h3 className="text-lg font-semibold text-foreground">
@@ -46,7 +46,7 @@ export function AeSupplyEarningsCard({
               </EmptyTitle>
               <EmptyDescription>
                 {readback.code === "unauthenticated"
-                  ? "An authenticated owner session is required to read provider earnings."
+                  ? "An authenticated owner session is required to read supplier earnings."
                   : "We could not read source earnings and payout data. Try again later."}
               </EmptyDescription>
             </EmptyHeader>
@@ -56,8 +56,8 @@ export function AeSupplyEarningsCard({
             <EmptyHeader>
               <EmptyTitle>No earnings have been recorded.</EmptyTitle>
               <EmptyDescription>
-                This owner does not have a business with a provider-earnings
-                account yet. Setup or test calls do not create earnings.
+                This supplier does not have an earnings account yet. Setup or
+                test calls do not create earnings.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -66,7 +66,7 @@ export function AeSupplyEarningsCard({
             <EmptyHeader>
               <EmptyTitle>No earnings have been recorded.</EmptyTitle>
               <EmptyDescription>
-                No provider-earnings money account exists for this business yet.
+                No supplier earnings account exists yet.
                 Setup or test calls do not create earnings.
               </EmptyDescription>
             </EmptyHeader>
@@ -84,12 +84,12 @@ export function AeSupplyEarningsCard({
             ))}
             {readback.accountsTruncated ? (
               <p className="text-sm text-muted-foreground">
-                Only the first 10 provider-earnings currencies are shown.
+                Only the first 10 supplier earnings currencies are shown.
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">
               Setup or test calls do not create earnings. Earnings appear only
-              when source money records provider accruals.
+              when source money records supplier accruals.
             </p>
           </div>
         )}
@@ -273,7 +273,7 @@ function EarningsCurrencyCard({
           {account.currency} earnings
         </h4>
         <p className="text-sm text-muted-foreground">
-          Source-recorded provider earnings and payout state.
+          Source-recorded supplier earnings and payout state.
         </p>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -295,7 +295,7 @@ function EarningsCurrencyCard({
         </div>
         <div className="grid gap-1">
           <dt className="text-sm font-medium text-muted-foreground">
-            Provider net
+            Supplier net
           </dt>
           <dd className="m-0 text-foreground">
             {formatCurrencyAmount(account.earnings.providerNet)}
@@ -383,7 +383,7 @@ function EarningsCurrencyCard({
             {evidenceDigest === undefined ? null : (
               <div className="grid gap-1">
                 <dt className="text-xs font-medium text-muted-foreground">
-                  Provider evidence digest
+                  Supplier evidence digest
                 </dt>
                 <dd className="m-0 break-all font-mono text-xs text-foreground">
                   {evidenceDigest}
@@ -437,7 +437,7 @@ function EarningsCurrencyCard({
       )}
       <div className="grid gap-2 rounded-md bg-muted/40 p-3">
         <p className="m-0 text-sm text-muted-foreground">
-          Payouts become available when your payout account and provider configuration are ready.
+          Payouts become available when your payout account and supplier configuration are ready.
         </p>
         <div className="flex flex-wrap gap-2">
           {accountState === "ready" ? null : stripeAccountId === undefined ? (

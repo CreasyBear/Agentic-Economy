@@ -123,6 +123,8 @@ describe('MCP host adapter tools/list', () => {
       properties: expect.objectContaining({ operationRef: expect.any(Object), input: expect.any(Object) }),
     }))
     expect(execute?.description).toContain('keyless http-json:v1 GET or POST operations')
+    expect(execute?.description).toContain('Call ae_registry_operations_detail first')
+    expect(execute?.description).toContain('includes an execute relation')
     expect(execute?.description).toContain('financial_exposure')
     expect(execute?.description).toContain('external_state_change')
     expect(execute?.description).not.toMatch(/\bPOST\b[^.]*refused/i)

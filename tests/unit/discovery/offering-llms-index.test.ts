@@ -38,16 +38,16 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
     }
-    // 10 shared surfaces; each business keeps page, UCP, and business detail.
+    // 11 shared surfaces; each business keeps page, UCP, and business detail.
     expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    expect(result.urls).toHaveLength(11 + 50 * 3)
   })
 
   it('deduplicates repeated slugs in the complete URL inventory', () => {
     const urls = buildOfferingLlmsUrlsFromSlugs(['same-business', 'same-business'], { canonicalBaseUrl })
 
     expect(urls).toEqual([...new Set(urls)])
-    expect(urls).toHaveLength(10 + 3)
+    expect(urls).toHaveLength(11 + 3)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -63,7 +63,7 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    expect(result.urls).toHaveLength(11 + 50 * 3)
   })
 
   it('teaches the ordered Operation path before the published business catalog', () => {
@@ -74,7 +74,7 @@ describe('Offering llms.txt index', () => {
       '3. Inspect one exact result',
       '4. Optional anonymous reads',
       '5. After exact detail',
-      '6. Run `npm run -s ae -- connect --json`',
+      '6. Set `AE_CLI_BASE_URL=',
       '7. Invoke with `npm run -s ae -- invoke',
       '8. Read `npm run -s ae -- status',
       '9. Cancel with `npm run -s ae -- advanced cancel',
@@ -90,6 +90,7 @@ describe('Offering llms.txt index', () => {
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/detail`)
     expect(body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
+    expect(body).toContain(`AE_CLI_BASE_URL=${canonicalBaseUrl}`)
   })
 
   it('makes anonymous and authenticated boundaries explicit', () => {
@@ -112,7 +113,7 @@ describe('Offering llms.txt index', () => {
     expect(buildOfferingLlmsUrlsFromSlugs(
       Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
       { canonicalBaseUrl },
-    )).toHaveLength(10 + 50 * 3)
+    )).toHaveLength(11 + 50 * 3)
   })
 
   it('keeps the boundary and correction sections and says none for an empty directory', () => {

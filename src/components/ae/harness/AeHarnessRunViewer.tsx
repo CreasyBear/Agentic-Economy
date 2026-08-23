@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { getStatusPresentation, aeStatusToneVariants } from '@/lib/ui/status-presentation'
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -170,7 +170,7 @@ function DeniedRows({
         <p className="text-lg font-semibold text-foreground">Private rows withheld</p>
         <p className="text-sm text-muted-foreground">Denied run reads return no raw turn, tool, or model rows.</p>
       </div>
-      <AeOperatorFactGrid
+      <AeFactList
         facts={[
           { label: 'Decision', value: result.reason.replaceAll('_', ' ') },
           { label: 'Private rows returned', value: result.rows.length },
@@ -189,7 +189,7 @@ function AllowedList({ result }: { result: HarnessRunViewerListAllowed }) {
           <p className="text-lg font-semibold text-foreground">Run summary</p>
           <p className="text-sm text-muted-foreground">Rows are derived from private answer-turn evidence after admin access is resolved.</p>
         </div>
-        <AeOperatorFactGrid
+        <AeFactList
           facts={[
             { label: 'Turns', value: result.summary.turns },
             { label: 'Harness runs', value: result.summary.withHarnessRun },
@@ -247,7 +247,7 @@ function RunDetailHeader({ detail }: { detail: HarnessRunViewerDetail }) {
         <p className="break-words font-mono text-lg font-semibold text-foreground">{detail.turn.turnId}</p>
         <p className="text-sm text-muted-foreground">{detail.turn.query}</p>
       </div>
-      <AeOperatorFactGrid
+      <AeFactList
         facts={[
           { label: 'Thread', value: detail.turn.threadId },
           { label: 'Turn status', value: detail.turn.status.replaceAll('_', ' ') },
@@ -292,7 +292,7 @@ function OverviewTab({ detail }: { detail: HarnessRunViewerDetail }) {
         <p className="text-lg font-semibold text-foreground">Overview</p>
         <p className="text-sm text-muted-foreground">Run identity, coverage, and terminal state.</p>
       </div>
-      <AeOperatorFactGrid
+      <AeFactList
         facts={[
           { label: 'Run ID', value: detail.run.runId ?? 'not recorded' },
           { label: 'Session ID', value: detail.run.sessionId ?? 'not recorded' },
@@ -393,7 +393,7 @@ function EvidenceTab({ detail }: { detail: HarnessRunViewerDetail }) {
         <p className="text-sm text-muted-foreground">Private evidence shape without expanding raw JSON.</p>
       </div>
       <div className="grid gap-5">
-        <AeOperatorFactGrid
+        <AeFactList
           facts={[
             { label: 'Providers', value: detail.evidence.providerCount },
             { label: 'Allowed slugs', value: detail.evidence.allowedSlugCount },
@@ -419,7 +419,7 @@ function PublicProjectionTab({ detail }: { detail: HarnessRunViewerDetail }) {
         <p className="text-sm text-muted-foreground">Public thread projection is an allowlist; raw tool and run data must stay absent.</p>
       </div>
       <div className="grid gap-5">
-        <AeOperatorFactGrid
+        <AeFactList
           facts={[
             { label: 'Leaked markers', value: diff.leakedMarkers.length },
             { label: 'Excluded markers', value: diff.excludedPrivateMarkers.length },
@@ -550,6 +550,5 @@ function listRowFacts(row: HarnessRunViewerListRow): readonly { label: string; v
     { label: 'Created', value: formatTimestamp(row.createdAt) },
   ]
 }
-
 
 

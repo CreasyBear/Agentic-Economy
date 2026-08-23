@@ -416,7 +416,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     }
     setThreadRecords((current) => upsertOptimisticThread(current, {
       threadId: id,
-      title: liveTurn?.query.trim() ?? 'New question',
+      title: liveTurn?.query.trim() ?? 'New search',
     }))
     emitWave1JourneyEvent({
       event: 'shortlist_started',
@@ -577,7 +577,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const sidebarVisible = sidebarManuallyOpen ?? threads.length > 0
   const showThreadChrome = effectiveRouteThreadId !== null && projection !== null
   const showCompactHeader = showThreadChrome || liveTurn !== null || threads.length > 0
-  const compactHeaderTitle = showThreadChrome ? projection.title : (liveTurn?.query ?? 'New chat')
+  const compactHeaderTitle = showThreadChrome ? projection.title : (liveTurn?.query ?? 'New search')
 
   // Keep scroller mounted while a turn streams - sessionThreadId updates mid-stream must not remount.
   const scrollerKey = effectiveRouteThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
@@ -617,20 +617,20 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         >
           <SheetHeader className="border-b border-border">
             <div className="flex min-h-11 items-center justify-between gap-3">
-              <SheetTitle className="font-heading text-base">Recent chats</SheetTitle>
+              <SheetTitle className="text-base font-semibold">Recent searches</SheetTitle>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="min-h-11 min-w-11"
-                aria-label="Close recent chats"
+                aria-label="Close recent searches"
                 data-autofocus=""
                 onClick={closeMobileSidebar}
               >
                 <XIcon aria-hidden="true" />
               </Button>
             </div>
-            <SheetDescription className="sr-only">Choose a recent chat to reopen.</SheetDescription>
+            <SheetDescription className="sr-only">Choose a recent search to reopen.</SheetDescription>
           </SheetHeader>
           <AeThreadSidebar
             threads={threads}
@@ -659,7 +659,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         ) : null}
         {effectiveRouteThreadId === null && liveTurn !== null ? (
           <h1 ref={routeFocusHeadingRef} className="sr-only" tabIndex={-1}>
-            Answering your question
+            Searching the operation market
           </h1>
         ) : null}
         <div className={cn('relative flex min-h-0 flex-1 flex-col max-sm:[&_[role=combobox]]:min-h-11 max-sm:[&_[role=radio]]:min-h-11 max-sm:[&_input[type=date]]:min-h-11 max-sm:[&_button[type=submit]]:min-h-11 max-sm:[&_button[type=submit]]:min-w-11', showWelcome && 'gap-5 sm:gap-8')}>
@@ -676,12 +676,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             {showThreadUnavailable ? (
               <Empty className="w-full">
                 <EmptyHeader>
-                  <h1 className="text-lg font-medium tracking-tight">Chat unavailable</h1>
-                  <EmptyDescription>This chat couldn’t be loaded. Start a new chat to continue.</EmptyDescription>
+                  <h1 className="text-lg font-medium tracking-tight">Search unavailable</h1>
+                  <EmptyDescription>This search couldn’t be loaded. Start a new search to continue.</EmptyDescription>
                 </EmptyHeader>
                 <EmptyContent>
                   <Button asChild variant="secondary" size="sm">
-                    <a href="/">Start a new chat</a>
+                    <a href="/">Start a new search</a>
                   </Button>
                 </EmptyContent>
               </Empty>
@@ -709,7 +709,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             )}
           </AeThreadScroller>
           {!showThreadUnavailable ? (
-            <div className={cn('w-full flex-none bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6', showWelcome ? 'mb-auto pt-0' : 'pt-2')}>
+            <div className={cn('mx-auto w-full max-w-[56rem] flex-none bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6', showWelcome ? 'mb-auto pt-0' : 'pt-2')}>
               {draftStorageError !== null ? (
                 <p role="alert" className="pb-2 text-sm text-destructive">
                   This browser could not save the answer draft. Nothing was sent; try again.
@@ -948,5 +948,3 @@ function browserSessionStorage(): Storage | undefined {
     return undefined
   }
 }
-
-

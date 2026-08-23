@@ -66,7 +66,7 @@ describe('AeThreadTranscript', () => {
     )
 
     expect(screen.getByText('Find plumbers near Parramatta')).toBeTruthy()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Shortlist ready' })).toBeNull()
     expect(screen.queryByLabelText('Shortlist actions')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Change criteria' })).toBeNull()
   })
@@ -128,7 +128,7 @@ describe('AeThreadTranscript', () => {
     render(<AeThreadTranscript projection={projection} />)
 
     expect(screen.getByText('Message the first listed business')).toBeTruthy()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Shortlist ready' })).toBeNull()
   })
 
   it('does not terminalize an earlier shortlist when a newer turn has errored', () => {
@@ -154,9 +154,9 @@ describe('AeThreadTranscript', () => {
     render(<AeThreadTranscript projection={projection} />)
 
     expect(screen.getByText('1 listed businesses match.')).toBeTruthy()
-    expect(screen.queryByRole('heading', { level: 2, name: 'Your options are ready' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Shortlist ready' })).toBeNull()
     expect(screen.getByRole('alert').textContent).toContain('Unable to finish this response.')
-    expect(screen.getByRole('link', { name: 'New chat' }).getAttribute('href')).toBe('/')
+    expect(screen.getByRole('link', { name: 'New search' }).getAttribute('href')).toBe('/')
   })
 
   it('explains a no-match result and suggests how to recover', () => {
@@ -343,17 +343,17 @@ describe('AeThreadTranscript', () => {
     expect(screen.getByRole('region', { name: 'Operation candidates' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: /Review and use / })).toHaveLength(4)
     const selected = screen.getByRole('button', {
-      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from this answer',
+      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from these results',
     })
     expect(selected.hasAttribute('disabled')).toBe(true)
     fireEvent.click(selected)
     expect(onOperationSelect).not.toHaveBeenCalled()
 
     const north = screen.getByRole('button', {
-      name: 'Run North Weather: Current weather · weather.current (option 2) from this answer',
+      name: 'Run North Weather: Current weather · weather.current (option 2) from these results',
     })
     const south = screen.getByRole('button', {
-      name: 'Run South Weather: Current weather · weather.current (option 3) from this answer',
+      name: 'Run South Weather: Current weather · weather.current (option 3) from these results',
     })
     expect(north.getAttribute('aria-label')).not.toBe(south.getAttribute('aria-label'))
     expect(screen.getAllByRole('button', { name: /Run .*Weather: Current weather/ })).toHaveLength(3)
@@ -361,7 +361,7 @@ describe('AeThreadTranscript', () => {
     expect(south.hasAttribute('disabled')).toBe(false)
 
     fireEvent.click(screen.getByRole('button', {
-      name: 'Run East Weather: Current weather · weather.current (option 4) from this answer',
+      name: 'Run East Weather: Current weather · weather.current (option 4) from these results',
     }))
     expect(screen.getAllByText('Optional inputs')).toHaveLength(4)
     expect(screen.getAllByText(/units · Query · string · Allowed: metric, imperial · Style: Form · Explode: Yes/)).toHaveLength(4)
@@ -413,7 +413,7 @@ describe('AeThreadTranscript', () => {
     render(<AeGenerativeAnswer artifacts={retryableArtifacts} query="current weather" onOperationSelect={onOperationSelect} />)
 
     const retry = screen.getByRole('button', {
-      name: 'Retry Weather Provider: Current weather · weather.current (option 1) from this answer',
+      name: 'Retry Weather Provider: Current weather · weather.current (option 1) from these results',
     })
     expect(retry.hasAttribute('disabled')).toBe(false)
     fireEvent.click(retry)
@@ -449,7 +449,7 @@ describe('AeThreadTranscript', () => {
     )
 
     const selected = screen.getByRole('button', {
-      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from this answer',
+      name: 'Selected Weather Provider: Current weather · weather.current (option 1) from these results',
     })
     expect(selected.hasAttribute('disabled')).toBe(true)
   })
@@ -496,7 +496,7 @@ describe('AeThreadTranscript', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /Current weather.*Expand/ }))
     const historicalRun = screen.getByRole('button', {
-      name: 'Run Weather Provider: Current weather · weather.current (option 1) from this answer',
+      name: 'Run Weather Provider: Current weather · weather.current (option 1) from these results',
     })
     expect(historicalRun.hasAttribute('disabled')).toBe(true)
     fireEvent.click(historicalRun)
@@ -550,9 +550,9 @@ describe('AeThreadTranscript', () => {
       />,
     )
 
-    const runButton = screen.getByRole('button', { name: /Not executable from this answer/ })
+    const runButton = screen.getByRole('button', { name: /Not executable from these results/ })
     expect(runButton.hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Not executable from this answer: Publisher withdrew.')).toBeTruthy()
+    expect(screen.getByText('Not executable here: Publisher withdrew.')).toBeTruthy()
     expect(screen.getByText(/x402 payment/)).toBeTruthy()
     expect(screen.getByRole('link', { name: /Review and use / })).toBeTruthy()
     fireEvent.click(runButton)

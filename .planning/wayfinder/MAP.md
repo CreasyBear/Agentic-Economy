@@ -1,133 +1,111 @@
-# Wayfinder map — AE category destination and execution/history
+# Wayfinder map — Build the Agentic Economy tool market foundation
 
-Label: `wayfinder:map` (active category/destination map; local-markdown tracker fallback; `gh` token is invalid — see ticket T1).
-Charted: 2026-08-08 against the current working tree (dirty).
-Reconciled: 2026-08-12 after the post-remediation re-audit; the 2026-08-11 closeout is historical and hosted receipt remains unproduced.
+Tracker: [GitHub map #196](https://github.com/CreasyBear/Agentic-Economy/issues/196)
+
+Label: `wayfinder:map`
+Rewritten: 2026-08-23 after the product prune and founder direction to make the market itself the product.
 
 ## Destination
 
-**Founder-confirmed category and ownership decision (2026-08-08; ADR-032):** Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.
+Agentic Economy is the useful market and transaction layer where agents find,
+compare, connect to, pay for, invoke, and recover third-party tools through one
+stable interface.
 
-The **Principal** is the human or organization that owns authority and budget. The **Consuming Agent** is the Principal's delegated shopper and distribution interface: it discovers, compares, buys and invokes only within delegated authority and policy. Suppliers host implementations wherever they choose; AE owns admission, invocation identity, authority/policy, evidence, Qualified Use metering and payment reconciliation—not runtime hosting.
+The foundation is complete when:
 
-The **Market Operation** is the admitted, versioned third-party operation and competitive unit. An **Agent Service** is its market-facing representation for authorized Consuming Agents. Skills, SDKs and repositories are acquisition, lineage and distribution inputs, not market supply. The existing ask → Customer Request → authority → execution → evidence product remains a first-party demand application and proving ground, not the category definition.
+- one explicit market capability can organize related supplier Operations
+  without weakening the identity, schema, effects, authority, price, or version
+  of any exact Operation;
+- the public home and `/market` expose the same searchable supply to people,
+  while machine discovery exposes the same admitted Operations to agents;
+- buyers can compare exact price, readiness, authenticated rating, completed
+  use, and measured latency without fabricated values or an opaque score;
+- every listing continues into understandable detail and the surviving
+  connect → inspect → invoke → status/recover gateway;
+- suppliers can publish, update, withdraw, and earn through the same canonical
+  publication and settlement records; and
+- a hosted proof demonstrates independent supply, real use, durable recovery,
+  and honest economic/evidence readback.
 
-**Category shorthand:** OpenRouter for agent services; a Vercel-style self-serve supplier publishing experience without AE-owned runtimes; the Consuming Agent is the app store that discovers, compares, buys and invokes Market Operations at runtime. These are structural analogies, not identity claims.
+Specialist agent-mediated experiences come later. They are focused discovery,
+composition, and workflow views over this same market and gateway—not new
+catalogs, runtimes, or product spines.
 
-**Creator/UGC supplier-economy model (destination):** Mature Instagram/YouTube-style creator/UGC publishing and algorithmic distribution is an operating-model analogy, not a category rename: eligible businesses/developers publish supplier-generated Operations with supplier-hosted implementations and bespoke datasets; AE admits/indexes/recommends/distributes them into agents' normal workflows for low-commitment one-use consumption, not bilateral relationships or AE-hosted content/runtimes. Admission/publication/eligibility evaluate the exact contract, provenance, authorization/ownership, license/derivation rights and immutable lineage; readiness is a later independent routeability gate, and Principal/execution authority is a later independent invocation gate. Passive views, impressions and exposure are distribution observations, not invocations; active use is an invocation. Qualified Use is only a non-owner, contract-valid production invocation with required evidence and exclusions, independent of payment settlement. Supplier accrual/creator earnings require Qualified Use plus separately authoritative reconciled economic settlement. Authorized licensed or materially derived supply is allowed and distinguished from unauthorized copy/republication; provenance/validity never proves semantic truth, and anti-copy/unauthorized-republication controls do not ban authorized source use. The loop is publish → admit → distribute → invoke → validate → settle → learn → revise/withdraw; ordering uses contract fit, price, freshness, readiness, non-owner Qualified Use, reliability/latency and bounded exploration, never gross calls, owner traffic, popularity alone or one opaque score. Agent runtimes consume/distribute supply and are not Principals. This is not proof of independent supply, production settlement, recommendation quality or a functioning flywheel, and it is not influencer/brand procurement, creator-hiring marketplace work, briefs/applications or collaborations.
+## Product shape
 
+The market has five surfaces and one shared transaction path:
 
-**V1 closure and wider proof gate:** V1 is closed to one family—public-document structured extraction with field-level provenance—with curated suppliers and AE-owned admission, verification and reconciliation. A wider category claim remains unearned until an eight-week pilot with 3–5 independent suppliers, one anchor consuming runtime, three unrelated paying Principals and at least 100 settled real-money calls per month for two consecutive months demonstrates repeat purchases by at least two Principals and two suppliers, AE retains at least 50% of each repeat buyer's eligible next paid purchases after direct alternatives are disclosed, and contribution-positive supplier/platform economics, with no transaction-spine failure. Contract-valid delivery and semantic correctness remain separate evidence classes; schema conformance never proves truth.
+1. **Catalogue** — anonymous, job-oriented search and category browsing.
+2. **Operation detail** — outcome, supplier, exact parameters, price, examples,
+   measured evidence, and a clear call action.
+3. **Agent setup** — thin onboarding through the API, `llms.txt`, skill, and MCP.
+4. **Supplier workspace** — publish and manage Operations, access, usage, money,
+   and recovery without inventing a second domain model.
+5. **Operator workspace** — health, exceptions, runs, and market administration.
+6. **Call boundary** — authenticate, authorize, reserve, call, settle or release,
+   record evidence, and replay idempotently.
 
-**Category guardrail:** Trades, Australian small businesses, BAS and human-service coordination may be future suppliers/use cases; they are not the category, ICP, wedge or default product frame.
+## Operating rules
 
-**Superseded framing (historical only):** The old AE-hosted-runtime, business-earning/API-native, no-API-local, claim-funnel, local-business/trades/Australian-SMB/BAS and human-service-coordination destinations are historical records, not active category authority. `MAP-framework.md`, `MAP-engine.md` and `JOURNEYS.md` remain useful only for mechanics and execution history; they do not define today's category, ICP, wedge or destination.
-
-## Notes
-
-- Skills every session must consult: `wayfinder`. The `ae-*` skills were **retired 2026-08-01** (founder: they handicapped the build); their rules live in this map, `PROJECT.md`, `BRAND.md`, and the verdict docs.
-- Standing preference: do not overcomplicate. Projection over new stores. One semantic supply object across human and agent hosts.
-- Ground-truth harness: `eval/parity/check-parity.mjs` (autoresearch-style loop in `eval/parity/program.md`). The harness is not modified to make scores improve.
-- Evidence classes never silently upgrade: sandbox callability is labelled `ae_sandbox_provider`; it proves the contract, not real supply.
-
-
-## Current gateway workstream — 2026-08-12
-
-**Status:** remediation campaign open; seven workstreams focused-verified; payout-period lifecycle blocked for lack of a trusted server-owned nonzero minimum-payout policy; full post-codegen source release gate not green and no later complete rerun; hosted proof blocked  
-**Decision:** [ADR-035 — Single-Key Capability Gateway](../adr/ADR-035-single-key-capability-gateway.md)  
-**Implementation plan:** [2026-08-09 gateway plan](../research/2026-08-09-single-key-capability-gateway-implementation-plan.md)  
-**Historical remediation closeout:** [2026-08-11 goblin source closeout](../research/2026-08-11-goblin-source-remediation-plan.md)
-
-The 2026-08-11 source-completion/local-gate claims are dated historical
-evidence, superseded for current status by the 2026-08-12 post-remediation
-re-audit recorded in `PAPERCUTS.md`.
-
-The consuming-agent boundary is one Clerk-issued AE bearer key over many
-admitted Market Operations. Clerk is the credential issuer/revocation
-authority; AE owns the `AgentAccessPrincipal`, grant/policy, invocation,
-money, evidence, and recovery. The canonical protected action is
-`operation.invoke:v1`; the canonical HTTP route is
-`POST /api/v1/operations/execute`; `/mcp`, CLI, and Answer adapt the same
-application service. Existing `operation.execute:v1` remains
-public/keyless/read-only. Supplier credentials stay inside the server-side
-provider connection/transport boundary.
-
-The fixed W0→W8 map is:
-
-| Wave | Discoverable contract |
-| --- | --- |
-| W0 | Freeze Clerk/AE ownership, canonical route/action, reused seams, no-handroll decisions, and proof ceiling. |
-| W1 | Generalize Customer Request key/principal/OAuth through `src/modules/agent-access/`; no aliases or second verifier. |
-| W2 | Add grant, budget, rate, concurrency, and standing-mandate admission through current money/rate seams. |
-| W3 | Expose authenticated `operation.invoke:v1` over HTTP and registered MCP with shared idempotency identity. |
-| W4 | Bind exact operation/publication/binding/provider/authority/money/evidence identity to Action Invocation and transport. |
-| W5 | Add generation-bound provider connection leases and final server-only credential checks. |
-| W6 | Add bounded read/cancel/reconcile, correlation, redaction, and durable unknown-outcome recovery. |
-| W7 | Ask one first-use authority question and keep consumer keys separate from supplier connections. |
-| W8 | Publish HTTP/MCP/CLI/Answer projections and run the exact hosted positive proof. |
-
-The gateway reuses the existing Clerk auth/OAuth, action registry/MCP,
-keyless executor, capability-supply publication/binding/readiness and
-provider-connection, Action Invocation, route transport, money,
-`convex/lib/rateLimit.ts`, canonical digest/stable serialization, RFC 9457,
-Convex, workflow/workpool, and MCP SDK seams. No parallel token verifier,
-registry, ledger, transport, or execution state machine is permitted. The
-package and no-handroll evidence is maintained in ADR-035 and the linked
-plan.
-
-Positive proof requires the same real Clerk-issued key to invoke two real
-operations from distinct admitted suppliers/connection modes on the exact
-hosted revision, with current approval/budget, server-only credentials,
-durable outcome/recovery, exact usage/evidence readback, same-key zero-meter
-replay, revoke/withdraw refusal, and one hard-capped live
-top-up/charge/payout with zero-movement replay. CI must independently parse
-the strict receipt. Fixtures, mocks, refusals, synthetic local identities,
-source-only OAuth, and unavailable Convex are not proof. Until that gate runs,
-hosted and live-money proof remain uncertified. The full post-codegen source
-release gate is not green and no later complete rerun exists; the payout-period
-lifecycle remains blocked for lack of a trusted server-owned nonzero
-minimum-payout policy.
+- **Execution is in scope.** The founder explicitly asked to clone familiar
+  marketplace patterns and make them work, not merely produce a specification.
+- Structural donor: Treg's "OpenRouter for agent tools" model—named inventory,
+  literal search, capability groups, supplier comparisons, pay per call, one
+  connection. Reuse the pattern, not its copy or provider-specific branches.
+- The exact `Operation` remains the transaction and execution unit. A market
+  capability is a discovery/comparison classification and never proof that two
+  contracts are interchangeable.
+- Project over the surviving Operation registry, publication, readiness,
+  invocation, evidence, money, and recovery seams. Do not create a second
+  catalog, analytics event pipeline, ledger, transport, or identity system.
+- Human-facing copy uses familiar marketplace language such as tool, supplier,
+  price, rating, calls, latency, and ready now. Technical references stay behind
+  detail/inspection boundaries.
+- UI work reuses shadcn and the consolidated AE product components. No bespoke
+  primitive system, prestige theatre, terminal cosplay, ticker motion, or
+  provider/vertical conditionals.
+- Ratings, popularity, latency, settlement, Qualified Use, and x402 transfers
+  remain distinct evidence classes. Missing evidence stays visibly missing.
+- Agentic Market and other external indexes are sources and acquisition inputs,
+  not authorities over AE delivery, identity, settlement, or native supply.
+- Work uses `wayfinder` for decisions and `unlazy` gates for executable leaves.
 
 ## Decisions so far
 
-- [Services IA](tickets/T0-services-ia.md) — Parity is served by a flat per-offering projection (`/api/v1/services`, `/api/v1/services/search`) derived from the existing V2 business catalog; no new tables, no second catalog store.
-- [Callable endpoint source of truth](tickets/T0-services-ia.md) — Sandbox checkup-quote callability is driven by the offering's own `external_operation` access path + fixed price, not a hardcoded slug map.
-- [Real-supply path](tickets/T4-real-supply-onboarding.md) — Resolved by research: first independent provider goes catalog Offering + `external_operation` path → capability-supply promotion (ADR-026 lineage); only new machinery is a no-credential adapter sentinel; claim ceiling is "published, last checked reachable".
-- **Current first-party demand proving ground** — `/` remains THE view: the human twin of `/api/v1/services` (search → priced service rows → instant sandbox quote), loader uses the same `projectPublicServicesPage` projection as the API. `/registry`, `/about`, `/help` 301 to `/`. Decided 2026-07-30 under founder directive. **Amended 2026-08-01:** `/for-agents` no longer 301s — `BRAND.md` (LOCKED, later) makes it the Door 2 landing, and `discovery-files.ts` already advertises it in the sitemap and `llms.txt`, so the 301 was serving a redirect for a surface AE tells agents to read. `/registry` still 301s while eight UI callsites label it "Browse services"; relabel or build, but do not keep promising a browse view. This ask → plan → install surface exercises the platform but does not define its category.
-- Parity evidence — autoresearch loop `eval/parity/` reached 7/7 against the agentic.market baseline contract on the local labelled deployment (results.tsv: 2/7 → 6/7 → 7/7). Evidence class: labelled local/dev; no hosted or real-supply claim follows.
-- **Historical local/trades framing (superseded 2026-08-08)** — The 2026-07-30 "agent SEO for local businesses", no-API-local driver ICP, and later trades/Australian-SMB/BAS/human-service-coordination journeys are preserved for research and mechanics only. They do not define the current category, ICP, wedge or default product frame.
-- [MCP host](tickets/T6-mcp-host-adapter.md) — Resolved 2026-07-30: Streamable HTTP `/mcp` over the action registry; anonymous tier = `surfaces:['mcp'] && readOnly` (4 tools, `ae_*` deterministic names); `sandbox.checkup_quote` registered; install one-liners in `/SKILL.md` + `/llms.txt`. Evidence: labelled local/dev smoke.
-- [Keyless sentinel](tickets/T5-no-credential-adapter.md) — Resolved 2026-07-30: `credentialRef: 'none'` for `http-json:v1` only; admission validates it, readiness probe skips resolution, route runtime omits Authorization. MCP/x402 adapters still require env refs. Evidence: labelled unit/dev seam behavior.
-- [Cold-agent keys](tickets/T3-cold-agent-keys.md) — Decided 2026-07-30 by founder: Soar-shaped OAuth/device-code issuance (AE-owned RFC 8628 flow + PKCE code grant, scopes mirror authority modes, keys ride Clerk). Execution plan: `plans/T3-oauth-issuance-PLAN.md`.
-- [Plan-first surface](tickets/T9-plan-first-surface.md) — Plan ready 2026-07-30: consumer `ConsumerPlan` projection over Customer Request compilation, `/` stays the single view, inspect-only actions, no booking claims until T10. Execution plan: `plans/T9-plan-first-surface-PLAN.md`.
-- Business-model mechanics (founder grilling, 2026-07-30; retained as mechanics, not category definition) — Payer: agent operators via prepaid credit (T2). Metered unit: paid invocation of a hosted Market Operation. Offer: free listing + Provider-set per-call price + free-call tier + rake on paid calls only. Surfaces: supply landing separate; `/` = demand application keeping the T9 ask → plan experience as try → install funnel. These mechanics remain subject to current implementation/evidence ceilings.
-- **Superseded T7 rationale (2026-08-08)** — API supply import/recruiting was previously descoped because no-API locals were treated as the driver ICP. That local-wedge rationale is historical; T7 is only a supply-acquisition tactic to assess under the closed-family destination.
+- [Make `/market` a working capability marketplace front door](https://github.com/CreasyBear/Agentic-Economy/issues/207)
+  — `/market` is the focused tool catalog over canonical Operation projections;
+  exact detail links now work, while analytics remain a separate evidence contract.
+- [Define normalized capability families without weakening exact contracts](https://github.com/CreasyBear/Agentic-Economy/issues/208)
+  — the registry owns a curator-versioned browse taxonomy whose explicit
+  memberships bind exact Operation references and never imply equivalence,
+  routing, fallback, authority, price, or trust.
+- [Cut over surviving product surfaces to the Treg-derived market system](https://github.com/CreasyBear/Agentic-Economy/issues/214)
+  — the catalogue, detail, agent setup, supplier workspace, operator workspace,
+  and conversation surfaces share one compact marketplace system. The cutover
+  borrows proven information architecture and visual grammar, not Treg source.
 
-## Not yet specified
+## Next decisions
 
-- How a Provider (registered Business), rather than the AE operator, self-serves supply onboarding so eligible supply grows without dev seeds — depends on Business Account (Phase 4, ADR-024/026) shape.
-- What quality and usage metrics can be honestly exposed for Market Operations (agentic.market advertises them); depends on real invocation telemetry existing.
-- Composite requests over multiple callable Operations (Customer Request compilation over the services projection).
+- The economic launch sequence after the foundation proof: fee schedule,
+  supplier payout policy, currency/rail expansion, and when public market-wide
+  amounts become defensible.
+- The first specialist experience and the stable extension contract it needs
+  from the market once the foundation is proven.
+- Whether external observed services graduate into a claim/admission funnel or
+  remain source-labelled links outside native search.
 
 ## Out of scope
 
-- Matching agentic.market's catalog *size* (1,963 services). Parity here is contract parity, not supply-volume parity.
-- Crypto settlement/USDC pricing display remains out of scope for this parity map; the payment rail is a future implementation choice within the canonical transaction boundary, and the rail decision remains ticket T2.
-- T7 catalog import from agentic.market remains out of scope for this parity map; any import/claim-funnel work is a supply-acquisition tactic, not an ICP or category boundary.
-
-## Successor effort
-
-The agent-engine effort (non-mechanical `/`, dialog → plan → business calls) is a historical first-party demand application and proving ground. [MAP-engine.md](MAP-engine.md) and the framework journeys are execution/mechanics records, not the active category destination. The confirmed product vision (`.planning/VISION-conceptual-map.md`, 2026-08-01) is mapped against the repo in [Vision → repo gap](MAP-vision-gap.md); new vision-gap work belongs there.
-
-## Open tickets (frontier)
-
-| id | type | title | blocked by |
-| --- | --- | --- | --- |
-| [T1](tickets/T1-gh-auth.md) | task (HITL) | Re-authenticate `gh` and mirror this map to GitHub Issues | — |
-| [T3](tickets/T3-cold-agent-keys.md) | task (HITL remainder) | OAuth/device-code dev journey and Convex grant store landed 2026-07-30; remaining: production Clerk enablement, deployment secrets, hosted readback | HITL |
-| [T7](tickets/T7-agentic-market-importer.md) | task (reopened) | Supply bootstrap: import agentic.market public catalog as `publicly_observed` listings + claim funnel feed | founder optics sign-off |
-| [T9](tickets/T9-plan-first-surface.md) | task (review) | Implemented 2026-07-30; now the demand experience on `/` with T13's install handoff | — |
-| [T10](tickets/T10-booking-endpoints.md) | task (candidate) | Hosted operations for capability artifacts that lack an existing API — a possible supplier-acquisition path under the closed-family destination, not a no-API-local ICP or wedge | T3 production HITL, T12 live rail |
-| [T11](tickets/T11-supply-funnel.md) | implemented | Supply landing and six-step publish funnel landed 2026-07-30 | credential-vault/live-provider HITL |
-| [T12](tickets/T12-metering-payouts.md) | implemented (dev) | Credit ledger, 1000 bps rake, usage, payout state and T13 query seams landed 2026-07-30 | Stripe/Connect production HITL |
-| [T13](tickets/T13-demand-console.md) | implemented | `/` ask-to-options-to-install funnel plus assistant access, credit, usage and revocation console landed 2026-07-30 | production Clerk/Stripe readback |
+- Restoring the pruned Customer Request, WorkTree, Study, Project Spine, or
+  general Agent Engine as the product's organizing surface.
+- A general crypto/DeFi dashboard, combined "total agent economy" number, or
+  Agentic Market catalog clone inside native Operation results.
+- Provider-name inference, fuzzy title grouping, fabricated ratings, default
+  chain/currency/facilitator assumptions, or a single opaque quality score.
+- AE-hosted provider runtimes, specialist vertical branches in the market core,
+  and bespoke bilateral procurement workflows.
+- Historical engine-first child tickets
+  [Complete the Agent runtime rationalization prerequisite](https://github.com/CreasyBear/Agentic-Economy/issues/199)
+  and
+  [Prove the hosted registry-to-engine harness over heterogeneous operation schemas](https://github.com/CreasyBear/Agentic-Economy/issues/204),
+  which were closed when this destination replaced the old map.

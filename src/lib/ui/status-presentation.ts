@@ -907,8 +907,8 @@ export function categoryIllustrationPath(category: string): string {
  */
 export const aeStatusToneVariants = {
   neutral: 'outline',
-  info: 'secondary',
-  success: 'default',
-  warning: 'outline',
+  info: 'info',
+  success: 'success',
+  warning: 'warning',
   danger: 'destructive',
-} satisfies Record<AeTone, 'outline' | 'secondary' | 'default' | 'destructive'>
+} satisfies Record<AeTone, 'outline' | 'info' | 'success' | 'warning' | 'destructive'>

@@ -63,6 +63,5 @@ customer-value or production-safety claim follows.
 
 Inquiry and booking were earlier parity targets. Founder direction selected a
 generic business-published operation and rejected booking as a mandatory AE
-bounded context. The complete pre-hardening ADR and amendment history is
-preserved at
-[`ADR-010 pre-hardening`](../archive/adr-009-010-pre-hardening/adrs/ADR-010-one-action-plane-across-human-and-agent-experiences.md).
+bounded context. Git history preserves the complete pre-hardening ADR and
+amendment history.

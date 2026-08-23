@@ -158,7 +158,7 @@ describe('AeChat route promotion composer', () => {
 
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    const composer = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    const composer = screen.getByRole('searchbox', { name: 'Search the operation market' })
     expect(composer.getAttribute('placeholder')).toBe(placeholder)
     expect(screen.getByRole('combobox', { name: 'When do you need this?' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Change criteria' })).toBeNull()

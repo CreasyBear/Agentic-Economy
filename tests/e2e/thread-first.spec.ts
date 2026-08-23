@@ -15,7 +15,7 @@ test.describe('thread-first answer flow', () => {
     await waitForReadyAnswer(page)
 
     await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /data for ai assistants/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /agent-readable data/i })).toBeVisible()
 
     // Cited provider cards and boundary copy require the dev server to run the
     // tool-use agent (OPENROUTER_API_KEY). When the key is absent the turn emits

@@ -1,19 +1,15 @@
 /*
- * AE style entry: semantic tokens + Tailwind 4 utility glue.
+ * Agentic Economy product system.
  *
- * Layer cascade (low → high priority):
- *   reset        (reserved)
- *   theme        Tailwind theme variables
- *   base         Tailwind preflight
- *   components   (reserved)
- *   utilities    Tailwind utilities
- *
- * base.css carries the reset + cross-surface primitives; the semantic token
- * bridge and ae-* palette live in the relocated :root block at the bottom of
- * this file (formerly tokens.css).
+ * Structural donor: Treg's compact agent-tool marketplace. This file owns the
+ * semantic bridge used by shadcn and product components; surfaces do not invent
+ * their own palettes, type scales, radii, or elevation systems.
  */
 @layer reset, theme, base, components, utilities;
 
+@import "@fontsource-variable/inter";
+@import "@fontsource/dm-mono";
+@import "@fontsource/geist-pixel";
 @import "./base.css";
 @import "tw-animate-css";
 
@@ -22,449 +18,136 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 
 @source not "../../.planning";
-@custom-variant dark (&:where(.dark, .dark *));
 
-
-/*
- * Keep concrete font-weight aliases available for the app's semantic type
- * roles. These declarations stay unlayered and after the imports so they win
- * over layered theme values consistently.
- */
-:root {
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
-
-/*
- * Tailwind semantic utility mappings.
- *
- * These bind Tailwind's colour utilities to the AE tokens defined in this
- * file's relocated :root block. shadcn/ui primitives and AI SDK Elements are written against
- * exactly this vocabulary (`bg-background`, `border-border`, `bg-primary`,
- * ...), so binding it to `--ae-*` is what makes unmodified upstream
- * components render in AE's brand rather than shadcn's default slate.
- *
- * The seven keys below (accent, border, card, muted, popover, primary,
- * secondary) are owned by AE in this mapping, so one vocabulary describes the
- * whole product.
- */
 @theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
-  --color-border-strong: var(--ae-public-line-strong);
+  --color-border-strong: var(--ae-border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-brand: var(--ae-brand);
+  --color-brand-strong: var(--ae-brand-strong);
+  --color-brand-muted: var(--ae-brand-muted);
+  --color-on-brand: var(--ae-on-brand);
+
+  --color-success: var(--ae-success);
+  --color-success-ring: var(--ae-success-ring);
+  --color-success-subtle: var(--ae-success-subtle);
+  --color-success-foreground: var(--ae-success-foreground);
+  --color-warning: var(--ae-warning);
+  --color-warning-ring: var(--ae-warning-ring);
+  --color-warning-subtle: var(--ae-warning-subtle);
+  --color-warning-foreground: var(--ae-warning-foreground);
+  --color-info: var(--ae-info);
+  --color-info-ring: var(--ae-info-ring);
+  --color-info-subtle: var(--ae-info-subtle);
+  --color-info-foreground: var(--ae-info-foreground);
   --color-red-vivid: var(--ae-danger);
   --color-red-ring: var(--ae-danger-ring);
   --color-red-subtle: var(--ae-danger-subtle);
   --color-green-vivid: var(--ae-success);
   --color-green-ring: var(--ae-success-ring);
   --color-green-subtle: var(--ae-success-subtle);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-popover: var(--popover);
-  --color-primary: var(--primary);
-  --color-secondary: var(--secondary);
 
-  /*
-   * AE's eucalyptus brand, named explicitly.
-   *
-   * shadcn spends `accent` on subtle hover surfaces, while AE had been using
-   * it for the eucalyptus brand mark. Those are different jobs, so the brand
-   * gets its own name and `accent` is left to mean what every vendored
-   * component in src/components/ui expects. Divergence lives here, in AE code,
-   * so the upstream registry stays re-pullable.
-   */
-  --color-brand: var(--ae-brand);
-  --color-brand-strong: var(--ae-brand-strong);
-  --color-brand-muted: var(--ae-brand-muted);
-  --color-on-brand: var(--ae-on-brand);
-  --font-display: var(--font-family-heading, ui-sans-serif, system-ui, -apple-system, sans-serif);
-  --font-heading: var(--font-family-heading, ui-sans-serif, system-ui, -apple-system, sans-serif);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-card-foreground: var(--card-foreground);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-  --radius-2xl: var(--ae-radius-2xl);
-  --radius-3xl: var(--ae-radius-3xl);
-  --radius-4xl: var(--ae-radius-4xl);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--ae-font-sans);
+  --font-heading: var(--ae-font-sans);
+  --font-display: var(--ae-font-display);
+  --font-mono: var(--ae-font-mono);
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+  --radius-4xl: 1.5rem;
+  --radius-card: 0.9375rem;
+  --radius-nav: 0.875rem;
+  --shadow-soft: var(--shadow-low);
+  --shadow-float: var(--shadow-med);
+  --shadow-market-row-hover: var(--shadow-inset-market-row);
+  --shadow-market-cell-hover: var(--shadow-inset-market-cell);
   --duration-fast: var(--motion-duration-fast);
   --duration-base: var(--motion-duration-base);
   --duration-slow: var(--motion-duration-slow);
   --ease-standard: var(--motion-ease-standard);
   --ease-emphasized: var(--motion-ease-emphasized);
-  --spacing-lift: var(--motion-lift);
-  --scale-press: var(--motion-press-scale);
 }
 
-@utility duration-fast {
-  --tw-duration: var(--duration-fast);
-  --tw-animation-duration: var(--duration-fast);
-  transition-duration: var(--duration-fast);
-}
-
-@utility duration-base {
-  --tw-duration: var(--duration-base);
-  --tw-animation-duration: var(--duration-base);
-  transition-duration: var(--duration-base);
-}
-
-@utility duration-slow {
-  --tw-duration: var(--duration-slow);
-  --tw-animation-duration: var(--duration-slow);
-  transition-duration: var(--duration-slow);
-}
-
-@utility ease-standard {
-  --tw-ease: var(--ease-standard);
-  transition-timing-function: var(--ease-standard);
-}
-
-@utility ease-emphasized {
-  --tw-ease: var(--ease-emphasized);
-  transition-timing-function: var(--ease-emphasized);
-}
-
-@utility scale-press {
-  --tw-scale-x: var(--scale-press);
-  --tw-scale-y: var(--scale-press);
-  --tw-scale-z: var(--scale-press);
-  scale: var(--tw-scale-x) var(--tw-scale-y);
-}
-
-@utility lift {
-  --tw-translate-y: calc(var(--spacing-lift) * -1);
-  translate: var(--tw-translate-x) var(--tw-translate-y);
-}
-
-/*
- * Motion, elevation and type scale.
- *
- * These motion, elevation and type-scale tokens are global so utilities and
- * components share one current source.
- * Colour is deliberately NOT redefined here: the relocated :root block at the
- * bottom of this file owns it.
- */
 :root {
-  /* Functional motion: quick confirmation, not decorative staging. */
-  --motion-duration-fast: 120ms;
-  --motion-duration-base: 200ms;
-  --motion-duration-slow: 300ms;
-  --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
-  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
-  --motion-lift: 2px;
-  --motion-press-scale: 0.98;
-  --duration-fast: var(--motion-duration-fast);
-  --duration-base: var(--motion-duration-base);
-  --duration-slow: var(--motion-duration-slow);
-  --ease-standard: var(--motion-ease-standard);
-  --ease-emphasized: var(--motion-ease-emphasized);
-  --spacing-lift: var(--motion-lift);
-  --scale-press: var(--motion-press-scale);
-
-  /* Soft elevation: cards lift off the page, no pure-black depth. */
-  --shadow-low: 0 1px 2px oklch(0.21 0.012 250 / 0.05), 0 1px 3px oklch(0.21 0.012 250 / 0.06);
-  --shadow-med: 0 4px 14px oklch(0.21 0.012 250 / 0.08), 0 2px 6px oklch(0.21 0.012 250 / 0.06);
-  --shadow-high: 0 12px 32px oklch(0.21 0.012 250 / 0.12), 0 6px 14px oklch(0.21 0.012 250 / 0.08);
-  --shadow-inset-hover: inset 0 0 0 1.5px oklch(0.50 0.11 195 / 0.30);
-  --shadow-inset-selected: inset 0 0 0 2px oklch(0.50 0.11 195 / 0.46);
-}
-
-/*
- * Heading defaults MUST live in a cascade layer.
- *
- * An unlayered rule beats every layered one regardless of specificity, and
- * Tailwind's utilities live in `@layer utilities`. Unlayered `:where(h2)`
- * therefore overrode `className="text-sm"` on every heading in the app,
- * rendering sidebar and card headings at display size. `:where()` keeps
- * specificity at zero; the LAYER is what makes utilities win.
- */
-@layer base {
-  :where(h1, h2, h3) {
-    text-wrap: balance;
-  }
-
-  :where(h1) {
-    font-size: clamp(2.5rem, 6vw, 4.25rem);
-    line-height: 1.05;
-    letter-spacing: -0.02em;
-  }
-
-  :where(h2) {
-    font-size: clamp(2rem, 4vw, 2.5rem);
-    line-height: 1.12;
-    letter-spacing: -0.02em;
-  }
-}
-/*
- * Canonical semantic tokens and the ae-* product palette.
- */
-  :root {
   color-scheme: light;
 
-  --ae-font-display: var(--font-family-heading, ui-sans-serif, system-ui, -apple-system, sans-serif);
-  --ae-font-sans: var(--font-family-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
-  --ae-font-mono: var(--font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
-  --ae-font-body: var(--ae-font-sans);
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-family-body:
+    "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-family-heading:
+    "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: "Geist Pixel", "DM Mono", monospace;
+  --font-family-code: "DM Mono", "SFMono-Regular", Menlo, monospace;
+  --ae-font-sans: var(--font-family-body);
+  --ae-font-body: var(--font-family-body);
+  --ae-font-mono: var(--font-family-code);
+  --ae-font-display: var(--font-family-display);
 
-  /* Product palette. */
-  --ae-bg: oklch(0.99 0.005 95);             /* cream #FDFBFA */
-  --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
-  --ae-muted-fg: oklch(0.47 0.012 130);      /* stronger sage grey */
-  --ae-muted: var(--ae-muted-fg);
-  --ae-surface: oklch(0.995 0.004 95);       /* raised just above cream */
-  --ae-surface-sunken: oklch(0.98 0.006 95); /* slightly below cream */
-  --ae-surface-raised: oklch(0.995 0.004 95);
-  --ae-surface-command: oklch(0.21 0.012 250);
+  /* Measured donor neutrals, expressed in OKLCH. */
+  --ae-bg: oklch(0.9663 0.004 106.47);
+  --ae-fg: oklch(0.2178 0 0);
+  --ae-muted-fg: oklch(0.493 0 0);
+  --ae-surface: oklch(1 0 0);
+  --ae-surface-sunken: oklch(0.9546 0.0027 106.45);
+  --ae-surface-raised: var(--ae-surface);
+  --ae-border: oklch(0.215 0.004 106 / 0.12);
+  --ae-border-strong: oklch(0.215 0.004 106 / 0.22);
 
-  --ae-border: oklch(0.83 0.008 110);        /* hairline #C9C8BE */
-  --ae-teal: oklch(0.50 0.085 195);         /* central eucalyptus teal */
-  --ae-ring: var(--ae-teal);
+  /* Ink is the action colour. Blue is reserved for links/focus/information. */
+  --ae-primary: var(--ae-fg);
+  --ae-primary-fg: oklch(0.985 0.002 106);
+  --ae-brand: oklch(0.5553 0.1056 232.01);
+  --ae-brand-strong: oklch(0.455 0.1056 232.01);
+  --ae-brand-muted: oklch(0.94 0.024 232.01);
+  --ae-on-brand: var(--ae-primary-fg);
+  --ae-ring: var(--ae-fg);
 
-  --ae-primary: oklch(0.47 0.080 195);       /* deep teal */
-  --ae-primary-strong: oklch(0.45 0.077 195); /* stronger teal */
-  --ae-primary-fg: oklch(0.98 0.005 95);     /* near-white on teal */
+  --ae-success: oklch(0.5423 0.1222 157.98);
+  --ae-success-foreground: oklch(0.32 0.085 150);
+  --ae-success-ring: oklch(0.53 0.12 150 / 0.32);
+  --ae-success-subtle: oklch(0.95 0.025 150);
+  --ae-warning: oklch(0.5948 0.1401 58.96);
+  --ae-warning-foreground: oklch(0.35 0.08 70);
+  --ae-warning-ring: oklch(0.69 0.13 78 / 0.38);
+  --ae-warning-subtle: oklch(0.96 0.035 82);
+  --ae-danger: oklch(0.5408 0.176 27.61);
+  --ae-danger-ring: oklch(0.53 0.18 28 / 0.32);
+  --ae-danger-subtle: oklch(0.95 0.03 28);
+  --ae-info: var(--ae-brand);
+  --ae-info-foreground: oklch(0.34 0.085 232);
+  --ae-info-ring: oklch(0.585 0.105 232 / 0.32);
+  --ae-info-subtle: var(--ae-brand-muted);
 
-  --ae-success: oklch(0.50 0.085 195);       /* teal family */
-  --ae-warning: oklch(0.74 0.15 70);         /* amber (shared) */
-  --ae-danger: oklch(0.45 0.16 32);          /* oxide brick #A8322A */
-  --ae-oxide: var(--ae-danger);
-  --ae-info: oklch(0.42 0.07 250);           /* slate #345A7A */
-
-  /* Radii — 6px chips, 8px controls, 12px cards, distinct large surfaces, 9999px pills */
-  --ae-radius-sm: 6px;
-  --ae-radius-md: 8px;
-  --ae-radius-lg: 12px;
-  --ae-radius-2xl: 16px;
-  --ae-radius-3xl: 24px;
-  --ae-radius-4xl: 32px;
-  --ae-radius-pill: 9999px;
-
-  /*
-   * Eucalyptus brand mark. Named `brand`, not `accent`: shadcn/ui reserves
-   * `accent` for subtle hover surfaces, and overloading one name with two jobs
-   * is what made body text render as a surface colour.
-   */
-  --ae-brand: var(--ae-teal);
-  --ae-brand-strong: oklch(0.42 0.072 195);  /* deepest brand teal */
-  --ae-brand-muted: oklch(0.95 0.03 195);    /* pale teal tint */
-  --ae-on-brand: var(--ae-public-command-text);
-
-  /* Shadows — rare and soft; hairline rules carry hierarchy */
-  --ae-shadow-raised: 0 1px 2px oklch(0.21 0.012 250 / 0.04);
-  --ae-shadow-border: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
-  --ae-shadow-border-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
-  --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
-  --ae-focus-ring: 0 0 0 3px oklch(0.50 0.11 195 / 0.34);
-  --ae-command-fg: var(--ae-public-command-text);
-  --ae-shadow-command: var(--ae-public-command-shadow);
-
-  /* Public surface token contract */
-  --ae-public-field: var(--ae-bg);
-  --ae-public-field-alt: var(--ae-surface-sunken);
-  --ae-public-surface: var(--ae-surface);
-  --ae-public-raised: var(--ae-surface-raised);
-  --ae-public-surface-raised: var(--ae-public-raised);
-  --ae-public-overlay: oklch(0.995 0.004 95);
-  --ae-public-ink: var(--ae-fg);
-  --ae-public-muted: var(--ae-muted-fg);
-  --ae-public-muted-strong: oklch(0.40 0.014 130);
-  --ae-public-command: var(--ae-surface-command);
-  --ae-public-command-soft: oklch(0.27 0.014 250);
-  --ae-public-command-text: oklch(0.96 0.006 95);
-  --ae-public-command-muted: oklch(0.74 0.012 130);
-
-  /* Accent family — teal is the single brand accent. */
-  --ae-public-amber: var(--ae-primary);
-  --ae-public-amber-deep: var(--ae-primary-strong);
-  --ae-public-amber-fg: var(--ae-primary-fg);
-  --ae-public-amber-soft: color-mix(in oklch, var(--ae-public-amber) 9%, var(--ae-public-field));
-  --ae-public-sage: var(--ae-success);
-  --ae-public-gold: var(--ae-warning);
-  --ae-public-blue: var(--ae-info);
-  --ae-image-outline: rgba(0, 0, 0, 0.1);
-
-  --ae-public-line: oklch(0.21 0.012 250 / 0.10);
-  --ae-public-line-strong: oklch(0.21 0.012 250 / 0.18);
-  --ae-public-grid-line: oklch(0.21 0.012 250 / 0.045);
-  --ae-public-command-line: oklch(0.96 0.006 95 / 0.12);
-  --ae-public-link-line: oklch(0.50 0.11 195 / 0.50);
-  --ae-danger-ring: color-mix(in oklch, var(--ae-danger) 48%, var(--ae-public-field));
-  --ae-danger-subtle: color-mix(in oklch, var(--ae-danger) 8%, var(--ae-public-field));
-  --ae-success-ring: color-mix(in oklch, var(--ae-success) 48%, var(--ae-public-field));
-  --ae-success-subtle: color-mix(in oklch, var(--ae-success) 9%, var(--ae-public-field));
-
-
-  --ae-public-button-primary-bg: var(--ae-public-amber);
-  --ae-public-button-primary-bg-hover: var(--ae-public-amber-deep);
-  --ae-public-button-primary-border: color-mix(in oklch, var(--ae-public-amber-deep) 72%, var(--ae-public-ink));
-  --ae-public-button-primary-text: var(--ae-public-amber-fg);
-  --ae-public-control-bg: var(--ae-public-surface);
-  --ae-public-control-border: color-mix(in oklch, var(--ae-public-ink) 42%, var(--ae-public-control-bg));
-  --ae-public-control-text: var(--ae-public-ink);
-  --ae-public-control-placeholder: var(--ae-public-muted);
-  --ae-public-nav-bg-active: color-mix(in oklch, var(--ae-public-amber) 12%, var(--ae-public-surface));
-  --ae-public-nav-text-active: var(--ae-public-amber-deep);
-
-  /* Spacing — 8px base */
-  --ae-public-space-2xs: 0.25rem;
-  --ae-public-space-xs: 0.5rem;
-  --ae-public-space-sm: 0.75rem;
-  --ae-public-space-md: 1rem;
-  --ae-public-space-lg: 1.5rem;
-  --ae-public-space-xl: 2rem;
-  --ae-public-space-2xl: 3rem;
-  --ae-public-space-3xl: 4rem;
-  --ae-public-space-4xl: 5rem;
-  --ae-public-space-5xl: 6rem;
-  --ae-public-space-6xl: 7rem;
-  --ae-public-gutter: clamp(1.25rem, 4vw, 3rem);
-  --ae-public-content-max: 80rem;
-  --ae-public-measure: 36rem;
-  --ae-public-grid-size: 4.5rem;
-  --ae-public-grid-size-wide: 4.5rem;
-  --ae-public-grid-size-command: 1.75rem;
-  --ae-public-grid-size-path: 2.25rem;
-
-  /* Type roles — heading/display, body, mono data */
-  --ae-public-font-display: var(--ae-font-display);
-  --ae-public-font-body: var(--ae-font-body);
-  --ae-public-font-mono: var(--ae-font-mono);
-  --ae-public-font-heading: var(--ae-public-font-display);
-  --ae-public-text-xs: 0.78rem;
-  --ae-public-text-sm: 0.875rem;
-  --ae-public-text-base: 1rem;
-  --ae-public-text-md: 1.125rem;
-  --ae-public-text-lg: 1.25rem;
-  --ae-public-text-xl: 1.45rem;
-  --ae-public-text-2xl: 1.55rem;
-  --ae-public-text-3xl: 2rem;
-  --ae-public-text-lede-mobile: 1.55rem;
-  --ae-public-text-record: 3rem;
-  --ae-public-text-display-small: 2.9rem;
-  --ae-public-text-display-mobile: 3.6rem;
-  --ae-public-text-display-tablet: 4.75rem;
-  --ae-public-text-section-small: 2.35rem;
-  --ae-public-text-section-mobile: 2.9rem;
-  --ae-public-text-section: 5.2rem;
-  --ae-public-text-display: clamp(3rem, 7vw, 5.8rem);
-  --ae-public-leading-display: 1.02;
-  --ae-public-leading-tight: 1.08;
-  --ae-public-leading-snug: 1.35;
-  --ae-public-leading-body: 1.6;
-  --ae-public-weight-regular: 430;
-  --ae-public-weight-medium: 530;
-  --ae-public-weight-semibold: 620;
-  --ae-public-weight-bold: 680;
-  --ae-public-weight-display: 560;
-  --ae-public-tracking: 0;
-  --ae-public-tracking-display: -0.01em;
-  --ae-public-tracking-mono-label: 0.06em;
-
-  /* Radii — panels 4px, buttons 6px, status pills 999px */
-  --ae-public-radius-sm: var(--ae-radius-sm);
-  --ae-public-radius-md: var(--ae-radius-md);
-  --ae-public-radius-lg: var(--ae-radius-lg);
-  --ae-public-radius-xl: var(--ae-radius-sm);
-  --ae-public-radius-control: var(--ae-radius-md);
-  --ae-public-radius-button: var(--ae-radius-md);
-  --ae-public-radius-panel: var(--ae-radius-sm);
-  --ae-public-radius-card: var(--ae-radius-sm);
-  --ae-public-radius-object: var(--ae-radius-lg);
-  --ae-public-radius-pill: var(--ae-radius-pill);
-
-  /* Shadows — soft, rare */
-  --ae-public-soft-shadow: 0 1px 2px oklch(0.21 0.012 250 / 0.04), 0 8px 24px oklch(0.21 0.012 250 / 0.05);
-  --ae-public-float-shadow: 0 8px 28px oklch(0.21 0.012 250 / 0.08), 0 2px 6px oklch(0.21 0.012 250 / 0.04);
-  --ae-public-control-shadow: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
-  --ae-public-control-shadow-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
-  --ae-public-shadow-hairline: var(--ae-shadow-border);
-  --ae-public-command-shadow: 0 20px 60px oklch(0.21 0.012 250 / 0.18);
-  --ae-public-hard-shadow: 6px 6px 0 oklch(0.21 0.012 250 / 0.06);
-  --ae-public-button-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 6px 16px oklch(0.50 0.11 195 / 0.18);
-  --ae-public-button-shadow-hover: inset 0 1px 0 oklch(1 0 0 / 0.14), 0 8px 20px oklch(0.50 0.11 195 / 0.22);
-  --ae-public-card-shadow: var(--ae-public-soft-shadow);
-  --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
-  --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
-  --ae-public-underline-offset: 0.2em;
-
-  /* Relative-color derivations. */
-  --ae-bubble-tinted-bg: oklch(from var(--ae-primary) 0.93 calc(c * 0.4) h);
-  --ae-bubble-tinted-bg-hover: oklch(from var(--ae-primary) 0.88 calc(c * 0.5) h);
-
-  /* Routing object primitives. */
-  --ae-public-routing-object-bg: color-mix(in oklch, var(--ae-public-surface) 72%, var(--ae-public-field));
-  --ae-public-routing-object-border: color-mix(in oklch, var(--ae-public-line-strong) 78%, var(--ae-public-amber) 22%);
-  --ae-public-routing-object-shadow: var(--ae-shadow-border), inset 0 1px 0 oklch(1 0 0 / 0.30);
-  --ae-public-cutout-bg: color-mix(in oklch, var(--ae-public-surface) 88%, var(--ae-public-field));
-  --ae-public-cutout-border: color-mix(in oklch, var(--ae-public-line-strong) 82%, var(--ae-public-amber) 18%);
-  --ae-public-cutout-shadow: var(--ae-shadow-border), 0 10px 28px oklch(0.21 0.012 250 / 0.08);
-  --ae-public-evidence-bg: color-mix(in oklch, var(--ae-public-surface) 70%, var(--ae-public-field));
-  --ae-public-evidence-border: color-mix(in oklch, var(--ae-public-line) 75%, transparent);
-  --ae-public-route-line: color-mix(in oklch, var(--ae-public-amber) 32%, var(--ae-public-grid-line));
-
-  /* Motion — minimal-functional, leaning intentional */
-  --ae-public-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ae-public-ease-standard: var(--ae-public-ease);
-  --ae-public-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
-  --ae-public-ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ae-public-duration-hover: 160ms;
-  --ae-public-duration-entrance: 260ms;
-  --ae-public-hover-lift: -1px;
-  --ae-public-hover-shift: 2px;
-  --ae-public-reveal-distance: 0.75rem;
-  --ae-public-z-underlay: -1;
-  --ae-public-z-base: 0;
-  --ae-public-z-content: 1;
-  --ae-public-z-sticky: 20;
-  --ae-z-underlay: -1;
-  --ae-z-base: 0;
-  --ae-z-content: 1;
-  --ae-z-header: 20;
-  --ae-z-sticky: 30;
-  --ae-z-dropdown: 40;
-  --ae-z-popover: 45;
-  --ae-z-tooltip: 50;
-  --ae-z-modal: 60;
-  --ae-z-toast: 70;
-  --ae-overlay-scrim: color-mix(in oklch, var(--ae-fg) 12%, transparent);
-  --ae-public-overlay-scrim: color-mix(in oklch, var(--ae-public-ink) 10%, transparent);
-
-  --ae-ease-out: var(--ae-public-ease-enter);
-  --ae-ease-state: var(--ae-public-ease);
-  --ae-duration-fast: 120ms;
-  --ae-duration-state: 160ms;
-  --ae-duration-route: 240ms;
-
-  /* Tailwind semantic tokens */
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
   --card: var(--ae-surface);
@@ -473,121 +156,85 @@
   --popover-foreground: var(--ae-fg);
   --primary: var(--ae-primary);
   --primary-foreground: var(--ae-primary-fg);
-  --secondary: var(--ae-surface-sunken);
+  --secondary: var(--ae-surface);
   --secondary-foreground: var(--ae-fg);
   --muted: var(--ae-surface-sunken);
   --muted-foreground: var(--ae-muted-fg);
   --accent: var(--ae-surface-sunken);
   --accent-foreground: var(--ae-fg);
   --destructive: var(--ae-danger);
-  --destructive-foreground: oklch(0.98 0.005 95);
+  --destructive-foreground: oklch(0.985 0.002 106);
   --border: var(--ae-border);
-  --input: var(--ae-public-control-border);
+  --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
-  --radius: var(--ae-radius-md);
+  --radius: 0.625rem;
+
+  --sidebar: var(--ae-bg);
+  --sidebar-foreground: var(--ae-fg);
+  --sidebar-primary: var(--ae-fg);
+  --sidebar-primary-foreground: var(--ae-primary-fg);
+  --sidebar-accent: var(--ae-surface);
+  --sidebar-accent-foreground: var(--ae-fg);
+  --sidebar-border: var(--ae-border);
+  --sidebar-ring: var(--ae-ring);
+
+  --motion-duration-fast: 100ms;
+  --motion-duration-base: 160ms;
+  --motion-duration-slow: 220ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ae-duration-fast: var(--motion-duration-fast);
+  --ae-duration-state: var(--motion-duration-base);
+  --ae-duration-route: var(--motion-duration-slow);
+  --ae-ease-out: var(--motion-ease-emphasized);
+  --ae-ease-state: var(--motion-ease-standard);
+  --ae-focus-ring: 0 0 0 2px var(--ae-bg), 0 0 0 4px var(--ae-fg);
+  --ae-overlay-scrim: oklch(0.215 0.004 106 / 0.16);
+  --ae-bubble-tinted-bg: var(--ae-brand-muted);
+  --ae-bubble-tinted-bg-hover: oklch(0.915 0.035 232);
+
+  --shadow-low: 0 1px 2px oklch(0 0 0 / 0.08);
+  --shadow-med:
+    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06);
+  --shadow-high:
+    0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06),
+    0 8px 16px oklch(0 0 0 / 0.04);
+  --shadow-inset-hover: inset 0 0 0 1px var(--ae-border-strong);
+  --shadow-inset-selected: inset 0 0 0 2px var(--ae-brand);
+  --shadow-inset-market-row: inset 0 0 0 1px var(--ae-brand);
+  --shadow-inset-market-cell: inset 0 0 0 1px var(--ae-brand);
 }
 
-
-
-/* ── Transitions.dev "magic" layer ─────────────────────────────
-   Ported from transitions.dev (MIT) — semantic motion tokens plus
-   the tilted-card, error-shake and digit-pop-in recipes, namespaced
-   to avoid clashing with component CSS. Every rule carries a
-   prefers-reduced-motion guard.
-   ───────────────────────────────────────────────────────────── */
-:root {
-  /* Card hover tilt */
-  --tilt-perspective: 1000px;
-  --tilt-return: 900ms;
-  --tilt-return-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --tilt-follow: 400ms;
-  --tilt-follow-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --tilt-glare-opacity: 0.28;
-  --tilt-glare-fade: 300ms;
-  --tilt-glare-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Error state shake */
-  --shake-distance: 6px;
-  --shake-overshoot: 4px;
-  --shake-dur-a: 80ms;
-  --shake-dur-b: 60ms;
-  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Number pop-in */
-  --digit-dur: 500ms;
-  --digit-distance: 8px;
-  --digit-stagger: 70ms;
-  --digit-blur: 2px;
-  --digit-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --digit-dir-x: 0;
-  --digit-dir-y: 1;
+@utility duration-fast {
+  transition-duration: var(--motion-duration-fast);
 }
 
-/* Card hover tilt — outer flat hit area, inner tilted card + glare. */
-.magic-tilt { touch-action: none; }
-.magic-tilt-card {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  transform:
-    perspective(var(--tilt-perspective))
-    rotateX(var(--tilt-rx, 0deg))
-    rotateY(var(--tilt-ry, 0deg));
-  transform-style: preserve-3d;
-  transition: transform var(--tilt-return) var(--tilt-return-ease);
-  will-change: transform;
-}
-.magic-tilt-card.is-tilting {
-  transition: transform var(--tilt-follow) var(--tilt-follow-ease);
-}
-.magic-tilt-glare {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  mix-blend-mode: screen;
-  background:
-    radial-gradient(circle 95px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
-      rgba(255,255,255,0.42), rgba(255,255,255,0.05) 52%, rgba(255,255,255,0) 84%),
-    radial-gradient(circle 200px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
-      rgba(255,255,255,0.2), rgba(255,255,255,0.04) 58%, rgba(255,255,255,0) 78%);
-  transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
-}
-.magic-tilt.is-hover .magic-tilt-glare { opacity: var(--tilt-glare-opacity); }
-
-/* Error state shake — apply .is-shaking to the element that shakes. */
-.magic-shake.is-shaking {
-  animation: magic-shake
-    calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear;
-}
-@keyframes magic-shake {
-  0%      { transform: translateX(0);                                    animation-timing-function: var(--shake-ease); }
-  28.57%  { transform: translateX(var(--shake-distance));                animation-timing-function: var(--shake-ease); }
-  57.14%  { transform: translateX(calc(var(--shake-distance) * -1));      animation-timing-function: var(--shake-ease); }
-  78.57%  { transform: translateX(var(--shake-overshoot));               animation-timing-function: var(--shake-ease); }
-  100%    { transform: translateX(0); }
+@utility duration-base {
+  transition-duration: var(--motion-duration-base);
 }
 
-/* Number pop-in — split the display into .magic-digit spans. */
-.magic-digit-group { display: inline-flex; align-items: baseline; }
-.magic-digit { display: inline-block; will-change: transform, opacity, filter; }
-.magic-digit-group.is-animating .magic-digit {
-  animation: magic-digit-pop-in var(--digit-dur) var(--digit-ease) both;
+@utility duration-slow {
+  transition-duration: var(--motion-duration-slow);
 }
-.magic-digit-group.is-animating .magic-digit[data-stagger="1"] { animation-delay: var(--digit-stagger); }
-.magic-digit-group.is-animating .magic-digit[data-stagger="2"] { animation-delay: calc(var(--digit-stagger) * 2); }
-@keyframes magic-digit-pop-in {
-  0% {
-    transform: translate(
-      calc(var(--digit-distance) * var(--digit-dir-x)),
-      calc(var(--digit-distance) * var(--digit-dir-y))
-    );
-    opacity: 0;
-    filter: blur(var(--digit-blur));
+
+@utility ease-standard {
+  transition-timing-function: var(--motion-ease-standard);
+}
+
+@utility ease-emphasized {
+  transition-timing-function: var(--motion-ease-emphasized);
+}
+
+@layer base {
+  :where(h1, h2, h3, h4) {
+    font-family: var(--ae-font-sans);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
   }
-  100% { transform: translate(0, 0); opacity: 1; filter: blur(0); }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .magic-tilt-card { transform: none !important; transition: none !important; }
-  .magic-shake { animation: none !important; transform: none !important; }
-  .magic-digit-group .magic-digit { animation: none !important; }
+  ::selection {
+    background: var(--ae-brand-muted);
+    color: var(--ae-fg);
+  }
 }

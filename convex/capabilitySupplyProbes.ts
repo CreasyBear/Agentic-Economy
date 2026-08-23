@@ -20,6 +20,7 @@ import {
   publicationLifecycleValue,
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
+import { syncMarketOperationPresence } from './marketPresence'
 
 const READINESS_REFRESH_LEAD_MS = 90_000
 const MAX_READINESS_REFRESH_BATCH = 20
@@ -190,6 +191,12 @@ export async function observeCapabilityReadinessHandler(
     readinessObservedAt: now,
     readinessValidUntil: args.validUntil,
     updatedAt: now,
+  })
+  await syncMarketOperationPresence(ctx, {
+    operationRef: publication.operationRef,
+    businessId: publication.businessId,
+    active: args.credentialState === 'ready' && args.healthState === 'healthy',
+    now,
   })
   const [offering, binding] = await Promise.all([
     ctx.db

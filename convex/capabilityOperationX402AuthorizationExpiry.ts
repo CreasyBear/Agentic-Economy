@@ -90,14 +90,16 @@ async function queueExpiredX402AuthorizationHandler(
     || args.authorizationDigest.trim().length === 0
   ) return { kind: 'not_queued' }
 
-  const invocation = await ctx.db.query('capabilityOperationInvocations')
-    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
-    .unique()
-  const payment = await ctx.db.query('moneyX402PaymentAttempts')
-    .withIndex('by_attemptRef_and_effectGeneration', (query) => (
-      query.eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration)
-    ))
-    .unique()
+  const [invocation, payment] = await Promise.all([
+    ctx.db.query('capabilityOperationInvocations')
+      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+      .unique(),
+    ctx.db.query('moneyX402PaymentAttempts')
+      .withIndex('by_attemptRef_and_effectGeneration', (query) => (
+        query.eq('attemptRef', args.attemptRef).eq('effectGeneration', args.effectGeneration)
+      ))
+      .unique(),
+  ])
   if (invocation === null || payment === null) return { kind: 'not_queued' }
 
   const actionControl = await ctx.db.query('actionInvocationControls')

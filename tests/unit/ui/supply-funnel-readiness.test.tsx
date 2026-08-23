@@ -114,7 +114,7 @@ describe("current supply funnel", () => {
         />,
       );
 
-    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check readiness" }));
     await waitFor(() =>
       expect(
         screen.getByText(/endpoint returned an unhealthy result/i),
@@ -124,7 +124,7 @@ describe("current supply funnel", () => {
     expect(screen.getByRole("alert").className).toContain("text-destructive");
 
     nextStep = "test";
-    fireEvent.click(screen.getByRole("button", { name: "Check the service" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check readiness" }));
     await waitFor(() =>
       expect(
         screen.getByRole("heading", { name: "Run a real test" }),

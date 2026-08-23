@@ -7,16 +7,11 @@ import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
 
 import { AeProviderListingPage, ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
-import {
-  DIRECT_CONTACT_EXPLAINER,
-  NO_CONTACT_EXPLAINER,
-  buildListingTrustProjection,
-} from '@/lib/ui/trust-projection'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 
 describe('ListingFirstScreen', () => {
-  it('filters ae_inquiry paths and keeps phone contact copy', () => {
+  it('presents supplier supply as a compact Operation catalogue', () => {
     const catalog = catalogFixture()
     const markup = renderListingToStaticMarkup(
       <AeProviderListingPage
@@ -27,37 +22,35 @@ describe('ListingFirstScreen', () => {
     const text = fragmentFrom(markup).textContent ?? ''
 
     expect(text).toContain('Emergency plumbing')
-    expect(text).toContain('What this business offers')
-    expect(text).toContain('Use the published phone number or website on this listing.')
+    expect(text).toContain('Published Operations')
+    expect(text).toContain('Inspect the price, access path, and current readiness before calling.')
     expect(markup).not.toContain('Ask this business')
     expect(markup).not.toContain('href="/demo-plumbing/inquiry"')
   })
 
-  it('puts the published trust facts and posture before contact copy', () => {
+  it('puts literal market facts before any access path', () => {
     const markup = renderFirstScreen(catalogFixture())
 
     expect(markup).toContain('Demo listed provider')
     expect(markup).toContain('Plumber')
-    expect(markup).toContain('Mon–Fri, 8am–5pm')
-    expect(markup).toContain('Parramatta and nearby suburbs')
-    expect(markup).toContain(NO_CONTACT_EXPLAINER)
+    expect(markup).toContain('Compare this supplier’s published Operations, exact prices, and access paths.')
+    expect(markup).toContain('Operations')
+    expect(markup).toContain('Ready now')
+    expect(markup).toContain('Last indexed')
     expect(markup).not.toContain('href="tel:')
     expect(markup).not.toContain('Ask this business')
-    expect(peerActions(markup)).toEqual([
-      { action: 'copy-details', variant: 'secondary' },
-    ])
   })
 
-  it('renders the direct-call explainer with a dialable target only when a phone is published', () => {
-    const markup = renderFirstScreen(catalogFixture({}, '08 6111 2222'))
+  it('uses a published phone only as the fallback access path', () => {
+    const markup = renderListingToStaticMarkup(
+      <AeProviderListingPage
+        catalog={catalogFixture({}, '08 6111 2222')}
+        agentJsonUrl="/api/businesses/demo-plumbing"
+      />,
+    )
 
-    expect(markup).toContain(DIRECT_CONTACT_EXPLAINER)
     expect(markup).toContain('href="tel:0861112222"')
-    expect(markup).toContain('Call now: 08 6111 2222')
-    expect(peerActions(markup)).toEqual([
-      { action: 'call', variant: 'primary' },
-      { action: 'copy-details', variant: 'secondary' },
-    ])
+    expect(markup).toContain('Call supplier')
   })
 
   it('lets Offering v2 own visible supply without resurrecting inquiry cards', () => {
@@ -139,7 +132,6 @@ function renderFirstScreen(catalog: PublicBusinessCatalogApiV2Dto): string {
   return renderListingToStaticMarkup(
     <ListingFirstScreen
       catalog={catalog}
-      trust={buildListingTrustProjection(catalog)}
     />,
   )
 }
@@ -193,13 +185,6 @@ function fragmentFrom(markup: string): DocumentFragment {
   const template = document.createElement('template')
   template.innerHTML = markup
   return template.content
-}
-
-function peerActions(markup: string): Array<{ action: string | undefined; variant: string | undefined }> {
-  return Array.from(fragmentFrom(markup).querySelectorAll<HTMLElement>('[data-peer-action]'), (element) => ({
-    action: element.dataset.peerAction,
-    variant: element.dataset.variant,
-  }))
 }
 
 function renderListingToStaticMarkup(ui: ReactElement): string {

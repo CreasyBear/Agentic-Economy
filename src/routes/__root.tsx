@@ -59,9 +59,12 @@ function RootComponent() {
  */
 const clerkAppearance = {
   variables: {
-    fontSize: '1.125rem',
-    spacing: '1rem',
-    borderRadius: '0.75rem',
+    fontSize: '0.875rem',
+    spacing: '0.875rem',
+    borderRadius: '0.625rem',
+    colorPrimary: 'oklch(0.215 0.004 106)',
+    colorBackground: 'oklch(1 0 0)',
+    colorText: 'oklch(0.215 0.004 106)',
   },
   elements: {
     formFieldRow__password: 'aria-hidden:!hidden',
@@ -107,4 +110,3 @@ function RootDocument({ children }: { children: ReactNode }) {
 function requiresClerkProvider(pathname: string): boolean {
   return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }
-

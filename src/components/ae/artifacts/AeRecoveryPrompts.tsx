@@ -22,7 +22,7 @@ export function RecoveryPrompts({
 
   return (
     <section
-      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-lg border border-border bg-card p-4')}
+      className={cn(REVEAL_ENTER, 'grid gap-3 rounded-md border border-border bg-card p-3')}
       aria-label={titleText}
     >
       <header className="flex items-center gap-2">
@@ -34,7 +34,7 @@ export function RecoveryPrompts({
         </span>
         <div className="grid gap-0.5">
           <p className="block text-sm font-medium text-muted-foreground">Try another way</p>
-          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="font-heading text-base text-foreground">{titleText}</p>
+          <p dir="auto" style={{ unicodeBidi: 'isolate' }} className="text-sm font-semibold text-foreground">{titleText}</p>
         </div>
       </header>
       {prompts.length > 0 ? (
@@ -44,7 +44,7 @@ export function RecoveryPrompts({
             return (
               <li key={`${prompt.label}-${prompt.query}`}>
                 <Link
-                  className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-foreground transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
+                  className="inline-flex min-h-9 items-center rounded-md border border-border bg-card px-3 text-sm text-foreground transition-colors hover:bg-muted"
                   to="/"
                   search={{ q: prompt.query }}
                   dir="auto"

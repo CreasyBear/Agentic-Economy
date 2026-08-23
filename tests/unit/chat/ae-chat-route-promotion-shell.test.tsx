@@ -18,14 +18,14 @@ describe('AeChat route promotion shell', () => {
 
     const headings = screen.getAllByRole('heading', { level: 1 })
     expect(headings).toHaveLength(1)
-    expect(headings[0]?.textContent).toBe('Answering your question')
+    expect(headings[0]?.textContent).toBe('Searching the operation market')
     expect(headings[0]?.getAttribute('tabindex')).toBe('-1')
     expect(document.activeElement).toBe(headings[0])
   })
 
   it('focuses the main landmark on thread and new-chat route changes even when a control was focused', () => {
     const first = render(<AeChat initialQuery="duplicate probe" />)
-    const pendingHeading = screen.getByRole('heading', { level: 1, name: 'Answering your question' })
+    const pendingHeading = screen.getByRole('heading', { level: 1, name: 'Searching the operation market' })
     pendingHeading.blur()
 
     first.rerender(
@@ -34,7 +34,7 @@ describe('AeChat route promotion shell', () => {
     const main = screen.getByRole('main')
     expect(document.activeElement).toBe(main)
 
-    const sidebarToggle = screen.getAllByRole('button', { name: 'Open recent chats' })[0] as HTMLButtonElement
+    const sidebarToggle = screen.getAllByRole('button', { name: 'Open recent searches' })[0] as HTMLButtonElement
     sidebarToggle.focus()
     first.rerender(
       <AeChat threadId="thread-two" initialProjection={buildProjection('thread-two', 'Second answer')} />,
@@ -51,7 +51,7 @@ describe('AeChat route promotion shell', () => {
 
     render(<AeChat />)
 
-    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
+    expect(screen.queryByRole('searchbox', { name: 'Search the operation market' })).not.toBeNull()
     expect(testState.latestScrollerProps).toMatchObject({
       showJumpButton: true,
       contentClassName: 'justify-center',
@@ -59,7 +59,7 @@ describe('AeChat route promotion shell', () => {
 
     await submitQuery('businesses in Perth')
     expect(screen.getAllByRole('searchbox')).toHaveLength(1)
-    const composer = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    const composer = screen.getByRole('searchbox', { name: 'Search the operation market' })
     expect(computeAccessibleDescription(composer)).toContain('Working on your ask')
     expect(testState.latestScrollerProps?.showJumpButton).toBe(true)
     expect(testState.latestScrollerProps?.contentClassName).toBe('[&>[data-slot=message-scroller-item]:first-of-type]:mt-auto')
@@ -84,7 +84,7 @@ describe('AeChat route promotion shell', () => {
       },
     ])
     expect(screen.getAllByRole('searchbox')).toHaveLength(1)
-    expect(screen.getByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
+    expect(screen.getByRole('searchbox', { name: 'Search the operation market' })).not.toBeNull()
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
   })
 

@@ -36,9 +36,9 @@ export function publishGateRefusal(
   value: OwnerOfferingEditorValue,
 ): Readonly<{ field: string; message: string }> | undefined {
   if (value.status !== 'published') return undefined
-  if (value.name.trim().length === 0) return { field: 'name', message: 'Add a service name before publishing.' }
-  if (value.category.trim().length === 0) return { field: 'category', message: 'Add a service category before publishing.' }
-  if (value.summary.trim().length === 0) return { field: 'summary', message: 'Add a clear service summary before publishing.' }
+  if (value.name.trim().length === 0) return { field: 'name', message: 'Add an Operation name before publishing.' }
+  if (value.category.trim().length === 0) return { field: 'category', message: 'Add an Operation category before publishing.' }
+  if (value.summary.trim().length === 0) return { field: 'summary', message: 'Add a clear Operation summary before publishing.' }
   return undefined
 }
 

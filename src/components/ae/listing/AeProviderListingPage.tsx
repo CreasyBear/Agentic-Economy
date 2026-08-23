@@ -1,25 +1,18 @@
-import { ArrowLeftIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeftIcon, ArrowUpRightIcon, BracesIcon, Globe2Icon, PhoneIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
+
+import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-
-import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
-import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
-import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
-import { ProvenanceBadge } from '@/components/ae/status/ProvenanceBadge'
-import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
-import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
-import { AeOfferingCard } from '@/components/ae/primitives/AeOfferingCard'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
-import { copyTextToClipboard } from '@/lib/ui/copy-text-to-clipboard'
-import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
 import { telUri } from '@/lib/ui/tel-uri'
-import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
-import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
-import { cn } from '@/lib/utils'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import type { ListingTrustProjection } from '@/lib/ui/trust-projection'
+import { formatOfferingPrice } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto, PublicOfferingDto } from '@/modules/registry/public'
+import type { PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 
 export type AeProviderListingPageProps = {
   catalog: PublicBusinessCatalogApiV2Dto
@@ -29,108 +22,99 @@ export type AeProviderListingPageProps = {
   backThreadId?: string
 }
 
-const peerActionClassName = 'min-h-11 w-full sm:w-auto'
-
 export function AeProviderListingPage({
-  catalog: rawCatalog,
+  catalog,
   agentJsonUrl,
-  supply: rawSupply,
+  supply,
   backFrom,
   backThreadId,
 }: AeProviderListingPageProps) {
-  const catalog = rawCatalog
-  const supply = rawSupply
-  const presentation = buildProviderPresentation(catalog)
-  const trust = buildListingTrustProjection(catalog)
-  const officeAddress = readOfficeAddress(catalog)
-  const supplyOfferings = supply?.offerings
-  const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
-
-  useEffect(() => {
-    const journeyId = getOrCreatePseudonymousJourneyId('J1', catalog.slug)
-    setJourneyIdentity({ slug: catalog.slug, id: journeyId })
-    emitWave1JourneyEvent({
-      event: 'listing_viewed',
-      eventVersion: 1,
-      journey: 'J1',
-      pseudonymousJourneyId: journeyId,
-    })
-  }, [catalog.slug])
-  const journeyIdentityForCatalog = journeyIdentity === null || journeyIdentity.slug !== catalog.slug
-    ? null
-    : journeyIdentity
+  const offerings = supply === undefined ? catalog.offerings : supply.offerings.map(supplyOfferingToDto)
+  const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
 
   return (
-    <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
-      <nav aria-label="Return to your previous view">
-        <ListingBackLink {...(backFrom === undefined ? {} : { from: backFrom })} {...(backThreadId === undefined ? {} : { threadId: backThreadId })} />
+    <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8">
+      <nav aria-label="Breadcrumb">
+        <ListingBackLink
+          {...(backFrom === undefined ? {} : { from: backFrom })}
+          {...(backThreadId === undefined ? {} : { threadId: backThreadId })}
+        />
       </nav>
 
-      <ListingFirstScreen
-        catalog={catalog}
-        trust={trust}
-        pseudonymousJourneyId={journeyIdentityForCatalog?.id ?? null}
-        offeringDetailMode={supply !== undefined}
-      />
+      <ListingFirstScreen catalog={catalog} offerings={offerings} />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-        <div className="grid gap-8">
-          <ListingPhotosSection catalog={catalog} presentation={presentation} />
-
-          {supply === undefined || supplyOfferings === undefined ? null : (
-            <AeOfferingSupplyList
-              offerings={supplyOfferings}
-              disposition={supply.disposition}
-              observedAt={supply.observedAt}
-              showTechnicalDetails={false}
-            />
-          )}
-
-          {supply === undefined ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <ReachOutStepsCard updatedAt={catalog.observedAt} />
-              <SourceStampCard updatedAt={catalog.observedAt} />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+        <section aria-labelledby="supplier-operations-title" className="overflow-hidden rounded-card border border-border bg-card">
+          <div className="flex flex-col gap-1 border-b border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 id="supplier-operations-title" className="text-lg font-semibold text-foreground">Published Operations</h2>
+              <p className="text-sm text-muted-foreground">Inspect the price, access path, and current readiness before calling.</p>
             </div>
-          ) : <SourceStampCard updatedAt={catalog.observedAt} />}
+            <p className="font-mono text-xs tabular-nums text-muted-foreground">
+              {offerings.length} listed · {readyCount} ready now
+            </p>
+          </div>
 
-          {supply === undefined ? <OfferingCardsSection catalog={catalog} /> : null}
+          {offerings.length === 0 ? (
+            <div className="grid gap-1 px-4 py-8">
+              <p className="font-medium text-foreground">No Operations published</p>
+              <p className="text-sm text-muted-foreground">This supplier profile remains visible while its catalogue is prepared.</p>
+            </div>
+          ) : (
+            <ul className="m-0 divide-y divide-border p-0" aria-label={`${catalog.name} Operations`}>
+              {offerings.map((offering) => (
+                <OperationRow key={offering.offeringRef} offering={offering} catalog={catalog} />
+              ))}
+            </ul>
+          )}
+        </section>
 
-          {supply === undefined ? <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} /> : null}
-        </div>
+        <aside className="grid gap-4 lg:sticky lg:top-20" aria-label="Supplier information">
+          <Card className="gap-4 p-4">
+            <div className="grid gap-1">
+              <h2 className="text-base font-semibold text-foreground">Supplier details</h2>
+              <p className="text-sm text-muted-foreground">Facts published with this catalogue entry.</p>
+            </div>
+            <Separator />
+            <dl className="grid gap-3">
+              <Fact label="Supplier type" value={catalog.businessContext.kind === 'programmable_provider' ? 'Programmable provider' : 'Human-operated supplier'} />
+              <Fact label="Catalogue status" value={catalog.disposition === 'current' ? 'Current' : catalog.disposition} />
+              <Fact label="Observed">
+                <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>
+              </Fact>
+              {catalog.responseTimeMinutes === undefined ? null : (
+                <Fact label="Published response time" value={`${catalog.responseTimeMinutes} min`} />
+              )}
+              {catalog.businessContext.kind === 'programmable_provider' ? (
+                <Fact label="Provider ID" value={catalog.businessContext.providerIdentifier} mono />
+              ) : (
+                <Fact label="Location" value={`${catalog.businessContext.suburb}, ${catalog.businessContext.stateTerritory}`} />
+              )}
+            </dl>
+            {catalog.businessContext.kind !== 'programmable_provider' ? null : (
+              <Button asChild variant="outline" className="min-h-11 w-full justify-between">
+                <a href={catalog.businessContext.website} target="_blank" rel="noreferrer">
+                  Supplier website <ArrowUpRightIcon aria-hidden="true" />
+                </a>
+              </Button>
+            )}
+          </Card>
 
-        <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Actions for this business">
-          {supply === undefined ? (
-            <Card className="p-5">
-              <div className="grid gap-4">
-                <div>
-                  <h2 className="block text-lg font-semibold text-foreground">
-                    Contact this business
-                  </h2>
-                  <p className="block text-muted-foreground">
-                    {replyPostureLabel(trust.replyPosture)}
-                  </p>
-                </div>
-                <p className="block text-muted-foreground">
-                  Use the published phone number or website on this listing.
-                </p>
-                <AeProtectedByAe />
-              </div>
-            </Card>
-          ) : null}
-
-          <details className="border-t border-border pt-2">
-            <summary className="flex min-h-11 cursor-pointer items-center rounded-md px-2 text-sm font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2">
-              Page info
+          <details className="rounded-card border border-border bg-card">
+            <summary className="flex min-h-11 cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <BracesIcon className="size-4" aria-hidden="true" /> Agent-readable catalogue
             </summary>
-            <div className="grid gap-2 px-2 pb-2 pt-3">
-              <p className="block text-sm font-semibold text-muted-foreground">Data for AI assistants</p>
-              <p className="block text-sm text-muted-foreground">A machine-readable copy of this page.</p>
+            <div className="grid gap-2 border-t border-border px-4 py-3">
+              <p className="text-sm text-muted-foreground">Use the public JSON projection to inspect this supplier without parsing the page.</p>
               <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />
             </div>
           </details>
 
-          <Link to="/privacy/remove-business" className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
-            Correct or remove this page
+          <Link
+            to="/privacy/remove-business"
+            className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            Correct or remove this supplier
           </Link>
         </aside>
       </div>
@@ -140,369 +124,175 @@ export function AeProviderListingPage({
 
 export function ListingFirstScreen({
   catalog,
-  trust,
-  pseudonymousJourneyId,
-  offeringDetailMode = false,
+  offerings = catalog.offerings,
 }: {
   catalog: PublicBusinessCatalogApiV2Dto
-  trust: ListingTrustProjection
-  pseudonymousJourneyId?: PseudonymousJourneyId | null
+  offerings?: readonly PublicOfferingDto[]
+  trust?: ListingTrustProjection
+  pseudonymousJourneyId?: unknown
   offeringDetailMode?: boolean
 }) {
-  const [detailsCopied, setDetailsCopied] = useState(false)
-  const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
-  const telDestination = phone === undefined ? undefined : telUri(phone)
-  const publishedFacts = [trust.phone, trust.hours, trust.serviceArea].filter((fact) => fact.kind === 'published')
-  function recordDirectCall() {
-    if (pseudonymousJourneyId === null || pseudonymousJourneyId === undefined) {
-      return
-    }
-    emitWave1JourneyEvent({
-      event: 'direct_call_selected',
-      eventVersion: 1,
-      journey: 'J1',
-      pseudonymousJourneyId,
-    })
-  }
-  async function copyDetails() {
-    const details = [
-      catalog.name,
-      catalog.category,
-      `Phone: ${trustFactText(trust.phone)}`,
-      `Hours: ${trustFactText(trust.hours)}`,
-      `Service area: ${trustFactText(trust.serviceArea)}`,
-    ].join('\n')
-
-    try {
-      await copyTextToClipboard(details)
-      setDetailsCopied(true)
-      window.setTimeout(() => setDetailsCopied(false), 1600)
-    } catch {
-      window.prompt('Copy business details:', details)
-    }
-  }
+  const readyCount = offerings.filter((offering) => offering.support.aeSupportedAction).length
 
   return (
-    <Card className="overflow-hidden p-6" aria-labelledby="provider-listing-title">
-      <div className="grid gap-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <img src="/brand/logo/ae-seal.svg" alt="" className="size-6 shrink-0" />
-          <p className="font-mono text-sm font-semibold text-brand">
-            Business page for people and AI assistants
-          </p>
-        </div>
-        <div className="grid gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 id="provider-listing-title" className="text-balance text-4xl leading-none font-semibold tracking-tight text-foreground md:text-6xl">
-              {catalog.name}
-            </h1>
-            <ProvenanceBadge source="business_published" />
-          </div>
-          <p className="block text-lg text-muted-foreground">{catalog.category}</p>
-        </div>
-
-        {publishedFacts.length === 0 ? null : (
-          <dl className="grid gap-3 sm:grid-cols-3" aria-label="Published business details">
-            <TrustFactRow label="Phone" fact={trust.phone} />
-            <TrustFactRow label="Hours" fact={trust.hours} />
-            <TrustFactRow label="Service area" fact={trust.serviceArea} />
-          </dl>
-        )}
-
-        {offeringDetailMode ? null : (
-          <p className="block max-w-3xl text-pretty text-foreground">{trust.explainer}</p>
-        )}
-
-        <div className="grid gap-3 sm:flex sm:flex-wrap" role="group" aria-label="Actions for this business">
-          {phone === undefined || telDestination === undefined ? null : (
-            <div data-peer-action="call" data-variant="primary">
-              <Button asChild variant="default" size="lg" className={peerActionClassName} onClick={recordDirectCall}>
-                <a href={telDestination}>Call now: {phone}</a>
-              </Button>
-            </div>
-          )}
-          <div data-peer-action="copy-details" data-variant="secondary">
-            <Button type="button" variant="secondary" size="lg" className={peerActionClassName} onClick={() => void copyDetails()}>
-              {detailsCopied ? 'Details copied' : 'Copy details'}
-            </Button>
-          </div>
-          {offeringDetailMode ? null : (
-            <p className="block text-muted-foreground">Use the published phone or website on this page.</p>
-          )}
-        </div>
+    <header className="grid gap-5 border-b border-border pb-6" aria-labelledby="provider-listing-title">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline">Supplier</Badge>
+        <Badge variant={readyCount > 0 ? 'success' : 'secondary'}>
+          {readyCount > 0 ? `${readyCount} ready now` : 'Inspect only'}
+        </Badge>
       </div>
-    </Card>
+      <div className="grid max-w-3xl gap-2">
+        <p className="font-mono text-xs font-medium uppercase tracking-widest text-muted-foreground">{catalog.category}</p>
+        <h1 id="provider-listing-title" className="text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">
+          {catalog.name}
+        </h1>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Compare this supplier’s published Operations, exact prices, and access paths.
+        </p>
+      </div>
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <Fact label="Operations" value={String(offerings.length)} mono />
+        <Fact label="Ready now" value={String(readyCount)} mono />
+        <Fact label="Last indexed">
+          <time dateTime={timestampIso(catalog.observedAt)}>{formatTimestamp(catalog.observedAt)}</time>
+        </Fact>
+      </dl>
+    </header>
   )
 }
 
-/**
- * An unpublished fact is omitted, never announced. "Hours not published here"
- * fills a row, teaches nothing, and previously contradicted the offer section
- * below, which states the hours the owner did supply.
- */
-function TrustFactRow({ label, fact }: { label: string; fact: TrustFact }) {
-  if (fact.kind !== 'published') {
-    return null
-  }
+function OperationRow({ offering, catalog }: { offering: PublicOfferingDto; catalog: PublicBusinessCatalogApiV2Dto }) {
+  const operationPath = offering.accessPaths.find((path) => path.kind === 'external_operation')
+  const webPath = offering.accessPaths.find((path) => path.kind === 'human_request' && path.channel === 'website' && path.url !== undefined)
+  const phone = catalog.businessContext.kind === 'local_human' ? catalog.businessContext.publishedPhone : undefined
+  const phoneHref = phone === undefined ? undefined : telUri(phone)
+  const accessNote = offering.accessPaths.find((path) => path.kind === 'human_request')?.disclosure
+  const price = offering.price === undefined
+    ? offering.pricingSummary ?? 'Price unknown'
+    : formatOfferingPrice(offering.price)
 
   return (
-    <div className="grid min-w-0 gap-1">
-      <dt className="text-sm font-semibold text-muted-foreground">{label}</dt>
-      <dd className="m-0 break-words text-foreground">{fact.value}</dd>
+    <li className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start">
+      <div className="grid min-w-0 gap-3">
+        <div className="grid gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-foreground">{offering.name}</h3>
+            <Badge variant={offering.support.aeSupportedAction ? 'success' : offering.support.integrated ? 'warning' : 'secondary'}>
+              {offering.support.aeSupportedAction ? 'Ready now' : offering.support.integrated ? 'Setup required' : 'Inspect only'}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">{offering.summary}</p>
+        </div>
+        <dl className="grid gap-2 text-sm sm:grid-cols-3">
+          <Fact label="Category" value={offering.category} />
+          <Fact label="Price" value={price} mono />
+          <Fact label="Availability" value={offering.availabilitySummary ?? 'Not published'} />
+        </dl>
+        {accessNote === undefined ? null : <p className="text-xs text-muted-foreground">{accessNote}</p>}
+      </div>
+      <div className="grid gap-2 sm:justify-items-stretch">
+        {operationPath === undefined ? null : (
+          <Button asChild size="sm" className="min-h-11 justify-between">
+            <a href={operationPath.documentationUrl ?? operationPath.url} target="_blank" rel="noreferrer">
+              Open provider route <ArrowUpRightIcon aria-hidden="true" />
+            </a>
+          </Button>
+        )}
+        {operationPath !== undefined || webPath === undefined ? null : (
+          <Button asChild variant="outline" size="sm" className="min-h-11 justify-between">
+            <a href={webPath.url} target="_blank" rel="noreferrer">
+              Open website <Globe2Icon aria-hidden="true" />
+            </a>
+          </Button>
+        )}
+        {operationPath !== undefined || webPath !== undefined || phoneHref === undefined ? null : (
+          <Button asChild variant="outline" size="sm" className="min-h-11 justify-between">
+            <a href={phoneHref}>Call supplier <PhoneIcon aria-hidden="true" /></a>
+          </Button>
+        )}
+        {operationPath !== undefined || webPath !== undefined || phoneHref !== undefined ? null : (
+          <p className="text-sm text-muted-foreground">No public call path</p>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function supplyOfferingToDto(item: PublicOfferingSupplyView['offerings'][number]): PublicOfferingDto {
+  return {
+    offeringRef: item.offering.offeringRef,
+    revision: item.offering.revision,
+    name: item.offering.name,
+    category: item.offering.category,
+    summary: item.offering.summary,
+    ...(item.offering.serviceAreaSummary === undefined ? {} : { serviceAreaSummary: item.offering.serviceAreaSummary }),
+    ...(item.offering.availabilitySummary === undefined ? {} : { availabilitySummary: item.offering.availabilitySummary }),
+    ...(item.offering.pricingSummary === undefined ? {} : { pricingSummary: item.offering.pricingSummary }),
+    ...(item.offering.price === undefined ? {} : { price: item.offering.price }),
+    accessPaths: item.accessPaths.map((path) => path.descriptor.kind === 'human_request'
+      ? {
+          accessPathRef: path.accessPathRef,
+          offeringRevision: path.offeringRevision,
+          kind: 'human_request' as const,
+          channel: path.descriptor.channel,
+          disclosure: path.descriptor.disclosure,
+          ...(path.descriptor.url === undefined ? {} : { url: path.descriptor.url }),
+        }
+      : {
+          accessPathRef: path.accessPathRef,
+          offeringRevision: path.offeringRevision,
+          kind: 'external_operation' as const,
+          name: path.descriptor.name,
+          summary: path.descriptor.summary,
+          url: path.descriptor.url,
+          ...(path.descriptor.method === undefined ? {} : { method: path.descriptor.method }),
+          ...(path.descriptor.documentationUrl === undefined ? {} : { documentationUrl: path.descriptor.documentationUrl }),
+          ...(path.descriptor.interfaceDescription === undefined ? {} : { interfaceDescription: path.descriptor.interfaceDescription }),
+          ...(path.descriptor.authenticationSummary === undefined ? {} : { authenticationSummary: path.descriptor.authenticationSummary }),
+          ...(path.descriptor.pricingSummary === undefined ? {} : { pricingSummary: path.descriptor.pricingSummary }),
+          provenance: path.descriptor.provenance,
+        }),
+    support: {
+      integrated: item.support.integrated,
+      aeSupportedAction: item.support.routeable,
+      ...(item.support.observedAt === undefined ? {} : { observedAt: item.support.observedAt }),
+      ...(item.support.validUntil === undefined ? {} : { validUntil: item.support.validUntil }),
+    },
+  }
+}
+
+function Fact({
+  label,
+  value,
+  children,
+  mono = false,
+}: {
+  label: string
+  value?: string
+  children?: ReactNode
+  mono?: boolean
+}) {
+  return (
+    <div className="grid min-w-0 gap-0.5">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className={`m-0 break-words text-sm text-foreground ${mono ? 'font-mono tabular-nums' : ''}`}>{children ?? value}</dd>
     </div>
   )
 }
 
-function trustFactText(fact: TrustFact): string {
-  return fact.kind === 'published' ? fact.value : fact.label
-}
-
-function replyPostureLabel(posture: ReplyPosture): string {
-  return posture.kind === 'observed' ? NO_REPLY_HISTORY : posture.label
-}
-
-function OfferingCardsSection({
-  catalog,
-}: {
-  catalog: PublicBusinessCatalogApiV2Dto
-}) {
-  if (catalog.offerings.length === 0) {
-    return null
-  }
-
-  return (
-    <Card className="p-6" aria-labelledby="listing-offerings">
-      <div className="grid gap-4">
-        <div>
-          <h2 id="listing-offerings" className="block text-lg font-semibold text-foreground">
-            What this business offers
-          </h2>
-          <p className="block text-sm text-muted-foreground">
-            Published by {catalog.name}. Contact them using the phone or website on this page.
-          </p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {catalog.offerings.map((offering) => (
-            <AeOfferingCard
-              key={offering.offeringRef}
-              offering={offering}
-              className="h-full content-start gap-2"
-            />
-          ))}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-
-
-
-function SourceStampCard({ updatedAt }: { updatedAt: number }) {
-  return (
-    <Card className="p-5" aria-labelledby="listing-source-stamps">
-      <div className="grid gap-3">
-        <h2 id="listing-source-stamps" className="block text-lg font-semibold text-foreground">
-          Last updated
-        </h2>
-        <ul className="grid gap-2" aria-label="Last updated">
-          <li><SourceStamp label="published details" updatedAt={updatedAt} /></li>
-          <li><SourceStamp label="last checked" updatedAt={updatedAt} /></li>
-        </ul>
-      </div>
-    </Card>
-  )
-}
-
-function SourceStamp({ label, updatedAt }: { label: string; updatedAt?: number }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 font-mono text-xs tabular-nums text-brand">
-      <span className="size-1.5 rounded-full bg-brand" aria-hidden="true" />
-      {label}
-      {updatedAt === undefined ? null : (
-        <>
-          <span aria-hidden="true">·</span>
-          <time dateTime={timestampIso(updatedAt)}>{formatTimestamp(updatedAt)}</time>
-        </>
-      )}
-    </span>
-  )
-}
-
-function ReachOutStepsCard({ updatedAt }: { updatedAt: number }) {
-  const steps = [
-    {
-      title: 'Read the page',
-      stamp: 'published details',
-      note: 'Offerings, area, and contact details are on this page.',
-      reached: true,
-    },
-    {
-      title: 'Check the date',
-      stamp: 'last checked',
-      note: 'The date shows the latest page check.',
-      reached: true,
-    },
-    {
-      title: 'Use published contact details',
-      stamp: 'phone or website',
-      note: 'Call the published number or use the published website on the listing.',
-      reached: false,
-    },
-  ] satisfies Array<{ title: string; stamp: string; note: string; reached: boolean }>
-
-  return (
-    <Card className="p-5" aria-labelledby="listing-reach-out-steps">
-      <div className="grid gap-3">
-        <h2 id="listing-reach-out-steps" className="block text-lg font-semibold text-foreground">
-          What happens when you contact this business
-        </h2>
-        <ol className="grid gap-0" aria-label="What happens when you contact this business">
-          {steps.map((step, index) => {
-            const hasNext = index < steps.length - 1
-            const nextReached = steps[index + 1]?.reached === true
-
-            return (
-              <li key={step.title} className="grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
-                <span className="relative mt-1 flex justify-center" aria-hidden="true">
-                  <span className={cn('size-3 rounded-full border', step.reached ? 'border-brand bg-brand' : 'border-border bg-card')} />
-                  {hasNext ? <span className={cn('absolute top-3 h-[calc(100%+1rem)] w-px', step.reached && nextReached ? 'bg-brand' : 'bg-border')} /> : null}
-                </span>
-                <span className="grid gap-1">
-                  <span className="text-sm font-medium text-foreground">{step.title}</span>
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {step.stamp} · <time dateTime={timestampIso(updatedAt)}>{formatTimestamp(updatedAt)}</time>
-                  </span>
-                  <span className="text-sm text-muted-foreground">{step.note}</span>
-                </span>
-              </li>
-            )
-          })}
-        </ol>
-      </div>
-    </Card>
-  )
-}
-
-function WhatTheyOfferCard({
-  catalog,
-  presentation,
-  officeAddress,
-}: {
-  catalog: PublicBusinessCatalogApiV2Dto
-  presentation: ProviderPresentation
-  officeAddress: string | undefined
-}) {
-  return (
-    <Card className="grid gap-6 p-6" aria-labelledby="listing-offer-details">
-      <div className="grid gap-1">
-        <h2 id="listing-offer-details" className="block text-lg font-semibold text-foreground">
-          Offerings and prices
-        </h2>
-        <p className="block text-sm text-muted-foreground">
-          Published by {catalog.name}.
-        </p>
-      </div>
-
-      <div className="grid gap-3">
-        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Where they work</span>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="grid gap-1">
-            <p className="text-sm font-medium text-muted-foreground">Service area</p>
-            <p className="block text-pretty text-foreground">{presentation.serviceArea}</p>
-            {officeAddress === undefined ? <AeGenerativeMap label={catalog.name} placeQuery={presentation.serviceArea} /> : null}
-          </div>
-          {officeAddress !== undefined ? (
-            <div className="grid gap-1">
-              <p className="text-sm font-medium text-muted-foreground">Office</p>
-              <p className="block text-pretty text-foreground">{officeAddress}</p>
-              <AeOfficeMap address={officeAddress} businessName={catalog.name} />
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="grid gap-3">
-        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Offerings</span>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="grid gap-1">
-            <p className="text-sm font-medium text-muted-foreground">Offering</p>
-            <p className="block text-foreground">{presentation.primaryOfferingName ?? catalog.category}</p>
-          </div>
-          {presentation.primaryOfferingName !== undefined ? (
-            <div className="grid gap-1">
-              <p className="text-sm font-medium text-muted-foreground">Availability</p>
-              <p className="block tabular-nums text-foreground">{presentation.hoursLabel}</p>
-            </div>
-          ) : null}
-        </div>
-        {presentation.offeringChips.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {presentation.offeringChips.map((offering) => (
-              <li key={offering.key}><span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground">{offering.label}</span></li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      {presentation.primaryOfferingSummary !== undefined ? (
-        <>
-          <Separator />
-          <div className="grid gap-3">
-            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">About</span>
-            <p className="block max-w-3xl text-pretty text-foreground">
-              {presentation.primaryOfferingSummary}
-            </p>
-          </div>
-        </>
-      ) : null}
-    </Card>
-  )
-}
-
-function ListingPhotosSection({ catalog, presentation }: { catalog: PublicBusinessCatalogApiV2Dto; presentation: ProviderPresentation }) {
-  const photos = catalog.photos
-
-  // No photo is better than a stock category image captioned as a stock
-  // category image: it occupied a third of the mobile page to tell the reader
-  // that AE has no picture of this business.
-  if (photos.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="grid gap-3" aria-labelledby="listing-photos">
-      <h2 id="listing-photos" className="sr-only">Photos</h2>
-      <div className="grid gap-3 md:grid-cols-2">
-        {photos.slice(0, 4).map((photo) => (
-          <figure key={photo.url} className="overflow-hidden rounded-md border border-border bg-card">
-            <img className="h-56 w-full object-cover" src={photo.url} alt={photo.alt} loading="lazy" />
-          </figure>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function readOfficeAddress(catalog: PublicBusinessCatalogApiV2Dto): string | undefined {
-  const extended = catalog as PublicBusinessCatalogApiV2Dto & { officeAddress?: string }
-  const value = extended.officeAddress?.trim()
-  return value !== undefined && value.length > 0 ? value : undefined
-}
 function ListingBackLink({ from, threadId }: { from?: 'thread'; threadId?: string }) {
-  const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : 'Find another business'
-  const className = 'inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:underline'
-  const content = (
-    <>
-      <ArrowLeftIcon aria-hidden="true" className="size-4" />
-      {label}
-    </>
-  )
-
   if (from === 'thread' && threadId !== undefined) {
-    return <Link to="/t/$threadId" params={{ threadId }} className={className}>{content}</Link>
+    return (
+      <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
+        <Link to="/t/$threadId" params={{ threadId }}><ArrowLeftIcon aria-hidden="true" /> Back to result</Link>
+      </Button>
+    )
   }
-  return <Link to="/" className={className}>{content}</Link>
+
+  return (
+    <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
+      <Link to="/market" search={{ window: '30d' }} hash="operations"><ArrowLeftIcon aria-hidden="true" /> Back to catalog</Link>
+    </Button>
+  )
 }

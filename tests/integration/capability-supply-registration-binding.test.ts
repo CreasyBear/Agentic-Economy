@@ -1,10 +1,8 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -24,7 +22,7 @@ import {
 
 describe('V2 capability supply registration — binding', () => {
   it('refuses adapter, exact-ref, identity and stored-integrity drift without a V1 fallback', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')

@@ -56,8 +56,8 @@ describe('public semantic comfort', () => {
     const headings = screen.getAllByRole('heading')
     expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
     expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Ask a question' }).classList.contains('min-h-11')).toBe(true)
-    expect(screen.getByRole('link', { name: /Fix a page/ }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: /Publish an Operation/ }).classList.contains('min-h-11')).toBe(true)
   })
 
   it('gives every privacy tab a comfortable standalone target', () => {
@@ -100,7 +100,7 @@ describe('public semantic comfort', () => {
       />,
     )
 
-    expect(screen.getByRole('list', { name: 'Answer thinking' })).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Search progress' })).toBeTruthy()
     expect(screen.getByText('Searching for matches')).toBeTruthy()
   })
 })

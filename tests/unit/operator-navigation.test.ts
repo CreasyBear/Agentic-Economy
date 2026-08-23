@@ -54,7 +54,9 @@ describe('operator navigation', () => {
     const advertised = navGroupsForRole(role, { advanced: true })
       .flatMap((group) => group.items.map((item) => item.href))
 
-    const missing = advertised.filter((href) => !routePaths.has(href))
+    const missing = advertised.filter(
+      (href) => !routePaths.has(href) && !publicDestinations.has(href),
+    )
     expect(missing, `navigation advertises routes that do not exist: ${missing.join(', ')}`)
       .toEqual([])
   })
@@ -74,20 +76,27 @@ describe('operator navigation', () => {
       .toEqual([])
   })
 
-  it('offers exactly the sidebar destinations plus public ones', () => {
+  it('offers exactly the sidebar destinations plus the public home', () => {
     const sidebar = navGroupsForRole('owner')
       .flatMap((group) => group.items.map((item) => item.href))
     const command = listOperatorCommandDestinations('owner')
       .flatMap((group) => group.items.map((item) => item.href))
 
-    expect(command.filter((href) => !publicDestinations.has(href))).toEqual(sidebar)
+    expect(command).toEqual([...sidebar, '/'])
   })
 
   it('keeps the gated owner sidebar to the core working set', () => {
     const labels = navGroupsForRole('owner', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual(['Business page', 'Offerings', 'Supply', 'Settings'])
+    expect(labels).toEqual([
+      'Overview',
+      'Operations',
+      'Browse marketplace',
+      'Publishing',
+      'Access & usage',
+      'Settings',
+    ])
   })
 
   /** Admin carries the most surfaces, so it is the role where an untiered item
@@ -96,7 +105,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('admin', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual([])
+    expect(labels).toEqual(['Browse marketplace', 'Marketplace health', 'Activity', 'Runs'])
   })
 
   it('marks nested paths active for their nav root', () => {
@@ -108,6 +117,23 @@ describe('operator navigation', () => {
   it('exposes public utility links for operator sidebar footers', () => {
     expect(operatorUtilityItemsForRole('owner').map((item) => item.href))
       .toEqual(['/', '/for-agents', '/privacy/remove-business'])
+  })
+
+  it('keeps administration destinations exclusive to the admin role', () => {
+    const adminDestinations = navGroupsForRole('admin', { advanced: true })
+      .flatMap((group) => group.items.map((item) => item.href))
+    const ownerDestinations = navGroupsForRole('owner', { advanced: true })
+      .flatMap((group) => group.items.map((item) => item.href))
+    const developerDestinations = navGroupsForRole('developer', { advanced: true })
+      .flatMap((group) => group.items.map((item) => item.href))
+
+    expect(adminDestinations).toEqual(expect.arrayContaining([
+      '/admin/index-health',
+      '/admin/audit-events',
+      '/admin/runs',
+    ]))
+    expect(ownerDestinations.some((href) => href.startsWith('/admin/'))).toBe(false)
+    expect(developerDestinations.some((href) => href.startsWith('/admin/'))).toBe(false)
   })
 
 

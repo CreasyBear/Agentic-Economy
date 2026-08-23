@@ -35,7 +35,7 @@ describe("current supply funnel", () => {
         callbacks={callbacks}
       />,
     );
-    expect(screen.getByText("Service details")).toBeDefined();
+    expect(screen.getByText("Public details")).toBeDefined();
     expect(
       screen.queryByRole("heading", { name: "Check that it works" }),
     ).toBeNull();

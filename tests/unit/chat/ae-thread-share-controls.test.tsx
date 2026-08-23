@@ -38,10 +38,10 @@ describe('owner share controls', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open recent chats' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open recent searches' }))
     expect(openMobile).toHaveBeenCalledOnce()
 
-    const show = screen.getByRole('button', { name: 'Show recent chats' })
+    const show = screen.getByRole('button', { name: 'Show recent searches' })
     expect(show.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(show)
     expect(toggleDesktop).toHaveBeenCalledOnce()
@@ -55,26 +55,26 @@ describe('owner share controls', () => {
         onToggleDesktopSidebar={toggleDesktop}
       />,
     )
-    expect(screen.getByRole('button', { name: 'Hide recent chats' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Hide recent searches' }).getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('keeps New chat visible and puts copy/revoke behind one Chat actions menu', async () => {
+  it('keeps New search visible and puts copy/revoke behind one Search actions menu', async () => {
     const ask = vi.fn()
     shareMocks.copy.mockResolvedValue({ kind: 'copied', sharePath: '/s/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })
     shareMocks.revoke.mockResolvedValue({ kind: 'revoked' })
     render(<AeThreadHeader title="Find a plumber" threadId="thread:1" onNewQuestion={ask} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New search' }))
     expect(ask).toHaveBeenCalledOnce()
 
-    const trigger = screen.getByRole('button', { name: 'Chat actions' })
+    const trigger = screen.getByRole('button', { name: 'Search actions' })
     expect(screen.queryByRole('menu')).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'Copy share link' })).toBeNull()
 
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
     expect(screen.getByRole('menu')).toBeTruthy()
     expect(screen.getByText(
-      'This chat is private unless you share it. Shared links are read-only until you revoke the link or delete the chat.',
+      'This search is private unless you share it. Shared links are read-only until you revoke the link or delete the search.',
     )).toBeTruthy()
     const copy = screen.getByRole('menuitem', { name: 'Copy share link' })
     const revoke = screen.getByRole('menuitem', { name: 'Revoke share link' })
@@ -106,7 +106,7 @@ describe('owner share controls', () => {
     )
     render(<AeThreadHeader title="Find a plumber" threadId="thread:1" />)
 
-    const trigger = screen.getByRole('button', { name: 'Chat actions' })
+    const trigger = screen.getByRole('button', { name: 'Search actions' })
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Copy share link' }))
 

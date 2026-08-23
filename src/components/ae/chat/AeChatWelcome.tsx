@@ -6,17 +6,17 @@ import {
 
 export function AeChatWelcome() {
   return (
-    <EmptyHeader className="gap-2">
+    <EmptyHeader className="max-w-md gap-2">
       <EmptyTitle
         id="ae-home-heading"
         role="heading"
         aria-level={1}
-        className="text-lg font-medium tracking-tight"
+        className="text-xl font-semibold tracking-tight"
       >
-        What do you need done?
+        Search the operation market
       </EmptyTitle>
-      <EmptyDescription className="max-w-sm text-sm/relaxed">
-        Ask about a task, a service, or current information.
+      <EmptyDescription className="max-w-md text-sm/relaxed">
+        Describe the task. Compare exact Operations by price, readiness, and evidence.
       </EmptyDescription>
     </EmptyHeader>
   )

@@ -58,7 +58,7 @@ describe('AeGenerativeAnswer operation result presentation', () => {
     expect(link.className).toContain('min-h-6')
     expect(container.querySelector('video, iframe, object, embed')).toBeNull()
     expect(screen.getByText('Mockster')).toBeTruthy()
-    expect(screen.getByText(/Run by AE runtime/)).toBeTruthy()
+    expect(screen.getByText(/Runtime execution/)).toBeTruthy()
     expect(fetchSpy).not.toHaveBeenCalled()
 
     const result = screen.getByRole('region', { name: 'Result' })

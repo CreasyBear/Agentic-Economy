@@ -137,7 +137,7 @@ export const readOwnerOfferingSupplyServer = createServerFn().handler(async (): 
   try {
     return await callSourceQuery(readSupplyQuery, {})
   } catch {
-    return { kind: 'error', code: 'source_unavailable', reason: 'The service source did not answer. Try again.' }
+    return { kind: 'error', code: 'source_unavailable', reason: 'The Operation source did not answer. Try again.' }
   }
 })
 
@@ -179,7 +179,7 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
 
     const completedSteps: string[] = ['details']
     if (first.currentRevision === undefined) {
-      return partialRefusal('Service details were saved, but its revision could not be confirmed. Try again.', offeringRef, value.expectedRevision, completedSteps)
+      return partialRefusal('Operation details were saved, but its revision could not be confirmed. Try again.', offeringRef, value.expectedRevision, completedSteps)
     }
     const currentRevision = first.currentRevision
     const status = await write(
@@ -194,7 +194,7 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
       },
       (args) => callSourceMutation(changeStatusMutation, args),
     )
-    if (status.kind === 'error') return partialRefusal('Service details were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
+    if (status.kind === 'error') return partialRefusal('Operation details were saved, but its public state could not be changed. Try again.', offeringRef, currentRevision, completedSteps)
     completedSteps.push('public_state')
 
     for (const [index, path] of value.accessPaths.entries()) {
@@ -227,13 +227,13 @@ export const saveOwnerOfferingServer = createServerFn({ method: 'POST' })
           },
           (args) => callSourceMutation(upsertPathMutation, args),
         )
-      if (pathResult.kind === 'error') return partialRefusal('Service details were saved, but one way to start the service could not be saved. Try again.', offeringRef, currentRevision, completedSteps)
+      if (pathResult.kind === 'error') return partialRefusal('Operation details were saved, but one access route could not be saved. Try again.', offeringRef, currentRevision, completedSteps)
       completedSteps.push(`access_path_${index}`)
     }
 
     return {
       kind: 'saved',
-      message: 'Your service and its contact routes were saved.',
+      message: 'Operation and access routes saved.',
       value: { ...value, offeringRef: offeringRef as never, expectedRevision: currentRevision },
     }
   })
@@ -257,13 +257,13 @@ async function write<T extends Record<string, unknown>>(
       sourceWrite,
     })
   } catch {
-    return { kind: 'error', code: 'source_unavailable', reason: 'The service source did not answer. Try again.' }
+    return { kind: 'error', code: 'source_unavailable', reason: 'The Operation source did not answer. Try again.' }
   }
 }
 
 function compactFacts(value: OwnerOfferingEditorValue): OfferingFacts {
   return {
-    name: value.name.trim().length === 0 ? 'Untitled service' : value.name,
+    name: value.name.trim().length === 0 ? 'Untitled Operation' : value.name,
     category: value.category,
     summary: value.summary,
     ...(value.serviceAreaSummary.trim() === '' ? {} : { serviceAreaSummary: value.serviceAreaSummary }),
@@ -306,7 +306,7 @@ function toOfferingPriceInput(price: z.infer<typeof offeringPriceSchema>): Offer
 }
 
 function toSaveError(result: Extract<OfferingCommandResult, { kind: 'error' }>): OwnerOfferingSaveResult {
-  if (result.code === 'revision_conflict') return { kind: 'revision_conflict', message: 'Reload the latest service before saving your changes.' }
+  if (result.code === 'revision_conflict') return { kind: 'revision_conflict', message: 'Reload the latest Operation before saving your changes.' }
   if (result.code === 'invalid_offering' || result.code === 'invalid_access_path' || result.code === 'limit_exceeded') return { kind: 'invalid', message: result.reason }
   return { kind: 'refused', message: result.reason }
 }

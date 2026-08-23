@@ -25,7 +25,7 @@ export const Route = createFileRoute('/_operator/owner/supply')({
     ])
     return { supply, earnings, connect, connections }
   },
-  head: () => ({ meta: [{ title: 'Publish your service | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Publish Operations | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: OwnerSupplyHomeRoute,
 })
 
@@ -36,5 +36,5 @@ function OwnerSupplyHomeRoute() {
 
 function OwnerSupplyHome() {
   const { supply, earnings, connect, connections } = Route.useLoaderData()
-  return <AeOperatorShell operatorRole="owner" title="Publish your service" description="Describe what you do, set a price, test it, and go live." currentPath="/owner/supply"><AeSupplyPublisherHome readback={supply} earnings={earnings} connect={connect} connections={connections} /></AeOperatorShell>
+  return <AeOperatorShell operatorRole="owner" title="Publish Operations" description="Connect a tool, set its price, test the route, and publish it." currentPath="/owner/supply"><AeSupplyPublisherHome readback={supply} earnings={earnings} connect={connect} connections={connections} /></AeOperatorShell>
 }

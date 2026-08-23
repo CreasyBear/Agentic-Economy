@@ -1,10 +1,8 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   publishedBusinessOwner,
 } from '../helpers/convex-fixtures'
@@ -23,7 +21,7 @@ import {
 
 describe('V2 capability supply registration — offering', () => {
   it('refuses missing-contract registration through the trusted command port', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
     const registration = offeringRegistration(businessId, missingRef())
 
@@ -37,7 +35,7 @@ describe('V2 capability supply registration — offering', () => {
   })
 
   it('registers separate inert records, replays exactly, then atomically admits the pair', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
@@ -121,7 +119,7 @@ describe('V2 capability supply registration — offering', () => {
   })
 
   it('fails offering registration closed when the exact V2 contract row is corrupt', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -139,7 +137,7 @@ describe('V2 capability supply registration — offering', () => {
   })
 
   it('registers an offering without a listed audit table', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -159,7 +157,7 @@ describe('V2 capability supply registration — offering', () => {
   })
 
   it('fails a successful replay closed when its recorded audit effect is missing', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
@@ -182,7 +180,7 @@ describe('V2 capability supply registration — offering', () => {
 
   it('fails offering replay closed when its durable row is missing or corrupt', async () => {
     for (const corruption of ['delete', 'invalidate'] as const) {
-      const backend = convexTest(schema, modules)
+      const backend = convexTestWithMarketComponents()
       const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
       const ref = await registerContract(admin)
       const { businessId } = await publishedBusinessOwner(backend, `supply-${corruption}`)
