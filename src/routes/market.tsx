@@ -14,8 +14,6 @@ export type MarketSearch = Readonly<{
   query?: string;
   availability?: "routeable" | "integrated" | "unavailable";
   cursor?: string;
-  access?: "all" | "x402" | "provider_account" | "agentic_economy";
-  registryCursor?: string;
 }>;
 
 export const Route = createFileRoute("/market")({
@@ -35,16 +33,6 @@ export const Route = createFileRoute("/market")({
       : {}),
     ...(typeof search.cursor === "string" && search.cursor.length <= 512
       ? { cursor: search.cursor }
-      : {}),
-    ...(search.access === "all" ||
-    search.access === "x402" ||
-    search.access === "provider_account" ||
-    search.access === "agentic_economy"
-      ? { access: search.access }
-      : {}),
-    ...(typeof search.registryCursor === "string" &&
-    search.registryCursor.length <= 512
-      ? { registryCursor: search.registryCursor }
       : {}),
   }),
   loaderDeps: ({ search }) => search,

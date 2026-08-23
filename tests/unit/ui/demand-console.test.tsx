@@ -89,7 +89,7 @@ describe('assistant access components', () => {
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
     expect(screen.getByRole('heading', { name: 'Connect once. Call any listed capability.' })).toBeTruthy()
-    expect(screen.getByText(/npx ae connect --base-url "https:\/\/ae\.example" --mcp/u)).toBeTruthy()
+    expect(screen.getByText(/npx @agentic-economy\/cli connect --base-url "https:\/\/ae\.example" --mcp/u)).toBeTruthy()
     expect(screen.getByText(/ae search "weather forecast"/u)).toBeTruthy()
     expect(screen.getByText(/ae inspect "\$AE_OPERATION_REF"/u)).toBeTruthy()
     expect(screen.getByText(/ae call "\$AE_OPERATION_REF" --input "\$AE_INPUT_JSON"/u)).toBeTruthy()
@@ -111,7 +111,7 @@ describe('assistant access components', () => {
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://AE.Example:443/" />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Connect command' }))
-    expect(writeText).toHaveBeenCalledWith('npx ae connect --base-url "https://AE.Example:443" --mcp')
+    expect(writeText).toHaveBeenCalledWith('npx @agentic-economy/cli connect --base-url "https://AE.Example:443" --mcp')
     expect(screen.queryByText(/ae_secret/u)).toBeNull()
     expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })

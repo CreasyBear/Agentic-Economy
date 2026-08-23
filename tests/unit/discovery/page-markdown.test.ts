@@ -56,11 +56,13 @@ const pricedOffering: PublicBusinessCatalogApiV2Dto['offerings'][number] = {
 describe('site brief markdown', () => {
   const body = buildSiteBriefMarkdown(options)
 
-  it('starts with one-command connection and the canonical call loop', () => {
-    expect(body).toContain('npx ae connect --base-url "https://ae.example" --mcp')
-    expect(body.indexOf('npx ae connect')).toBeLessThan(body.indexOf('ae search "<job>"'))
+  it('starts with the public call loop and connects only at the authority boundary', () => {
+    expect(body).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
+    expect(body.indexOf('ae search "<job>"')).toBeLessThan(body.indexOf('npx @agentic-economy/cli connect'))
     expect(body).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
     expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(body).toContain('official MCP client')
+    expect(body).toContain('Connect only when the call reports `agent_access_key_required`')
   })
 
   it('names the OAuth key boundary, body-only idempotency, and stable recovery identity', () => {
@@ -69,20 +71,21 @@ describe('site brief markdown', () => {
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('If the receipt explicitly requires reconciliation')
     expect(body).toContain('the CLI creates and retains it automatically')
-    expect(body).toContain('Search and inspection are public')
+    expect(body).toContain('Search, inspection, and eligible free keyless read calls are public')
     expect(body).toContain('Provider and publication records are supporting metadata')
   })
 
   it('builds a machine guide for non-HTML /for-agents requests', () => {
     const guide = buildForAgentsMarkdown(options)
-    expect(guide).toContain('npx ae connect --base-url "https://ae.example" --mcp')
+    expect(guide).toContain('npx @agentic-economy/cli connect --base-url "https://ae.example" --mcp')
     expect(guide).toContain('POST body example')
     expect(guide).toContain('application/problem+json')
     expect(guide).toContain('ae inspect "$AE_OPERATION_REF" --base-url "https://ae.example" --json')
     expect(guide).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
     expect(guide).not.toContain('advanced')
     expect(guide).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
-    expect(guide).toContain('`initialize` then `notifications/initialized`')
+    expect(guide).toContain('Client connect performs initialization')
+    expect(guide).toContain('may omit `Mcp-Session-Id`')
   })
 
   it('trims the trailing slash off the canonical base', () => {

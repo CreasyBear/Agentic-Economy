@@ -6,13 +6,10 @@ import {
 } from "@/modules/market/registry-source-contracts";
 import {
   fetchAgenticMarketCatalog,
-  fetchTregCatalog,
 } from "@/modules/market/registry-source-adapters";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-
-const WRITE_BATCH_SIZE = 50;
 
 export const run = internalAction({
   args: {},
@@ -44,16 +41,8 @@ export const run = internalAction({
           insertedEntries += written.inserted;
         },
       });
-      const treg = await fetchTregCatalog({ jobTimeoutMs: 300_000 });
-      if (!agenticMarket.complete || !treg.complete) {
-        const reason = [
-          ...(agenticMarket.complete
-            ? []
-            : [`agentic_market:${agenticMarket.incompleteReason ?? "incomplete"}`]),
-          ...(treg.complete
-            ? []
-            : [`treg:${treg.incompleteReason ?? "incomplete"}`]),
-        ].join(",");
+      if (!agenticMarket.complete) {
+        const reason = `agentic_market:${agenticMarket.incompleteReason ?? "incomplete"}`;
         await ctx.runMutation(internal.marketExternalRegistry.fail, {
           generation,
           failedAt: Date.now(),
@@ -61,23 +50,16 @@ export const run = internalAction({
         });
         return { kind: "preserved" as const, generation, entries: 0, reason };
       }
-      for (let offset = 0; offset < treg.entries.length; offset += WRITE_BATCH_SIZE) {
-        const written = await ctx.runMutation(internal.marketExternalRegistry.writeBatch, {
-          generation,
-          entries: treg.entries
-            .slice(offset, offset + WRITE_BATCH_SIZE)
-            .map(toPersistedEntry),
-        });
-        insertedEntries += written.inserted;
-      }
       await ctx.runMutation(internal.marketExternalRegistry.finalize, {
         generation,
         completedAt: Date.now(),
         expectedEntries: insertedEntries,
         agenticMarketReported: agenticMarket.sourceReportedCount,
         agenticMarketFetched: agenticMarket.fetchedServiceCount ?? 0,
-        tregReported: treg.sourceReportedCount,
-        tregFetched: treg.entries.length,
+      });
+      await ctx.scheduler.runAfter(0, internal.marketRegistryGraduation.sweep, {
+        generation,
+        cursor: null,
       });
       return {
         kind: "refreshed" as const,
@@ -126,6 +108,10 @@ function toPersistedEntry(entry: RegistrySourceEntry) {
       : { lastVerifiedAt: entry.lastVerifiedAt }),
     inputSchemaJson: entry.inputSchemaJson,
     exampleInvocation: entry.exampleInvocation,
+    probeRequest: {
+      ...entry.probeRequest,
+      headers: entry.probeRequest.headers.map((header) => ({ ...header })),
+    },
     quality: "callable" as const,
     ...(entry.sourceCalls30d === undefined
       ? {}

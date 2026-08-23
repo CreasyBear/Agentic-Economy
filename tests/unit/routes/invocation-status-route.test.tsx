@@ -129,6 +129,7 @@ describe('/operations/invocations/$invocationRef', () => {
       invocationRef,
       operationRef,
       state: 'terminal',
+      previousInput: { city: 'Perth', units: 'metric' },
       result: {
         kind: 'completed',
         invocationRef,
@@ -166,42 +167,13 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.getByText('Provider quote')).toBeTruthy()
     expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'Run again' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Save capability' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Save capability|Capability saved/ })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Copy as CLI' })).toBeTruthy()
-    expect(screen.getByText(/ae call/)).toBeTruthy()
+    expect(screen.getAllByText(/\{"city":"Perth","units":"metric"\}/).length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Copy as API request' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Add to MCP' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Copy agent prompt' })).toBeTruthy()
     expect(screen.getByText(/ae.public-invocation-receipt:v1/)).toBeTruthy()
-  })
-
-  it('saves a completed capability locally without claiming an account save', () => {
-    renderWithRouter({
-      kind: 'found',
-      invocationRef,
-      operationRef,
-      state: 'terminal',
-      result: {
-        kind: 'completed',
-        invocationRef,
-        operationRef,
-        output: {},
-        evidenceHash: 'sha256:completed',
-        usage: {
-          usageRef: 'usage:free',
-          observedAt: Date.UTC(2026, 7, 23),
-          chargeState: 'free_tier',
-          amount: { currency: 'USD', units: '0', exponent: 2 },
-          priceDigest: 'sha256:free',
-        },
-      },
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save capability' }))
-
-    expect(screen.getByRole('button', { name: 'Capability saved' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Saved in this browser.')).toBeTruthy()
-    expect(window.localStorage.getItem('ae.saved-capabilities.v1')).toContain(operationRef)
   })
 
   it('keeps a found pending result distinct from completion', () => {

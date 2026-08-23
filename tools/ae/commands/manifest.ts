@@ -81,7 +81,7 @@ export const COMMANDS: Readonly<Record<string, CommandManifestEntry>> = {
     json: true,
     guidance: ['Open the returned /agent-access#fund continuation as the owner. No agent credential is used.'],
   },
-  call: { summary: 'Call one available capability through the authenticated AE gateway.', args: "<operationRef> --input '<json>' [--wait]", json: true },
+  call: { summary: 'Call one capability: anonymous MCP for eligible free keyless reads, otherwise the connected AE gateway.', args: "<operationRef> --input '<json>' [--wait]", json: true },
   status: { summary: 'Read one authenticated invocation status and evidence projection.', args: '<invocationRef>', json: true },
   cancel: { summary: 'Cancel one authenticated invocation explicitly.', args: '<invocationRef> --idempotency-key <key>', json: true },
   recover: {
@@ -126,6 +126,7 @@ function directKeylessManifest() {
     mcpTool: mcpToolName(action),
     authentication: 'none' as const,
     requiresOperationRef: true as const,
+    eligibility: 'free_keyless_read_only' as const,
     ...(described.inputJsonSchema === undefined ? {} : { inputJsonSchema: described.inputJsonSchema }),
     ...(described.outputJsonSchema === undefined ? {} : { outputJsonSchema: described.outputJsonSchema }),
   }
@@ -136,7 +137,7 @@ function directKeylessManifest() {
  * canonical Operation search/inspection/invocation/recovery contract, not a
  * second legacy catalog or generic action inventory.
  */
-export async function runManifestCommand(_args: readonly string[], _options: CliOptions): Promise<void> {
+export async function runManifestCommand(_args: readonly string[], options: CliOptions): Promise<void> {
   const operationReads = OPERATION_MARKET_ACTION_ENTRIES.map((route) => ({
     route,
     action: describedAction(route.actionId),
@@ -147,7 +148,7 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
   }))
   const directKeyless = directKeylessManifest()
 
-  printJson({
+  const manifest = {
     $schema: 'https://agentic-economy/market-terminal/manifest:v3',
     protocol: 'agentic-economy.operation-terminal.v1',
     about: 'Discover exact current work, inspect terms, connect one agent key, call idempotently, preserve the receipt, and reuse successful work.',
@@ -298,5 +299,46 @@ export async function runManifestCommand(_args: readonly string[], _options: Cli
       },
       unknown: 'A transport timeout is not a terminal outcome; inspect status and use recover only when the outcome remains genuinely uncertain, supplying canonical evidence and the same invocation and idempotency references. Recover reconciles evidence; it does not replay a known result.',
     },
+  }
+  if (options.technical === true) {
+    printJson(manifest)
+    return
+  }
+
+  printJson({
+    $schema: manifest.$schema,
+    protocol: manifest.protocol,
+    about: manifest.about,
+    commands: manifest.commands,
+    coldLoop: ['search', 'inspect', 'call', 'receipt', 'reuse'],
+    access: {
+      anonymous: 'Search, inspect, compare, and call eligible free keyless read-only capabilities without connecting.',
+      connected: 'Run ae connect once before paid, provider-keyed, or consequential capabilities.',
+    },
+    routes: operationReads.map(({ route, action }) => ({
+      relation: route.relation,
+      method: route.method,
+      path: route.pathTemplate,
+      actionId: action.id,
+    })),
+    call: {
+      command: "ae call <operationRef> --input '<json>'",
+      anonymous: {
+        transport: 'official_mcp_client',
+        tool: directKeyless.mcpTool,
+        eligibility: directKeyless.eligibility,
+        result: 'Literal provider output plus evidenceHash.',
+      },
+      connected: {
+        transport: 'operation.invoke:v1',
+        connect: 'ae connect',
+        receipt: 'Every accepted gateway call returns or progresses toward one invocation receipt.',
+      },
+    },
+    recovery: {
+      status: 'ae status <invocationRef>',
+      rule: 'If the outcome is uncertain, read status before any retry and preserve the same identity.',
+    },
+    fullContract: 'ae manifest --technical --json',
   })
 }

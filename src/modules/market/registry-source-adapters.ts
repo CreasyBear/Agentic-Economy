@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { jsonValueSchema, type JsonValue } from "@/modules/capability-contract/public";
+
 import { readBoundedRequestText } from "@/lib/server/bounded-request-body";
 import { canonicalDigest } from "@/modules/common/canonical-digest";
 
@@ -9,7 +11,6 @@ import type {
 } from "./registry-source-contracts";
 
 const AGENTIC_MARKET_SERVICES_URL = "https://api.agentic.market/v1/services";
-const TREG_PLATFORMS_URL = "https://treg.to/catalog/platforms";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_JOB_TIMEOUT_MS = 240_000;
 const MAX_RESPONSE_BYTES = 6_291_456;
@@ -18,12 +19,10 @@ const MAX_AGENTIC_MARKET_SERVICES = 5_000;
 const MAX_AGENTIC_MARKET_PAGES = 120;
 const MAX_AGENTIC_MARKET_SWEEPS = 10;
 const MIN_AGENTIC_MARKET_SERVICE_COVERAGE = 0.95;
-const MAX_TREG_SHELVES = 120;
 
 type SourceFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 const boundedText = (max: number) => z.string().max(max);
-const nullableText = boundedText(2_000).nullable();
 const safeCount = z.number().int().nonnegative().safe();
 const httpUrl = z.url().max(2_000).refine((value) => {
   try {
@@ -99,71 +98,6 @@ const agenticServicesPage = z.strictObject({
   total: safeCount,
   limit: safeCount,
   offset: safeCount,
-});
-
-const tregPlatform = z.strictObject({
-  slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,118}[a-z0-9])?$/),
-  label: boundedText(240).min(1),
-  category: boundedText(160),
-  featured: z.number().int().nonnegative().nullable(),
-  summary: boundedText(2_000),
-  price_from: z.unknown().nullable(),
-  capabilities: safeCount,
-  endpoints: safeCount,
-  verified: safeCount,
-  providers: z.array(boundedText(160)).max(100),
-});
-const tregPlatformIndex = z.strictObject({
-  platforms: z.array(tregPlatform).max(MAX_TREG_SHELVES),
-  generated_from: z.literal("catalog").optional(),
-});
-const tregEndpoint = z.strictObject({
-  id: boundedText(240).min(1),
-  provider: boundedText(160),
-  provider_display: boundedText(240),
-  name: boundedText(500).min(1),
-  summary: boundedText(2_000),
-  method: boundedText(24),
-  path: boundedText(2_000),
-  scope: boundedText(160),
-  tier: boundedText(80),
-  kind: boundedText(80),
-  domain: boundedText(160),
-  call_template: boundedText(4_000),
-  cost: z.unknown().nullable(),
-  platform_eligible: z.boolean(),
-  platform_blocked: nullableText,
-  miss: z.unknown().nullable(),
-  status: nullableText,
-  status_note: nullableText,
-  superseded_by: nullableText,
-  verified: boundedText(80).nullable(),
-  docs_url: boundedText(2_000),
-  has_example: z.boolean(),
-  input: z.unknown().nullable(),
-  test_request: z.unknown().nullable(),
-  observed: z.unknown().optional(),
-});
-const tregCapability = z.strictObject({
-  id: boundedText(240),
-  description: boundedText(2_000),
-  endpoints: z.array(tregEndpoint).max(1_000),
-});
-const tregDomain = z.strictObject({
-  domain: boundedText(160),
-  rows: z.array(z.unknown()).max(1_000),
-});
-const tregShelf = z.strictObject({
-  platform: z.strictObject({
-    slug: boundedText(120),
-    label: boundedText(240),
-    category: boundedText(160),
-  }),
-  capabilities: z.array(tregCapability).max(1_000),
-  domains: z.array(tregDomain).max(1_000),
-  extended: z.array(tregEndpoint).max(2_000),
-  hidden_count: safeCount,
-  providers: z.record(z.string(), z.unknown()),
 });
 
 export async function fetchAgenticMarketCatalog(
@@ -282,92 +216,11 @@ export async function fetchAgenticMarketCatalog(
   };
 }
 
-export async function fetchTregCatalog(
-  input: Readonly<{
-    fetch?: SourceFetch;
-    now?: () => number;
-    maxEntries?: number;
-    maxShelves?: number;
-    timeoutMs?: number;
-    jobTimeoutMs?: number;
-  }> = {},
-): Promise<RegistrySourceFetchResult> {
-  const fetchImpl = input.fetch ?? globalThis.fetch;
-  const now = input.now ?? Date.now;
-  const fetchedAt = now();
-  const deadline = fetchedAt + (input.jobTimeoutMs ?? DEFAULT_JOB_TIMEOUT_MS);
-  const maxEntries = Math.min(MAX_TOTAL_ENTRIES, Math.max(1, input.maxEntries ?? MAX_TOTAL_ENTRIES));
-  const maxShelves = Math.min(MAX_TREG_SHELVES, Math.max(1, input.maxShelves ?? MAX_TREG_SHELVES));
-  const index = tregPlatformIndex.parse(
-    await fetchBoundedJson(fetchImpl, TREG_PLATFORMS_URL, input.timeoutMs),
-  );
-  const entries = new Map<string, RegistrySourceEntry>();
-  let fetchedShelfCount = 0;
-  let evaluatedEndpointCount = 0;
-  let incompleteReason: RegistrySourceFetchResult["incompleteReason"];
-  const shelves = index.platforms.slice(0, maxShelves);
-  if (shelves.length !== index.platforms.length) incompleteReason = "page_ceiling_reached";
-
-  for (const platform of shelves) {
-    if (now() >= deadline) {
-      incompleteReason = "deadline_reached";
-      break;
-    }
-    const url = `${TREG_PLATFORMS_URL}/${encodeURIComponent(platform.slug)}?include_hidden=1`;
-    const shelf = tregShelf.parse(
-      await fetchBoundedJson(fetchImpl, url, input.timeoutMs),
-    );
-    if (shelf.platform.slug !== platform.slug) {
-      throw new Error("treg_catalog_shelf_identity_mismatch");
-    }
-    fetchedShelfCount += 1;
-    const endpointPairs = [
-      ...shelf.capabilities.flatMap((capability) =>
-        capability.endpoints.map((endpoint) => ({
-          endpoint,
-          capability: capability.id,
-        })),
-      ),
-      ...shelf.extended.map((endpoint) => ({ endpoint, capability: undefined })),
-    ];
-    for (const pair of endpointPairs) {
-      evaluatedEndpointCount += 1;
-      if (entries.size >= maxEntries) {
-        incompleteReason = "entry_ceiling_reached";
-        break;
-      }
-      const entry = tregEntry(platform, pair.endpoint, pair.capability, fetchedAt);
-      if (entry === undefined) continue;
-      const existing = entries.get(entry.upstreamEndpointId);
-      if (existing !== undefined && existing.sourceDigest !== entry.sourceDigest) {
-        throw new Error("treg_catalog_duplicate_identity_conflict");
-      }
-      entries.set(entry.upstreamEndpointId, entry);
-    }
-    if (incompleteReason === "entry_ceiling_reached") break;
-  }
-  const sourceReportedCount = index.platforms.reduce(
-    (total, platform) => total + platform.endpoints,
-    0,
-  );
-  return {
-    source: "treg",
-    fetchedAt,
-    complete: incompleteReason === undefined,
-    ...(incompleteReason === undefined ? {} : { incompleteReason }),
-    sourceReportedCount,
-    admittedCount: entries.size,
-    excludedCount: evaluatedEndpointCount - entries.size,
-    fetchedShelfCount,
-    entries: [...entries.values()],
-  };
-}
-
 async function fetchBoundedJson(
   fetchImpl: SourceFetch,
   url: string,
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
-): Promise<unknown> {
+): Promise<JsonValue> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -381,7 +234,7 @@ async function fetchBoundedJson(
     const body = await readBoundedRequestText(response, MAX_RESPONSE_BYTES);
     if (!body.ok) throw new Error("external_registry_response_too_large");
     try {
-      return JSON.parse(body.text) as unknown;
+      return jsonValueSchema.parse(JSON.parse(body.text));
     } catch {
       throw new Error("external_registry_response_invalid_json");
     }
@@ -434,6 +287,7 @@ function agenticEntries(
       networks: uniqueBounded(service.networks),
       pricing: exactPrice,
       inputSchemaJson: inputContract.inputSchemaJson,
+      probeRequest: inputContract.probeRequest,
       quality: endpoint.quality,
     };
     return [{
@@ -460,6 +314,7 @@ function agenticEntries(
       lastObservedAt: observedAt,
       inputSchemaJson: inputContract.inputSchemaJson,
       exampleInvocation: inputContract.exampleInvocation,
+      probeRequest: inputContract.probeRequest,
       ...(endpoint.quality?.l30DaysTotalCalls
         ? { sourceCalls30d: endpoint.quality.l30DaysTotalCalls }
         : {}),
@@ -472,23 +327,8 @@ function agenticEntries(
   });
 }
 
-function tregEntry(
-  platform: z.infer<typeof tregPlatform>,
-  endpoint: z.infer<typeof tregEndpoint>,
-  capability: string | undefined,
-  _fetchedAt: number,
-): RegistrySourceEntry | undefined {
-  void platform;
-  void endpoint;
-  void capability;
-  // Shelf records expose relative paths but no canonical provider base URL or
-  // authoritative credential binding. They remain source references until an
-  // independent adapter can prove a callable route and credential contract.
-  return undefined;
-}
-
-const callableMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const);
-type CallableMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+const callableMethods = new Set(["GET", "POST"] as const);
+type CallableMethod = "GET" | "POST";
 
 function callableMethod(value: string): CallableMethod | undefined {
   const normalized = value.trim().toUpperCase();
@@ -532,7 +372,11 @@ function inputContractFor(
   parameters: readonly z.infer<typeof agenticParameter>[],
   endpointUrl: string,
   method: CallableMethod,
-): Readonly<{ inputSchemaJson: string; exampleInvocation: string }> | undefined {
+): Readonly<{
+  inputSchemaJson: string;
+  exampleInvocation: string;
+  probeRequest: RegistrySourceEntry["probeRequest"];
+}> | undefined {
   const groups: Record<string, Record<string, unknown>> = {};
   const requiredByGroup: Record<string, string[]> = {};
   const url = new URL(endpointUrl);
@@ -588,7 +432,16 @@ function inputContractFor(
           `--data '${JSON.stringify(body).replaceAll("'", "")}'`,
         ]),
   ].join(" \\\n  ");
-  return { inputSchemaJson, exampleInvocation: command };
+  return {
+    inputSchemaJson,
+    exampleInvocation: command,
+    probeRequest: {
+      method,
+      url: url.toString(),
+      headers: headers.map(([name, value]) => ({ name, value })),
+      ...(Object.keys(body).length === 0 ? {} : { bodyJson: JSON.stringify(body) }),
+    },
+  };
 }
 
 function normalizeParameterGroup(value: string): "path" | "query" | "body" | "headers" | undefined {

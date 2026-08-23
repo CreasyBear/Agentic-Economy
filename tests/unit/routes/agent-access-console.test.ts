@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { readAgentAccessMoneyReadback } from '@/modules/agent-access/agent-access-console'
+import { enrichAgentAccessActivity, readAgentAccessMoneyReadback } from '@/modules/agent-access/agent-access-console'
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import {
   accountRefForOwner,
@@ -9,6 +9,7 @@ import {
   type MoneyAccount,
   type MoneyUsageEvent,
 } from '@/modules/money/public'
+import type { OperationCompareResult } from '@/modules/capability-supply/public'
 
 const ownerId = 'owner-console-1'
 
@@ -69,6 +70,31 @@ describe('agent access money seam', () => {
     expect(result?.activity).toHaveLength(1)
     expect(result?.activity[0]).toMatchObject({ credentialId: 'key_console_1', grossAmount: { currency: 'USD', units: '500', exponent: 2 }, chargeState: 'paid' })
     expect(result?.usage).toMatchObject({ credentialId: 'key_console_1', callCount: 1, paidCallCount: 1, grossSpend: { currency: 'USD', units: '500', exponent: 2 } })
+  })
+
+  it('projects canonical Operation and supplier labels onto task activity', async () => {
+    const operationRef = `operation:v1:${'a'.repeat(64)}`
+    const [readback] = await readAgentAccessMoneyReadback([key], createInMemoryMoneyQueryPort({
+      ledger: { ...createLedgerState([account]), usageEvents: [{ ...usage, operationKey: operationRef }] },
+      resolveOwnerId: () => ownerId,
+    }))
+    if (readback === undefined) throw new Error('expected agent readback')
+    const enriched = await enrichAgentAccessActivity([readback], async ({ operationRefs }) => {
+      expect(operationRefs).toEqual([operationRef])
+      return {
+        kind: 'ok',
+        operations: [{
+          operationRef,
+          offering: { label: 'Extract invoice fields' },
+          business: { name: 'Ledger Labs' },
+        }],
+      } as unknown as OperationCompareResult
+    })
+
+    expect(enriched[0]?.activity[0]?.operation).toEqual({
+      label: 'Extract invoice fields',
+      supplier: 'Ledger Labs',
+    })
   })
 
 })

@@ -6,6 +6,8 @@ import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.f
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
+import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
+import { isPublicOperationRef, type OperationCompareResult, type PublicOperationRef } from '@/modules/capability-supply/public'
 
 export type AgentAccessConsoleReadback = readonly AgentOperatorKeyReadback[]
 const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly AgentAccessOwnerGrantReadback[]>(
@@ -22,7 +24,53 @@ export async function loadAgentAccessConsoleReadback(): Promise<AgentAccessConso
     createAuthenticatedSourceTransport(),
   ])
   const grants = await source.query(listOwnerGrantReadbacksQuery, {})
-  return await readAgentAccessMoneyReadback(keys, createConvexMoneyQueryPort(), grants)
+  const readback = await readAgentAccessMoneyReadback(keys, createConvexMoneyQueryPort(), grants)
+  return await enrichAgentAccessActivity(readback, readCapabilityOperationCompare)
+}
+
+type CompareOperations = (input: Readonly<{ operationRefs: readonly string[] }>) => Promise<OperationCompareResult>
+
+export async function enrichAgentAccessActivity(
+  readbacks: AgentAccessConsoleReadback,
+  compare: CompareOperations,
+): Promise<AgentAccessConsoleReadback> {
+  const recentActivity = readbacks
+    .flatMap(({ activity }) => activity)
+    .toSorted((left, right) => right.observedAt - left.observedAt)
+  const operationRefs = [...new Set(recentActivity.reduce<PublicOperationRef[]>((refs, { operationKey }) => {
+    if (isPublicOperationRef(operationKey)) refs.push(operationKey)
+    return refs
+  }, []))]
+    .slice(0, 40)
+  if (operationRefs.length === 0) return readbacks
+
+  const batches = Array.from({ length: Math.ceil(operationRefs.length / 4) }, (_, index) => (
+    operationRefs.slice(index * 4, index * 4 + 4)
+  ))
+  const comparisons = await Promise.all(batches.map(async (operationRefs) => {
+    try {
+      return await compare({ operationRefs })
+    } catch {
+      return undefined
+    }
+  }))
+  const labels = new Map(comparisons.flatMap((comparison) => (
+    comparison?.kind === 'ok'
+      ? comparison.operations.map((operation) => [operation.operationRef, {
+        label: operation.offering.label,
+        supplier: operation.business.name,
+      }] as const)
+      : []
+  )))
+  return readbacks.map((readback) => ({
+    ...readback,
+    activity: readback.activity.map((entry) => {
+      const operation = isPublicOperationRef(entry.operationKey)
+        ? labels.get(entry.operationKey)
+        : undefined
+      return operation === undefined ? entry : { ...entry, operation }
+    }),
+  }))
 }
 
 export async function readAgentAccessMoneyReadback(

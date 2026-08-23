@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { AlertTriangleIcon, CheckCircle2Icon, CircleIcon, Clock3Icon } from 'lucide-react'
-import { useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
@@ -390,59 +390,22 @@ function ReceiptSettlementFacts({
   )
 }
 
-const savedCapabilityStorageKey = 'ae.saved-capabilities.v1'
-const savedCapabilityChangedEvent = 'ae:saved-capabilities-change'
-
-function subscribeSavedCapabilities(onStoreChange: () => void) {
-  window.addEventListener('storage', onStoreChange)
-  window.addEventListener(savedCapabilityChangedEvent, onStoreChange)
-  return () => {
-    window.removeEventListener('storage', onStoreChange)
-    window.removeEventListener(savedCapabilityChangedEvent, onStoreChange)
-  }
-}
-
-function browserHasSavedCapability(operationRef: string | undefined) {
-  if (operationRef === undefined) return false
-  try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(savedCapabilityStorageKey) ?? '[]')
-    return Array.isArray(parsed) && parsed.includes(operationRef)
-  } catch {
-    return false
-  }
-}
-
 function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView }>) {
   const operationRef = view.operationRef
-  const saved = useSyncExternalStore(
-    subscribeSavedCapabilities,
-    () => browserHasSavedCapability(operationRef),
-    () => false,
-  )
-  const [saveFailed, setSaveFailed] = useState(false)
-
-  function saveCapability() {
-    if (operationRef === undefined) return
-    try {
-      const parsed: unknown = JSON.parse(window.localStorage.getItem(savedCapabilityStorageKey) ?? '[]')
-      const existing = Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
-      const next = [operationRef, ...existing.filter((value) => value !== operationRef)].slice(0, 50)
-      window.localStorage.setItem(savedCapabilityStorageKey, JSON.stringify(next))
-      setSaveFailed(false)
-      window.dispatchEvent(new Event(savedCapabilityChangedEvent))
-    } catch {
-      setSaveFailed(true)
-    }
-  }
-
   if (operationRef === undefined) return null
-  const cli = `ae call '${operationRef}' --input "$AE_INPUT_JSON" --wait`
+  const priorInputJson = view.previousInput === undefined ? undefined : JSON.stringify(view.previousInput)
+  const cliInput = priorInputJson === undefined
+    ? '"$AE_INPUT_JSON"'
+    : `'${priorInputJson.replaceAll("'", "'\\''")}'`
+  const apiInput = priorInputJson ?? '$AE_INPUT_JSON'
+  const cli = `ae call '${operationRef}' --input ${cliInput} --wait`
   const api = `curl -sS '$ORIGIN/api/v1/operations/call' \\
   -H "Authorization: Bearer $AE_API_KEY" \\
   -H 'content-type: application/json' \\
-  --data "{\\"operationRef\\":\\"${operationRef}\\",\\"input\\":$AE_INPUT_JSON,\\"idempotencyKey\\":\\"$AE_IDEMPOTENCY_KEY\\"}"`
-  const mcp = `Connect to $ORIGIN/mcp, initialize the session, list tools, then call ae_operation_invoke with operationRef=${operationRef}, fresh input, and a new idempotencyKey.`
-  const prompt = `Use Agentic Economy to inspect ${operationRef}. Ask me for fresh input and any required approval. Create a new idempotency key, invoke the Operation once, follow its invocation reference to a terminal result, and return the output with its receipt. Do not replay ${view.invocationRef} as a new call.`
+  --data "{\\"operationRef\\":\\"${operationRef}\\",\\"input\\":${apiInput.replaceAll('"', '\\"')},\\"idempotencyKey\\":\\"$AE_IDEMPOTENCY_KEY\\"}"`
+  const inputInstruction = priorInputJson === undefined ? 'fresh input' : `this prior input as a starting point: ${priorInputJson}`
+  const mcp = `Connect to $ORIGIN/mcp, initialize the session, list tools, then call ae_operation_invoke with operationRef=${operationRef}, ${inputInstruction}, and a new idempotencyKey.`
+  const prompt = `Use Agentic Economy to inspect ${operationRef}. Reconfirm current terms and ${inputInstruction}. Ask me for any required approval. Create a new idempotency key, invoke the Operation once, follow its invocation reference to a terminal result, and return the output with its receipt. Do not replay ${view.invocationRef} as a new call.`
   return (
     <section className="grid gap-4 border-t border-border pt-6" aria-labelledby="reuse-title">
       <div className="grid gap-1">
@@ -453,16 +416,19 @@ function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView
         <Button asChild className="min-h-11">
           <Link to="/operations/$operationRef" params={{ operationRef }}>Run again</Link>
         </Button>
-        <Button type="button" variant="outline" className="min-h-11" onClick={saveCapability} disabled={saved}>
-          {saved ? 'Capability saved' : 'Save capability'}
-        </Button>
         <Button asChild variant="outline" className="min-h-11"><a href="#receipt">View receipt</a></Button>
       </div>
-      <p role="status" aria-live="polite" className={saveFailed ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
-        {saved ? 'Saved in this browser.' : saveFailed ? 'This browser could not save the capability.' : ''}
-      </p>
+      {priorInputJson === undefined ? null : (
+        <Card className="shadow-none">
+          <CardHeader>
+            <h3 className="font-semibold text-foreground">Previous input</h3>
+            <CardDescription>Owner-visible input from this invocation. Reconfirm current terms before running it again.</CardDescription>
+          </CardHeader>
+          <CardContent><pre className="overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre></CardContent>
+        </Card>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
-        <ReuseCopy title="Copy as CLI" description="Run from this repository CLI." label="CLI command" code={cli} />
+        <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
         <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
         <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Operation." label="MCP setup instruction" code={mcp} />
         <ReuseCopy title="Copy agent prompt" description="Hand the task to an agent without reusing this receipt identity." label="agent prompt" code={prompt} />

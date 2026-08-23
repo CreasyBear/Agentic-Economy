@@ -1,10 +1,9 @@
 "use node"
 
-import { Agent, fetch as guardedFetch } from 'undici'
 import { v } from 'convex/values'
 import type { RegisteredAction } from 'convex/server'
-import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import {
   type CapabilityProbeTargetUnavailableReason,
   type ReadCapabilityProbeTargetResult,
@@ -124,7 +123,7 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
           : undefined
       },
       validateTarget: async (url) => isPublicHttpTarget(url, defaultDnsResolver),
-      send: sendGuarded,
+      send: sendGuardedHttpRequest,
     })
     const recorded: ProbeRecordResult = await ctx.runMutation(
       internal.capabilitySupply.recordCapabilityProbeResult,
@@ -147,27 +146,4 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
     return recorded
   },
 })
-
-async function sendGuarded(request: Request): Promise<Response> {
-  const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
-  try {
-    const upstream = await guardedFetch(request.url, {
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      ...(request.method === 'GET' || request.method === 'HEAD' ? {} : { body: await request.text() }),
-      redirect: 'manual',
-      signal: request.signal,
-      dispatcher,
-    })
-    const body = await readBoundedRequestText(upstream, 64 * 1024)
-    return new Response(body.ok ? body.text : null, {
-      status: body.ok ? upstream.status : 413,
-      headers: body.ok ? Object.fromEntries(upstream.headers.entries()) : {
-        'Content-Type': 'text/plain', 'X-AE-Probe-Outcome': 'response_too_large',
-      },
-    })
-  } finally {
-    await dispatcher.close().catch(() => undefined)
-  }
-}
 

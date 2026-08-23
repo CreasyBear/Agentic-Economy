@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  fetchAgenticMarketCatalog,
-  fetchTregCatalog,
-} from "@/modules/market/registry-source-adapters";
+import { fetchAgenticMarketCatalog } from "@/modules/market/registry-source-adapters";
 
 function json(document: unknown): Response {
   return Response.json(document);
@@ -62,6 +59,11 @@ describe("registry origin adapters", () => {
       credentialRequirements: ["x402_payment"],
       readiness: "source_declared_callable",
       authority: "source_metadata_only",
+      probeRequest: {
+        method: "POST",
+        url: "https://api.alpha.example/route-0",
+        headers: [],
+      },
     });
   });
 
@@ -196,58 +198,15 @@ describe("registry origin adapters", () => {
     ]);
   });
 
-  it("enumerates the Treg shelf index and every hidden-inclusive shelf exactly once", async () => {
-    const requested: string[] = [];
-    const result = await fetchTregCatalog({
-      fetch: async (url) => {
-        requested.push(url);
-        if (url.endsWith("/catalog/platforms")) {
-          return json({
-            generated_from: "catalog",
-            platforms: [
-              tregPlatform("companies", 1),
-              tregPlatform("stocks", 2),
-            ],
-          });
-        }
-        const slug = new URL(url).pathname.split("/").at(-1)!;
-        return json(tregShelf(slug));
-      },
-      now: () => 2_000,
-    });
-
-    expect(requested).toEqual([
-      "https://treg.to/catalog/platforms",
-      "https://treg.to/catalog/platforms/companies?include_hidden=1",
-      "https://treg.to/catalog/platforms/stocks?include_hidden=1",
-    ]);
-    expect(result).toMatchObject({
-      source: "treg",
-      complete: true,
-      fetchedShelfCount: 2,
-      sourceReportedCount: 3,
-      fetchedAt: 2_000,
-    });
-    expect(result.entries).toEqual([]);
-    expect(result.excludedCount).toBe(4);
-  });
-
-  it("rejects wrapper drift and unsafe source URLs", async () => {
+  it("rejects wrapper drift", async () => {
     await expect(
       fetchAgenticMarketCatalog({
         fetch: async () => json({ ...agenticMarketPage([], 0, 100, 0), unexpected: true }),
       }),
     ).rejects.toThrow();
-
-    await expect(
-      fetchTregCatalog({
-        fetch: async () =>
-          json({ platforms: [{ ...tregPlatform("companies", 1), slug: "../secrets" }] }),
-      }),
-    ).rejects.toThrow();
   });
 
-  it("fails closed on timeouts and excludes duplicate non-callable origin rows", async () => {
+  it("fails closed on timeouts", async () => {
     await expect(
       fetchAgenticMarketCatalog({
         fetch: async () => {
@@ -256,21 +215,6 @@ describe("registry origin adapters", () => {
       }),
     ).rejects.toThrow();
 
-    const result = await fetchTregCatalog({
-        fetch: async (url) => {
-          if (url.endsWith("/catalog/platforms")) {
-            return json({ platforms: [tregPlatform("companies", 1)] });
-          }
-          const shelf = tregShelf("companies");
-          const duplicate = {
-            ...shelf.capabilities[0]!.endpoints[0]!,
-            summary: "Conflicting duplicate metadata",
-          };
-          return json({ ...shelf, extended: [duplicate] });
-        },
-      });
-    expect(result.entries).toEqual([]);
-    expect(result.excludedCount).toBe(2);
   });
 });
 
@@ -327,69 +271,5 @@ function agenticService(id: string, endpointCount: number) {
     serviceName: `${id} API`,
     tags: ["search"],
     iconUrl: "",
-  };
-}
-
-function tregPlatform(slug: string, endpoints: number) {
-  return {
-    slug,
-    label: `${slug} label`,
-    category: "Data",
-    featured: null,
-    summary: `${slug} summary`,
-    price_from: null,
-    capabilities: 1,
-    endpoints,
-    verified: 0,
-    providers: [`${slug}-provider`],
-  };
-}
-
-function tregShelf(slug: string) {
-  return {
-    platform: { slug, label: `${slug} label`, category: "Data" },
-    capabilities: [
-      {
-        id: `${slug}.search`,
-        description: `${slug} search`,
-        endpoints: [{
-          ...tregEndpoint(`${slug}.search`, "core"),
-          miss: { reason: "not_in_fixture" },
-        }],
-      },
-    ],
-    domains: [],
-    extended: [tregEndpoint(`${slug}.extended`, "extended")],
-    hidden_count: 1,
-    providers: {},
-  };
-}
-
-function tregEndpoint(id: string, tier: string) {
-  return {
-    id,
-    provider: id.split(".")[0],
-    provider_display: `${id.split(".")[0]} provider`,
-    name: `${id} endpoint`,
-    summary: `${id} summary`,
-    method: "GET",
-    path: "/v1/search",
-    scope: "any_account",
-    tier,
-    kind: "data",
-    domain: "search",
-    call_template: `treg call ${id}`,
-    cost: { type: "per_call", value: 1, currency: "credit", unit: "call" },
-    platform_eligible: false,
-    platform_blocked: null,
-    miss: null,
-    status: null,
-    status_note: null,
-    superseded_by: null,
-    verified: null,
-    docs_url: "https://example.com/docs",
-    has_example: false,
-    input: null,
-    test_request: null,
   };
 }

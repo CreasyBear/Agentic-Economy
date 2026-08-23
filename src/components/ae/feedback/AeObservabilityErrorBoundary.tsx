@@ -24,7 +24,7 @@ function AeObservabilityErrorFallback() {
           <Button type="button" variant="default" className="min-h-11" onClick={() => window.location.reload()}>
             Try again
           </Button>
-          <Button asChild variant="secondary" className="min-h-11"><a href="/">Start a new chat</a></Button>
+          <Button asChild variant="secondary" className="min-h-11"><a href="/t/new">Start a new chat</a></Button>
         </div>
       </EmptyContent>
     </Empty>

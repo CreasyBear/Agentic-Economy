@@ -9,9 +9,9 @@ import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import {
   operationSearchInputSchema,
-  operationSearchOutputSchema,
 } from '@/modules/capability-supply/public'
 import { registryOperationsSearchAction } from '@/modules/registry/operations.actions'
+import { operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
 
 const MAX_OPERATION_SEARCH_BODY_BYTES = 16 * 1024
 
@@ -57,7 +57,7 @@ export async function handleMarketOperationSearchRequest(request: Request): Prom
             ...(detail === undefined ? {} : { detail }),
           })
         }
-        const result = operationSearchOutputSchema.safeParse(await registryOperationsSearchAction.run({
+        const result = operationChoiceSearchOutputSchema.safeParse(await registryOperationsSearchAction.run({
           data: parsed.data,
           context: { caller: 'http', request },
         }))

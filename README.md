@@ -13,11 +13,12 @@ gateway across the web, HTTP API, CLI, and MCP.
 - Browse and search the public tool market without an account.
 - Inspect exact terms, inputs, effects, and evidence before calling a tool.
 - Compare tools or inspect a bounded multi-tool plan.
-- Connect an agent through HTTP, MCP, or the repository CLI.
+- Connect an agent through HTTP, MCP, or the compiled CLI.
 - Publish an API once for discovery across the same interfaces.
 
-Registry metadata describes what a provider offers; it is not a claim that a
-tool is endorsed or that a payment proves successful delivery.
+Imported source metadata stays internal until a live contract, price, and
+readiness check admits a callable Operation. A payment never proves successful
+delivery.
 
 ## Run locally
 
@@ -43,12 +44,12 @@ http://127.0.0.1:3000/.well-known/ucp
 http://127.0.0.1:3000/mcp
 ```
 
-The repository CLI follows the same public market contract:
+The compiled CLI follows the same public market contract:
 
 ```sh
-npm run -s ae -- manifest
-npm run -s ae -- search "weather forecast" --limit 5
-npm run -s ae -- inspect <operationRef>
+npx @agentic-economy/cli manifest
+npx @agentic-economy/cli search "weather forecast" --limit 5
+npx @agentic-economy/cli inspect <operationRef>
 ```
 
 Search and inspection are anonymous. Paid or consequential calls require an

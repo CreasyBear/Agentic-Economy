@@ -353,6 +353,67 @@ export function buildSiteDiscoveryManifest(
   return { ...body, generatedAt: input.now, generatedHash: schemaDescriptorDigest(body as StableHashValue) }
 }
 
+/**
+ * Cold-start projection: enough to choose the next surface without embedding
+ * every JSON schema twice. Exact action schemas remain available through MCP
+ * tools/list, /api/discovery/schema, and Operation detail.
+ */
+export function projectCompactSiteDiscoveryManifest(
+  manifest: SiteDiscoveryManifestContract,
+) {
+  const body = {
+    schemaVersion: manifest.schemaVersion,
+    ucpVersion: manifest.ucpVersion,
+    name: manifest.name,
+    summary: manifest.summary,
+    origin: manifest.origin,
+    endpoints: manifest.endpoints.map((endpoint) => ({
+      kind: endpoint.kind,
+      label: endpoint.label,
+      method: endpoint.method,
+      path: endpoint.path,
+      url: endpoint.url,
+      authentication: endpoint.authentication,
+      ...(endpoint.requiredScope === undefined ? {} : { requiredScope: endpoint.requiredScope }),
+      ...(endpoint.actionId === undefined ? {} : { actionId: endpoint.actionId }),
+      ...(endpoint.contractVersion === undefined ? {} : { contractVersion: endpoint.contractVersion }),
+    })),
+    operationGateway: {
+      contract: manifest.operationGateway.contract,
+      action: manifest.operationGateway.action,
+      scope: manifest.operationGateway.scope,
+      mcp: {
+        endpoint: manifest.operationGateway.mcp.endpoint,
+        protocolVersion: manifest.operationGateway.mcp.protocolVersion,
+        operationInvokeTool: manifest.operationGateway.mcp.operationInvokeTool,
+        directKeylessTool: manifest.operationGateway.executionModes.directKeyless.mcpTool,
+        lifecycle: 'The official MCP client performs initialize and close; this endpoint is session-optional.',
+      },
+      access: {
+        anonymous: {
+          eligibility: manifest.operationGateway.executionModes.directKeyless.eligibility,
+          requiresExactDetailExecuteRelation: true,
+          cli: "ae call <operationRef> --input '<json>'",
+        },
+        connected: {
+          authentication: manifest.operationGateway.executionModes.gateway.authentication,
+          cli: 'ae connect',
+          invokeAction: manifest.operationGateway.executionModes.gateway.action,
+        },
+      },
+      recovery: manifest.operationGateway.recovery,
+    },
+    assistantSetup: manifest.assistantSetup,
+    fullSchemas: `${manifest.origin}/api/discovery/schema`,
+    boundary: manifest.boundary,
+  } as const
+  return {
+    ...body,
+    generatedAt: manifest.generatedAt,
+    generatedHash: schemaDescriptorDigest(body as StableHashValue),
+  }
+}
+
 function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[] {
   const operationRoutes: readonly SiteDiscoveryOperationRouteSummary[] = operationRouteExamples().map(({ route }) => route)
   const labels: Readonly<Record<string, string>> = {

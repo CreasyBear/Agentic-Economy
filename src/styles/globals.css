@@ -1,8 +1,8 @@
 /*
  * Agentic Economy product system.
  *
- * Structural donor: Treg's compact agent-tool marketplace. This file owns the
- * semantic bridge used by shadcn and product components; surfaces do not invent
+ * Compact capability-market structure. This file owns the semantic bridge
+ * used by shadcn and product components; surfaces do not invent
  * their own palettes, type scales, radii, or elevation systems.
  */
 @layer reset, theme, base, components, utilities;

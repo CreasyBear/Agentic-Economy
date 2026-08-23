@@ -73,7 +73,7 @@ describe('CLI operation recovery projections', () => {
   it('publishes the anonymous direct-keyless MCP contract from the action registry', async () => {
     const output = capture(process.stdout)
     try {
-      await runManifestCommand([], baseOptions)
+      await runManifestCommand([], { ...baseOptions, technical: true })
     } finally {
       output.restore()
     }
@@ -108,7 +108,7 @@ describe('CLI operation recovery projections', () => {
   it('publishes a schema-valid recovery example with digest and identity rules', async () => {
     const output = capture(process.stdout)
     try {
-      await runManifestCommand([], baseOptions)
+      await runManifestCommand([], { ...baseOptions, technical: true })
     } finally {
       output.restore()
     }

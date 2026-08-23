@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   operationInvokeReceiptSchema,
@@ -23,6 +24,7 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     kind: z.literal('found'),
     invocationRef: boundedText(300),
     operationRef: boundedText(300),
+    previousInput: z.record(z.string(), jsonValueSchema).exactOptional(),
     state: operationInvokeStatusStateSchema,
     usage: operationInvokeUsageSchema.exactOptional(),
     evidenceHash: boundedText(300).exactOptional(),

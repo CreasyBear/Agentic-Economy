@@ -38,16 +38,16 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
     }
-    // 11 shared surfaces; each business keeps page, UCP, and business detail.
+    // 10 shared surfaces; each business keeps page, UCP, and business detail.
     expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
-    expect(result.urls).toHaveLength(11 + 50 * 3)
+    expect(result.urls).toHaveLength(10 + 50 * 3)
   })
 
   it('deduplicates repeated slugs in the complete URL inventory', () => {
     const urls = buildOfferingLlmsUrlsFromSlugs(['same-business', 'same-business'], { canonicalBaseUrl })
 
     expect(urls).toEqual([...new Set(urls)])
-    expect(urls).toHaveLength(11 + 3)
+    expect(urls).toHaveLength(10 + 3)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -63,16 +63,16 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(11 + 50 * 3)
+    expect(result.urls).toHaveLength(10 + 50 * 3)
   })
 
   it('teaches the ordered Operation path before the published business catalog', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
     const markers = [
-      '1. Connect once:',
-      '2. Search by outcome:',
-      '3. Inspect one exact result',
-      '4. Call it:',
+      '1. Search by outcome:',
+      '2. Inspect one exact result',
+      '3. Call it:',
+      '4. Connect only if the call reports',
       '5. Keep the receipt:',
       'Published businesses (business catalog; never Agent Services):',
     ]
@@ -84,14 +84,15 @@ describe('Offering llms.txt index', () => {
     }
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/search`)
     expect(body).toContain(`POST ${canonicalBaseUrl}/api/v1/market-operations/detail`)
-    expect(body).toContain(`npx ae connect --base-url "${canonicalBaseUrl}" --mcp`)
+    expect(body).toContain(`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`)
     expect(body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
   })
 
   it('makes anonymous and authenticated boundaries explicit', () => {
     const body = buildOfferingLlmsTxt(catalogOf(1, () => 'only-business'), { canonicalBaseUrl }).body
 
-    expect(body).toContain('Search and inspection are public')
+    expect(body).toContain('Public: search, inspect, and eligible free keyless read calls.')
+    expect(body).toContain('Connect only when a call reports agent_access_key_required.')
     expect(body).toContain('The AE key identifies the caller.')
     expect(body).toContain('never contains provider credentials or silently grants payment or consequential authority')
     expect(body).toContain('Never infer fulfilment, payment, deployment, or a receipt')
@@ -108,7 +109,7 @@ describe('Offering llms.txt index', () => {
     expect(buildOfferingLlmsUrlsFromSlugs(
       Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
       { canonicalBaseUrl },
-    )).toHaveLength(11 + 50 * 3)
+    )).toHaveLength(10 + 50 * 3)
   })
 
   it('keeps the boundary and correction sections and says none for an empty directory', () => {

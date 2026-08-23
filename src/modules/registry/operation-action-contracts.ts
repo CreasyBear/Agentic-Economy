@@ -1,18 +1,21 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import {
   operationCompareInputSchema,
-  operationCompareOutputSchema,
   operationDetailInputSchema,
   operationDetailOutputSchema,
   operationInspectPlanInputSchema,
   operationInspectPlanOutputSchema,
   operationSearchInputSchema,
-  operationSearchOutputSchema,
 } from '@/modules/capability-supply/operation-schemas'
+import {
+  operationChoiceCompareOutputSchema,
+  operationChoiceSearchOutputSchema,
+} from './operation-choice-contracts'
 import type { ActionParameter, ActionParameterType, ActionSurface } from '@/modules/common/action'
 import type { z } from 'zod'
 export {
-  operationCompareOutputSchema,
+  operationChoiceCompareOutputSchema,
+  operationChoiceSearchOutputSchema,
   operationDetailOutputSchema,
   operationInspectPlanOutputSchema,
 }
@@ -89,7 +92,7 @@ export const registryOperationsSearchContract = {
   name: 'Search Market Operations',
   summary: 'Search admitted Market Operations with a short capability phrase; omit concrete input values.',
   boundaries,
-  outputSchema: operationSearchOutputSchema,
+  outputSchema: operationChoiceSearchOutputSchema,
   parameters: searchParameters,
   readOnly: true,
   effect: readOnlyEffect,
@@ -135,7 +138,7 @@ export const registryOperationsCompareContract = {
   name: 'Compare executable operations',
   summary: 'Compare up to four exact current operation references without selecting or authorizing one.',
   boundaries,
-  outputSchema: operationCompareOutputSchema,
+  outputSchema: operationChoiceCompareOutputSchema,
   parameters: compareParameters,
   readOnly: true,
   effect: readOnlyEffect,

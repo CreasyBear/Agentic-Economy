@@ -16,6 +16,7 @@ export {
   SiteDiscoveryEndpointKindValues,
   SiteDiscoveryManifestSchemaVersion,
   buildSiteDiscoveryManifest,
+  projectCompactSiteDiscoveryManifest,
 } from './internal/site-manifest'
 export type {
   SiteDiscoveryEndpointContract,

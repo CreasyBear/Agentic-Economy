@@ -13,6 +13,8 @@ import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
+import { operationSearchOutputSchema } from '@/modules/capability-supply/public'
 
 type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
 
@@ -51,7 +53,7 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
 }
 
 function operationSearchResult(query: string, operations: readonly OperationDescriptorFixture[]) {
-  return {
+  return projectOperationSearchChoices(operationSearchOutputSchema.parse({
     kind: 'ok' as const,
     schemaVersion: 'registry-operations:v1' as const,
     query,
@@ -64,7 +66,7 @@ function operationSearchResult(query: string, operations: readonly OperationDesc
     })),
     pagination: { limit: 20, hasMore: false },
     navigation: [],
-  }
+  }))
 }
 
 function operationDetailResult(operation: OperationDescriptorFixture) {
@@ -157,6 +159,7 @@ describe('external-agent Market Operation cold loop', () => {
 
     await runSearchCommand(['reference lookup'], {
       ...options,
+      technical: true,
       limit: '3',
       cursor: 'opaque-prior-cursor',
       filters: JSON.stringify({ availability: ['routeable'] }),
@@ -169,6 +172,24 @@ describe('external-agent Market Operation cold loop', () => {
       filters: { availability: ['routeable'] },
     })
     expect(JSON.parse(output.read())).toEqual(result)
+  })
+  it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
+    const operationRef = `operation:v1:${'e'.repeat(64)}`
+    const result = operationSearchResult('reference lookup', [operationDescriptor(operationRef)])
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })))
+
+    await runSearchCommand(['reference lookup'], options)
+
+    const serialized = output.read()
+    const compact = JSON.parse(serialized) as Record<string, unknown>
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(4 * 1024)
+    expect(compact).toHaveProperty('items')
+    expect(serialized).not.toContain('inputJsonSchema')
+    expect(serialized).not.toContain('outputJsonSchema')
   })
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()

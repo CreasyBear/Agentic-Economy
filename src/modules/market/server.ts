@@ -25,7 +25,6 @@ import {
   toOperationCardViewModel,
   type OperationCardViewModel,
 } from "./operation-view-model";
-import type { RegistryExactPrice } from "./registry-source-contracts";
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -51,62 +50,6 @@ type MarketSourceRead = Readonly<{
   }>;
 }>;
 
-export type RegistryAccessFilter = "all" | "x402" | "provider_account";
-
-export type MarketAccess = RegistryAccessFilter | "agentic_economy";
-
-export type RegistryCardViewModel = Readonly<{
-  documentId: string;
-  sourceUrl: string;
-  providerUrl?: string;
-  endpointUrl?: string;
-  docsUrl?: string;
-  routeIdentity: string;
-  name: string;
-  summary: string;
-  provider: string;
-  category: string;
-  capability?: string;
-  method?: string;
-  tags: readonly string[];
-  networks: readonly string[];
-  priceLabel?: string;
-  exactPrice: RegistryExactPrice;
-  access: "x402" | "provider_account" | "unknown";
-  credentialRequirements: readonly string[];
-  readiness: "source_declared_callable";
-  lastObservedAt: string;
-  lastVerifiedAt?: string;
-  inputSchemaJson: string;
-  exampleInvocation: string;
-  sourceCheckedAt?: string;
-  sourceCalls30d?: string;
-  sourcePayers30d?: string;
-  sourceMedianLatencyMs?: number;
-  sourceP95LatencyMs?: number;
-  sourceSampleSize?: number;
-  authority: "registry_metadata_only";
-}>;
-
-export type RegistryRead =
-  | Readonly<{ kind: "unavailable" }>
-  | Readonly<{
-      kind: "ok";
-      generation: string;
-      coverage: Readonly<{
-        entries: number;
-        completedAt: number;
-      }>;
-      page: readonly RegistryCardViewModel[];
-      isDone: boolean;
-      continueCursor: string;
-    }>;
-
-export type RegistryEntryRead =
-  | Readonly<{ kind: "found"; entry: RegistryCardViewModel }>
-  | Readonly<{ kind: "not_found" }>
-  | Readonly<{ kind: "unavailable" }>;
-
 const readMarket = sourceQuery<
   { window: MarketWindow; now: number },
   MarketSourceRead
@@ -116,21 +59,6 @@ const readListingEvidence = sourceQuery<
   { operationRefs: string[]; since: number },
   readonly MarketListingEvidenceSource[]
 >("marketListingEvidence:read");
-
-const readRegistry = sourceQuery<
-  {
-    query: string;
-    access: RegistryAccessFilter;
-    limit: number;
-    cursor: string | null;
-  },
-  RegistryRead
->("marketExternalRegistry:search");
-
-const readRegistryEntry = sourceQuery<
-  { documentId: string },
-  RegistryEntryRead
->("marketExternalRegistry:entry");
 
 export type MarketCatalogProjection =
   | Readonly<{
@@ -149,76 +77,41 @@ export type MarketCatalogProjection =
 export type MarketRouteProjection = Readonly<{
   window: MarketWindow;
   catalog: MarketCatalogProjection;
-  registry: RegistryRead;
 }>;
 
 export type MarketCatalogQuery = Readonly<{
   query?: string;
   availability?: "routeable" | "integrated" | "unavailable";
   cursor?: string;
-  access?: MarketAccess;
-  registryCursor?: string;
 }>;
 
 export async function readMarketRouteProjection(
   window: MarketWindow,
   catalogQuery: MarketCatalogQuery = {},
 ): Promise<MarketRouteProjection> {
-  const includeOperations = catalogQuery.access === "agentic_economy";
-  const includeRegistry = catalogQuery.access !== "agentic_economy";
   const generatedAt = Date.now();
-  const [catalogResult, registryResult] = await Promise.allSettled([
-    includeOperations
-      ? readCapabilityOperationSearch({
-          query: catalogQuery.query ?? "",
-          limit: 12,
-          ...(catalogQuery.cursor === undefined
-            ? {}
-            : { cursor: catalogQuery.cursor }),
-          ...(catalogQuery.availability === undefined
-            ? {}
-            : { filters: { availability: [catalogQuery.availability] } }),
-        })
-      : Promise.resolve<OperationSearchResult>({
-          kind: "no_candidates",
-          schemaVersion: "registry-operations:v1",
-          query: catalogQuery.query ?? "",
-          appliedFilters: {},
-          matchedCount: 0,
-          ranking: [],
-          navigation: [],
-        }),
-    includeRegistry
-      ? callPublicSourceQuery(readRegistry, {
-          query: catalogQuery.query ?? "",
-          access:
-            catalogQuery.access === "x402" ||
-            catalogQuery.access === "provider_account"
-              ? catalogQuery.access
-              : "all",
-          limit: 24,
-          cursor: catalogQuery.registryCursor ?? null,
-        })
-      : Promise.resolve<RegistryRead>({ kind: "unavailable" }),
-  ]);
-  const catalog: OperationSearchResult =
-    catalogResult.status === "fulfilled"
-      ? catalogResult.value
-      : {
-          kind: "unavailable",
-          schemaVersion: "registry-operations:v1",
-          reason: "source_unavailable",
-          navigation: [],
-        };
+  let catalog: OperationSearchResult;
+  try {
+    catalog = await readCapabilityOperationSearch({
+      query: catalogQuery.query ?? "",
+      limit: 12,
+      ...(catalogQuery.cursor === undefined
+        ? {}
+        : { cursor: catalogQuery.cursor }),
+      ...(catalogQuery.availability === undefined
+        ? {}
+        : { filters: { availability: [catalogQuery.availability] } }),
+    });
+  } catch {
+    catalog = {
+      kind: "unavailable",
+      schemaVersion: "registry-operations:v1",
+      reason: "source_unavailable",
+      navigation: [],
+    };
+  }
   const projectedCatalog = await projectCatalog(catalog, window, generatedAt);
-  return {
-    window,
-    catalog: projectedCatalog,
-    registry:
-      registryResult.status === "fulfilled"
-        ? registryResult.value
-        : { kind: "unavailable" },
-  };
+  return { window, catalog: projectedCatalog };
 }
 
 export async function readMarketPageProjection(
@@ -238,28 +131,6 @@ export async function readMarketPageProjection(
     x402Ecosystem: externalProjection(source, source.generatedAt),
     agenticEconomy: firstPartyProjection(source, generatedAt),
   };
-}
-
-export async function readRegistryProjection(
-  input: Readonly<{
-    query?: string;
-    access?: RegistryAccessFilter;
-    limit?: number;
-    cursor?: string;
-  }>,
-): Promise<RegistryRead> {
-  return await callPublicSourceQuery(readRegistry, {
-    query: input.query ?? "",
-    access: input.access ?? "all",
-    limit: input.limit ?? 24,
-    cursor: input.cursor ?? null,
-  });
-}
-
-export async function readRegistryEntryProjection(
-  documentId: string,
-): Promise<RegistryEntryRead> {
-  return await callPublicSourceQuery(readRegistryEntry, { documentId });
 }
 
 function externalProjection(

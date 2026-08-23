@@ -3,10 +3,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { exactAmountSchema } from '@/modules/money/public'
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { operationInvokeResultSchema } from '@/modules/capability-execution/operation-invoke-contracts'
-import {
-  operationCompareOutputSchema,
-  operationInspectPlanOutputSchema,
-} from '@/modules/registry/operation-action-contracts'
+import { operationInspectPlanOutputSchema } from '@/modules/registry/operation-action-contracts'
+import { operationChoiceCompareOutputSchema } from '@/modules/registry/operation-choice-contracts'
 import {
   publicOperationAuthenticationSchema,
   publicOperationParameterSchema,
@@ -192,7 +190,7 @@ const operationComparisonFactsSchema = z.custom<readonly OperationComparisonFact
   (value) =>
     Array.isArray(value)
     && value.length <= MAX_OPERATION_COMPARISON_FACTS
-    && operationCompareOutputSchema.safeParse({
+    && operationChoiceCompareOutputSchema.safeParse({
       kind: 'ok',
       schemaVersion: 'registry-operations:v1',
       operations: [],
@@ -250,7 +248,7 @@ export type AnswerOperationPlan = z.infer<typeof AnswerOperationPlanSchema>
 export function projectAnswerOperationComparison(
   value: unknown,
 ): AnswerOperationComparison | undefined {
-  const parsed = operationCompareOutputSchema.safeParse(value)
+  const parsed = operationChoiceCompareOutputSchema.safeParse(value)
   if (!parsed.success || parsed.data.kind !== 'ok') return undefined
   const operationRefs = [...new Set(parsed.data.operations.map((operation) => operation.operationRef))]
   const artifact = AnswerOperationComparisonSchema.safeParse({

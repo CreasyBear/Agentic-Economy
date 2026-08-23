@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAgentAccessConsoleServer } from '@/modules/agent-access/agent-access-console'
-import { formatExactAmount, type CreditActivityView } from '@/modules/money/public'
+import { formatExactAmount } from '@/modules/money/public'
+import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
 
 export const Route = createFileRoute('/_operator/activity')({
   ...operatorRouteOptions,
@@ -39,16 +40,16 @@ function ActivityRoute() {
   )
 }
 
-function ActivityRow({ item }: { item: CreditActivityView }) {
+function ActivityRow({ item }: { item: AgentActivityView }) {
   const amount = formatExactAmount(item.grossAmount) ?? item.grossAmount.units
   return (
     <li className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
       <div className="min-w-0">
         <p className="font-medium text-foreground">
-          {taskLabel(item.operationKey)} — {item.grossAmount.currency} {amount} — {chargeLabel(item.chargeState)}
+          {item.operation?.label ?? taskLabel(item.operationKey)} — {item.grossAmount.currency} {amount} — {chargeLabel(item.chargeState)}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {new Date(item.observedAt).toLocaleString()} · receipt {shortReference(item.invocationRef)}
+          {item.operation === undefined ? '' : `${item.operation.supplier} · `}{new Date(item.observedAt).toLocaleString()} · receipt {shortReference(item.invocationRef)}
         </p>
       </div>
       <Button asChild variant="outline" size="sm">
@@ -77,7 +78,7 @@ function taskLabel(operationKey: string): string {
   return words.length === 0 ? 'Used a capability' : `${words.charAt(0).toUpperCase()}${words.slice(1)}`
 }
 
-function chargeLabel(state: CreditActivityView['chargeState']): string {
+function chargeLabel(state: AgentActivityView['chargeState']): string {
   if (state === 'free_tier') return 'completed free'
   if (state === 'paid') return 'completed'
   if (state === 'refunded') return 'refunded'

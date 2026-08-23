@@ -16,7 +16,6 @@ export const DiscoveryPublicSurfacePaths = [
   '/privacy/remove-business',
   '/.well-known/ucp',
   '/api/businesses',
-  '/api/v1/registry',
   OPERATION_MARKET_SEARCH_PATH,
   OPERATION_MARKET_DETAIL_PATH,
   OPERATION_MARKET_COMPARE_PATH,
@@ -27,12 +26,9 @@ export const DiscoveryPublicSurfacePaths = [
 export const DiscoveryListingBoundaryLine =
   'Provider and publication facts are supporting metadata. Only independently callable Operations appear in the capability catalogue.'
 
-export const RegistryEntryBoundaryLine =
-  'Registry Entries are discovery metadata, not Operations. Invoke through Agentic Economy only when a separate admitted Operation exists; otherwise inspect the entry source URL.'
-
 /** Public loop copy shared by the machine-readable discovery surfaces. */
 export const OperationMarketAnonymousBoundaryLine =
-  'Public: search and inspect. Connected: call, status, cancel, and recover through one origin-bound key.'
+  'Public: search, inspect, and eligible free keyless read calls. Connect only when a call reports agent_access_key_required.'
 export const OperationMarketIdempotencyLine =
   'The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.'
 export const OperationMarketInvokeScopeLine = `Required invoke scope: \`${OPERATION_INVOKE_ROUTE_CONTRACT.scope}\`.`
@@ -44,14 +40,13 @@ export function operationMarketLines(canonicalBaseUrl: string): readonly string[
   return [
     '## Capability market loop',
     '',
-    `Registry: \`GET ${canonicalBaseUrl}/api/v1/registry?query=weather%20forecast&access=all&limit=5\`; entries are discovery-only.`,
-    `1. Connect once: \`npx ae connect --base-url "${canonicalBaseUrl}" --mcp\`.`,
-    `2. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`).`,
-    `3. Inspect one exact result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`).`,
-    `4. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait\` (\`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`).`,
+    `1. Search by outcome: \`${cli} search "weather forecast" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_SEARCH_PATH}\`).`,
+    `2. Inspect one exact result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`POST ${canonicalBaseUrl}${OPERATION_MARKET_DETAIL_PATH}\`).`,
+    `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait\`. Eligible free keyless reads use the official MCP client.`,
+    `4. Connect only if the call reports \`agent_access_key_required\`: \`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp\`, then repeat the same call through \`${invoke.method} ${canonicalBaseUrl}${invoke.path}\`.`,
     `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${canonicalBaseUrl}" --json\` (\`${status.method} ${canonicalBaseUrl}${status.path}\`). Use cancel or recover only when that receipt offers the action.`,
     '',
-    'Search and inspection are public. Calls use one owner-approved AE key stored by connect.',
+    OperationMarketAnonymousBoundaryLine,
     'The AE key identifies the caller. It never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
     'The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.',

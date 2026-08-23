@@ -23,6 +23,8 @@ describe('discovery files', () => {
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'http://localhost:3000' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
     const serialized = `${llms.body}\n${sitemap.body}`
+    expect(llms.body).not.toContain('/api/v1/registry')
+    expect(llms.body).toContain('/api/v1/market-operations/search')
 
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
@@ -58,13 +60,14 @@ describe('discovery files', () => {
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
-    expect(result.body).toContain('1. Connect once: `npx ae connect')
+    expect(result.body).toContain('1. Search by outcome: `ae search')
+    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('4. Connect only if the call reports'))
     expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
     expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/detail')
     expect(result.body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
     expect(result.body).toContain('ae status "$AE_INVOCATION_REF"')
     expect(result.body).toContain('Use cancel or recover only when that receipt offers the action.')
-    expect(result.body).toContain('Search and inspection are public. Calls use one owner-approved AE key stored by connect.')
+    expect(result.body).toContain('Public: search, inspect, and eligible free keyless read calls.')
     expect(result.body).toContain('The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.')
     expect(result.body).not.toContain('--idempotency-key')
     expect(result.body).not.toContain('Demo listed provider')

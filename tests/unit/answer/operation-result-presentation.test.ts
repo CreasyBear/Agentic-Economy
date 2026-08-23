@@ -6,7 +6,8 @@ import {
 import {
   sanitizeAnswerOperationOutcome,
 } from '@/modules/answer/internal/operation-result-presentation'
-import { isPublicOperationRef, type PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { isPublicOperationRef, operationCompareOutputSchema, type PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import { projectOperationCompareChoices } from '@/modules/registry/operation-choice-contracts'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
   answerOperationDescriptorMaterialDigest,
@@ -141,7 +142,7 @@ describe('frozen operation result presentation', () => {
   })
   it('freezes compare facts and inspect-plan summaries from completed read calls', () => {
     const observedAt = 1_786_622_400_000
-    const comparison = {
+    const comparison = projectOperationCompareChoices(operationCompareOutputSchema.parse({
       kind: 'ok' as const,
       schemaVersion: 'registry-operations:v1' as const,
       operations: [descriptor],
@@ -156,7 +157,8 @@ describe('frozen operation result presentation', () => {
         }],
       }],
       navigation: [],
-    }
+    }))
+    if (comparison.kind !== 'ok') throw new Error('comparison_fixture_invalid')
     const plan = {
       kind: 'ok' as const,
       schemaVersion: 'registry-operations:v1' as const,

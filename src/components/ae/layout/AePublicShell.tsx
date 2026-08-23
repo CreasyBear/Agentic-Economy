@@ -88,6 +88,7 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
 function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Public navigation" className="grid gap-2 p-4">
+      <Link to="/t/new" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
       <Link to="/market" search={{ window: '30d' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
       <Link to="/for-agents" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
       <Link to="/activity" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
@@ -108,6 +109,7 @@ function PublicNavActions({
   return (
     <Sheet open={mobileNavOpen} onOpenChange={onMobileNavOpenChange}>
       <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
+        <Link to="/t/new" className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
         <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
         <Link to="/for-agents" className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
         <Link to="/activity" className="inline-flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
@@ -159,6 +161,7 @@ function PublicFooter() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6 md:text-sm">
         <div className="flex items-center gap-2 font-mono text-foreground"><img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-7" /><span>agentic economy</span></div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-1">
+          <Link to="/t/new" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
           <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
           <Link to="/for-agents" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
           <Link to="/activity" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>

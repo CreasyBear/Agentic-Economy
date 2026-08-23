@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowRightIcon,
   SearchIcon,
@@ -7,7 +7,6 @@ import {
 import { useMemo, useState, type FormEvent } from "react";
 
 import { AeEmptyState } from "@/components/ae/feedback/AeEmptyState";
-import { AeRegistryEntry } from "@/components/ae/market/AeRegistryEntry";
 import { AeOperationCard } from "@/components/ae/market/AeOperationCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,21 +59,9 @@ type MarketPageSearch = Readonly<{
   query?: string;
   availability?: "routeable" | "integrated" | "unavailable";
   cursor?: string;
-  access?: "all" | "x402" | "provider_account" | "agentic_economy";
-  registryCursor?: string;
 }>;
 
 type CatalogOrder = "recommended" | "popular" | "rated" | "fastest";
-
-const registryDateFormatter = new Intl.DateTimeFormat("en-AU", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "UTC",
-  timeZoneName: "short",
-});
 
 export function AeMarketPage({
   projection,
@@ -84,11 +71,7 @@ export function AeMarketPage({
   search: MarketPageSearch;
 }) {
   const navigate = useNavigate({ from: "/market" });
-  const { window, catalog, registry } = projection;
-  const selectedAccess = search.access ?? "all";
-  const showRegistry = selectedAccess !== "agentic_economy";
-  const showAgenticEconomy = selectedAccess === "agentic_economy";
-  const showOperationFilters = selectedAccess === "agentic_economy";
+  const { window, catalog } = projection;
   const [categoryId, setCategoryId] = useState<MarketCategoryId | "all">("all");
   const [order, setOrder] = useState<CatalogOrder>("recommended");
   const visibleOperations = useMemo(() => {
@@ -107,9 +90,6 @@ export function AeMarketPage({
   );
   const matchedCount =
     catalog.kind === "unavailable" ? 0 : catalog.matchedCount;
-  const registryEntryCount =
-    registry.kind === "ok" ? registry.coverage.entries : 0;
-  const totalAvailable = registryEntryCount + matchedCount;
   const hasFilters =
     search.query !== undefined ||
     search.availability !== undefined ||
@@ -127,7 +107,6 @@ export function AeMarketPage({
         ...(search.availability === undefined
           ? {}
           : { availability: search.availability }),
-        ...(selectedAccess === "all" ? {} : { access: selectedAccess }),
       },
     });
   }
@@ -142,7 +121,6 @@ export function AeMarketPage({
         window,
         ...(search.query === undefined ? {} : { query: search.query }),
         ...(availability === undefined ? {} : { availability }),
-        ...(selectedAccess === "all" ? {} : { access: selectedAccess }),
       },
     });
   }
@@ -155,7 +133,6 @@ export function AeMarketPage({
         ...(search.availability === undefined
           ? {}
           : { availability: search.availability }),
-        ...(selectedAccess === "all" ? {} : { access: selectedAccess }),
       },
     });
   }
@@ -163,26 +140,7 @@ export function AeMarketPage({
   function clearFilters() {
     setCategoryId("all");
     void navigate({
-      search: {
-        window,
-        ...(selectedAccess === "all" ? {} : { access: selectedAccess }),
-      },
-    });
-  }
-
-  function changeAccess(value: string) {
-    const access =
-      value === "x402" ||
-      value === "provider_account" ||
-      value === "agentic_economy"
-        ? value
-        : "all";
-    void navigate({
-      search: {
-        window,
-        ...(search.query === undefined ? {} : { query: search.query }),
-        ...(access === "all" ? {} : { access }),
-      },
+      search: { window },
     });
   }
 
@@ -190,11 +148,8 @@ export function AeMarketPage({
     <div className="bg-background text-foreground">
       <MarketHero
         catalogAvailable={catalog.kind !== "unavailable"}
-        registryAvailable={registry.kind !== "unavailable"}
-        totalAvailable={totalAvailable}
+        matchedCount={matchedCount}
         query={search.query}
-        selectedAccess={selectedAccess}
-        onAccessChange={changeAccess}
         onSearch={submitSearch}
       />
 
@@ -210,19 +165,11 @@ export function AeMarketPage({
               className="text-2xl font-semibold tracking-tight"
             >
               {search.query === undefined
-                ? selectedAccess === "agentic_economy"
-                  ? "Agentic Economy Operations"
-                  : selectedAccess === "x402"
-                    ? "Pay-per-call APIs"
-                    : selectedAccess === "provider_account"
-                      ? "APIs you can connect"
-                      : "API registry"
+                ? "Available tools"
                 : `Results for “${search.query}”`}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {showAgenticEconomy
-                ? "Compare tools admitted to run through Agentic Economy."
-                : "Browse public APIs by how they’re paid for or connected."}
+              Compare tools admitted to run through Agentic Economy.
             </p>
           </div>
           <p
@@ -231,43 +178,28 @@ export function AeMarketPage({
             aria-atomic="true"
             className="mt-2 text-sm font-medium sm:mt-0"
           >
-            {showRegistry
-              ? registry.kind === "unavailable"
-                ? "Registry unavailable"
-                : registry.page.length === 0
-                  ? "No APIs match this search"
-                  : `Showing ${registry.page.length.toLocaleString()} of ${registry.coverage.entries.toLocaleString()} APIs`
+            {catalog.kind === "unavailable"
+              ? "Catalogue unavailable"
               : `${visibleOperations.length.toLocaleString()} Operations shown`}
           </p>
         </div>
 
-        {showOperationFilters ? (
-          <OperationControls
-            availability={search.availability}
-            categoryId={categoryId}
-            hasFilters={hasFilters}
-            matchedCount={matchedCount}
-            order={order}
-            window={window}
-            onAvailabilityChange={changeAvailability}
-            onCategoryChange={setCategoryId}
-            onClear={clearFilters}
-            onOrderChange={setOrder}
-            onWindowChange={changeWindow}
-          />
-        ) : null}
+        <OperationControls
+          availability={search.availability}
+          categoryId={categoryId}
+          hasFilters={hasFilters}
+          matchedCount={matchedCount}
+          order={order}
+          window={window}
+          onAvailabilityChange={changeAvailability}
+          onCategoryChange={setCategoryId}
+          onClear={clearFilters}
+          onOrderChange={setOrder}
+          onWindowChange={changeWindow}
+        />
 
         <div className="mt-3 min-w-0">
-          {showRegistry ? (
-            <RegistryResults
-              registry={registry}
-              window={window}
-              query={search.query}
-              selectedAccess={selectedAccess}
-            />
-          ) : null}
-
-          {showAgenticEconomy && capabilityGroups.length === 0 ? (
+          {capabilityGroups.length === 0 ? (
             <Card className="mt-5 shadow-none">
               <AeEmptyState
                 icon={<SearchIcon />}
@@ -294,7 +226,7 @@ export function AeMarketPage({
                 }
               />
             </Card>
-          ) : showAgenticEconomy ? (
+          ) : (
             <div className="mt-5 grid gap-4">
               {capabilityGroups.map((group, index) => {
                 const headingId = `capability-${index}`;
@@ -316,8 +248,9 @@ export function AeMarketPage({
                       <p className="text-xs text-muted-foreground">
                         {group.providerCount.toLocaleString()}{" "}
                         {group.providerCount === 1 ? "provider" : "providers"} ·{" "}
-                        {group.operations.length.toLocaleString()}{" "}
-                        {group.operations.length === 1 ? "listing" : "listings"}
+                        {group.providerCount > 1
+                          ? "compare available suppliers"
+                          : "no direct supplier alternative yet"}
                       </p>
                     </header>
                     <ItemGroup>
@@ -332,10 +265,9 @@ export function AeMarketPage({
                 );
               })}
             </div>
-          ) : null}
+          )}
 
-          {showAgenticEconomy &&
-          catalog.kind === "ok" &&
+          {catalog.kind === "ok" &&
           catalog.pagination.hasMore &&
           catalog.pagination.nextCursor !== undefined ? (
             <Pagination className="mt-6" aria-label="Operation pages">
@@ -352,7 +284,6 @@ export function AeMarketPage({
                         ...(search.availability === undefined
                           ? {}
                           : { availability: search.availability }),
-                        access: selectedAccess,
                         cursor: catalog.pagination.nextCursor,
                       }}
                     >
@@ -366,68 +297,7 @@ export function AeMarketPage({
         </div>
       </section>
 
-      <MarketActivity catalog={catalog} registry={registry} />
       <MarketParticipation />
-    </div>
-  );
-}
-
-function MarketActivity({
-  catalog,
-  registry,
-}: Readonly<{
-  catalog: MarketRouteProjection["catalog"];
-  registry: MarketRouteProjection["registry"];
-}>) {
-  return (
-    <section
-      id="activity"
-      aria-labelledby="market-activity-heading"
-      className="scroll-mt-24 border-t bg-card/40"
-    >
-      <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-6 md:px-6">
-        <div className="grid gap-1">
-          <h2 id="market-activity-heading" className="text-xl font-semibold">
-            Activity
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Current registry coverage and callable supply.
-          </p>
-        </div>
-        <dl className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-3">
-          <ActivityFact
-            label="Indexed APIs"
-            value={registry.kind === "ok" ? registry.coverage.entries.toLocaleString() : "Unavailable"}
-          />
-          <ActivityFact
-            label="Entries shown"
-            value={
-              registry.kind === "ok"
-                ? registry.page.length.toLocaleString()
-                : catalog.kind === "unavailable"
-                  ? "Unavailable"
-                  : catalog.matchedCount.toLocaleString()
-            }
-          />
-          <ActivityFact
-            label="Registry updated"
-            value={
-              registry.kind === "ok"
-                ? registryDateFormatter.format(registry.coverage.completedAt)
-                : "Unavailable"
-            }
-          />
-        </dl>
-      </div>
-    </section>
-  );
-}
-
-function ActivityFact({ label, value }: Readonly<{ label: string; value: string }>) {
-  return (
-    <div className="grid gap-1 border-b px-4 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-mono text-sm font-medium tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -551,19 +421,13 @@ function OperationControls({
 
 function MarketHero({
   catalogAvailable,
-  registryAvailable,
-  totalAvailable,
+  matchedCount,
   query,
-  selectedAccess,
-  onAccessChange,
   onSearch,
 }: {
   catalogAvailable: boolean;
-  registryAvailable: boolean;
-  totalAvailable: number;
+  matchedCount: number;
   query: string | undefined;
-  selectedAccess: NonNullable<MarketPageSearch["access"]>;
-  onAccessChange: (value: string) => void;
   onSearch: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -583,9 +447,9 @@ function MarketHero({
             </p>
           </div>
           <p className="font-mono text-xs tabular-nums text-muted-foreground">
-            {!registryAvailable && !catalogAvailable
+            {!catalogAvailable
               ? "Catalogue unavailable"
-              : `${totalAvailable.toLocaleString()} indexed entries`}
+              : `${matchedCount.toLocaleString()} matching Operations`}
           </p>
         </div>
 
@@ -614,37 +478,6 @@ function MarketHero({
           </InputGroup>
         </form>
 
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          value={selectedAccess}
-          onValueChange={(value) => {
-            if (value !== "") onAccessChange(value);
-          }}
-          aria-label="API access"
-          spacing={1}
-          className="grid w-full grid-cols-2 bg-card sm:flex sm:w-fit"
-        >
-          <ToggleGroupItem value="all" className="min-h-11 w-full sm:w-auto">
-            All APIs
-          </ToggleGroupItem>
-          <ToggleGroupItem value="x402" className="min-h-11 w-full sm:w-auto">
-            Pay per call
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="provider_account"
-            className="min-h-11 w-full sm:w-auto"
-          >
-            Connect account
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="agentic_economy"
-            className="min-h-11 w-full sm:w-auto"
-          >
-            Agentic Economy
-          </ToggleGroupItem>
-        </ToggleGroup>
-
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>Browse without an account</span>
           <span aria-hidden="true">·</span>
@@ -662,88 +495,6 @@ function MarketHero({
         </div>
       </div>
     </section>
-  );
-}
-
-function RegistryResults({
-  registry,
-  window,
-  query,
-  selectedAccess,
-}: {
-  registry: MarketRouteProjection["registry"];
-  window: MarketWindow;
-  query: string | undefined;
-  selectedAccess: NonNullable<MarketPageSearch["access"]>;
-}) {
-  const router = useRouter();
-  if (registry.kind !== "ok" || registry.page.length === 0) {
-    return (
-      <Card className="mt-5 shadow-none">
-        <AeEmptyState
-          icon={<SearchIcon />}
-          title={
-            registry.kind === "unavailable"
-              ? "The public API registry is temporarily unavailable"
-              : "No public APIs match this search"
-          }
-          description={
-            registry.kind === "unavailable"
-              ? "The last complete registry could not be loaded. Try again shortly."
-              : "Try a broader capability, provider, or category."
-          }
-          action={
-            registry.kind === "unavailable" ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => void router.invalidate()}
-              >
-                Try again
-              </Button>
-            ) : undefined
-          }
-        />
-      </Card>
-    );
-  }
-
-  return (
-    <>
-      <div className="mt-5 overflow-hidden rounded-lg border bg-card">
-        <p className="border-b bg-muted/25 px-4 py-2 text-xs text-muted-foreground sm:px-5">
-          Registry snapshot ·{" "}
-          {registryDateFormatter.format(registry.coverage.completedAt)}
-        </p>
-        <ItemGroup>
-          {registry.page.map((entry) => (
-            <AeRegistryEntry key={entry.documentId} entry={entry} />
-          ))}
-        </ItemGroup>
-      </div>
-      {!registry.isDone ? (
-        <Pagination className="mt-6" aria-label="Registry pages">
-          <PaginationContent>
-            <PaginationItem>
-              <Button asChild variant="outline" className="min-h-11">
-                <Link
-                  to="/market"
-                  search={{
-                    window,
-                    ...(query === undefined ? {} : { query }),
-                    access: selectedAccess,
-                    registryCursor: registry.continueCursor,
-                  }}
-                >
-                  Next 24 APIs
-                </Link>
-              </Button>
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      ) : null}
-    </>
   );
 }
 

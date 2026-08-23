@@ -29,7 +29,6 @@ import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
 import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as SShareTokenRouteImport } from './routes/s.$shareToken'
-import { Route as RegistryDocumentIdRouteImport } from './routes/registry.$documentId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OperationsOperationRefRouteImport } from './routes/operations.$operationRef'
 import { Route as OauthTokenRouteImport } from './routes/oauth.token'
@@ -50,7 +49,6 @@ import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as OperationsInvocationsInvocationRefRouteImport } from './routes/operations.invocations.$invocationRef'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
-import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
@@ -187,11 +185,6 @@ const SShareTokenRoute = SShareTokenRouteImport.update({
   path: '/s/$shareToken',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RegistryDocumentIdRoute = RegistryDocumentIdRouteImport.update({
-  id: '/registry/$documentId',
-  path: '/registry/$documentId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
   id: '/remove-business',
   path: '/remove-business',
@@ -295,11 +288,6 @@ const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
 const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
   id: '/api/v1/release',
   path: '/api/v1/release',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1RegistryRoute = ApiV1RegistryRouteImport.update({
-  id: '/api/v1/registry',
-  path: '/api/v1/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
@@ -532,7 +520,6 @@ export interface FileRoutesByFullPath {
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/registry/$documentId': typeof RegistryDocumentIdRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -557,7 +544,6 @@ export interface FileRoutesByFullPath {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
-  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -611,7 +597,6 @@ export interface FileRoutesByTo {
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/registry/$documentId': typeof RegistryDocumentIdRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -636,7 +621,6 @@ export interface FileRoutesByTo {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
-  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -692,7 +676,6 @@ export interface FileRoutesById {
   '/oauth/token': typeof OauthTokenRoute
   '/operations/$operationRef': typeof OperationsOperationRefRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/registry/$documentId': typeof RegistryDocumentIdRoute
   '/s/$shareToken': typeof SShareTokenRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
@@ -717,7 +700,6 @@ export interface FileRoutesById {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
-  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -773,7 +755,6 @@ export interface FileRouteTypes {
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
-    | '/registry/$documentId'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -798,7 +779,6 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
-    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -852,7 +832,6 @@ export interface FileRouteTypes {
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
-    | '/registry/$documentId'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -877,7 +856,6 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
-    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -932,7 +910,6 @@ export interface FileRouteTypes {
     | '/oauth/token'
     | '/operations/$operationRef'
     | '/privacy/remove-business'
-    | '/registry/$documentId'
     | '/s/$shareToken'
     | '/sign-in/$'
     | '/sign-up/$'
@@ -957,7 +934,6 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
-    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -1008,7 +984,6 @@ export interface RootRouteChildren {
   OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthTokenRoute: typeof OauthTokenRoute
-  RegistryDocumentIdRoute: typeof RegistryDocumentIdRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -1022,7 +997,6 @@ export interface RootRouteChildren {
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
-  ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
   ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
@@ -1175,13 +1149,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/registry/$documentId': {
-      id: '/registry/$documentId'
-      path: '/registry/$documentId'
-      fullPath: '/registry/$documentId'
-      preLoaderRoute: typeof RegistryDocumentIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/privacy/remove-business': {
       id: '/privacy/remove-business'
       path: '/remove-business'
@@ -1320,13 +1287,6 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/release'
       fullPath: '/api/v1/release'
       preLoaderRoute: typeof ApiV1ReleaseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/registry': {
-      id: '/api/v1/registry'
-      path: '/api/v1/registry'
-      fullPath: '/api/v1/registry'
-      preLoaderRoute: typeof ApiV1RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/market-metrics': {
@@ -1814,7 +1774,6 @@ const rootRouteChildren: RootRouteChildren = {
   OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
   OauthRegisterRoute: OauthRegisterRoute,
   OauthTokenRoute: OauthTokenRoute,
-  RegistryDocumentIdRoute: RegistryDocumentIdRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
@@ -1828,7 +1787,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
-  ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
   ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,

@@ -1,4 +1,4 @@
-export const registryOrigins = ["agentic_market", "treg"] as const;
+export const registryOrigins = ["agentic_market"] as const;
 export type RegistryOrigin = (typeof registryOrigins)[number];
 
 export type RegistryExactPrice = Readonly<{
@@ -6,6 +6,13 @@ export type RegistryExactPrice = Readonly<{
   amount: string;
   currency: string;
   network: string;
+}>;
+
+export type RegistryProbeRequest = Readonly<{
+  method: "GET" | "POST";
+  url: string;
+  headers: readonly Readonly<{ name: string; value: string }>[];
+  bodyJson?: string;
 }>;
 
 export type RegistrySourceEntry = Readonly<{
@@ -35,6 +42,7 @@ export type RegistrySourceEntry = Readonly<{
   lastVerifiedAt?: string;
   inputSchemaJson: string;
   exampleInvocation: string;
+  probeRequest: RegistryProbeRequest;
   sourceCalls30d?: string;
   sourcePayers30d?: string;
   sourceMedianLatencyMs?: number;

@@ -61,14 +61,14 @@ describe('catalogue-first home', () => {
     routeState.navigate.mockClear()
   })
 
-  it('renders a direct market search before a query and performs no network work', () => {
+  it('renders a direct job prompt before a query and performs no network work', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     renderHomeRoute()
 
-    expect(screen.getByRole('searchbox', { name: 'Search capabilities' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Search capabilities' })).toBeTruthy()
+    expect(screen.getByRole('searchbox', { name: 'Describe what you need' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask Agentic Economy' })).toBeTruthy()
     expect(screen.queryByText('Expand the network for this ask')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -102,17 +102,17 @@ describe('catalogue-first home', () => {
   it.each(['', '   '])('keeps an empty search on home and announces the required message', (query) => {
     renderHomeRoute()
 
-    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' })
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' })
     fireEvent.change(searchbox, { target: { value: query } })
     fireEvent.submit(screen.getByRole('search'))
 
     expect(routeState.navigate).not.toHaveBeenCalled()
-    const message = screen.getByText('Enter an API, capability, or provider.')
+    const message = screen.getByText('Describe the outcome you need.')
     expect(message.getAttribute('aria-live')).toBe('polite')
     expect(searchbox.getAttribute('aria-invalid')).toBe('true')
 
     fireEvent.change(searchbox, { target: { value: 'Find a local electrician' } })
-    expect(screen.queryByText('Enter an API, capability, or provider.')).toBeNull()
+    expect(screen.queryByText('Describe the outcome you need.')).toBeNull()
     expect(searchbox.getAttribute('aria-invalid')).toBeNull()
   })
 
@@ -128,7 +128,7 @@ describe('catalogue-first home', () => {
 
     renderHomeRoute('Find a printer for 200 cards by Friday')
 
-    const composer = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
+    const composer = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(composer.value).toBe('Find a printer for 200 cards by Friday')
     fireEvent.change(composer, { target: { value: 'Find a local printer for Monday' } })
     expect(composer.value).toBe('Find a local printer for Monday')
@@ -136,7 +136,7 @@ describe('catalogue-first home', () => {
   })
 
 
-  it('keeps the first step focused on market search without extra setup fields', () => {
+  it('keeps the first step focused on the job without extra setup fields', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     renderHomeRoute('Replace a leaking kitchen tap')
@@ -145,14 +145,14 @@ describe('catalogue-first home', () => {
     if (form === null) throw new Error('The market search must be a form.')
     expect(form).toBeTruthy()
     expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Search capabilities' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask Agentic Economy' })).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('keeps a submitted query in the ask box without speculative result copy', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(searchbox.value).toBe('Moon dentist in Adelaide')
     expect(screen.queryByRole('heading', { name: 'Expand the network for this ask' })).toBeNull()
     expect(document.body.textContent?.match(/available now|guaranteed availability/gi)).toBeNull()
@@ -164,7 +164,7 @@ describe('catalogue-first home', () => {
     renderHomeRoute()
 
     const query = 'q'.repeat(length)
-    const searchbox = screen.getByRole('searchbox', { name: 'Search capabilities' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(searchbox.maxLength).toBe(-1)
     fireEvent.change(searchbox, { target: { value: query } })
     expect(searchbox.value).toBe(query)
@@ -176,7 +176,7 @@ describe('catalogue-first home', () => {
     if (length > QUERY_MAX_LENGTH) {
       expect(routeState.navigate).not.toHaveBeenCalled()
     } else {
-      expect(routeState.navigate).toHaveBeenCalledWith({ to: '/market', search: { window: '30d', query } })
+      expect(routeState.navigate).toHaveBeenCalledWith({ to: '/t/new', search: { q: query } })
     }
     expect(fetchMock).not.toHaveBeenCalled()
   })

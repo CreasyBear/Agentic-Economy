@@ -81,7 +81,7 @@ function anonymousReads(canonicalBaseUrl: string) {
 
 function authenticatedCalls(canonicalBaseUrl: string) { return [
   {
-    command: `npx ae connect --base-url "${canonicalBaseUrl}" --mcp`,
+    command: `npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`,
     route: `POST ${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization} · POST ${AGENT_ACCESS_OAUTH_PATHS.token}`,
     description: 'Obtain one owner-approved AE caller key through the OAuth device flow or validate the configured key against the gateway.',
   },
@@ -123,26 +123,26 @@ function ForAgentsRoute() {
         <section aria-labelledby="agent-instruction" className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)] sm:items-center sm:p-5">
           <div className="grid gap-1">
             <h2 id="agent-instruction" className="font-semibold">Give this to your agent</h2>
-            <p className="text-sm leading-6 text-muted-foreground">It can connect, find the capability, inspect the exact terms, and make the call through the same public workflow.</p>
+            <p className="text-sm leading-6 text-muted-foreground">It can preserve your task, find viable capabilities, inspect the exact terms, and call a free keyless read before asking you to connect.</p>
           </div>
           <AeCopyCommand
             compact
             label="agent setup instruction"
-            code="Connect to Agentic Economy, find the best capability for my task, show me its total price and inputs, then use it."
-            copyText="Read $ORIGIN/llms.txt. Connect to Agentic Economy, find the best capability for my task, show me its total price and inputs, then use it."
+            code="Find viable capabilities for my task, compare the real differences, show me total price and inputs, then use the one I approve."
+            copyText="Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, compare the real differences, show me total price and inputs, then use the one I approve. Connect only if that capability requires it."
           />
         </section>
 
         <section aria-labelledby="agent-quickstart" className="grid overflow-hidden rounded-lg border bg-card md:grid-cols-4">
           <h2 id="agent-quickstart" className="sr-only">Four-step agent quickstart</h2>
-          <AeAgentQuickstartStep number="01" title="Connect" access="Once" command={`npx ae connect --base-url "${canonicalBaseUrl}" --mcp`} body="Browser approval stores and verifies one bounded key." />
-          <AeAgentQuickstartStep number="02" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find current capabilities by the outcome you need." />
-          <AeAgentQuickstartStep number="03" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
-          <AeAgentQuickstartStep number="04" title="Call" access="Connected" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Get one durable execution receipt." />
+          <AeAgentQuickstartStep number="01" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find current capabilities by the outcome you need." />
+          <AeAgentQuickstartStep number="02" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
+          <AeAgentQuickstartStep number="03" title="Call" access="Public when eligible" command={`${CLI_ENTRYPOINT} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${canonicalBaseUrl}" --wait`} body="Free keyless reads return literal output and an evidence hash." />
+          <AeAgentQuickstartStep number="04" title="Connect if asked" access="Once" command={`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`} body="Required only for capabilities that cannot run anonymously." />
         </section>
 
         <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <div><p className="font-semibold">The catalogue is public.</p><p className="text-sm leading-6 text-muted-foreground">Search and inspect without an account. Connect only to call; provider credentials stay behind AE.</p></div>
+          <div><p className="font-semibold">Try the public path first.</p><p className="text-sm leading-6 text-muted-foreground">Search, inspect, and call eligible free keyless reads without an account. Connect only when the selected capability requires it; provider credentials stay behind AE.</p></div>
           <Button asChild variant="outline"><Link to="/.well-known/ucp">Open machine manifest</Link></Button>
         </div>
 
@@ -158,7 +158,7 @@ function ForAgentsRoute() {
             <AeAgentReferenceList title="Authenticated calls" items={authenticatedCalls(canonicalBaseUrl)} />
             <section aria-labelledby="mcp-lifecycle" className="grid gap-2 border-t pt-5">
               <h2 id="mcp-lifecycle" className="font-semibold">MCP connection</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">Connect a Streamable HTTP client to <code>{canonicalBaseUrl}/mcp</code> using protocol <code>{MCP_LATEST_PROTOCOL_VERSION}</code>. Initialize the session before <code>tools/list</code> or <code>tools/call</code>, then close the transport when finished.</p>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">Use the official MCP SDK with <code>{canonicalBaseUrl}/mcp</code> and protocol <code>{MCP_LATEST_PROTOCOL_VERSION}</code>. Client connect performs initialization; this server is stateless and may omit <code>Mcp-Session-Id</code>. List tools before calling one, then close the client transport. A malformed JSON-RPC request returns a top-level protocol error; valid <code>tools/call</code> requests with invalid tool arguments return a tool result with <code>isError</code>.</p>
             </section>
           </div>
         </details>

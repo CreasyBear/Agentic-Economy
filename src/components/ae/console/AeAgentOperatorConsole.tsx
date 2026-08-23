@@ -12,7 +12,7 @@ import {
 
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
-import type { CreditActivityView } from '@/modules/money/public'
+import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
 
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
@@ -284,11 +284,12 @@ function consequenceLabel(consequence: PendingOperationApproval['authorityReques
   return 'Creates an external effect'
 }
 
-function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback; entry: CreditActivityView }>) {
+function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback; entry: AgentActivityView }>) {
   return (
     <li className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="grid gap-1">
-        <p className="font-semibold text-foreground">{activityLabel(entry)}</p>
+        <p className="font-semibold text-foreground">{entry.operation?.label ?? activityLabel(entry)}</p>
+        {entry.operation === undefined ? null : <p className="text-sm text-muted-foreground">{entry.operation.supplier} · {activityLabel(entry)}</p>}
         <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
         <Link
           to="/operations/invocations/$invocationRef"
@@ -377,7 +378,7 @@ function RecoveryItem({ title, children }: Readonly<{ title: string; children: s
   )
 }
 
-function activityLabel(entry: CreditActivityView): string {
+function activityLabel(entry: AgentActivityView): string {
   if (entry.chargeState === 'free_tier') return 'Free call'
   if (entry.chargeState === 'paid') return 'Paid call'
   if (entry.chargeState === 'refunded') return 'Refunded call'

@@ -11,10 +11,14 @@ import {
   readCapabilityOperationInspectPlan,
   readCapabilityOperationSearch,
 } from '@/modules/capability-supply/operation-source'
+import {
+  projectOperationCompareChoices,
+  projectOperationSearchChoices,
+} from './operation-choice-contracts'
 
 export const registryOperationsSearchAction = defineAction({
   ...registryOperationsSearchContract,
-  run: async ({ data }) => readCapabilityOperationSearch(data),
+  run: async ({ data }) => projectOperationSearchChoices(await readCapabilityOperationSearch(data)),
 })
 
 export const registryOperationsDetailAction = defineAction({
@@ -24,7 +28,7 @@ export const registryOperationsDetailAction = defineAction({
 
 export const registryOperationsCompareAction = defineAction({
   ...registryOperationsCompareContract,
-  run: async ({ data }) => readCapabilityOperationCompare(data),
+  run: async ({ data }) => projectOperationCompareChoices(await readCapabilityOperationCompare(data)),
 })
 
 export const registryOperationsInspectPlanAction = defineAction({

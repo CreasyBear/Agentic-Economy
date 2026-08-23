@@ -2,6 +2,13 @@ import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-a
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
 
+export type AgentActivityView = CreditActivityView & Readonly<{
+  operation?: Readonly<{
+    label: string
+    supplier: string
+  }>
+}>
+
 /**
  * Presentation-ready readback for one agent credential.
  *
@@ -13,7 +20,7 @@ export type AgentOperatorKeyReadback = Readonly<{
   grant?: AgentAccessOwnerGrantReadback
   principalId: string
   account?: CreditAccountView
-  activity: readonly CreditActivityView[]
+  activity: readonly AgentActivityView[]
   usage?: KeyUsageView
   dataState: 'source' | 'empty' | 'unavailable'
 }>

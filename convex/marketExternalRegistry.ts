@@ -4,12 +4,12 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
-  query,
+  internalQuery,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 
-const sourceValue = v.union(v.literal("agentic_market"), v.literal("treg"));
+const sourceValue = v.literal("agentic_market");
 const accessValue = v.union(
   v.literal("x402"),
   v.literal("provider_account"),
@@ -20,6 +20,12 @@ const exactPriceValue = v.object({
   amount: v.string(),
   currency: v.string(),
   network: v.string(),
+});
+const probeRequestValue = v.object({
+  method: v.union(v.literal("GET"), v.literal("POST")),
+  url: v.string(),
+  headers: v.array(v.object({ name: v.string(), value: v.string() })),
+  bodyJson: v.optional(v.string()),
 });
 const entryInputValue = v.object({
   documentId: v.string(),
@@ -48,6 +54,7 @@ const entryInputValue = v.object({
   lastVerifiedAt: v.optional(v.string()),
   inputSchemaJson: v.string(),
   exampleInvocation: v.string(),
+  probeRequest: probeRequestValue,
   quality: v.literal("callable"),
   sourceCheckedAt: v.optional(v.string()),
   sourceCalls30d: v.optional(v.string()),
@@ -110,6 +117,28 @@ const entryResultValue = v.union(
   v.object({ kind: v.literal("found"), entry: publicEntryValue }),
   v.object({ kind: v.literal("not_found") }),
   v.object({ kind: v.literal("unavailable") }),
+);
+const admissionCandidateResultValue = v.union(
+  v.object({ kind: v.literal("found"), candidate: v.object({
+    documentId: v.string(),
+    sourceDigest: v.string(),
+    probeRequest: probeRequestValue,
+  }) }),
+  v.object({ kind: v.literal("not_found") }),
+  v.object({ kind: v.literal("source_changed") }),
+  v.object({ kind: v.literal("unavailable") }),
+);
+const admissionCandidatesResultValue = v.union(
+  v.object({ kind: v.literal("stale_generation") }),
+  v.object({
+    kind: v.literal("page"),
+    candidates: v.array(v.object({
+      documentId: v.string(),
+      sourceDigest: v.string(),
+    })),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
 );
 
 const MAX_BATCH_ENTRIES = 50;
@@ -211,8 +240,6 @@ export const finalize = internalMutation({
     expectedEntries: v.number(),
     agenticMarketReported: v.number(),
     agenticMarketFetched: v.number(),
-    tregReported: v.number(),
-    tregFetched: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -235,8 +262,6 @@ export const finalize = internalMutation({
       completedAt: args.completedAt,
       agenticMarketReported: args.agenticMarketReported,
       agenticMarketFetched: args.agenticMarketFetched,
-      tregReported: args.tregReported,
-      tregFetched: args.tregFetched,
     });
     const state = await registryState(ctx);
     if (state !== null && state.lastAttemptAt > generation.startedAt) {
@@ -335,7 +360,7 @@ export const deleteGenerationBatch = internalMutation({
   },
 });
 
-export const search = query({
+export const search = internalQuery({
   args: {
     query: v.string(),
     access: v.union(accessValue, v.literal("all")),
@@ -413,7 +438,7 @@ export const search = query({
   },
 });
 
-export const entry = query({
+export const entry = internalQuery({
   args: { documentId: v.string() },
   returns: entryResultValue,
   handler: async (ctx, args) => {
@@ -447,6 +472,72 @@ export const entry = query({
     return projected === undefined
       ? { kind: "not_found" as const }
       : { kind: "found" as const, entry: projected };
+  },
+});
+
+export const admissionCandidate = internalQuery({
+  args: { documentId: v.string(), expectedSourceDigest: v.string() },
+  returns: admissionCandidateResultValue,
+  handler: async (ctx, args) => {
+    if (
+      !/^registry:[0-9a-f]{64}$/u.test(args.documentId) ||
+      !/^sha256:[0-9a-f]{64}$/u.test(args.expectedSourceDigest)
+    ) {
+      return { kind: "not_found" as const };
+    }
+    const state = await registryState(ctx);
+    if (state?.activeGeneration === undefined) return { kind: "unavailable" as const };
+    const activeGeneration = state.activeGeneration;
+    const row = await ctx.db
+      .query("marketExternalRegistryEntries")
+      .withIndex("by_generation_and_documentId", (index) =>
+        index.eq("generation", activeGeneration).eq("documentId", args.documentId),
+      )
+      .unique();
+    if (row === null || row.probeRequest === undefined) return { kind: "not_found" as const };
+    if (row.sourceDigest !== args.expectedSourceDigest) return { kind: "source_changed" as const };
+    return {
+      kind: "found" as const,
+      candidate: {
+        documentId: row.documentId,
+        sourceDigest: row.sourceDigest,
+        probeRequest: row.probeRequest,
+      },
+    };
+  },
+});
+
+export const admissionCandidates = internalQuery({
+  args: {
+    generation: v.string(),
+    cursor: v.union(v.string(), v.null()),
+    limit: v.number(),
+  },
+  returns: admissionCandidatesResultValue,
+  handler: async (ctx, args) => {
+    if (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 12) {
+      throw new Error("external_registry_admission_page_invalid");
+    }
+    const state = await registryState(ctx);
+    if (state?.activeGeneration !== args.generation) {
+      return { kind: "stale_generation" as const };
+    }
+    const page = await ctx.db
+      .query("marketExternalRegistryEntries")
+      .withIndex("by_generation_and_documentId", (index) =>
+        index.eq("generation", args.generation),
+      )
+      .paginate({ cursor: args.cursor, numItems: args.limit });
+    return {
+      kind: "page" as const,
+      candidates: page.page.flatMap((row) =>
+        row.probeRequest === undefined
+          ? []
+          : [{ documentId: row.documentId, sourceDigest: row.sourceDigest }],
+      ),
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    };
   },
 });
 
@@ -531,6 +622,12 @@ function validEntry(entry: {
   lastObservedAt: string;
   inputSchemaJson: string;
   exampleInvocation: string;
+  probeRequest: {
+    method: "GET" | "POST";
+    url: string;
+    headers: { name: string; value: string }[];
+    bodyJson?: string;
+  };
   quality: "callable";
   tags: string[];
   networks: string[];
@@ -542,7 +639,7 @@ function validEntry(entry: {
     /^sha256:[0-9a-f]{64}$/u.test(entry.sourceDigest) &&
     validHttpUrl(entry.endpointUrl) &&
     entry.routeIdentity === `${entry.method} ${entry.endpointUrl}` &&
-    /^(?:GET|POST|PUT|PATCH|DELETE|HEAD)$/u.test(entry.method ?? "") &&
+    /^(?:GET|POST)$/u.test(entry.method ?? "") &&
     entry.exactPrice.scheme === "exact" &&
     /^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(entry.exactPrice.amount) &&
     /[1-9]/u.test(entry.exactPrice.amount) &&
@@ -555,12 +652,30 @@ function validEntry(entry: {
     validJsonSchemaDocument(entry.inputSchemaJson) &&
     entry.exampleInvocation.length > 0 &&
     entry.exampleInvocation.length <= 16_000 &&
+    entry.probeRequest.method === entry.method &&
+    entry.probeRequest.url === entry.endpointUrl &&
+    entry.probeRequest.headers.length <= 32 &&
+    entry.probeRequest.headers.every(({ name, value }) =>
+      /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,100}$/u.test(name) && value.length <= 2_000
+    ) &&
+    (entry.probeRequest.bodyJson === undefined || (
+      entry.probeRequest.bodyJson.length <= 16_000 && validJsonObject(entry.probeRequest.bodyJson)
+    )) &&
     entry.quality === "callable" &&
     entry.tags.length <= 50 &&
     entry.networks.length <= 40 &&
     entry.searchText.length <= 8_000 &&
     encoder.encode(serialized).byteLength <= MAX_ENTRY_BYTES
   );
+}
+
+function validJsonObject(value: string): boolean {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
 }
 
 function validHttpUrl(value: string | undefined): boolean {
@@ -593,15 +708,11 @@ function validCoverage(args: {
   expectedEntries: number;
   agenticMarketReported: number;
   agenticMarketFetched: number;
-  tregReported: number;
-  tregFetched: number;
 }): boolean {
   return [
     args.expectedEntries,
     args.agenticMarketReported,
     args.agenticMarketFetched,
-    args.tregReported,
-    args.tregFetched,
   ].every(
     (value) => Number.isSafeInteger(value) && value >= 0,
   );

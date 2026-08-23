@@ -59,6 +59,7 @@ export type InspectPlanResult =
         | "mapping_unavailable"
         | "mapping_incompatible"
         | "mapping_cycle";
+      operationRef?: string;
       navigation: readonly PublicOperationNavigationRelation[];
     }>;
 
@@ -96,13 +97,18 @@ export async function inspectCapabilityOperationPlan(
   const presentRecords = records.filter(
     (record): record is CapabilityOperationSourceRecord => record !== null,
   );
-  if (presentRecords.length !== records.length)
+  if (presentRecords.length !== records.length) {
+    const missingIndex = records.findIndex((record) => record === null);
+    const missingOperationRef = refs[missingIndex];
+    if (missingOperationRef === undefined) throw new Error("operation_plan_missing_ref_invariant");
     return {
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_not_found",
+      operationRef: missingOperationRef,
       navigation: noOperationNavigation(),
     };
+  }
   const operations = presentRecords.map((record) =>
     projectCapabilityOperation(record, now),
   );
@@ -111,15 +117,15 @@ export async function inspectCapabilityOperationPlan(
   // 'integrated' (reason 'setup_required') but are NOT routeable; they must be
   // refused here rather than presented as a buildable plan (the commit/plan gate
   // already requires listRouteable, so this closes the registry preview surface too).
-  if (
-    operations.some(
-      (operation) => operation.availability.posture !== "routeable",
-    )
-  )
+  const unavailableOperation = operations.find(
+    (operation) => operation.availability.posture !== "routeable",
+  );
+  if (unavailableOperation !== undefined)
     return {
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_unavailable",
+      operationRef: unavailableOperation.operationRef,
       navigation: noOperationNavigation(),
     };
   const mappings: RegisteredOperationMapping[] = [];

@@ -2,7 +2,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -14,7 +14,7 @@ describe("Agentic Economy registry generations", () => {
       generation: "generation-1",
       startedAt: 1,
     });
-    const entries = [entry("agentic_market", "alpha"), entry("treg", "beta")];
+    const entries = [entry("alpha"), entry("beta")];
     const firstEntry = entries[0];
     if (firstEntry === undefined) throw new Error("expected first registry entry");
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
@@ -27,7 +27,7 @@ describe("Agentic Economy registry generations", () => {
     });
 
     expect(
-      await backend.query(api.marketExternalRegistry.search, {
+      await backend.query(internal.marketExternalRegistry.search, {
         query: "",
         access: "all",
         limit: 12,
@@ -41,11 +41,9 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 2,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
-      tregReported: 1,
-      tregFetched: 1,
     });
 
-    const result = await backend.query(api.marketExternalRegistry.search, {
+    const result = await backend.query(internal.marketExternalRegistry.search, {
       query: "search",
       access: "all",
       limit: 12,
@@ -65,7 +63,7 @@ describe("Agentic Economy registry generations", () => {
     expect(result.page[0]).not.toHaveProperty("source");
     expect(result.page[0]).not.toHaveProperty("upstreamServiceId");
 
-    const detail = await backend.query(api.marketExternalRegistry.entry, {
+    const detail = await backend.query(internal.marketExternalRegistry.entry, {
       documentId: firstEntry.documentId,
     });
     expect(detail).toMatchObject({
@@ -78,6 +76,40 @@ describe("Agentic Economy registry generations", () => {
     if (detail.kind !== "found") throw new Error("expected registry entry");
     expect(detail.entry).not.toHaveProperty("source");
     expect(detail.entry).not.toHaveProperty("upstreamEndpointId");
+
+    await expect(
+      backend.query(internal.marketExternalRegistry.admissionCandidate, {
+        documentId: firstEntry.documentId,
+        expectedSourceDigest: firstEntry.sourceDigest,
+      }),
+    ).resolves.toMatchObject({
+      kind: "found",
+      candidate: {
+        documentId: firstEntry.documentId,
+        sourceDigest: firstEntry.sourceDigest,
+        probeRequest: firstEntry.probeRequest,
+      },
+    });
+    await expect(
+      backend.query(internal.marketExternalRegistry.admissionCandidate, {
+        documentId: firstEntry.documentId,
+        expectedSourceDigest: `sha256:${"f".repeat(64)}`,
+      }),
+    ).resolves.toEqual({ kind: "source_changed" });
+    await expect(
+      backend.query(internal.marketExternalRegistry.admissionCandidates, {
+        generation: "generation-1",
+        cursor: null,
+        limit: 12,
+      }),
+    ).resolves.toMatchObject({
+      kind: "page",
+      candidates: [
+        { documentId: entries[0]?.documentId },
+        { documentId: entries[1]?.documentId },
+      ],
+      isDone: true,
+    });
   });
 
   it("preserves the last-known-good generation when a refresh is incomplete", async () => {
@@ -88,7 +120,7 @@ describe("Agentic Economy registry generations", () => {
     });
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
       generation: "good",
-      entries: [entry("agentic_market", "alpha")],
+      entries: [entry("alpha")],
     });
     await backend.mutation(internal.marketExternalRegistry.finalize, {
       generation: "good",
@@ -96,8 +128,6 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 1,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
-      tregReported: 0,
-      tregFetched: 0,
     });
     await backend.mutation(internal.marketExternalRegistry.begin, {
       generation: "partial",
@@ -106,10 +136,10 @@ describe("Agentic Economy registry generations", () => {
     await backend.mutation(internal.marketExternalRegistry.fail, {
       generation: "partial",
       failedAt: 4,
-      reason: "treg:deadline_reached",
+      reason: "agentic_market:deadline_reached",
     });
 
-    const result = await backend.query(api.marketExternalRegistry.search, {
+    const result = await backend.query(internal.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -120,7 +150,7 @@ describe("Agentic Economy registry generations", () => {
 
   it("withdraws entries absent from the next complete generation", async () => {
     const backend = convexTest(schema, modules);
-    const firstEntries = [entry("agentic_market", "alpha"), entry("treg", "beta")];
+    const firstEntries = [entry("alpha"), entry("beta")];
     await backend.mutation(internal.marketExternalRegistry.begin, {
       generation: "first",
       startedAt: 1,
@@ -135,8 +165,6 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 2,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
-      tregReported: 1,
-      tregFetched: 1,
     });
 
     await backend.mutation(internal.marketExternalRegistry.begin, {
@@ -155,11 +183,9 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 1,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
-      tregReported: 0,
-      tregFetched: 0,
     });
 
-    const result = await backend.query(api.marketExternalRegistry.search, {
+    const result = await backend.query(internal.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -179,7 +205,7 @@ describe("Agentic Economy registry generations", () => {
     });
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
       generation: "older",
-      entries: [entry("agentic_market", "alpha")],
+      entries: [entry("alpha")],
     });
     await backend.mutation(internal.marketExternalRegistry.begin, {
       generation: "newer",
@@ -187,16 +213,14 @@ describe("Agentic Economy registry generations", () => {
     });
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
       generation: "newer",
-      entries: [entry("treg", "beta")],
+      entries: [entry("beta")],
     });
     await backend.mutation(internal.marketExternalRegistry.finalize, {
       generation: "newer",
       completedAt: 3,
       expectedEntries: 1,
-      agenticMarketReported: 0,
-      agenticMarketFetched: 0,
-      tregReported: 1,
-      tregFetched: 1,
+      agenticMarketReported: 1,
+      agenticMarketFetched: 1,
     });
     await backend.mutation(internal.marketExternalRegistry.finalize, {
       generation: "older",
@@ -204,11 +228,9 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 1,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
-      tregReported: 0,
-      tregFetched: 0,
     });
 
-    const result = await backend.query(api.marketExternalRegistry.search, {
+    const result = await backend.query(internal.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -218,11 +240,11 @@ describe("Agentic Economy registry generations", () => {
   });
 });
 
-function entry(source: "agentic_market" | "treg", id: string) {
+function entry(id: string) {
   const endpointUrl = `https://api.example.com/${id}`;
   return {
     documentId: `registry:${(id === "alpha" ? "a" : "b").repeat(64)}`,
-    source,
+    source: "agentic_market" as const,
     upstreamServiceId: "service",
     upstreamEndpointId: id,
     sourceUrl: `https://example.com/${id}`,
@@ -249,6 +271,7 @@ function entry(source: "agentic_market" | "treg", id: string) {
     lastObservedAt: "2026-08-23T00:00:00.000Z",
     inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
     exampleInvocation: `curl --request GET --url '${endpointUrl}'`,
+    probeRequest: { method: "GET" as const, url: endpointUrl, headers: [] },
     quality: "callable" as const,
     authority: "source_metadata_only" as const,
     sourceDigest: `sha256:${"a".repeat(64)}`,

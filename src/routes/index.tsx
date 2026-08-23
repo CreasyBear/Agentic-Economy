@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-router";
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { z } from "zod";
 
 import { AePublicShell } from "@/components/ae/layout/AePublicShell";
 import { Badge } from "@/components/ui/badge";
@@ -25,81 +24,18 @@ import {
 import { HOME } from "@/content/brand-copy";
 import { QUERY_MAX_LENGTH } from "@/lib/query-length";
 import { formatUtcTimestamp } from "@/lib/ui/format-time";
-import { readMarketRouteServer } from "@/modules/market/market.functions";
+import {
+  readHomeCapabilities,
+  validateRootSearch,
+  type HomeCapabilityRead,
+} from "@/modules/market/home-catalogue";
 import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
-
-const HOME_CAPABILITY_LIMIT = 6;
-
-const rootSearchSchema = z.object({
-  q: z.string().optional().catch(undefined),
-  project: z.string().max(200).optional().catch(undefined),
-});
-
-export type RootSearchParams = {
-  q?: string | undefined;
-  project?: string | undefined;
-};
-
-export type HomeCapabilityRead =
-  | Readonly<{
-      kind: "ok";
-      operations: readonly OperationCardViewModel[];
-      matchedCount: number;
-    }>
-  | Readonly<{ kind: "unavailable" }>;
-
-/** Home never reads WorkTree. `project` remains accepted for old shared URLs. */
-export async function loadRootRoute(
-  _search: RootSearchParams,
-): Promise<undefined> {
-  return undefined;
-}
-
-export function validateRootSearch(
-  search: Record<string, unknown>,
-): RootSearchParams {
-  const parsed = rootSearchSchema.parse(search);
-  const query = parsed.q?.trim() ?? "";
-  const project = parsed.project?.trim() ?? "";
-  return {
-    ...(query.length === 0 ? {} : { q: query }),
-    ...(project.length === 0 ? {} : { project }),
-  };
-}
-
-export async function readHomeCapabilities(): Promise<HomeCapabilityRead> {
-  try {
-    const projection = await readMarketRouteServer({
-      data: {
-        window: "30d",
-        access: "agentic_economy",
-        availability: "routeable",
-      },
-    });
-    if (projection.catalog.kind !== "ok") {
-      return projection.catalog.kind === "unavailable"
-        ? { kind: "unavailable" }
-        : { kind: "ok", operations: [], matchedCount: 0 };
-    }
-
-    return {
-      kind: "ok",
-      matchedCount: projection.catalog.matchedCount,
-      operations: projection.catalog.items.slice(0, HOME_CAPABILITY_LIMIT),
-    };
-  } catch {
-    return { kind: "unavailable" };
-  }
-}
 
 export const Route = createFileRoute("/")({
   validateSearch: validateRootSearch,
   beforeLoad: ({ search }) => {
     if (search.q !== undefined) {
-      throw redirect({
-        to: "/market",
-        search: { window: "30d", query: search.q },
-      });
+      throw redirect({ to: "/t/new", search: { q: search.q } });
     }
   },
   loader: readHomeCapabilities,
@@ -139,7 +75,7 @@ function ServicesRoute() {
       return;
     }
     setQueryError(undefined);
-    void navigate({ to: "/market", search: { window: "30d", query } });
+    void navigate({ to: "/t/new", search: { q: query } });
   }
 
   return (
@@ -161,12 +97,12 @@ function ServicesRoute() {
           <form
             key={q ?? ""}
             role="search"
-            aria-label="Search the capability market"
+            aria-label="Ask Agentic Economy"
             onSubmit={handleAskSubmit}
             className="grid gap-2"
           >
             <FieldLabel htmlFor="service-search" className="sr-only">
-              Search capabilities
+              Describe what you need
             </FieldLabel>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div className="relative rounded-md transition-[box-shadow] duration-base ease-standard focus-within:shadow-float">
@@ -180,7 +116,7 @@ function ServicesRoute() {
                   type="search"
                   value={queryValue}
                   required
-                  placeholder="Search APIs, capabilities, or providers"
+                  placeholder="What do you need your agent to do?"
                   autoComplete="off"
                   aria-describedby="service-search-hint service-search-count"
                   aria-invalid={
@@ -202,7 +138,7 @@ function ServicesRoute() {
                 />
               </div>
               <Button type="submit" size="lg" className="min-h-12 px-6">
-                Search capabilities
+                Ask Agentic Economy
               </Button>
             </div>
             <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
@@ -212,10 +148,10 @@ function ServicesRoute() {
                 aria-atomic="true"
               >
                 {queryError === "required"
-                  ? "Enter an API, capability, or provider."
+                  ? "Describe the outcome you need."
                   : queryError === "too-long" || queryTooLong
                     ? `Keep your search to ${QUERY_MAX_LENGTH} characters or fewer.`
-                    : "Browse and compare before you connect or call."}
+                    : "We’ll preserve the job, find viable capabilities, and ask before calling."}
               </p>
               <span
                 id="service-search-count"
@@ -268,7 +204,7 @@ export function HomeCapabilityResults({
         <Button asChild variant="outline" className="min-h-11 self-start sm:self-auto">
           <Link
             to="/market"
-            search={{ window: "30d", access: "agentic_economy" }}
+            search={{ window: "30d" }}
           >
             Discover all capabilities
             <ArrowRightIcon aria-hidden="true" />
@@ -280,14 +216,14 @@ export function HomeCapabilityResults({
         <Card className="p-5 shadow-none" role="status">
           <h3 className="font-semibold">Capabilities are temporarily unavailable</h3>
           <p className="text-sm text-muted-foreground">
-            Open Discover to search the full registry, or try again shortly.
+            Open Discover to search the callable catalogue, or try again shortly.
           </p>
         </Card>
       ) : read.operations.length === 0 ? (
         <Card className="p-5 shadow-none" role="status">
           <h3 className="font-semibold">No capabilities are ready right now</h3>
           <p className="text-sm text-muted-foreground">
-            Discover the wider registry to inspect APIs that require setup.
+            Browse all capabilities, including those that require setup.
           </p>
         </Card>
       ) : (

@@ -25,6 +25,7 @@ export type OperationReadFailureReason =
 export function throwOperationReadFailure(input: {
   reason: OperationReadFailureReason
   cursorProvided?: boolean
+  operationRef?: string
 }): never {
   const code = input.reason
   switch (input.reason) {
@@ -36,9 +37,10 @@ export function throwOperationReadFailure(input: {
         { kind: 'INVALID_ARGUMENT', code },
       )
     case 'operation_not_found':
-      throw new CliFailure('The requested Market Operation was not found.', {
+      throw new CliFailure(`The requested Market Operation${input.operationRef === undefined ? '' : ` ${input.operationRef}`} was not found.`, {
         kind: 'NOT_FOUND',
         code,
+        ...(input.operationRef === undefined ? {} : { detail: { operationRef: input.operationRef } }),
       })
     // Publication state: the operation exists but is not usable as published.
     // Retrying the same read changes nothing until the publisher acts.
@@ -64,10 +66,11 @@ export function throwOperationReadFailure(input: {
     case 'operation_unavailable':
     case 'source_unavailable':
     case 'temporarily_unavailable':
-      throw new CliFailure('The requested Market Operation is unavailable.', {
+      throw new CliFailure(`The requested Market Operation${input.operationRef === undefined ? '' : ` ${input.operationRef}`} is unavailable.`, {
         kind: 'UNAVAILABLE',
         code,
         retryable: true,
+        ...(input.operationRef === undefined ? {} : { detail: { operationRef: input.operationRef } }),
       })
     default: {
       const exhaustive: never = input.reason

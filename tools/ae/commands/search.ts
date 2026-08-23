@@ -1,7 +1,7 @@
 import {
   operationSearchInputSchema,
-  operationSearchOutputSchema,
 } from '@/modules/capability-supply/public'
+import { operationChoiceSearchOutputSchema } from '@/modules/registry/operation-choice-contracts'
 import { OPERATION_MARKET_SEARCH_PATH } from '@/modules/registry/operation-entry'
 
 import type { CliOptions } from '../lib/args'
@@ -124,6 +124,6 @@ export const searchCommandDescriptor = {
   actionId: 'registry.operations.search',
   path: OPERATION_MARKET_SEARCH_PATH,
   inputSchema: operationSearchInputSchema,
-  outputSchema: operationSearchOutputSchema,
+  outputSchema: operationChoiceSearchOutputSchema,
   run: runSearchCommand,
 } as const

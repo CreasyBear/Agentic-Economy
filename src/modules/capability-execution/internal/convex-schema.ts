@@ -134,6 +134,7 @@ const statusState = v.union(
 export const statusResultValue = v.union(
   v.object({
     kind: v.literal('found'), invocationRef: v.string(), operationRef: v.string(), state: statusState,
+    previousInput: v.optional(jsonObject),
     usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),
     effectGeneration: v.optional(v.number()), result: v.optional(operationResultValue), receipt: v.optional(operationInvokeReceiptValue),
   }),

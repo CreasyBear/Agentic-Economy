@@ -8,7 +8,7 @@ import { describeActionForAgent, findAction } from '@/modules/actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { buildSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
 
 /**
  * `/.well-known/ucp` is the only document a cold agent reads before it knows
@@ -62,6 +62,17 @@ function collectAdvertisedUrls(value: unknown, into: Set<string>): void {
 const manifest = buildSiteDiscoveryManifest({ canonicalBaseUrl: `${origin}/`, now: 1_700_000_000_000 })
 
 describe('Site discovery manifest', () => {
+  it('keeps the cold handshake compact and links to schemas instead of embedding them', () => {
+    const compact = projectCompactSiteDiscoveryManifest(manifest)
+    const serialized = JSON.stringify(compact)
+
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(64 * 1024)
+    expect(serialized).not.toContain('inputJsonSchema')
+    expect(serialized).not.toContain('outputJsonSchema')
+    expect(compact.fullSchemas).toBe(`${origin}/api/discovery/schema`)
+    expect(compact.operationGateway.access.anonymous.cli).toContain('ae call')
+  })
+
   it('resolves the route-file scan it depends on', () => {
     // Guards the helper itself: a broken scan would make every path "missing".
     expect(routePaths.has('/.well-known/http-message-signatures-directory')).toBe(true)

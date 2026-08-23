@@ -4,6 +4,7 @@ import type {
   OperationInvokeUsageSummary,
 } from './operation-invoke-contracts'
 import type { OperationInvokeStatusResult } from './operation-recovery-contracts'
+import type { JsonValue } from '@/modules/capability-contract/public'
 
 export type PublicInvocationStatusRead = OperationInvokeStatusResult | Readonly<{
   kind: 'source_unavailable'
@@ -40,6 +41,7 @@ export type InvocationReceiptView = Readonly<{
   version: 'ae.public-invocation-receipt:v1'
   invocationRef: string
   operationRef?: string
+  previousInput?: Readonly<Record<string, JsonValue>>
   statusLabel: string
   statusDetail: string
   stages: readonly InvocationReceiptStageView[]
@@ -111,6 +113,7 @@ export function projectInvocationReceipt(input: PublicInvocationStatusRead): Inv
     version: 'ae.public-invocation-receipt:v1',
     invocationRef: input.invocationRef,
     operationRef: input.operationRef,
+    ...(input.previousInput === undefined ? {} : { previousInput: input.previousInput }),
     statusLabel: foundStatusLabel(input.state, result),
     statusDetail: foundStatusDetail(input.state, result),
     stages: stagesFromFound(input, result, usage, receipt),

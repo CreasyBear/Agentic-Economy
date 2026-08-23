@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import {
   loadRootRoute,
   validateRootSearch,
-  Route,
-} from '@/routes/index'
+} from '@/modules/market/home-catalogue'
+import { Route } from '@/routes/index'
 
 const BAS_ASK = 'My BAS is overdue and my books are a mess'
 const ORDINARY_ASK = 'dentist near Adelaide'
@@ -31,7 +31,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
   })
 
   it('redirects a query without a project to the market', () => {
@@ -47,7 +47,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query: BAS_ASK } })
+    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: BAS_ASK } })
   })
 
   it('preserves a 173-character query through home and market navigation', () => {
@@ -69,7 +69,7 @@ describe('root route readback', () => {
 
     expect(isRedirect(thrown)).toBe(true)
     if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/market', search: { window: '30d', query } })
+    expect(thrown.options).toMatchObject({ to: '/t/new', search: { q: query } })
   })
 
   it('ignores an explicit project reference without reading WorkTree', async () => {

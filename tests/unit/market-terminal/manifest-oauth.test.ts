@@ -46,6 +46,16 @@ function oauthStore(): AgentAccessOAuthStore {
 async function manifestJson(): Promise<JsonRecord> {
   const output = captureStdout()
   try {
+    await runManifestCommand([], { ...cliOptions, technical: true })
+    return JSON.parse(output.read()) as JsonRecord
+  } finally {
+    output.restore()
+  }
+}
+
+async function compactManifestJson(): Promise<JsonRecord> {
+  const output = captureStdout()
+  try {
     await runManifestCommand([], cliOptions)
     return JSON.parse(output.read()) as JsonRecord
   } finally {
@@ -55,6 +65,17 @@ async function manifestJson(): Promise<JsonRecord> {
 
 
 describe('market terminal manifest OAuth contract', () => {
+  it('uses a compact decision contract by default and keeps schemas behind technical mode', async () => {
+    const compact = await compactManifestJson()
+    const serialized = JSON.stringify(compact)
+
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(16 * 1024)
+    expect(serialized).not.toContain('inputJsonSchema')
+    expect(serialized).not.toContain('outputJsonSchema')
+    expect(compact.fullContract).toBe('ae manifest --technical --json')
+    expect((compact.call as JsonRecord).anonymous).toMatchObject({ transport: 'official_mcp_client' })
+  })
+
   it('serializes the registration request accepted by the OAuth handler', async () => {
     const manifest = await manifestJson()
     const oauth = (manifest.gateway as JsonRecord).oauth as JsonRecord

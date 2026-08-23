@@ -24,7 +24,7 @@ export function AeAssistantInstallFunnel({
       title: 'Connect',
       access: 'Once per device',
       description: 'Opens browser approval, stores one origin-bound key with user-only permissions, verifies it, and configures MCP. No wallet or environment editing.',
-      code: `npx ae connect --base-url "${baseUrl}" --mcp`,
+      code: `npx @agentic-economy/cli connect --base-url "${baseUrl}" --mcp`,
     },
     {
       id: 'search',

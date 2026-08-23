@@ -4,7 +4,8 @@ import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
-import { isBoundedJsonValue } from '@/modules/capability-contract/public'
+import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
+import { isRecord } from '@/modules/common/is-record'
 import {
   createOperationInvokeApplication,
   type OperationInvokeRuntime,
@@ -467,7 +468,24 @@ export async function readOwnerInvocationStatusHandler(
     credentialId: row.credentialId,
     mode: 'status',
   })
-  return projectStatusRecoveryResult(result)
+  const projected = projectStatusRecoveryResult(result)
+  if (projected.kind !== 'found') return projected
+  const previousInput = parseOwnerPreviousInput(row.inputJson)
+  return {
+    ...projected,
+    ...(previousInput === undefined ? {} : { previousInput }),
+  }
+}
+
+function parseOwnerPreviousInput(inputJson: string): Record<string, JsonValue> | undefined {
+  try {
+    const value: unknown = JSON.parse(inputJson)
+    return isRecord(value) && isBoundedJsonValue(value)
+      ? value as Record<string, JsonValue>
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function cancelOwnerInvocationHandler(

@@ -182,7 +182,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
               <h3 className="text-sm font-semibold text-foreground">Data use</h3>
               <ul className="m-0 grid list-none gap-2 p-0">
                 {operation.dataUse.length === 0 ? <li className="text-sm text-muted-foreground">No data-use effects are declared.</li> : operation.dataUse.map((effect) => (
-                  <li key={effect.effectId} className="rounded-md border border-border p-3 text-sm">
+                  <li key={`${effect.effectId}:${effect.inputPointer}:${effect.phase}`} className="rounded-md border border-border p-3 text-sm">
                     <span className="font-medium text-foreground">{label(effect.classification)} · {effect.inputPointer}</span>
                     <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.phase)} · {label(effect.recipient)} · {effect.purposes.join(', ')}</span>
                   </li>
@@ -193,7 +193,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
               <h3 className="text-sm font-semibold text-foreground">Effects and authority</h3>
               <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
                 {operation.effects.length === 0 ? <li className="text-sm text-muted-foreground">No consequential effects are declared.</li> : operation.effects.map((effect) => (
-                  <li key={effect.effectId} className="rounded-md border border-border p-3 text-sm">
+                  <li key={`${effect.effectId}:${effect.class}:${effect.authority}:${effect.reversibility}`} className="rounded-md border border-border p-3 text-sm">
                     <span className="font-medium text-foreground">{label(effect.class)}</span>
                     <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.authority)} · {label(effect.reversibility)}</span>
                   </li>

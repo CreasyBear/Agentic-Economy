@@ -12,7 +12,7 @@ describe("registry origin authority boundary", () => {
       source: "agentic_market",
       upstreamServiceId: "companies",
       upstreamEndpointId: "provider.search",
-      sourceUrl: "https://treg.to/catalog/endpoints/provider.search",
+      sourceUrl: "https://agentic.market/services/companies",
       providerUrl: "https://provider.example",
       endpointUrl: "https://api.provider.example/search",
       routeIdentity: "GET https://api.provider.example/search",
@@ -37,6 +37,11 @@ describe("registry origin authority boundary", () => {
       inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
       exampleInvocation:
         "curl --request GET --url 'https://api.provider.example/search'",
+      probeRequest: {
+        method: "GET",
+        url: "https://api.provider.example/search",
+        headers: [],
+      },
       authority: "source_metadata_only",
       sourceDigest: "digest",
     };

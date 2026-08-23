@@ -9,9 +9,9 @@ import { withHttpRateLimit } from '@/lib/server/rate-limit'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import {
   operationCompareInputSchema,
-  operationCompareOutputSchema,
 } from '@/modules/capability-supply/public'
 import { registryOperationsCompareAction } from '@/modules/registry/operations.actions'
+import { operationChoiceCompareOutputSchema } from '@/modules/registry/operation-choice-contracts'
 
 const MAX_OPERATION_COMPARE_BODY_BYTES = 8 * 1024
 
@@ -57,7 +57,7 @@ export async function handleMarketOperationCompareRequest(request: Request): Pro
             ...(detail === undefined ? {} : { detail }),
           })
         }
-        const result = operationCompareOutputSchema.safeParse(await registryOperationsCompareAction.run({
+        const result = operationChoiceCompareOutputSchema.safeParse(await registryOperationsCompareAction.run({
           data: parsed.data,
           context: { caller: 'http', request },
         }))

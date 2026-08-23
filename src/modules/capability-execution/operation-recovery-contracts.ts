@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { JsonValue } from '@/modules/capability-contract/public'
 
 import type {
   OperationInvokeRefusalCode,
@@ -40,6 +41,7 @@ export type OperationInvokeStatusResult =
       kind: 'found'
       invocationRef: string
       operationRef: string
+      previousInput?: Readonly<Record<string, JsonValue>>
       state: OperationInvokeStatusState
       usage?: OperationInvokeUsageSummary
       evidenceHash?: string

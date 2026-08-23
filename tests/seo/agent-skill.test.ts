@@ -18,8 +18,8 @@ describe('public agent skill', () => {
       'curl -fsSL https://ae.example/.well-known/ucp',
       'ae search "weather forecast" --json',
       'ae inspect "$AE_OPERATION_REF" --json',
-      'ae connect --json',
       'ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json',
+      'ae connect --json',
       'ae status "$AE_INVOCATION_REF" --json',
       'ae recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json',
     ]
@@ -80,12 +80,13 @@ describe('public agent skill', () => {
     expect(body).toContain(projection)
     expect(body).toContain('executionModes.directKeyless')
     expect(body).toContain('not a guarantee for every Operation')
-    expect(body).toContain('relation: "execute"')
-    expect(body).toContain('anonymous MCP tool `ae_operation_execute`')
+    expect(body).toContain('compiled `ae call` command uses the official MCP client')
+    expect(body).toContain('return literal output plus an `evidenceHash`')
   })
   it('documents the installed MCP lifecycle and the business-only catalog boundary', () => {
     expect(body).toContain(`protocol \`${LATEST_PROTOCOL_VERSION}\``)
-    expect(body).toContain('`initialize` then `notifications/initialized`')
+    expect(body).toContain('the client performs initialization')
+    expect(body).toContain('may omit `Mcp-Session-Id`')
     expect(body).toContain('`tools/list` before `tools/call`')
     expect(body).toContain('Business catalog is business-only')
     expect(body).toContain('`registry.search` and `registry.detail` read published businesses')

@@ -468,7 +468,11 @@ async function withdrawMissing(
   const rows = await ctx.db.query('capabilityPublications')
     .withIndex('by_networkId_and_disposition', (query) => query.eq('networkId', 'ae:public').eq('disposition', 'current'))
     .take(1000)
-  const missing = rows.filter((row) => row.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF && !seen.has(row.publicationRef))
+  const missing = rows.filter((row) => (
+    row.publisherRef === FACILITATOR_DISCOVERY_PUBLISHER_REF
+    && row.sourceRevision.startsWith('facilitator-discovery:')
+    && !seen.has(row.publicationRef)
+  ))
   let withdrawn = 0
   const businessIds = new Set<Id<'businesses'>>()
   for (const publication of missing) {

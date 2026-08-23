@@ -365,16 +365,18 @@ describe('capability operation recovery Convex adapters', () => {
     }
   })
   it('allows the owning Clerk session to continue status and reconciliation after agent revocation', async () => {
+    const ownerRow = { ...row, inputJson: JSON.stringify({ city: 'Perth', units: 'metric' }) }
     const statusContext = ownerRecoveryContext(ownerIdentity, {
       kind: 'found',
       invocationRef,
       operationRef: row.operationRef,
       state: 'reconciliation_required',
       attemptRef: evidence.attemptRef,
-    })
+    }, ownerRow)
     await expect(readOwnerInvocationStatusHandler(statusContext, { invocationRef })).resolves.toMatchObject({
       kind: 'found',
       state: 'reconciliation_required',
+      previousInput: { city: 'Perth', units: 'metric' },
     })
     expect(statusContext.runAction).toHaveBeenCalledWith(expect.anything(), {
       invocationRef,

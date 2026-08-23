@@ -30,7 +30,7 @@ describe('durable llms Offering parity', () => {
     const result = await backend.query(api.discovery.readLlmsTxt, {
       canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://ae.example', now: 3,
     })
-    expect(result.body).toContain('## Operation market loop')
+    expect(result.body).toContain('## Capability market loop')
     expect(result.body).toContain('- none')
     expect(result.body).toContain('- total=0; the lines above are a bounded sample')
     expect(result.body).not.toContain('offering-engineering')

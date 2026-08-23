@@ -112,55 +112,12 @@ const projection: MarketRouteProjection = {
       },
     ],
   },
-  registry: {
-    kind: "ok",
-    generation: "registry-test",
-    coverage: {
-      entries: 5100,
-      completedAt: Date.parse(generatedAt),
-    },
-    page: [
-      {
-        documentId: "registry:exa",
-        sourceUrl: "https://agentic.market/services/api-exa-ai",
-        providerUrl: "https://exa.ai",
-        endpointUrl: "https://api.exa.ai/search",
-        routeIdentity: "POST https://api.exa.ai/search",
-        name: "Exa search",
-        summary: "Search the web and return structured results.",
-        provider: "Exa",
-        category: "Search",
-        method: "POST",
-        tags: ["search"],
-        networks: ["Base"],
-        priceLabel: "USDC 0.007",
-        exactPrice: {
-          scheme: "exact",
-          amount: "0.007",
-          currency: "USDC",
-          network: "eip155:8453",
-        },
-        access: "x402",
-        credentialRequirements: ["x402_payment"],
-        readiness: "source_declared_callable",
-        lastObservedAt: generatedAt,
-        inputSchemaJson: JSON.stringify({ type: "object", properties: {} }),
-        exampleInvocation:
-          "curl --request POST --url 'https://api.exa.ai/search'",
-        sourceCalls30d: "3503",
-        sourcePayers30d: "90",
-        authority: "registry_metadata_only",
-      },
-    ],
-    isDone: true,
-    continueCursor: "",
-  },
 };
 
 afterEach(cleanup);
 
 describe("market page", () => {
-  it("uses familiar marketplace search, access modes, and concrete registry details", () => {
+  it("shows callable Operations by default without source-access modes", () => {
     renderMarket({ window: "30d" });
 
     expect(
@@ -171,24 +128,22 @@ describe("market page", () => {
     ).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Search tools" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Pay per call" })).toBeTruthy();
-    expect(screen.getByText("Exa search")).toBeTruthy();
-    expect(screen.getAllByText("Pay per call").length).toBeGreaterThan(1);
+    expect(screen.queryByRole("radio", { name: "Pay per call" })).toBeNull();
+    expect(screen.queryByText("Exa search")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Inspect Exa search" }),
+      screen.getByRole("link", { name: "Use Company registry search" }),
     ).toBeTruthy();
-    expect(screen.queryByText("Company registry search")).toBeNull();
     expect(
-      screen.queryByRole("radio", { name: "Identity & compliance" }),
-    ).toBeNull();
+      screen.getByRole("radio", { name: "Identity & compliance" }),
+    ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain(
-      "Showing 1 of 5,100 APIs",
+      "2 Operations shown",
     );
     expect(screen.queryByText("Market activity")).toBeNull();
   });
 
   it("keeps admitted Operations separate with their comparison evidence", () => {
-    renderMarket({ window: "30d", access: "agentic_economy" });
+    renderMarket({ window: "30d" });
 
     expect(screen.queryByText("Exa search")).toBeNull();
     expect(
@@ -208,39 +163,33 @@ describe("market page", () => {
     ).toHaveLength(2);
   });
 
-  it("announces an empty filtered registry truthfully", () => {
-    if (projection.registry.kind !== "ok")
-      throw new Error("expected registry fixture");
+  it("announces an empty Operation search truthfully", () => {
     renderMarket(
-      { window: "30d", query: "not in the registry" },
+      { window: "30d", query: "not in the catalogue" },
       {
         ...projection,
-        registry: {
-          ...projection.registry,
-          page: [],
-          isDone: true,
-          continueCursor: "",
-        },
+        catalog: { kind: "no_candidates", matchedCount: 0 },
       },
     );
 
-    expect(screen.getByRole("status").textContent).toBe(
-      "No APIs match this search",
-    );
-    expect(screen.getByText("No public APIs match this search")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("0 Operations shown");
+    expect(screen.getByText("No tools match these filters")).toBeTruthy();
   });
 
-  it("offers an explicit recovery action when the registry is unavailable", () => {
+  it("distinguishes catalogue unavailability from an empty search", () => {
     renderMarket(
       { window: "30d" },
-      { ...projection, registry: { kind: "unavailable" } },
+      {
+        ...projection,
+        catalog: { kind: "unavailable", reason: "source_unavailable" },
+      },
     );
 
     expect(
-      screen.getByText("The public API registry is temporarily unavailable"),
+      screen.getByText("The tool catalog is temporarily unavailable"),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
-    expect(screen.queryByText(/0 APIs/u)).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Catalogue unavailable");
+    expect(screen.queryByText("No tools match these filters")).toBeNull();
   });
 });
 
@@ -254,10 +203,6 @@ function renderMarket(
     createRoute({
       getParentRoute: () => rootRoute,
       path: "/operations/$operationRef",
-    }),
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: "/registry/$documentId",
     }),
     createRoute({ getParentRoute: () => rootRoute, path: "/for-agents" }),
     createRoute({ getParentRoute: () => rootRoute, path: "/for-providers" }),

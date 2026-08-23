@@ -1,4 +1,3 @@
-#!/usr/bin/env tsx
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
  * surfaces. Market Operation search/detail/compare are anonymous HTTP reads;
@@ -10,8 +9,6 @@
  * Evidence class: every HTTP command here is labelled local execution against
  * whatever `--base-url` points at. It never proves hosted behavior.
  */
-
-import { loadEnv } from 'vite'
 
 import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
 import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
@@ -290,7 +287,6 @@ function validateCommandOptions(parsed: ParsedArgs): void {
 
 
 async function main(): Promise<number> {
-  loadCliEnvironment()
   const [
     cancelCommands,
     marketOperationCommands,
@@ -432,13 +428,6 @@ async function main(): Promise<number> {
       process.stderr.write(`${message}\n`)
     }
     return exitCode
-  }
-}
-
-function loadCliEnvironment(): void {
-  const fileEnvironment = loadEnv('development', process.cwd(), '')
-  for (const [name, value] of Object.entries(fileEnvironment)) {
-    if (process.env[name] === undefined) process.env[name] = value
   }
 }
 
