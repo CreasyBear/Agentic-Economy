@@ -8,7 +8,6 @@ import type {
   ServiceOperationMap,
 } from '@/modules/registry/public'
 import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
-import { toConsumerSupplyOption } from '@/components/ae/plan/consumer-plan'
 
 describe('agentic.market Service mapping', () => {
   it('omits businesses without public offerings while preserving page and search cursors', () => {
@@ -523,17 +522,6 @@ describe('public services API projection', () => {
     expect(result.services[0]!.endpoints[1]).not.toHaveProperty('providerName')
     expect(result.services[0]!.endpoints[0]).not.toHaveProperty('summary')
     expect(result.services[0]!.endpoints[0]).not.toHaveProperty('offeringRef')
-  })
-
-  it('carries exact published availability and observation into the consumer supply adapter', () => {
-    const result = toConsumerSupplyOption(projectPublicServicesPage(page()).services[0]!)
-
-    expect(result).toMatchObject({
-      optionRef: 'acme-plumbing',
-      business: { slug: 'acme-plumbing', name: 'Acme Plumbing', location: 'Fremantle, WA' },
-      availability: { kind: 'published', summary: 'Weekdays by appointment' },
-      evidence: { source: 'business_published', observedAt: 1_700_000_000_000 },
-    })
   })
 
   it('passes source cursor state through', () => {

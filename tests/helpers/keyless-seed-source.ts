@@ -2,7 +2,7 @@ import type {
   KeylessExecutableSourcePort,
   KeylessExecutableToolDescriptor,
   OperationExecutableDescriptor,
-} from '../../src/modules/capability-execution/public'
+} from '../../src/modules/capability-execution'
 import {
   isPublicOperationRef,
   rankOperationSearchText,

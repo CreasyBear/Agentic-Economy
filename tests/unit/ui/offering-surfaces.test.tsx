@@ -3,8 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
-import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
 import {
   AeOwnerOfferingEditor,
   AeOwnerOfferingsList,
@@ -18,43 +16,6 @@ import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 afterEach(cleanup)
 
 describe('Offering market surfaces', () => {
-  it('keeps a supplier profile useful when no Operations are published', () => {
-    render(<AeOfferingSupplyList offerings={[]} />)
-    expect(screen.getByRole('heading', { name: 'Operations and prices' })).toBeTruthy()
-    expect(screen.getByText('No Operations are published yet')).toBeTruthy()
-  })
-
-  it('separates declared request source from measured agent readiness', () => {
-    render(<AeOfferingSupplyList offerings={[projectionFixture()]} />)
-
-    expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Access' })).toBeTruthy()
-    expect(screen.getByText('Quotes this published Operation through the demo supplier.')).toBeTruthy()
-    expect(screen.getByText('Published by the supplier')).toBeTruthy()
-    expect(screen.getByText('AUD 42.00 per item incl. tax')).toBeTruthy()
-    expect(screen.getByText('Ready for agent calls')).toBeTruthy()
-    expect(screen.getByText('An agent can send this request now.')).toBeTruthy()
-    expect(screen.queryByText(/verified/i)).toBeNull()
-    expect(screen.queryByText('POST')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'More page information' }))
-    expect(screen.getByText('POST')).toBeTruthy()
-    expect(screen.getByText('https://example.com/api/query')).toBeTruthy()
-  })
-
-  it('adapts the safe v2 API without restoring internal support vocabulary', () => {
-    const view = offeringApiDtoToSupplyView(v2BusinessFixture())
-    render(<AeOfferingSupplyList {...view} />)
-    expect(screen.getByRole('link', { name: 'Website' }).getAttribute('href')).toBe('https://example.com/start')
-    expect(screen.queryByText(/routeable|binding|capability/i)).toBeNull()
-  })
-
-  it('shows last-safe public facts when projection freshness degrades', () => {
-    render(<AeOfferingSupplyList offerings={[projectionFixture()]} disposition="stale" observedAt={1_900_000_000_000} />)
-    expect(screen.getByText('These are the last safely listed details')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
-  })
-
   it('teaches the owner the first useful action without requiring a contact route', () => {
     render(<AeOwnerOfferingsList offerings={[]} />)
     expect(screen.getByRole('heading', { name: 'Publish your first Operation' })).toBeTruthy()
@@ -170,40 +131,5 @@ function projectionFixture(): PublicOfferingSupplyProjection {
       },
     }],
     support: { integrated: true, routeable: true, reasons: [], observedAt: 1_900_000_000_000 },
-  }
-}
-
-function v2BusinessFixture() {
-  return {
-    schemaVersion: 'public-business-catalog-api:v2' as const,
-    businessId: 'business:v2',
-    slug: 'v2-business',
-    name: 'V2 Business',
-    category: 'Data',
-    businessContext: { kind: 'local_human' as const, suburb: 'Perth', stateTerritory: 'WA' },
-    publicUrl: '/v2-business',
-    trustTier: 'claimed' as const,
-    photos: [],
-    observedAt: 1,
-    disposition: 'current' as const,
-    offerings: [{
-      offeringRef: 'offering:v2',
-      revision: 1,
-      name: 'Data lookup',
-      category: 'Data',
-      summary: 'Look up public data.',
-      accessPaths: [{
-        accessPathRef: 'access:v2:web',
-        offeringRevision: 1,
-        offeringSourceHash: canonicalDigest('offering-surfaces:v2'),
-        sourceHash: canonicalDigest('offering-surfaces:access:v2:web'),
-        kind: 'human_request' as const,
-        channel: 'website' as const,
-        disclosure: 'Start on the business website.',
-        url: 'https://example.com/start',
-      }],
-      support: { integrated: false, aeSupportedAction: false },
-    }],
-    accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
   }
 }

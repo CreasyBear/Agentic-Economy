@@ -5,7 +5,7 @@ import { encodeX402PaymentRequiredHeader, type X402PaymentRequired } from '@/mod
 import { runCapabilityReadinessProbe } from '@/modules/capability-supply/internal/readiness-probe'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-import timezoneX402PaymentRequiredPin from '@/modules/dev/internal/x402-timezone-payment-required-2026-08-19.json'
+import timezoneX402PaymentRequiredPin from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 
 import { keylessAuthority, target } from './readiness-probe-harness'
 

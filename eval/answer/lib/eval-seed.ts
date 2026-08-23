@@ -2,7 +2,7 @@ import type {
   KeylessExecutableSourcePort,
   OperationExecutableDescriptor,
   OperationExecuteDeps,
-} from '../../../src/modules/capability-execution/public'
+} from '../../../src/modules/capability-execution'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '../../../src/modules/capability-execution/operation-invoke-entry'
 import {
   isPublicOperationRef,

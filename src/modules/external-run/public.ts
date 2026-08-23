@@ -41,23 +41,3 @@ export {
   type ExternalRunRateMetric,
   type ExternalRunReport,
 } from './internal/gate'
-
-
-export {
-  admitExternalRunStartThroughSource,
-  createExternalRunManifestThroughSource,
-  externalRunEvidenceCommandSchema,
-  externalRunManifestCommandSchema,
-  externalRunReportQuerySchema,
-  externalRunStartCommandSchema,
-  finalizeExternalRunThroughSource,
-  inspectExternalRunManifestThroughSource,
-  readExternalRunReportThroughSource,
-  recordExternalRunEvidenceThroughSource,
-  updateExternalRunManifestThroughSource,
-  type ExternalRunEvidenceCommand,
-  type ExternalRunManifestCommand,
-  type ExternalRunReportQuery,
-  type ExternalRunSourceResult,
-  type ExternalRunStartCommand,
-} from './external-run.functions'
