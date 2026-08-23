@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
+import { requireBillingSourceWrite } from './moneyBillingAuthorization'
 import { accountFromRow } from './moneyCanonicalAccounts'
 import { identifier } from './moneyLedgerValues'
 import { utcPeriodStartIso } from './moneyQualifiedUsePayout'
@@ -27,7 +28,6 @@ import {
   payoutTransferRow,
   payoutTransferView,
   readPayoutReservationJournal,
-  requireBillingSourceWrite,
   type PayoutTransferResult,
 } from './moneyPayoutTransferShared'
 

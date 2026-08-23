@@ -4,6 +4,10 @@ import type { Doc } from './_generated/dataModel'
 import { env, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import {
+  requireBillingSourceWrite,
+  type BillingSourceWriteArgs,
+} from './moneyBillingAuthorization'
+import {
   accountUpdatedEventArg,
   billingSourceArgs,
   identifier,
@@ -11,7 +15,6 @@ import {
   serverFunctionAuth,
 } from './moneyLedgerValues'
 import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
-import { requireSourceWrite } from './sourceWriteAdmission'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
@@ -25,13 +28,6 @@ import {
 const PAYOUT_BINDING_LOOKUP_OPERATION =
   'moneyLedger:readPayoutAccountByStripeId'
 const PAYOUT_BINDING_LOOKUP_SCOPE = 'money:payout_binding_read'
-
-type BillingSourceWriteArgs = {
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-  sourceWriteRequest?: unknown
-}
 
 export type BindConnectAccountArgs = BillingSourceWriteArgs & {
   businessId: string
@@ -206,16 +202,6 @@ export const recordConnectAccountEventArgs = {
 
 function refusedConnect(code: string, retryable: boolean) {
   return { kind: 'refused' as const, code, retryable }
-}
-
-async function requireBillingSourceWrite(
-  ctx: MutationCtx,
-  args: BillingSourceWriteArgs,
-): Promise<void> {
-  const result = await requireSourceWrite(ctx, args, 'billing')
-  if (result.kind === 'rejected') {
-    throw new Error(`money_billing_source_write_rejected:${result.reason}`)
-  }
 }
 
 function payoutAccountView(row: Doc<'moneyPayoutAccounts'>) {

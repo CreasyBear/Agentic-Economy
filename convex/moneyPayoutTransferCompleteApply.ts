@@ -1,5 +1,9 @@
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
+import {
+  requireBillingSourceWrite,
+  type BillingSourceWriteArgs,
+} from './moneyBillingAuthorization'
 import { accountFromRow } from './moneyCanonicalAccounts'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
@@ -29,8 +33,6 @@ import {
   payoutTransferView,
   readLatestCompletedPayoutPaidAfter,
   readPayoutReservationJournal,
-  requireBillingSourceWrite,
-  type BillingSourceWriteArgs,
   type PayoutReservationJournal,
   type PayoutTransferResult,
 } from './moneyPayoutTransferShared'

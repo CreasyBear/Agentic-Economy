@@ -5,6 +5,7 @@ import type {
 } from '../answer-schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isRecord } from '@/modules/common/is-record'
+import { resolveJsonPointer } from '@/modules/common/json-pointer'
 import { safeJsonStringify } from '@/modules/common/safe-json-stringify'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/answer-thread.schema'
 import { neutralizeBidiFormattingControls } from '../projection'
@@ -214,32 +215,6 @@ export function projectAnswerOperationResult(
       ? {}
       : { presentation: outcome.presentation }),
   }
-}
-
-function resolveJsonPointer(
-  value: unknown,
-  pointer: string,
-): Readonly<{ found: boolean; value?: unknown }> {
-  if (pointer === '') return { found: true, value }
-  if (!pointer.startsWith('/')) return { found: false }
-  let current = value
-  for (const encodedToken of pointer.slice(1).split('/')) {
-    if (/~(?:[^01]|$)/u.test(encodedToken)) return { found: false }
-    const token = encodedToken.replace(/~1/gu, '/').replace(/~0/gu, '~')
-    if (Array.isArray(current)) {
-      if (!/^(?:0|[1-9]\d*)$/u.test(token)) return { found: false }
-      const index = Number(token)
-      if (!Number.isSafeInteger(index) || index >= current.length) return { found: false }
-      current = current[index]
-      continue
-    }
-    if (current === null || typeof current !== 'object'
-      || !Object.prototype.hasOwnProperty.call(current, token)) {
-      return { found: false }
-    }
-    current = (current as Record<string, unknown>)[token]
-  }
-  return { found: true, value: current }
 }
 
 function validatedHttpsHref(value: unknown): string | undefined {

@@ -14,6 +14,10 @@ import {
   canonicalMoneyAccountMatches,
   prepareCanonicalMoneyAccount,
 } from './moneyCanonicalAccounts'
+import {
+  ownerPrincipalAllowed,
+  requireBillingSourceWrite,
+} from './moneyBillingAuthorization'
 import { entryAmount } from './moneyChargeJournal'
 import {
   billingSourceArgs,
@@ -24,7 +28,6 @@ import {
   stripeMoneyWebhookEventArg,
 } from './moneyLedgerValues'
 import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
-import { requireSourceWrite } from './sourceWriteAdmission'
 import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
@@ -167,60 +170,9 @@ export type ReadCreditTopupWebhookCommandArgs = Infer<
   typeof readCreditTopupWebhookCommandArgs
 >
 export type ApplyCreditTopupArgs = Infer<typeof applyCreditTopupArgs>
-type BillingSourceWriteArgs = Pick<
-  ReserveCreditTopupArgs,
-  'operationKey' | 'correlationId' | 'sourceWrite' | 'sourceWriteRequest'
->
 
 function refusedTopup(code: string, retryable: boolean): MoneyRefusal {
   return { kind: 'refused', code, retryable }
-}
-
-function principalAllowed(
-  identity: { tokenIdentifier?: string } | null,
-  principalId: string,
-): boolean {
-  if (identity === null || identity.tokenIdentifier === undefined) return false
-  return (
-    identity.tokenIdentifier === principalId ||
-    `clerk_api_key:${identity.tokenIdentifier}` === principalId
-  )
-}
-
-async function ownerPrincipalAllowed(
-  identity: {
-    issuer?: string
-    subject?: string
-    tokenIdentifier?: string
-  } | null,
-  principalId: string,
-  loadPrincipal: () => Promise<Readonly<{
-    ownerId: string
-    ownerTokenIdentifier?: string
-  }> | null>,
-): Promise<boolean> {
-  if (principalAllowed(identity, principalId)) return true
-  if (identity?.subject === undefined) return false
-  const principal = await loadPrincipal()
-  if (principal === null || principal.ownerId !== identity.subject) return false
-  if (principal.ownerTokenIdentifier === undefined) return true
-  const identityRefs = [
-    identity.tokenIdentifier,
-    identity.issuer === undefined
-      ? undefined
-      : `${identity.issuer}|${identity.subject}`,
-  ].filter((value): value is string => value !== undefined)
-  return identityRefs.includes(principal.ownerTokenIdentifier)
-}
-
-async function requireBillingSourceWrite(
-  ctx: MutationCtx,
-  args: BillingSourceWriteArgs,
-): Promise<void> {
-  const result = await requireSourceWrite(ctx, args, 'billing')
-  if (result.kind === 'rejected') {
-    throw new Error(`money_billing_source_write_rejected:${result.reason}`)
-  }
 }
 
 function topupCommandView(row: Doc<'moneyTopupCommands'>) {

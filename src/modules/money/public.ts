@@ -23,7 +23,9 @@ export {
   parseDecimalExactAmount,
   readExactAmount,
   rescaleExactAmount,
+  sameExactScale,
   subtractExactAmounts,
+  sumExactAmounts,
   zeroExactAmount,
 } from "./internal/exact-amount";
 export type { ExactAmount } from "./internal/exact-amount";

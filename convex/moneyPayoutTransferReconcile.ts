@@ -1,12 +1,10 @@
 import type { MutationCtx } from './_generated/server'
+import { requireBillingSourceWrite } from './moneyBillingAuthorization'
 import {
   completePayoutBody,
   type CompletePayoutTransferArgs,
 } from './moneyPayoutTransferCompleteApply'
-import {
-  requireBillingSourceWrite,
-  type PayoutTransferResult,
-} from './moneyPayoutTransferShared'
+import type { PayoutTransferResult } from './moneyPayoutTransferShared'
 
 function refusedPayout(code: string, retryable: boolean): PayoutTransferResult {
   return { kind: 'refused', code, retryable }

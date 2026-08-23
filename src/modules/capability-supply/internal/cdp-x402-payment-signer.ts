@@ -22,6 +22,7 @@ import {
 } from '@x402/extensions/payment-identifier'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signature-key'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -625,18 +626,6 @@ function isUnsignedMaterial(value: unknown): value is CdpX402PaymentUnsignedMate
     || !isRecord(value.typedData.message)
   ) return false
   return true
-}
-
-function containsForbiddenSignatureKey(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsForbiddenSignatureKey)
-  if (!isRecord(value)) return false
-  return Object.entries(value).some(([key, child]) => (
-    key === 'signature'
-    || key === 'paymentSignature'
-    || key === 'PAYMENT-SIGNATURE'
-    || key === 'Payment-Signature'
-    || containsForbiddenSignatureKey(child)
-  ))
 }
 
 function hasPolicy(policies: readonly string[] | undefined, expectedPolicyId: string): boolean {

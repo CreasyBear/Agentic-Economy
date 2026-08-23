@@ -1,6 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { containsForbiddenSignatureKey } from '@/modules/common/forbidden-signature-key'
 import { isRecord } from '@/modules/common/is-record'
 import { stableStringify } from '@/modules/common/stable-hash'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -78,18 +79,6 @@ function paymentAuthorizationExpiryFromMaterial(
   return expiry !== undefined && value.authorization.validBefore === expiry.paymentAuthorizationValidBefore
     ? expiry
     : undefined
-}
-
-function containsForbiddenSignatureKey(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsForbiddenSignatureKey)
-  if (!isRecord(value)) return false
-  return Object.entries(value).some(([key, child]) => (
-    key === 'signature'
-    || key === 'paymentSignature'
-    || key === 'PAYMENT-SIGNATURE'
-    || key === 'Payment-Signature'
-    || containsForbiddenSignatureKey(child)
-  ))
 }
 
 function canonicalUnsignedMaterialJson(value: unknown): string | undefined {

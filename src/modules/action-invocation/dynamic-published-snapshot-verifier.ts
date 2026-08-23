@@ -9,6 +9,7 @@ import {
   compareExactAmounts,
   exactAmountSchema,
   rescaleExactAmount,
+  sameExactScale,
   type ExactAmount,
 } from '@/modules/money/public'
 
@@ -389,12 +390,6 @@ export function verifyDynamicPublishedSnapshot(input: Readonly<{
   ) throw new Error('dynamic_published_snapshot_semantics_invalid')
   return snapshot
 }
-function sameExactScale(value: unknown, expected: ExactAmount): boolean {
-  const parsed = exactAmountSchema.safeParse(value)
-  return parsed.success
-    && parsed.data.currency === expected.currency
-    && parsed.data.exponent === expected.exponent
-}
 
 function paymentAttemptsValid(
   paymentAttempts: DynamicPublishedAdapterSnapshot['paymentAttempts'],
@@ -728,5 +723,4 @@ function resultIdentityValid(
     && (expectedChallengeDigest === undefined
       || source.observedResolution.result.paymentChallengeDigest === expectedChallengeDigest)
 }
-
 

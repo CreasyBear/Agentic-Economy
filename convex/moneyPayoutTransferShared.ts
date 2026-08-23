@@ -1,7 +1,7 @@
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
-import { requireSourceWrite } from './sourceWriteAdmission'
+import { principalAllowed } from './moneyBillingAuthorization'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   addExactAmounts,
@@ -12,13 +12,6 @@ import {
   type MoneyAccount,
   type MoneyPayout,
 } from '../src/modules/money/public'
-
-export type BillingSourceWriteArgs = {
-  operationKey: string
-  correlationId: string
-  sourceWrite?: unknown
-  sourceWriteRequest?: unknown
-}
 
 type PayoutTransferView = {
   payoutRef: string
@@ -56,27 +49,6 @@ type PayoutTransferView = {
 export type PayoutTransferResult =
   | { kind: 'accepted'; transfer: PayoutTransferView }
   | { kind: 'refused'; code: string; retryable: boolean }
-
-export async function requireBillingSourceWrite(
-  ctx: MutationCtx,
-  args: BillingSourceWriteArgs,
-): Promise<void> {
-  const result = await requireSourceWrite(ctx, args, 'billing')
-  if (result.kind === 'rejected') {
-    throw new Error(`money_billing_source_write_rejected:${result.reason}`)
-  }
-}
-
-function principalAllowed(
-  identity: { tokenIdentifier?: string } | null,
-  principalId: string,
-): boolean {
-  if (identity === null || identity.tokenIdentifier === undefined) return false
-  return (
-    identity.tokenIdentifier === principalId ||
-    `clerk_api_key:${identity.tokenIdentifier}` === principalId
-  )
-}
 
 export function payoutFromRow(row: Doc<'moneyPayouts'>): MoneyPayout | undefined {
   const grossAccrual = amountFromParts(

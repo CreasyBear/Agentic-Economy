@@ -2,6 +2,8 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   addExactAmounts,
   compareExactAmounts,
+  sameExactScale,
+  sumExactAmounts,
   type ExactAmount,
 } from '@/modules/money/public'
 import type {
@@ -164,18 +166,4 @@ function scopeRefusal(
   if (!mandate.scope.permittedFallbacks.includes(proposal.fallbackRef)) return 'mandate_fallback_mismatch'
   if (proposal.risk !== mandate.scope.riskCeiling) return 'mandate_risk_exceeded'
   return undefined
-}
-function sameExactScale(left: ExactAmount, right: ExactAmount): boolean {
-  return left.currency === right.currency && left.exponent === right.exponent
-}
-
-function sumExactAmounts(amounts: readonly ExactAmount[], zeroReference: ExactAmount): ExactAmount | undefined {
-  let total: ExactAmount = { ...zeroReference, units: '0' }
-  for (const amount of amounts) {
-    if (!sameExactScale(total, amount)) return undefined
-    const next = addExactAmounts(total, amount)
-    if (next === undefined) return undefined
-    total = next
-  }
-  return total
 }

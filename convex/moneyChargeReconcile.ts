@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
+import { principalAllowed } from './moneyBillingAuthorization'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { decideChargeOutcomeUnknown } from '../src/modules/money/public'
 import {
@@ -11,17 +12,6 @@ import {
 import { readPayoutAccrualAmounts } from './moneyChargeJournal'
 import { identifier } from './moneyLedgerValues'
 import { appendRefundBody } from './moneyRefund'
-
-function principalAllowed(
-  identity: { tokenIdentifier?: string } | null,
-  principalId: string,
-): boolean {
-  if (identity === null || identity.tokenIdentifier === undefined) return false
-  return (
-    identity.tokenIdentifier === principalId ||
-    `clerk_api_key:${identity.tokenIdentifier}` === principalId
-  )
-}
 
 type ReconcileChargeResult =
   | Readonly<{ kind: 'accepted'; transactionRef: string; outcome: 'released' }>

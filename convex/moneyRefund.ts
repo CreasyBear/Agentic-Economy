@@ -2,6 +2,7 @@ import { v } from 'convex/values'
 
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
+import { principalAllowed } from './moneyBillingAuthorization'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../src/modules/common/stable-hash'
 import {
@@ -39,17 +40,6 @@ import {
   type DailyPayoutIdentity,
 } from './moneyQualifiedUsePayout'
 import { reverseBrokeredDisputeLoss } from './moneyBrokeredDisputeLoss'
-
-function principalAllowed(
-  identity: { tokenIdentifier?: string } | null,
-  principalId: string,
-): boolean {
-  if (identity === null || identity.tokenIdentifier === undefined) return false
-  return (
-    identity.tokenIdentifier === principalId ||
-    `clerk_api_key:${identity.tokenIdentifier}` === principalId
-  )
-}
 
 type PayoutAllocationRefundLink = Readonly<{
   payoutRef: string

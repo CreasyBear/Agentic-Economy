@@ -86,6 +86,7 @@ import type * as marketExternalRegistryRefresh from "../marketExternalRegistryRe
 import type * as marketExternalSnapshots from "../marketExternalSnapshots.js";
 import type * as marketListingEvidence from "../marketListingEvidence.js";
 import type * as marketPresence from "../marketPresence.js";
+import type * as moneyBillingAuthorization from "../moneyBillingAuthorization.js";
 import type * as moneyBrokeredDisputeEvidence from "../moneyBrokeredDisputeEvidence.js";
 import type * as moneyBrokeredDisputeLoss from "../moneyBrokeredDisputeLoss.js";
 import type * as moneyBrokeredInvalidOutputLoss from "../moneyBrokeredInvalidOutputLoss.js";
@@ -219,6 +220,7 @@ declare const fullApi: ApiFromModules<{
   marketExternalSnapshots: typeof marketExternalSnapshots;
   marketListingEvidence: typeof marketListingEvidence;
   marketPresence: typeof marketPresence;
+  moneyBillingAuthorization: typeof moneyBillingAuthorization;
   moneyBrokeredDisputeEvidence: typeof moneyBrokeredDisputeEvidence;
   moneyBrokeredDisputeLoss: typeof moneyBrokeredDisputeLoss;
   moneyBrokeredInvalidOutputLoss: typeof moneyBrokeredInvalidOutputLoss;

@@ -121,6 +121,31 @@ export function addExactAmounts(left: unknown, right: unknown): ExactAmount | un
   return { currency: aligned.left.currency, units: (BigInt(aligned.left.units) + BigInt(aligned.right.units)).toString(), exponent: aligned.left.exponent }
 }
 
+export function sameExactScale(left: unknown, right: unknown): boolean {
+  const parsedLeft = readExactAmount(left)
+  const parsedRight = readExactAmount(right)
+  return parsedLeft !== undefined
+    && parsedRight !== undefined
+    && parsedLeft.currency === parsedRight.currency
+    && parsedLeft.exponent === parsedRight.exponent
+}
+
+export function sumExactAmounts(
+  amounts: readonly unknown[],
+  zeroReference: unknown,
+): ExactAmount | undefined {
+  const reference = readExactAmount(zeroReference)
+  if (reference === undefined) return undefined
+  let total: ExactAmount = { ...reference, units: '0' }
+  for (const amount of amounts) {
+    if (!sameExactScale(total, amount)) return undefined
+    const next = addExactAmounts(total, amount)
+    if (next === undefined) return undefined
+    total = next
+  }
+  return total
+}
+
 export function subtractExactAmounts(left: unknown, right: unknown): ExactAmount | undefined {
   const aligned = alignExactAmounts(left, right)
   if (aligned === undefined) return undefined
