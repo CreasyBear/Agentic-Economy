@@ -145,6 +145,7 @@ function AeAnswerPromptInputInner({
     if (busy) return
     setQueryError(null)
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
+    setValue('')
   }
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
