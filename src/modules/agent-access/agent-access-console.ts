@@ -13,7 +13,7 @@ const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly
 
 
 export async function loadAgentAccessConsoleReadback(
-  compare: CompareOperations,
+  operations: AgentAccessOperationActivityPort,
 ): Promise<AgentAccessConsoleReadback> {
   const [keys, source] = await Promise.all([
     listAgentAccessKeysServer(),
@@ -21,7 +21,7 @@ export async function loadAgentAccessConsoleReadback(
   ])
   const grants = await source.query(listOwnerGrantReadbacksQuery, {})
   const readback = await readAgentAccessMoneyReadback(keys, createConvexMoneyQueryPort(), grants)
-  return await enrichAgentAccessActivity(readback, compare)
+  return await enrichAgentAccessActivity(readback, operations)
 }
 
 type OperationCompareResult = Readonly<
@@ -40,19 +40,20 @@ export type CompareOperations = (
   input: Readonly<{ operationRefs: readonly string[] }>,
 ) => Promise<OperationCompareResult>
 
-function isPublicOperationRef(value: string): boolean {
-  return /^operation:v1:[0-9a-f]{64}$/u.test(value)
-}
+export type AgentAccessOperationActivityPort = Readonly<{
+  compare: CompareOperations
+  isOperationRef: (value: string) => boolean
+}>
 
 export async function enrichAgentAccessActivity(
   readbacks: AgentAccessConsoleReadback,
-  compare: CompareOperations,
+  operations: AgentAccessOperationActivityPort,
 ): Promise<AgentAccessConsoleReadback> {
   const recentActivity = readbacks
     .flatMap(({ activity }) => activity)
     .toSorted((left, right) => right.observedAt - left.observedAt)
   const operationRefs = [...new Set(recentActivity.reduce<string[]>((refs, { operationKey }) => {
-    if (isPublicOperationRef(operationKey)) refs.push(operationKey)
+    if (operations.isOperationRef(operationKey)) refs.push(operationKey)
     return refs
   }, []))]
     .slice(0, 40)
@@ -63,7 +64,7 @@ export async function enrichAgentAccessActivity(
   ))
   const comparisons = await Promise.all(batches.map(async (operationRefs) => {
     try {
-      return await compare({ operationRefs })
+      return await operations.compare({ operationRefs })
     } catch {
       return undefined
     }
@@ -79,7 +80,7 @@ export async function enrichAgentAccessActivity(
   return readbacks.map((readback) => ({
     ...readback,
     activity: readback.activity.map((entry) => {
-      const operation = isPublicOperationRef(entry.operationKey)
+      const operation = operations.isOperationRef(entry.operationKey)
         ? labels.get(entry.operationKey)
         : undefined
       return operation === undefined ? entry : { ...entry, operation }
