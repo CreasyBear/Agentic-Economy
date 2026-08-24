@@ -7,7 +7,12 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { getFunctionName } from 'convex/server'
+import {
+  getFunctionName,
+  type FunctionArgs,
+  type FunctionReference,
+  type FunctionReturnType,
+} from 'convex/server'
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 vi.mock('undici', async (importOriginal) => ({
@@ -284,7 +289,7 @@ async function serveOperationRoutes(input: Readonly<{
       for await (const chunk of incoming) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
       const body = Buffer.concat(chunks)
       const request = new Request(url, {
-        method: incoming.method,
+        ...(incoming.method === undefined ? {} : { method: incoming.method }),
         headers: incoming.headers as HeadersInit,
         ...(body.length === 0 ? {} : { body }),
       })
@@ -599,7 +604,12 @@ describe('capability operation Workpool lifecycle', () => {
         .withIndex('by_invocationRef', (query) => query.eq('invocationRef', pendingInvocationRef))
         .unique()
       if (source === null) throw new Error('operation_workpool_status_source_missing')
-      const { _id: _sourceId, _creationTime: _sourceCreationTime, ...material } = source
+      const {
+        _id: _sourceId,
+        _creationTime: _sourceCreationTime,
+        attemptRef: sourceAttemptRef,
+        ...material
+      } = source
       const variants = [
         {
           suffix: 'paid-settled',
@@ -671,9 +681,11 @@ describe('capability operation Workpool lifecycle', () => {
           result,
           usage,
           evidenceHash: variant.receipt.evidenceHash,
-          attemptRef: variant.state === 'reconciliation_required'
-            ? `attempt:operation-workpool:${variant.suffix}`
-            : material.attemptRef,
+          ...(variant.state === 'reconciliation_required'
+            ? { attemptRef: `attempt:operation-workpool:${variant.suffix}` }
+            : sourceAttemptRef === undefined
+              ? {}
+              : { attemptRef: sourceAttemptRef }),
         })
         refs.push({ invocationRef: variantInvocationRef, receiptState: variant.receipt.state })
       }
@@ -802,17 +814,23 @@ describe('capability operation Workpool lifecycle', () => {
     }))
     providerFetch.mockClear()
 
-    const transport = {
-      query: async (reference, args) => await backend.query(reference as never, args as never) as never,
-      mutation: async (reference, args) => await backend.mutation(reference as never, args as never) as never,
-      action: async (reference, args) => {
-        const result = await backend.action(reference as never, args as never)
+    const queryBackend = backend.query as ConvexSourceTransport['query']
+    const mutationBackend = backend.mutation as ConvexSourceTransport['mutation']
+    const actionBackend = backend.action as ConvexSourceTransport['action']
+    const transport: ConvexSourceTransport = {
+      query: queryBackend,
+      mutation: mutationBackend,
+      action: async <Action extends FunctionReference<'action'>>(
+        reference: Action,
+        args: FunctionArgs<Action>,
+      ): Promise<FunctionReturnType<Action>> => {
+        const result = await actionBackend(reference, args)
         if (getFunctionName(reference) === 'capabilityOperationInvocations:invoke') {
           await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
         }
-        return result as never
+        return result
       },
-    } as ConvexSourceTransport
+    }
     const restoreTransport = setPublicSourceTransportForTests(transport)
     const served = await serveOperationRoutes({ apiKeyId, apiKeySubject, scopes })
     const temporaryRoot = await mkdtemp(join(tmpdir(), 'ae-served-cli-'))
