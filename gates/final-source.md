@@ -15,7 +15,7 @@ Scope: Prove the pruned repository builds, tests, generates, preserves retained 
 - [x] G3: Net tracked line removal from `76e31dc72` is at least 55,000.
   CHECK: git diff --numstat 76e31dc72..HEAD | awk 'BEGIN{a=0;d=0} $1~/^[0-9]+$/&&$2~/^[0-9]+$/{a+=$1;d+=$2} END{net=d-a; print "NET_REMOVED=" net; exit(net>=55000?0:1)}'
   EXPECT: /NET_REMOVED=([5-9][5-9][0-9]{3}|[6-9][0-9]{4}|[1-9][0-9]{5,})/
-  EVIDENCE: At final source HEAD, the base-revision numstat reports 92,960 deleted and 17,511 added tracked lines, for exactly 75,449 net removed.
+  EVIDENCE: At final source HEAD, the base-revision numstat reports 92,960 deleted and 17,512 added tracked lines, for exactly 75,448 net removed.
 
 - [ ] G4: Gateway production smoke and exact-revision staging evidence are validated.
   EVIDENCE: Pending external evidence. Source/unit gateway-smoke coverage is green, but no production gateway request or exact-revision staging smoke was run in this repository-only operation.

@@ -23,7 +23,7 @@ Scope: Deliver the narrow Operation market repository, prove its retained bounda
 - [x] G5: Final source and generated-output gates are green and net removal is at least 55,000 lines.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/final-source.md && echo FINAL_SOURCE_OK
   EXPECT: FINAL_SOURCE_OK
-  EVIDENCE: Final source ledger G1-G3 are met: source/build/generated/CLI/chat/retained/parity gates pass and the verified tracked reduction is 75,449 net lines.
+  EVIDENCE: Final source ledger G1-G3 are met: source/build/generated/CLI/chat/retained/parity gates pass and the verified tracked reduction is 75,448 net lines.
 
 - [ ] G6: Production drain, exact-revision staging, rollback export, Release A/B, and eleven separately confirmed table deletions are evidenced.
   EVIDENCE: Pending human release operations. No production deployment, export, destructive table deletion, or snapshot-retention decision was inferred or performed.
