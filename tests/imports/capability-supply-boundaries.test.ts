@@ -91,6 +91,15 @@ describe('capability supply boundaries', () => {
     expect(readiness).not.toMatch(/ctx\.scheduler\.runAfter[\s\S]*internal\.capabilitySupplyReadiness\.probe/)
     expect(readiness).not.toContain('makeFunctionReference')
   })
+
+  it('keeps active detail parity on the bounded active-first index', () => {
+    const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
+    const projection = readFileSync('convex/capabilitySupplyOperationProjection.ts', 'utf8')
+
+    expect(schema).toMatch(/capabilityCurrentOperationDetails:[\s\S]*\.index\('by_active_and_operationRef', \['active', 'operationRef'\]\)/)
+    expect(projection).toMatch(/query\('capabilityCurrentOperationDetails'\)[\s\S]*?\.withIndex\('by_active_and_operationRef', \(query\) => query\.eq\('active', true\)\)[\s\S]*?\.take\(258\)/)
+    expect(projection).not.toContain(".filter((query) => query.eq(query.field('active'), true))")
+  })
 })
 
 function sources(): string[] {

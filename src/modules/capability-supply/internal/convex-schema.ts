@@ -221,7 +221,8 @@ export const capabilitySupplyTables = {
     projectedAt: v.number(),
   })
     .index('by_operationRef_and_active', ['operationRef', 'active'])
-    .index('by_publicationRef_and_publicationRevision', ['publicationRef', 'publicationRevision']),
+    .index('by_publicationRef_and_publicationRevision', ['publicationRef', 'publicationRevision'])
+    .index('by_active_and_operationRef', ['active', 'operationRef']),
 
   capabilityCurrentOperationReadControls: defineTable({
     controlRef: v.literal('current_operation_registry'),
