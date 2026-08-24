@@ -513,7 +513,7 @@ Synthesized from this review's findings. Each task is build-actionable and order
   - Files: `package.json`, `package-lock.json`, `packages/cli/package.json`, `scripts/build-cli.mjs`, `scripts/test-cli-package.mjs`, CLI package tests.
   - Verify: clean archive `npm ci`, package-owned build, exact `npm pack`, temporary install, Node 20/22 help smoke, and `CLI_PACKAGE_PASS`.
 
-- [ ] **T3 (P1, human: ~2 days / Codex: ~2h)** - Module enforcement - Declare and enforce the runtime dependency DAG
+- [x] **T3 (P1, human: ~2 days / Codex: ~2h)** - Module enforcement - Declare and enforce the runtime dependency DAG
   - Surfaced by: Architecture finding 1 and code quality findings 5-6 - sixteen-module cycle and path-name-only privacy.
   - Files: `src/lib/ui/contract-scans.ts`, `tests/imports/`, module boundary manifest, `src/modules/common/action.ts`, `src/modules/actions/`.
   - Verify: manifest test rejects undeclared entry files, reverse edges, and cycles; `npm run test:imports && npm run typecheck`.
@@ -579,6 +579,7 @@ Zero deferred TODO items were created. Every necessary architecture action is re
 - 2026-08-25 T1 integrated: `852df326c`, `e498dcc6e`, `730b6ccf0`, `0b81030d4`, `1c448e05b`, and `360d5d4e7`; master reproduced 17/17 Wave 0 fixtures, 2/2 durable Workpool/installed-CLI journeys, 5/5 recovery adapter tests, 29/29 imports, and 588/588 integration tests. The installed CLI crossed served search/detail/compare/inspect/call/status/receipt/replay routes into one Convex test backend with one provider effect. Controlled capacity accepted 256 and returned typed `source_capacity_exceeded` at 257. Master baselines for 1/20/256 rows were respectively 14/261/3329 database queries, 14/280/3584 documents, 15,765/317,080/4,076,780 bytes read, and p95 23.625/18.167/195.926 ms over ten samples; corresponding heap high-water marks were 129,090,920/141,131,888/196,529,712 bytes.
 - 2026-08-25 integration typecheck: `2948adf76` regenerated the omitted `/api/v1/registry` route entry and closed the original preflight error. The resulting full typecheck then exposed five T1 test-only errors in `tests/integration/capability-operation-workpool.test.ts:286,665,806-809` (exact optional method/attempt fields and Convex transport generics). A bounded T1 integration-fix child owns only those compile errors before T3 begins.
 - 2026-08-25 T1 integration typecheck closed: `035260773` fixed the fixture types without runtime or assertion changes; master reproduced `npm run typecheck`, the 2/2 served Workpool/CLI tests, and 588/588 integration tests.
+- 2026-08-25 T3 integrated: `d8f39a867` and `912231b6e`; the installed TypeScript compiler API now enforces 22 declared modules, 98 acyclic target edges, named entry surfaces, 75 exact owned runtime exceptions assigned to T4-T7, 492 adapter/Convex consumer imports, and 62 test-only groups covering 142 exact importer/entry scopes. `common/action.ts` has no product-module imports; `actions` owns concrete context composition. The master reproduced 39/39 import tests, 49/49 focused boundary/action/surface tests, full typecheck, and the TypeScript standards gate. No external action was performed.
 
 ## Review completion
 
