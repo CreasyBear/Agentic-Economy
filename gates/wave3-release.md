@@ -12,10 +12,10 @@ Scope: Make generated-source, deterministic chat, browser accessibility, and exa
   EXPECT: RELEASE_CONFORMANCE_OK
   EVIDENCE: `test:chat:conformance` and retained `test:conformance` both passed and emitted `RELEASE_CONFORMANCE_OK`.
 
-- [x] G3: Browser/accessibility scripts no longer target legacy answer UI and pass through the release contract.
-  CHECK: npm run test:e2e && npm run test:e2e:a11y && ! rg -n "AeChat|Answer ready|Agent-readable data|api/answer" tests/e2e tests/deploy-smoke/chat-* && rg -n "test:e2e|test:e2e:a11y|smoke:chat:staging" package.json && echo BROWSER_GATE_OK
+- [x] G3: Browser, accessibility, and isolated retained-payment proofs pass through the release contract.
+  CHECK: npm run test:e2e && npm run test:e2e:a11y && npm run test:e2e:paid-operation && ! rg -n "AeChat|Answer ready|Agent-readable data|api/answer" tests/e2e tests/deploy-smoke/chat-* && rg -n "test:e2e|test:e2e:a11y|test:e2e:paid-operation|smoke:chat:staging" package.json && echo BROWSER_GATE_OK
   EXPECT: BROWSER_GATE_OK
-  EVIDENCE: Commit `18ea46b20`; complete credential-free directory passed 20/20 and accessibility passed 10/10 under Node 22.22.0.
+  EVIDENCE: Commits `18ea46b20` and `68d2cbc7a`; general 20/20, accessibility 10/10, and isolated retained-payment 7/7 passed under Node 22.22.0.
 
 - [x] G4: Exact-revision staging workflow invokes HTTP streaming and proves a compact typed Operation card on a redacted public share.
   CHECK: test -f tests/deploy-smoke/chat-browser-staging.spec.ts && rg -n "smoke:chat:staging|AE_RELEASE_SOURCE_REVISION|playwright-chat-staging-smoke.json|chat-browser-staging" .github/workflows/kernel-release-gate.yml package.json playwright.chat-staging.config.ts tests/deploy-smoke/chat-* && rg -n "registry\.operations\.search exactly once|sharedSearchCard|toolCallId|shareUrl\.origin" tests/deploy-smoke/chat-browser-staging.spec.ts && echo STAGING_WORKFLOW_OK
