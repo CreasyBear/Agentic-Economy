@@ -12,12 +12,12 @@ Scope: Make generated-source, deterministic chat, browser accessibility, and exa
   EXPECT: RELEASE_CONFORMANCE_OK
   EVIDENCE: `test:chat:conformance` and retained `test:conformance` both passed and emitted `RELEASE_CONFORMANCE_OK`.
 
-- [x] G3: Browser/accessibility scripts no longer target legacy answer UI and are present in the release contract.
-  CHECK: ! rg -n "AeChat|Answer ready|Agent-readable data|api/answer" tests/e2e tests/deploy-smoke/chat-* && rg -n "test:e2e|test:e2e:a11y|smoke:chat:staging" package.json && echo BROWSER_GATE_OK
+- [ ] G3: Browser/accessibility scripts no longer target legacy answer UI and pass through the release contract.
+  CHECK: npm run test:e2e && npm run test:e2e:a11y && ! rg -n "AeChat|Answer ready|Agent-readable data|api/answer" tests/e2e tests/deploy-smoke/chat-* && rg -n "test:e2e|test:e2e:a11y|smoke:chat:staging" package.json && echo BROWSER_GATE_OK
   EXPECT: BROWSER_GATE_OK
-  EVIDENCE: Obsolete answer E2E files were deleted in `0eae24809`; package release contract includes both browser and accessibility scripts.
+  EVIDENCE: pending; final verification found 33 general E2E and 6 accessibility failures, including stale removed-surface assertions.
 
-- [x] G4: Exact-revision staging workflow invokes both HTTP streaming and browser chat proof and uploads sanitized evidence.
+- [ ] G4: Exact-revision staging workflow invokes HTTP streaming and proves a compact typed Operation card on a redacted public share.
   CHECK: test -f tests/deploy-smoke/chat-browser-staging.spec.ts && rg -n "smoke:chat:staging|AE_RELEASE_SOURCE_REVISION|playwright-chat-staging-smoke.json|chat-browser-staging" .github/workflows/kernel-release-gate.yml package.json playwright.chat-staging.config.ts tests/deploy-smoke/chat-* && echo STAGING_WORKFLOW_OK
   EXPECT: STAGING_WORKFLOW_OK
-  EVIDENCE: Commits `0eae24809` and `5195538d7`; staging config lists both chat specs and the opt-in workflow binds evidence to `${{ github.sha }}`.
+  EVIDENCE: pending; contract review requires the durable staging prompt/share assertion to exercise one canonical read tool and exclude raw payload fields.
