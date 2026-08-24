@@ -17,7 +17,6 @@ outputs/
 .react-doctor/
 graphify-out/
 .tanstack/
-.promptfoo-home/
 
 # Local planning, agent memory, and development journals
 /.planning/

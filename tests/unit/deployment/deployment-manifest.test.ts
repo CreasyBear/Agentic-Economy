@@ -58,7 +58,17 @@ describe('deployment manifest validator', () => {
       'convex-scheduled-jobs',
     ])
     const components = result.resources.find((resource) => resource.id === 'convex-components')
-    expect((components as { components: readonly string[] }).components).toContain('agent')
+    expect((components as { components: readonly string[] }).components).toEqual([
+      'workpool',
+      'rate-limiter',
+      'agent',
+      'aggregate:ownerActivationByStage',
+      'aggregate:marketEvidence',
+      'aggregate:marketOperationEvidence',
+      'aggregate:marketOperationRatings',
+      'aggregate:marketActiveOperations',
+      'aggregate:marketActiveSuppliers',
+    ])
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
   })
 
@@ -178,6 +188,28 @@ describe('deployment manifest validator', () => {
       AE_CHAT_SHARE_KEY_ID: 'chat-share-v1',
     }, { nodeMajor: 22 })
     expect(complete.findings.filter(({ scope }) => scope === 'security:chat-share')).toEqual([])
+    expect(complete.findings.filter(({ kind }) => kind === 'unknown')).toEqual([])
+    expect(JSON.stringify(complete)).not.toContain('chat-share-secret-value')
+  })
+
+  it('treats retired answer, model-catalogue, and eval configuration as unknown', () => {
+    const retiredNames = [
+      'AE_ANSWER_EVAL_REGISTRY_SEED',
+      'AE_ANSWER_EVAL_PASSED',
+      'AE_LLM_MODELS',
+      'VITE_AE_ANSWER_MODE',
+      'AE_ANSWER_THREAD_SHARE_SECRET',
+      'AE_ANSWER_THREAD_SHARE_KEY_ID',
+      'AE_BRAINTRUST_PROJECT',
+      'AE_BRAINTRUST_DATASET',
+    ]
+    const result = validateDeploymentManifest({
+      NODE_ENV: 'development',
+      ...Object.fromEntries(retiredNames.map((name) => [name, 'retired'])),
+    }, { nodeMajor: 22 })
+
+    expect(result.findings.filter(({ kind }) => kind === 'unknown').flatMap(({ names }) => names))
+      .toEqual(expect.arrayContaining(retiredNames))
   })
 
   it('requires CDP custody, forbids raw production keys, and redacts custody secrets', () => {

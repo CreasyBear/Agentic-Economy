@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 
+import { DEPLOYMENT_MANIFEST } from '../../../src/lib/deployment/manifest'
+
 type ReleaseScriptMap = Record<string, string>
 
 type WorkflowStep = {
@@ -246,6 +248,24 @@ describe('green release baseline', () => {
     const workflowText = readFileSync(resolve(root, '.github/workflows/kernel-release-gate.yml'), 'utf8')
     expect(workflowText).not.toContain('answer-suite-report')
     expect(workflowText).not.toContain('test:eval:report')
+  })
+
+  it('provides every production manifest requirement to the live gateway job', () => {
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const liveEnvironment = workflow.jobs?.['live-gateway-proof']?.env ?? {}
+    const requiredNames = DEPLOYMENT_MANIFEST.configuration.requiredProduction
+      .flatMap(({ names }) => names)
+
+    expect(Object.keys(liveEnvironment)).toEqual(expect.arrayContaining(requiredNames))
+    expect(liveEnvironment).toMatchObject({
+      AE_LLM_MODEL: '${{ vars.AE_LLM_MODEL }}',
+      AE_CHAT_PROXY_SECRET: '${{ secrets.AE_CHAT_PROXY_SECRET }}',
+      AE_X402_CDP_EXPECTED_EVM_ADDRESS: '${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}',
+      AE_X402_CDP_ACCOUNT_POLICY_ID: '${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}',
+      AE_X402_CDP_PROJECT_POLICY_ID: '${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}',
+      AE_X402_CDP_CREDENTIAL_GENERATION: '${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}',
+      AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}',
+    })
   })
 
   it('keeps the paid gateway smoke explicit and production-approved', () => {

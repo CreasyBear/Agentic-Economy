@@ -24,7 +24,7 @@ export type DeploymentValidationResult = Readonly<{
   readinessProbes: typeof DEPLOYMENT_MANIFEST.readinessProbes
 }>
 
-type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'answer-mode' | 'credential-ref'; target?: string }>
+type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'credential-ref'; target?: string }>
 type RequirementGroup = Readonly<{ scope: string; code: string; names: readonly string[]; mode: 'all' | 'one-of'; trigger?: readonly string[] }>
 
 export const SOURCE_WRITE_FAMILIES = ['billing', 'protected', 'catalog', 'operator', 'repair', 'session'] as const
@@ -40,7 +40,6 @@ const sourceWriteDerivedNames = SOURCE_WRITE_FAMILIES.flatMap((family) => {
 const forbiddenProductionNames = Object.freeze([
   'AE_SOURCE_WRITE_SECRET',
   'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E',
-  'AE_ANSWER_EVAL_REGISTRY_SEED',
   'AE_DEV_WBA_SMOKE_ENABLED',
   'AE_DEV_WBA_SMOKE_SECRET',
   'AE_DEV_WBA_SIGNATURE_AGENT',
@@ -110,8 +109,7 @@ const conditional: readonly RequirementGroup[] = [
 ]
 
 const optionalNames = Object.freeze([
-  'AE_ANSWER_EVAL_PASSED', 'AE_LLM_MODEL', 'AE_LLM_MODELS', 'VITE_AE_ANSWER_MODE', 'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
-  'AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID',
+  'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
   'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
@@ -130,7 +128,7 @@ const fieldRules: readonly FieldRule[] = [
   { name: 'VITE_POSTHOG_APP_URL', kind: 'url' }, { name: 'POSTHOG_APP_URL', kind: 'url' },
   { name: 'AUTUMN_API_BASE_URL', kind: 'url' }, { name: 'AUTUMN_PORTAL_RETURN_BASE_URL', kind: 'url' },
   { name: 'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', kind: 'host-list' },
-  { name: 'VITE_AE_ANSWER_MODE', kind: 'answer-mode' }, { name: 'AE_CSP_REPORT_ONLY', kind: 'boolean' },
+  { name: 'AE_CSP_REPORT_ONLY', kind: 'boolean' },
   { name: 'AE_COOKIE_SECURE', kind: 'boolean' },
   { name: 'AE_DISABLE_OBSERVABILITY', kind: 'boolean' }, { name: 'VITE_AE_DISABLE_OBSERVABILITY', kind: 'boolean' },
   { name: 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', kind: 'boolean' }, { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
@@ -138,16 +136,16 @@ const fieldRules: readonly FieldRule[] = [
 ]
 
 const knownNames = Object.freeze([
-  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_LLM_MODEL', 'AE_LLM_MODELS',
+  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY',
   'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
-  'AE_ANSWER_EVAL_PASSED', 'AE_SOURCE_WRITE_SECRET',
-  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_ANSWER_THREAD_SHARE_KEY_ID',
+  'AE_SOURCE_WRITE_SECRET',
+  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
   'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_MAX_ATOMIC',
   'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
   'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
-  'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL', 'AE_BRAINTRUST_PROJECT', 'AE_BRAINTRUST_DATASET',
+  'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
 ])
 
@@ -160,7 +158,21 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   }),
   resources: Object.freeze([
     Object.freeze({ id: 'web-server', kind: 'vercel-node-runtime', declaration: 'nitro.vercel.entryFormat=node' }),
-    Object.freeze({ id: 'convex-components', kind: 'convex-component-set', components: Object.freeze(['workflow', 'workpool', 'rate-limiter', 'agent', 'aggregate:ownerActivationByStage']) }),
+    Object.freeze({
+      id: 'convex-components',
+      kind: 'convex-component-set',
+      components: Object.freeze([
+        'workpool',
+        'rate-limiter',
+        'agent',
+        'aggregate:ownerActivationByStage',
+        'aggregate:marketEvidence',
+        'aggregate:marketOperationEvidence',
+        'aggregate:marketOperationRatings',
+        'aggregate:marketActiveOperations',
+        'aggregate:marketActiveSuppliers',
+      ]),
+    }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
@@ -383,7 +395,7 @@ function isMalformed(rule: FieldRule, value: string, production: boolean): boole
   if (rule.kind === 'url') return !validUrl(value, production)
   if (rule.kind === 'host-list') return !value.split(',').every((entry) => validHost(entry.trim()))
   if (rule.kind === 'boolean') return value !== 'true' && value !== 'false' && !(rule.name === 'AE_CSP_REPORT_ONLY' && ['0', '1'].includes(value))
-  return rule.kind === 'answer-mode' && value !== 'structured'
+  return false
 }
 function validUrl(value: string, production: boolean): boolean {
   try {
