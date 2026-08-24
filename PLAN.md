@@ -44,4 +44,4 @@ The master owns contracts, ordering, gates, conflict resolution, reviews, genera
 
 - Wave 1 accepted: commits `65959ec48` through `5207cbe7e`, dual review passed.
 - Wave 2 accepted: commits `c742476ac` through `79291d274`, dual review passed.
-- Wave 3 initial implementation committed through `ec2977e74`; contract corrections are active.
+- Wave 3 implementation and correction leaves committed through `5195538d7`; dual integration review is active.
