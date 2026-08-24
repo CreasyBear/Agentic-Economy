@@ -10,7 +10,6 @@ import {
   type SourceWriteAdmission,
   type SourceWriteAdmissionRequest,
 } from '@/modules/security/source-write-admission'
-import type { OwnerProviderEarningsReadback } from '@/modules/capability-supply/supply-funnel.functions'
 import {
   isMoneyRefusal,
   type MoneyRefusal,
@@ -57,6 +56,21 @@ export type OwnerBusinessCurrencyProjection = Readonly<{
   earnings: ProviderEarningsView
   payout: PayoutStatusView
 }>
+
+type OwnerProviderEarningsReadback = Readonly<
+  | { kind: 'error'; code: 'unauthenticated' | 'source_unavailable' }
+  | { kind: 'not_found' }
+  | {
+      kind: 'available'
+      businessId: string
+      accounts: readonly Readonly<{
+        currency: string
+        earnings: Readonly<{ kind: 'ok' } & ProviderEarningsView>
+        payout: Readonly<{ kind: 'ok' } & PayoutStatusView>
+      }>[]
+      accountsTruncated: boolean
+    }
+>
 
 export const ownerBusinessQuery = sourceQuery<
   Record<string, never>,
