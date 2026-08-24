@@ -4,19 +4,21 @@ import { v } from 'convex/values'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
   ActorKindValues,
-  AuditEventTypeValues,
-  AuditTargetTypeValues,
   OperationKeyStatusValues,
 } from '@/modules/observability/public'
+import {
+  StoredAuditEventTypeValues,
+  StoredAuditTargetTypeValues,
+} from '@/modules/observability/stored-compatibility'
 
 export const observabilityTables = {
   auditEvents: defineTable({
     eventId: v.string(),
-    eventType: literalUnion(AuditEventTypeValues),
+    eventType: literalUnion(StoredAuditEventTypeValues),
     actorKind: literalUnion(ActorKindValues),
     actorRef: v.string(),
     businessId: v.optional(v.id('businesses')),
-    targetType: literalUnion(AuditTargetTypeValues),
+    targetType: literalUnion(StoredAuditTargetTypeValues),
     targetRef: v.string(),
     beforeState: v.optional(v.string()),
     afterState: v.optional(v.string()),

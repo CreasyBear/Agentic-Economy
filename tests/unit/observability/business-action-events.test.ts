@@ -2,26 +2,32 @@ import { describe, expect, it } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  AuditEventTypeValues,
-  AuditTargetTypeValues,
+  FunnelEventTypeValues,
+  validateAuditEvent,
+} from '@/modules/observability/public'
+import {
   BusinessActionPrivateEvidenceAccessPolicy,
   BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues,
   BusinessActionPrivateEvidenceRetentionClass,
-  FunnelEventTypeValues,
   projectBusinessActionPrivateEvidenceForPublic,
   validateBusinessActionPrivateEvidencePolicy,
   validateBusinessActionNoRepairReconstruction,
-} from '@/modules/observability/public'
+} from '@/modules/observability/stored-business-action-compatibility'
+import {
+  StoredAuditEventTypeValues,
+  StoredAuditTargetTypeValues,
+  readStoredAuditEventType,
+} from '@/modules/observability/stored-compatibility'
 import { observabilityTables } from '@/modules/observability/internal/schema'
 import type {
   BusinessActionPrivateEvidencePolicyInput,
-} from '@/modules/observability/public'
+} from '@/modules/observability/stored-business-action-compatibility'
 
 describe('business action observability contracts', () => {
   it('registers Phase 6 audit targets in the shared observability schema', () => {
     expect(observabilityTables.operationKeys).toBeDefined()
     expect(observabilityTables.auditEvents).toBeDefined()
-    expect(AuditTargetTypeValues).toEqual(
+    expect(StoredAuditTargetTypeValues).toEqual(
       expect.arrayContaining([
         'business_action_card',
         'business_action_mandate',
@@ -39,7 +45,7 @@ describe('business action observability contracts', () => {
   })
 
   it('registers Phase 6 audit events for receipt reconstruction', () => {
-    expect(AuditEventTypeValues).toEqual(
+    expect(StoredAuditEventTypeValues).toEqual(
       expect.arrayContaining([
         'business_action.card_versioned',
         'business_action.mandate_recorded',
@@ -58,7 +64,7 @@ describe('business action observability contracts', () => {
   })
 
   it('registers Phase 6 funnel events from GTM readiness', () => {
-    expect(FunnelEventTypeValues).toEqual(
+    expect(FunnelEventTypeValues).not.toEqual(
       expect.arrayContaining([
         'business_action_card_viewed',
         'business_action_request_started',
@@ -70,6 +76,24 @@ describe('business action observability contracts', () => {
         'business_action_proof_gap_recorded',
       ])
     )
+  })
+
+  it('keeps stored business-action audit rows readable but rejects new writes', () => {
+    expect(readStoredAuditEventType('business_action.no_repair_marked'))
+      .toBe('business_action.no_repair_marked')
+    expect(validateAuditEvent({
+      eventId: 'audit:compatibility',
+      eventType: 'business_action.no_repair_marked',
+      actorKind: 'system',
+      actorRef: 'system:compatibility-test',
+      targetType: 'business_action_no_repair',
+      targetRef: 'stored:no-repair:1',
+      idempotencyKey: 'stored:no-repair:1',
+      correlationId: 'correlation:compatibility',
+      redactedPayload: null,
+      payloadHash: canonicalDigest(null),
+      createdAt: 1,
+    } as never)).toEqual({ valid: false, reason: 'retired_compatibility_event' })
   })
 
   it('validates no-repair as terminal audited reconstruction without provider evidence rewrite', () => {

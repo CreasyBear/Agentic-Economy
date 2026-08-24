@@ -1,40 +1,29 @@
 export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_retryable', 'failed_terminal'] as const
 
-export { ActorKindValues, AuditEventTypeValues, AuditTargetTypeValues } from '@/modules/common/audit-events'
+import {
+  ActorKindValues,
+  AuditEventTypeValues as StoredAuditEventTypeValues,
+  AuditTargetTypeValues as StoredAuditTargetTypeValues,
+} from '@/modules/common/audit-events'
+
+export { ActorKindValues }
+
+type StoredAuditEventType = (typeof StoredAuditEventTypeValues)[number]
+type StoredAuditTargetType = (typeof StoredAuditTargetTypeValues)[number]
+export type CurrentAuditEventType = Exclude<StoredAuditEventType, `business_action.${string}`>
+export type CurrentAuditTargetType = Exclude<StoredAuditTargetType, `business_action_${string}`>
+
+export const AuditEventTypeValues = StoredAuditEventTypeValues.filter(
+  (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
+) as unknown as readonly [CurrentAuditEventType, ...CurrentAuditEventType[]]
+
+export const AuditTargetTypeValues = StoredAuditTargetTypeValues.filter(
+  (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
+) as unknown as readonly [CurrentAuditTargetType, ...CurrentAuditTargetType[]]
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 
 export const InvalidationIntentStatusValues = ['queued', 'applied'] as const
-export const WAVE_1_JOURNEY_EVENT_NAMES = [
-  'listing_viewed',
-  'listing_trust_fact_opened',
-  'direct_call_selected',
-  'shortlist_started',
-  'shortlist_ready',
-  'shortlist_reopened',
-  'export_preview_opened',
-  'shortlist_exported',
-  'business_opened',
-  'urgent_call_route_shown',
-  'journey_abandoned',
-] as const
-
-export const WAVE_2_DORMANT_JOURNEY_EVENT_NAMES = [
-  'record_reopened',
-  'record_exported',
-  'record_shared',
-  'record_cited',
-  'dispute_opened',
-  'replay_materially_resolved',
-  'admitted_r1_send',
-] as const
-
-export const JOURNEY_EVENT_NAMES = [
-  ...WAVE_1_JOURNEY_EVENT_NAMES,
-  ...WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
-] as const
-
-
 export const FunnelEventTypeValues = [
   'visitor_attributed',
   'auth_started',
@@ -49,7 +38,6 @@ export const FunnelEventTypeValues = [
   'registry_search',
   'service_registry_result_clicked',
   'ucp_manifest_fetched',
-  ...JOURNEY_EVENT_NAMES,
   'developer_docs_viewed',
   'schema_downloaded',
   'example_fixture_downloaded',
@@ -68,14 +56,6 @@ export const FunnelEventTypeValues = [
   'refund_or_dispute_recorded',
   'billing_reconciliation_failed',
   'billing_reconciliation_repaired',
-  'business_action_card_viewed',
-  'business_action_request_started',
-  'business_action_checkpoint_recorded',
-  'business_action_guardrail_allowed',
-  'business_action_guardrail_blocked',
-  'business_action_evidence_ingested',
-  'business_action_receipt_viewed',
-  'business_action_proof_gap_recorded',
 ] as const
 
 export const ActivationStageValues = ['visitor', 'published', 'activated', 'blocked'] as const
