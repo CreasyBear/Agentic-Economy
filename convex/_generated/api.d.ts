@@ -84,6 +84,7 @@ import type * as harnessSessionsAppend from "../harnessSessionsAppend.js";
 import type * as harnessSessionsFinalize from "../harnessSessionsFinalize.js";
 import type * as harnessSessionsReads from "../harnessSessionsReads.js";
 import type * as http from "../http.js";
+import type * as legacyReleaseASchema from "../legacyReleaseASchema.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as marketAggregateBackfill from "../marketAggregateBackfill.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   harnessSessionsFinalize: typeof harnessSessionsFinalize;
   harnessSessionsReads: typeof harnessSessionsReads;
   http: typeof http;
+  legacyReleaseASchema: typeof legacyReleaseASchema;
   "lib/rateLimit": typeof lib_rateLimit;
   marketAggregateBackfill: typeof marketAggregateBackfill;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;

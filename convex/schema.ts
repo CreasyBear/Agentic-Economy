@@ -10,21 +10,19 @@ import {
 } from '../src/modules/agent-access/public'
 import { actionInvocationTables } from '../src/modules/action-invocation/internal/convex-schema'
 import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/internal/convex-schema'
-import { harnessTables } from '../src/modules/harness/internal/convex-schema'
-import { answerThreadTables } from '../src/modules/answer-thread/internal/convex-schema'
 import { observabilityTables } from '../src/modules/observability/internal/schema'
 import { registryTables } from '../src/modules/registry/internal/schema'
 import { securityTables } from '../src/modules/security/internal/schema'
 import { moneyTables } from '../src/modules/money/internal/convex-schema'
-import { externalRunTables } from '../src/modules/external-run/internal/convex-schema'
 import { marketTables } from '../src/modules/market/internal/convex-schema'
 import { chatTables } from '../src/modules/chat/internal/convex-schema'
+import { legacyReleaseATables } from './legacyReleaseASchema'
 
 export default defineSchema({
   ...chatTables,
   ...actionInvocationTables,
   ...capabilityOperationInvocationTables,
-  ...answerThreadTables,
+  ...legacyReleaseATables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,
@@ -33,10 +31,8 @@ export default defineSchema({
   ...agentAccessPolicyTables,
   ...agentAccessOAuthTables,
   ...registryTables,
-  ...harnessTables,
   ...observabilityTables,
   ...securityTables,
   ...moneyTables,
-  ...externalRunTables,
   ...marketTables,
 })

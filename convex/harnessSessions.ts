@@ -1,18 +1,16 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { FollowUpIntentValues } from '../src/modules/answer-thread/answer-thread.schema'
 import {
-  appendHarnessSessionEntryHandler,
   appendHarnessSessionEntryResult,
   harnessRunStatus,
   harnessSessionEntryKind,
 } from './harnessSessionsAppend'
 import {
   answerTurnToolCallInput,
-  finalizeReservedAnswerTurnHandler,
   finalizeReservedAnswerTurnResult,
 } from './harnessSessionsFinalize'
 import {
@@ -23,6 +21,10 @@ import {
   readAdminHarnessSessionEntriesHandler,
   readAdminHarnessSessionEntriesResult,
 } from './harnessSessionsReads'
+
+function retiredLegacyWriter(): never {
+  throw new Error('legacy_writer_retired')
+}
 
 export const appendHarnessSessionEntry = mutationGeneric({
   args: {
@@ -49,7 +51,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
     sourceSnapshotHash: v.optional(v.string()),
   },
   returns: appendHarnessSessionEntryResult,
-  handler: appendHarnessSessionEntryHandler,
+  handler: (): Promise<Infer<typeof appendHarnessSessionEntryResult>> => retiredLegacyWriter(),
 })
 
 export const finalizeReservedAnswerTurn = mutationGeneric({
@@ -101,7 +103,7 @@ export const finalizeReservedAnswerTurn = mutationGeneric({
     ),
   },
   returns: finalizeReservedAnswerTurnResult,
-  handler: finalizeReservedAnswerTurnHandler,
+  handler: (): Promise<Infer<typeof finalizeReservedAnswerTurnResult>> => retiredLegacyWriter(),
 })
 
 export const listHarnessSessionEntries = queryGeneric({

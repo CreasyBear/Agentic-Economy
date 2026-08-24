@@ -1,21 +1,17 @@
 import { mutationGeneric, paginationOptsValidator, queryGeneric } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { internalMutation } from './_generated/server'
 
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import {
   answerTurnReservationResult,
-  renewAnswerTurnLeaseHandler,
   renewAnswerTurnLeaseResult,
-  reserveAnswerTurnHandler,
 } from './answerThreadsReserve'
 import {
-  persistAnswerTurnCheckpointHandler,
   persistAnswerTurnCheckpointResult,
   readAnswerTurnCheckpointHandler,
   readAnswerTurnCheckpointResult,
-  stopAnswerTurnHandler,
   stopAnswerTurnResult,
 } from './answerThreadsCheckpoint'
 import {
@@ -30,13 +26,13 @@ import {
   readTurnToolCallsHandler,
 } from './answerThreadsReads'
 import {
-  continueDeleteAnswerThreadHandler,
-  deleteAnswerThreadHandler,
-  issueAnswerThreadShareHandler,
   issueAnswerThreadShareResult,
-  revokeAnswerThreadShareHandler,
   revokeAnswerThreadShareResult,
 } from './answerThreadsShare'
+
+function retiredLegacyWriter(): never {
+  throw new Error('legacy_writer_retired')
+}
 
 export const reserveAnswerTurn = mutationGeneric({
   args: {
@@ -52,7 +48,7 @@ export const reserveAnswerTurn = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: answerTurnReservationResult,
-  handler: reserveAnswerTurnHandler,
+  handler: (): Promise<Infer<typeof answerTurnReservationResult>> => retiredLegacyWriter(),
 })
 
 export const renewAnswerTurnLease = mutationGeneric({
@@ -69,7 +65,7 @@ export const renewAnswerTurnLease = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: renewAnswerTurnLeaseResult,
-  handler: renewAnswerTurnLeaseHandler,
+  handler: (): Promise<Infer<typeof renewAnswerTurnLeaseResult>> => retiredLegacyWriter(),
 })
 
 export const persistAnswerTurnCheckpoint = mutationGeneric({
@@ -89,7 +85,7 @@ export const persistAnswerTurnCheckpoint = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: persistAnswerTurnCheckpointResult,
-  handler: persistAnswerTurnCheckpointHandler,
+  handler: (): Promise<Infer<typeof persistAnswerTurnCheckpointResult>> => retiredLegacyWriter(),
 })
 
 export const readAnswerTurnCheckpoint = queryGeneric({
@@ -119,7 +115,7 @@ export const stopAnswerTurn = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: stopAnswerTurnResult,
-  handler: stopAnswerTurnHandler,
+  handler: (): Promise<Infer<typeof stopAnswerTurnResult>> => retiredLegacyWriter(),
 })
 
 export const readTurnToolCalls = queryGeneric({
@@ -197,7 +193,7 @@ export const issueAnswerThreadShare = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: issueAnswerThreadShareResult,
-  handler: issueAnswerThreadShareHandler,
+  handler: (): Promise<Infer<typeof issueAnswerThreadShareResult>> => retiredLegacyWriter(),
 })
 
 export const revokeAnswerThreadShare = mutationGeneric({
@@ -209,12 +205,12 @@ export const revokeAnswerThreadShare = mutationGeneric({
     ...sourceWriteArgs,
   },
   returns: revokeAnswerThreadShareResult,
-  handler: revokeAnswerThreadShareHandler,
+  handler: (): Promise<Infer<typeof revokeAnswerThreadShareResult>> => retiredLegacyWriter(),
 })
 
 export const continueDeleteAnswerThread = internalMutation({
   args: { threadId: v.string() },
-  handler: continueDeleteAnswerThreadHandler,
+  handler: (): Promise<void> => retiredLegacyWriter(),
 })
 
 export const deleteAnswerThread = mutationGeneric({
@@ -225,5 +221,5 @@ export const deleteAnswerThread = mutationGeneric({
     correlationId: v.optional(v.string()),
     ...sourceWriteArgs,
   },
-  handler: deleteAnswerThreadHandler,
+  handler: (): Promise<{ threadId: string }> => retiredLegacyWriter(),
 })
