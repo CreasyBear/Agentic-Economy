@@ -164,6 +164,7 @@ export {
   actionToToolContract,
   describeActionToolExecutionValidation,
   describeActionToolForModel,
+  providerSafeActionToolName,
   type ActionToolContract,
   type ActionToolDescriptorProjection,
   type ActionToolExecuteArgs,

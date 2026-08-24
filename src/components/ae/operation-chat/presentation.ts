@@ -1,4 +1,4 @@
-import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
+import { providerSafeActionToolName } from '@/modules/actions'
 
 export const CHAT_TOOL_IDS = [
   'registry.operations.search',
