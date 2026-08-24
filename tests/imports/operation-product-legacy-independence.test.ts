@@ -12,6 +12,7 @@ const operationProductEntrypoints = [
 ].sort()
 
 const legacyModuleImport = /modules\/(?:answer(?:-thread)?|external-run|harness)(?:\/|['"])/u
+const retiredRuntimeNoun = /CustomerRequest|Customer Request|WorkTree|Work Tree/u
 
 describe('Operation product legacy independence', () => {
   it('keeps CLI, MCP, and Operation HTTP entrypoints independent of the legacy stack', () => {
@@ -27,5 +28,16 @@ describe('Operation product legacy independence', () => {
     expect(operationProductEntrypoints.filter((path) => (
       legacyModuleImport.test(readFileSync(path, 'utf8'))
     ))).toEqual([])
+  })
+
+  it('keeps current Call runtime and broad entry barrels free of retired product nouns', () => {
+    expect([
+      'src/modules/action-invocation/runtime.ts',
+      'src/modules/action-invocation/public.ts',
+      'src/modules/action-invocation/index.ts',
+    ].filter((path) => retiredRuntimeNoun.test(readFileSync(path, 'utf8')))).toEqual([])
+
+    expect(readFileSync('src/modules/action-invocation/compatibility.ts', 'utf8'))
+      .toContain('CustomerRequestCanonicalClaimMaterial')
   })
 })

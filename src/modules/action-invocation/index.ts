@@ -52,7 +52,6 @@ export type {
   CanonicalReleaseFenceInput,
   CanonicalTerminalOutcome,
   CanonicalTerminalOutcomeInput,
-  CustomerRequestCanonicalClaimMaterial,
 } from './canonical-claim'
 export {
   authorityUseIntegrityValid,

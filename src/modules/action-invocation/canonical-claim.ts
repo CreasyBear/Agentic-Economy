@@ -55,10 +55,6 @@ export type CanonicalClaimInput = Readonly<{
   recordedAt: string
 }>
 
-export type CustomerRequestCanonicalClaimMaterial = Readonly<
-  Omit<CanonicalClaimInput, 'expectedInvocationVersion' | 'expectedEffectGeneration'>
->
-
 export type CanonicalClaimSnapshot = Readonly<{
   control: DurableControlRow
   attempt: DurableAttemptRow
