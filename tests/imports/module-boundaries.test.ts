@@ -88,6 +88,23 @@ describe('module surface and dependency manifest', () => {
     expect(validateModuleBoundaryManifest(manifest, fixtureRoot).map(({ rule }) => rule)).toContain('module-cycle')
   })
 
+  it('rejects fictional entries and duplicate dependency declarations', () => {
+    const manifest = fixtureManifest({
+      modules: fixtureManifest().modules.map((module): ModuleDeclaration => (
+        module.name === 'actions'
+          ? {
+              ...module,
+              entrySurfaces: [...module.entrySurfaces, 'missing.ts'],
+              allowedDependencies: [...module.allowedDependencies, 'registry'],
+            }
+          : module
+      )),
+    })
+    expect(validateModuleBoundaryManifest(manifest, fixtureRoot).map(({ rule }) => rule)).toEqual(
+      expect.arrayContaining(['module-unknown-entry', 'module-duplicate-dependency']),
+    )
+  })
+
   it('rejects an unowned temporary exception without a removal task', () => {
     const malformed: RuntimeBoundaryException = {
       id: 'malformed',
@@ -117,6 +134,21 @@ describe('module surface and dependency manifest', () => {
       sourceFiles: [`${fixtureRoot}/common/test-only-at-runtime.ts`],
     })
     expect(result.violations.map(({ rule }) => rule)).toContain('module-test-exception-at-runtime')
+  })
+
+  it('rejects one stale importer inside a grouped test-only exception', () => {
+    const consumer = 'tests/fixtures/module-boundaries/test-only-consumer.ts'
+    const manifest = fixtureManifest({
+      testOnlyWhiteBoxExceptions: [{
+        id: 'partially-stale-white-box',
+        importers: [consumer, 'tests/fixtures/module-boundaries/stale-consumer.ts'],
+        to: 'registry',
+        entry: 'testing.ts',
+        owner: 'registry-tests',
+      }],
+    })
+    const result = scanTestOnlyModuleBoundaries(manifest, [consumer], fixtureRoot)
+    expect(result.violations.map(({ rule }) => rule)).toContain('module-unused-test-exception')
   })
 })
 

@@ -11,6 +11,8 @@
  * rely on module-eval side effects; production bundlers can tree-shake them.
  */
 
+import './contract'
+
 import { describeActionForAgent, type AgentToolDescriptor, type AnyAction } from '@/modules/common/action'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import {
