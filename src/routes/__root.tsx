@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
-import { ClerkProvider } from '@clerk/tanstack-react-start'
+import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
+import { ConvexProviderWithClerk } from 'convex/react-clerk'
+import { ConvexReactClient } from 'convex/react'
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 
 
@@ -81,9 +83,15 @@ const clerkAppearance = {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content = isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname)
-    ? children
-    : <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
+  const content = requiresChatProviders(pathname)
+    ? (
+        <ClerkProvider appearance={clerkAppearance}>
+          <ChatConvexProvider>{children}</ChatConvexProvider>
+        </ClerkProvider>
+      )
+    : isLocalE2EAuthBypassEnabled() || !requiresClerkProvider(pathname)
+      ? children
+      : <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -105,6 +113,32 @@ function RootDocument({ children }: { children: ReactNode }) {
       </body>
     </html>
   )
+}
+
+function ChatConvexProvider({ children }: { children: ReactNode }) {
+  const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
+  if (!convexUrl) {
+    return (
+      <main className="grid min-h-screen place-items-center p-6">
+        <section className="max-w-md text-center" role="status" aria-live="polite">
+          <h1 className="text-lg font-semibold">Chat is unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The chat service is not configured. The Operation marketplace is still available.
+          </p>
+        </section>
+      </main>
+    )
+  }
+  return <ConfiguredChatConvexProvider convexUrl={convexUrl}>{children}</ConfiguredChatConvexProvider>
+}
+
+function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: string; children: ReactNode }) {
+  const [client] = useState(() => new ConvexReactClient(convexUrl))
+  return <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
+}
+
+export function requiresChatProviders(pathname: string): boolean {
+  return pathname === '/t/new' || pathname.startsWith('/t/') || pathname.startsWith('/s/')
 }
 
 function requiresClerkProvider(pathname: string): boolean {

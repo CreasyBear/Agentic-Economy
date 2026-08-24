@@ -5,7 +5,6 @@ import {
   CircleHelp,
   Gauge,
   KeyRound,
-  ListChecks,
   SearchCode,
   ScrollText,
   Settings,
@@ -86,7 +85,6 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
     items: [
       { href: '/admin/index-health', label: 'Marketplace health', icon: Activity, tier: 'core' },
       { href: '/admin/audit-events', label: 'Activity', icon: ScrollText, tier: 'core' },
-      { href: '/admin/runs', label: 'Runs', icon: ListChecks, tier: 'core' },
     ],
   },
 ] as const

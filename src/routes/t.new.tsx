@@ -1,19 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AeChat } from '@/components/ae/chat/AeChat'
+import { OperationChat } from '@/components/ae/operation-chat'
 
 type NewThreadRouteSearch = { q?: string }
 
-/**
- * Fresh-thread entry for the surviving market workbench:
- * mounts AeChat with threadId={null} so the blank-welcome state is reachable
- * from a URL, and the initial query auto-starts a live SSE turn that creates
- * the thread and navigates to /t/$threadId. Transient entry: noindex.
- *
- * Path is /t/new (not /t) because a bare t.tsx would become the layout parent
- * of t.$threadId.tsx in TanStack file-based routing and swallow the existing
- * thread route's render.
- */
 export function validateNewThreadSearch(search: Record<string, unknown>): NewThreadRouteSearch {
   const q = typeof search.q === 'string' ? search.q.trim() : ''
   return q.length === 0 ? {} : { q }
@@ -33,5 +23,18 @@ export const Route = createFileRoute('/t/new')({
 
 function NewThreadPage() {
   const { q } = Route.useSearch()
-  return <AeChat threadId={null} initialQuery={q ?? null} />
+  const navigate = Route.useNavigate()
+  const openThread = (threadId: string) => void navigate({
+    to: '/t/$threadId',
+    params: { threadId },
+  })
+  return (
+    <OperationChat
+      threadId={null}
+      initialPrompt={q ?? ''}
+      onThreadCreated={openThread}
+      onOpenThread={openThread}
+      onNewChat={() => void navigate({ to: '/t/new' })}
+    />
+  )
 }

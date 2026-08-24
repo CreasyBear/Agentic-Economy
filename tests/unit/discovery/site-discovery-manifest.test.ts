@@ -108,7 +108,6 @@ describe('Site discovery manifest', () => {
     expect(pathsByKind.get('catalog_list')).toEqual(['/api/businesses'])
     expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
     expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
-    expect(pathsByKind.get('answer_turn')).toEqual(['/api/answer/turn'])
     expect(pathsByKind.get('operation_read')).toEqual([
       '/api/v1/market-operations/search',
       '/api/v1/market-operations/detail',
@@ -122,10 +121,10 @@ describe('Site discovery manifest', () => {
     expect(manifest.businessManifestUrlTemplate).toBe(`${origin}/{slug}/ucp`)
     expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
+    expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
   })
 
   it('states the authentication each endpoint actually enforces', () => {
-    const answerTurn = manifest.endpoints.find((endpoint) => endpoint.kind === 'answer_turn')
     const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
     const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
     const directKeylessAction = findAction('operation.execute')
@@ -133,15 +132,6 @@ describe('Site discovery manifest', () => {
     const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
 
     expect(manifest).not.toHaveProperty('customerRequest')
-    expect(answerTurn).toMatchObject({
-      method: 'POST',
-      authentication: 'none',
-      mediaType: 'text/event-stream',
-      requiredHeaders: {
-        'Content-Type': 'application/json',
-        'X-AE-Turn-Key': expect.stringContaining('not a credential'),
-      },
-    })
     expect(operationInvoke).toMatchObject({
       method: 'POST',
       path: '/api/v1/operations/call',

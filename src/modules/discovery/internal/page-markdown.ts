@@ -1,6 +1,5 @@
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import type { BusinessContext } from '@/modules/business/public'
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { formatOfferingPrice } from '@/modules/catalog/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -149,7 +148,7 @@ export function buildCatalogMarkdown(
     '',
     DiscoveryListingBoundaryLine,
     '',
-    `Start a request with \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
+    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -187,7 +186,7 @@ export function buildBusinessMarkdown(
         ])),
     DiscoveryListingBoundaryLine,
     '',
-    `To act on this, start at \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
+    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -206,7 +205,11 @@ export function buildUnknownPageMarkdown(
     `- \`GET ${base}/llms.txt\` — the public surface index`,
     `- \`GET ${base}/SKILL.md\` — the full assistant procedure`,
     `- \`GET ${base}/api/businesses\` — every published business`,
-    `- \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — ask for an outcome, no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn`,
+    `- \`GET ${base}/market\` — browse the Operation catalogue`,
+    `- \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\` — search callable Operations`,
+    `- \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\` — inspect one Operation`,
+    `- \`${base}/mcp\` — use the Operation MCP surface`,
+    `- \`ae search "<job>" --base-url "${base}" --json\` — use the Operation CLI`,
     '',
   ].join('\n')
 }

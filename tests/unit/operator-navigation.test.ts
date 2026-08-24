@@ -106,7 +106,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('admin', { advanced: false })
       .flatMap((group) => group.items.map((item) => item.label))
 
-    expect(labels).toEqual(['Browse marketplace', 'Marketplace health', 'Activity', 'Runs'])
+    expect(labels).toEqual(['Browse marketplace', 'Marketplace health', 'Activity'])
   })
 
   it('marks nested paths active for their nav root', () => {
@@ -131,8 +131,8 @@ describe('operator navigation', () => {
     expect(adminDestinations).toEqual(expect.arrayContaining([
       '/admin/index-health',
       '/admin/audit-events',
-      '/admin/runs',
     ]))
+    expect(adminDestinations).not.toContain('/admin/runs')
     expect(ownerDestinations.some((href) => href.startsWith('/admin/'))).toBe(false)
     expect(developerDestinations.some((href) => href.startsWith('/admin/'))).toBe(false)
   })

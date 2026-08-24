@@ -15,7 +15,6 @@ import {
   operationInvokeStatusStateValues,
   operationInvokeStatusRefusalCodeValues,
 } from '@/modules/capability-execution/operation-recovery-contracts'
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { AGENT_ACCESS_OAUTH_SCOPES } from '@/lib/http/oauth-challenge'
 import {
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
@@ -61,7 +60,6 @@ export const SiteDiscoveryEndpointKindValues = [
   'business_manifest',
   'discovery_file',
   'discovery_artifact',
-  'answer_turn',
   'operation_read',
   'operation_invoke',
   'operation_status',
@@ -418,7 +416,6 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
   const operationRoutes: readonly SiteDiscoveryOperationRouteSummary[] = operationRouteExamples().map(({ route }) => route)
   const labels: Readonly<Record<string, string>> = {
     ...humanSurfaceLabels,
-    [ANSWER_THREAD_AGENT_ENTRYPOINT.path]: 'Keyless Answer Thread turn',
     ...Object.fromEntries(operationRoutes.map((route) => [route.path, `Operation ${route.actionId}`])),
     ...Object.fromEntries(OPERATION_MARKET_ACTION_ENTRIES.map((entry) => [entry.pathTemplate, `Operation ${entry.relation}`])),
     ...Object.fromEntries(DeveloperDiscoveryPublicRoutes.map((route) => [route.path, route.label])),
@@ -428,7 +425,6 @@ function buildEndpoints(origin: string): readonly SiteDiscoveryEndpointContract[
     '/api/businesses/{slug}': 'Published business catalog detail',
   }
   const paths: readonly string[] = [
-    ANSWER_THREAD_AGENT_ENTRYPOINT.path,
     ...operationRoutes.map((route) => route.path),
     ...DiscoveryPublicSurfacePaths,
     PublicAgentSkillPath,
@@ -482,7 +478,6 @@ function kindFor(path: string, operationRoutes: readonly SiteDiscoveryOperationR
   if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.cancel.actionId) return 'operation_cancel'
   if (operationRoute?.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId) return 'operation_reconcile'
   if (path === SiteDiscoveryManifestPath) return 'site_entry_point'
-  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) return 'answer_turn'
   if (path === PublicAgentSkillPath) return 'assistant_setup'
   if (path === businessManifestPath) return 'business_manifest'
   if (path === '/privacy/remove-business') return 'privacy_request'
@@ -514,19 +509,11 @@ function accessFor(path: string, operationRoutes: readonly SiteDiscoveryOperatio
       requiredHeaders: Object.fromEntries(operationRoute.requiredHeaders.map((header) => [header, 'required'])),
     }
   }
-  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) {
-    return {
-      method: ANSWER_THREAD_AGENT_ENTRYPOINT.method,
-      authentication: ANSWER_THREAD_AGENT_ENTRYPOINT.authentication,
-      requiredHeaders: ANSWER_THREAD_AGENT_ENTRYPOINT.requiredHeaders,
-    }
-  }
   return { method: 'GET', authentication: 'none' }
 }
 
 function mediaTypeFor(path: string, operationRoutes: readonly SiteDiscoveryOperationRouteSummary[]): string {
   if (operationRoutes.some((route) => route.path === path)) return OPERATION_INVOKE_ROUTE_CONTRACT.media.response
-  if (path === ANSWER_THREAD_AGENT_ENTRYPOINT.path) return ANSWER_THREAD_AGENT_ENTRYPOINT.responseMediaType
   if (path.endsWith('.txt')) return 'text/plain'
   if (path.endsWith('.xml')) return 'application/xml'
   if (path.endsWith('.md')) return 'text/markdown'

@@ -158,10 +158,26 @@ describe('refusal documents', () => {
     expect(body).toContain('Do not invent provider details.')
   })
 
-  it('points an unprojectable page at the surfaces that do answer machines', () => {
+  it('points an unprojectable page only at canonical Operation surfaces', () => {
     const body = buildUnknownPageMarkdown('/about', options)
     expect(body).toContain('`/about` is served as HTML only')
     expect(body).toContain('https://ae.example/llms.txt')
-    expect(body).toContain('https://ae.example/api/answer/turn')
+    expect(body).toContain('https://ae.example/market')
+    expect(body).toContain('https://ae.example/api/v1/market-operations/search')
+    expect(body).toContain('https://ae.example/api/v1/market-operations/detail')
+    expect(body).toContain('https://ae.example/mcp')
+    expect(body).toContain('ae search')
+    expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)
+  })
+
+  it('keeps catalogue and business projections on Operation surfaces', () => {
+    const bodies = [buildCatalogMarkdown([business()], options), buildBusinessMarkdown(business(), options)]
+    for (const body of bodies) {
+      expect(body).toContain('https://ae.example/market')
+      expect(body).toContain('https://ae.example/api/v1/market-operations/search')
+      expect(body).toContain('https://ae.example/mcp')
+      expect(body).toContain('ae search')
+      expect(body).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous|X-AE-Turn-Key/u)
+    }
   })
 })
