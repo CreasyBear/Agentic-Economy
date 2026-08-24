@@ -164,6 +164,92 @@ export const registeredOperationMappingValue = v.union(
 export { registeredOperationMappingMaterialValue }
 
 export const capabilitySupplyTables = {
+  capabilityCurrentOperations: defineTable({
+    schemaVersion: v.literal('current-operation-projection:v1'),
+    operationRef: v.string(),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    networkId: v.string(),
+    active: v.boolean(),
+    outcomeKind: v.union(
+      v.literal('current'),
+      v.literal('unavailable'),
+      v.literal('dropped'),
+    ),
+    unavailableReason: v.optional(v.union(
+      v.literal('setup_required'),
+      v.literal('temporarily_unavailable'),
+      v.literal('readiness_expired'),
+      v.literal('publisher_withdrew'),
+      v.literal('under_review'),
+      v.literal('updated_terms_require_review'),
+      v.literal('not_supported_by_ae'),
+    )),
+    dropReason: v.optional(v.union(
+      v.literal('identity_drift'),
+      v.literal('missing_offering'),
+      v.literal('missing_binding'),
+      v.literal('missing_business'),
+      v.literal('missing_contract'),
+      v.literal('business_unpublished'),
+      v.literal('invalid_transport'),
+      v.literal('malformed_price'),
+    )),
+    descriptorDigest: v.optional(v.string()),
+    currentDigest: v.optional(v.string()),
+    searchTokens: v.array(v.string()),
+    searchFactJson: v.optional(v.string()),
+    sourceUpdatedAt: v.number(),
+    projectedAt: v.number(),
+  })
+    .index('by_operationRef_and_active', ['operationRef', 'active'])
+    .index('by_publicationRef_and_publicationRevision', ['publicationRef', 'publicationRevision'])
+    .index('by_active_and_networkId', ['active', 'networkId'])
+    .index('by_active_and_operationRef', ['active', 'operationRef']),
+
+  capabilityCurrentOperationDetails: defineTable({
+    schemaVersion: v.literal('current-operation-detail:v1'),
+    operationRef: v.string(),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    active: v.boolean(),
+    descriptorJson: v.string(),
+    descriptorDigest: v.string(),
+    commitmentJson: v.string(),
+    currentDigest: v.string(),
+    sourceUpdatedAt: v.number(),
+    projectedAt: v.number(),
+  })
+    .index('by_operationRef_and_active', ['operationRef', 'active'])
+    .index('by_publicationRef_and_publicationRevision', ['publicationRef', 'publicationRevision']),
+
+  capabilityCurrentOperationReadControls: defineTable({
+    controlRef: v.literal('current_operation_registry'),
+    mode: v.union(v.literal('old'), v.literal('shadow'), v.literal('new')),
+    reason: v.string(),
+    releaseOwner: v.string(),
+    updatedAt: v.number(),
+  }).index('by_controlRef', ['controlRef']),
+
+  capabilityCurrentOperationMismatchExplanations: defineTable({
+    operationRef: v.string(),
+    mismatchKind: v.union(
+      v.literal('missing_projection'),
+      v.literal('stale_projection'),
+      v.literal('typed_outcome'),
+      v.literal('descriptor_digest'),
+      v.literal('invalid_projection'),
+      v.literal('orphan_projection'),
+    ),
+    owner: v.string(),
+    reason: v.string(),
+    expiresAt: v.number(),
+    regressionFixture: v.string(),
+    recordedAt: v.number(),
+  })
+    .index('by_operationRef_and_mismatchKind', ['operationRef', 'mismatchKind'])
+    .index('by_expiresAt', ['expiresAt']),
+
   capabilityPublications: defineTable({
     publicationRef: v.string(),
     operationRef: v.string(),

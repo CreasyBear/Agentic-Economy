@@ -65,7 +65,7 @@ export type CurrentOperationProjectionResult =
   | Readonly<{ kind: 'dropped'; reason: CurrentOperationProjectionDropReason }>
 
 export async function operationRecord(
-  ctx: QueryCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   publication: Doc<'capabilityPublications'>,
   now: number,
 ): Promise<CapabilityOperationSourceRecord | undefined> {
@@ -79,7 +79,7 @@ export async function operationRecord(
  * Public readers continue to omit these rows; diagnostics expose counts only.
  */
 export async function operationRecordProjection(
-  ctx: QueryCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   publication: Doc<'capabilityPublications'>,
   now: number,
 ): Promise<CurrentOperationProjectionResult> {

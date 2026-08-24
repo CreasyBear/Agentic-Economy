@@ -15,6 +15,7 @@ import {
 } from "./operation-project";
 import {
   PublicOperationRegistrySchemaVersion,
+  type CapabilityOperationSourceRecord,
   type CapabilityOperationSourcePort,
   type PublicCommercialTerms,
   type PublicDataUsePolicy,
@@ -28,6 +29,19 @@ export type OperationSearchTextCandidate<T> = Readonly<{
   value: T;
   operationRef: string;
   searchText: readonly string[];
+}>;
+export type CurrentOperationSearchFact = Readonly<{
+  operationRef: PublicOperationRef;
+  networkId: string;
+  searchText: readonly string[];
+  businessSearchText: string;
+  price: PublicCommercialTerms["price"];
+  effects: readonly PublicEffectPolicy[number]["class"][];
+  dataUse: readonly PublicDataUsePolicy[number]["classification"][];
+  integrated: boolean;
+  routeable: boolean;
+  unavailableReason?: CapabilityOperationSourceRecord["unavailableReason"];
+  readiness: CapabilityOperationSourceRecord["readiness"];
 }>;
 export type OperationSearchRanking = Readonly<{
   operationRef: PublicOperationRef;
@@ -279,6 +293,108 @@ export async function searchCapabilityOperations(
   };
 }
 
+export function currentOperationSearchFact(
+  record: CapabilityOperationSourceRecord,
+  now = Date.now(),
+): CurrentOperationSearchFact {
+  const operation = projectCapabilityOperation(record, now);
+  return {
+    operationRef: operation.operationRef,
+    networkId: record.networkId,
+    searchText: operationSearchText(operation, record.searchTerms),
+    businessSearchText: `${operation.business.slug} ${operation.business.name}`.toLowerCase(),
+    price: operation.commercial.price,
+    effects: operation.effects.map((effect) => effect.class),
+    dataUse: operation.dataUse.map((entry) => entry.classification),
+    integrated: record.integrated,
+    routeable: record.routeable,
+    ...(record.unavailableReason === undefined
+      ? {}
+      : { unavailableReason: record.unavailableReason }),
+    readiness: record.readiness,
+  };
+}
+
+export async function searchCurrentOperationFacts(
+  input: OperationSearchInput,
+  facts: readonly CurrentOperationSearchFact[],
+  snapshotKey: string,
+  load: (operationRef: PublicOperationRef) => Promise<CapabilityOperationSourceRecord | null>,
+  now = Date.now(),
+): Promise<OperationSearchResult> {
+  const normalized = normalizeSearch(input);
+  if (normalized === undefined) return searchUnavailable("query_invalid");
+  if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded");
+  const cursor = decodeCursor(
+    normalized.cursor,
+    normalized.query,
+    normalized.filters,
+    snapshotKey,
+  );
+  if (normalized.cursor !== undefined && cursor === undefined)
+    return searchUnavailable("query_invalid");
+  const matches = rankOperationSearchCandidates(
+    normalized.query,
+    facts.filter((fact) => matchesFactFilters(fact, normalized.filters, now)).map((fact) => ({
+      value: fact,
+      operationRef: fact.operationRef,
+      searchText: fact.searchText,
+    })),
+  );
+  const start = cursor?.lastOperationRef === undefined
+    ? 0
+    : Math.max(0, matches.findIndex((item) => item.operationRef === cursor.lastOperationRef) + 1);
+  const pageMatches = matches.slice(start, start + normalized.limit);
+  if (pageMatches.length === 0) {
+    return {
+      kind: "no_candidates",
+      schemaVersion: PublicOperationRegistrySchemaVersion,
+      query: normalized.query,
+      appliedFilters: normalized.filters,
+      matchedCount: matches.length,
+      ranking: [],
+      navigation: noOperationNavigation(),
+    };
+  }
+  const records = await Promise.all(pageMatches.map(({ operationRef }) => load(operationRef as PublicOperationRef)));
+  if (records.some((record) => record === null)) return searchUnavailable("source_unavailable");
+  const items = records.map((record) => projectCapabilityOperation(
+    record as CapabilityOperationSourceRecord,
+    now,
+  ));
+  const ranking = pageMatches.map(({ operationRef, score }, index) => ({
+    operationRef: operationRef as PublicOperationRef,
+    rank: start + index + 1,
+    score,
+  }));
+  const hasMore = start + items.length < matches.length;
+  const lastItem = items.at(-1);
+  if (lastItem === undefined) return searchUnavailable("source_unavailable");
+  return {
+    kind: "ok",
+    schemaVersion: PublicOperationRegistrySchemaVersion,
+    query: normalized.query,
+    items,
+    matchedCount: matches.length,
+    ranking,
+    pagination: {
+      limit: normalized.limit,
+      hasMore,
+      ...(hasMore
+        ? {
+            nextCursor: encodeCursor(
+              normalized.query,
+              normalized.filters,
+              snapshotKey,
+              lastItem.operationRef,
+            ),
+          }
+        : {}),
+    },
+    navigation: operationNavigation("inspect_only"),
+  };
+}
+
 function searchUnavailable(
   reason: "query_invalid" | "source_unavailable" | "source_capacity_exceeded",
 ): OperationSearchResult {
@@ -400,6 +516,29 @@ function matchesFilters(
   )
     return false;
   return true;
+}
+function matchesFactFilters(
+  fact: CurrentOperationSearchFact,
+  filters: OperationSearchFilters,
+  now: number,
+): boolean {
+  if (filters.networkId !== undefined && filters.networkId !== fact.networkId) return false;
+  if (filters.effects !== undefined && !filters.effects.some((effect) => fact.effects.includes(effect))) return false;
+  if (filters.dataUse !== undefined && !filters.dataUse.some((entry) => fact.dataUse.includes(entry))) return false;
+  const availability = fact.routeable
+    && fact.readiness.validUntil !== undefined
+    && fact.readiness.validUntil > now
+    ? "routeable"
+    : fact.integrated ? "integrated" : "unavailable";
+  if (filters.availability !== undefined && !filters.availability.includes(availability)) return false;
+  if (filters.currency !== undefined) {
+    const currency = fact.price.kind === "on_request"
+      ? undefined
+      : fact.price.kind === "fixed" ? fact.price.amount.currency : fact.price.minimum.currency;
+    if (currency !== filters.currency) return false;
+  }
+  if (filters.maximumPrice !== undefined && !priceWithin(fact.price, filters.maximumPrice)) return false;
+  return filters.location === undefined || fact.businessSearchText.includes(filters.location);
 }
 function searchTokens(query: string): string[] {
   return (query.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
