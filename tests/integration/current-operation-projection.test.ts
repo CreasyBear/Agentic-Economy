@@ -454,6 +454,72 @@ describe('T4 current Operation read model', () => {
       .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_unavailable' })
   })
 
+  it('compares paginated shadow facts without treating opaque cursor bytes as a mismatch', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishFixture(backend, 'projection-shadow-pagination')
+    await cloneCurrentPublications(backend, fixture, 21)
+    await backfillAll(backend)
+    await setMode(backend, 'shadow', 'shadow_pagination_test')
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+
+    const firstOld = await backend.query(api.capabilitySupplyOperations.search, {
+      query: 'lookup',
+      limit: 20,
+    })
+    expect(firstOld).toMatchObject({
+      kind: 'ok',
+      matchedCount: 21,
+      pagination: { hasMore: true },
+    })
+    expect(log.mock.calls.at(-1)?.[1]).toContain('"canonicalDigestMatch":true')
+    if (firstOld.kind !== 'ok' || firstOld.pagination.nextCursor === undefined) {
+      throw new Error('t4_old_cursor_missing')
+    }
+    const oldCursor = firstOld.pagination.nextCursor
+    await expect(backend.query(api.capabilitySupplyOperations.search, {
+      query: 'lookup',
+      limit: 20,
+      cursor: oldCursor,
+    })).resolves.toMatchObject({
+      kind: 'ok',
+      matchedCount: 21,
+      items: [expect.any(Object)],
+      pagination: { hasMore: false },
+    })
+    expect(log.mock.calls.at(-1)?.[1]).toContain('"canonicalDigestMatch":true')
+    await expect(backend.query(api.capabilitySupplyOperations.search, {
+      query: 'different',
+      limit: 20,
+      cursor: oldCursor,
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
+
+    await setMode(backend, 'new', 'new_pagination_test')
+    const firstNew = await backend.query(api.capabilitySupplyOperations.search, {
+      query: 'lookup',
+      limit: 20,
+    })
+    if (firstNew.kind !== 'ok' || firstNew.pagination.nextCursor === undefined) {
+      throw new Error('t4_new_cursor_missing')
+    }
+    const newCursor = firstNew.pagination.nextCursor
+    await expect(backend.query(api.capabilitySupplyOperations.search, {
+      query: 'lookup',
+      limit: 20,
+      cursor: newCursor,
+    })).resolves.toMatchObject({
+      kind: 'ok',
+      matchedCount: 21,
+      items: [expect.any(Object)],
+      pagination: { hasMore: false },
+    })
+    await expect(backend.query(api.capabilitySupplyOperations.search, {
+      query: 'different',
+      limit: 20,
+      cursor: newCursor,
+    })).resolves.toMatchObject({ kind: 'unavailable', reason: 'query_invalid' })
+    log.mockRestore()
+  })
+
   it('completes a local probe record cycle and refreshes readiness without changing Operation identity', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishFixture(backend, 'projection-probe-cycle', false)
