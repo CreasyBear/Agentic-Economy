@@ -261,6 +261,15 @@ export function parseStartReceipt(value: unknown): StartReceipt {
   return receipt
 }
 
+export function parseStagingReceipt(value: unknown): StagingReceipt {
+  const receipt = StagingReceiptSchema.parse(value)
+  const { receiptDigest, ...material } = receipt
+  if (canonicalDigest(material as StableHashValue) !== receiptDigest) {
+    throw new Error('staging_observation_receipt_digest_mismatch')
+  }
+  return receipt
+}
+
 export async function readStartReceipt(path: string, repositoryRoot = process.cwd()): Promise<StartReceipt> {
   const destination = resolveReleasePath(path, repositoryRoot)
   let value: unknown
@@ -277,7 +286,7 @@ export async function writeStagingReceipt(
   path: string,
   repositoryRoot = process.cwd(),
 ): Promise<StagingReceipt> {
-  const parsed = StagingReceiptSchema.parse(receipt)
+  const parsed = parseStagingReceipt(receipt)
   const destination = resolveReleasePath(path, repositoryRoot)
   await mkdir(dirname(destination), { recursive: true })
   const temporary = `${destination}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`
@@ -717,7 +726,10 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
             throw new Error('staging_observation_probe_start_malformed')
           }
           if (start.success) {
-            started.set(start.data.scheduledFunctionId, (started.get(start.data.scheduledFunctionId) ?? 0) + 1)
+            if (started.has(start.data.scheduledFunctionId)) {
+              throw new Error('staging_observation_probe_start_duplicate')
+            }
+            started.set(start.data.scheduledFunctionId, 1)
           }
           const terminal = z.union([
             z.strictObject({

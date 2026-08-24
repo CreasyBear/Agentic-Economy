@@ -15,6 +15,7 @@ import {
   observeCurrentOperationStaging,
   parseStageOptions,
   parseStartReceipt,
+  parseStagingReceipt,
   readinessCycleFromLogRecords,
   resolveReleasePath,
   writeStagingReceipt,
@@ -380,6 +381,11 @@ describe('T8 current Operation staging observation', () => {
     line?.messages.push(line.messages[1]!)
     expect(() => readinessCycleFromLogRecords(duplicateTerminal)).toThrow('staging_observation_probe_terminal_duplicate')
 
+    const duplicateStart = structuredClone(records)
+    const startLine = ((duplicateStart[2] as { logLines: Array<{ messages: string[] }> }).logLines[0])
+    startLine?.messages.unshift(startLine.messages[0]!)
+    expect(() => readinessCycleFromLogRecords(duplicateStart)).toThrow('staging_observation_probe_start_duplicate')
+
     const duplicateCycle = structuredClone(records)
     const cycleLine = ((duplicateCycle[1] as { logLines: Array<{ messages: string[] }> }).logLines[0])
     cycleLine?.messages.push(cycleLine.messages[0]!)
@@ -577,6 +583,8 @@ describe('T8 current Operation staging observation', () => {
     const start = StartReceiptSchema.parse(await observeCurrentOperationStaging(fakeRuntime(), options('start'), root))
     expect(() => parseStartReceipt({ ...start, receiptDigest: `sha256:${'0'.repeat(64)}` }))
       .toThrow('staging_observation_start_receipt_digest_mismatch')
+    expect(() => parseStagingReceipt({ ...start, receiptDigest: `sha256:${'0'.repeat(64)}` }))
+      .toThrow('staging_observation_receipt_digest_mismatch')
     expect(() => parseStartReceipt({ ...start, operationRef: 'operation:private' })).toThrow()
     expect(() => resolveReleasePath('../outside.json', root)).toThrow('staging_observation_receipt_path_outside_release_directory')
     expect(() => resolveReleasePath('output/release', root)).toThrow('staging_observation_receipt_path_outside_release_directory')
