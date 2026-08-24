@@ -156,7 +156,7 @@ export async function currentOperationStagingSnapshotHandler(
   args: Readonly<{ now: number; observedSince?: number }>,
   sourceRevision: string | undefined,
 ) {
-  if (!/^[0-9a-f]{40}$/u.test(sourceRevision ?? '')) {
+  if (sourceRevision === undefined || !/^[0-9a-f]{40}$/u.test(sourceRevision)) {
     return {
       kind: 'unavailable' as const,
       reason: 'source_revision_unavailable' as const,

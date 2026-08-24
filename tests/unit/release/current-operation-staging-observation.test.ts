@@ -91,10 +91,10 @@ function fakeRuntime(controls: RuntimeControls = {}): StagingRuntime & {
   const runtime = {
     calls,
     cycleTimeouts,
-    mode: 'old' as const,
+    mode: 'old' as 'old' | 'shadow' | 'new',
     now: () => controls.now ?? 1_000,
     startLogs: async () => ({
-      waitForCycle: async (timeoutMs) => {
+      waitForCycle: async (timeoutMs: number) => {
         cycleTimeouts.push(timeoutMs)
         if (controls.cycleError !== undefined) throw controls.cycleError
         return controls.cycle ?? {
