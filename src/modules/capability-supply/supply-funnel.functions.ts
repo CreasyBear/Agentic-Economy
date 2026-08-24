@@ -22,7 +22,6 @@ import {
   ownerSupplyReadInputSchema,
   withdrawOwnerCapability,
 } from "./internal/supply-funnel/funnel-owner";
-import { loadSupplyLandingReadback } from "./internal/supply-funnel/landing";
 import {
   admitOwnerCapability,
   ownerOpenApiDocumentPreflightInputSchema,
@@ -39,6 +38,7 @@ export type {
   OwnerProviderEarningsReadback,
 } from "./internal/supply-funnel/connections";
 export type {
+  SupplyLandingPorts,
   SupplyLandingReadback,
   SupplyLandingTool,
 } from "./internal/supply-funnel/landing";
@@ -65,14 +65,11 @@ export type {
 } from "./internal/supply-funnel/types";
 
 export { filterOwnerSupplyAuthorityOptions } from "./internal/supply-funnel/connections";
+export { loadSupplyLandingReadback } from "./internal/supply-funnel/landing";
 export { ownerPublicationImport } from "./internal/supply-funnel/publication-import";
 export { ownerPublicationWithCatalogOrigin } from "./internal/supply-funnel/publication-admit";
 export { ownerSupplyActionContext } from "./internal/supply-funnel/types";
 export { resolveSupplyPricing } from "./internal/supply-funnel/pricing-port";
-
-export const loadSupplyLandingReadbackServer = createServerFn({
-  method: "GET",
-}).handler(loadSupplyLandingReadback);
 
 export const readOwnerSupplyFunnelServer = createServerFn()
   .validator((data) => ownerSupplyReadInputSchema.parse(data))
