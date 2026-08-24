@@ -10,6 +10,7 @@ const rateLimitName = v.union(
   v.literal('oauth-issuance'),
   v.literal('answer-turn-submit'),
   v.literal('answer-stream'),
+  v.literal('chat-submit'),
   v.literal('dispute-open'),
 )
 

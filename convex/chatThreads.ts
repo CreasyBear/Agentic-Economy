@@ -15,8 +15,8 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 50
-const MAX_TITLE_LENGTH = 80
-const ACTIVE_GENERATION_MS = 10 * 60 * 1_000
+export const MAX_CHAT_THREAD_TITLE_LENGTH = 80
+export const ACTIVE_CHAT_GENERATION_MS = 10 * 60 * 1_000
 
 const threadSummary = v.object({
   threadId: v.string(),
@@ -28,7 +28,7 @@ const threadSummary = v.object({
 
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
 
-async function requireOwnerId(ctx: Pick<QueryCtx, 'auth'>): Promise<string> {
+export async function requireChatOwnerId(ctx: Pick<QueryCtx, 'auth'>): Promise<string> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null || identity.tokenIdentifier.trim().length === 0) {
     throw new Error('unauthenticated')
@@ -36,11 +36,11 @@ async function requireOwnerId(ctx: Pick<QueryCtx, 'auth'>): Promise<string> {
   return identity.tokenIdentifier
 }
 
-async function ownedThread(
+export async function requireOwnedChatThread(
   ctx: ThreadContext,
   threadId: string,
 ): Promise<Doc<'chatThreads'>> {
-  const ownerId = await requireOwnerId(ctx)
+  const ownerId = await requireChatOwnerId(ctx)
   const row = await ctx.db
     .query('chatThreads')
     .withIndex('by_threadId', (index) => index.eq('threadId', threadId))
@@ -51,27 +51,27 @@ async function ownedThread(
   return row
 }
 
-function normalizeTitle(title: string): string {
+export function normalizeChatThreadTitle(title: string): string {
   return Array.from(title.trim().replace(/\s+/gu, ' '))
-    .slice(0, MAX_TITLE_LENGTH)
+    .slice(0, MAX_CHAT_THREAD_TITLE_LENGTH)
     .join('')
 }
 
 function createTitle(title: string | undefined): string {
-  const normalized = normalizeTitle(title ?? '')
+  const normalized = normalizeChatThreadTitle(title ?? '')
   return normalized.length === 0 ? 'New conversation' : normalized
 }
 
 function renameTitle(title: string): string {
-  const normalized = normalizeTitle(title)
+  const normalized = normalizeChatThreadTitle(title)
   if (normalized.length === 0) throw new Error('thread_title_invalid')
   return normalized
 }
 
-function isBusy(row: Doc<'chatThreads'>, now: number): boolean {
+export function isChatThreadBusy(row: Doc<'chatThreads'>, now: number): boolean {
   return row.activePromptMessageId !== undefined
     && row.activeStartedAt !== undefined
-    && row.activeStartedAt > now - ACTIVE_GENERATION_MS
+    && row.activeStartedAt > now - ACTIVE_CHAT_GENERATION_MS
 }
 
 function projectThread(row: Doc<'chatThreads'>, now: number) {
@@ -80,7 +80,7 @@ function projectThread(row: Doc<'chatThreads'>, now: number) {
     title: row.title,
     createdAt: row._creationTime,
     updatedAt: row.updatedAt,
-    busy: isBusy(row, now),
+    busy: isChatThreadBusy(row, now),
   }
 }
 
@@ -102,7 +102,7 @@ export const createThread = mutation({
   args: { title: v.optional(v.string()) },
   returns: threadSummary,
   handler: async (ctx, args) => {
-    const ownerId = await requireOwnerId(ctx)
+    const ownerId = await requireChatOwnerId(ctx)
     const title = createTitle(args.title)
     const now = Date.now()
     const threadId = await createAgentThread(ctx, components.agent, {
@@ -125,7 +125,7 @@ export const getThread = query({
   args: { threadId: v.string(), now: v.number() },
   returns: threadSummary,
   handler: async (ctx, args) => projectThread(
-    await ownedThread(ctx, args.threadId),
+    await requireOwnedChatThread(ctx, args.threadId),
     args.now,
   ),
 })
@@ -137,7 +137,7 @@ export const listThreads = query({
   },
   returns: paginationResultValidator(threadSummary),
   handler: async (ctx, args) => {
-    const ownerId = await requireOwnerId(ctx)
+    const ownerId = await requireChatOwnerId(ctx)
     const page = await ctx.db
       .query('chatThreads')
       .withIndex('by_ownerId_and_updatedAt', (index) => index.eq('ownerId', ownerId))
@@ -158,8 +158,8 @@ export const searchThreads = query({
   },
   returns: paginationResultValidator(threadSummary),
   handler: async (ctx, args) => {
-    const ownerId = await requireOwnerId(ctx)
-    const search = normalizeTitle(args.query)
+    const ownerId = await requireChatOwnerId(ctx)
+    const search = normalizeChatThreadTitle(args.query)
     if (search.length === 0) {
       const page = await ctx.db
         .query('chatThreads')
@@ -187,7 +187,7 @@ export const renameThread = mutation({
   args: { threadId: v.string(), title: v.string() },
   returns: threadSummary,
   handler: async (ctx, args) => {
-    const row = await ownedThread(ctx, args.threadId)
+    const row = await requireOwnedChatThread(ctx, args.threadId)
     const title = renameTitle(args.title)
     const now = Date.now()
     await updateThreadMetadata(ctx, components.agent, {
@@ -211,8 +211,8 @@ export const deleteThread = mutation({
   args: { threadId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await ownedThread(ctx, args.threadId)
-    if (isBusy(row, Date.now())) throw new Error('thread_busy')
+    const row = await requireOwnedChatThread(ctx, args.threadId)
+    if (isChatThreadBusy(row, Date.now())) throw new Error('thread_busy')
 
     await deleteShares(ctx, row.threadId)
     await ctx.db.delete(row._id)
