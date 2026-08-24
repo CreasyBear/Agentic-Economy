@@ -8,7 +8,11 @@ import { recordInvalidationIntent as recordInvalidationIntentImpl } from './inte
 import { validateAuditEvent as validateStoredAuditEvent } from './internal/audit'
 import type {
   ActorKind,
-  AuditEventContract as StoredAuditEventContract,
+  AuditEventContract,
+  AuditEventInput,
+  AuditEventType,
+  AuditTargetType,
+  AuditValidationResult,
   RedactedPayload,
 } from './internal/audit'
 import type {
@@ -48,25 +52,11 @@ export type InvalidationSurface = (typeof InvalidationSurfaceValues)[number]
 export type InvalidationIntentStatus = (typeof InvalidationIntentStatusValues)[number]
 export type FunnelEventType = (typeof FunnelEventTypeValues)[number]
 export type ActivationStage = (typeof ActivationStageValues)[number]
-export type AuditEventType = CurrentAuditEventType
-export type AuditTargetType = CurrentAuditTargetType
-export type AuditEventContract = Omit<StoredAuditEventContract, 'eventType' | 'targetType'> & {
-  eventType: AuditEventType
-  targetType: AuditTargetType
-}
-export type AuditEventInput = Omit<AuditEventContract, 'evidenceRefs'> & {
-  evidenceRefs?: readonly string[]
-}
-export type AuditValidationResult =
-  | { valid: true; event: AuditEventContract }
-  | {
-      valid: false
-      reason:
-        | 'retired_compatibility_event'
-        | 'missing_identity'
-        | 'missing_payload_hash'
-        | 'missing_state_transition'
-    }
+export type CurrentOperationAuditEventType = CurrentAuditEventType
+export type CurrentOperationAuditTargetType = CurrentAuditTargetType
+export type CurrentAuditValidationResult =
+  | AuditValidationResult
+  | { valid: false; reason: 'retired_compatibility_event' }
 
 export type OperationKeyRecord = {
   actorRef: string
@@ -112,14 +102,17 @@ export const markOperationSucceeded = markOperationSucceededImpl
 
 export const reserveOperationKey = reserveOperationKeyImpl
 
-export function validateAuditEvent(input: AuditEventInput): AuditValidationResult {
+export function validateAuditEvent(input: AuditEventInput): CurrentAuditValidationResult {
   if (
-    !AuditEventTypeValues.includes(input.eventType) ||
-    !AuditTargetTypeValues.includes(input.targetType)
+    !currentAuditEventTypes.has(input.eventType) ||
+    !currentAuditTargetTypes.has(input.targetType)
   ) {
     return { valid: false, reason: 'retired_compatibility_event' }
   }
-  return validateStoredAuditEvent(input) as AuditValidationResult
+  return validateStoredAuditEvent(input)
 }
+
+const currentAuditEventTypes = new Set<string>(AuditEventTypeValues)
+const currentAuditTargetTypes = new Set<string>(AuditTargetTypeValues)
 
 export const recordInvalidationIntent = recordInvalidationIntentImpl
