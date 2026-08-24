@@ -10,10 +10,10 @@ Scope: Deliver the narrow Operation market repository, prove its retained bounda
   EXPECT: WAVE3_OK
   EVIDENCE: Wave 3 integration ledger is 4/4 met; both original reviewers returned PASS after correction through `68d2cbc7a`.
 
-- [ ] G3: Drain, writer freeze, and retained-boundary extraction are accepted.
+- [x] G3: Drain, writer freeze, and retained-boundary extraction are accepted.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave4-integration.md && echo WAVE4_OK
   EXPECT: WAVE4_OK
-  EVIDENCE: pending
+  EVIDENCE: Wave 4 integration ledger is 4/4 met; contract and verification reviewers independently passed the drain candidate, writer freeze, eleven-table Release A compatibility schema, and retained-boundary extraction through `71b688a09`.
 
 - [ ] G4: Audited deletion, dependency cleanup, and documentation are accepted.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave5-integration.md && echo WAVE5_OK

@@ -45,3 +45,4 @@ The master owns contracts, ordering, gates, conflict resolution, reviews, genera
 - Wave 1 accepted: commits `65959ec48` through `5207cbe7e`, dual review passed.
 - Wave 2 accepted: commits `c742476ac` through `79291d274`, dual review passed.
 - Wave 3 accepted after correction and re-review: thin chat cutover, browser/release proof, and retained payment isolation are green through `68d2cbc7a`.
+- Wave 4 accepted after correction and dual review: the repository drain candidate, Release A writer freeze, exact eleven-table compatibility schema, and retained-boundary extraction are green through `71b688a09`. Production drain/deploy evidence remains an explicit human checkpoint.
