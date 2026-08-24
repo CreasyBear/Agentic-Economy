@@ -92,6 +92,9 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
+      - name: Install the source-proof Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
       - name: Record exact source evidence identity
         run: |
           mkdir -p output/release
