@@ -199,7 +199,6 @@ export async function currentOperationStagingSnapshotHandler(
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
     sourceDigest: publication.sourceDigest,
-    sourceUpdatedAt: publication.updatedAt,
   })).sort((left, right) => left.operationRef.localeCompare(right.operationRef))
   const readinessMaterial = publications.map((publication) => ({
     operationRef: publication.operationRef,

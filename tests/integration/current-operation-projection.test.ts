@@ -312,6 +312,29 @@ describe('T4 current Operation read model', () => {
     ]) expect(serialized).not.toContain(forbidden)
   })
 
+  it('keeps the staging source-set identity stable across readiness refreshes', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishFixture(backend, 'projection-staging-readiness-digest', false)
+    const readSnapshot = async () => await backend.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      {
+        ...ctx,
+        meta: {
+          ...ctx.meta,
+          getDeploymentMetadata: async () => ({ name: 'fabricated-readiness', region: null, class: 's16' as const }),
+        },
+      } as QueryCtx,
+      { now: Date.now() },
+      '0123456789abcdef0123456789abcdef01234567',
+    ))
+    const before = await readSnapshot()
+    await observeReadiness(backend, fixture, 'healthy')
+    const after = await readSnapshot()
+    if (before.kind !== 'current_operation_staging_snapshot'
+      || after.kind !== 'current_operation_staging_snapshot') throw new Error('t8_staging_snapshot_unavailable')
+    expect(after.sourceSetDigest).toBe(before.sourceSetDigest)
+    expect(after.readinessSetDigest).not.toBe(before.readinessSetDigest)
+  })
+
   it('fails the staging snapshot closed for invalid revision, time, zero rows, and a 257-row sentinel', async () => {
     const empty = convexTestWithMarketComponents()
     const unavailable = await empty.run(async (ctx) => await currentOperationStagingSnapshotHandler(
