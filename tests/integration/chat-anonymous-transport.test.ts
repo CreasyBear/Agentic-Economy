@@ -1,11 +1,26 @@
 import { mockModel } from '@convex-dev/agent'
-import { getFunctionName } from 'convex/server'
+import { getFunctionName, makeFunctionReference } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
 import { components, internal } from '../../convex/_generated/api'
 import type { ActionCtx } from '../../convex/_generated/server'
 import { streamAnonymousChatResponse } from '../../convex/chatAnonymous'
+import { createConvexServerFunctionAssertion } from '../../src/lib/server/convex-source'
+import type { CustomerRequestServiceAssertion } from '../../src/modules/agent-access/service-auth-envelope'
 import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
+
+const admitAnonymousEdge = makeFunctionReference<'mutation', {
+  key: string
+  serviceAuth: CustomerRequestServiceAssertion
+}, Readonly<{
+  kind: 'admitted' | 'limited' | 'refused'
+  retryAfter?: number
+  code?: 'authentication_required'
+}>>('chatAdmission:admitAnonymousEdge')
+const admitHttp = makeFunctionReference<'mutation', {
+  name: string
+  key: string
+}, Readonly<{ ok: boolean; retryAfter?: number }>>('rateLimit:admitHttp')
 
 describe('anonymous operation chat transport', () => {
   it('streams from a fake model without creating Agent threads or messages', async () => {
@@ -58,34 +73,61 @@ describe('anonymous operation chat transport', () => {
   })
 
   it('keeps the edge and Convex backstop admissions in independent hourly buckets', async () => {
+    const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN =
+      'anonymous-chat-admission-test-token-at-least-32-characters'
     const backend = convexTestWithMarketComponents()
     const key = `ip:sha256:${'a'.repeat(64)}:sha256:${'b'.repeat(64)}`
-    await expect(backend.mutation(internal.rateLimit.admit, {
-      name: 'chat-anonymous-edge',
-      key,
-    })).resolves.toMatchObject({ ok: true })
-    await expect(backend.mutation(internal.rateLimit.admit, {
-      name: 'chat-anonymous',
-      key,
-    })).resolves.toMatchObject({ ok: true })
-
-    for (let index = 1; index < 30; index += 1) {
-      await expect(backend.mutation(internal.rateLimit.admit, {
-        name: 'chat-anonymous-edge',
-        key,
-      })).resolves.toMatchObject({ ok: true })
+    try {
+      for (const name of ['chat-submit', 'chat-anonymous', 'chat-anonymous-edge']) {
+        await expect(backend.mutation(admitHttp, { name, key })).rejects.toThrow()
+      }
+      const unsigned = {
+        principalId: 'ae:server-function',
+        ownerId: 'ae:server-function',
+        credentialId: 'ae:server-function',
+        scopes: ['chat_anonymous:admit'],
+        issuedAt: Date.now(),
+        signature: 'unsigned',
+      }
+      await expect(backend.mutation(admitAnonymousEdge, { key, serviceAuth: unsigned }))
+        .resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+      const forged = await createConvexServerFunctionAssertion({
+        operation: 'chatAdmission.admitAnonymousEdge',
+        scope: 'chat_anonymous:admit',
+        command: { key: `${key}:forged` },
+      })
+      await expect(backend.mutation(admitAnonymousEdge, { key, serviceAuth: forged }))
+        .resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+      const serviceAuth = await createConvexServerFunctionAssertion({
+        operation: 'chatAdmission.admitAnonymousEdge',
+        scope: 'chat_anonymous:admit',
+        command: { key },
+      })
+      await expect(backend.mutation(admitAnonymousEdge, { key, serviceAuth }))
+        .resolves.toMatchObject({ kind: 'admitted' })
       await expect(backend.mutation(internal.rateLimit.admit, {
         name: 'chat-anonymous',
         key,
       })).resolves.toMatchObject({ ok: true })
+
+      for (let index = 1; index < 30; index += 1) {
+        await expect(backend.mutation(admitAnonymousEdge, { key, serviceAuth }))
+          .resolves.toMatchObject({ kind: 'admitted' })
+        await expect(backend.mutation(internal.rateLimit.admit, {
+          name: 'chat-anonymous',
+          key,
+        })).resolves.toMatchObject({ ok: true })
+      }
+      await expect(backend.mutation(admitAnonymousEdge, { key, serviceAuth }))
+        .resolves.toMatchObject({ kind: 'limited' })
+      await expect(backend.mutation(internal.rateLimit.admit, {
+        name: 'chat-anonymous',
+        key,
+      })).resolves.toMatchObject({ ok: false })
+    } finally {
+      if (previousServerKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+      else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerKey
     }
-    await expect(backend.mutation(internal.rateLimit.admit, {
-      name: 'chat-anonymous-edge',
-      key,
-    })).resolves.toMatchObject({ ok: false })
-    await expect(backend.mutation(internal.rateLimit.admit, {
-      name: 'chat-anonymous',
-      key,
-    })).resolves.toMatchObject({ ok: false })
   })
 })

@@ -5,7 +5,15 @@ import {
   resolveAnonymousChatSiteUrl,
   Route,
 } from '../../../src/routes/api.chat.anonymous'
-import { requestAdmissionKey } from '../../../src/lib/server/rate-limit'
+import {
+  createPublicSourceTransport,
+  setPublicSourceTransportForTests,
+} from '../../../src/lib/server/convex-source'
+import {
+  anonymousChatAdmissionKey,
+  assertHttpAdmission,
+  setHttpRateLimitAdmissionForTests,
+} from '../../../src/lib/server/rate-limit'
 
 const PROXY_SECRET = 'anonymous-chat-proxy-secret-at-least-32-characters'
 const body = { messages: [{ role: 'user', content: 'Find weather operations' }] }
@@ -32,6 +40,79 @@ function request(input: Readonly<{
 
 describe('anonymous chat TanStack proxy', () => {
   afterEach(() => vi.restoreAllMocks())
+
+  it('keys admission only from the trusted ingress IP headers', () => {
+    const anonymousRequest = (headers: Readonly<Record<string, string>>) => new Request(
+      'https://agentic.example/api/chat/anonymous',
+      { headers },
+    )
+    const baseline = anonymousChatAdmissionKey(anonymousRequest({
+      'CF-Connecting-IP': '203.0.113.10',
+    }))
+    for (const headers of [
+      { 'CF-Connecting-IP': '203.0.113.10', Authorization: 'Bearer rotating' },
+      { 'CF-Connecting-IP': '203.0.113.10', 'X-API-Key': 'rotating' },
+      { 'CF-Connecting-IP': '203.0.113.10', Cookie: 'ae_session=rotating' },
+      { 'CF-Connecting-IP': '203.0.113.10', 'X-Session-ID': 'rotating' },
+      { 'CF-Connecting-IP': '203.0.113.10', 'X-Forwarded-For': '198.51.100.7' },
+    ]) {
+      expect(anonymousChatAdmissionKey(anonymousRequest(headers))).toBe(baseline)
+    }
+    expect(anonymousChatAdmissionKey(anonymousRequest({
+      'CF-Connecting-IP': '203.0.113.11',
+    }))).not.toBe(baseline)
+    expect(anonymousChatAdmissionKey(anonymousRequest({
+      'X-Vercel-Forwarded-For': '198.51.100.7',
+      'CF-Connecting-IP': '203.0.113.10',
+    }))).not.toBe(baseline)
+    expect(anonymousChatAdmissionKey(anonymousRequest({}))).toBe(
+      anonymousChatAdmissionKey(anonymousRequest({ Authorization: 'Bearer ignored' })),
+    )
+  })
+
+  it('signs the dedicated edge admission command before calling Convex', async () => {
+    const previousServerToken = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+    const previousLocalBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN =
+      'anonymous-chat-server-function-token-at-least-32-characters'
+    delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    setHttpRateLimitAdmissionForTests(undefined)
+    let payload: unknown
+    const restoreTransport = setPublicSourceTransportForTests(createPublicSourceTransport({
+      env: { CONVEX_URL: 'https://anonymous-chat.test' },
+      fetch: async (_input, init) => {
+        payload = JSON.parse(String(init?.body)) as unknown
+        return Response.json({
+          status: 'success',
+          value: { kind: 'admitted' },
+        })
+      },
+    }))
+    const incoming = request()
+    try {
+      await expect(assertHttpAdmission(incoming, 'chat-anonymous-edge'))
+        .resolves.toEqual({ ok: true })
+    } finally {
+      restoreTransport()
+      if (previousServerToken === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+      else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerToken
+      if (previousLocalBypass === undefined) delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      else process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalBypass
+      setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    }
+
+    expect(payload).toMatchObject({
+      path: 'chatAdmission:admitAnonymousEdge',
+      args: [{
+        key: anonymousChatAdmissionKey(incoming),
+        serviceAuth: {
+          principalId: 'ae:server-function',
+          scopes: ['chat_anonymous:admit'],
+          signature: expect.any(String),
+        },
+      }],
+    })
+  })
 
   it('uses an explicit site URL before the cloud deployment fallback', () => {
     expect(resolveAnonymousChatSiteUrl({
@@ -86,12 +167,16 @@ describe('anonymous chat TanStack proxy', () => {
       admit,
     })
 
-    expect(admit).toHaveBeenCalledWith(incoming, 'chat-anonymous-edge')
+    expect(admit).toHaveBeenCalledWith(
+      incoming,
+      'chat-anonymous-edge',
+      anonymousChatAdmissionKey(incoming),
+    )
     expect(fetchInput).toBe('https://happy-animal-123.convex.site/chat/anonymous')
     expect(fetchInit?.signal).toBe(incoming.signal)
     expect(new Headers(fetchInit?.headers).get('x-ae-chat-proxy-secret')).toBe(PROXY_SECRET)
     expect(new Headers(fetchInit?.headers).get('x-ae-chat-admission-key')).toBe(
-      requestAdmissionKey(incoming, 'chat-anonymous'),
+      anonymousChatAdmissionKey(incoming),
     )
     expect(JSON.parse(String(fetchInit?.body))).toEqual(body)
     expect(response.status).toBe(202)

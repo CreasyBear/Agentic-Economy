@@ -93,7 +93,11 @@ export function validateAnonymousChatBody(value: unknown): ValidationResult {
   return { ok: true, body }
 }
 
-function jsonError(status: number, code: string, headers: HeadersInit = {}): Response {
+function jsonError(
+  status: number,
+  code: string,
+  headers: Readonly<Record<string, string>> = {},
+): Response {
   return Response.json({ code }, {
     status,
     headers: {
@@ -114,7 +118,7 @@ function secretMatches(expected: string, received: string | null): boolean {
   return constantTimeStringEqual(expected, received ?? '')
 }
 
-function retryAfterHeader(retryAfterMs: number): HeadersInit {
+function retryAfterHeader(retryAfterMs: number): Readonly<Record<string, string>> {
   return { 'Retry-After': String(Math.max(1, Math.ceil(retryAfterMs / 1_000))) }
 }
 

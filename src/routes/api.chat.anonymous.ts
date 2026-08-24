@@ -5,9 +5,9 @@ import { methodNotAllowed } from '@/lib/server/method-guard'
 import { problem } from '@/lib/server/problem'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
 import {
+  anonymousChatAdmissionKey,
   assertHttpAdmission,
   rateLimitedResponse,
-  requestAdmissionKey,
   type RateLimitResult,
 } from '@/lib/server/rate-limit'
 import {
@@ -25,7 +25,11 @@ const SAFE_UPSTREAM_HEADERS = [
 type AnonymousChatProxyDependencies = Readonly<{
   env?: StringEnvironment
   fetch?: typeof globalThis.fetch
-  admit?: (request: Request, name: 'chat-anonymous-edge') => Promise<RateLimitResult>
+  admit?: (
+    request: Request,
+    name: 'chat-anonymous-edge',
+    key: string,
+  ) => Promise<RateLimitResult>
 }>
 
 export const Route = createFileRoute('/api/chat/anonymous')({
@@ -128,7 +132,14 @@ export async function handleAnonymousChatProxyRequest(
           response = proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable')
         } else {
           try {
-            const admission = await (dependencies.admit ?? assertHttpAdmission)(request, 'chat-anonymous-edge')
+            const admissionKey = anonymousChatAdmissionKey(request)
+            const admit = dependencies.admit
+              ?? (async (admissionRequest, name, key) => await assertHttpAdmission(
+                admissionRequest,
+                name,
+                { key },
+              ))
+            const admission = await admit(request, 'chat-anonymous-edge', admissionKey)
             if (!admission.ok) {
               response = rateLimitedResponse(admission.retryAfter)
             } else {
@@ -139,7 +150,7 @@ export async function handleAnonymousChatProxyRequest(
                   headers: {
                     'Content-Type': 'application/json',
                     'x-ae-chat-proxy-secret': proxySecret,
-                    'x-ae-chat-admission-key': requestAdmissionKey(request, 'chat-anonymous'),
+                    'x-ae-chat-admission-key': admissionKey,
                   },
                   body: JSON.stringify(bounded.value),
                   signal: request.signal,

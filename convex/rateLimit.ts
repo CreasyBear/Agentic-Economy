@@ -4,7 +4,7 @@ import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
 import { assertAdmission } from './lib/rateLimit'
 
-const rateLimitName = v.union(
+const internalRateLimitName = v.union(
   v.literal('public-read'),
   v.literal('public-mutation'),
   v.literal('oauth-issuance'),
@@ -12,13 +12,21 @@ const rateLimitName = v.union(
   v.literal('answer-stream'),
   v.literal('chat-submit'),
   v.literal('chat-anonymous'),
-  v.literal('chat-anonymous-edge'),
+  v.literal('dispute-open'),
+)
+
+const publicHttpRateLimitName = v.union(
+  v.literal('public-read'),
+  v.literal('public-mutation'),
+  v.literal('oauth-issuance'),
+  v.literal('answer-turn-submit'),
+  v.literal('answer-stream'),
   v.literal('dispute-open'),
 )
 
 export const admit = internalMutation({
   args: {
-    name: rateLimitName,
+    name: internalRateLimitName,
     key: v.string(),
   },
   returns: v.union(
@@ -36,7 +44,7 @@ export const admit = internalMutation({
 
 export const admitHttp = mutationGeneric({
   args: {
-    name: rateLimitName,
+    name: publicHttpRateLimitName,
     key: v.string(),
   },
   returns: v.union(
