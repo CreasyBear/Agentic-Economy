@@ -101,11 +101,12 @@ function normalizeObservation(
     callIdentity: observation.callIdentity.trim(),
     operationRef: observation.operationRef.trim(),
   }
+  const operationRef = normalized.operationRef
   if (
     !Object.values(normalized).every((value) => value.length > 0) ||
-    !isPublicOperationRef(normalized.operationRef)
+    !isPublicOperationRef(operationRef)
   ) {
     return undefined
   }
-  return normalized
+  return { ...normalized, operationRef }
 }
