@@ -79,16 +79,19 @@ describe('agent access money seam', () => {
       resolveOwnerId: () => ownerId,
     }))
     if (readback === undefined) throw new Error('expected agent readback')
-    const enriched = await enrichAgentAccessActivity([readback], async ({ operationRefs }) => {
-      expect(operationRefs).toEqual([operationRef])
-      return {
-        kind: 'ok',
-        operations: [{
-          operationRef,
-          offering: { label: 'Extract invoice fields' },
-          business: { name: 'Ledger Labs' },
-        }],
-      } as unknown as OperationCompareResult
+    const enriched = await enrichAgentAccessActivity([readback], {
+      isOperationRef: (value) => value === operationRef,
+      compare: async ({ operationRefs }) => {
+        expect(operationRefs).toEqual([operationRef])
+        return {
+          kind: 'ok',
+          operations: [{
+            operationRef,
+            offering: { label: 'Extract invoice fields' },
+            business: { name: 'Ledger Labs' },
+          }],
+        } as unknown as OperationCompareResult
+      },
     })
 
     expect(enriched[0]?.activity[0]?.operation).toEqual({
