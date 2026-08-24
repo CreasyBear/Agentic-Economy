@@ -1,36 +1,50 @@
 # Agentic Economy
 
-Agentic Economy is an **Operation market**: a catalogue of callable capabilities
-that people and software agents can search, inspect, compare, and invoke through
-controlled contracts. The website chat is a thin adapter over that market. It is
-not the product authority.
+Agentic Economy is a marketplace where agents working for people and companies
+find, compare, and buy services from businesses and other agents.
 
-```mermaid
-flowchart LR
-  Website --> Catalogue[Operation catalogue]
-  Website --> Chat[Thin chat]
-  Chat --> Anonymous[Anonymous ephemeral]
-  Chat --> Durable[Signed-in durable]
-  Anonymous --> Tools[Five Operation tools]
-  Durable --> Tools
-  Tools --> Registry[Registry reads]
-  Tools --> Keyless[Safe keyless execution]
-  Machine[API · MCP · CLI] --> Consequential[Consequential plane]
-  Consequential --> Market[Invocation · payment · recovery · supply]
-```
+The active product is an **Operation market**. An Operation is one exact,
+callable contribution an outside supplier can provide when an agent reaches the
+edge of its current capabilities.
 
-Chat exposes exactly five tools:
+## The product loop
 
-- `registry.operations.search`
-- `registry.operations.detail`
-- `registry.operations.compare`
-- `registry.operations.inspectPlan`
-- `operation.execute`
+1. An agent encounters a capability gap while pursuing its own project.
+2. It searches Agentic Economy for relevant Operations.
+3. It compares suppliers and inspects exact inputs, price, readiness, and terms.
+4. It invokes one Operation within delegated authority.
+5. It consumes the result and continues its own work.
 
-The first four read canonical Operation projections. The fifth may execute only
-an eligible keyless Operation through the existing SSRF-safe network boundary.
-Consequential invocation, payment, recovery, and supplier management remain on
-the HTTP API, MCP, and CLI surfaces.
+Agentic Economy does not own the agent's project, planning, memory, harness, or
+orchestration. It owns the market boundary: discovery, selection, controlled
+invocation, payment where required, and evidence about the returned unit.
+
+## Current surfaces
+
+- `/market` — public Operation catalogue.
+- `/t/new` — thin natural-language adapter over the same market.
+- `/api/v1/market-operations/*` — canonical Operation discovery and inspection.
+- `/api/v1/operations/call` — consequential invocation entry.
+- `/mcp`, `/llms.txt`, and `/SKILL.md` — machine discovery.
+- `@agentic-economy/cli` — search, inspect, call, status, and recovery.
+- `/for-providers` — supplier publication.
+
+Chat exposes only search, detail, compare, inspect-plan, and eligible keyless
+execution. Paid or consequential work remains on the authenticated API, MCP,
+and CLI invocation plane.
+
+The broad external registry is lower-authority supply discovery. An imported
+listing is not an Operation and cannot be invoked until it passes admission and
+is published into the canonical market.
+
+## Project authority
+
+Read [PRODUCT.md](./PRODUCT.md) before making product decisions. Research does
+not override the current charter.
+
+Historical planning ledgers, migration gates, parity notes, generated codebase
+maps, and diagrams have been removed from active project context. Git history
+records them but does not define the product.
 
 ## Run locally
 
@@ -44,7 +58,7 @@ npm run dev:local
 Open `http://127.0.0.1:3024/market` for the catalogue or
 `http://127.0.0.1:3024/t/new` for chat.
 
-Useful deterministic checks:
+Useful checks:
 
 ```sh
 npm run test:chat:conformance
@@ -53,31 +67,10 @@ npm run test:cli-package
 npm run test:release:source
 ```
 
-## Machine surfaces
-
-Start with `/llms.txt`, `/SKILL.md`, `/.well-known/ucp`, or `/mcp`. Canonical
-Operation reads live under `/api/v1/market-operations/*`; consequential calls
-start at `/api/v1/operations/call`. The compiled client is
-`@agentic-economy/cli`:
+## Machine quickstart
 
 ```sh
 npx @agentic-economy/cli search "weather forecast" --limit 5
 npx @agentic-economy/cli inspect <operationRef>
 npx @agentic-economy/cli call <operationRef> --input '{"city":"Perth"}'
 ```
-
-The `/api/v1/services/*` routes are retained compatibility views, not parity or
-discovery authority. Browser-only anonymous chat at `/api/chat/anonymous` is not
-advertised as a machine Agent API.
-
-## Migration status
-
-This branch is a **Release-B source candidate**: the old runtime, readers, and
-eleven legacy schema declarations have been removed from source. That does not
-prove a production drain, export, Release A deployment, Release B deployment,
-staging smoke, or table deletion occurred.
-
-Before any irreversible data deletion, identify the exact production deployment,
-export and verify each legacy table, deploy and verify the staged releases, and
-obtain a separate typed human confirmation for every table. See
-[the architecture and rollback runbook](.planning/codebase/ARCHITECTURE.md).
