@@ -287,8 +287,7 @@ export function OperationChat({
       setError('Copy failed. Select the link and copy it manually.')
       return
     }
-    const absoluteShareUrl = new URL(sharePath, window.location.origin).toString()
-    void navigator.clipboard.writeText(absoluteShareUrl).then(() => {
+    void navigator.clipboard.writeText(sharePath).then(() => {
       setCopied(true)
       setStatus('Share link copied.')
     }).catch(() => setError('Copy failed. Select the link and copy it manually.'))
@@ -330,7 +329,7 @@ export function OperationChat({
           onIssueShare={() => void mutateWithError(async () => {
             if (threadId === null) return
             const result = await issueShare({ threadId })
-            setSharePath(`/s/${result.shareToken}`)
+            setSharePath(new URL(`/s/${result.shareToken}`, window.location.origin).toString())
           }, 'Read-only share link ready.')}
           onRevokeShare={() => void mutateWithError(async () => {
             if (threadId === null) return

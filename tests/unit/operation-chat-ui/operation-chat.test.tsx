@@ -473,13 +473,33 @@ describe('thin operation chat presentation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Get share link' }))
     await waitFor(() => expect(state.issue).toHaveBeenCalledWith({ threadId: 'thread-1' }))
-    expect(screen.getByDisplayValue('/s/share-token-value')).toBeTruthy()
+    const absoluteShareUrl = new URL('/s/share-token-value', window.location.origin).toString()
+    expect(screen.getByDisplayValue(absoluteShareUrl)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      new URL('/s/share-token-value', window.location.origin).toString(),
-    ))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(absoluteShareUrl))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke share link' }))
     await waitFor(() => expect(state.revoke).toHaveBeenCalledWith({ threadId: 'thread-1' }))
+  })
+
+  it('keeps an absolute share URL selectable when clipboard copy fails', async () => {
+    state.auth = { isAuthenticated: true, isLoading: false, isRefreshing: false }
+    const writeText = vi.fn(async () => {
+      throw new Error('clipboard unavailable')
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    renderChat({ threadId: 'thread-1' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create share link' }))
+    const absoluteShareUrl = new URL('/s/share-token-value', window.location.origin).toString()
+    const shareInput = await screen.findByDisplayValue(absoluteShareUrl)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(absoluteShareUrl))
+    expect(screen.getByRole('alert').textContent).toContain('Select the link and copy it manually.')
+    expect((shareInput as HTMLInputElement).value).toBe(absoluteShareUrl)
   })
 
   it('refreshes stale busy state every 30 seconds so deletion recovers without a remount', async () => {
