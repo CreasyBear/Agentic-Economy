@@ -17,6 +17,7 @@ const generatedDirectory = join('convex', '_generated')
 const generatedSourceFiles = ['api.d.ts', 'api.js', 'dataModel.d.ts', 'server.d.ts', 'server.js'] as const
 const requiredRootFiles = ['package.json', 'package-lock.json', 'tsconfig.json', 'convex.json'] as const
 const requiredSourceDirectories = ['src', 'convex'] as const
+const anonymousClerkJwtIssuerDomain = 'https://release-proof.invalid'
 
 function copyReleaseSource(target: string): void {
   for (const name of requiredRootFiles) cpSync(resolve(root, name), resolve(target, name))
@@ -36,7 +37,7 @@ function anonymousEnvironment(): NodeJS.ProcessEnv {
     CI: '1',
     NO_COLOR: '1',
     CONVEX_AGENT_MODE: 'anonymous',
-    CLERK_JWT_ISSUER_DOMAIN: 'https://release-proof.invalid',
+    CLERK_JWT_ISSUER_DOMAIN: anonymousClerkJwtIssuerDomain,
   }
 }
 
@@ -160,6 +161,12 @@ async function run(): Promise<void> {
       rmSync(resolve(isolatedRoot, generatedDirectory, name))
     }
     await runConvex(isolatedRoot, ['init'])
+    await runConvex(isolatedRoot, [
+      'env',
+      'set',
+      'CLERK_JWT_ISSUER_DOMAIN',
+      anonymousClerkJwtIssuerDomain,
+    ])
     await runConvex(isolatedRoot, ['codegen', '--typecheck=disable'])
     for (const name of generatedSourceFiles) {
       if (!existsSync(resolve(isolatedRoot, generatedDirectory, name))) {
