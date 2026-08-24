@@ -36,6 +36,7 @@
     "smoke:gateway:production": "node tools/dev/run-with-cleanup.mjs tsx tools/release/operation-gateway-production-smoke.ts",
     "smoke:chat:staging": "node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts",
     "validate:release:gateway": "tsx tools/release/validate-operation-gateway-production-smoke-receipt.ts",
+    "observe:current-operation:staging": "tsx tools/release/current-operation-staging-observation.ts",
     "evidence:action-invocation:development": "tsx tools/dev/action-invocation-development-evidence.ts",
     "evidence:operation:development": "tsx tools/dev/development-provider-operation-evidence.ts",
     "evidence:bounded-mandate:development": "tsx tools/dev/bounded-mandate-evidence-packet.ts",
