@@ -56,7 +56,8 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
-  { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY'], mode: 'all' },
+  { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY', 'AE_LLM_MODEL'], mode: 'all' },
+  { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
   { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
   { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
@@ -92,8 +93,8 @@ const conditional: readonly RequirementGroup[] = [
     trigger: ['AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID'],
   },
   {
-    scope: 'security:answer-share', code: 'secret_key_id_without_secret', names: ['AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID'], mode: 'all',
-    trigger: ['AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID'],
+    scope: 'security:chat-share', code: 'secret_key_id_without_secret', names: ['AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID'], mode: 'all',
+    trigger: ['AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID'],
   },
   {
     scope: 'observability:build', code: 'sentry_build_configuration_partial', names: ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT'], mode: 'all',
@@ -110,6 +111,7 @@ const conditional: readonly RequirementGroup[] = [
 
 const optionalNames = Object.freeze([
   'AE_ANSWER_EVAL_PASSED', 'AE_LLM_MODEL', 'AE_LLM_MODELS', 'VITE_AE_ANSWER_MODE', 'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
+  'AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID',
   'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
   'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
@@ -137,6 +139,7 @@ const fieldRules: readonly FieldRule[] = [
 
 const knownNames = Object.freeze([
   'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_LLM_MODEL', 'AE_LLM_MODELS',
+  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
   'AE_ANSWER_EVAL_PASSED', 'AE_SOURCE_WRITE_SECRET',
   'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_ANSWER_THREAD_SHARE_KEY_ID',
   'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_MAX_ATOMIC',
@@ -157,7 +160,7 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   }),
   resources: Object.freeze([
     Object.freeze({ id: 'web-server', kind: 'vercel-node-runtime', declaration: 'nitro.vercel.entryFormat=node' }),
-    Object.freeze({ id: 'convex-components', kind: 'convex-component-set', components: Object.freeze(['workflow', 'workpool', 'rate-limiter', 'aggregate:ownerActivationByStage']) }),
+    Object.freeze({ id: 'convex-components', kind: 'convex-component-set', components: Object.freeze(['workflow', 'workpool', 'rate-limiter', 'agent', 'aggregate:ownerActivationByStage']) }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),

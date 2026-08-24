@@ -72,6 +72,9 @@ jobs:
       - name: Run focused provider and recovery conformance
         run: npm run test:conformance
 
+      - name: Run deterministic operation chat conformance
+        run: npm run test:chat:conformance
+
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
 
@@ -84,7 +87,7 @@ jobs:
             output/release/source-metadata.json
             output/release/unit-vitest.json
             output/release/integration-vitest.json
-            output/eval/answer-suite-report.json
+            output/release/chat-conformance-vitest.json
           if-no-files-found: error
           retention-days: 14
 

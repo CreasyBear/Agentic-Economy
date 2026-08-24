@@ -2,7 +2,7 @@ import { convexTest, type TestConvex } from 'convex-test'
 import { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
-import { register as registerAgent } from '@convex-dev/agent/test'
+import agentTest from '@convex-dev/agent/test'
 import { components } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
@@ -31,7 +31,7 @@ export type ConvexTestWithWorkersOptions = Readonly<{
 export function convexTestWithMarketComponents() {
   const backend = convexTest(schema, convexModules)
   registerRateLimiter(backend)
-  registerAgent(backend)
+  agentTest.register(backend)
   registerAggregate(backend, 'marketEvidence')
   registerAggregate(backend, 'marketOperationEvidence')
   registerAggregate(backend, 'marketOperationRatings')

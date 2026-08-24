@@ -55,6 +55,8 @@ describe('green release baseline', () => {
     const chain = releaseCommandChain('gate:release')
     expect(releaseCommandChain('test:release:source')).toContain('npm run verify:deployment-manifest -- --environment development')
     for (const subGate of [
+      'test:conformance',
+      'test:chat:conformance',
       'check:convex-codegen',
       'lint',
       'typecheck',
@@ -65,11 +67,12 @@ describe('green release baseline', () => {
       'test:ts-standards',
       'test:seo',
       'test:ui-contract',
-      'test:eval:report',
+      'test:cli-package',
       'build',
     ]) {
       expect(chain, `gate:release must execute ${subGate}`).toContain(`npm run ${subGate}`)
     }
+    expect(chain).not.toContain('npm run test:eval:report')
   })
 
   it('keeps pull requests credential-free and protected releases generated-source proof', () => {
@@ -90,6 +93,8 @@ describe('green release baseline', () => {
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()
+    const chatGate = source?.steps?.find((step) => step.name === 'Run deterministic operation chat conformance')
+    expect(chatGate?.run).toBe('npm run test:chat:conformance')
 
     const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))
     for (const upload of uploads) {
@@ -109,6 +114,12 @@ describe('green release baseline', () => {
       expect(`${artifactName}\n${artifactPaths}`).not.toMatch(/(?:^|[\\/\n])\.env(?:$|[.*\\/])/i)
       expect(`${artifactName}\n${artifactPaths}`).not.toMatch(/(?:credential|secret|token|private-key)/i)
     }
+    const sourceUpload = uploads.find((upload) => upload.with?.name?.includes('source-release-gate'))
+    expect(sourceUpload?.with?.path).toContain('output/release/chat-conformance-vitest.json')
+
+    const workflowText = readFileSync(resolve(root, '.github/workflows/kernel-release-gate.yml'), 'utf8')
+    expect(workflowText).not.toContain('answer-suite-report')
+    expect(workflowText).not.toContain('test:eval:report')
 
     const metadataRuns = steps
       .map((step) => step.run ?? '')

@@ -19,6 +19,7 @@ function productionEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example.com',
     OPENROUTER_API_KEY: 'openrouter-secret-value',
+    AE_CHAT_PROXY_SECRET: 'chat-proxy-secret-value-long-enough',
     CDP_API_KEY_ID: 'cdp-key-id',
     CDP_API_KEY_SECRET: 'cdp-key-secret',
     CDP_WALLET_SECRET: 'cdp-wallet-secret',
@@ -57,6 +58,8 @@ describe('deployment manifest validator', () => {
       'operation-gateway',
       'convex-scheduled-jobs',
     ])
+    const components = result.resources.find((resource) => resource.id === 'convex-components')
+    expect((components as { components: readonly string[] }).components).toContain('agent')
     expect(result.readinessProbes.map((probe) => probe.path)).toEqual(['/api/health', '/api/ready', '/api/v1/release'])
   })
 
@@ -84,6 +87,8 @@ describe('deployment manifest validator', () => {
       'AE_CANONICAL_BASE_URL',
       'AE_CANONICAL_HOST_ALLOWLIST',
       'OPENROUTER_API_KEY',
+      'AE_LLM_MODEL',
+      'AE_CHAT_PROXY_SECRET',
       'AE_SOURCE_WRITE_KEY_BILLING',
       'AE_SOURCE_WRITE_KEY_SESSION',
       'STRIPE_SECRET_KEY',
@@ -154,6 +159,27 @@ describe('deployment manifest validator', () => {
       'url_configuration_invalid',
       'canonical_host_allowlist_invalid',
     ]))
+  })
+
+  it('requires chat sharing configuration as an all-or-none pair', () => {
+    const partial = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CHAT_SHARE_KEY_ID: 'chat-share-v1',
+    }, { nodeMajor: 22 })
+
+    expect(partial.findings).toContainEqual({
+      kind: 'missing',
+      code: 'secret_key_id_without_secret',
+      names: ['AE_CHAT_SHARE_SECRET'],
+      scope: 'security:chat-share',
+    })
+
+    const complete = validateDeploymentManifest({
+      ...productionEnvironment(),
+      AE_CHAT_SHARE_SECRET: 'chat-share-secret-value-long-enough',
+      AE_CHAT_SHARE_KEY_ID: 'chat-share-v1',
+    }, { nodeMajor: 22 })
+    expect(complete.findings.filter(({ scope }) => scope === 'security:chat-share')).toEqual([])
   })
 
   it('requires CDP custody, forbids raw production keys, and redacts custody secrets', () => {
@@ -272,17 +298,24 @@ describe('deployment manifest validator', () => {
 
   it('returns no secret values and fingerprints shape rather than secret material', () => {
     const first = productionEnvironment()
-    const rotated = { ...first, OPENROUTER_API_KEY: 'rotated-openrouter-secret' }
+    const rotated = {
+      ...first,
+      OPENROUTER_API_KEY: 'rotated-openrouter-secret',
+      AE_CHAT_PROXY_SECRET: 'rotated-chat-proxy-secret-long-enough',
+    }
     const result = validateDeploymentManifest(first, { nodeMajor: 22 })
     const rotatedResult = validateDeploymentManifest(rotated, { nodeMajor: 22 })
 
     expect(JSON.stringify(result)).not.toContain('openrouter-secret-value')
+    expect(JSON.stringify(result)).not.toContain('chat-proxy-secret-value')
     expect(JSON.stringify(result)).not.toContain('source-write-secret')
     expect(rotatedResult.fingerprint).toBe(result.fingerprint)
 
     const modeChanged = validateDeploymentManifest({ ...first, VITE_AE_ANSWER_MODE: 'structured' }, { nodeMajor: 22 })
+    const modelChanged = validateDeploymentManifest({ ...first, AE_LLM_MODEL: 'openai/gpt-5-mini' }, { nodeMajor: 22 })
     const presenceChanged = validateDeploymentManifest({ ...first, VITE_SENTRY_DSN: 'https://public@sentry.example/1' }, { nodeMajor: 22 })
     expect(modeChanged.fingerprint).not.toBe(result.fingerprint)
+    expect(modelChanged.fingerprint).not.toBe(result.fingerprint)
     expect(presenceChanged.fingerprint).not.toBe(result.fingerprint)
   })
 

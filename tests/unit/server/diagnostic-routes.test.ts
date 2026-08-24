@@ -38,6 +38,8 @@ function productionReadinessEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
+    AE_LLM_MODEL: 'test/provider-model',
+    AE_CHAT_PROXY_SECRET: 'test-chat-proxy-value-long-enough-for-production-shape',
     CDP_API_KEY_ID: 'cdp-key-id',
     CDP_API_KEY_SECRET: 'cdp-key-secret',
     CDP_WALLET_SECRET: 'cdp-wallet-secret',
