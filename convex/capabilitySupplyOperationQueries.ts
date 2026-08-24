@@ -30,6 +30,11 @@ import {
   publicPrice,
   publicPriceBreakdown,
 } from './capabilitySupplyOperationShared'
+import {
+  loadProjectedCurrentOperation,
+  readCurrentOperationMode,
+  searchProjectedCurrentOperations,
+} from './capabilitySupplyOperationProjection'
 
 const currentOperationProjectionDropReason = v.union(
   ...CURRENT_OPERATION_PROJECTION_DROP_REASONS.map((reason) => v.literal(reason)),
@@ -377,7 +382,11 @@ export const compareArgs = { operationRefs: v.array(v.string()) }
 export const inspectArgs = { operationRefs: v.array(v.string()), mappingRefs: v.optional(v.array(v.string())), expiresInMs: v.optional(v.number()) }
 
 export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
-  return serializeOperationSearchResult(await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args))
+  const now = Date.now()
+  const mode = await readCurrentOperationMode(ctx)
+  return serializeOperationSearchResult(mode === 'new'
+    ? await searchProjectedCurrentOperations(ctx, args, now)
+    : await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now))
 }
 export async function detailHandler(ctx: QueryCtx, args: OperationDetailInput) {
   return serializeOperationDetailResult(await detailCapabilityOperation(capabilityOperationSourcePort(ctx), args))
@@ -473,7 +482,7 @@ export async function currentSearchBenchmarkHandler(
 }
 
 function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSourcePort {
-  const list = async (
+  const listOld = async (
     networkId: string | undefined,
     limit: number,
     now: number,
@@ -508,16 +517,23 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
       })))}`,
     }
   }
+  const loadOld = async (operationRef: string) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_operationRef_and_disposition', (query) => (
+        query.eq('operationRef', operationRef).eq('disposition', 'current')
+      ))
+      .unique()
+    if (publication === null) return null
+    return await operationRecord(ctx, publication, Date.now()) ?? null
+  }
   return {
-    listCurrent: async (input) => list(input.networkId, input.limit, input.now),
+    listCurrent: async (input) => {
+      return await listOld(input.networkId, input.limit, input.now)
+    },
     loadCurrent: async (operationRef) => {
-      const publication = await ctx.db.query('capabilityPublications')
-        .withIndex('by_operationRef_and_disposition', (query) => (
-          query.eq('operationRef', operationRef).eq('disposition', 'current')
-        ))
-        .unique()
-      if (publication === null) return null
-      return await operationRecord(ctx, publication, Date.now()) ?? null
+      const mode = await readCurrentOperationMode(ctx)
+      if (mode === 'new') return await loadProjectedCurrentOperation(ctx, operationRef)
+      return await loadOld(operationRef)
     },
     resolveMapping: async (mappingRef, networkId) => {
       if (networkId === undefined) return null
