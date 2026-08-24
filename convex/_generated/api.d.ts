@@ -64,6 +64,8 @@ import type * as capabilitySupplyWriterPorts from "../capabilitySupplyWriterPort
 import type * as catalog from "../catalog.js";
 import type * as catalogOfferingMutations from "../catalogOfferingMutations.js";
 import type * as catalogPublicReads from "../catalogPublicReads.js";
+import type * as chatExecute from "../chatExecute.js";
+import type * as chatTools from "../chatTools.js";
 import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
@@ -199,6 +201,8 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   catalogOfferingMutations: typeof catalogOfferingMutations;
   catalogPublicReads: typeof catalogPublicReads;
+  chatExecute: typeof chatExecute;
+  chatTools: typeof chatTools;
   crons: typeof crons;
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;

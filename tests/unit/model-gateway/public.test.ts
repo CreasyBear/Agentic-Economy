@@ -2,6 +2,8 @@ import { generateText } from 'ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  DEFAULT_OPENROUTER_MODEL,
+  openRouterGatewayConfig,
   openRouterModel,
   type OpenRouterGatewayConfig,
   type OpenRouterModelOptions,
@@ -30,6 +32,24 @@ afterEach(() => {
 })
 
 describe('openRouterModel routing options', () => {
+  it('accepts explicit Convex environment values and keeps the single default model', () => {
+    expect(openRouterGatewayConfig({
+      OPENROUTER_API_KEY: '  convex-key  ',
+      AE_LLM_MODEL: '  openrouter/configured-model  ',
+      AE_OPENROUTER_API_BASE_URL: '  https://router.example.test/api  ',
+      SITE_URL: '  https://agentic.example.test  ',
+    })).toEqual({
+      apiKey: 'convex-key',
+      model: 'openrouter/configured-model',
+      baseUrl: 'https://router.example.test/api',
+      siteUrl: 'https://agentic.example.test',
+    })
+
+    expect(openRouterGatewayConfig({ AE_LLM_MODEL: '  ' })).toEqual({
+      model: DEFAULT_OPENROUTER_MODEL,
+    })
+  })
+
   it('requires strict-output support without forcing provider parallel calls', async () => {
     const body = await requestBody({ structuredOutputs: true })
 

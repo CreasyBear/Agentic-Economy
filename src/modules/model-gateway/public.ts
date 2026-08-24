@@ -1,8 +1,8 @@
 import { createOpenRouter, type OpenRouterProvider } from '@openrouter/ai-sdk-provider'
+import type { LanguageModelV4 } from '@ai-sdk/provider'
 import {
   addToolInputExamplesMiddleware,
   wrapLanguageModel,
-  type LanguageModel,
   type ProviderMetadata,
 } from 'ai'
 
@@ -30,13 +30,33 @@ export type OpenRouterGatewayConfig = Readonly<{
 
 export const DEFAULT_OPENROUTER_MODEL = 'deepseek/deepseek-v4-flash'
 
-export function openRouterGatewayConfig(): OpenRouterGatewayConfig {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-  const baseUrl = process.env.AE_OPENROUTER_API_BASE_URL?.trim()
-  const siteUrl = process.env.SITE_URL?.trim()
+export type OpenRouterGatewayEnvironment = Readonly<{
+  OPENROUTER_API_KEY?: string
+  AE_LLM_MODEL?: string
+  AE_OPENROUTER_API_BASE_URL?: string
+  SITE_URL?: string
+}>
+
+/**
+ * Resolve the gateway from explicit host values. Convex callers pass its typed
+ * `env` object here; existing Node hosts may omit it and retain process-env
+ * behavior without making the provider or Agent depend on a process reader.
+ */
+export function openRouterGatewayConfig(
+  environment?: OpenRouterGatewayEnvironment,
+): OpenRouterGatewayConfig {
+  const source = environment ?? {
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    AE_LLM_MODEL: process.env.AE_LLM_MODEL,
+    AE_OPENROUTER_API_BASE_URL: process.env.AE_OPENROUTER_API_BASE_URL,
+    SITE_URL: process.env.SITE_URL,
+  }
+  const apiKey = source.OPENROUTER_API_KEY?.trim()
+  const baseUrl = source.AE_OPENROUTER_API_BASE_URL?.trim()
+  const siteUrl = source.SITE_URL?.trim()
   return {
     ...(apiKey === undefined || apiKey.length === 0 ? {} : { apiKey }),
-    model: process.env.AE_LLM_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL,
+    model: source.AE_LLM_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL,
     ...(baseUrl === undefined || baseUrl.length === 0 ? {} : { baseUrl }),
     ...(siteUrl === undefined || siteUrl.length === 0 ? {} : { siteUrl }),
   }
@@ -111,7 +131,7 @@ export function openRouterModel(
   config: OpenRouterGatewayConfig,
   modelId: string,
   options: OpenRouterModelOptions = {},
-): LanguageModel {
+): LanguageModelV4 {
   const extraBody: Record<string, unknown> = {
     ...(options.jsonObjectResponse === true ? { response_format: { type: 'json_object' } } : {}),
     ...(options.jsonSchemaResponse === undefined
@@ -140,7 +160,7 @@ export function openRouterModel(
   return wrapLanguageModel({
     model,
     middleware: addToolInputExamplesMiddleware(),
-  })
+  }) as LanguageModelV4
 }
 
 /**
