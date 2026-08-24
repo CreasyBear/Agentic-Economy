@@ -387,7 +387,7 @@ export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
         .lt('readinessValidUntil', Date.now() + READINESS_REFRESH_LEAD_MS),
     )
     .take(MAX_READINESS_REFRESH_BATCH)
-  await Promise.all(
+  const scheduledFunctionIds = await Promise.all(
     due.map((publication) =>
       ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
         publicationRef: publication.publicationRef,
@@ -395,5 +395,12 @@ export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
       }),
     ),
   )
+  console.info(JSON.stringify({
+    kind: 'capability_readiness_scheduled_cycle',
+    schemaVersion: 'capability-readiness-scheduled-cycle:v1',
+    observedAt: Date.now(),
+    dueCount: due.length,
+    scheduledFunctionIds,
+  }))
   return due.length
 }
