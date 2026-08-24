@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ANSWER_TURN_PROBLEM_CODES,
+  buildAnswerTurnProblem,
   buildProblem,
   defaultTitle,
   gatewayFailureToProblem,
   kindForStatus,
   operationInvokeResultToProblem,
   operationResultToProblem,
+  parseAnswerTurnProblem,
+  parseAnswerTurnProblemStrict,
+  redactAnswerTurnProblem,
   DEFAULT_STATUS,
 } from '@/lib/errors'
 import type { ProblemKind } from '@/lib/errors'
@@ -96,6 +101,59 @@ describe('buildProblem', () => {
     for (const kind of kinds) {
       expect(defaultTitle(kind).length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('answer turn problems', () => {
+  it('has the complete literal answer code set', () => {
+    expect(ANSWER_TURN_PROBLEM_CODES).toContain('missing_turn_key')
+    expect(ANSWER_TURN_PROBLEM_CODES).toContain('answer_turn_idempotency_conflict')
+    expect(ANSWER_TURN_PROBLEM_CODES).toContain('answer_turn_in_progress')
+    expect(ANSWER_TURN_PROBLEM_CODES).toHaveLength(25)
+  })
+
+  it('maps known codes through static RFC fields', () => {
+    expect(buildAnswerTurnProblem('rate_limited')).toEqual({
+      type: 'about:blank',
+      title: 'Resource exhausted',
+      status: 429,
+      kind: 'RESOURCE_EXHAUSTED',
+      code: 'rate_limited',
+      detail: 'Too many answer requests. Try again shortly.',
+      retryable: true,
+    })
+  })
+
+  it('redacts private fields and provider detail while preserving the stable code', () => {
+    const parsed = parseAnswerTurnProblem({
+      type: 'urn:private',
+      title: 'provider leaked',
+      status: 500,
+      kind: 'INTERNAL',
+      code: 'grounding_failed',
+      detail: 'secret provider response',
+      reason: 'raw stack',
+      copyId: 'private-copy-id',
+      instance: '/private/trace',
+    })
+    expect(parsed).toEqual(buildAnswerTurnProblem('grounding_failed'))
+    expect(parsed).not.toHaveProperty('copyId')
+    expect(parsed).not.toHaveProperty('reason')
+    expect(parsed).not.toHaveProperty('instance')
+  })
+
+  it('fails closed for unknown and malformed problem payloads', () => {
+    expect(redactAnswerTurnProblem({ code: 'private_agent_code', detail: 'secret' }))
+      .toEqual(buildAnswerTurnProblem('answer_turn_failed'))
+    expect(parseAnswerTurnProblem({ detail: 'missing code' })).toBeUndefined()
+    expect(parseAnswerTurnProblem({ code: 42 })).toBeUndefined()
+  })
+
+  it('accepts canonical wire problems and rejects unknown/private fields', () => {
+    const canonical = buildAnswerTurnProblem('answer_turn_failed')
+    expect(parseAnswerTurnProblemStrict(canonical)).toEqual(canonical)
+    expect(parseAnswerTurnProblemStrict({ ...canonical, copyId: 'private-copy-id' })).toBeUndefined()
+    expect(parseAnswerTurnProblemStrict({ ...canonical, code: 'private_agent_code' })).toBeUndefined()
   })
 })
 
