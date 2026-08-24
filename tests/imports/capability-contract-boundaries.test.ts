@@ -13,6 +13,7 @@ describe('capability contract boundaries', () => {
     )))].sort()
 
     expect(imports).toEqual([
+      '@/modules/common/bounded-json',
       '@/modules/common/canonical-digest',
       '@/modules/common/deep-freeze',
       '@/modules/common/is-record',
