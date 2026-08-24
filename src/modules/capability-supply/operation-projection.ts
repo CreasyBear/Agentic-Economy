@@ -64,8 +64,11 @@ export type {
 export {
   rankOperationSearchText,
   searchCapabilityOperations,
+  currentOperationSearchFact,
+  searchCurrentOperationFacts,
 } from "./internal/operation-search";
 export type {
+  CurrentOperationSearchFact,
   OperationSearchTextCandidate,
   OperationSearchRanking,
   OperationSearchFilters,
