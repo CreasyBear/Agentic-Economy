@@ -17,8 +17,8 @@ import {
   recoveryResultValue,
   statusResultValue,
   usageValue,
+  x402PaymentReconciliationEvidenceValue,
 } from '@/modules/capability-execution/convex'
-import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/public'
 import {
   sourceWriteAdmissionArg,
   sourceWriteRequestArg,
