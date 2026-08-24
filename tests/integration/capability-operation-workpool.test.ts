@@ -40,6 +40,31 @@ type TestPrincipal = Readonly<{
   authorityMode: 'bounded_mandate'
 }>
 
+function publicReceipt(
+  state: 'settled' | 'refunded' | 'reconciliation_required',
+  suffix: string,
+) {
+  const amount = { currency: 'USD', units: '100', exponent: 2 }
+  return {
+    receiptRef: `receipt:operation-workpool:${suffix}`,
+    state,
+    network: 'eip155:8453' as const,
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
+    providerQuotedAmount: amount,
+    agenticEconomyFee: { currency: 'USD', units: '10', exponent: 2 },
+    totalBuyerAuthorization: { currency: 'USD', units: '110', exponent: 2 },
+    priceDigest: `price:operation-workpool:${suffix}`,
+    transactionRef: `transaction:operation-workpool:${suffix}`,
+    ...(state === 'refunded'
+      ? { refundState: 'released' as const, lossState: 'provider_output_invalid' as const }
+      : state === 'reconciliation_required'
+        ? { refundState: 'unknown' as const, lossState: 'unknown' as const }
+        : { refundState: 'not_applicable' as const, lossState: 'none' as const }),
+    evidenceHash: `evidence:operation-workpool:${suffix}`,
+    issuedAt: '2026-08-12T00:00:00.000Z',
+  }
+}
+
 async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string> {
   const suffix = 'workpool-lookup'
   const { businessId, owner } = await publishedBusinessOwner(backend, suffix)
@@ -450,6 +475,109 @@ describe('capability operation Workpool lifecycle', () => {
       invocationRef: pendingInvocationRef,
       code: 'invocation_not_found',
     })
+    const statusVariants = await backend.run(async (ctx) => {
+      const source = await ctx.db.query('capabilityOperationInvocations')
+        .withIndex('by_invocationRef', (query) => query.eq('invocationRef', pendingInvocationRef))
+        .unique()
+      if (source === null) throw new Error('operation_workpool_status_source_missing')
+      const { _id: _sourceId, _creationTime: _sourceCreationTime, ...material } = source
+      const variants = [
+        {
+          suffix: 'paid-settled',
+          state: 'completed' as const,
+          dispatchState: 'completed' as const,
+          receipt: publicReceipt('settled', 'paid-settled'),
+        },
+        {
+          suffix: 'refunded',
+          state: 'refused' as const,
+          dispatchState: 'failed' as const,
+          receipt: publicReceipt('refunded', 'refunded'),
+        },
+        {
+          suffix: 'reconciliation-required',
+          state: 'reconciliation_required' as const,
+          dispatchState: 'reconciliation_required' as const,
+          receipt: publicReceipt('reconciliation_required', 'reconciliation-required'),
+        },
+      ]
+      const refs: Array<{ invocationRef: string; receiptState: typeof variants[number]['receipt']['state'] }> = []
+      for (const variant of variants) {
+        const variantInvocationRef = `${pendingInvocationRef}:${variant.suffix}`
+        const usage = {
+          usageRef: `usage:operation-workpool:${variant.suffix}`,
+          observedAt: Date.now(),
+          chargeState: variant.suffix === 'refunded' ? 'refunded' as const : 'paid' as const,
+          amount: variant.receipt.totalBuyerAuthorization,
+          priceDigest: variant.receipt.priceDigest,
+          transactionRef: variant.receipt.transactionRef,
+        }
+        const result = variant.state === 'completed'
+          ? {
+              kind: 'completed' as const,
+              invocationRef: variantInvocationRef,
+              operationRef,
+              output: { result: variant.suffix },
+              evidenceHash: variant.receipt.evidenceHash,
+              usage,
+              receipt: variant.receipt,
+            }
+          : variant.state === 'refused'
+            ? {
+                kind: 'refused' as const,
+                operationRef,
+                code: 'provider_output_invalid',
+                retryable: false,
+                receipt: variant.receipt,
+              }
+            : {
+                kind: 'reconciliation_required' as const,
+                invocationRef: variantInvocationRef,
+                operationRef,
+                evidence: {
+                  attemptRef: `attempt:operation-workpool:${variant.suffix}`,
+                  effectGeneration: 1,
+                  requiredAt: variant.receipt.issuedAt,
+                  retry: 'reconcile_before_retry' as const,
+                  evidenceSource: 'test:operation-workpool',
+                },
+                receipt: variant.receipt,
+              }
+        await ctx.db.insert('capabilityOperationInvocations', {
+          ...material,
+          invocationRef: variantInvocationRef,
+          idempotencyKey: `idempotency:operation-workpool:${variant.suffix}`,
+          state: variant.state,
+          dispatchState: variant.dispatchState,
+          result,
+          usage,
+          evidenceHash: variant.receipt.evidenceHash,
+          attemptRef: variant.state === 'reconciliation_required'
+            ? `attempt:operation-workpool:${variant.suffix}`
+            : material.attemptRef,
+        })
+        refs.push({ invocationRef: variantInvocationRef, receiptState: variant.receipt.state })
+      }
+      return refs
+    })
+    for (const variant of statusVariants) {
+      const status = await backend.action(
+        api.capabilityOperationInvocations.readInvocationStatus,
+        await recoveryActionArgs(
+          first.principal,
+          variant.invocationRef,
+          `status-${variant.receiptState}`,
+          `status:${variant.invocationRef}`,
+        ),
+      )
+      expect(status).toMatchObject({
+        kind: 'found',
+        invocationRef: variant.invocationRef,
+        operationRef,
+        receipt: { state: variant.receiptState },
+        result: { receipt: { state: variant.receiptState } },
+      })
+    }
     const canonicalCommandJson = JSON.stringify({
       control: completed.control,
       attempt: completed.attempt,
