@@ -3,13 +3,12 @@
 import * as crypto from 'node:crypto'
 import { v, type Infer } from 'convex/values'
 import { recoveryResultValue } from '@/modules/capability-execution/convex'
-import type { WorkerResult } from '@/modules/capability-execution/invocation-worker/charge'
-import { prepareInvocationRun } from '@/modules/capability-execution/invocation-worker/runPreparation'
-import { releaseInvocationRun } from '@/modules/capability-execution/invocation-worker/runRelease'
 import {
   recoverCapabilityOperationInvocation,
   recoveryArgs,
-} from '@/modules/capability-execution/invocation-worker/recover'
+  runCapabilityOperationInvocation,
+  type WorkerResult,
+} from '@/modules/capability-execution/invocation-runtime'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 
@@ -52,11 +51,9 @@ function isTerminalRecoveryResult(result: RecoveryResult): boolean {
 export const run = internalAction({
   args: { invocationRef: v.string() },
   returns: workerResult,
-  handler: async (ctx, args): Promise<WorkerResult> => {
-    const prepared = await prepareInvocationRun(ctx, args)
-    if (prepared.kind !== 'prepared') return prepared
-    return await releaseInvocationRun(ctx, prepared)
-  },
+  handler: async (ctx, args): Promise<WorkerResult> => (
+    await runCapabilityOperationInvocation(ctx, args)
+  ),
 })
 
 export const recover = internalAction({
