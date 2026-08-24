@@ -1,7 +1,7 @@
 import { useUIMessages } from '@convex-dev/agent/react'
 import { DefaultChatTransport, readUIMessageStream, type UIMessage } from 'ai'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 
 import { api } from '../../../../convex/_generated/api'
 
@@ -69,6 +69,8 @@ export function OperationChat({
   const [copied, setCopied] = useState(false)
   const [now] = useState(() => Date.now())
   const abortRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(false)
+  const initialSubmitPendingRef = useRef(initialPrompt.trim().length > 0)
 
   const durable = useUIMessages(
     api.chatMessages.listMessages,
@@ -110,7 +112,13 @@ export function OperationChat({
     }),
   }), [])
 
-  useEffect(() => () => abortRef.current?.abort(), [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      abortRef.current?.abort()
+    }
+  }, [])
   useEffect(() => {
     if (isAuthenticated) abortRef.current?.abort()
   }, [isAuthenticated])
@@ -171,7 +179,7 @@ export function OperationChat({
     }
   }
 
-  async function submit(): Promise<void> {
+  async function submit(forceNewThread = false): Promise<void> {
     const nextPrompt = prompt.trim()
     if (nextPrompt.length === 0) {
       setError('Enter a message before sending.')
@@ -188,7 +196,7 @@ export function OperationChat({
       if (isAuthenticated) {
         const result = await sendMessage({
           prompt: nextPrompt,
-          ...(threadId === null ? {} : { threadId }),
+          ...(threadId === null || forceNewThread ? {} : { threadId }),
         })
         setPrompt('')
         setStatus('Message sent.')
@@ -212,6 +220,16 @@ export function OperationChat({
       setBusy(false)
     }
   }
+
+  const autoSubmit = useEffectEvent(() => void submit(true))
+
+  useEffect(() => {
+    if (authLoading || !initialSubmitPendingRef.current) return
+    initialSubmitPendingRef.current = false
+    queueMicrotask(() => {
+      if (mountedRef.current) autoSubmit()
+    })
+  }, [authLoading])
 
   async function mutateWithError(work: () => Promise<unknown>, success: string): Promise<boolean> {
     setBusy(true)

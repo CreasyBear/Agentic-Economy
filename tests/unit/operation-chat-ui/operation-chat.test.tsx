@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
@@ -210,6 +211,69 @@ describe('thin operation chat presentation', () => {
     ])
   })
 
+  it('auto-submits a signed-out initial prompt once through anonymous transport', async () => {
+    const view = render(
+      <StrictMode>
+        <OperationChat
+          threadId={null}
+          initialPrompt="Homepage weather query"
+          onThreadCreated={vi.fn()}
+          onNewChat={vi.fn()}
+        />
+      </StrictMode>,
+    )
+
+    await waitFor(() => expect(state.preparedBodies).toEqual([{
+      messages: [{ role: 'user', content: 'Homepage weather query' }],
+    }]))
+    expect((state.transportCalls[0] as { abortSignal: AbortSignal }).abortSignal.aborted).toBe(false)
+    view.rerender(
+      <StrictMode>
+        <OperationChat
+          threadId={null}
+          initialPrompt="Homepage weather query"
+          onThreadCreated={vi.fn()}
+          onNewChat={vi.fn()}
+        />
+      </StrictMode>,
+    )
+    await waitFor(() => expect(state.transportCalls).toHaveLength(1))
+  })
+
+  it('waits for auth and auto-submits a signed-in initial prompt once without a thread', async () => {
+    state.auth = { isAuthenticated: false, isLoading: true, isRefreshing: false }
+    const onThreadCreated = vi.fn()
+    const view = renderChat({
+      threadId: 'route-thread-must-not-be-used',
+      initialPrompt: 'Homepage durable query',
+      onThreadCreated,
+    })
+    expect(state.send).not.toHaveBeenCalled()
+
+    state.auth = { isAuthenticated: true, isLoading: false, isRefreshing: false }
+    view.rerender(
+      <OperationChat
+        threadId="route-thread-must-not-be-used"
+        initialPrompt="Homepage durable query"
+        onThreadCreated={onThreadCreated}
+        onNewChat={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(state.send).toHaveBeenCalledWith({ prompt: 'Homepage durable query' }))
+    expect(state.send).toHaveBeenCalledTimes(1)
+    expect(onThreadCreated).toHaveBeenCalledWith('durable-thread')
+
+    view.rerender(
+      <OperationChat
+        threadId="route-thread-must-not-be-used"
+        initialPrompt="Homepage durable query"
+        onThreadCreated={onThreadCreated}
+        onNewChat={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(state.send).toHaveBeenCalledTimes(1))
+  })
+
   it('sends only text roles through the standard anonymous transport and enforces bounds', async () => {
     renderChat()
     await sendPrompt('Find a weather operation')
@@ -280,6 +344,7 @@ describe('thin operation chat presentation', () => {
     const anonymous = renderChat()
     await sendPrompt('Rate limited request')
     expect(screen.getByRole('alert').textContent).toContain('chat limit')
+    expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Rate limited request')
 
     anonymous.unmount()
     state.auth = { isAuthenticated: true, isLoading: false, isRefreshing: false }
@@ -287,6 +352,7 @@ describe('thin operation chat presentation', () => {
     const durable = renderChat({ threadId: 'thread-1' })
     await sendPrompt('Busy request')
     expect(screen.getByRole('alert').textContent).toContain('already responding')
+    expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Busy request')
 
     durable.unmount()
     state.auth = { isAuthenticated: false, isLoading: false, isRefreshing: false }
