@@ -503,7 +503,7 @@ Lane A and Lane B both touch capability-supply interfaces, so fix the Operation 
 
 Synthesized from this review's findings. Each task is build-actionable and ordered by dependency.
 
-- [ ] **T1 (P1, human: ~2 days / Codex: ~2h)** - Verification foundation - Land pre-refactor behavior and performance gates
+- [x] **T1 (P1, human: ~2 days / Codex: ~2h)** - Verification foundation - Land pre-refactor behavior and performance gates
   - Surfaced by: Test and performance review - real-backend consumer, projection-drop, parity, capacity, receipt, and query-count gaps.
   - Files: `tests/imports/`, `tests/integration/`, `tests/e2e/`, `convex/capabilitySupplyOperation*.ts`, release test helpers.
   - Verify: focused new fixtures pass, then `npm run test:imports && npm run test:integration`.
@@ -576,6 +576,7 @@ Zero deferred TODO items were created. Every necessary architecture action is re
 - 2026-08-25 T2 integrated: `6370d9f81` and `124b4a808`; master reproduced the exact three-file tarball, Node 20.20.2/22.23.2 JSON-help contracts, blocked library/deep imports, `CLI_PACKAGE_PASS`, 29/29 import tests, and SHA-256 `109e14b023e883c72586825d8ba58d49766882dedd27d00dcb1a90158285c450`. Publication was not performed.
 - 2026-08-25 T1 integration issue: a completed Workpool invocation reaches `api.capabilityOperationInvocations.readInvocationStatus`, but `convex/capabilityOperationInvokeActions.ts:398-403` forwards `invocationRef` through `...args` to `internal.capabilityOperationInvocations.admit`, whose validator at `convex/capabilityOperationInvocations.ts:542-548,591-595` does not accept that field. The master authorized a bounded T1 exception to pass only the existing admission fields in status/cancel/reconcile handlers and add the required regression fixture; public recovery contracts and validators remain unchanged.
 - 2026-08-25 T1 recovery adapter issue: `src/lib/server/operation-invoke-api.ts:95-175` signs recovery admission commands containing `invocationRef` and reconciliation evidence, while the stable internal admission command excludes those recovery-only fields. The master authorized a bounded adapter/test exception to sign the exact existing neutral admission material; invocation identity remains bound through the unchanged operation key, idempotency key, principal, and public request.
+- 2026-08-25 T1 integrated: `852df326c`, `e498dcc6e`, `730b6ccf0`, `0b81030d4`, `1c448e05b`, and `360d5d4e7`; master reproduced 17/17 Wave 0 fixtures, 2/2 durable Workpool/installed-CLI journeys, 5/5 recovery adapter tests, 29/29 imports, and 588/588 integration tests. The installed CLI crossed served search/detail/compare/inspect/call/status/receipt/replay routes into one Convex test backend with one provider effect. Controlled capacity accepted 256 and returned typed `source_capacity_exceeded` at 257. Master baselines for 1/20/256 rows were respectively 14/261/3329 database queries, 14/280/3584 documents, 15,765/317,080/4,076,780 bytes read, and p95 23.625/18.167/195.926 ms over ten samples; corresponding heap high-water marks were 129,090,920/141,131,888/196,529,712 bytes.
 
 ## Review completion
 
