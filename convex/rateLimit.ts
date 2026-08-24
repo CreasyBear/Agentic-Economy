@@ -12,6 +12,7 @@ const rateLimitName = v.union(
   v.literal('answer-stream'),
   v.literal('chat-submit'),
   v.literal('chat-anonymous'),
+  v.literal('chat-anonymous-edge'),
   v.literal('dispute-open'),
 )
 

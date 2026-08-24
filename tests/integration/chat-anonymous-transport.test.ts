@@ -57,15 +57,32 @@ describe('anonymous operation chat transport', () => {
     expect(sentinelThreads.page).toEqual([])
   })
 
-  it('enforces thirty anonymous admissions per trusted hash each hour', async () => {
+  it('keeps the edge and Convex backstop admissions in independent hourly buckets', async () => {
     const backend = convexTestWithMarketComponents()
     const key = `ip:sha256:${'a'.repeat(64)}:sha256:${'b'.repeat(64)}`
-    for (let index = 0; index < 30; index += 1) {
+    await expect(backend.mutation(internal.rateLimit.admit, {
+      name: 'chat-anonymous-edge',
+      key,
+    })).resolves.toMatchObject({ ok: true })
+    await expect(backend.mutation(internal.rateLimit.admit, {
+      name: 'chat-anonymous',
+      key,
+    })).resolves.toMatchObject({ ok: true })
+
+    for (let index = 1; index < 30; index += 1) {
+      await expect(backend.mutation(internal.rateLimit.admit, {
+        name: 'chat-anonymous-edge',
+        key,
+      })).resolves.toMatchObject({ ok: true })
       await expect(backend.mutation(internal.rateLimit.admit, {
         name: 'chat-anonymous',
         key,
       })).resolves.toMatchObject({ ok: true })
     }
+    await expect(backend.mutation(internal.rateLimit.admit, {
+      name: 'chat-anonymous-edge',
+      key,
+    })).resolves.toMatchObject({ ok: false })
     await expect(backend.mutation(internal.rateLimit.admit, {
       name: 'chat-anonymous',
       key,

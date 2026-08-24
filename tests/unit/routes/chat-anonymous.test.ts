@@ -86,7 +86,7 @@ describe('anonymous chat TanStack proxy', () => {
       admit,
     })
 
-    expect(admit).toHaveBeenCalledWith(incoming, 'chat-anonymous')
+    expect(admit).toHaveBeenCalledWith(incoming, 'chat-anonymous-edge')
     expect(fetchInput).toBe('https://happy-animal-123.convex.site/chat/anonymous')
     expect(fetchInit?.signal).toBe(incoming.signal)
     expect(new Headers(fetchInit?.headers).get('x-ae-chat-proxy-secret')).toBe(PROXY_SECRET)

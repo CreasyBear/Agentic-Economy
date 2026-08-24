@@ -11,6 +11,7 @@ export type RateLimitName =
   | 'answer-turn-submit'
   | 'answer-stream'
   | 'chat-anonymous'
+  | 'chat-anonymous-edge'
 
 export type RateLimitResult =
   | { ok: true; retryAfter?: number | undefined }

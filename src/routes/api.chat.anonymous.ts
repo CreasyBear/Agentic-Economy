@@ -25,7 +25,7 @@ const SAFE_UPSTREAM_HEADERS = [
 type AnonymousChatProxyDependencies = Readonly<{
   env?: StringEnvironment
   fetch?: typeof globalThis.fetch
-  admit?: (request: Request, name: 'chat-anonymous') => Promise<RateLimitResult>
+  admit?: (request: Request, name: 'chat-anonymous-edge') => Promise<RateLimitResult>
 }>
 
 export const Route = createFileRoute('/api/chat/anonymous')({
@@ -128,7 +128,7 @@ export async function handleAnonymousChatProxyRequest(
           response = proxyProblem(503, 'UNAVAILABLE', 'chat_proxy_unavailable')
         } else {
           try {
-            const admission = await (dependencies.admit ?? assertHttpAdmission)(request, 'chat-anonymous')
+            const admission = await (dependencies.admit ?? assertHttpAdmission)(request, 'chat-anonymous-edge')
             if (!admission.ok) {
               response = rateLimitedResponse(admission.retryAfter)
             } else {
