@@ -43,11 +43,9 @@ import {
  * response and the registered contract are one code path over one projection.
  * They stay literal: the registry does not typo-correct suburbs or rewrite
  * queries. Misspelling recovery is the caller's job - it chooses better tool
- * arguments, and the chosen input is persisted as tool evidence by the
- * answer-thread turn orchestrator.
+ * arguments.
  *
- * These actions power the quiet agent-tools door, the Phase 7 answer agent
- * tool-use loop, and any future agent JSON action descriptors. They never
+ * These actions power agent tools and agent JSON action descriptors. They never
  * expose private owner fields, raw DB rows, or booking/payment/dispatch claims.
  */
 

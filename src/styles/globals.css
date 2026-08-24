@@ -190,9 +190,6 @@
   --ae-ease-state: var(--motion-ease-standard);
   --ae-focus-ring: 0 0 0 2px var(--ae-bg), 0 0 0 4px var(--ae-fg);
   --ae-overlay-scrim: oklch(0.215 0.004 106 / 0.16);
-  --ae-bubble-tinted-bg: var(--ae-brand-muted);
-  --ae-bubble-tinted-bg-hover: oklch(0.915 0.035 232);
-
   --shadow-low: 0 1px 2px oklch(0 0 0 / 0.08);
   --shadow-med:
     0 1px 2px -1px oklch(0 0 0 / 0.04), 0 4px 6px -1px oklch(0 0 0 / 0.06);

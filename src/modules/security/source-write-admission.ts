@@ -20,9 +20,7 @@ export const SourceWriteAdmissionScopeValues = [
   'admin_operator',
   'discovery_repair',
   'notification_repair',
-  'harness_session',
   'agent_identity',
-  'answer_thread',
   'study',
 ] as const
 
@@ -161,9 +159,7 @@ export function sourceWriteKeyFamilyForScope(scope: SourceWriteAdmissionScope): 
     case 'discovery_repair':
     case 'notification_repair':
       return 'repair'
-    case 'harness_session':
     case 'agent_identity':
-    case 'answer_thread':
     case 'study':
       return 'session'
   }

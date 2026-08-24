@@ -57,16 +57,12 @@ import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
-import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
-import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.threads'
-import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
 import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owner.supply'
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
-import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
@@ -77,15 +73,11 @@ import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1
 import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
 import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
 import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
-import { Route as ApiAnswerTurnStopRouteImport } from './routes/api.answer.turn.stop'
-import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
-import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
 import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './routes/api.v1.operations.$invocationRef.reconcile'
 import { Route as ApiV1OperationsInvocationRefCancelRouteImport } from './routes/api.v1.operations.$invocationRef.cancel'
-import { Route as ApiAnswerThreadsThreadIdShareRouteImport } from './routes/api.answer.threads.$threadId.share'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -332,21 +324,6 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
-const ApiAnswerTurnRoute = ApiAnswerTurnRouteImport.update({
-  id: '/api/answer/turn',
-  path: '/api/answer/turn',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerThreadsRoute = ApiAnswerThreadsRouteImport.update({
-  id: '/api/answer/threads',
-  path: '/api/answer/threads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerEvalStatusRoute = ApiAnswerEvalStatusRouteImport.update({
-  id: '/api/answer/eval-status',
-  path: '/api/answer/eval-status',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OperatorOwnerSupplyRoute = OperatorOwnerSupplyRouteImport.update({
   id: '/owner/supply',
   path: '/owner/supply',
@@ -379,11 +356,6 @@ const OperatorAgentAccessAuthorizeRoute =
     path: '/authorize',
     getParentRoute: () => OperatorAgentAccessRoute,
   } as any)
-const OperatorAdminRunsRoute = OperatorAdminRunsRouteImport.update({
-  id: '/admin/runs',
-  path: '/admin/runs',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorAdminIndexHealthRoute =
   OperatorAdminIndexHealthRouteImport.update({
     id: '/admin/index-health',
@@ -441,17 +413,6 @@ const ApiV1MarketOperationsCompareRoute =
     path: '/api/v1/market-operations/compare',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiAnswerTurnStopRoute = ApiAnswerTurnStopRouteImport.update({
-  id: '/stop',
-  path: '/stop',
-  getParentRoute: () => ApiAnswerTurnRoute,
-} as any)
-const ApiAnswerThreadsThreadIdRoute =
-  ApiAnswerThreadsThreadIdRouteImport.update({
-    id: '/$threadId',
-    path: '/$threadId',
-    getParentRoute: () => ApiAnswerThreadsRoute,
-  } as any)
 const OperatorOwnerSupplyOfferingRefRoute =
   OperatorOwnerSupplyOfferingRefRouteImport.update({
     id: '/$offeringRef',
@@ -470,11 +431,6 @@ const OperatorOwnerOfferingsOfferingRefRoute =
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerOfferingsRoute,
   } as any)
-const OperatorAdminRunsTurnIdRoute = OperatorAdminRunsTurnIdRouteImport.update({
-  id: '/$turnId',
-  path: '/$turnId',
-  getParentRoute: () => OperatorAdminRunsRoute,
-} as any)
 const ApiV1OperationsInvocationRefReconcileRoute =
   ApiV1OperationsInvocationRefReconcileRouteImport.update({
     id: '/reconcile',
@@ -486,12 +442,6 @@ const ApiV1OperationsInvocationRefCancelRoute =
     id: '/cancel',
     path: '/cancel',
     getParentRoute: () => ApiV1OperationsInvocationRefRoute,
-  } as any)
-const ApiAnswerThreadsThreadIdShareRoute =
-  ApiAnswerThreadsThreadIdShareRouteImport.update({
-    id: '/share',
-    path: '/share',
-    getParentRoute: () => ApiAnswerThreadsThreadIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -533,16 +483,12 @@ export interface FileRoutesByFullPath {
   '/t/new': typeof TNewRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -554,12 +500,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -568,7 +511,6 @@ export interface FileRoutesByFullPath {
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
 }
@@ -611,16 +553,12 @@ export interface FileRoutesByTo {
   '/t/new': typeof TNewRoute
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -632,12 +570,9 @@ export interface FileRoutesByTo {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -646,7 +581,6 @@ export interface FileRoutesByTo {
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
 }
@@ -691,16 +625,12 @@ export interface FileRoutesById {
   '/t/new': typeof TNewRoute
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
@@ -712,12 +642,9 @@ export interface FileRoutesById {
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
@@ -726,7 +653,6 @@ export interface FileRoutesById {
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
 }
@@ -771,16 +697,12 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/admin/audit-events'
     | '/admin/index-health'
-    | '/admin/runs'
     | '/agent-access/authorize'
     | '/developers/discovery'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -792,12 +714,9 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/admin/runs/$turnId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
     | '/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -806,7 +725,6 @@ export interface FileRouteTypes {
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/answer/threads/$threadId/share'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
   fileRoutesByTo: FileRoutesByTo
@@ -849,16 +767,12 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/admin/audit-events'
     | '/admin/index-health'
-    | '/admin/runs'
     | '/agent-access/authorize'
     | '/developers/discovery'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -870,12 +784,9 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/admin/runs/$turnId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
     | '/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -884,7 +795,6 @@ export interface FileRouteTypes {
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/answer/threads/$threadId/share'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
   id:
@@ -928,16 +838,12 @@ export interface FileRouteTypes {
     | '/t/new'
     | '/_operator/admin/audit-events'
     | '/_operator/admin/index-health'
-    | '/_operator/admin/runs'
     | '/_operator/agent-access/authorize'
     | '/_operator/developers/discovery'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
     | '/_operator/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/chat/anonymous'
@@ -949,12 +855,9 @@ export interface FileRouteTypes {
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
     | '/_operator/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
@@ -963,7 +866,6 @@ export interface FileRouteTypes {
     | '/api/v1/operations/call'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/answer/threads/$threadId/share'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
   fileRoutesById: FileRoutesById
@@ -1001,9 +903,6 @@ export interface RootRouteChildren {
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
   TNewRoute: typeof TNewRoute
-  ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
-  ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
-  ApiAnswerTurnRoute: typeof ApiAnswerTurnRouteWithChildren
   ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
@@ -1358,27 +1257,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
-    '/api/answer/turn': {
-      id: '/api/answer/turn'
-      path: '/api/answer/turn'
-      fullPath: '/api/answer/turn'
-      preLoaderRoute: typeof ApiAnswerTurnRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer/threads': {
-      id: '/api/answer/threads'
-      path: '/api/answer/threads'
-      fullPath: '/api/answer/threads'
-      preLoaderRoute: typeof ApiAnswerThreadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer/eval-status': {
-      id: '/api/answer/eval-status'
-      path: '/api/answer/eval-status'
-      fullPath: '/api/answer/eval-status'
-      preLoaderRoute: typeof ApiAnswerEvalStatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_operator/owner/supply': {
       id: '/_operator/owner/supply'
       path: '/owner/supply'
@@ -1420,13 +1298,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/agent-access/authorize'
       preLoaderRoute: typeof OperatorAgentAccessAuthorizeRouteImport
       parentRoute: typeof OperatorAgentAccessRoute
-    }
-    '/_operator/admin/runs': {
-      id: '/_operator/admin/runs'
-      path: '/admin/runs'
-      fullPath: '/admin/runs'
-      preLoaderRoute: typeof OperatorAdminRunsRouteImport
-      parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/index-health': {
       id: '/_operator/admin/index-health'
@@ -1498,20 +1369,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MarketOperationsCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/answer/turn/stop': {
-      id: '/api/answer/turn/stop'
-      path: '/stop'
-      fullPath: '/api/answer/turn/stop'
-      preLoaderRoute: typeof ApiAnswerTurnStopRouteImport
-      parentRoute: typeof ApiAnswerTurnRoute
-    }
-    '/api/answer/threads/$threadId': {
-      id: '/api/answer/threads/$threadId'
-      path: '/$threadId'
-      fullPath: '/api/answer/threads/$threadId'
-      preLoaderRoute: typeof ApiAnswerThreadsThreadIdRouteImport
-      parentRoute: typeof ApiAnswerThreadsRoute
-    }
     '/_operator/owner/supply/$offeringRef': {
       id: '/_operator/owner/supply/$offeringRef'
       path: '/$offeringRef'
@@ -1533,13 +1390,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOfferingsOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerOfferingsRoute
     }
-    '/_operator/admin/runs/$turnId': {
-      id: '/_operator/admin/runs/$turnId'
-      path: '/$turnId'
-      fullPath: '/admin/runs/$turnId'
-      preLoaderRoute: typeof OperatorAdminRunsTurnIdRouteImport
-      parentRoute: typeof OperatorAdminRunsRoute
-    }
     '/api/v1/operations/$invocationRef/reconcile': {
       id: '/api/v1/operations/$invocationRef/reconcile'
       path: '/reconcile'
@@ -1553,13 +1403,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/operations/$invocationRef/cancel'
       preLoaderRoute: typeof ApiV1OperationsInvocationRefCancelRouteImport
       parentRoute: typeof ApiV1OperationsInvocationRefRoute
-    }
-    '/api/answer/threads/$threadId/share': {
-      id: '/api/answer/threads/$threadId/share'
-      path: '/share'
-      fullPath: '/api/answer/threads/$threadId/share'
-      preLoaderRoute: typeof ApiAnswerThreadsThreadIdShareRouteImport
-      parentRoute: typeof ApiAnswerThreadsThreadIdRoute
     }
   }
 }
@@ -1584,17 +1427,6 @@ const OperatorAgentAccessRouteChildren: OperatorAgentAccessRouteChildren = {
 
 const OperatorAgentAccessRouteWithChildren =
   OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
-
-interface OperatorAdminRunsRouteChildren {
-  OperatorAdminRunsTurnIdRoute: typeof OperatorAdminRunsTurnIdRoute
-}
-
-const OperatorAdminRunsRouteChildren: OperatorAdminRunsRouteChildren = {
-  OperatorAdminRunsTurnIdRoute: OperatorAdminRunsTurnIdRoute,
-}
-
-const OperatorAdminRunsRouteWithChildren =
-  OperatorAdminRunsRoute._addFileChildren(OperatorAdminRunsRouteChildren)
 
 interface OperatorOwnerOfferingsRouteChildren {
   OperatorOwnerOfferingsOfferingRefRoute: typeof OperatorOwnerOfferingsOfferingRefRoute
@@ -1629,7 +1461,6 @@ interface OperatorRouteChildren {
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
-  OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
@@ -1642,7 +1473,6 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
-  OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
@@ -1692,43 +1522,6 @@ const ApiBusinessesRouteChildren: ApiBusinessesRouteChildren = {
 
 const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
-)
-
-interface ApiAnswerThreadsThreadIdRouteChildren {
-  ApiAnswerThreadsThreadIdShareRoute: typeof ApiAnswerThreadsThreadIdShareRoute
-}
-
-const ApiAnswerThreadsThreadIdRouteChildren: ApiAnswerThreadsThreadIdRouteChildren =
-  {
-    ApiAnswerThreadsThreadIdShareRoute: ApiAnswerThreadsThreadIdShareRoute,
-  }
-
-const ApiAnswerThreadsThreadIdRouteWithChildren =
-  ApiAnswerThreadsThreadIdRoute._addFileChildren(
-    ApiAnswerThreadsThreadIdRouteChildren,
-  )
-
-interface ApiAnswerThreadsRouteChildren {
-  ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRouteWithChildren
-}
-
-const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
-  ApiAnswerThreadsThreadIdRoute: ApiAnswerThreadsThreadIdRouteWithChildren,
-}
-
-const ApiAnswerThreadsRouteWithChildren =
-  ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
-
-interface ApiAnswerTurnRouteChildren {
-  ApiAnswerTurnStopRoute: typeof ApiAnswerTurnStopRoute
-}
-
-const ApiAnswerTurnRouteChildren: ApiAnswerTurnRouteChildren = {
-  ApiAnswerTurnStopRoute: ApiAnswerTurnStopRoute,
-}
-
-const ApiAnswerTurnRouteWithChildren = ApiAnswerTurnRoute._addFileChildren(
-  ApiAnswerTurnRouteChildren,
 )
 
 interface ApiV1ServicesRouteChildren {
@@ -1799,9 +1592,6 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
   TNewRoute: TNewRoute,
-  ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
-  ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
-  ApiAnswerTurnRoute: ApiAnswerTurnRouteWithChildren,
   ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,

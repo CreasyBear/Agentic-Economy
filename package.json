@@ -39,10 +39,7 @@
     "test": "node tools/dev/run-with-cleanup.mjs vitest run",
     "test:unit": "node tools/dev/run-with-cleanup.mjs vitest run tests/unit",
     "test:integration": "node tools/dev/run-with-cleanup.mjs vitest run tests/integration convex --no-file-parallelism",
-    "test:eval": "npm run test:eval:coverage && npm run test:eval:report && PROMPTFOO_CONFIG_DIR=.promptfoo-home PROMPTFOO_DISABLE_WAL_MODE=true node tools/dev/run-with-cleanup.mjs promptfoo eval -c eval/answer/promptfooconfig.yaml --no-cache && node tools/dev/run-with-cleanup.mjs vitest run tests/eval",
-    "test:eval:coverage": "node tools/dev/run-with-cleanup.mjs tsx eval/answer/scripts/audit-coverage.ts",
-    "test:eval:report": "node tools/dev/run-with-cleanup.mjs tsx eval/answer/scripts/run-suite.ts --output output/eval/answer-suite-report.json",
-    "test:eval:validate": "npm run test:eval:coverage && PROMPTFOO_CONFIG_DIR=.promptfoo-home PROMPTFOO_DISABLE_WAL_MODE=true node tools/dev/run-with-cleanup.mjs promptfoo validate -c eval/answer/promptfooconfig.yaml",
+    "test:eval": "node tools/dev/run-with-cleanup.mjs vitest run tests/eval",
     "test:e2e": "node tools/dev/run-with-cleanup.mjs playwright test tests/e2e",
     "test:e2e:paid-operation": "node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.paid-operation.config.ts",
     "test:e2e:a11y": "node tools/dev/run-with-cleanup.mjs playwright test tests/e2e/a11y --workers=1",
@@ -54,9 +51,7 @@
     "test:seo": "node tools/dev/run-with-cleanup.mjs vitest run tests/seo",
     "test:ui-contract": "AE_SCAN_MODE=clean node tools/dev/run-with-cleanup.mjs vitest run tests/ui-contract",
     "test:all": "npm run typecheck && npm run check:convex-codegen && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:seo && npm run test:ui-contract && npm run build",
-    "doctor": "npm exec --offline -- react-doctor",
-    "test:eval:braintrust:local": "node tools/dev/run-with-cleanup.mjs tsx eval/braintrust/answer.eval.ts",
-    "test:eval:braintrust:remote": "node tools/dev/run-with-cleanup.mjs tsx eval/braintrust/answer.eval.ts --remote"
+    "doctor": "npm exec --offline -- react-doctor"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "^5.0.16",

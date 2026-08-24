@@ -23,7 +23,6 @@ function AeFunnelAttributionBoot() {
 
 type AePublicShellProps = {
   children: ReactNode
-  immersive?: boolean
 }
 
 function AeSkipFocusBridge() {
@@ -51,11 +50,11 @@ function AeSkipFocusBridge() {
   return null
 }
 
-export function AePublicShell({ children, immersive = false }: AePublicShellProps) {
+export function AePublicShell({ children }: AePublicShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className={immersive ? 'flex h-dvh min-h-0 flex-col overflow-hidden' : 'min-h-dvh'}>
+    <div className="min-h-dvh">
       <AeFunnelAttributionBoot />
       <AeSkipFocusBridge />
       <a
@@ -65,21 +64,19 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
       >
         Skip to content
       </a>
-      <header className={immersive ? 'flex-none border-b border-border bg-card' : 'sticky top-0 z-30 px-3 pt-3'}>
-        <div className={immersive
-          ? 'flex min-h-13 w-full items-center gap-3 px-4 md:px-5'
-          : 'mx-auto flex min-h-13 w-full max-w-6xl items-center gap-3 rounded-nav border border-border bg-card/90 px-3 shadow-float backdrop-blur-md sm:px-4'}>
+      <header className="sticky top-0 z-30 px-3 pt-3">
+        <div className="mx-auto flex min-h-13 w-full max-w-6xl items-center gap-3 rounded-nav border border-border bg-card/90 px-3 shadow-float backdrop-blur-md sm:px-4">
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <PublicNavActions mobileNavOpen={mobileNavOpen} onMobileNavOpenChange={setMobileNavOpen} />
           </div>
         </div>
       </header>
-      <div id="ae-app-shell-main" tabIndex={-1} className={immersive ? 'flex min-h-0 flex-1 flex-col' : undefined}>
-        <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1' : undefined}>
+      <div id="ae-app-shell-main" tabIndex={-1}>
+        <main id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {immersive ? null : <PublicFooter />}
+        <PublicFooter />
       </div>
     </div>
   )

@@ -10,7 +10,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
  * Agent-native action contract for AE.
  *
  * One declaration fans out to every surface: the React UI, the HTTP API, the
- * agent JSON payload, and the internal answer-thread read-tool runner.
+ * agent JSON payload, and the chat tool runner.
  *
  * Each action carries a boundary-honest `summary` and an explicit `boundaries`
  * list so an external assistant knows both *when* to call it and *what it must
@@ -38,10 +38,6 @@ export type ActionTimingSink = {
     durationMs: number,
     metadata?: Record<string, string | number | boolean | null>,
   ) => void
-}
-
-export type ActionHarnessApprovalContext = {
-  authority?: 'owner' | 'admin'
 }
 
 export type ActionAgentAccessPrincipal = AgentAccessPrincipal
@@ -96,14 +92,12 @@ export type ActionContext = {
   sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available at an HTTP boundary. */
   request?: Request
-  /** Internal timing sink used by answer turns; never exposed on human surfaces. */
+  /** Internal timing sink; never exposed on human surfaces. */
   timing?: ActionTimingSink
-  /** Private model-call accounting sink owned by the runtime harness. */
+  /** Private model-call accounting sink owned by the runtime. */
   onModelRequest?: (observation: ActionModelRequestObservation) => void
   /** Signed request identity for attribution/quota/audit only; never write authority. */
   agentIdentity?: ActionAgentIdentity
-  /** Harness-only approval authority for owner/admin-gated tools. */
-  harnessApproval?: ActionHarnessApprovalContext
   /** Explicitly labelled in-process adapter for Action Invocation development evals only. */
   developmentOnlyDurableWriteAdapter?: (
     data: unknown,

@@ -16,13 +16,11 @@ import { securityTables } from '../src/modules/security/internal/schema'
 import { moneyTables } from '../src/modules/money/internal/convex-schema'
 import { marketTables } from '../src/modules/market/internal/convex-schema'
 import { chatTables } from '../src/modules/chat/internal/convex-schema'
-import { legacyReleaseATables } from './legacyReleaseASchema'
 
 export default defineSchema({
   ...chatTables,
   ...actionInvocationTables,
   ...capabilityOperationInvocationTables,
-  ...legacyReleaseATables,
   ...businessTables,
   ...catalogTables,
   ...capabilityContractRegistryTables,

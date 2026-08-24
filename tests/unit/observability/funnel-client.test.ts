@@ -42,41 +42,6 @@ describe('emitFunnelEvent', () => {
     }))
   })
 
-  it('captures answer telemetry client-side without posting it to the source-owned funnel endpoint', async () => {
-    const sessionStorage = new TestSessionStorage()
-    mocks.randomUUID.mockReturnValueOnce('session-id').mockReturnValueOnce('correlation-id')
-
-    vi.stubGlobal('window', {
-      location: { search: '?utm_source=answer-session&utm_campaign=answer-quality-run' },
-      sessionStorage,
-    })
-    vi.stubGlobal('document', { referrer: 'https://search.example/path' })
-    vi.stubGlobal('crypto', { randomUUID: mocks.randomUUID })
-
-    await emitFunnelEvent({
-      eventType: 'answer_registry_searched',
-      stage: 'visitor',
-      correlationPrefix: 'answer-registry',
-      payload: {
-        queryLength: 18,
-        priorTurnCount: 0,
-      },
-    })
-
-    expect(mocks.captureClientFunnelEventOnClient).toHaveBeenCalledWith(expect.objectContaining({
-      eventType: 'answer_registry_searched',
-      source: 'answer-session',
-      pseudonymousSessionId: 'sess_session-id',
-      correlationId: 'answer-registry:correlation-id',
-      utmSource: 'answer-session',
-      utmCampaign: 'answer-quality-run',
-      payload: {
-        queryLength: 18,
-        priorTurnCount: 0,
-      },
-    }))
-  })
-
   it('captures business-scoped registry result clicks client-side', async () => {
     const sessionStorage = new TestSessionStorage()
     mocks.randomUUID.mockReturnValueOnce('session-id').mockReturnValueOnce('correlation-id')

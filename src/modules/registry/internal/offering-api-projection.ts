@@ -172,7 +172,7 @@ export function projectBusinessSupplyToPublicApi(
  * The retained v1 service model requires a non-empty `hoursOrUnknown`, so
  * "this business has not published hours" could only ever be spelled as one of
  * a handful of sentinel strings. Passing those through as `availabilitySummary`
- * makes every consumer — the business page, the answer thread, an agent reading
+ * makes every consumer — the business page and an agent reading
  * /api/businesses — render a placeholder as a published fact. The public
  * boundary drops them instead: an unpublished fact is absent, never named.
  *

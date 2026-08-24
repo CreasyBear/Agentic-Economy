@@ -80,22 +80,11 @@ const durableTables = [
   'auditEvents',
   'registrySearchDocuments',
   'disputes',
-  'answerThreads',
-  'answerTurns',
-  'answerTurnReservations',
-  'answerToolCalls',
-  'answerThreadShares',
-  'harnessSessions',
-  'harnessSessionEntries',
   'chatThreads',
   'chatThreadShares',
   'actionInvocationControls',
   'actionInvocationAttempts',
   'actionInvocationHistory',
-  'externalRunEvidence',
-  'externalRunManifests',
-  'externalRunStarts',
-  'externalRunGateDecisions',
   'marketActiveOperations',
   'marketActiveSuppliers',
   'marketAggregateBackfills',
@@ -153,23 +142,6 @@ const requiredIndexes = {
   auditEvents: ['by_eventId'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
-  answerThreads: ['by_threadId', 'by_session_updatedAt'],
-  answerTurns: ['by_turnId', 'by_thread_seq'],
-  answerTurnReservations: ['by_reservationKey', 'by_turnId', 'by_thread_seq'],
-  answerThreadShares: ['by_threadId', 'by_accessId', 'by_thread_status'],
-  answerToolCalls: ['by_toolCallId', 'by_turn_seq'],
-  harnessSessions: ['by_sessionId', 'by_ownerKey_updatedAt', 'by_lastRunId'],
-  harnessSessionEntries: [
-    'by_entryId',
-    'by_sessionId_seq',
-    'by_sessionId_entryId',
-    'by_sessionId_idempotencyKey',
-    'by_sessionId_parentEntryId',
-    'by_idempotencyKey',
-    'by_ownerKey_createdAt',
-    'by_runId_seq',
-    'by_turnId_seq',
-  ],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
@@ -231,7 +203,6 @@ const requiredIndexes = {
     'by_connectionRef_and_authorityGeneration',
   ],
   registeredOperationMappings: ['by_networkId_and_mappingRef'],
-  externalRunGateDecisions: ['by_runId'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {
@@ -242,7 +213,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(65)
+    expect(durableTables).toHaveLength(54)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
