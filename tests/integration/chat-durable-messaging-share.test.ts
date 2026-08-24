@@ -1,4 +1,4 @@
-import { listUIMessages, mockModel, saveMessage } from '@convex-dev/agent'
+import { listUIMessages, mockModel, saveMessage, saveMessages } from '@convex-dev/agent'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
@@ -252,8 +252,11 @@ describe.sequential('durable operation chat messaging and shares', () => {
     })
     expect(shared.title).toBe('Compare current weather operations')
     expect(shared.page).toHaveLength(1)
-    expect(shared.page[0]).toMatchObject({ role: 'user', status: 'success' })
-    expect(shared.page[0]).not.toHaveProperty('userId')
+    expect(shared.page[0]).toEqual({
+      id: sent.promptMessageId,
+      role: 'user',
+      parts: [{ type: 'text', text: 'Compare current weather operations' }],
+    })
     expect(shared).not.toHaveProperty('streams')
 
     await expect(other.mutation(api.chatShares.issueShare, {
@@ -293,5 +296,166 @@ describe.sequential('durable operation chat messaging and shares', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })).resolves.toMatchObject({ title: 'Compare current weather operations' })
     await drainExpectedUnavailableGenerations(backend)
+  })
+
+  it('projects settled shared messages into allowlisted text and operation cards only', async () => {
+    const backend = convexTestWithMarketComponents()
+    const owner = backend.withIdentity(identity('projection-owner'))
+    const created = await owner.mutation(api.chatThreads.createThread, {
+      title: 'Public projection',
+    })
+    const operationRefs = ['a', 'b', 'c', 'd', 'e']
+      .map((character) => `operation:v1:${character.repeat(64)}`)
+    const [operationRef] = operationRefs
+
+    await backend.run(async (ctx) => {
+      await saveMessages(ctx, components.agent, {
+        threadId: created.threadId,
+        userId: 'token_projection-owner',
+        messages: [
+          {
+            role: 'user',
+            content: 'Show <tool>current</tool> operations',
+          },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'reasoning',
+                text: 'REASONING_SECRET',
+                providerMetadata: { hidden: { trace: 'REASONING_PROVIDER_SECRET' } },
+              },
+              {
+                type: 'text',
+                text: 'Here are <assistant>the results</assistant> <b>now</b>.',
+                providerMetadata: { hidden: { trace: 'TEXT_PROVIDER_SECRET' } },
+              },
+              { type: 'text', text: '😀'.repeat(8_001) },
+              {
+                type: 'tool-call',
+                toolCallId: 'known-search',
+                toolName: 'registry_operations_search',
+                input: { query: 'TOOL_INPUT_SECRET' },
+                toolMetadata: { trace: 'TOOL_METADATA_SECRET' },
+              },
+              {
+                type: 'tool-call',
+                toolCallId: 'unknown-tool',
+                toolName: 'arbitrary_internal_tool',
+                input: { value: 'UNKNOWN_INPUT_SECRET' },
+              },
+              {
+                type: 'tool-call',
+                toolCallId: 'failed-execute',
+                toolName: 'operation_execute',
+                input: { operationRef, payload: 'FAILED_INPUT_SECRET' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'known-search',
+                toolName: 'registry_operations_search',
+                output: {
+                  type: 'json',
+                  value: {
+                    kind: 'ok',
+                    matchedCount: operationRefs.length,
+                    items: operationRefs.map((ref) => ({
+                      operationRef: ref,
+                      internal: 'RAW_ITEM_SECRET',
+                    })),
+                    rawOutput: 'RAW_OUTPUT_SECRET',
+                    metadata: { trace: 'OUTPUT_METADATA_SECRET' },
+                  },
+                },
+                providerMetadata: { hidden: { trace: 'RESULT_PROVIDER_SECRET' } },
+              },
+              {
+                type: 'tool-result',
+                toolCallId: 'unknown-tool',
+                toolName: 'arbitrary_internal_tool',
+                output: { type: 'json', value: { secret: 'UNKNOWN_OUTPUT_SECRET' } },
+              },
+              {
+                type: 'tool-result',
+                toolCallId: 'failed-execute',
+                toolName: 'operation_execute',
+                output: { type: 'error-text', value: 'INTERNAL_EXECUTION_ERROR_SECRET' },
+                isError: true,
+              },
+            ],
+          },
+        ],
+        metadata: [
+          { provider: 'user-provider-secret' },
+          {
+            model: 'MODEL_SECRET',
+            provider: 'PROVIDER_SECRET',
+            reasoning: 'METADATA_REASONING_SECRET',
+            usage: { totalTokens: 999, raw: { billing: 'USAGE_SECRET' } },
+          },
+          { provider: 'TOOL_MESSAGE_PROVIDER_SECRET' },
+        ],
+      })
+    })
+
+    const issued = await owner.mutation(api.chatShares.issueShare, {
+      threadId: created.threadId,
+    })
+    const shared = await backend.query(api.chatShares.listSharedMessages, {
+      shareToken: issued.shareToken,
+      paginationOpts: { cursor: null, numItems: 20 },
+    })
+
+    expect(shared.page).toEqual([
+      {
+        id: expect.any(String),
+        role: 'user',
+        parts: [{ type: 'text', text: 'Show [data-tag]current[data-tag] operations' }],
+      },
+      {
+        id: expect.any(String),
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Here are [data-tag]the results[data-tag] ‹b›now‹/b›.',
+          },
+          { type: 'text', text: expect.any(String) },
+          {
+            type: 'operation-card',
+            toolId: 'registry.operations.search',
+            state: 'complete',
+            title: 'Search operations',
+            operationRefs: operationRefs.slice(0, 4),
+            summary: '5 operations found',
+          },
+          {
+            type: 'operation-card',
+            toolId: 'operation.execute',
+            state: 'error',
+            title: 'Execute operation',
+            operationRefs: [],
+            summary: 'Tool unavailable',
+          },
+        ],
+      },
+    ])
+    expect(JSON.stringify(shared)).not.toMatch(
+      /SECRET|rawOutput|metadata|reasoning|provider|model|usage|errorText|input|arbitrary_internal_tool/u,
+    )
+    const publicParts = shared.page.flatMap((message) => message.parts)
+    const boundedText = publicParts.find((part) => part.type === 'text' && part.text.startsWith('😀'))
+    expect(boundedText?.type).toBe('text')
+    expect(Array.from(boundedText?.type === 'text' ? boundedText.text : '')).toHaveLength(8_000)
+    for (const part of publicParts) {
+      if (part.type === 'operation-card') expect(Array.from(part.summary).length).toBeLessThanOrEqual(240)
+    }
+    expect(shared.page.every((message) => Object.keys(message).sort().join(',') === 'id,parts,role'))
+      .toBe(true)
   })
 })
