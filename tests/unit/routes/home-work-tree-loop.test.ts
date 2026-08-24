@@ -5,6 +5,7 @@ import {
   loadRootRoute,
   validateRootSearch,
 } from '@/modules/market/home-catalogue'
+import { readStoredProjectQueryCompatibility } from '@/modules/market/project-query-compatibility'
 import { Route } from '@/routes/index'
 
 const BAS_ASK = 'My BAS is overdue and my books are a mess'
@@ -73,6 +74,10 @@ describe('root route readback', () => {
   })
 
   it('ignores an explicit project reference without reading WorkTree', async () => {
+    expect(readStoredProjectQueryCompatibility({ project: ' project_opaque_missing ' }))
+      .toEqual({ project: 'project_opaque_missing' })
+    expect(validateRootSearch({ q: BAS_ASK, project: ' project_opaque_missing ' }))
+      .toEqual({ q: BAS_ASK, project: 'project_opaque_missing' })
     await expect(loadRootRoute({
       q: BAS_ASK,
       project: 'project_opaque_missing',
