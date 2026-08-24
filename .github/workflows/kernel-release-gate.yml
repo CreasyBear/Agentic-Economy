@@ -8,6 +8,11 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
+      confirm_chat_staging_smoke:
+        description: 'Confirm the deployed staging host is the exact source revision and the private owner browser session may be used for the chat smoke.'
+        required: true
+        default: false
+        type: boolean
       confirm_live_gateway_spend:
         description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
         required: true
@@ -75,6 +80,15 @@ jobs:
       - name: Run deterministic operation chat conformance
         run: npm run test:chat:conformance
 
+      - name: Generate Convex source normally
+        run: npm run generate:convex
+
+      - name: Verify generated Convex source with a dry run
+        run: npm run check:convex-codegen
+
+      - name: Prove committed Convex generated source is current
+        run: git diff --exit-code -- convex/_generated
+
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
 
@@ -88,6 +102,56 @@ jobs:
             output/release/unit-vitest.json
             output/release/integration-vitest.json
             output/release/chat-conformance-vitest.json
+          if-no-files-found: error
+          retention-days: 14
+
+  chat-staging-proof:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_chat_staging_smoke == true
+    name: Opt-in exact-revision operation chat staging smoke
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ vars.AE_CHAT_STAGING_BASE_URL }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
+
+      - name: Frozen dependency install without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Install the staging browser
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Write the private owner browser session
+        env:
+          AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON: ${{ secrets.AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON }}
+        run: |
+          owner_storage_state="${RUNNER_TEMP}/ae-chat-owner-storage-state.json"
+          umask 077
+          printf '%s' "${AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON}" > "${owner_storage_state}"
+          chmod 600 "${owner_storage_state}"
+          echo "SMOKE_OWNER_STORAGE_STATE=${owner_storage_state}" >> "${GITHUB_ENV}"
+
+      - name: Run the exact-revision chat staging smoke
+        run: npm run smoke:chat:staging
+
+      - name: Upload only the sanitized chat staging result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-chat-staging-smoke
+          path: output/release/playwright-chat-staging-smoke.json
           if-no-files-found: error
           retention-days: 14
 
