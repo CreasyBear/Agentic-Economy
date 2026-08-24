@@ -7,7 +7,11 @@ import type { BusinessOfferingStatus, OfferingAccessPathStatus } from '@/modules
 import { BusinessOfferingStatusValues, OfferingAccessPathStatusValues } from '@/modules/catalog/public'
 import type { AdminRole } from '@/modules/security/public'
 import { AdminRoleSchema } from '@/modules/security/internal/validators'
-import type { AuditEventType, AuditTargetType, FunnelEventType } from '@/modules/observability/public'
+import type {
+  CurrentOperationAuditEventType,
+  CurrentOperationAuditTargetType,
+  FunnelEventType,
+} from '@/modules/observability/public'
 import {
   AuditEventTypeValues,
   AuditTargetTypeValues,
@@ -27,12 +31,12 @@ describe('domain-owned state contracts', () => {
     expectTypeOf<z.infer<typeof BusinessOfferingStatusSchema>>().toEqualTypeOf<BusinessOfferingStatus>()
     expectTypeOf<z.infer<typeof OfferingAccessPathStatusSchema>>().toEqualTypeOf<OfferingAccessPathStatus>()
     expectTypeOf<z.infer<typeof AdminRoleSchema>>().toEqualTypeOf<AdminRole>()
-    expectTypeOf<z.infer<typeof AuditEventTypeSchema>>().toEqualTypeOf<AuditEventType>()
-    expectTypeOf<z.infer<typeof AuditTargetTypeSchema>>().toEqualTypeOf<AuditTargetType>()
+    expectTypeOf<z.infer<typeof AuditEventTypeSchema>>().toEqualTypeOf<CurrentOperationAuditEventType>()
+    expectTypeOf<z.infer<typeof AuditTargetTypeSchema>>().toEqualTypeOf<CurrentOperationAuditTargetType>()
     expectTypeOf<z.infer<typeof FunnelEventTypeSchema>>().toEqualTypeOf<FunnelEventType>()
-    expectTypeOf<(typeof AuditTargetTypeValues)[number]>().toEqualTypeOf<AuditTargetType>()
+    expectTypeOf<(typeof AuditTargetTypeValues)[number]>().toEqualTypeOf<CurrentOperationAuditTargetType>()
     expectTypeOf<(typeof FunnelEventTypeValues)[number]>().toEqualTypeOf<FunnelEventType>()
-    expectTypeOf<(typeof AuditEventTypeValues)[number]>().toEqualTypeOf<AuditEventType>()
+    expectTypeOf<(typeof AuditEventTypeValues)[number]>().toEqualTypeOf<CurrentOperationAuditEventType>()
   })
 
   it('rejects invalid status strings at runtime', () => {
@@ -57,5 +61,5 @@ const invalidPublicStatus: PublicStatus = 'live'
 void invalidPublicStatus
 
 // @ts-expect-error broad strings cannot stand in for exact event types
-const invalidAuditEvent: AuditEventType = 'admin.changed'
+const invalidAuditEvent: CurrentOperationAuditEventType = 'admin.changed'
 void invalidAuditEvent
