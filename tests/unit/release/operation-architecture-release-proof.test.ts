@@ -133,4 +133,33 @@ describe('Operation architecture local release proof', () => {
       'test:release:live-gateway',
     )
   })
+
+  it('installs only the locked Chromium browser before the hosted source release suite', () => {
+    const workflow = readFileSync(
+      resolve(process.cwd(), '.github/workflows/kernel-release-gate.yml'),
+      'utf8',
+    )
+    const sourceProofStart = workflow.indexOf('\n  source-proof:\n')
+    const nextJobStart = workflow.indexOf('\n  chat-staging-proof:\n')
+    expect(sourceProofStart).toBeGreaterThan(-1)
+    expect(nextJobStart).toBeGreaterThan(sourceProofStart)
+
+    const sourceProof = workflow.slice(sourceProofStart, nextJobStart)
+    const frozenInstall = sourceProof.indexOf(
+      '      - name: Frozen dependency install\n        run: npm ci',
+    )
+    const browserInstall = sourceProof.indexOf(
+      '      - name: Install the source-proof Chromium browser\n' +
+        '        run: npm exec -- playwright install --with-deps chromium',
+    )
+    const sourceRelease = sourceProof.indexOf(
+      '      - name: Run source release contract without deployment credentials\n' +
+        '        run: npm run test:release:source:after-codegen',
+    )
+
+    expect(frozenInstall).toBeGreaterThan(-1)
+    expect(browserInstall).toBeGreaterThan(frozenInstall)
+    expect(sourceRelease).toBeGreaterThan(browserInstall)
+    expect(sourceProof.match(/playwright install/g)).toHaveLength(1)
+  })
 })
