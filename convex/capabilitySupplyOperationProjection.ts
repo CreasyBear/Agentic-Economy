@@ -427,7 +427,7 @@ export async function currentOperationShadowDiagnosticsHandler(
       .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
       .take(258),
     ctx.db.query('capabilityCurrentOperationDetails')
-      .filter((query) => query.eq(query.field('active'), true))
+      .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
       .take(258),
   ])
   const truncated = publicationSentinel.length > 257
