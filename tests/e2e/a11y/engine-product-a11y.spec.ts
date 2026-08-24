@@ -14,8 +14,8 @@ test.describe('market product accessibility', () => {
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#main-content')).toBeFocused()
-    await expect(page.getByRole('search', { name: 'Search the capability market' })).toBeVisible()
-    await expect(page.getByRole('searchbox', { name: 'Search capabilities' })).toBeVisible()
+    await expect(page.getByRole('search', { name: 'Ask Agentic Economy' })).toBeVisible()
+    await expect(page.getByRole('searchbox', { name: 'Describe what you need' })).toBeVisible()
     const compact = (page.viewportSize()?.width ?? 1280) < 768
     if (compact) {
       const menu = page.getByRole('button', { name: 'Open public menu' })
@@ -31,21 +31,21 @@ test.describe('market product accessibility', () => {
     await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
   })
 
-  test('literal tool search is labelled, keyboard reachable, and continues into the market', async ({ page }) => {
+  test('popular searches are labelled, keyboard reachable, and continue into the market', async ({ page }) => {
     await gotoSettled(page, '/')
-    const searchbox = page.getByRole('searchbox', { name: 'Search capabilities' })
-    await searchbox.fill('company registry search')
-    await expect(searchbox).toHaveValue('company registry search')
-    const submit = page.getByRole('button', { name: 'Search capabilities' })
-    await submit.focus()
-    await expect(submit).toBeFocused()
-    await submit.click()
+    const popular = page.getByRole('navigation', { name: 'Popular searches' })
+    const popularLink = popular.getByRole('link').first()
+    await expect(popular).toBeVisible()
+    await popularLink.focus()
+    await expect(popularLink).toBeFocused()
+    await popularLink.press('Enter')
     await page.waitForURL((url) => (
       url.pathname === '/market'
       && url.searchParams.get('window') === '30d'
-      && url.searchParams.get('query') === 'company registry search'
+      && (url.searchParams.get('query')?.length ?? 0) > 0
     ), { timeout: 15_000 })
     await expect(page.getByRole('heading', { level: 1, name: 'Find the right tool for the job.' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Search tools' })).toBeVisible()
   })
 
   test('catalogue and controls do not widen the viewport', async ({ page }) => {
@@ -53,7 +53,7 @@ test.describe('market product accessibility', () => {
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
-    await expect(page.getByRole('region', { name: 'API registry' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Available tools' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Search tools' })).toBeVisible()
   })
 })

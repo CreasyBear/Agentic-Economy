@@ -16,16 +16,16 @@ test('assistant setup primary copy control works by pointer and keyboard before 
   await page.goto('/for-agents', { waitUntil: 'networkidle' })
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
 
-  const manifestCopyButton = page.getByRole('button', { name: 'Copy Read the handshake command' })
+  const manifestCopyButton = page.getByRole('button', { name: 'Copy agent setup instruction' })
 
   await expectInitialHitTarget(page, manifestCopyButton)
   expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
   await manifestCopyButton.click()
-  await expect(page.getByRole('status')).toHaveText('Read the handshake command copied.')
+  await expect(page.getByRole('status').first()).toHaveText('agent setup instruction copied.')
 
   await manifestCopyButton.focus()
   await expect(manifestCopyButton).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('status')).toHaveText('Read the handshake command copied.')
+  await expect(page.getByRole('status').first()).toHaveText('agent setup instruction copied.')
 })

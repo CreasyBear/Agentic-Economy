@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { parse } from 'yaml'
@@ -94,6 +94,17 @@ describe('green release baseline', () => {
     expect(scripts['smoke:chat:staging']).toBe(
       'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts',
     )
+    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
+    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
+    expect(scripts['test:e2e']).toBe('node tools/dev/run-with-cleanup.mjs playwright test tests/e2e')
+    expect(scripts['test:e2e']).not.toMatch(/--grep|testMatch|ignore|\.spec\.ts/u)
+    for (const staleFile of [
+      'tests/e2e/paid-operation-development-surface.spec.ts',
+      'tests/e2e/protected-action-owner-flow.spec.ts',
+      'tests/e2e/shortlist-export-preview.spec.ts',
+    ]) {
+      expect(existsSync(resolve(root, staleFile)), `${staleFile} must remain deleted`).toBe(false)
+    }
     expect(chain).not.toContain('npm run test:eval:report')
   })
 
