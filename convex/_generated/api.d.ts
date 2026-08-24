@@ -64,6 +64,7 @@ import type * as capabilitySupplyWriterPorts from "../capabilitySupplyWriterPort
 import type * as catalog from "../catalog.js";
 import type * as catalogOfferingMutations from "../catalogOfferingMutations.js";
 import type * as catalogPublicReads from "../catalogPublicReads.js";
+import type * as chatAnonymous from "../chatAnonymous.js";
 import type * as chatExecute from "../chatExecute.js";
 import type * as chatGenerate from "../chatGenerate.js";
 import type * as chatMessages from "../chatMessages.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   catalogOfferingMutations: typeof catalogOfferingMutations;
   catalogPublicReads: typeof catalogPublicReads;
+  chatAnonymous: typeof chatAnonymous;
   chatExecute: typeof chatExecute;
   chatGenerate: typeof chatGenerate;
   chatMessages: typeof chatMessages;

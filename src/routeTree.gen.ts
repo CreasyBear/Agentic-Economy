@@ -54,6 +54,7 @@ import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhoo
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
+import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
@@ -316,6 +317,11 @@ const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   path: '/api/discovery/examples',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatAnonymousRoute = ApiChatAnonymousRouteImport.update({
+  id: '/api/chat/anonymous',
+  path: '/api/chat/anonymous',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -539,6 +545,7 @@ export interface FileRoutesByFullPath {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -616,6 +623,7 @@ export interface FileRoutesByTo {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -695,6 +703,7 @@ export interface FileRoutesById {
   '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
@@ -774,6 +783,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/observability/client-error'
@@ -851,6 +861,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/observability/client-error'
@@ -929,6 +940,7 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/observability/client-error'
@@ -992,6 +1004,7 @@ export interface RootRouteChildren {
   ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
   ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
   ApiAnswerTurnRoute: typeof ApiAnswerTurnRouteWithChildren
+  ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
@@ -1322,6 +1335,13 @@ declare module '@tanstack/react-router' {
       path: '/api/discovery/examples'
       fullPath: '/api/discovery/examples'
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/chat/anonymous': {
+      id: '/api/chat/anonymous'
+      path: '/api/chat/anonymous'
+      fullPath: '/api/chat/anonymous'
+      preLoaderRoute: typeof ApiChatAnonymousRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/businesses/search': {
@@ -1782,6 +1802,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
   ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
   ApiAnswerTurnRoute: ApiAnswerTurnRouteWithChildren,
+  ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,

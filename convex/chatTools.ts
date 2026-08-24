@@ -1,12 +1,10 @@
-"use node"
-
 import { Agent, createTool, type ToolCtx } from '@convex-dev/agent'
 import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import type { z } from 'zod'
 
-import { actionToToolContract, findAction, type ActionToolContract } from '@/modules/actions'
+import { operationExecuteContract } from '@/modules/capability-execution/operation-execute-contract'
 import type {
   InspectPlanInput,
   OperationCompareInput,
@@ -18,11 +16,17 @@ import {
   deserializeOperationDetailResult,
   deserializeOperationSearchResult,
 } from '@/modules/capability-supply/public'
-import type { OperationExecuteInput } from '@/modules/capability-execution/operation-execute.functions'
+import type { OperationExecuteInput } from '@/modules/capability-execution/operation-execute-contract'
 import {
   projectOperationCompareChoices,
   projectOperationSearchChoices,
 } from '@/modules/registry/operation-choice-contracts'
+import {
+  registryOperationsCompareContract,
+  registryOperationsDetailContract,
+  registryOperationsInspectPlanContract,
+  registryOperationsSearchContract,
+} from '@/modules/registry/operation-action-contracts'
 
 import { api, components, internal } from './_generated/api'
 
@@ -56,15 +60,32 @@ export type ChatToolFailure = Readonly<{
 
 type ChatToolAdmission = ChatToolFailure | null
 
-function contractFor(toolId: ChatToolId): ActionToolContract {
-  const action = findAction(toolId)
-  if (action === undefined || !action.surfaces.includes('chat')) {
+type ChatContract = Readonly<{
+  id: ChatToolId
+  summary: string
+  boundaries: readonly string[]
+  surfaces: readonly string[]
+  schema: z.ZodType
+  outputSchema: z.ZodType
+}>
+
+const chatContracts = {
+  'registry.operations.search': registryOperationsSearchContract,
+  'registry.operations.detail': registryOperationsDetailContract,
+  'registry.operations.compare': registryOperationsCompareContract,
+  'registry.operations.inspectPlan': registryOperationsInspectPlanContract,
+  'operation.execute': operationExecuteContract,
+} as const satisfies Record<ChatToolId, ChatContract>
+
+function contractFor(toolId: ChatToolId): ChatContract {
+  const contract = chatContracts[toolId]
+  if (!contract.surfaces.includes('chat')) {
     throw new Error(`Chat Action is unavailable: ${toolId}`)
   }
-  return actionToToolContract(action)
+  return contract
 }
 
-function descriptionFor(contract: ActionToolContract): string {
+function descriptionFor(contract: ChatContract): string {
   return [
     contract.summary,
     'Boundaries:',
@@ -160,11 +181,11 @@ export function createChatAgent(languageModel: LanguageModelV4) {
   const tools = {
     'registry.operations.search': createTool({
       description: descriptionFor(searchContract),
-      inputSchema: searchContract.schemas.inputSchema as z.ZodType<OperationSearchInput>,
+      inputSchema: searchContract.schema as z.ZodType<OperationSearchInput>,
       execute: async (ctx: ToolCtx, input: OperationSearchInput) => {
         const parsed = parseInput(
           'registry.operations.search',
-          searchContract.schemas.inputSchema as z.ZodType<OperationSearchInput>,
+          searchContract.schema as z.ZodType<OperationSearchInput>,
           input,
         )
         if (isChatToolFailure(parsed)) return parsed
@@ -176,18 +197,18 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
         return projectedModelFacingOutput(
           'registry.operations.search',
-          searchContract.schemas.outputSchema,
+          searchContract.outputSchema,
           () => projectOperationSearchChoices(deserializeOperationSearchResult(result)),
         )
       },
     }),
     'registry.operations.detail': createTool({
       description: descriptionFor(detailContract),
-      inputSchema: detailContract.schemas.inputSchema as z.ZodType<OperationDetailInput>,
+      inputSchema: detailContract.schema as z.ZodType<OperationDetailInput>,
       execute: async (ctx: ToolCtx, input: OperationDetailInput) => {
         const parsed = parseInput(
           'registry.operations.detail',
-          detailContract.schemas.inputSchema as z.ZodType<OperationDetailInput>,
+          detailContract.schema as z.ZodType<OperationDetailInput>,
           input,
         )
         if (isChatToolFailure(parsed)) return parsed
@@ -196,18 +217,18 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         const result = await ctx.runQuery(api.capabilitySupplyOperations.detail, parsed)
         return projectedModelFacingOutput(
           'registry.operations.detail',
-          detailContract.schemas.outputSchema,
+          detailContract.outputSchema,
           () => deserializeOperationDetailResult(result),
         )
       },
     }),
     'registry.operations.compare': createTool({
       description: descriptionFor(compareContract),
-      inputSchema: compareContract.schemas.inputSchema as z.ZodType<OperationCompareInput>,
+      inputSchema: compareContract.schema as z.ZodType<OperationCompareInput>,
       execute: async (ctx: ToolCtx, input: OperationCompareInput) => {
         const parsed = parseInput(
           'registry.operations.compare',
-          compareContract.schemas.inputSchema as z.ZodType<OperationCompareInput>,
+          compareContract.schema as z.ZodType<OperationCompareInput>,
           input,
         )
         if (isChatToolFailure(parsed)) return parsed
@@ -219,18 +240,18 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
         return projectedModelFacingOutput(
           'registry.operations.compare',
-          compareContract.schemas.outputSchema,
+          compareContract.outputSchema,
           () => projectOperationCompareChoices(deserializeOperationCompareResult(result)),
         )
       },
     }),
     'registry.operations.inspectPlan': createTool({
       description: descriptionFor(inspectContract),
-      inputSchema: inspectContract.schemas.inputSchema as z.ZodType<InspectPlanInput>,
+      inputSchema: inspectContract.schema as z.ZodType<InspectPlanInput>,
       execute: async (ctx: ToolCtx, input: InspectPlanInput) => {
         const parsed = parseInput(
           'registry.operations.inspectPlan',
-          inspectContract.schemas.inputSchema as z.ZodType<InspectPlanInput>,
+          inspectContract.schema as z.ZodType<InspectPlanInput>,
           input,
         )
         if (isChatToolFailure(parsed)) return parsed
@@ -242,18 +263,18 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
         return projectedModelFacingOutput(
           'registry.operations.inspectPlan',
-          inspectContract.schemas.outputSchema,
+          inspectContract.outputSchema,
           () => result,
         )
       },
     }),
     'operation.execute': createTool({
       description: descriptionFor(executeContract),
-      inputSchema: executeContract.schemas.inputSchema as z.ZodType<OperationExecuteInput>,
+      inputSchema: executeContract.schema as z.ZodType<OperationExecuteInput>,
       execute: async (ctx: ToolCtx, input: OperationExecuteInput) => {
         const parsed = parseInput(
           'operation.execute',
-          executeContract.schemas.inputSchema as z.ZodType<OperationExecuteInput>,
+          executeContract.schema as z.ZodType<OperationExecuteInput>,
           input,
         )
         if (isChatToolFailure(parsed)) return parsed
@@ -262,7 +283,7 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         const result = await ctx.runAction(internal.chatExecute.execute, parsed)
         return projectedModelFacingOutput(
           'operation.execute',
-          executeContract.schemas.outputSchema,
+          executeContract.outputSchema,
           () => result,
         )
       },

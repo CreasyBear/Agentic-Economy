@@ -1,6 +1,4 @@
 import { defaultBodySerializer } from 'openapi-fetch'
-import { z } from 'zod'
-
 import type { BoundedRequestBody } from '@/lib/server/bounded-request-body'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -18,6 +16,15 @@ import {
   type HttpJsonQueryParameterMapping,
   type PublicOperationPrice,
 } from '@/modules/capability-supply/public'
+import type {
+  OperationExecuteInput,
+  OperationExecuteResult,
+} from './operation-execute-contract'
+export {
+  operationExecuteInputSchema,
+  type OperationExecuteInput,
+  type OperationExecuteResult,
+} from './operation-execute-contract'
 export { isAnonymousKeylessOperationEligible }
 
 /**
@@ -129,25 +136,6 @@ export function operationExecutionBindingDigest(
     provenance: descriptor.provenance,
   }
   return canonicalDigest(material).toString()
-}
-
-
-export type OperationExecuteResult =
-  | {
-      kind: 'ok'
-      operationRef: string
-      capabilityId: string
-      name: string
-      output: unknown
-      evidenceHash: string
-    }
-  | { kind: 'refused'; operationRef: string; reason: 'operation_not_found' | 'operation_not_keyless' | 'operation_not_executable' | 'input_invalid' | 'endpoint_invalid' }
-  | { kind: 'error'; operationRef: string; code: 'fetch_failed' | 'response_invalid' | 'provider_error' | 'source_unavailable'; retryable: boolean; reason: string }
-
-export type OperationExecuteInput = {
-  operationRef: string
-  /** Caller-supplied operation inputs, validated against the DB input schema. */
-  input: Record<string, unknown>
 }
 
 export type OperationExecuteDeps = {
@@ -391,18 +379,3 @@ export async function executeOperation(
     evidenceHash,
   }
 }
-
-
-
-/** Mirror of the module's input shape, kept in step with the action schema. */
-export const operationExecuteInputSchema = z.strictObject({
-  operationRef: z
-    .string()
-    .refine(isPublicOperationRef, 'A current operation reference (operation:v1:...) is required')
-    .describe('The operation reference found via the public operation registry.'),
-  input: z
-    .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.record(z.string(), z.any()), z.array(z.any())]))
-    .refine((value) => Object.keys(value).length <= 64, 'input_size_exceeded')
-    .default({})
-    .describe('The inputs the operation contract requires, keyed exactly as its published schema names them.'),
-})

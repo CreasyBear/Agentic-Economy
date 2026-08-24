@@ -10,6 +10,7 @@ export type RateLimitName =
   | 'oauth-issuance'
   | 'answer-turn-submit'
   | 'answer-stream'
+  | 'chat-anonymous'
 
 export type RateLimitResult =
   | { ok: true; retryAfter?: number | undefined }
@@ -119,4 +120,3 @@ function bearerToken(value: string | null): string | undefined {
   const match = /^Bearer\s+(.+)$/iu.exec(value.trim())
   return match?.[1]?.trim() || undefined
 }
-

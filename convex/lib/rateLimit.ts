@@ -9,6 +9,7 @@ export const RATE_LIMIT_NAMES = [
   'answer-turn-submit',
   'answer-stream',
   'chat-submit',
+  'chat-anonymous',
   'dispute-open',
 ] as const
 
@@ -28,6 +29,7 @@ const limits: RateLimitDefinitions = {
   'answer-turn-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'answer-stream': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'chat-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
+  'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE, capacity: 3 },
 }
 
