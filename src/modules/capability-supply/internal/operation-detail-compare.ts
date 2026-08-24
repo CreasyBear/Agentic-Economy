@@ -102,7 +102,7 @@ export async function detailCapabilityOperation(
       kind: "not_found",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       operationRef: input.operationRef,
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const record = await port.loadCurrent(input.operationRef);
   if (record === null)
@@ -110,16 +110,16 @@ export async function detailCapabilityOperation(
       kind: "not_found",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       operationRef: input.operationRef,
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
-  const operation = projectCapabilityOperation(record, now);
+  const operation = projectCapabilityOperation(record, now, port.navigation);
   return operation.availability.posture === "unavailable"
     ? {
         kind: "unavailable",
         schemaVersion: PublicOperationRegistrySchemaVersion,
         operationRef: operation.operationRef,
         reason: operation.availability.reason ?? "not_supported_by_ae",
-        navigation: noOperationNavigation(),
+        navigation: noOperationNavigation(port.navigation),
       }
     : {
         kind: "found",
@@ -139,7 +139,7 @@ export async function compareCapabilityOperations(
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "query_invalid",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const records = await Promise.all(refs.map((ref) => port.loadCurrent(ref)));
   const presentRecords = records.filter(
@@ -150,10 +150,10 @@ export async function compareCapabilityOperations(
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_not_found",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const operations = presentRecords.map((record) =>
-    projectCapabilityOperation(record, now),
+    projectCapabilityOperation(record, now, port.navigation),
   );
   if (
     operations.some(
@@ -164,14 +164,14 @@ export async function compareCapabilityOperations(
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_unavailable",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   return {
     kind: "ok",
     schemaVersion: PublicOperationRegistrySchemaVersion,
     operations,
     facts: comparisonFacts(operations),
-    navigation: operationNavigation("inspect_only"),
+    navigation: operationNavigation("inspect_only", port.navigation),
   };
 }
 

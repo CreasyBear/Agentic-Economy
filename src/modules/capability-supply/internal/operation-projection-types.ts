@@ -4,7 +4,6 @@ import type {
   JsonValue,
 } from "@/modules/capability-contract/public";
 import type { ExactAmount } from "@/modules/money/public";
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from "@/modules/capability-execution/operation-invoke-entry";
 import type {
   PublicOperationRef,
   RegisteredOperationMapping,
@@ -12,6 +11,7 @@ import type {
 } from "../public";
 import type { X402CatalogPayment } from "./transport-adapters";
 
+export const CURRENT_OPERATION_CALL_VIA = "/api/v1/operations/call" as const;
 export const PublicOperationRegistrySchemaVersion =
   "registry-operations:v1" as const;
 export type PublicOperationRegistrySchemaVersion =
@@ -189,10 +189,33 @@ export type PublicOperationNavigationRelation = Readonly<{
   )[];
   precondition?: string;
 }>;
+type PublicOperationNavigationFor<
+  Relation extends PublicOperationNavigationRelation["relation"],
+> = PublicOperationNavigationRelation & Readonly<{ relation: Relation }>;
+export type OperationProjectionNavigationContract = Readonly<{
+  market: Readonly<{
+    search: PublicOperationNavigationFor<"search">;
+    detail: PublicOperationNavigationFor<"detail">;
+    compare: PublicOperationNavigationFor<"compare">;
+    inspectPlan: PublicOperationNavigationFor<"inspect_plan">;
+  }>;
+  execute: PublicOperationNavigationFor<"execute"> &
+    Readonly<{
+      method: "POST";
+      authentication: "none";
+      precondition: "free_keyless_read_only";
+    }>;
+  invoke: PublicOperationNavigationFor<"invoke"> &
+    Readonly<{
+      pathTemplate: typeof CURRENT_OPERATION_CALL_VIA;
+      method: "POST";
+      authentication: "required";
+    }>;
+}>;
 export type PublicOperationDescriptor = Readonly<{
   operationRef: PublicOperationRef;
   operationId: string;
-  callVia: typeof OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path;
+  callVia: typeof CURRENT_OPERATION_CALL_VIA;
   paymentLane: "brokered";
   contract: Readonly<{
     capabilityId: string;
@@ -282,6 +305,7 @@ export type CapabilityOperationSourceRecord = Readonly<{
   snapshotKey: string;
 }>;
 export type CapabilityOperationSourcePort = Readonly<{
+  navigation: OperationProjectionNavigationContract;
   listCurrent: (
     input: Readonly<{ networkId?: string; limit: number; now: number }>,
   ) => Promise<

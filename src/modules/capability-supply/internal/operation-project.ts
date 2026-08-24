@@ -12,12 +12,12 @@ import {
   isPublicOperationRef,
   type PublicOperationRef,
 } from "../public";
-import { operationMarketNavigation } from "@/modules/registry/operation-entry";
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from "@/modules/capability-execution/operation-invoke-entry";
 import { paymentLaneAdmission } from "./x402-invocation-policy";
 import { projectPublicSchema } from "./operation-projection-wire";
+import { CURRENT_OPERATION_CALL_VIA } from "./operation-projection-types";
 import type {
   CapabilityOperationSourceRecord,
+  OperationProjectionNavigationContract,
   PublicOperationAvailability,
   PublicOperationCatalogPrice,
   PublicOperationDescriptor,
@@ -37,43 +37,33 @@ if (
 )
   throw new Error("v1_payment_lane_not_brokered");
 const V1_PAYMENT_LANE = V1_PAYMENT_LANE_ADMISSION.lane;
-const EXECUTE_NAVIGATION: PublicOperationNavigationRelation = {
-  relation: "execute",
-  method: "POST",
-  actionId: "operation.execute",
-  authentication: "none",
-  surfaces: ["chat", "mcp"],
-  precondition: "free_keyless_read_only",
-};
-const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
-  relation: "invoke",
-  pathTemplate: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
-  method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
-  actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
-  authentication: "required",
-  surfaces: ["http", "cli", "mcp"],
-};
 type OperationAccessMode = "anonymous_execute" | "authenticated_invoke" | "inspect_only";
 
 export function operationNavigation(
   accessMode: OperationAccessMode,
+  navigation: OperationProjectionNavigationContract,
 ): readonly PublicOperationNavigationRelation[] {
+  if (navigation.invoke.pathTemplate !== CURRENT_OPERATION_CALL_VIA) {
+    throw new Error("operation_projection_call_via_mismatch");
+  }
   return Object.freeze([
-    operationMarketNavigation("search"),
-    operationMarketNavigation("detail"),
-    operationMarketNavigation("compare"),
-    operationMarketNavigation("inspect_plan"),
+    navigation.market.search,
+    navigation.market.detail,
+    navigation.market.compare,
+    navigation.market.inspectPlan,
     ...(accessMode === "anonymous_execute"
-      ? [EXECUTE_NAVIGATION]
+      ? [navigation.execute]
       : accessMode === "authenticated_invoke"
-        ? [INVOKE_NAVIGATION]
+        ? [navigation.invoke]
         : []),
   ]);
 }
-export function noOperationNavigation(): readonly PublicOperationNavigationRelation[] {
+export function noOperationNavigation(
+  navigation: OperationProjectionNavigationContract,
+): readonly PublicOperationNavigationRelation[] {
   return Object.freeze([
-    operationMarketNavigation("search"),
-    operationMarketNavigation("detail"),
+    navigation.market.search,
+    navigation.market.detail,
   ]);
 }
 
@@ -91,7 +81,8 @@ export function normalizeRefs(
 
 export function projectCapabilityOperation(
   record: CapabilityOperationSourceRecord,
-  now = Date.now(),
+  now: number,
+  navigation: OperationProjectionNavigationContract,
 ): PublicOperationDescriptor {
   const operationRef = createPublicOperationRef({
     operationId: record.operationId,
@@ -109,7 +100,7 @@ export function projectCapabilityOperation(
   return {
     operationRef,
     operationId: record.operationId,
-    callVia: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
+    callVia: CURRENT_OPERATION_CALL_VIA,
     paymentLane: V1_PAYMENT_LANE,
     contract: {
       capabilityId: record.contract.ref.capabilityId,
@@ -167,7 +158,7 @@ export function projectCapabilityOperation(
     availability,
     navigation:
       availability.posture === "unavailable"
-        ? noOperationNavigation()
+        ? noOperationNavigation(navigation)
         : operationNavigation(
             availability.posture !== "routeable" ||
               record.authentication.kind === "unknown"
@@ -177,10 +168,26 @@ export function projectCapabilityOperation(
                   record.provenance.sourceKind !== "x402"
                 ? "anonymous_execute"
                 : "authenticated_invoke",
+            navigation,
           ),
     ...(parameters === undefined ? {} : { parameters }),
     ...(catalogPrice === undefined ? {} : { catalogPrice }),
   };
+}
+
+export function projectCapabilityOperationParameters(
+  record: CapabilityOperationSourceRecord,
+): readonly PublicOperationParameter[] | undefined {
+  return projectParameters(
+    projectPublicSchema(record.contract.inputSchema),
+    record.parameterMappings,
+  );
+}
+
+export function projectCapabilityOperationCatalogPrice(
+  record: CapabilityOperationSourceRecord,
+): PublicOperationCatalogPrice | undefined {
+  return projectCatalogPrice(record.price);
 }
 
 function projectParameters(

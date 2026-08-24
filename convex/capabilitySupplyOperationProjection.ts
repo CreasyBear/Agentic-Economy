@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from 'convex/server'
 import { v } from 'convex/values'
 
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import {
   createCurrentOperationCommitment,
   createCurrentOperationCommitmentFromMaterial,
@@ -13,6 +14,7 @@ import {
   type CapabilityOperationSourceRecord,
   type CurrentOperationSearchFact,
   type OperationSearchInput,
+  type OperationProjectionNavigationContract,
 } from '@/modules/capability-supply/operation-projection'
 import type { PublicOperationRef } from '@/modules/capability-supply/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
@@ -369,6 +371,7 @@ export async function searchProjectedCurrentOperations(
   ctx: Pick<QueryCtx, 'db'>,
   input: OperationSearchInput,
   now: number,
+  navigation: OperationProjectionNavigationContract,
   expectedActiveCount?: number,
   expectedProjectionDigest?: string,
   trustedCursorLastOperationRef?: PublicOperationRef,
@@ -398,6 +401,7 @@ export async function searchProjectedCurrentOperations(
     snapshotKey,
     async (operationRef) => await loadProjectedCurrentOperation(ctx, operationRef),
     now,
+    navigation,
     expectedSearchableCount,
     trustedCursorLastOperationRef,
   )
@@ -544,7 +548,11 @@ async function projectionValue(
       descriptorDigest,
       currentDigest: commitment.currentDigest,
       searchTokens: searchTokens(outcome.descriptor),
-      searchFactJson: JSON.stringify(currentOperationSearchFact(outcome.descriptor, now)),
+      searchFactJson: JSON.stringify(currentOperationSearchFact(
+        outcome.descriptor,
+        now,
+        CURRENT_OPERATION_PROJECTION_NAVIGATION,
+      )),
     },
     detail: {
       schemaVersion: 'current-operation-detail:v1',

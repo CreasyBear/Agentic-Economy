@@ -1,8 +1,9 @@
 import { v } from 'convex/values'
 
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
+  CURRENT_OPERATION_CALL_VIA,
   compareCapabilityOperations,
   detailCapabilityOperation,
   inspectCapabilityOperationPlan,
@@ -202,7 +203,7 @@ const publicInputExample = v.object({
 })
 const publicDescriptor = v.object({
   operationRef: v.string(),
-  callVia: v.literal(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path),
+  callVia: v.literal(CURRENT_OPERATION_CALL_VIA),
   paymentLane: v.literal('brokered'),
   operationId: v.string(),
   contract: v.object({
@@ -392,6 +393,7 @@ export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
       ctx,
       args,
       now,
+      CURRENT_OPERATION_PROJECTION_NAVIGATION,
       control.verifiedActiveCount,
       control.verifiedProjectionDigest,
       trustedCursorLastOperationRef,
@@ -576,6 +578,7 @@ function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSource
     return await operationRecord(ctx, publication, Date.now()) ?? null
   }
   return {
+    navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
     listCurrent: async (input) => {
       return await listOld(input.networkId, input.limit, input.now)
     },

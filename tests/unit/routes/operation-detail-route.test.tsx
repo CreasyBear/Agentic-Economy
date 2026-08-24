@@ -6,9 +6,10 @@ import { RouterContextProvider, createMemoryHistory, createRootRoute, createRout
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import {
   PublicOperationRegistrySchemaVersion,
-  projectCapabilityOperation,
+  projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   type CapabilityOperationSourceRecord,
 } from '@/modules/capability-supply/public'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
@@ -129,6 +130,15 @@ const sourceRecord = {
   searchTerms: ['invoice', 'extract'],
   snapshotKey: 'snapshot:invoice:4',
 } as CapabilityOperationSourceRecord
+
+const projectCapabilityOperation = (
+  record: CapabilityOperationSourceRecord,
+  now: number,
+) => projectCapabilityOperationWithNavigation(
+  record,
+  now,
+  CURRENT_OPERATION_PROJECTION_NAVIGATION,
+)
 
 const operation = projectCapabilityOperation(sourceRecord, 2_000)
 

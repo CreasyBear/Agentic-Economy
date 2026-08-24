@@ -11,7 +11,8 @@ import {
   parseAdmittedTransportCatalogMetadata,
   parseAdmittedX402CatalogPayment,
   parseHttpJsonTransportConfiguration,
-  projectCapabilityOperation,
+  projectCapabilityOperationCatalogPrice,
+  projectCapabilityOperationParameters,
   qualifySuppliedCandidate,
   MAX_ELIGIBLE_SUPPLY,
   admitRegisteredTransport,
@@ -209,13 +210,14 @@ async function buildOfferingOperationMap(
       ) continue
       const transport = parseAdmittedTransportCatalogMetadata(bindingDoc.adapterId, bindingDoc.configJson)
       if (transport === undefined) continue
-      const descriptor = projectCapabilityOperation(record, now)
+      const parameters = projectCapabilityOperationParameters(record)
+      const catalogPrice = projectCapabilityOperationCatalogPrice(record)
       const exactRouteable = record.routeable
       const payment = bindingDoc.admission !== 'admitted' || bindingDoc.conformance !== 'conformant'
         ? undefined
         : parseAdmittedX402CatalogPayment(bindingDoc.adapterId, bindingDoc.configJson)
       const queryPointers = new Set(transport.queryInputPointers)
-      const parameters = descriptor.parameters?.map((parameter) => ({
+      const projectedParameters = parameters?.map((parameter) => ({
         ...parameter,
         group: queryPointers.has(`/${parameter.name.replace(/~/g, '~0').replace(/\//g, '~1')}`)
           ? 'query' as const
@@ -236,9 +238,9 @@ async function buildOfferingOperationMap(
         routeable: exactRouteable,
         answerExecutable,
         readiness: record.readiness,
-        operationRef: descriptor.operationRef,
-        ...(parameters === undefined ? {} : { parameters }),
-        ...(descriptor.catalogPrice === undefined ? {} : { catalogPrice: descriptor.catalogPrice }),
+        operationRef: publication.operationRef,
+        ...(projectedParameters === undefined ? {} : { parameters: projectedParameters }),
+        ...(catalogPrice === undefined ? {} : { catalogPrice }),
         ...(payment === undefined ? {} : { payment }),
       })
     }
