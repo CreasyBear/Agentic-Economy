@@ -59,8 +59,7 @@ describe('green release baseline', () => {
     for (const subGate of [
       'test:conformance',
       'test:chat:conformance',
-      'generate:convex',
-      'check:convex-codegen',
+      'verify:convex-generated:anonymous',
       'test:release:architecture',
       'lint',
       'typecheck',
@@ -84,8 +83,7 @@ describe('green release baseline', () => {
       'verify:deployment-manifest',
       'test:conformance',
       'test:chat:conformance',
-      'generate:convex',
-      'check:convex-codegen',
+      'verify:convex-generated:anonymous',
       'test:release:source:after-codegen',
     ]
     for (let index = 1; index < orderedSourceGates.length; index += 1) {
@@ -95,6 +93,18 @@ describe('green release baseline', () => {
     }
     expect(scripts['generate:convex']).toBe('convex codegen --typecheck=disable')
     expect(scripts['check:convex-codegen']).toBe('convex codegen --dry-run --typecheck=disable')
+    expect(scripts['verify:convex-generated:anonymous']).toBe(
+      'tsx tools/release/verify-convex-generated-anonymous.ts',
+    )
+    const anonymousCodegenProof = readFileSync(
+      resolve(root, 'tools/release/verify-convex-generated-anonymous.ts'),
+      'utf8',
+    )
+    expect(anonymousCodegenProof).toContain("CONVEX_AGENT_MODE: 'anonymous'")
+    expect(anonymousCodegenProof).not.toContain('...process.env')
+    expect(anonymousCodegenProof).not.toMatch(/CONVEX_DEPLOYMENT|CONVEX_DEPLOY_KEY|CONVEX_SELF_HOSTED/u)
+    expect(anonymousCodegenProof).toContain("rmSync(resolve(isolatedRoot, generatedDirectory, name))")
+    expect(anonymousCodegenProof).toContain('terminateIsolatedProcesses(isolatedRoot)')
     expect(scripts['smoke:chat:staging']).toBe(
       'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts',
     )
@@ -137,15 +147,13 @@ describe('green release baseline', () => {
     const sourceConfig = JSON.stringify(source ?? {})
     expect(sourceConfig).not.toContain('CONVEX_DEPLOY_KEY')
     expect(sourceConfig).not.toContain('secrets.')
-    const generateIndex = source?.steps?.findIndex((step) => step.name === 'Generate Convex source normally') ?? -1
-    const dryRunIndex = source?.steps?.findIndex((step) => step.name === 'Verify generated Convex source with a dry run') ?? -1
-    const driftIndex = source?.steps?.findIndex((step) => step.name === 'Prove committed Convex generated source is current') ?? -1
+    const anonymousIndex = source?.steps?.findIndex((step) => step.name === 'Prove committed Convex source with an isolated anonymous local backend') ?? -1
+    const driftIndex = source?.steps?.findIndex((step) => step.name === 'Prove anonymous generation did not mutate the source checkout') ?? -1
     const sourceGateIndex = source?.steps?.findIndex((step) => step.name === 'Run source release contract without deployment credentials') ?? -1
-    expect(source?.steps?.[generateIndex]?.run).toBe('npm run generate:convex')
-    expect(source?.steps?.[dryRunIndex]?.run).toBe('npm run check:convex-codegen')
+    expect(source?.steps?.[anonymousIndex]?.run).toBe('npm run verify:convex-generated:anonymous')
     expect(source?.steps?.[driftIndex]?.run).toBe('git diff --exit-code -- convex/_generated')
-    expect(generateIndex).toBeLessThan(dryRunIndex)
-    expect(dryRunIndex).toBeLessThan(driftIndex)
+    expect(anonymousIndex).toBeGreaterThanOrEqual(0)
+    expect(anonymousIndex).toBeLessThan(driftIndex)
     expect(driftIndex).toBeLessThan(sourceGateIndex)
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
