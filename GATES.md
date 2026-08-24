@@ -15,10 +15,10 @@ Scope: Deliver the narrow Operation market repository, prove its retained bounda
   EXPECT: WAVE4_OK
   EVIDENCE: Wave 4 integration ledger is 4/4 met; contract and verification reviewers independently passed the drain candidate, writer freeze, eleven-table Release A compatibility schema, and retained-boundary extraction through `71b688a09`.
 
-- [ ] G4: Audited deletion, dependency cleanup, and documentation are accepted.
+- [x] G4: Audited deletion, dependency cleanup, and documentation are accepted.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave5-integration.md && echo WAVE5_OK
   EXPECT: WAVE5_OK
-  EVIDENCE: pending
+  EVIDENCE: Wave 5 integration ledger is 4/4 met; both reviewers accepted the audited prune, dependency/environment cleanup, Operation parity correction, CDP externalization, and current architecture/rollback map through `ca8040f04`.
 
 - [ ] G5: Final source and generated-output gates are green and net removal is at least 55,000 lines.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/final-source.md && echo FINAL_SOURCE_OK

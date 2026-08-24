@@ -46,3 +46,4 @@ The master owns contracts, ordering, gates, conflict resolution, reviews, genera
 - Wave 2 accepted: commits `c742476ac` through `79291d274`, dual review passed.
 - Wave 3 accepted after correction and re-review: thin chat cutover, browser/release proof, and retained payment isolation are green through `68d2cbc7a`.
 - Wave 4 accepted after correction and dual review: the repository drain candidate, Release A writer freeze, exact eleven-table compatibility schema, and retained-boundary extraction are green through `71b688a09`. Production drain/deploy evidence remains an explicit human checkpoint.
+- Wave 5 accepted after correction and dual review: 341 audited legacy files are removed, dependency/environment contracts are consolidated, Operation parity is current, retained CDP EVM custody is green without a root SVM dependency, and the repository/codebase maps describe the Release-B source candidate through `ca8040f04`.
