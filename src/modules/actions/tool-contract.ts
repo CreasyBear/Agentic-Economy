@@ -71,6 +71,14 @@ export type ActionToolExecutionValidationMetadata = {
   outputJsonSchema?: JSONSchema
 }
 
+export function providerSafeActionToolName(actionId: string): string {
+  const name = actionId.replace(/[^A-Za-z0-9_-]/g, '_')
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(name)) {
+    throw new Error(`Action ${actionId} cannot be represented as a provider tool name`)
+  }
+  return name
+}
+
 export function actionToToolContract(
   action: AnyAction,
 ): ActionToolContract<unknown, unknown> {

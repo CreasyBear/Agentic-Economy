@@ -1,5 +1,8 @@
 import type { JSONSchema } from '@tanstack/ai'
-import { actionToToolContract } from '@/modules/actions/tool-contract'
+import {
+  actionToToolContract,
+  providerSafeActionToolName,
+} from '@/modules/actions/tool-contract'
 import { findStrictToolSchemaViolation } from '@/modules/actions/strict-schema'
 import type { AnyAction } from '@/modules/common/action'
 type StrictObjectJsonSchema = JSONSchema & {
@@ -66,9 +69,5 @@ export function actionToOpenRouterTool(
 }
 
 export function openRouterToolName(actionId: string): string {
-  const name = actionId.replace(/[^a-zA-Z0-9_-]/g, '_')
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(name)) {
-    throw new Error(`Action ${actionId} cannot be represented as an OpenRouter tool name`)
-  }
-  return name
+  return providerSafeActionToolName(actionId)
 }

@@ -48,8 +48,9 @@ function parseSchemaJson(value: string): Record<string, unknown> {
 
 function decodeExecutableDescriptor(
   row: ExecutableDescriptorWire | null,
+  requestedOperationRef: string,
 ): OperationExecutableDescriptor | null {
-  if (row === null) return null
+  if (row === null || row.operationRef !== requestedOperationRef) return null
   const { inputSchemaJson, outputSchemaJson, ...descriptor } = row
   const inputSchema = parseSchemaJson(inputSchemaJson)
   const outputSchema = outputSchemaJson === undefined
@@ -64,12 +65,10 @@ function decodeExecutableDescriptor(
 
 async function descriptorServiceAuth(
   operationRef: string,
-  serviceKey: string | undefined,
-): Promise<CustomerRequestServiceAssertion | undefined> {
-  const key = serviceKey?.trim()
-  if (key === undefined || key.length < 32) return undefined
+  serviceKey: string,
+): Promise<CustomerRequestServiceAssertion> {
   return await createCustomerRequestServiceAssertion({
-    key,
+    key: serviceKey,
     operation: EXECUTABLE_DESCRIPTOR_OPERATION,
     command: toStableHashValue({ operationRef }),
     principal: {
@@ -92,21 +91,30 @@ export async function runChatOperationExecute(
   execute: KeylessExecutor = executeKeylessOperation,
   serviceKey?: string,
 ): Promise<OperationExecuteResult> {
+  const serviceKeyValue = serviceKey?.trim()
+  if (serviceKeyValue === undefined || serviceKeyValue.length < 32) {
+    return {
+      kind: 'error',
+      operationRef: input.operationRef,
+      code: 'source_unavailable',
+      retryable: true,
+      reason: 'The executable descriptor source is unavailable.',
+    }
+  }
+
   const source: KeylessExecutableSourcePort = {
     list: async () => [],
     search: async () => [],
     read: async (operationRef) => {
-      const serviceAuth = await descriptorServiceAuth(operationRef, serviceKey)
+      const serviceAuth = await descriptorServiceAuth(operationRef, serviceKeyValue)
       const row: ExecutableDescriptorWire | null = await ctx.runQuery(
         api.capabilitySupplyOperations.readKeylessExecutable,
         {
           operationRef,
-          ...(serviceAuth === undefined
-            ? {}
-            : { serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] } }),
+          serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
         },
       )
-      return decodeExecutableDescriptor(row)
+      return decodeExecutableDescriptor(row, operationRef)
     },
     readPublic: async (operationRef) => {
       const result = await ctx.runQuery(

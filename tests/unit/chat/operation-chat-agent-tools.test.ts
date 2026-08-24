@@ -1,9 +1,11 @@
 import { mockModel, type ToolCtx } from '@convex-dev/agent'
+import { generateText, type ToolSet } from 'ai'
 import { getFunctionName } from 'convex/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
   CHAT_TOOL_IDS,
+  CHAT_TOOL_NAME_MAP,
   createChatAgent,
   MAX_CHAT_TOOL_CALLS,
   MAX_CHAT_TOOL_RESULT_BYTES,
@@ -60,7 +62,8 @@ async function invokeTool(
   ctx: ToolCtx,
   input: unknown,
 ): Promise<unknown> {
-  const tool = agent.options.tools?.[toolId]
+  const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]
+  const tool = agent.options.tools?.[providerToolName]
   if (tool === undefined || typeof tool.execute !== 'function') {
     throw new Error(`Missing executable chat tool: ${toolId}`)
   }
@@ -90,25 +93,41 @@ describe('Operation chat Agent tools', () => {
   it('exports exactly the five canonical tools and bounded Agent defaults', () => {
     const agent = createChatAgent(mockModel())
 
-    expect(Object.keys(agent.options.tools ?? {})).toEqual(CHAT_TOOL_IDS)
+    expect(Object.keys(agent.options.tools ?? {})).toEqual(
+      CHAT_TOOL_IDS.map((toolId) => CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]),
+    )
+    expect(Object.isFrozen(CHAT_TOOL_NAME_MAP)).toBe(true)
+    expect(Object.isFrozen(CHAT_TOOL_NAME_MAP.canonicalToProvider)).toBe(true)
+    expect(Object.isFrozen(CHAT_TOOL_NAME_MAP.providerToCanonical)).toBe(true)
+    for (const toolId of CHAT_TOOL_IDS) {
+      const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider[toolId]
+      expect(CHAT_TOOL_NAME_MAP.providerToCanonical[providerToolName]).toBe(toolId)
+    }
     expect(agent.options.contextOptions).toEqual({ recentMessages: 20 })
     expect(agent.options.stopWhen).toBeTypeOf('function')
   })
 
-  it('rejects canonical invalid input before native dispatch', async () => {
+  it('lets the AI SDK reject canonical invalid provider input before native dispatch', async () => {
     const runQuery = vi.fn()
-    const agent = createChatAgent(mockModel())
-
-    await expect(invokeTool(
-      agent,
-      'registry.operations.search',
-      toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] }),
-      { query: 42 },
-    )).resolves.toEqual({
-      kind: 'chat_tool_refused',
-      toolId: 'registry.operations.search',
-      reason: 'input_invalid',
+    const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.search']
+    const model = mockModel({
+      contentSteps: [[{
+        type: 'tool-call',
+        toolCallId: 'invalid-search',
+        toolName: providerToolName,
+        input: JSON.stringify({ query: 42 }),
+      }]],
     })
+    const agent = createChatAgent(model)
+    const ctx = toolCtx({ runQuery: runQuery as ToolCtx['runQuery'] })
+    const tools = Object.fromEntries(Object.entries(agent.options.tools ?? {}).map(
+      ([name, tool]) => [name, { ...tool, ctx }],
+    )) as ToolSet
+
+    const result = await generateText({ model, prompt: 'Search operations.', tools })
+
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolResults).toHaveLength(0)
     expect(runQuery).not.toHaveBeenCalled()
   })
 

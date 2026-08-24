@@ -4,6 +4,7 @@ import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import type { z } from 'zod'
 
+import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { operationExecuteContract } from '@/modules/capability-execution/operation-execute-contract'
 import type {
   InspectPlanInput,
@@ -40,12 +41,24 @@ export const CHAT_TOOL_IDS = [
 
 export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
 
+const canonicalToProvider = Object.freeze(Object.fromEntries(
+  CHAT_TOOL_IDS.map((toolId) => [toolId, providerSafeActionToolName(toolId)]),
+)) as Readonly<Record<ChatToolId, string>>
+
+const providerToCanonical = Object.freeze(Object.fromEntries(
+  CHAT_TOOL_IDS.map((toolId) => [canonicalToProvider[toolId], toolId]),
+)) as Readonly<Record<string, ChatToolId>>
+
+export const CHAT_TOOL_NAME_MAP = Object.freeze({
+  canonicalToProvider,
+  providerToCanonical,
+})
+
 export const MAX_CHAT_TOOL_CALLS = 4
 export const MAX_CHAT_EXECUTE_CALLS = 1
 export const MAX_CHAT_TOOL_RESULT_BYTES = 64 * 1024
 
 const chatToolFailureReasons = [
-  'input_invalid',
   'source_output_invalid',
   'result_too_large',
   'tool_limit',
@@ -95,22 +108,6 @@ function descriptionFor(contract: ChatContract): string {
 
 function failure(toolId: ChatToolId, reason: ChatToolFailure['reason']): ChatToolFailure {
   return { kind: 'chat_tool_refused', toolId, reason }
-}
-
-function isChatToolFailure(value: unknown): value is ChatToolFailure {
-  return typeof value === 'object'
-    && value !== null
-    && 'kind' in value
-    && value.kind === 'chat_tool_refused'
-}
-
-function parseInput<Input>(
-  toolId: ChatToolId,
-  schema: z.ZodType<Input>,
-  input: unknown,
-): Input | ChatToolFailure {
-  const parsed = schema.safeParse(input)
-  return parsed.success ? parsed.data : failure(toolId, 'input_invalid')
 }
 
 function modelFacingOutput<Output>(
@@ -179,21 +176,15 @@ export function createChatAgent(languageModel: LanguageModelV4) {
   const executeContract = contractFor('operation.execute')
 
   const tools = {
-    'registry.operations.search': createTool({
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.search']]: createTool({
       description: descriptionFor(searchContract),
       inputSchema: searchContract.schema as z.ZodType<OperationSearchInput>,
       execute: async (ctx: ToolCtx, input: OperationSearchInput) => {
-        const parsed = parseInput(
-          'registry.operations.search',
-          searchContract.schema as z.ZodType<OperationSearchInput>,
-          input,
-        )
-        if (isChatToolFailure(parsed)) return parsed
         const denied = reserve('registry.operations.search')
         if (denied !== null) return denied
         const result = await ctx.runQuery(
           api.capabilitySupplyOperations.search,
-          structuredClone(parsed) as FunctionArgs<typeof api.capabilitySupplyOperations.search>,
+          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyOperations.search>,
         )
         return projectedModelFacingOutput(
           'registry.operations.search',
@@ -202,19 +193,13 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
       },
     }),
-    'registry.operations.detail': createTool({
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail']]: createTool({
       description: descriptionFor(detailContract),
       inputSchema: detailContract.schema as z.ZodType<OperationDetailInput>,
       execute: async (ctx: ToolCtx, input: OperationDetailInput) => {
-        const parsed = parseInput(
-          'registry.operations.detail',
-          detailContract.schema as z.ZodType<OperationDetailInput>,
-          input,
-        )
-        if (isChatToolFailure(parsed)) return parsed
         const denied = reserve('registry.operations.detail')
         if (denied !== null) return denied
-        const result = await ctx.runQuery(api.capabilitySupplyOperations.detail, parsed)
+        const result = await ctx.runQuery(api.capabilitySupplyOperations.detail, input)
         return projectedModelFacingOutput(
           'registry.operations.detail',
           detailContract.outputSchema,
@@ -222,21 +207,15 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
       },
     }),
-    'registry.operations.compare': createTool({
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.compare']]: createTool({
       description: descriptionFor(compareContract),
       inputSchema: compareContract.schema as z.ZodType<OperationCompareInput>,
       execute: async (ctx: ToolCtx, input: OperationCompareInput) => {
-        const parsed = parseInput(
-          'registry.operations.compare',
-          compareContract.schema as z.ZodType<OperationCompareInput>,
-          input,
-        )
-        if (isChatToolFailure(parsed)) return parsed
         const denied = reserve('registry.operations.compare')
         if (denied !== null) return denied
         const result = await ctx.runQuery(
           api.capabilitySupplyOperations.compare,
-          structuredClone(parsed) as FunctionArgs<typeof api.capabilitySupplyOperations.compare>,
+          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyOperations.compare>,
         )
         return projectedModelFacingOutput(
           'registry.operations.compare',
@@ -245,21 +224,15 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
       },
     }),
-    'registry.operations.inspectPlan': createTool({
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.inspectPlan']]: createTool({
       description: descriptionFor(inspectContract),
       inputSchema: inspectContract.schema as z.ZodType<InspectPlanInput>,
       execute: async (ctx: ToolCtx, input: InspectPlanInput) => {
-        const parsed = parseInput(
-          'registry.operations.inspectPlan',
-          inspectContract.schema as z.ZodType<InspectPlanInput>,
-          input,
-        )
-        if (isChatToolFailure(parsed)) return parsed
         const denied = reserve('registry.operations.inspectPlan')
         if (denied !== null) return denied
         const result = await ctx.runQuery(
           api.capabilitySupplyOperations.inspectPlan,
-          structuredClone(parsed) as FunctionArgs<typeof api.capabilitySupplyOperations.inspectPlan>,
+          structuredClone(input) as FunctionArgs<typeof api.capabilitySupplyOperations.inspectPlan>,
         )
         return projectedModelFacingOutput(
           'registry.operations.inspectPlan',
@@ -268,19 +241,13 @@ export function createChatAgent(languageModel: LanguageModelV4) {
         )
       },
     }),
-    'operation.execute': createTool({
+    [CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.execute']]: createTool({
       description: descriptionFor(executeContract),
       inputSchema: executeContract.schema as z.ZodType<OperationExecuteInput>,
       execute: async (ctx: ToolCtx, input: OperationExecuteInput) => {
-        const parsed = parseInput(
-          'operation.execute',
-          executeContract.schema as z.ZodType<OperationExecuteInput>,
-          input,
-        )
-        if (isChatToolFailure(parsed)) return parsed
         const denied = reserve('operation.execute')
         if (denied !== null) return denied
-        const result = await ctx.runAction(internal.chatExecute.execute, parsed)
+        const result = await ctx.runAction(internal.chatExecute.execute, input)
         return projectedModelFacingOutput(
           'operation.execute',
           executeContract.outputSchema,
