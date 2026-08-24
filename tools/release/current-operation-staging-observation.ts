@@ -248,7 +248,7 @@ export function resolveReleasePath(path: string, repositoryRoot = process.cwd())
   return target
 }
 
-function receiptWithDigest<T extends StableHashValue>(material: T): T & { receiptDigest: string } {
+function receiptWithDigest<T extends Record<string, unknown>>(material: T): T & { receiptDigest: string } {
   return { ...material, receiptDigest: canonicalDigest(material) }
 }
 
