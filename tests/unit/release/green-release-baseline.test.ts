@@ -24,6 +24,7 @@ type WorkflowJob = {
   environment?: string
   steps?: WorkflowStep[]
   env?: Record<string, string>
+  'timeout-minutes'?: number
 }
 type Workflow = {
   on?: Record<string, unknown>
@@ -171,6 +172,9 @@ describe('green release baseline', () => {
       } else if (artifactName.includes('chat-staging-smoke')) {
         expect(upload.if).toBe('always()')
         expect(upload.with?.path).toBe('output/release/playwright-chat-staging-smoke.json')
+      } else if (artifactName.includes('current-operation-staging')) {
+        expect(upload.if).toBeUndefined()
+        expect(upload.with?.path).toBe('output/release/current-operation-staging-${{ inputs.current_operation_staging_stage }}.json')
       } else {
         expect(upload.if).toBe('always()')
         expect(artifactName).toContain('source-release-gate')
@@ -257,6 +261,85 @@ describe('green release baseline', () => {
     const workflowText = readFileSync(resolve(root, '.github/workflows/kernel-release-gate.yml'), 'utf8')
     expect(workflowText).not.toContain('answer-suite-report')
     expect(workflowText).not.toContain('test:eval:report')
+  })
+
+  it('keeps current Operation staging observation opt-in, revision-bound, and rollback-only outside cutover', () => {
+    expect(scripts['observe:current-operation:staging']).toBe(
+      'tsx tools/release/current-operation-staging-observation.ts',
+    )
+    const workflow = readWorkflow('.github/workflows/kernel-release-gate.yml')
+    const job = workflow.jobs?.['current-operation-staging-observation']
+    expect(job?.if).toBe("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_current_operation_staging_observation == true && (inputs.current_operation_staging_stage != 'complete' || inputs.confirm_current_operation_staging_cutover == true)")
+    expect(job?.needs).toBe('source-proof')
+    expect(job?.environment).toBe('staging')
+    expect(job?.['timeout-minutes']).toBe(15)
+    expect(job?.env).toEqual({
+      AE_T8_STAGING_CONVEX_DEPLOYMENT: '${{ vars.AE_T8_STAGING_CONVEX_DEPLOYMENT }}',
+      CONVEX_DEPLOY_KEY: '${{ secrets.AE_T8_STAGING_CONVEX_DEPLOY_KEY }}',
+      AE_RELEASE_SOURCE_REVISION: '${{ github.sha }}',
+      AE_T8_RELEASE_OWNER: '${{ inputs.current_operation_staging_owner }}',
+    })
+    const serialized = JSON.stringify(job ?? {})
+    for (const forbidden of [
+      'environment:production',
+      'STRIPE_',
+      'CDP_',
+      'CLERK_',
+      'AE_X402_',
+      'AE_SOURCE_WRITE_',
+      'AE_GATEWAY_SMOKE_',
+      'deploy production',
+      'npm publish',
+    ]) expect(serialized).not.toContain(forbidden)
+    const install = job?.steps?.find((step) => step.name === 'Frozen dependency install without lifecycle scripts')
+    expect(install?.run).toBe('npm ci --ignore-scripts')
+
+    const download = job?.steps?.find((step) => step.name === 'Download the exact revision-bound staging start receipt')
+    expect(download?.if).toBe("inputs.current_operation_staging_stage == 'complete'")
+    expect(download?.with).toMatchObject({
+      repository: '${{ github.repository }}',
+      'run-id': '${{ inputs.current_operation_staging_start_workflow_run_id }}',
+      name: 'release-${{ github.sha }}-${{ inputs.current_operation_staging_start_workflow_run_id }}-current-operation-staging-start',
+      path: 'output/release/current-operation-staging-start-artifact',
+    })
+    const start = job?.steps?.find((step) => step.name === 'Start the exact-revision shadow observation')
+    expect(start?.run).toContain('npm run observe:current-operation:staging --')
+    expect(start?.run).toContain('start')
+    const complete = job?.steps?.find((step) => step.name === 'Complete the exact baseline-bound staging cutover')
+    expect(complete?.run).toContain("baseline_digest=\"$(jq -er '.receiptDigest' \"${baseline}\")\"")
+    expect(complete?.run).toContain('confirmation="cutover:${AE_T8_STAGING_CONVEX_DEPLOYMENT}:${AE_RELEASE_SOURCE_REVISION}:${AE_T8_RELEASE_OWNER}:${baseline_digest}"')
+    expect(complete?.run).toContain('--confirm-cutover "${confirmation}"')
+    const rollback = job?.steps?.find((step) => step.name === 'Restore the old read path without deleting projection rows')
+    expect(rollback?.run).toContain('rollback')
+    expect(rollback?.run).toContain('--reason "${ROLLBACK_REASON}"')
+    const upload = job?.steps?.find((step) => step.name === 'Upload only the sanitized staging observation receipt')
+    expect(upload?.with).toEqual({
+      name: 'release-${{ github.sha }}-${{ github.run_id }}-current-operation-staging-${{ inputs.current_operation_staging_stage }}',
+      path: 'output/release/current-operation-staging-${{ inputs.current_operation_staging_stage }}.json',
+      'if-no-files-found': 'error',
+      'retention-days': 14,
+    })
+
+    const dispatch = workflow.on?.['workflow_dispatch'] as {
+      inputs?: Record<string, { default?: boolean | string; required?: boolean; type?: string; options?: string[] }>
+    } | undefined
+    expect(dispatch?.inputs?.confirm_current_operation_staging_observation).toMatchObject({
+      required: true,
+      default: false,
+      type: 'boolean',
+    })
+    expect(dispatch?.inputs?.current_operation_staging_stage).toMatchObject({
+      required: true,
+      default: 'start',
+      type: 'choice',
+      options: ['start', 'complete', 'rollback'],
+    })
+    expect(dispatch?.inputs?.current_operation_staging_owner).toMatchObject({ required: true, type: 'string' })
+    expect(dispatch?.inputs?.confirm_current_operation_staging_cutover).toMatchObject({
+      required: true,
+      default: false,
+      type: 'boolean',
+    })
   })
 
   it('provides every production manifest requirement to the live gateway job', () => {
