@@ -1,5 +1,4 @@
 import type { CapabilityOfferingOrigin } from '@/modules/capability-supply/public'
-import type { OfferingAccessPathDescriptor } from '@/modules/catalog/public'
 
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import type { ExactCapabilityContractResult } from '@/modules/capability-contract-registry/public'
@@ -10,6 +9,26 @@ import type {
   CapabilityReadinessOutcome,
 } from '../publication'
 import type { ProviderConnection } from '../../provider-connection'
+
+type OfferingAccessPathDescriptor =
+  | Readonly<{
+      kind: 'human_request'
+      channel: 'phone' | 'website'
+      disclosure: string
+      url?: string
+    }>
+  | Readonly<{
+      kind: 'external_operation'
+      name: string
+      summary: string
+      url: string
+      method?: string
+      documentationUrl?: string
+      interfaceDescription?: Readonly<{ format: string; url?: string }>
+      authenticationSummary?: string
+      pricingSummary?: string
+      provenance: 'business_declared' | 'publicly_observed'
+    }>
 
 export type GraphCatalogAccessPath = Readonly<{
   accessPathRef: string
