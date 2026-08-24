@@ -566,6 +566,34 @@ describe('T8 current Operation staging observation', () => {
     expect(runtime.mode).toBe('old')
   })
 
+  it('restores old if exclusive start-receipt persistence fails after shadow transition', async () => {
+    const root = await temporaryRoot()
+    await observeCurrentOperationStaging(fakeRuntime(), options('start'), root)
+    const retry = fakeRuntime()
+    await expect(observeCurrentOperationStaging(retry, options('start'), root))
+      .rejects.toThrow('staging_observation_start_receipt_failed:rollback_succeeded')
+    expect(retry.mode).toBe('old')
+  })
+
+  it('restores old if exclusive completion-receipt persistence fails after cutover', async () => {
+    const root = await temporaryRoot()
+    const start = StartReceiptSchema.parse(await observeCurrentOperationStaging(fakeRuntime(), options('start'), root))
+    const completeOptions: StageOptions = {
+      ...options('complete'),
+      startArtifactPath: 'output/release/start.json',
+      cutoverConfirmation: `cutover:${deploymentName}:${revision}:${owner}:${start.receiptDigest}`,
+    }
+    const first = fakeRuntime({ now: 86_401_000 })
+    first.mode = 'shadow'
+    await observeCurrentOperationStaging(first, completeOptions, root)
+
+    const retry = fakeRuntime({ now: 86_401_001 })
+    retry.mode = 'shadow'
+    await expect(observeCurrentOperationStaging(retry, completeOptions, root))
+      .rejects.toThrow('staging_observation_complete_receipt_failed:rollback_succeeded')
+    expect(retry.mode).toBe('old')
+  })
+
   it('rolls back independently with old-only commands and never backfills', async () => {
     const root = await temporaryRoot()
     const runtime = fakeRuntime()
