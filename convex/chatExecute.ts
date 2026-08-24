@@ -13,6 +13,10 @@ import type {
   OperationExecuteInput,
   OperationExecuteResult,
 } from '@/modules/capability-execution/operation-execute.functions'
+import {
+  jsonObject,
+  jsonValue,
+} from '@/modules/capability-execution/internal/convex-schema'
 import { deserializeOperationDetailResult } from '@/modules/capability-supply/public'
 import {
   createCustomerRequestServiceAssertion,
@@ -39,6 +43,40 @@ type KeylessExecutor = (
 
 const EXECUTABLE_DESCRIPTOR_OPERATION = 'capabilitySupplyOperations:readKeylessExecutable'
 const EXECUTABLE_DESCRIPTOR_SCOPE = 'capability_supply:read_executable'
+
+const operationExecuteResultValue = v.union(
+  v.object({
+    kind: v.literal('ok'),
+    operationRef: v.string(),
+    capabilityId: v.string(),
+    name: v.string(),
+    output: jsonValue,
+    evidenceHash: v.string(),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    operationRef: v.string(),
+    reason: v.union(
+      v.literal('operation_not_found'),
+      v.literal('operation_not_keyless'),
+      v.literal('operation_not_executable'),
+      v.literal('input_invalid'),
+      v.literal('endpoint_invalid'),
+    ),
+  }),
+  v.object({
+    kind: v.literal('error'),
+    operationRef: v.string(),
+    code: v.union(
+      v.literal('fetch_failed'),
+      v.literal('response_invalid'),
+      v.literal('provider_error'),
+      v.literal('source_unavailable'),
+    ),
+    retryable: v.boolean(),
+    reason: v.string(),
+  }),
+)
 
 function parseSchemaJson(value: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(value)
@@ -133,9 +171,9 @@ export async function runChatOperationExecute(
 export const execute = internalAction({
   args: {
     operationRef: v.string(),
-    input: v.record(v.string(), v.any()),
+    input: jsonObject,
   },
-  returns: v.any(),
+  returns: operationExecuteResultValue,
   handler: async (ctx, args): Promise<OperationExecuteResult> =>
     runChatOperationExecute(
       ctx,

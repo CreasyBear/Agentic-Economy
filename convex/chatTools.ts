@@ -242,7 +242,10 @@ export function createChatAgent(languageModel: LanguageModelV4) {
       },
     }),
     [CHAT_TOOL_NAME_MAP.canonicalToProvider['operation.execute']]: createTool({
-      description: descriptionFor(executeContract),
+      description: descriptionFor(executeContract).replace(
+        'ae_registry_operations_detail',
+        CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail'],
+      ),
       inputSchema: executeContract.schema as z.ZodType<OperationExecuteInput>,
       execute: async (ctx: ToolCtx, input: OperationExecuteInput) => {
         const denied = reserve('operation.execute')

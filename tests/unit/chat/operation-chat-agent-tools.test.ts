@@ -107,6 +107,26 @@ describe('Operation chat Agent tools', () => {
     expect(agent.options.stopWhen).toBeTypeOf('function')
   })
 
+  it('mentions only provider tool names that the Agent actually offers', () => {
+    const agent = createChatAgent(mockModel())
+    const tools = agent.options.tools ?? {}
+    const offeredNames = new Set(Object.keys(tools))
+    const descriptions = Object.values(tools)
+      .map((tool) => tool.description ?? '')
+      .join('\n')
+    const mentionedNames = descriptions.match(
+      /\b(?:ae_)?(?:registry|operation)_[A-Za-z0-9_-]+\b/g,
+    ) ?? []
+
+    expect(mentionedNames).toContain(
+      CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.detail'],
+    )
+    expect(mentionedNames).not.toContain('ae_registry_operations_detail')
+    for (const mentionedName of mentionedNames) {
+      expect(offeredNames.has(mentionedName)).toBe(true)
+    }
+  })
+
   it('lets the AI SDK reject canonical invalid provider input before native dispatch', async () => {
     const runQuery = vi.fn()
     const providerToolName = CHAT_TOOL_NAME_MAP.canonicalToProvider['registry.operations.search']
