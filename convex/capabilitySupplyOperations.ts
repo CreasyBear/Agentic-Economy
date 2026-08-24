@@ -41,10 +41,13 @@ import {
   currentOperationReadMode,
   currentOperationShadowDiagnosticsHandler,
   currentOperationShadowDiagnosticsReturns,
+  currentOperationStagingSnapshotHandler,
+  currentOperationStagingSnapshotReturns,
   rebuildCurrentOperationProjectionHandler,
   recordCurrentOperationMismatchExplanationHandler,
   setCurrentOperationReadModeHandler,
 } from './capabilitySupplyOperationProjection'
+import { env } from './_generated/server'
 
 export { readCurrentPublishedOperation } from './capabilitySupplyOperationKeyless'
 
@@ -144,6 +147,16 @@ export const currentOperationShadowDiagnostics = internalQueryGeneric({
   args: { now: v.number() },
   returns: currentOperationShadowDiagnosticsReturns,
   handler: currentOperationShadowDiagnosticsHandler,
+})
+
+export const currentOperationStagingSnapshot = internalQueryGeneric({
+  args: { now: v.number(), observedSince: v.optional(v.number()) },
+  returns: currentOperationStagingSnapshotReturns,
+  handler: async (ctx, args) => await currentOperationStagingSnapshotHandler(
+    ctx,
+    args,
+    env.AE_RELEASE_SOURCE_REVISION,
+  ),
 })
 export const readKeylessExecutable = queryGeneric({
   args: { operationRef: v.string(), serviceAuth: v.optional(serverFunctionAuth) },

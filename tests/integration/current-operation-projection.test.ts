@@ -6,6 +6,8 @@ import { capabilityOperationId, createPublicOperationRef } from '@/modules/capab
 
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
+import type { QueryCtx } from '../../convex/_generated/server'
+import { currentOperationStagingSnapshotHandler } from '../../convex/capabilitySupplyOperationProjection'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
@@ -265,6 +267,93 @@ async function corruptDetailProjection(
 }
 
 describe('T4 current Operation read model', () => {
+  it('returns a privacy-safe revision/deployment-bound staging snapshot', async () => {
+    const backend = convexTestWithMarketComponents()
+    const observedSince = Date.now() - 60_000
+    await publishFixture(backend, 'projection-staging-snapshot')
+    const snapshot = await backend.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      {
+        ...ctx,
+        meta: {
+          ...ctx.meta,
+          getDeploymentMetadata: async () => ({
+            name: 'fabricated-staging-deployment',
+            region: null,
+            class: 's16' as const,
+          }),
+        },
+      } as QueryCtx,
+      { now: Date.now(), observedSince },
+      '0123456789abcdef0123456789abcdef01234567',
+    ))
+    expect(snapshot).toMatchObject({
+      kind: 'current_operation_staging_snapshot',
+      schemaVersion: 'current-operation-staging-snapshot:v1',
+      deploymentName: 'fabricated-staging-deployment',
+      sourceRevision: '0123456789abcdef0123456789abcdef01234567',
+      sourceCount: 1,
+      searchProjectionCount: 1,
+      detailProjectionCount: 1,
+      observedSinceCount: 1,
+      unobservedSinceCount: 0,
+      truncated: false,
+    })
+    expect(snapshot.kind === 'current_operation_staging_snapshot'
+      ? [snapshot.sourceSetDigest, snapshot.readinessSetDigest]
+      : []).toEqual([expect.stringMatching(/^sha256:[0-9a-f]{64}$/u), expect.stringMatching(/^sha256:[0-9a-f]{64}$/u)])
+    const serialized = JSON.stringify(snapshot)
+    for (const forbidden of [
+      'operationRef',
+      'publicationRef',
+      'readinessEvidenceRefs',
+      'endpointUrl',
+      'credentialRef',
+      'responseDigest',
+    ]) expect(serialized).not.toContain(forbidden)
+  })
+
+  it('fails the staging snapshot closed for invalid revision, time, zero rows, and a 257-row sentinel', async () => {
+    const empty = convexTestWithMarketComponents()
+    const unavailable = await empty.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      ctx as QueryCtx,
+      { now: 1 },
+      'INVALID',
+    ))
+    expect(unavailable).toEqual({ kind: 'unavailable', reason: 'source_revision_unavailable' })
+    await expect(empty.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      {
+        ...ctx,
+        meta: {
+          ...ctx.meta,
+          getDeploymentMetadata: async () => ({ name: 'fabricated-empty', region: null, class: 's16' as const }),
+        },
+      } as QueryCtx,
+      { now: 1 },
+      '0123456789abcdef0123456789abcdef01234567',
+    ))).resolves.toMatchObject({ sourceCount: 0, truncated: false })
+    await expect(empty.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      ctx as QueryCtx,
+      { now: 1, observedSince: 2 },
+      '0123456789abcdef0123456789abcdef01234567',
+    ))).rejects.toThrow('current_operation_staging_snapshot_time_invalid')
+
+    const exceeded = convexTestWithMarketComponents()
+    const fixture = await publishFixture(exceeded, 'projection-staging-sentinel')
+    await cloneCurrentPublications(exceeded, fixture, 257)
+    const snapshot = await exceeded.run(async (ctx) => await currentOperationStagingSnapshotHandler(
+      {
+        ...ctx,
+        meta: {
+          ...ctx.meta,
+          getDeploymentMetadata: async () => ({ name: 'fabricated-exceeded', region: null, class: 's16' as const }),
+        },
+      } as QueryCtx,
+      { now: Date.now() },
+      '0123456789abcdef0123456789abcdef01234567',
+    ))
+    expect(snapshot).toMatchObject({ sourceCount: 256, truncated: true })
+  }, 30_000)
+
   it('defaults to old, dual-writes current/unavailable facts, and stores no endpoint or config secret', async () => {
     const backend = convexTestWithMarketComponents()
     const control = await backend.query(
