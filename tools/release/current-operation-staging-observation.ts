@@ -562,7 +562,20 @@ export async function observeCurrentOperationStaging(
     : options.stage === 'complete'
       ? await completeStage(runtime, options, repositoryRoot)
       : await rollbackStage(runtime, options)
-  return await writeStagingReceipt(receipt, options.receiptPath, repositoryRoot)
+  try {
+    return await writeStagingReceipt(receipt, options.receiptPath, repositoryRoot)
+  } catch (error) {
+    if (options.stage === 'rollback') throw error
+    const rolledBack = await bestEffortOld(
+      runtime,
+      options,
+      `t8_${options.stage}_receipt_failure_rollback`,
+    )
+    throw new Error(
+      `staging_observation_${options.stage}_receipt_failed:rollback_${rolledBack ? 'succeeded' : 'failed'}`,
+      { cause: error },
+    )
+  }
 }
 
 export function convexRunArguments(
