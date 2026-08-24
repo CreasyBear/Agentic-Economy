@@ -1,6 +1,13 @@
 import type { fetch as UndiciFetch } from 'undici'
 import { Response as UndiciResponse } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { execFile } from 'node:child_process'
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { promisify } from 'node:util'
+import { getFunctionName } from 'convex/server'
 
 const providerFetch = vi.hoisted(() => vi.fn<typeof UndiciFetch>())
 vi.mock('undici', async (importOriginal) => ({
@@ -20,13 +27,30 @@ import {
   preparedPublicationArgs,
   seedCatalogOffering,
 } from './capability-publication-harness'
-import { withSourceWrite, withSourceWriteCommand } from '../helpers/source-write-admission'
+import { installTestSourceWriteSecret, withSourceWrite, withSourceWriteCommand } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import {
+  CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE,
+  MARKET_OPERATIONS_INVOKE_SCOPE,
+} from '@/modules/agent-access/contract'
 import { accountRefForOwner } from '@/modules/money/public'
 import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { capabilitySupplyGraphPorts } from '../../convex/capabilitySupplyGraphPorts'
 import { qualifySuppliedCandidate } from '@/modules/capability-supply/internal/graph/qualify-candidate'
+import {
+  setPublicSourceTransportForTests,
+  type ConvexSourceTransport,
+} from '@/lib/server/convex-source'
+import { handleMarketOperationSearchRequest } from '@/routes/api.v1.market-operations.search'
+import { handleMarketOperationDetailRequest } from '@/routes/api.v1.market-operations.detail'
+import { handleMarketOperationCompareRequest } from '@/routes/api.v1.market-operations.compare'
+import { handleMarketOperationInspectPlanRequest } from '@/routes/api.v1.market-operations.inspect-plan'
+import {
+  handleOperationInvokePost,
+  handleOperationInvokeStatusGet,
+} from '@/lib/server/operation-invoke-api'
+import { projectInvocationReceipt } from '@/modules/capability-execution/invocation-receipt-view'
+import { operationInvokeStatusResultSchema } from '@/modules/capability-execution/operation-recovery.actions'
 
 const INPUT = { request: 'lookup' } as const
 
@@ -36,7 +60,7 @@ type TestPrincipal = Readonly<{
   credentialId: string
   applicationRef: string
   environment: 'production'
-  scopes: readonly [string]
+  scopes: readonly string[]
   authorityMode: 'bounded_mandate'
 }>
 
@@ -150,8 +174,9 @@ async function seedPrincipal(
   backend: ConvexFixtureBackend,
   suffix: string,
   now: number,
+  principalOverride?: TestPrincipal,
 ): Promise<{ principal: TestPrincipal; grantRef: string }> {
-  const principal = {
+  const principal: TestPrincipal = principalOverride ?? {
     principalId: `principal:operation-workpool:${suffix}`,
     ownerId: `owner:operation-workpool:${suffix}`,
     credentialId: `credential:operation-workpool:${suffix}`,
@@ -232,6 +257,100 @@ async function seedPrincipal(
     })
   })
   return { principal, grantRef }
+}
+
+const execFileAsync = promisify(execFile)
+
+async function serveOperationRoutes(input: Readonly<{
+  apiKeyId: string
+  apiKeySubject: string
+  scopes: readonly string[]
+}>): Promise<Readonly<{ origin: string; close: () => Promise<void> }>> {
+  const authenticate = async () => ({
+    isAuthenticated: true as const,
+    tokenType: 'api_key' as const,
+    id: input.apiKeyId,
+    subject: input.apiKeySubject,
+    scopes: input.scopes,
+    claims: { aeEnvironment: 'production' },
+  })
+  const server = createServer(async (incoming, outgoing) => {
+    try {
+      const address = server.address()
+      if (address === null || typeof address === 'string') throw new Error('served_operation_address_unavailable')
+      const origin = `http://127.0.0.1:${address.port}`
+      const url = new URL(incoming.url ?? '/', origin)
+      const chunks: Buffer[] = []
+      for await (const chunk of incoming) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      const body = Buffer.concat(chunks)
+      const request = new Request(url, {
+        method: incoming.method,
+        headers: incoming.headers as HeadersInit,
+        ...(body.length === 0 ? {} : { body }),
+      })
+      let response: Response
+      if (url.pathname === '/api/v1/market-operations/search') {
+        response = await handleMarketOperationSearchRequest(request)
+      } else if (url.pathname === '/api/v1/market-operations/detail') {
+        response = await handleMarketOperationDetailRequest(request)
+      } else if (url.pathname === '/api/v1/market-operations/compare') {
+        response = await handleMarketOperationCompareRequest(request)
+      } else if (url.pathname === '/api/v1/market-operations/inspect-plan') {
+        response = await handleMarketOperationInspectPlanRequest(request)
+      } else if (url.pathname === '/api/v1/operations/call') {
+        response = await handleOperationInvokePost(request, { authenticate })
+      } else if (url.pathname.startsWith('/api/v1/operations/')) {
+        const invocationRef = decodeURIComponent(url.pathname.slice('/api/v1/operations/'.length))
+        response = await handleOperationInvokeStatusGet(request, invocationRef, { authenticate })
+      } else {
+        response = Response.json({ code: 'route_not_found' }, { status: 404 })
+      }
+      outgoing.statusCode = response.status
+      response.headers.forEach((value, name) => outgoing.setHeader(name, value))
+      outgoing.end(Buffer.from(await response.arrayBuffer()))
+    } catch (error) {
+      outgoing.statusCode = 500
+      outgoing.end(JSON.stringify({ code: error instanceof Error ? error.message : 'served_operation_error' }))
+    }
+  })
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectListen)
+      resolveListen()
+    })
+  })
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('served_operation_address_unavailable')
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    close: async () => await new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => error === undefined ? resolveClose() : rejectClose(error))
+    }),
+  }
+}
+
+async function installPackagedCli(root: string): Promise<string> {
+  const packageDirectory = join(root, 'package')
+  const consumerDirectory = join(root, 'consumer')
+  await mkdir(packageDirectory, { recursive: true })
+  await mkdir(consumerDirectory, { recursive: true })
+  await execFileAsync('npm', ['run', 'build:cli'], { cwd: resolve('.') })
+  const packed = await execFileAsync('npm', [
+    'pack',
+    './packages/cli',
+    '--json',
+    '--pack-destination',
+    packageDirectory,
+  ], { cwd: resolve('.') })
+  const packResult = JSON.parse(packed.stdout) as Array<{ filename: string }>
+  const filename = packResult[0]?.filename
+  if (filename === undefined) throw new Error('packaged_cli_tarball_missing')
+  await writeFile(join(consumerDirectory, 'package.json'), JSON.stringify({ private: true, type: 'module' }))
+  await execFileAsync('npm', ['install', '--ignore-scripts', join(packageDirectory, filename)], {
+    cwd: consumerDirectory,
+  })
+  return join(consumerDirectory, 'node_modules', '.bin', 'ae')
 }
 
 async function invokeOperation(
@@ -651,4 +770,138 @@ describe('capability operation Workpool lifecycle', () => {
     expect(refused.usage).toHaveLength(0)
     expect(providerFetch).toHaveBeenCalledTimes(1)
   })
+
+  it('runs the installed CLI through served routes and one real durable backend receipt', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-12T00:00:00Z'))
+    installTestSourceWriteSecret()
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'served-cli-route-signing-secret-material-32')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:served-cli')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+
+    const backend = convexTestWithWorkers()
+    const operationRef = await seedKeylessLookup(backend)
+    const apiKeyId = 'served-cli-key'
+    const apiKeySubject = 'user_served_cli'
+    const scopes = [CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE] as const
+    const principal: TestPrincipal = {
+      principalId: `clerk_api_key:${apiKeyId}`,
+      ownerId: apiKeySubject,
+      credentialId: apiKeyId,
+      applicationRef: 'agentic-economy',
+      environment: 'production',
+      scopes: [...scopes].sort(),
+      authorityMode: 'bounded_mandate',
+    }
+    await seedPrincipal(backend, 'served-cli', Date.now(), principal)
+
+    const providerOutput = { result: 'served-cli-ok' }
+    providerFetch.mockResolvedValue(new UndiciResponse(JSON.stringify(providerOutput), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    providerFetch.mockClear()
+
+    const transport = {
+      query: async (reference, args) => await backend.query(reference as never, args as never) as never,
+      mutation: async (reference, args) => await backend.mutation(reference as never, args as never) as never,
+      action: async (reference, args) => {
+        const result = await backend.action(reference as never, args as never)
+        if (getFunctionName(reference) === 'capabilityOperationInvocations:invoke') {
+          await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
+        }
+        return result as never
+      },
+    } as ConvexSourceTransport
+    const restoreTransport = setPublicSourceTransportForTests(transport)
+    const served = await serveOperationRoutes({ apiKeyId, apiKeySubject, scopes })
+    const temporaryRoot = await mkdtemp(join(tmpdir(), 'ae-served-cli-'))
+    const cliHome = join(temporaryRoot, 'home')
+    const cliDist = resolve('packages/cli/dist')
+    const cliDistWasPresent = await access(cliDist).then(() => true, () => false)
+    await mkdir(cliHome)
+    try {
+      const cli = await installPackagedCli(temporaryRoot)
+      const runCli = async (args: readonly string[]): Promise<unknown> => {
+        const executed = await execFileAsync(cli, [...args, '--base-url', served.origin, '--json'], {
+          env: {
+            ...process.env,
+            AE_API_KEY: apiKeyId,
+            AE_API_KEY_ORIGIN: served.origin,
+            XDG_CONFIG_HOME: cliHome,
+          },
+          maxBuffer: 4 * 1024 * 1024,
+        })
+        return JSON.parse(executed.stdout) as unknown
+      }
+
+      const search = await runCli(['search', 'lookup']) as {
+        kind: string
+        items: Array<{ operationRef: string }>
+      }
+      expect(search).toMatchObject({ kind: 'ok', items: [{ operationRef }] })
+      await expect(runCli(['inspect', operationRef])).resolves.toMatchObject({
+        kind: 'found',
+        operation: { operationRef },
+      })
+      await expect(runCli(['compare', operationRef])).resolves.toMatchObject({
+        kind: 'ok',
+        operations: [{ operationRef }],
+      })
+      await expect(runCli(['inspect-plan', operationRef])).resolves.toMatchObject({
+        kind: 'ok',
+        operationRefs: [operationRef],
+      })
+
+      const idempotencyKey = 'served-cli-golden-replay'
+      const completed = await runCli([
+        'call',
+        operationRef,
+        '--input',
+        JSON.stringify(INPUT),
+        '--idempotency-key',
+        idempotencyKey,
+        '--wait',
+      ]) as { kind: string; invocationRef: string; operationRef: string; output: unknown }
+      expect(completed).toMatchObject({
+        kind: 'completed',
+        operationRef,
+        output: providerOutput,
+        idempotencyKey,
+      })
+      const status = operationInvokeStatusResultSchema.parse(await runCli(['status', completed.invocationRef]))
+      expect(status).toMatchObject({
+        kind: 'found',
+        invocationRef: completed.invocationRef,
+        operationRef,
+        state: 'terminal',
+        usage: { chargeState: 'free_tier' },
+        result: { kind: 'completed', output: providerOutput },
+      })
+      expect(projectInvocationReceipt(status)).toMatchObject({
+        version: 'ae.public-invocation-receipt:v1',
+        invocationRef: completed.invocationRef,
+        operationRef,
+        complete: true,
+        resultKind: 'completed',
+        usage: { chargeState: 'free_tier' },
+        evidenceHash: expect.any(String),
+      })
+      await expect(runCli([
+        'call',
+        operationRef,
+        '--input',
+        JSON.stringify(INPUT),
+        '--idempotency-key',
+        idempotencyKey,
+        '--wait',
+      ])).resolves.toEqual(completed)
+      expect(providerFetch).toHaveBeenCalledTimes(1)
+    } finally {
+      await served.close()
+      restoreTransport()
+      await rm(temporaryRoot, { recursive: true, force: true })
+      if (!cliDistWasPresent) await rm(cliDist, { recursive: true, force: true })
+    }
+  }, 120_000)
 })
