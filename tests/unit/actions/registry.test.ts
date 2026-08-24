@@ -48,16 +48,18 @@ describe('action registry', () => {
   })
 
 
-  it('exposes bounded read actions to the internal answer thread', () => {
-    const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
-    expect(exposed).toContain('registry.search')
-    expect(exposed).toContain('registry.detail')
-    expect(exposed).not.toContain('sandbox.checkup_quote')
+  it('exposes exactly the bounded operation actions to chat', () => {
+    const exposed = listActions().filter((action) => action.surfaces.includes('chat')).map((action) => action.id)
+    expect(exposed).toEqual([
+      'registry.operations.search',
+      'registry.operations.detail',
+      'registry.operations.compare',
+      'registry.operations.inspectPlan',
+      'operation.execute',
+    ])
   })
 
-  it('does not expose retired web discovery on the answer thread', () => {
-    const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
-    expect(exposed).not.toContain('web.discover')
+  it('does not expose retired web discovery', () => {
     expect(findAction('web.discover')).toBeUndefined()
   })
 
@@ -163,10 +165,10 @@ describe('action registry', () => {
     ])
   })
 
-  it('keeps operation execution MCP-only and fail-closed at the action boundary', () => {
+  it('keeps operation execution on MCP and chat and fail-closed at the action boundary', () => {
     const action = findAction('operation.execute')
     expect(action).toBeDefined()
-    expect(action?.surfaces).toEqual(['mcp'])
+    expect(action?.surfaces).toEqual(['mcp', 'chat'])
     expect(action?.readOnly).toBe(true)
     expect(action?.effect).toMatchObject({
       class: 'observation',
@@ -188,8 +190,8 @@ describe('action registry', () => {
     }).success).toBe(false)
     expect(action?.boundaries.join(' ')).toMatch(/keyless|public HTTPS|GET|endpoint|credential/i)
     expect(action?.boundaries.join(' ')).toMatch(/book|pay|dispatch|inquiry|fulfil/i)
-    expect(listActions().filter((candidate) => candidate.surfaces.includes('answerThread')).map(({ id }) => id))
-      .not.toContain('operation.execute')
+    expect(listActions().filter((candidate) => candidate.surfaces.includes('chat')).map(({ id }) => id))
+      .toContain('operation.execute')
   })
 
   it('carries output validation schemas on every action', () => {
@@ -311,7 +313,7 @@ describe('action registry', () => {
     const search = findAction('registry.search')
     expect(search).toBeDefined()
     expect(search?.readOnly).toBe(true)
-    expect(search?.surfaces).toContain('answerThread')
+    expect(search?.surfaces).not.toContain('chat')
     expect(search?.surfaces).toContain('mcp')
     expect(search?.boundaries.join(' ')).toMatch(/book|charge|dispatch|inquiry/i)
     expect(search?.parameters.map((p) => p.name)).toContain('query')
@@ -319,7 +321,7 @@ describe('action registry', () => {
     const detail = findAction('registry.detail')
     expect(detail).toBeDefined()
     expect(detail?.readOnly).toBe(true)
-    expect(detail?.surfaces).toContain('answerThread')
+    expect(detail?.surfaces).not.toContain('chat')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
 
     expect(findAction('registry.list')).toBeUndefined()
@@ -338,11 +340,11 @@ describe('action registry', () => {
     expect(JSON.stringify(canonicalDescriptors)).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
-  it('keeps operation.invoke outside the internal answer-thread tools', () => {
+  it('keeps operation.invoke outside chat tools', () => {
     const action = findAction('operation.invoke')
     expect(action).toBeDefined()
     expect(action?.readOnly).toBe(false)
-    expect(action?.surfaces).not.toContain('answerThread')
+    expect(action?.surfaces).not.toContain('chat')
   })
 
   it('carries boundary-honest descriptors on the agent-facing invoke tool', () => {

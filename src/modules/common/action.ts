@@ -28,7 +28,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
  * bundler tree-shakes bare side-effect imports.
  */
 
-export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli' | 'mcp'
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'chat' | 'cli' | 'mcp'
 
 export type ActionSourceWriteRequest = SourceWriteAdmissionRequest
 

@@ -140,7 +140,7 @@ describe('answer harness operation persistence bridge — reserve/operation', ()
         method: 'POST',
         actionId: 'operation.execute',
         authentication: 'none',
-        surfaces: ['answerThread'],
+        surfaces: ['chat'],
       }],
     } satisfies PublicOperationDescriptor
     const stagedSearchResult = {

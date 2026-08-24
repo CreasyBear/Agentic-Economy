@@ -79,7 +79,7 @@ async function evaluateParityCase(vars: ParityVars): Promise<{ ok: boolean; deta
   try {
     const page = await registrySearchAction.run({
       data: { query: vars.query, limit: 10 },
-      context: { caller: 'answerThread' },
+      context: { caller: 'chat' },
     })
     const slugs = page.items.map((item) => item.slug).sort()
     if (slugs.length === 0 || !slugs.includes('demo-listed-provider')) {

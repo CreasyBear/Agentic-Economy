@@ -225,7 +225,7 @@ function exposureForAction(
 ): HarnessToolExposure {
   const answerModel =
     action.readOnly &&
-    action.surfaces.includes('answerThread') &&
+    action.surfaces.includes('chat') &&
     action.invocationContract.authorityRequirement === 'none'
   const publicProjection = action.readOnly
     ? 'sanitized-counts'

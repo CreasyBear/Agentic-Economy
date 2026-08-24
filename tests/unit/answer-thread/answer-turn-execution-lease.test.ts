@@ -145,7 +145,7 @@ describe('answer turn execution lease durability', () => {
         method: 'POST',
         actionId: 'operation.execute',
         authentication: 'none',
-        surfaces: ['answerThread'],
+        surfaces: ['chat'],
       }],
     } satisfies PublicOperationDescriptor
     const stagedSearchResult = {

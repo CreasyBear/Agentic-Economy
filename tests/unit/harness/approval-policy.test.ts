@@ -17,7 +17,7 @@ describe('AE harness approval policy', () => {
       expect(resolveHarnessApprovalPolicy({
         tool: readTool(),
         mode,
-        surface: 'answerThread',
+        surface: 'chat',
       })).toMatchObject({
         policy: 'allow',
         status: 'allowed',
@@ -46,7 +46,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: promptedRead,
       mode: 'public-read',
-      surface: 'answerThread',
+      surface: 'chat',
     })).toMatchObject({
       policy: 'prompt',
       status: 'blocked',
@@ -58,7 +58,7 @@ describe('AE harness approval policy', () => {
       tool: promptedRead,
       mode: 'public-read',
       input: {},
-      surface: 'answerThread',
+      surface: 'chat',
       toolCallId: 'tc-public-prompt',
     })
 
@@ -72,7 +72,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: writeTool({ id: 'catalog.publish' }),
       mode: 'public-qualified-write',
-      surface: 'answerThread',
+      surface: 'chat',
       context: sourceWriteContext(),
     })).toMatchObject({
       policy: 'prompt',
@@ -86,7 +86,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: inquirySubmitTool(),
       mode: 'public-qualified-write',
-      surface: 'answerThread',
+      surface: 'chat',
     })).toMatchObject({
       policy: 'prompt',
       status: 'blocked',
@@ -102,7 +102,7 @@ describe('AE harness approval policy', () => {
         resolveHarnessApprovalPolicy({
           tool: inquirySubmitTool(),
           mode,
-          surface: 'answerThread',
+          surface: 'chat',
           context: sourceWriteContext(),
         }),
       ]),
@@ -127,7 +127,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: readTool(),
       mode: 'public-read',
-      surface: 'answerThread',
+      surface: 'chat',
       overrides: { 'registry.search': 'deny' },
     })).toMatchObject({
       policy: 'deny',
@@ -155,7 +155,7 @@ function readTool(
   return tool({
     id: 'registry.search',
     tier: 'read',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
     ...overrides,
   })
 }
@@ -163,7 +163,7 @@ function readTool(
 function inquirySubmitTool(): HarnessToolDefinition {
   return writeTool({
     id: 'inquiry.submit',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
   })
 }
 
@@ -171,7 +171,7 @@ function execTool(): HarnessToolDefinition {
   return tool({
     id: 'internal.exec',
     tier: 'exec',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
   })
 }
 
@@ -181,7 +181,7 @@ function writeTool(
   return tool({
     id: 'inquiry.submit',
     tier: 'write',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
     ...overrides,
   })
 }
@@ -195,7 +195,7 @@ function tool(
     summary: overrides.summary ?? 'Test harness tool.',
     boundaries: overrides.boundaries ?? ['Test boundary.'],
     tier: overrides.tier,
-    surfaces: overrides.surfaces ?? ['answerThread'],
+    surfaces: overrides.surfaces ?? ['chat'],
     inputSchema: overrides.inputSchema ?? z.object({}),
     outputSchema: overrides.outputSchema ?? z.object({ kind: z.literal('ok') }),
     ...(overrides.approval === undefined ? {} : { approval: overrides.approval }),

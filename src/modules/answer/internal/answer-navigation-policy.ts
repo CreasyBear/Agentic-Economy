@@ -169,7 +169,7 @@ export function selectedCandidateAdvertisesAnswerThreadEffect(
     (continuation) =>
       continuation.relation === relation
       && continuation.actionId === effectToolId
-      && continuation.surfaces?.includes('answerThread') === true,
+      && continuation.surfaces?.includes('chat') === true,
   )
 }
 

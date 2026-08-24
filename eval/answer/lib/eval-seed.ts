@@ -234,7 +234,7 @@ export async function seedOnlyPublicOperation(): Promise<PublicOperationDescript
       method: 'POST',
       actionId: 'operation.execute',
       authentication: 'none',
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       precondition: 'free_keyless_read_only',
     }],
   }

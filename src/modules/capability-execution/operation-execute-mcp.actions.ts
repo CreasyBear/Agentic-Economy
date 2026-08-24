@@ -85,7 +85,7 @@ export const operationExecuteAction = defineAction<OperationExecuteInput, Operat
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['mcp'],
+  surfaces: ['mcp', 'chat'],
   invocationContract: {
     version: 'operation.execute:v1',
     consequenceClass: 'read_only',

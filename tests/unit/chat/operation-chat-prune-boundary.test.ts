@@ -71,7 +71,7 @@ describe('Operation chat prune boundary', () => {
       'supply.earnings',
     ])
 
-    expect(registeredIds).toEqual(expect.arrayContaining(CHAT_ACTION_IDS))
+    expect(registeredIds).toEqual(expect.arrayContaining([...CHAT_ACTION_IDS]))
     expect(CHAT_ACTION_IDS.filter((id) => excludedActionIds.has(id))).toEqual([])
 
     const paymentBearingIds = actions

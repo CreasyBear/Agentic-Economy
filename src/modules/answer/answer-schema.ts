@@ -35,7 +35,7 @@ const operationNavigationSchema = z.strictObject({
   actionId: z.string(),
   authentication: z.enum(['none', 'required']),
   inputSchema: z.record(z.string(), jsonValueSchema).exactOptional(),
-  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'answerThread', 'cli', 'mcp'])).exactOptional(),
+  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'chat', 'cli', 'mcp'])).exactOptional(),
   precondition: z.string().exactOptional(),
 })
 const operationCandidateSchema = z.strictObject({

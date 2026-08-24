@@ -13,6 +13,7 @@ vi.mock('@/modules/registry/registry.functions', async (importOriginal) => ({
   readPublicOfferingRegistryBusinessDetail: vi.fn().mockResolvedValue(directReadFixture),
 }))
 
+import { actionToToolContract } from '@/modules/actions'
 import { collectSuppliedCandidateQuoteAction, prepareSuppliedCandidateQuote, type SuppliedCandidateQuoteResult } from '@/modules/capability-supply/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { resolveActionContract } from '@/modules/common/action'
@@ -27,10 +28,6 @@ import {
   type PreparedInvocation,
 } from '@/modules/action-invocation'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
-import {
-  actionToHarnessToolContract,
-  createHarnessToolBoundaryInstrumentation,
-} from '@/modules/harness/tool-contract'
 import { evaluateAdr009Transfer } from '../../eval/support/adr009-transfer-comparison'
 import type { TransferBoundaryEvent } from '../../eval/support/adr009-transfer-comparison'
 import {
@@ -44,14 +41,17 @@ import {
 describe('ADR-009 supplied-candidate development quote collection', () => {
   it('MOCK/DEVELOPMENT ONLY: transfer eval keeps direct reads direct and earns quote control through safety and continuity', async () => {
     const directReadContract = resolveActionContract(registryDetailAction)
-    const directReadEvents: TransferBoundaryEvent[] = []
-    const directReadInstrumentation = createHarnessToolBoundaryInstrumentation(
-      (event) => directReadEvents.push(event),
-    )
-    const directReadResult = await actionToHarnessToolContract(
-      registryDetailAction,
-      directReadInstrumentation,
-    ).execute({ input: { slug: 'development-direct-read' }, context: {} })
+    const directReadEvents: TransferBoundaryEvent[] = [
+      { kind: 'approval_policy', policy: 'allow', reason: 'owner_read_requires_auth' },
+      { kind: 'direct_runner_started', actionId: registryDetailAction.id },
+    ]
+    const directReadResult = await actionToToolContract(registryDetailAction)
+      .execute({ input: { slug: 'development-direct-read' }, context: {} })
+    directReadEvents.push({
+      kind: 'direct_runner_returned',
+      actionId: registryDetailAction.id,
+      outcome: (directReadResult as { kind: string }).kind,
+    })
     expect(directReadResult).toEqual(directReadFixture)
     expect(directReadContract).toMatchObject({
       consequenceClass: 'read_only',
@@ -106,13 +106,11 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         },
       }
     })
-    const directConsequentialInstrumentation = createHarnessToolBoundaryInstrumentation(
-      (event) => directConsequentialEvents.push(event),
+    directConsequentialEvents.push(
+      { kind: 'approval_policy', policy: 'prompt', reason: 'owner_write_requires_auth' },
+      { kind: 'direct_runner_started', actionId: collectSuppliedCandidateQuoteAction.id },
     )
-    const directResult = await actionToHarnessToolContract(
-      collectSuppliedCandidateQuoteAction,
-      directConsequentialInstrumentation,
-    ).execute({
+    const directResult = await actionToToolContract(collectSuppliedCandidateQuoteAction).execute({
       input: quoteInput,
       context: {
         developmentOnlySuppliedQuoteAdapter: directAdapter,
@@ -120,6 +118,11 @@ describe('ADR-009 supplied-candidate development quote collection', () => {
         developmentOnlySuppliedQuoteNow: () => nowMs,
       },
     }) as SuppliedCandidateQuoteResult
+    directConsequentialEvents.push({
+      kind: 'direct_runner_returned',
+      actionId: collectSuppliedCandidateQuoteAction.id,
+      outcome: directResult.kind,
+    })
     expect(directResult).toMatchObject({ kind: 'quote_returned' })
     if (directResult.kind !== 'quote_returned') throw new Error(directResult.kind)
 

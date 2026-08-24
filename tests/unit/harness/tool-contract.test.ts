@@ -48,7 +48,7 @@ describe('harness tool contract', () => {
         class: 'observation', reversible: true, recipientKind: 'none',
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       invocationContract: {
         version: 'registry.search:v1',
         consequenceClass: 'read_only',

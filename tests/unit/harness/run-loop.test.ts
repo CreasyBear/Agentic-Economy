@@ -106,7 +106,7 @@ describe('harness run loop', () => {
             tool,
             mode: 'public-read',
             input: { q: 'plumber' },
-            surface: 'answerThread',
+            surface: 'chat',
           })
           const output = outcome.result.output as { count?: unknown } | undefined
           return { count: typeof output?.count === 'number' ? output.count : state.count }
@@ -146,19 +146,19 @@ describe('harness run loop', () => {
         tool: createBatchTool('tool.first', 'shared', 'first', first.promise, log),
         mode: 'public-read',
         input: {},
-        surface: 'answerThread',
+        surface: 'chat',
       },
       {
         tool: createBatchTool('tool.second', 'exclusive', 'second', second.promise, log),
         mode: 'public-read',
         input: {},
-        surface: 'answerThread',
+        surface: 'chat',
       },
       {
         tool: createBatchTool('tool.third', 'shared', 'third', third.promise, log),
         mode: 'public-read',
         input: {},
-        surface: 'answerThread',
+        surface: 'chat',
       },
     ])
 
@@ -208,7 +208,7 @@ describe('harness run loop', () => {
             mode: 'public-read',
             tool,
             input: { q: 42 } as unknown as { q: string },
-            surface: 'answerThread',
+            surface: 'chat',
           })
         },
         gate: ({ loop }) => loop.evaluateGate(
@@ -405,7 +405,7 @@ function createReadTool(clock: ReturnType<typeof createClock>): HarnessToolDefin
     summary: 'Search published listings.',
     boundaries: ['Read-only catalog facts.'],
     tier: 'read',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
     inputSchema: z.object({ q: z.string() }),
     outputSchema: z.object({ kind: z.literal('ok'), count: z.number() }),
     async run() {
@@ -429,7 +429,7 @@ function createBatchTool(
     summary: 'Batch test tool.',
     boundaries: ['Read-only test fixture.'],
     tier: 'read',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
     inputSchema: z.object({}) as z.ZodType<unknown>,
     outputSchema: z.object({ kind: z.literal('ok'), label: z.string() }) as z.ZodType<unknown>,
     approval: 'allow',

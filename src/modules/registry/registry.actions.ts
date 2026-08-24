@@ -560,7 +560,7 @@ export const registrySearchAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson', 'answerThread', 'mcp'],
+  surfaces: ['http', 'agentJson', 'mcp'],
   invocationContract: {
     version: 'registry.search:v2',
     consequenceClass: 'read_only',
@@ -843,7 +843,7 @@ export const registryDetailAction = defineAction({
     spendExposure: 'none',
     approval: 'none',
   },
-  surfaces: ['http', 'agentJson', 'answerThread', 'mcp'],
+  surfaces: ['http', 'agentJson', 'mcp'],
   invocationContract: {
     version: 'registry.detail:v2',
     consequenceClass: 'read_only',

@@ -185,7 +185,7 @@ export type PublicOperationNavigationRelation = Readonly<{
   authentication: "none" | "required";
   inputSchema?: Readonly<Record<string, JsonValue>>;
   surfaces?: readonly (
-    "ui" | "http" | "agentJson" | "answerThread" | "cli" | "mcp"
+    "ui" | "http" | "agentJson" | "chat" | "cli" | "mcp"
   )[];
   precondition?: string;
 }>;

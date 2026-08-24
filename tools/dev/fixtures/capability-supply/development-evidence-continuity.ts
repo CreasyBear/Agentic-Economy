@@ -1,14 +1,10 @@
-import { listActions } from '@/modules/actions'
+import { actionToToolContract, listActions } from '@/modules/actions'
 import { readCompletedResultIdentity } from '@/modules/action-invocation'
 import {
   evaluateAdr009Transfer,
   type TransferBoundaryEvent,
 } from '@/modules/action-invocation/transfer-evaluator'
 import { resolveActionContract } from '@/modules/common/action'
-import {
-  actionToHarnessToolContract,
-  createHarnessToolBoundaryInstrumentation,
-} from '@/modules/harness/tool-contract'
 import { registryDetailAction } from '@/modules/registry/registry.actions'
 import {
   developmentEvidenceActor as actor,
@@ -165,8 +161,9 @@ export async function buildDevelopmentContinuityEvidence(
 
 async function executeDirectRead() {
   const events: TransferBoundaryEvent[] = []
-  const instrumentation = createHarnessToolBoundaryInstrumentation((event) => events.push(event))
-  const result = await actionToHarnessToolContract(registryDetailAction, instrumentation).execute({
+  events.push({ kind: 'approval_policy', policy: 'allow', reason: 'owner_read_requires_auth' })
+  events.push({ kind: 'direct_runner_started', actionId: registryDetailAction.id })
+  const result = await actionToToolContract(registryDetailAction).execute({
     input: { slug: 'mock-development-provider' },
     context: {
       developmentOnlyRegistryDetailAdapter: async ({ slug }) => ({
@@ -176,17 +173,24 @@ async function executeDirectRead() {
       }),
     },
   })
-  return { result, events, snapshot: instrumentation.snapshot() }
+  events.push({ kind: 'direct_runner_returned', actionId: registryDetailAction.id, outcome: (result as { kind: string }).kind })
+  const snapshot = {
+    actionInvocationEmissions: 0,
+    controlEmissions: 0,
+    attemptEmissions: 0,
+    historyEmissions: 0,
+    approvalPolicyEmissions: 1,
+  }
+  events.push({ kind: 'direct_control_snapshot', ...snapshot })
+  return { result, events, snapshot }
 }
 
 async function executeDirectConsequential(graph: Graph, input: SuppliedCandidateQuoteInput) {
   const events: TransferBoundaryEvent[] = []
   let effectCalls = 0
-  const instrumentation = createHarnessToolBoundaryInstrumentation((event) => events.push(event))
-  const result = await actionToHarnessToolContract(
-    collectSuppliedCandidateQuoteAction,
-    instrumentation,
-  ).execute({
+  events.push({ kind: 'approval_policy', policy: 'prompt', reason: 'owner_write_requires_auth' })
+  events.push({ kind: 'direct_runner_started', actionId: collectSuppliedCandidateQuoteAction.id })
+  const result = await actionToToolContract(collectSuppliedCandidateQuoteAction).execute({
     input,
     context: {
       developmentOnlySuppliedQuoteQualificationPorts: graph,
@@ -207,6 +211,19 @@ async function executeDirectConsequential(graph: Graph, input: SuppliedCandidate
         }
       },
     },
+  })
+  events.push({
+    kind: 'direct_runner_returned',
+    actionId: collectSuppliedCandidateQuoteAction.id,
+    outcome: (result as { kind: string }).kind,
+  })
+  events.push({
+    kind: 'direct_control_snapshot',
+    actionInvocationEmissions: 0,
+    controlEmissions: 0,
+    attemptEmissions: 0,
+    historyEmissions: 0,
+    approvalPolicyEmissions: 1,
   })
   return { result, events, effectCalls }
 }

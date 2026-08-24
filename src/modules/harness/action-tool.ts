@@ -32,7 +32,7 @@ export type ActionHarnessTool = HarnessToolDefinition<unknown, unknown> & {
 
 /** Surfaces the harness can run a tool on. Excludes 'cli' from ActionSurface: the harness
  *  tool runner has no CLI transport. */
-export type HarnessToolSurface = 'ui' | 'http' | 'agentJson' | 'answerThread'
+export type HarnessToolSurface = 'ui' | 'http' | 'agentJson' | 'chat'
 
 export type RunHarnessToolInput = {
   tool: HarnessToolDefinition<unknown, unknown>
@@ -247,4 +247,3 @@ function buildToolCallId(toolId: string): string {
 function elapsed(startedAt: number): number {
   return roundNonNegative2((Date.now() - startedAt))
 }
-

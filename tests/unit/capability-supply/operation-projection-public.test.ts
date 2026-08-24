@@ -94,7 +94,7 @@ describe('public operation read contract', () => {
     expect(registryOperationsSearchAction.schema).toBe(operationSearchInputSchema)
     expect(registryOperationsDetailAction.schema).toBe(operationDetailInputSchema)
     expect(registryOperationsDetailAction.outputSchema).toBe(operationDetailOutputSchema)
-    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['answerThread', 'mcp']))
+    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['chat', 'mcp']))
   })
   it('emits only navigation entries backed by registered actions', async () => {
     const projected = [
@@ -223,7 +223,7 @@ describe('public operation read contract', () => {
       method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
       actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       authentication: 'required',
-      surfaces: ['answerThread', 'http', 'cli', 'mcp'],
+      surfaces: ['http', 'cli', 'mcp'],
     })
     expect(operation.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
 
@@ -244,7 +244,7 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'operation.execute',
       authentication: 'none',
-      surfaces: ['answerThread', 'mcp'],
+      surfaces: ['chat', 'mcp'],
       precondition: 'free_keyless_read_only',
     })
     const roundTripped = deserializeOperationDescriptor(serializeOperationDescriptor(free))

@@ -6,9 +6,6 @@ import {
   listMcpActions,
   listOperationRouteDescriptors,
 } from '@/modules/actions'
-import { ANSWER_OPERATION_EFFECT_DISPATCH_IDS } from '@/modules/answer/internal/answer-tool-use-agent'
-import { ANSWER_OPERATION_EFFECT_TOOL_IDS, ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
-import { AnswerToolIdValues } from '@/modules/answer-thread/answer-thread.values'
 import { OPERATION_MARKET_ACTION_ENTRIES } from '@/modules/registry/operation-entry'
 import { MARKET_OPERATION_COMMAND_DESCRIPTORS } from '../../tools/ae/commands/market-operations'
 import { runCompareCommand } from '../../tools/ae/commands/compare'
@@ -31,8 +28,16 @@ const operationMarketCliRunners = [
   runInspectPlanCommand,
 ] as const
 
+const chatActionIds = [
+  'registry.operations.search',
+  'registry.operations.detail',
+  'registry.operations.compare',
+  'registry.operations.inspectPlan',
+  'operation.execute',
+] as const
+
 describe('operation surface conformance', () => {
-  it('projects operation reads across Answer, HTTP, agent JSON, MCP, and CLI', () => {
+  it('projects operation reads across chat, HTTP, agent JSON, MCP, and CLI', () => {
     const marketEntryIds = OPERATION_MARKET_ACTION_ENTRIES.map((entry) => entry.actionId)
     expect(operationMarketCliCommands.map(({ actionId }) => actionId)).toEqual(marketEntryIds)
     expect(MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ actionId }) => actionId)).toEqual(marketEntryIds)
@@ -41,7 +46,7 @@ describe('operation surface conformance', () => {
       command,
       path,
     }))).toEqual(operationMarketCliCommands)
-    expect(ANSWER_READ_TOOL_IDS.filter((id) => id.startsWith('registry.operations.'))).toEqual(marketEntryIds)
+    expect(chatActionIds.slice(0, 4)).toEqual(marketEntryIds)
 
     for (const [index, descriptor] of MARKET_OPERATION_COMMAND_DESCRIPTORS.entries()) {
       const entry = OPERATION_MARKET_ACTION_ENTRIES[index]
@@ -57,16 +62,14 @@ describe('operation surface conformance', () => {
       expect(descriptor.outputSchema).toBe(action.outputSchema)
       expect(descriptor.run).toBe(operationMarketCliRunners[index])
       expect(action.surfaces).toEqual(
-        expect.arrayContaining(['http', 'agentJson', 'answerThread', 'cli', 'mcp']),
+        expect.arrayContaining(['http', 'agentJson', 'chat', 'cli', 'mcp']),
       )
       expect(listMcpActions().map((candidate) => candidate.id)).toContain(action.id)
     }
   })
 
   it('keeps invocation on the canonical paid lifecycle surfaces', () => {
-    const directOperationIds = ANSWER_OPERATION_EFFECT_DISPATCH_IDS
-    expect(directOperationIds).toBe(ANSWER_OPERATION_EFFECT_TOOL_IDS)
-    expect(directOperationIds).toEqual(ANSWER_OPERATION_EFFECT_TOOL_IDS)
+    const directOperationIds = ['operation.execute', 'operation.invoke'] as const
     const [executeId, invokeId] = directOperationIds
     const mcpActionIds = listMcpActions().map((action) => action.id)
     const operationRouteDescriptors = listOperationRouteDescriptors()
@@ -74,14 +77,11 @@ describe('operation surface conformance', () => {
 
     for (const id of directOperationIds) {
       expect(mcpActionIds).toContain(id)
-      expect(AnswerToolIdValues).toContain(id)
     }
-    expect(ANSWER_READ_TOOL_IDS).toContain(executeId)
-    expect(ANSWER_READ_TOOL_IDS).not.toContain(invokeId)
 
     const execute = findAction(executeId)
     expect(execute).toBeDefined()
-    expect(execute?.surfaces).toEqual(['mcp'])
+    expect(execute?.surfaces).toEqual(['mcp', 'chat'])
     expect(operationRouteActionIds).not.toContain(executeId)
 
     const invoke = findAction(invokeId)
@@ -103,12 +103,11 @@ describe('operation surface conformance', () => {
     expect(invokeCommandDescriptor.outputSchema).toBe(invoke.outputSchema)
     expect(invokeCommandDescriptor.run).toBe(runInvokeCommand)
 
-    for (const action of listActions()) {
-      const isRegistryOperation = action.id.startsWith('registry.operations.')
-      const isOperation = action.id.startsWith('operation.')
-      if ((!isRegistryOperation && !isOperation) || !action.surfaces.includes('answerThread')) continue
+    const chatActions = listActions().filter((action) => action.surfaces.includes('chat'))
+    expect(chatActions.map(({ id }) => id)).toEqual(chatActionIds)
+    for (const action of chatActions) {
       expect(action.surfaces).toContain('mcp')
-      if (isRegistryOperation) expect(action.surfaces).toContain('cli')
+      if (action.id.startsWith('registry.operations.')) expect(action.surfaces).toContain('cli')
     }
   })
 })

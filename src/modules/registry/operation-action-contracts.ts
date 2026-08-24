@@ -23,7 +23,7 @@ export {
 const operationMarketActionSurfaces = [
   'http',
   'agentJson',
-  'answerThread',
+  'chat',
   'cli',
   'mcp',
 ] as const satisfies readonly ActionSurface[]

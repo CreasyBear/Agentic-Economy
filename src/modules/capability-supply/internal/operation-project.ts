@@ -42,7 +42,7 @@ const EXECUTE_NAVIGATION: PublicOperationNavigationRelation = {
   method: "POST",
   actionId: "operation.execute",
   authentication: "none",
-  surfaces: ["answerThread", "mcp"],
+  surfaces: ["chat", "mcp"],
   precondition: "free_keyless_read_only",
 };
 const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
@@ -51,7 +51,7 @@ const INVOKE_NAVIGATION: PublicOperationNavigationRelation = {
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
   actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   authentication: "required",
-  surfaces: ["answerThread", "http", "cli", "mcp"],
+  surfaces: ["http", "cli", "mcp"],
 };
 type OperationAccessMode = "anonymous_execute" | "authenticated_invoke" | "inspect_only";
 

@@ -497,7 +497,7 @@ describe('answer pipeline eval', () => {
     try {
       const page = await registrySearchAction.run({
         data: { query: QUERY, limit: 10 },
-        context: { caller: 'answerThread' },
+        context: { caller: 'chat' },
       })
       expect(page.items.map((item) => item.slug)).toEqual(['demo-listed-provider'])
     } finally {

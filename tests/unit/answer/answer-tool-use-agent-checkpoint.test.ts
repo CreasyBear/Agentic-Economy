@@ -193,7 +193,7 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
         method: "POST",
         actionId: "operation.execute",
         authentication: "none",
-        surfaces: ["answerThread"],
+        surfaces: ["chat"],
       }],
     };
     const source: KeylessExecutableSourcePort = {
@@ -427,7 +427,7 @@ describe("runAnswerToolUseAgent — checkpoint recovery", () => {
         method: "POST",
         actionId: "operation.execute",
         authentication: "none",
-        surfaces: ["answerThread"],
+        surfaces: ["chat"],
       }],
     };
     const source: KeylessExecutableSourcePort = {

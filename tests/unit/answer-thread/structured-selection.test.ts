@@ -153,7 +153,7 @@ function pendingLineageFixture(input: {
       method: 'POST',
       actionId: 'operation.invoke',
       authentication: 'required',
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
     }],
   }
   const operationCandidates = [candidate]

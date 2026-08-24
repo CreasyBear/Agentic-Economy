@@ -110,7 +110,7 @@ const publicNavigation = v.object({
     v.literal('ui'),
     v.literal('http'),
     v.literal('agentJson'),
-    v.literal('answerThread'),
+    v.literal('chat'),
     v.literal('cli'),
     v.literal('mcp'),
   ))),

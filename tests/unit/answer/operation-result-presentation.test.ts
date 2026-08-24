@@ -70,7 +70,7 @@ const descriptor = {
     method: 'POST',
     actionId: 'operation.execute',
     authentication: 'none',
-    surfaces: ['answerThread'],
+    surfaces: ['chat'],
   }],
 } satisfies PublicOperationDescriptor
 

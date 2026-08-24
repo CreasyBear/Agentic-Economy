@@ -26,7 +26,7 @@ describe('harness action tool adapter', () => {
         class: 'observation', reversible: true, recipientKind: 'none',
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       invocationContract: {
         version: 'registry.search:v1',
         consequenceClass: 'read_only',
@@ -43,7 +43,7 @@ describe('harness action tool adapter', () => {
     const tool = actionToHarnessTool(action)
     expect(tool.tier).toBe('read')
     expect(tool.inputJsonSchema).toMatchObject({ type: 'object' })
-    expect(resolveHarnessApproval({ tool, surface: 'answerThread', mode: 'public-read' })).toMatchObject({
+    expect(resolveHarnessApproval({ tool, surface: 'chat', mode: 'public-read' })).toMatchObject({
       policy: 'allow',
       reason: 'read_tool_auto_allowed',
     })
@@ -52,7 +52,7 @@ describe('harness action tool adapter', () => {
       tool,
       input: { query: 'plumber', limit: 2 },
       mode: 'public-read',
-      surface: 'answerThread',
+      surface: 'chat',
       toolCallId: 'tc-1',
     })
     expect(ok.result).toMatchObject({
@@ -65,7 +65,7 @@ describe('harness action tool adapter', () => {
     const invalid = await runHarnessTool({
       tool,
       input: { query: '' },
-      surface: 'answerThread',
+      surface: 'chat',
       mode: 'public-read',
       toolCallId: 'tc-2',
     })
@@ -89,7 +89,7 @@ describe('harness action tool adapter', () => {
         class: 'disclosure', reversible: false, recipientKind: 'business',
         dataClasses: ['query_text'], spendExposure: 'none', approval: 'approve_each',
       },
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       invocationContract: {
         version: 'fixture.qualifiedWrite:v1',
         consequenceClass: 'communication',
@@ -107,7 +107,7 @@ describe('harness action tool adapter', () => {
     const withoutWriteAdmission = await runHarnessTool({
       tool,
       input: { body: 'Need help' },
-      surface: 'answerThread',
+      surface: 'chat',
       mode: 'public-qualified-write',
       toolCallId: 'tc-write-1',
     })
@@ -123,7 +123,7 @@ describe('harness action tool adapter', () => {
     const admitted = await runHarnessTool({
       tool,
       input: { body: 'Need help' },
-      surface: 'answerThread',
+      surface: 'chat',
       mode: 'public-qualified-write',
       toolCallId: 'tc-write-2',
       context: {
@@ -151,7 +151,7 @@ describe('harness action tool adapter', () => {
       summary: 'Search published listings.',
       boundaries: ['Read-only. Does not book, charge, dispatch, or send inquiries.'],
       tier: 'read',
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       inputSchema: z.object({ query: z.string().min(1) }) as z.ZodType<unknown>,
       outputSchema: z.object({ kind: z.literal('ok') }) as z.ZodType<unknown>,
       approval: 'allow',
@@ -167,7 +167,7 @@ describe('harness action tool adapter', () => {
     const timedOut = await runHarnessTool({
       tool,
       input: { query: 'plumber' },
-      surface: 'answerThread',
+      surface: 'chat',
       mode: 'public-read',
       timeoutMs: 1,
       toolCallId: 'tc-timeout',

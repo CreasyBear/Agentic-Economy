@@ -30,7 +30,7 @@ export const publicOperationNavigationSchema = z.strictObject({
   actionId: z.string(),
   authentication: z.enum(['none', 'required']),
   inputSchema: publicSchema.optional(),
-  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'answerThread', 'cli', 'mcp'])).optional(),
+  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'chat', 'cli', 'mcp'])).optional(),
   precondition: z.string().optional(),
 })
 export const publicOperationPriceSchema = z.discriminatedUnion('kind', [
