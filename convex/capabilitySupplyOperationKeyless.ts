@@ -615,7 +615,7 @@ function parseHttpJsonMessageConfig(configJson: string): HttpJsonTransportConfig
 }
 
 export async function readCurrentPublishedOperation(
-  ctx: QueryCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   operationRef: string,
   now = Date.now(),
 ): Promise<PublishedOperation | undefined> {
@@ -674,22 +674,35 @@ export async function readCurrentPublishedOperation(
   if (admittedTransport.kind !== 'admitted') return undefined
   const pricing = canonicalPublicationPricing(publication)
   if (pricing === undefined) return undefined
-  const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
-    candidate: {
-      publicationRef: publication.publicationRef,
-      revision: publication.revision,
-      networkId: publication.networkId,
-      businessId: publication.businessId,
-      offeringId: publication.offeringId,
-      bindingId: publication.bindingId,
-      contractRef: {
-        capabilityId: publication.capabilityId,
-        version: publication.version,
-        contractDigest: publication.contractDigest,
-      },
+  const candidate = {
+    publicationRef: publication.publicationRef,
+    revision: publication.revision,
+    networkId: publication.networkId,
+    businessId: publication.businessId,
+    offeringId: publication.offeringId,
+    bindingId: publication.bindingId,
+    contractRef: {
+      capabilityId: publication.capabilityId,
+      version: publication.version,
+      contractDigest: publication.contractDigest,
     },
+  }
+  const currentQualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
+    candidate,
     now,
   })
+  if (currentQualification.status !== 'eligible') return undefined
+  // Fresh eligibility is checked at the caller's real `now`, but the strict
+  // snapshot identity is anchored to persisted readiness observation time.
+  // That makes two unchanged reads before expiry byte-identical while still
+  // refusing expired readiness or changed authority before materialization.
+  const identityObservedAt = publication.readinessObservedAt ?? publication.updatedAt
+  const qualification = identityObservedAt === now
+    ? currentQualification
+    : await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
+        candidate,
+        now: identityObservedAt,
+      })
   if (qualification.status !== 'eligible') return undefined
   try {
     const materialized = materializePublishedOperation({
