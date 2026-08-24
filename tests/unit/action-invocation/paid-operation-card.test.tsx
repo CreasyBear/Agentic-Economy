@@ -8,7 +8,7 @@ import { AePaidOperationCard } from '@/components/ae/action-invocation/AePaidOpe
 import {
   createPaidOperationSemantics,
   type PaidOperationSemantics,
-} from '@/modules/action-invocation/paid-operation-semantics'
+} from '@/modules/capability-execution/legacy-dynamic/paid-operation-semantics'
 
 afterEach(cleanup)
 

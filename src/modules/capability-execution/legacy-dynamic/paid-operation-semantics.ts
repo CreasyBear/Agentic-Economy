@@ -2,7 +2,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { ActionResult } from '@/modules/common/action'
 import { exactAmountSchema, type ExactAmount } from '@/modules/money/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import type { ActionInvocationView } from './contracts'
+import type { ActionInvocationView } from '@/modules/action-invocation/runtime'
 
 export const PAID_OPERATION_SEMANTICS_SCHEMA = 'agentic-paid-operation:v1' as const
 export const PAID_OPERATION_SEMANTIC_DIGEST_USE =

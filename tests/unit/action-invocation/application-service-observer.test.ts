@@ -11,7 +11,7 @@ import {
   type InvocationActor,
   type DynamicPublishedInvocationResult,
   type DevelopmentHostCommandEvent,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,

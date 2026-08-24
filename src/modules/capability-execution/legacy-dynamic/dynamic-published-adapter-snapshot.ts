@@ -1,7 +1,7 @@
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import type { InMemoryControlSnapshot } from './contracts'
+import type { InMemoryControlSnapshot } from '@/modules/action-invocation/runtime'
 import type {
   DynamicPublishedInvocationResult,
 } from './dynamic-published-contract'
@@ -17,15 +17,15 @@ import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   type DevelopmentDurableState,
-} from './internal/development-durable-port'
+} from '@/modules/action-invocation/runtime'
 import type {
   DurableActionInvocationPort,
   DurableAttemptRow,
   DurableControlRow,
   DurableHistoryRow,
   PersistControlResult,
-} from './internal/durable-contracts'
-import { restoreDurableAttempt } from './internal/durable-contracts'
+} from '@/modules/action-invocation/runtime'
+import { restoreDurableAttempt } from '@/modules/action-invocation/runtime'
 import type {
   InvocationInputHistory,
   InvocationInputWork,
@@ -33,7 +33,7 @@ import type {
 import type {
   X402PaymentAttempt,
   X402PaymentAuthorizationEvent,
-} from './x402-payment-attempt'
+} from '@/modules/action-invocation/runtime'
 
 export type DynamicPublishedAdapterSnapshot = Readonly<{
   format: 'dynamic-published-action-invocation:development:v4'

@@ -7,13 +7,13 @@ import type {
   DecisionRefusalCode,
   InvocationActor,
   InvocationDecision,
-} from './contracts'
+} from '@/modules/action-invocation/runtime'
 import type {
   DynamicPublishedActionInvocationAdapter,
 } from './dynamic-published-adapter'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
-import type { ReconciliationEvidence } from './reconciliation-evidence'
-import type { X402PaymentReconciliationEvidence } from './x402-payment-reconciliation-evidence'
+import type { ReconciliationEvidence } from '@/modules/action-invocation/runtime'
+import type { X402PaymentReconciliationEvidence } from '@/modules/action-invocation/runtime'
 import type { InvocationInputWork } from './input-work'
 import {
   projectRichInvocationTask,

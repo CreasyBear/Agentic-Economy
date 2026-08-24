@@ -3,7 +3,7 @@ import type { ActionResult } from '@/modules/common/action'
 import type {
   ActionInvocationView,
   InvocationActor,
-} from './contracts'
+} from '@/modules/action-invocation/runtime'
 import type { DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import type { InvocationHost } from './application-service'
 import {
@@ -17,9 +17,9 @@ import {
   type RichPaidOperationProjection,
   type StructuredPaidOperationProjection,
 } from './paid-operation-semantics'
-import type { X402PaymentAttempt } from './x402-payment-attempt'
-import type { ReconciliationEvidence } from './reconciliation-evidence'
-import type { X402PaymentReconciliationEvidence } from './x402-payment-reconciliation-evidence'
+import type { X402PaymentAttempt } from '@/modules/action-invocation/runtime'
+import type { ReconciliationEvidence } from '@/modules/action-invocation/runtime'
+import type { X402PaymentReconciliationEvidence } from '@/modules/action-invocation/runtime'
 
 export type PaidOperationReadPort<Result extends ActionResult> = Readonly<{
   loadInvocation(invocationRef: string): ActionInvocationView<Result> | undefined

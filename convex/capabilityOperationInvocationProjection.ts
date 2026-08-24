@@ -3,14 +3,6 @@ import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { Infer } from 'convex/values'
 import type { OperationDispatchCommand, OperationDispatchProjection } from './capabilityOperationInvocations'
-import {
-  buildCanonicalTerminalOutcomeCommand,
-  type CanonicalClaimSnapshot,
-  type CanonicalTerminalOutcome,
-  type DurableActionInvocationPort,
-  type PublicInvocationStatus,
-} from '@/modules/action-invocation'
-import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation/dynamic-published-contract'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import { transportObservationDigest } from '@/modules/capability-supply/public'
 import {
@@ -27,7 +19,13 @@ import {
   operationInvokeReceiptValue,
   recoveryResultValue,
   usageValue,
+  buildCanonicalTerminalOutcomeCommand,
+  type CanonicalClaimSnapshot,
+  type CanonicalTerminalOutcome,
+  type DurableActionInvocationPort,
   type OperationInvokePersistedAuthority,
+  type DynamicPublishedInvocationResult,
+  type PublicInvocationStatus,
 } from '@/modules/capability-execution/convex'
 import type { ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'

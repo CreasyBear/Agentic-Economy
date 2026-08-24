@@ -8,11 +8,11 @@ import {
   createDevelopmentDurablePort,
   createDevelopmentDurableState,
   type PaidOperationInterpreter,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
-import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
-import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation'
+import { createDevelopmentDynamicPublishedSource } from '@/modules/capability-execution/legacy-dynamic'
+import type { DynamicPublishedInvocationResult } from '@/modules/capability-execution/legacy-dynamic'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 
 describe('paid operation application service', () => {

@@ -11,7 +11,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
-import { loadDynamicPublishedAdapterSnapshot } from '@/modules/action-invocation'
+import { loadDynamicPublishedAdapterSnapshot } from '@/modules/capability-execution/legacy-dynamic'
 
 const provenance = {
   sourceBaseCommit: 'ebe35bdbd3b4707b356607e8dc615d3e29babe8d',

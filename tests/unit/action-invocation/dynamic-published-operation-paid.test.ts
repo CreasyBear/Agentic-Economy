@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
-import { createPaymentAttemptRuntime } from '@/modules/action-invocation/dynamic-published-execution'
+import { createDevelopmentDynamicPublishedSource } from '@/modules/capability-execution/legacy-dynamic'
+import { createPaymentAttemptRuntime } from '@/modules/capability-execution/legacy-dynamic/dynamic-published-execution'
 import { x402PaymentAttemptKey } from '@/modules/action-invocation/x402-payment-attempt'
 import type { X402RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

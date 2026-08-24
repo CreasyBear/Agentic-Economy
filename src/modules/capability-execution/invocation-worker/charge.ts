@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import type { CanonicalClaimSnapshot } from '@/modules/action-invocation'
+import type { CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
 import type { RouteTransportObservation } from '@/modules/capability-supply/route-transport-runtime'
 import {
   parsePublishedOperationSnapshot,

@@ -13,8 +13,8 @@ import {
   type ExactAmount,
 } from '@/modules/money/public'
 
-import type { ActionInvocationOrigin, InvocationActor } from './contracts'
-import type { ActionInvocationView } from './contracts'
+import type { ActionInvocationOrigin, InvocationActor } from '@/modules/action-invocation/runtime'
+import type { ActionInvocationView } from '@/modules/action-invocation/runtime'
 import {
   buildDynamicPublishedInput,
   dynamicPublishedSourceDigest,
@@ -22,7 +22,7 @@ import {
 } from './dynamic-published-contract'
 import type { DynamicPublishedAdapterSnapshot } from './dynamic-published-adapter-snapshot'
 import type { DynamicPublishedSourceRow } from './dynamic-published-source'
-import { reconstructDurableControlRow } from './internal/durable-contracts'
+import { reconstructDurableControlRow } from '@/modules/action-invocation/runtime'
 
 const recordSchema = z.looseObject({})
 const nonEmptyStringSchema = z.string().min(1)

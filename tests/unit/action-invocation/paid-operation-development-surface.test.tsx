@@ -14,7 +14,7 @@ import {
   projectStructuredPaidOperation,
   type PaidOperationApplicationService,
   type PaidOperationProjection,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 
 afterEach(cleanup)
 

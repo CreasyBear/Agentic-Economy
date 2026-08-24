@@ -17,9 +17,9 @@ import type {
   InvocationActor,
   InvocationDecision,
   StandingMandateAuthorityBasis,
-} from './contracts'
-import type { ReconciliationEvidence } from './reconciliation-evidence'
-import type { DevelopmentTimeoutSignal } from './attempts'
+} from '@/modules/action-invocation/runtime'
+import type { ReconciliationEvidence } from '@/modules/action-invocation/runtime'
+import type { DevelopmentTimeoutSignal } from '@/modules/action-invocation/runtime'
 import {
   buildDynamicPublishedInput,
   dynamicPublishedSourceDigest,
@@ -33,10 +33,9 @@ import {
   type DynamicPublishedSourcePort,
   type DynamicPublishedSourceRow,
 } from './dynamic-published-source'
-import { createDurableActionInvocationTracer, type CompletedResultIdentity } from './durable'
-import { materialDigest } from './preparation'
-import type { DevelopmentDurableState } from './internal/development-durable-port'
-import type { DurableActionInvocationPort } from './internal/durable-contracts'
+import { createDurableActionInvocationTracer, type CompletedResultIdentity } from '@/modules/action-invocation/runtime'
+import { materialDigest, type DevelopmentDurableState } from '@/modules/action-invocation/runtime'
+import type { DurableActionInvocationPort } from '@/modules/action-invocation/runtime'
 import {
   inspectUserInputContract,
   type InvocationInputHistory,
@@ -46,12 +45,12 @@ import { createDynamicPublishedInputApplication } from './input-application'
 import type {
   X402PaymentAttempt,
   X402PaymentAttemptPort,
-} from './x402-payment-attempt'
+} from '@/modules/action-invocation/runtime'
 import type {
   X402PaymentReconciliationEvidence,
   X402PaymentReconciliationEvidenceError,
   X402PaymentReconciliationEvidenceVerifier,
-} from './x402-payment-reconciliation-evidence'
+} from '@/modules/action-invocation/runtime'
 import { createDynamicPublishedAdapterCommands } from './dynamic-published-adapter-commands'
 import {
   loadDynamicPublishedAdapterSnapshot,

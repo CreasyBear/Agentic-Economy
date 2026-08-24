@@ -12,7 +12,7 @@ import {
   type ActionInvocationView,
   type DynamicPublishedInvocationResult,
   type InvocationActor,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import {
   buildDevelopmentPublishedOperationEvidence,
   createDevelopmentProviderLeaseIssuer,
@@ -41,7 +41,7 @@ import { pricingConfigDigest, rescaleExactAmount, type ExactAmount } from '@/mod
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   type DynamicPublishedPreparedTransport,
-} from '@/modules/action-invocation/dynamic-published-execution'
+} from '@/modules/capability-execution/legacy-dynamic/dynamic-published-execution'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
 import {
   type X402PaymentAttempt,

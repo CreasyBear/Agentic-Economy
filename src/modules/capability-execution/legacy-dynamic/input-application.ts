@@ -13,10 +13,10 @@ import type {
   ActionInvocationView,
   InvocationActor,
   InvocationDecision,
-} from './contracts'
+} from '@/modules/action-invocation/runtime'
 import { dynamicPublishedSourceDigest, type DynamicPublishedInvocationResult } from './dynamic-published-contract'
 import { dynamicPublishedOperationSlot, type DynamicPublishedSourcePort } from './dynamic-published-source'
-import type { DurableActionInvocationPort } from './internal/durable-contracts'
+import type { DurableActionInvocationPort } from '@/modules/action-invocation/runtime'
 import {
   inspectUserInputContract,
   mergeUserInput,
