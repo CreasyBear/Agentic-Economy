@@ -87,6 +87,8 @@ const durableTables = [
   'answerThreadShares',
   'harnessSessions',
   'harnessSessionEntries',
+  'chatThreads',
+  'chatThreadShares',
   'actionInvocationControls',
   'actionInvocationAttempts',
   'actionInvocationHistory',
@@ -240,7 +242,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(63)
+    expect(durableTables).toHaveLength(65)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
