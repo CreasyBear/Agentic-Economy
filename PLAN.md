@@ -508,7 +508,7 @@ Synthesized from this review's findings. Each task is build-actionable and order
   - Files: `tests/imports/`, `tests/integration/`, `tests/e2e/`, `convex/capabilitySupplyOperation*.ts`, release test helpers.
   - Verify: focused new fixtures pass, then `npm run test:imports && npm run test:integration`.
 
-- [ ] **T2 (P1, human: ~1 day / Codex: ~1h)** - CLI distribution - Make clean package build and publication self-proving
+- [x] **T2 (P1, human: ~1 day / Codex: ~1h)** - CLI distribution - Make clean package build and publication self-proving
   - Surfaced by: Architecture finding 4 - clean pack succeeds without `dist/ae.js`; import tests depend on an ignored bundle.
   - Files: `package.json`, `package-lock.json`, `packages/cli/package.json`, `scripts/build-cli.mjs`, `scripts/test-cli-package.mjs`, CLI package tests.
   - Verify: clean archive `npm ci`, package-owned build, exact `npm pack`, temporary install, Node 20/22 help smoke, and `CLI_PACKAGE_PASS`.
@@ -573,6 +573,7 @@ Zero deferred TODO items were created. Every necessary architecture action is re
 - 2026-08-25: independent challenge contract fixed before fresh outside review.
 - 2026-08-25: independent sequencing, read-model migration, cutover, and rollback corrections adopted; speculative product and package expansion rejected.
 - 2026-08-25 implementation preflight: `npm run typecheck` fails on the unmodified `8c38b57b2` source at `src/routes/api.v1.registry.ts:46`; `/api/v1/registry` is absent from the generated route-tree type. T1/T2 do not own this file, so the master must resolve and reproduce the typecheck gate before T3 can exit.
+- 2026-08-25 T2 integrated: `6370d9f81` and `124b4a808`; master reproduced the exact three-file tarball, Node 20.20.2/22.23.2 JSON-help contracts, blocked library/deep imports, `CLI_PACKAGE_PASS`, 29/29 import tests, and SHA-256 `109e14b023e883c72586825d8ba58d49766882dedd27d00dcb1a90158285c450`. Publication was not performed.
 
 ## Review completion
 
