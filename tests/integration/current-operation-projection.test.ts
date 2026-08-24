@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -408,6 +408,52 @@ describe('T4 current Operation read model', () => {
     })
   })
 
+  it('executes both reads in shadow mode and fails new reads closed when projection coverage disappears', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishFixture(backend, 'projection-shadow-coverage')
+    await setMode(backend, 'shadow', 'shadow_coverage_test')
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('capabilityCurrentOperations')
+        .withIndex('by_operationRef_and_active', (query) => (
+          query.eq('operationRef', fixture.operationRef).eq('active', true)
+        ))
+        .unique()
+      if (row === null) throw new Error('t4_projection_missing')
+      await ctx.db.delete(row._id)
+    })
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const shadow = await backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' })
+    expect(shadow.kind).toBe('ok')
+    expect(log).toHaveBeenCalledWith(
+      'CURRENT_OPERATION_SHADOW',
+      expect.stringContaining('"newOutcome":"unavailable"'),
+    )
+    log.mockRestore()
+    await expect(setMode(backend, 'new', 'must_refuse_incomplete_cutover'))
+      .rejects.toThrow('current_operation_cutover_not_ready')
+
+    await backend.mutation(
+      internal.capabilitySupplyOperations.rebuildCurrentOperationProjection,
+      {
+        publicationRef: fixture.publicationRef,
+        publicationRevision: fixture.publicationRevision,
+        now: Date.now(),
+      },
+    )
+    await setMode(backend, 'new', 'complete_cutover_test')
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('capabilityCurrentOperations')
+        .withIndex('by_operationRef_and_active', (query) => (
+          query.eq('operationRef', fixture.operationRef).eq('active', true)
+        ))
+        .unique()
+      if (row === null) throw new Error('t4_projection_missing')
+      await ctx.db.delete(row._id)
+    })
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_unavailable' })
+  })
+
   it('completes a local probe record cycle and refreshes readiness without changing Operation identity', async () => {
     const backend = convexTestWithMarketComponents()
     const fixture = await publishFixture(backend, 'projection-probe-cycle', false)
@@ -481,6 +527,31 @@ describe('T4 current Operation read model', () => {
       internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
       { now: Date.now() },
     )).resolves.toMatchObject({ unexplainedMismatchCount: 0 })
+  })
+
+  it('keeps valid Operations searchable when another current row has a typed drop outcome', async () => {
+    const backend = convexTestWithMarketComponents()
+    const valid = await publishFixture(backend, 'projection-valid-with-drop')
+    const dropped = await publishFixture(backend, 'projection-typed-drop-with-valid')
+    await corruptProjectionSource(backend, dropped, 'invalid_transport')
+    await backend.mutation(
+      internal.capabilitySupplyOperations.rebuildCurrentOperationProjection,
+      {
+        publicationRef: dropped.publicationRef,
+        publicationRevision: dropped.publicationRevision,
+        now: Date.now(),
+      },
+    )
+    const oldResult = await backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' })
+    expect(oldResult).toMatchObject({
+      kind: 'ok',
+      matchedCount: 1,
+      items: [{ operationRef: valid.operationRef }],
+    })
+
+    await setMode(backend, 'new', 'typed_drop_coverage_regression')
+    await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
+      .resolves.toEqual(oldResult)
   })
 
   it.each([

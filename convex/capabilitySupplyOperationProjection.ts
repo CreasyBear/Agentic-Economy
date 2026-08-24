@@ -71,6 +71,8 @@ export const currentOperationReadControlReturns = v.object({
   mode: currentOperationReadMode,
   reason: v.string(),
   releaseOwner: v.string(),
+  verifiedActiveCount: v.optional(v.number()),
+  verifiedProjectionDigest: v.optional(v.string()),
   updatedAt: v.number(),
   isDefault: v.boolean(),
 })
@@ -116,6 +118,10 @@ export async function currentOperationReadControlHandler(ctx: QueryCtx) {
         mode: row.mode,
         reason: row.reason,
         releaseOwner: row.releaseOwner,
+        ...(row.verifiedActiveCount === undefined ? {} : { verifiedActiveCount: row.verifiedActiveCount }),
+        ...(row.verifiedProjectionDigest === undefined
+          ? {}
+          : { verifiedProjectionDigest: row.verifiedProjectionDigest }),
         updatedAt: row.updatedAt,
         isDefault: false,
       }
@@ -126,6 +132,19 @@ export async function readCurrentOperationMode(ctx: Pick<QueryCtx, 'db'>): Promi
     .withIndex('by_controlRef', (query) => query.eq('controlRef', 'current_operation_registry'))
     .unique()
   return row?.mode ?? 'old'
+}
+
+export async function readCurrentOperationControl(ctx: Pick<QueryCtx, 'db'>) {
+  const row = await ctx.db.query('capabilityCurrentOperationReadControls')
+    .withIndex('by_controlRef', (query) => query.eq('controlRef', 'current_operation_registry'))
+    .unique()
+  return {
+    mode: row?.mode ?? 'old' as CurrentOperationReadMode,
+    ...(row?.verifiedActiveCount === undefined ? {} : { verifiedActiveCount: row.verifiedActiveCount }),
+    ...(row?.verifiedProjectionDigest === undefined
+      ? {}
+      : { verifiedProjectionDigest: row.verifiedProjectionDigest }),
+  }
 }
 
 export async function setCurrentOperationReadModeHandler(
@@ -146,11 +165,21 @@ export async function setCurrentOperationReadModeHandler(
   const existing = await ctx.db.query('capabilityCurrentOperationReadControls')
     .withIndex('by_controlRef', (query) => query.eq('controlRef', 'current_operation_registry'))
     .unique()
+  const coverage = args.mode === 'old' ? undefined : await projectionCoverage(ctx)
+  if (args.mode === 'new' && coverage !== undefined && !coverage.exact) {
+    throw new Error('current_operation_cutover_not_ready')
+  }
   const value = {
     controlRef: 'current_operation_registry' as const,
     mode: args.mode,
     reason: args.reason.trim(),
     releaseOwner: args.releaseOwner.trim(),
+    ...(coverage === undefined
+      ? {}
+      : {
+          verifiedActiveCount: coverage.sourceCount,
+          verifiedProjectionDigest: coverage.projectionDigest,
+        }),
     updatedAt: args.now,
   }
   if (existing === null) await ctx.db.insert('capabilityCurrentOperationReadControls', value)
@@ -241,6 +270,7 @@ export async function rebuildCurrentOperationProjection(
       sourceUpdatedAt: publication.updatedAt,
       projectedAt: args.now,
     })
+    await refreshProjectionReadControl(ctx)
     return {
       kind: 'deactivated' as const,
       publicationRef: publication.publicationRef,
@@ -278,6 +308,7 @@ export async function rebuildCurrentOperationProjection(
   } else if (!detailIdempotent) {
     await ctx.db.replace(existingDetail._id, value.detail)
   }
+  await refreshProjectionReadControl(ctx)
   return {
     kind: 'rebuilt' as const,
     publicationRef: publication.publicationRef,
@@ -337,17 +368,12 @@ export async function searchProjectedCurrentOperations(
   ctx: Pick<QueryCtx, 'db'>,
   input: OperationSearchInput,
   now: number,
+  expectedActiveCount?: number,
+  expectedProjectionDigest?: string,
 ) {
-  const networkId = input.filters?.networkId
-  const rows = networkId === undefined
-    ? await ctx.db.query('capabilityCurrentOperations')
-      .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
-      .take(257)
-    : await ctx.db.query('capabilityCurrentOperations')
-      .withIndex('by_active_and_networkId', (query) => (
-        query.eq('active', true).eq('networkId', networkId)
-      ))
-      .take(257)
+  const rows = await ctx.db.query('capabilityCurrentOperations')
+    .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
+    .take(257)
   const facts = rows.flatMap((row) => {
     const fact = searchFactFromProjection(row)
     return fact === null ? [] : [fact]
@@ -360,12 +386,17 @@ export async function searchProjectedCurrentOperations(
     unavailableReason: row.unavailableReason ?? null,
     sourceUpdatedAt: row.sourceUpdatedAt,
   })) as StableHashValue)}`
+  const projectionDigest = currentProjectionDigest(rows)
+  const coverageValid = (expectedActiveCount === undefined || rows.length === expectedActiveCount)
+    && (expectedProjectionDigest === undefined || projectionDigest === expectedProjectionDigest)
+  const expectedSearchableCount = coverageValid ? facts.length : -1
   return await searchCurrentOperationFacts(
     input,
     facts,
     snapshotKey,
     async (operationRef) => await loadProjectedCurrentOperation(ctx, operationRef),
     now,
+    expectedSearchableCount,
   )
 }
 
@@ -672,4 +703,58 @@ function sameProjection<T extends 'capabilityCurrentOperations' | 'capabilityCur
   const { _id: _id, _creationTime: _creationTime, projectedAt: _projectedAt, ...current } = existing
   const { projectedAt: _nextProjectedAt, ...candidate } = next
   return canonicalDigest(current as StableHashValue) === canonicalDigest(candidate as StableHashValue)
+}
+
+async function projectionCoverage(ctx: Pick<QueryCtx, 'db'>) {
+  const [publications, rows] = await Promise.all([
+    ctx.db.query('capabilityPublications')
+      .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
+      .take(258),
+    ctx.db.query('capabilityCurrentOperations')
+      .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
+      .take(258),
+  ])
+  const rowByPublication = new Map(rows.map((row) => [
+    `${row.publicationRef}:${row.publicationRevision}`,
+    row,
+  ] as const))
+  const sourceExact = publications.length <= 257
+    && rows.length <= 257
+    && publications.length === rows.length
+    && publications.every((publication) => {
+      const row = rowByPublication.get(`${publication.publicationRef}:${publication.revision}`)
+      return row !== undefined && row.sourceUpdatedAt === publication.updatedAt
+    })
+  return {
+    exact: sourceExact,
+    sourceCount: Math.min(publications.length, 257),
+    projectionDigest: currentProjectionDigest(rows.slice(0, 257)),
+  }
+}
+
+async function refreshProjectionReadControl(ctx: MutationCtx): Promise<void> {
+  const control = await ctx.db.query('capabilityCurrentOperationReadControls')
+    .withIndex('by_controlRef', (query) => query.eq('controlRef', 'current_operation_registry'))
+    .unique()
+  if (control === null || control.mode === 'old') return
+  const coverage = await projectionCoverage(ctx)
+  await ctx.db.patch(control._id, {
+    verifiedActiveCount: coverage.sourceCount,
+    verifiedProjectionDigest: coverage.projectionDigest,
+  })
+}
+
+function currentProjectionDigest(rows: readonly Doc<'capabilityCurrentOperations'>[]): string {
+  return canonicalDigest(rows.map((row) => ({
+    operationRef: row.operationRef,
+    publicationRef: row.publicationRef,
+    publicationRevision: row.publicationRevision,
+    sourceUpdatedAt: row.sourceUpdatedAt,
+    outcomeKind: row.outcomeKind,
+    unavailableReason: row.unavailableReason ?? null,
+    dropReason: row.dropReason ?? null,
+    descriptorDigest: row.descriptorDigest ?? null,
+    currentDigest: row.currentDigest ?? null,
+    searchFactJson: row.searchFactJson ?? null,
+  })) as StableHashValue)
 }

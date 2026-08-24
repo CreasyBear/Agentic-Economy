@@ -321,9 +321,12 @@ export async function searchCurrentOperationFacts(
   snapshotKey: string,
   load: (operationRef: PublicOperationRef) => Promise<CapabilityOperationSourceRecord | null>,
   now = Date.now(),
+  expectedCount?: number,
 ): Promise<OperationSearchResult> {
   const normalized = normalizeSearch(input);
   if (normalized === undefined) return searchUnavailable("query_invalid");
+  if (expectedCount !== undefined && facts.length !== expectedCount)
+    return searchUnavailable("source_unavailable");
   if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded");
   const cursor = decodeCursor(
     normalized.cursor,
