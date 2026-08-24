@@ -8,6 +8,7 @@ import {
   isAnonymousKeylessOperationEligible,
   capabilityOperationId,
   createPublicOperationRef,
+  isPublicOperationRef,
   parseAdmittedTransportCatalogMetadata,
   parseAdmittedX402CatalogPayment,
   parseHttpJsonTransportConfiguration,
@@ -204,6 +205,7 @@ async function buildOfferingOperationMap(
       ) continue
       const record = await operationRecord(ctx, publication, now)
       if (record === undefined || !record.integrated || bindingDoc === null) continue
+      if (!isPublicOperationRef(publication.operationRef)) continue
       if (
         record.offering.offeringRef !== origin.offeringRef
         || record.offering.revision !== origin.offeringRevision

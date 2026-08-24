@@ -30,7 +30,7 @@ export const CURRENT_OPERATION_PROJECTION_NAVIGATION = Object.freeze({
     method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
     actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
     authentication: 'required',
-    surfaces: ['http', 'cli', 'mcp'],
+    surfaces: ['http', 'cli', 'mcp'] as const,
   }),
 }) satisfies OperationProjectionNavigationContract
 
