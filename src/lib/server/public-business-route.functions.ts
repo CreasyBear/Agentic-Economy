@@ -3,8 +3,10 @@ import { z } from 'zod'
 
 import { offeringApiDtoToSupplyView, type PublicOfferingSupplyView } from '@/components/ae/offerings/offering-presentation'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
-import type { PublicBusinessPageRouteReadbackResult } from '@/modules/catalog/public'
-import { readPublicBusinessPageServer } from '@/modules/catalog/owner-status.functions'
+import {
+  readPublicBusinessPageServer,
+  type PublicBusinessPageRouteReadbackResult,
+} from '@/lib/server/owner-status.functions'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 import type { PublicBusinessSeoContract } from '@/modules/seo/public'
@@ -20,9 +22,7 @@ export type PublicBusinessRouteDataResult =
   | PublicBusinessRouteData
   | Exclude<PublicBusinessPageRouteReadbackResult, { kind: 'available' }>
 
-const publicBusinessRouteInputSchema = z.object({
-  slug: z.string(),
-})
+const publicBusinessRouteInputSchema = z.object({ slug: z.string() })
 
 export const readPublicBusinessRouteServer = createServerFn()
   .validator((data) => publicBusinessRouteInputSchema.parse(data))
@@ -32,12 +32,8 @@ export const readPublicBusinessRouteServer = createServerFn()
       if (page.kind !== 'available') return page
 
       const offeringDetail = await readPublicOfferingRegistryBusinessDetail({ slug: data.slug })
-      if (offeringDetail.kind === 'not_found') {
-        return { kind: 'not_found', reason: 'not_public' }
-      }
-
+      if (offeringDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
       const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
-
       return {
         kind: 'available',
         page,

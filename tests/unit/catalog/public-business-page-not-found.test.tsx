@@ -7,13 +7,13 @@ import { isNotFound, RouterContextProvider, createMemoryHistory, createRootRoute
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import type { PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
+import type { PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 
 const readPublicBusinessRouteMock = vi.hoisted(() =>
   vi.fn<(input: { data: { slug: string } }) => Promise<PublicBusinessRouteDataResult>>(),
 )
 
-vi.mock('@/modules/catalog/public-route.functions', () => ({
+vi.mock('@/lib/server/public-business-route.functions', () => ({
   readPublicBusinessRouteServer: readPublicBusinessRouteMock,
 }))
 

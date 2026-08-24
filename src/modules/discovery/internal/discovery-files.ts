@@ -1,5 +1,4 @@
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
-import { readCatalogHealth, type PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { getPublicBusinessCatalog, readCatalogHealth, type PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySourceState } from '@/modules/discovery/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {

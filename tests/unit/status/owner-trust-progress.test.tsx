@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
 afterEach(cleanup)
 
@@ -44,7 +45,7 @@ describe('owner status card', () => {
   })
 })
 
-function ownerReadback(): PublicOwnerStatusRouteReadback {
+function ownerReadback(): PublicOwnerStatusRouteReadback<PublicBusinessCatalogApiV2Dto> {
   return {
     publicUrl: '/status-card-plumbing',
     noindex: true,

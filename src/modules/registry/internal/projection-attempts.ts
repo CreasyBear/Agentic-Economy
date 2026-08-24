@@ -1,4 +1,3 @@
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import { isPubliclyDiscoverable } from '@/modules/business/public'
 import type { PublicCatalogReadState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -20,7 +19,7 @@ import type {
   SyncCatalogProjectionOptions,
   SyncCatalogProjectionResult,
 } from './projection-contracts'
-import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
+import { getPublicBusinessCatalog, type PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
 
 const sourceVersion = 'public-catalog:v1' as const
 const publicSurfaces = [

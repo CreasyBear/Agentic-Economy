@@ -6,7 +6,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
+import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { serializeJsonLd } from '@/modules/seo/public'
 
 type ProviderListingSearch = {

@@ -4,7 +4,7 @@ import { createPublicSourceTransport, setPublicSourceTransportForTests } from '@
 import { isRecord } from '@/modules/common/is-record'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { matchingCsrf } from '@/modules/common/matching-csrf'
-import { readOwnerStatusThroughSource } from '@/modules/catalog/owner-status.functions'
+import { readOwnerStatusThroughSource } from '@/lib/server/owner-status.functions'
 import {
   SOURCE_WRITE_NO_BODY_DIGEST,
   sourceWriteCommandDigest,

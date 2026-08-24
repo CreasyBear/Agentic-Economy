@@ -9,20 +9,19 @@ import {
 import {
   buildPublicOwnerStatusReadback,
   type PublicBusinessPageNotFoundReason,
-  type PublicBusinessPageRouteReadbackResult,
-  type PublicOwnerStatusRouteReadbackResult,
-  type PublicOwnerStatusReadback,
+  type PublicBusinessPageRouteReadbackResult as CatalogPublicBusinessPageRouteReadbackResult,
+  type PublicOwnerStatusRouteReadbackResult as CatalogPublicOwnerStatusRouteReadbackResult,
 } from '@/modules/catalog/public'
 import { readPublicOfferingRegistryBusinessDetail } from '@/modules/registry/registry.functions'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 
-const ownerStatusInputSchema = z.object({
-  slug: z.string().optional(),
-})
+export type PublicOwnerStatusRouteReadbackResult =
+  CatalogPublicOwnerStatusRouteReadbackResult<PublicBusinessCatalogApiV2Dto>
+export type PublicBusinessPageRouteReadbackResult =
+  CatalogPublicBusinessPageRouteReadbackResult<PublicBusinessCatalogApiV2Dto>
 
-const publicPageInputSchema = z.object({
-  slug: z.string(),
-})
+const ownerStatusInputSchema = z.object({ slug: z.string().optional() })
+const publicPageInputSchema = z.object({ slug: z.string() })
 
 type PublicCatalogReadResult =
   | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
@@ -51,16 +50,11 @@ export async function readOwnerStatusThroughSource(
     const result = readsCurrentOwner
       ? await callSourceQuery(currentOwnerCatalogQuery, {})
       : await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
-
     if (result.kind !== 'available') return { kind: 'not_found', reason: result.reason }
 
     const publicDetail = await readPublicOfferingRegistryBusinessDetail({ slug: result.catalog.slug })
     if (publicDetail.kind === 'not_found') return { kind: 'not_found', reason: 'not_public' }
-
-    return {
-      kind: 'available',
-      readback: buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)),
-    }
+    return { kind: 'available', readback: buildPublicOwnerStatusReadback(result.catalog) }
   } catch {
     return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
   }
@@ -77,10 +71,4 @@ async function readPublicBusinessPageThroughSource(
   } catch {
     return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
   }
-}
-
-function buildOwnerStatusRouteReadback(
-  readback: PublicOwnerStatusReadback,
-): PublicOwnerStatusReadback {
-  return readback
 }

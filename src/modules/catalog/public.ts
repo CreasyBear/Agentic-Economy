@@ -1,12 +1,4 @@
-import { isPubliclyDiscoverable } from '@/modules/business/public'
-import { buildOfferingSupplyProjection } from './internal/catalog-model'
-import type {
-  GetPublicBusinessCatalogInput,
-  PublicCatalogReadState,
-} from './internal/catalog-model'
-import { projectBusinessSupplyToPublicApi } from '@/modules/registry/public'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
-import type { PublicBusinessPageNotFoundReason, PublicBusinessPageReadbackResult, PublicOwnerStatusReadback } from './internal/owner-status'
+import type { OwnerStatusCatalog, PublicBusinessPageNotFoundReason, PublicBusinessPageReadbackResult, PublicOwnerStatusReadback } from './internal/owner-status'
 
 export type { PublicBusinessPhoto } from '@/modules/business/public'
 
@@ -121,46 +113,21 @@ export { buildPublicOwnerStatusReadback } from './internal/owner-status'
 export type {
   PublicBusinessPageNotFoundReason,
   PublicBusinessPageReadbackResult,
+  OwnerStatusCatalog,
   PublicOwnerStatusReadback,
 } from './internal/owner-status'
 
-export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'catalog'> & {
-  catalog: PublicBusinessCatalogApiV2Dto
-}
+export type PublicOwnerStatusRouteReadback<Catalog extends OwnerStatusCatalog> = PublicOwnerStatusReadback<Catalog>
 
-export type PublicOwnerStatusRouteReadbackResult =
-  | { kind: 'available'; readback: PublicOwnerStatusRouteReadback }
+export type PublicOwnerStatusRouteReadbackResult<Catalog extends OwnerStatusCatalog> =
+  | { kind: 'available'; readback: PublicOwnerStatusRouteReadback<Catalog> }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
-export type PublicBusinessPageRouteReadbackResult =
-  | PublicBusinessPageReadbackResult
+export type PublicBusinessPageRouteReadbackResult<Catalog extends OwnerStatusCatalog> =
+  | PublicBusinessPageReadbackResult<Catalog>
   | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
 
-export function readPublicCatalogActivationRef(catalog: PublicBusinessCatalogApiV2Dto): string {
+export function readPublicCatalogActivationRef(catalog: Readonly<{ businessId: string }>): string {
   return catalog.businessId
-}
-
-export function getPublicBusinessCatalog(
-  state: PublicCatalogReadState,
-  input: GetPublicBusinessCatalogInput,
-): { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto } | { kind: 'hidden'; reason: 'not_published' } {
-  const business = state.businesses.find((candidate) => candidate.slug === input.slug)
-  if (business === undefined || !isPubliclyDiscoverable(business)) {
-    return { kind: 'hidden', reason: 'not_published' }
-  }
-  const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
-  if (context === undefined) return { kind: 'hidden', reason: 'not_published' }
-  const projection = buildOfferingSupplyProjection({
-    business,
-    context,
-    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
-    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
-    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
-    indexStatus: input.indexStatus,
-    discoveryStatus: input.discoveryStatus,
-  })
-  return projection === undefined
-    ? { kind: 'hidden', reason: 'not_published' }
-    : { kind: 'available', catalog: projectBusinessSupplyToPublicApi(projection) }
 }

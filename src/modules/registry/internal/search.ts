@@ -1,4 +1,3 @@
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import type {
   BusinessId,
   Slug,
@@ -10,6 +9,7 @@ import type { RegistrySourceState } from './projection-contracts'
 
 import {
   PublicBusinessCatalogApiSchemaVersion,
+  getPublicBusinessCatalog,
   type PublicBusinessCatalogApiV2Dto,
   type PublicBusinessCatalogApiV2Page,
   type PublicBusinessCatalogApiV2SearchPage,

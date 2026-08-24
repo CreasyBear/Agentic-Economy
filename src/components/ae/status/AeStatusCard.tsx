@@ -3,6 +3,7 @@ import { ExternalLinkIcon } from 'lucide-react'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
+import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,7 @@ import {
 } from '@/lib/ui/status-presentation'
 
 type AeStatusCardProps = {
-  readback: PublicOwnerStatusRouteReadback
+  readback: PublicOwnerStatusRouteReadback<PublicBusinessCatalogApiV2Dto>
 }
 
 export function AeStatusCard({ readback }: AeStatusCardProps) {

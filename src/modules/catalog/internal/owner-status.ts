@@ -1,9 +1,13 @@
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+export type OwnerStatusCatalog = Readonly<{
+  businessId: string
+  slug: string
+  disposition: 'current' | 'partial' | 'stale'
+}>
 
-export type PublicOwnerStatusReadback = {
+export type PublicOwnerStatusReadback<Catalog extends OwnerStatusCatalog> = {
   publicUrl: string
   noindex: true
-  catalog: PublicBusinessCatalogApiV2Dto
+  catalog: Catalog
   projectionMode: 'public_source' | 'local_preview'
   unavailableCapabilities: readonly { label: string; explanation: string }[]
   nextAction: string
@@ -11,13 +15,13 @@ export type PublicOwnerStatusReadback = {
 
 export type PublicBusinessPageNotFoundReason = 'no_such_business' | 'not_public'
 
-export type PublicBusinessPageReadbackResult =
-  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
+export type PublicBusinessPageReadbackResult<Catalog extends OwnerStatusCatalog> =
+  | { kind: 'available'; catalog: Catalog }
   | { kind: 'not_found'; reason: PublicBusinessPageNotFoundReason }
 
-export function buildPublicOwnerStatusReadback(
-  catalog: PublicBusinessCatalogApiV2Dto,
-): PublicOwnerStatusReadback {
+export function buildPublicOwnerStatusReadback<Catalog extends OwnerStatusCatalog>(
+  catalog: Catalog,
+): PublicOwnerStatusReadback<Catalog> {
   return {
     publicUrl: `/${catalog.slug}`,
     noindex: true,
@@ -28,7 +32,7 @@ export function buildPublicOwnerStatusReadback(
   }
 }
 
-function ownerNextAction(catalog: PublicBusinessCatalogApiV2Dto): string {
+function ownerNextAction(catalog: OwnerStatusCatalog): string {
   if (catalog.disposition === 'stale') return 'Review search status before sharing widely.'
   if (catalog.disposition === 'partial') return 'Share the public page while assistant-ready data catches up.'
   return 'Share the public page and keep service facts current.'

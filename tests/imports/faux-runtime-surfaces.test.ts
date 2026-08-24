@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const deployableRoots = [
   'src/modules/registry/**/*.ts',
   'src/modules/discovery/**/*.ts',
-  'src/modules/catalog/owner-status.functions.ts',
+  'src/lib/server/owner-status.functions.ts',
   'src/modules/settings/**/*.ts',
   'src/modules/capability-execution/**/*.ts',
   'src/routes/llms[.]txt.ts',
