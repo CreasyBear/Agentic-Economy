@@ -38,6 +38,7 @@ import type * as capabilitySupplyGraphPorts from "../capabilitySupplyGraphPorts.
 import type * as capabilitySupplyLists from "../capabilitySupplyLists.js";
 import type * as capabilitySupplyOperationKeyless from "../capabilitySupplyOperationKeyless.js";
 import type * as capabilitySupplyOperationPorts from "../capabilitySupplyOperationPorts.js";
+import type * as capabilitySupplyOperationProjection from "../capabilitySupplyOperationProjection.js";
 import type * as capabilitySupplyOperationQueries from "../capabilitySupplyOperationQueries.js";
 import type * as capabilitySupplyOperationShared from "../capabilitySupplyOperationShared.js";
 import type * as capabilitySupplyOperations from "../capabilitySupplyOperations.js";
@@ -171,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   capabilitySupplyLists: typeof capabilitySupplyLists;
   capabilitySupplyOperationKeyless: typeof capabilitySupplyOperationKeyless;
   capabilitySupplyOperationPorts: typeof capabilitySupplyOperationPorts;
+  capabilitySupplyOperationProjection: typeof capabilitySupplyOperationProjection;
   capabilitySupplyOperationQueries: typeof capabilitySupplyOperationQueries;
   capabilitySupplyOperationShared: typeof capabilitySupplyOperationShared;
   capabilitySupplyOperations: typeof capabilitySupplyOperations;
