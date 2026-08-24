@@ -13,13 +13,25 @@ type StoredAuditTargetType = (typeof StoredAuditTargetTypeValues)[number]
 export type CurrentAuditEventType = Exclude<StoredAuditEventType, `business_action.${string}`>
 export type CurrentAuditTargetType = Exclude<StoredAuditTargetType, `business_action_${string}`>
 
-export const AuditEventTypeValues = StoredAuditEventTypeValues.filter(
-  (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
-) as unknown as readonly [CurrentAuditEventType, ...CurrentAuditEventType[]]
+function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, ...T[]] {
+  const [first, ...rest] = values
+  if (first === undefined) {
+    throw new Error('Expected at least one current audit value')
+  }
+  return [first, ...rest]
+}
 
-export const AuditTargetTypeValues = StoredAuditTargetTypeValues.filter(
-  (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
-) as unknown as readonly [CurrentAuditTargetType, ...CurrentAuditTargetType[]]
+export const AuditEventTypeValues = requireNonEmpty(
+  StoredAuditEventTypeValues.filter(
+    (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
+  ),
+)
+
+export const AuditTargetTypeValues = requireNonEmpty(
+  StoredAuditTargetTypeValues.filter(
+    (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
+  ),
+)
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 
