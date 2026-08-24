@@ -22,12 +22,67 @@ import {
 import type { QueryCtx } from './_generated/server'
 import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
 import {
+  CURRENT_OPERATION_PROJECTION_DROP_REASONS,
   exactAmount,
   operationRecord,
+  operationRecordProjection,
   publicAuthentication,
   publicPrice,
   publicPriceBreakdown,
 } from './capabilitySupplyOperationShared'
+
+const currentOperationProjectionDropReason = v.union(
+  ...CURRENT_OPERATION_PROJECTION_DROP_REASONS.map((reason) => v.literal(reason)),
+)
+const currentOperationUnavailableReason = v.union(
+  v.literal('setup_required'),
+  v.literal('temporarily_unavailable'),
+  v.literal('readiness_expired'),
+  v.literal('publisher_withdrew'),
+  v.literal('under_review'),
+  v.literal('updated_terms_require_review'),
+  v.literal('not_supported_by_ae'),
+)
+const CURRENT_OPERATION_UNAVAILABLE_REASONS = [
+  'setup_required',
+  'temporarily_unavailable',
+  'readiness_expired',
+  'publisher_withdrew',
+  'under_review',
+  'updated_terms_require_review',
+  'not_supported_by_ae',
+] as const
+export const currentProjectionDiagnosticsReturns = v.object({
+  kind: v.literal('current_operation_projection_diagnostic'),
+  schemaVersion: v.literal('current-operation-projection-diagnostic:v1'),
+  scannedCount: v.number(),
+  projectedCount: v.number(),
+  unavailableCount: v.number(),
+  dropCount: v.number(),
+  truncated: v.boolean(),
+  serializedProjectionBytes: v.number(),
+  databaseQueries: v.number(),
+  documentsRead: v.number(),
+  bytesRead: v.number(),
+  drops: v.array(v.object({ reason: currentOperationProjectionDropReason, count: v.number() })),
+  unavailable: v.array(v.object({ reason: currentOperationUnavailableReason, count: v.number() })),
+})
+export const currentSearchBenchmarkReturns = v.object({
+  kind: v.literal('current_operation_search_measurement'),
+  schemaVersion: v.literal('current-operation-search-measurement:v1'),
+  outcome: v.union(v.literal('ok'), v.literal('no_candidates'), v.literal('unavailable')),
+  refusalReason: v.optional(v.union(
+    v.literal('query_invalid'),
+    v.literal('source_unavailable'),
+    v.literal('source_capacity_exceeded'),
+  )),
+  itemCount: v.number(),
+  matchedCount: v.number(),
+  serializedResultBytes: v.number(),
+  databaseQueries: v.number(),
+  documentsRead: v.number(),
+  bytesRead: v.number(),
+})
 
 const publicMaterialTerm = v.object({ label: v.string(), value: v.string() })
 const publicRelationship = v.object({
@@ -332,6 +387,89 @@ export async function compareHandler(ctx: QueryCtx, args: OperationCompareInput)
 }
 export async function inspectPlanHandler(ctx: QueryCtx, args: InspectPlanInput) {
   return serializeInspectPlanResult(await inspectCapabilityOperationPlan(capabilityOperationSourcePort(ctx), args))
+}
+
+const MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS = 257
+
+/**
+ * Operator-only, bounded diagnostics for current rows that public projection
+ * deliberately omits. Only aggregate labels and counts are returned: no query
+ * text, Operation input, credentials, endpoint details, or raw source rows.
+ */
+export async function currentProjectionDiagnosticsHandler(
+  ctx: QueryCtx,
+  args: Readonly<{ now: number }>,
+) {
+  const publications = await ctx.db.query('capabilityPublications')
+    .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
+    .take(MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS + 1)
+  const bounded = publications.slice(0, MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS)
+  const projections = await Promise.all(bounded.map((publication) => (
+    operationRecordProjection(ctx, publication, args.now)
+  )))
+  const drops = new Map<string, number>()
+  const unavailable = new Map<string, number>()
+  let projectedCount = 0
+  let unavailableCount = 0
+  let serializedProjectionBytes = 0
+  for (const projection of projections) {
+    if (projection.kind === 'dropped') {
+      drops.set(projection.reason, (drops.get(projection.reason) ?? 0) + 1)
+      continue
+    }
+    projectedCount += 1
+    serializedProjectionBytes += new TextEncoder().encode(JSON.stringify(projection.record)).byteLength
+    if (projection.record.unavailableReason !== undefined) {
+      unavailableCount += 1
+      unavailable.set(
+        projection.record.unavailableReason,
+        (unavailable.get(projection.record.unavailableReason) ?? 0) + 1,
+      )
+    }
+  }
+  const transaction = await ctx.meta.getTransactionMetrics()
+  return {
+    kind: 'current_operation_projection_diagnostic' as const,
+    schemaVersion: 'current-operation-projection-diagnostic:v1' as const,
+    scannedCount: bounded.length,
+    projectedCount,
+    unavailableCount,
+    dropCount: bounded.length - projectedCount,
+    truncated: publications.length > MAX_CURRENT_PROJECTION_DIAGNOSTIC_ROWS,
+    serializedProjectionBytes,
+    databaseQueries: transaction.databaseQueries.used,
+    documentsRead: transaction.documentsRead.used,
+    bytesRead: transaction.bytesRead.used,
+    drops: CURRENT_OPERATION_PROJECTION_DROP_REASONS.flatMap((reason) => {
+      const count = drops.get(reason) ?? 0
+      return count === 0 ? [] : [{ reason, count }]
+    }),
+    unavailable: CURRENT_OPERATION_UNAVAILABLE_REASONS.flatMap((reason) => {
+      const count = unavailable.get(reason) ?? 0
+      return count === 0 ? [] : [{ reason, count }]
+    }),
+  }
+}
+
+/** Privacy-safe Wave 0 search measurement. The search query and rows stay in-process. */
+export async function currentSearchBenchmarkHandler(
+  ctx: QueryCtx,
+  args: OperationSearchInput,
+) {
+  const result = await searchHandler(ctx, args)
+  const transaction = await ctx.meta.getTransactionMetrics()
+  return {
+    kind: 'current_operation_search_measurement' as const,
+    schemaVersion: 'current-operation-search-measurement:v1' as const,
+    outcome: result.kind,
+    ...(result.kind === 'unavailable' ? { refusalReason: result.reason } : {}),
+    itemCount: result.kind === 'ok' ? result.items.length : 0,
+    matchedCount: result.kind === 'ok' || result.kind === 'no_candidates' ? result.matchedCount : 0,
+    serializedResultBytes: new TextEncoder().encode(JSON.stringify(result)).byteLength,
+    databaseQueries: transaction.databaseQueries.used,
+    documentsRead: transaction.documentsRead.used,
+    bytesRead: transaction.bytesRead.used,
+  }
 }
 
 function capabilityOperationSourcePort(ctx: QueryCtx): CapabilityOperationSourcePort {

@@ -4,6 +4,10 @@ import { v } from 'convex/values'
 import {
   compareArgs,
   compareHandler,
+  currentProjectionDiagnosticsHandler,
+  currentProjectionDiagnosticsReturns,
+  currentSearchBenchmarkHandler,
+  currentSearchBenchmarkReturns,
   detailHandler,
   inspectArgs,
   inspectPlanHandler,
@@ -60,6 +64,18 @@ export const readCurrentPublishedOperationSnapshot = internalQueryGeneric({
   args: { operationRef: v.string() },
   returns: publishedOperationSnapshotReturns,
   handler: readCurrentPublishedOperationSnapshotHandler,
+})
+
+export const currentProjectionDiagnostics = internalQueryGeneric({
+  args: { now: v.number() },
+  returns: currentProjectionDiagnosticsReturns,
+  handler: currentProjectionDiagnosticsHandler,
+})
+
+export const currentSearchBenchmark = internalQueryGeneric({
+  args: searchArgs,
+  returns: currentSearchBenchmarkReturns,
+  handler: currentSearchBenchmarkHandler,
 })
 export const readKeylessExecutable = queryGeneric({
   args: { operationRef: v.string(), serviceAuth: v.optional(serverFunctionAuth) },
