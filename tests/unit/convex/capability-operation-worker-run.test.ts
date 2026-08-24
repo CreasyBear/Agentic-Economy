@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from 'vitest'
 
 describe('capability operation invocation worker run', () => {
-  it('uses the current operation when only readiness observation changes', async () => {
+  it('refuses when the current readiness commitment changed after admission', async () => {
     const worker = createWorker('http', {
       currentOperation: (operation) => ({
         ...operation,
@@ -20,10 +20,36 @@ describe('capability operation invocation worker run', () => {
       }),
     })
     await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
-    expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityOperationInvocations:claimDispatch')).toHaveLength(1)
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'operation_not_current' },
+    })
+    expect(worker.state.mutationCalls.filter(({ path }) => path === 'capabilityOperationInvocations:claimDispatch')).toHaveLength(0)
     expect(mocks.claimCanonicalInvocation).not.toHaveBeenCalled()
-    expect(mocks.invokePreparedRouteTransport).toHaveBeenCalledTimes(1)
-    expect(worker.state.transportCalls).toBe(1)
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
+  })
+
+  it('refuses currentDigest drift immediately before the provider effect', async () => {
+    const worker = createWorker('http', {
+      releaseCurrentOperation: (operation) => ({
+        ...operation,
+        readiness: {
+          ...operation.readiness,
+          validUntil: operation.readiness.validUntil + 1_000,
+        },
+      }),
+    })
+
+    await expect(handler(worker.ctx, { invocationRef })).resolves.toEqual({ kind: 'recorded' })
+
+    expect(worker.state.events).toContain('current-publication-price-revalidation')
+    expect(worker.state.records.at(-1)).toMatchObject({
+      state: 'refused',
+      result: { kind: 'refused', code: 'pre_release_failed' },
+    })
+    expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()
+    expect(worker.state.transportCalls).toBe(0)
   })
 
   it('ignores a refused claim when another worker owns the active lease', async () => {
