@@ -127,7 +127,7 @@ describe('capability operation invocation worker charge/x402', () => {
         onUnsignedMaterial: expect.any(Function),
         requestFingerprintContext: {
           method: 'GET',
-          operationRef: 'capability:cryptocurrency.quotes.latest',
+          operationRef: worker.state.dispatch.operationRef,
         },
       }),
     )

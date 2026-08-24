@@ -11,7 +11,7 @@ import { assertAgentAccessRateAdmission } from './lib/rateLimit'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { isBoundedJsonValue, type JsonValue } from '@/modules/capability-contract/public'
 import { isRecord } from '@/modules/common/is-record'
-import { isPublicOperationRef } from '@/modules/capability-supply/public'
+import { createPublicOperationRef, isPublicOperationRef } from '@/modules/capability-supply/public'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
@@ -25,6 +25,7 @@ import {
   type OperationInvokeGrant,
   type OperationInvokeIdempotencyReservation,
 } from '@/modules/capability-execution/operation-invoke'
+import { currentOperationCommitmentsMatch } from '@/modules/capability-execution/current-operation-commitment'
 import { recordMarketEvidenceFact } from './marketEvidence'
 
 export function assertJsonObject(value: unknown): asserts value is Record<string, JsonValue> {
@@ -38,6 +39,15 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
   } catch {
     return undefined
   }
+}
+
+function publicOperationRef(operation: PublishedOperation): string {
+  return createPublicOperationRef({
+    operationId: operation.operationId,
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    contractRef: operation.contract.ref,
+  })
 }
 
 export type OperationInvokePrincipal = Readonly<{
@@ -451,7 +461,7 @@ export async function decideOperationApprovalHandler(
   }
   const persistedInput = parseJsonObject(row.inputJson)
   const persistedOperation = parsePublishedOperationSnapshot(row.operationJson)
-  if (persistedInput === undefined || persistedOperation === undefined || persistedOperation.operationId !== row.operationRef) {
+  if (persistedInput === undefined || persistedOperation === undefined || publicOperationRef(persistedOperation) !== row.operationRef) {
     return { kind: 'refused', code: 'invocation_invalid' }
   }
   try {
@@ -471,8 +481,12 @@ export async function decideOperationApprovalHandler(
   }
   if (
     currentOperation === undefined
-    || currentOperation.operationId !== row.operationRef
-    || !publishedOperationMaterialMatches(persistedOperation, currentOperation)
+    || publicOperationRef(currentOperation) !== row.operationRef
+    || !currentOperationCommitmentsMatch({
+      operationRef: row.operationRef,
+      pinned: persistedOperation,
+      current: currentOperation,
+    })
   ) return { kind: 'refused', code: 'invocation_invalid' }
   let descriptor: RuntimePublishedOperationDescriptor
   try {
