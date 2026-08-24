@@ -2,15 +2,15 @@
 
 Scope: Produce a deployable drain-only commit that stops new answer turns without touching legacy Convex writers.
 
-- [ ] G1: POST answer admission returns one deterministic no-store retirement problem before parsing, admission, session, model, or writer work.
+- [x] G1: POST answer admission returns one deterministic no-store retirement problem before parsing, admission, session, model, or writer work.
   CHECK: npm exec -- vitest run tests/unit/server/answer-api-retirement.test.ts --reporter=dot && echo DRAIN_ROUTE_OK
   EXPECT: DRAIN_ROUTE_OK
-  EVIDENCE: pending
+  EVIDENCE: Duration  259ms (transform 76ms, setup 184ms, import 8ms, tests 5ms, environment 0ms) | DRAIN_ROUTE_OK
 
-- [ ] G2: K1 changes no legacy Convex writer file.
+- [x] G2: K1 changes no legacy Convex writer file.
   CHECK: test -z "$(git show --name-only --format= HEAD | rg '^convex/(answerThreads|harnessSessions|externalRuns|schema)\.ts$')" && echo DRAIN_ISOLATED_OK
   EXPECT: DRAIN_ISOLATED_OK
-  EVIDENCE: pending
+  EVIDENCE: DRAIN_ISOLATED_OK
 
-- [ ] G3: K1 commit hash is recorded as the production drain candidate.
-  EVIDENCE: pending
+- [x] G3: K1 commit hash is recorded as the production drain candidate.
+  EVIDENCE: `b16de9846`; repository-only candidate. Production deploy, two idle lease intervals, and scheduled-function inspection remain pending human release evidence.
