@@ -36,7 +36,6 @@ function productionEnvironment(): Record<string, string> {
     STRIPE_WEBHOOK_SECRET: 'whsec_live_example',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_live_example',
     AE_LLM_MODEL: 'deepseek/deepseek-v4-flash',
-    AE_ANSWER_EVAL_PASSED: '1',
     ...Object.fromEntries(SOURCE_WRITE_FAMILIES.map((family) => [
       `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`,
       `${family}-key:source-write-secret-${family}-long-enough`,
@@ -115,11 +114,10 @@ describe('deployment manifest validator', () => {
     const result = validateDeploymentManifest({
       ...productionEnvironment(),
       VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E: 'true',
-      AE_ANSWER_EVAL_REGISTRY_SEED: 'broad',
     }, { nodeMajor: 22 })
 
     expect(result.findings.filter((finding) => finding.kind === 'forbidden').flatMap((finding) => finding.names))
-      .toEqual(expect.arrayContaining(['VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', 'AE_ANSWER_EVAL_REGISTRY_SEED']))
+      .toEqual(expect.arrayContaining(['VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E']))
   })
   it('rejects test Clerk credentials in production', () => {
     const result = validateDeploymentManifest({
@@ -311,10 +309,8 @@ describe('deployment manifest validator', () => {
     expect(JSON.stringify(result)).not.toContain('source-write-secret')
     expect(rotatedResult.fingerprint).toBe(result.fingerprint)
 
-    const modeChanged = validateDeploymentManifest({ ...first, VITE_AE_ANSWER_MODE: 'structured' }, { nodeMajor: 22 })
     const modelChanged = validateDeploymentManifest({ ...first, AE_LLM_MODEL: 'openai/gpt-5-mini' }, { nodeMajor: 22 })
     const presenceChanged = validateDeploymentManifest({ ...first, VITE_SENTRY_DSN: 'https://public@sentry.example/1' }, { nodeMajor: 22 })
-    expect(modeChanged.fingerprint).not.toBe(result.fingerprint)
     expect(modelChanged.fingerprint).not.toBe(result.fingerprint)
     expect(presenceChanged.fingerprint).not.toBe(result.fingerprint)
   })

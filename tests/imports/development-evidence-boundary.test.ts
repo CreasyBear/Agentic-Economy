@@ -17,8 +17,6 @@ const publicBarrels = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-execution/index.ts',
   'src/modules/registry/public.ts',
-  'src/modules/answer/public.ts',
-  'src/modules/answer-thread/public.ts',
   'src/modules/money/public.ts',
 ] as const
 

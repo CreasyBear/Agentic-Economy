@@ -6,7 +6,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AE_CATALOG_EXAMPLE_ASKS } from '@/modules/answer/catalog-example-asks'
+import { HOME } from '@/content/brand-copy'
 
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
@@ -46,7 +46,6 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
 import '@/routes/index'
 import '@/routes/privacy'
 import '@/routes/terms'
-import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 
 afterEach(cleanup)
 
@@ -77,7 +76,7 @@ describe('public semantic comfort', () => {
 
     const examples = screen.getByRole('navigation', { name: 'Popular searches' })
     const links = within(examples).getAllByRole('link')
-    expect(links).toHaveLength(AE_CATALOG_EXAMPLE_ASKS.length)
+    expect(links).toHaveLength(HOME.exampleAsks.length)
     for (const link of links) expect(link.classList.contains('min-h-11')).toBe(true)
   })
 
@@ -89,19 +88,6 @@ describe('public semantic comfort', () => {
     expect(link.classList.contains('inline-flex')).toBe(true)
   })
 
-  it('renders the thinking thread as a list and keeps the provenance trigger a comfortable native button', () => {
-    render(
-      <AeWorkDisclosure
-        isStreaming
-        workSteps={[]}
-        thinkingSteps={['Searching for matches']}
-        thinkingLabel="Searching for matches"
-      />,
-    )
-
-    expect(screen.getByRole('list', { name: 'Search progress' })).toBeTruthy()
-    expect(screen.getByText('Searching for matches')).toBeTruthy()
-  })
 })
 
 function renderRoute(path: '/' | '/privacy' | '/terms') {

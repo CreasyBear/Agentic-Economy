@@ -13,8 +13,6 @@ export type RateLimitName =
   | 'public-read'
   | 'public-mutation'
   | 'oauth-issuance'
-  | 'answer-turn-submit'
-  | 'answer-stream'
   | 'chat-anonymous'
   | 'chat-anonymous-edge'
 

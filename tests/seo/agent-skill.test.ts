@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 
 import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
-import { AGENT_KEY_ISSUANCE_PATH } from '@/modules/answer-thread/public'
+import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { listMcpActions, listOperationRouteDescriptors, mcpToolName } from '@/modules/actions'
 import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
@@ -56,7 +56,7 @@ describe('public agent skill', () => {
   })
 
   it('keeps the single caller key boundary explicit', () => {
-    expect(body).toContain(`https://ae.example${AGENT_KEY_ISSUANCE_PATH}/authorize?user_code=...`)
+    expect(body).toContain(`https://ae.example${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...`)
     expect(body).toContain('POST https://ae.example/oauth/register')
     expect(body).toContain('POST https://ae.example/oauth/device_authorization')
     expect(body).toContain('POST https://ae.example/oauth/token')

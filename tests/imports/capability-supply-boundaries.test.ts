@@ -1,7 +1,5 @@
-import { globSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 
-import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../helpers/source-files'
 
@@ -28,41 +26,6 @@ const deepenedFolders = [
 ] as const
 
 describe('capability supply boundaries', () => {
-  it('keeps Answer and Customer Request discovery behind market seams', () => {
-    const paths = [
-      ...listTsFiles('src/modules/answer'),
-      ...globSync(join('src/modules/answer', '**/*.tsx')).sort(),
-    ]
-    for (const path of paths) {
-      const sourceFile = ts.createSourceFile(
-        path,
-        readFileSync(path, 'utf8'),
-        ts.ScriptTarget.Latest,
-        false,
-        path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      )
-      const moduleSpecifiers = sourceFile.statements.flatMap((statement) =>
-        (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))
-          && statement.moduleSpecifier !== undefined
-          && ts.isStringLiteral(statement.moduleSpecifier)
-          ? [statement.moduleSpecifier.text]
-          : [],
-      )
-      for (const specifier of moduleSpecifiers) {
-        const normalizedTarget = (
-          specifier.startsWith('@/') || specifier.startsWith('~/') ? `src/${specifier.slice(2)}` :
-          specifier.startsWith('.') ? relative(process.cwd(), resolve(dirname(path), specifier)) :
-          specifier
-        )
-          .replaceAll('\\', '/')
-          .replace(/\.(?:ts|tsx|js|jsx)$/, '')
-        expect(normalizedTarget, path).not.toBe('src/modules/capability-supply')
-        expect(normalizedTarget, path).not.toMatch(/^src\/modules\/capability-supply\//)
-        expect(normalizedTarget, path).not.toBe('src/modules/registry/registry.functions')
-      }
-    }
-  })
-
   it('does not import or fall back to V1 Request, catalog or routing binding authorities', () => {
     for (const source of sources()) {
       const legacyAuthorityImport = /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
@@ -116,4 +79,3 @@ function sources(): string[] {
     ...deepenedFolders.flatMap((directory) => listTsFiles(directory).map((path) => readFileSync(path, 'utf8'))),
   ]
 }
-

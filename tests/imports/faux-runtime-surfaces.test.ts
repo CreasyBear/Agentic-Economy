@@ -8,7 +8,6 @@ const deployableRoots = [
   'src/modules/discovery/**/*.ts',
   'src/modules/catalog/owner-status.functions.ts',
   'src/modules/settings/**/*.ts',
-  'src/modules/answer-thread/internal/turn-orchestrator.ts',
   'src/modules/capability-execution/**/*.ts',
   'src/routes/llms[.]txt.ts',
   'src/routes/sitemap[.]xml.ts',

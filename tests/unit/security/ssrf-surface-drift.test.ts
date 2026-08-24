@@ -12,9 +12,6 @@ import { findFiles } from '@/lib/ui/contract-scans'
 // (`src/modules/network-guard/public.ts`) instead of being added here.
 // Extending this list is a conscious security decision, never a way to silence drift.
 const KNOWN_PROVIDER_CLIENT_FILES: Record<string, true> = {
-  // OpenRouter chat/model calls: fixed OpenRouter host, server-only API key.
-  'src/modules/answer/internal/answer-tool-use-agent.ts': true,
-  'src/modules/answer/internal/openrouter-models.ts': true,
   // Web Bot Auth directory lookup at the caller-declared signature agent origin, used
   // only to verify inbound request signatures, never to import owner content.
   'src/modules/routing-kernel/caller-identity.ts': true,

@@ -22,22 +22,7 @@ describe('raw API request boundary', () => {
     expect(JSON.stringify(body)).not.toContain('<!DOCTYPE html>')
   })
 
-  it('rejects malformed answer-thread detail shapes without a session cookie', async () => {
-    for (const suffix of ['/', '//', '/%20', '/%00', '/%2e']) {
-      const response = apiRequestBoundaryResponse({ url: `https://ae.example/api/answer/threads${suffix}` })
-
-      expect(response, suffix).toBeDefined()
-      if (response === undefined) throw new Error(`malformed thread path was not rejected: ${suffix}`)
-      expect(response.status, suffix).toBe(404)
-      expect(response.headers.get('content-type'), suffix).toBe('application/problem+json')
-      expect(response.headers.get('set-cookie'), suffix).toBeNull()
-      await expect(response.json()).resolves.toMatchObject({ code: 'thread_not_found', status: 404 })
-    }
-  })
-
-  it('leaves the exact collection and a normal detail path to their route handlers', () => {
-    expect(apiRequestBoundaryResponse({ url: 'https://ae.example/api/answer/threads' })).toBeUndefined()
-    expect(apiRequestBoundaryResponse({ url: 'https://ae.example/api/answer/threads/thread-1' })).toBeUndefined()
+  it('leaves normal API paths to their route handlers', () => {
     expect(apiRequestBoundaryResponse({ url: 'https://ae.example/api/unknown' })).toBeUndefined()
   })
 })
