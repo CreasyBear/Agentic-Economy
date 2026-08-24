@@ -572,6 +572,7 @@ Zero deferred TODO items were created. Every necessary architecture action is re
 - 2026-08-25: target dependency contract, package policy, migration waves, test diagram, failure modes, and implementation tasks integrated.
 - 2026-08-25: independent challenge contract fixed before fresh outside review.
 - 2026-08-25: independent sequencing, read-model migration, cutover, and rollback corrections adopted; speculative product and package expansion rejected.
+- 2026-08-25 implementation preflight: `npm run typecheck` fails on the unmodified `8c38b57b2` source at `src/routes/api.v1.registry.ts:46`; `/api/v1/registry` is absent from the generated route-tree type. T1/T2 do not own this file, so the master must resolve and reproduce the typecheck gate before T3 can exit.
 
 ## Review completion
 
