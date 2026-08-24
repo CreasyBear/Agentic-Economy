@@ -1,4 +1,3 @@
-import { createServerFn } from '@tanstack/react-start'
 import { createAuthenticatedSourceTransport, sourceQuery } from '@/lib/server/convex-source'
 import { createConvexMoneyQueryPort, MoneyQueryError } from '@/lib/server/money-query'
 import { listCreditActivity, readCreditAccount, readKeyUsage, type MoneyQueryPort } from '@/modules/money/public'
@@ -6,8 +5,6 @@ import { listAgentAccessKeysServer } from '@/modules/agent-access/agent-access.f
 import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
 import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
-import { readCapabilityOperationCompare } from '@/modules/capability-supply/operation-source'
-import { isPublicOperationRef, type OperationCompareResult, type PublicOperationRef } from '@/modules/capability-supply/public'
 
 export type AgentAccessConsoleReadback = readonly AgentOperatorKeyReadback[]
 const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly AgentAccessOwnerGrantReadback[]>(
@@ -15,20 +12,37 @@ const listOwnerGrantReadbacksQuery = sourceQuery<Record<string, never>, readonly
 )
 
 
-export const readAgentAccessConsoleServer = createServerFn({ method: 'GET' })
-  .handler(async () => loadAgentAccessConsoleReadback())
-
-export async function loadAgentAccessConsoleReadback(): Promise<AgentAccessConsoleReadback> {
+export async function loadAgentAccessConsoleReadback(
+  compare: CompareOperations,
+): Promise<AgentAccessConsoleReadback> {
   const [keys, source] = await Promise.all([
     listAgentAccessKeysServer(),
     createAuthenticatedSourceTransport(),
   ])
   const grants = await source.query(listOwnerGrantReadbacksQuery, {})
   const readback = await readAgentAccessMoneyReadback(keys, createConvexMoneyQueryPort(), grants)
-  return await enrichAgentAccessActivity(readback, readCapabilityOperationCompare)
+  return await enrichAgentAccessActivity(readback, compare)
 }
 
-type CompareOperations = (input: Readonly<{ operationRefs: readonly string[] }>) => Promise<OperationCompareResult>
+type OperationCompareResult = Readonly<
+  | {
+      kind: 'ok'
+      operations: readonly Readonly<{
+        operationRef: string
+        offering: Readonly<{ label: string }>
+        business: Readonly<{ name: string }>
+      }>[]
+    }
+  | { kind: 'unavailable' }
+>
+
+export type CompareOperations = (
+  input: Readonly<{ operationRefs: readonly string[] }>,
+) => Promise<OperationCompareResult>
+
+function isPublicOperationRef(value: string): boolean {
+  return /^operation:v1:[0-9a-f]{64}$/u.test(value)
+}
 
 export async function enrichAgentAccessActivity(
   readbacks: AgentAccessConsoleReadback,
@@ -37,7 +51,7 @@ export async function enrichAgentAccessActivity(
   const recentActivity = readbacks
     .flatMap(({ activity }) => activity)
     .toSorted((left, right) => right.observedAt - left.observedAt)
-  const operationRefs = [...new Set(recentActivity.reduce<PublicOperationRef[]>((refs, { operationKey }) => {
+  const operationRefs = [...new Set(recentActivity.reduce<string[]>((refs, { operationKey }) => {
     if (isPublicOperationRef(operationKey)) refs.push(operationKey)
     return refs
   }, []))]
