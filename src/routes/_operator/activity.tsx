@@ -4,7 +4,7 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Button } from '@/components/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { readAgentAccessConsoleServer } from '@/modules/agent-access/agent-access-console'
+import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
 import { formatExactAmount } from '@/modules/money/public'
 import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
 

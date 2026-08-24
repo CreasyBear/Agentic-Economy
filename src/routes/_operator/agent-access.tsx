@@ -10,8 +10,9 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
 import { revokeAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
-import { readAgentAccessConsoleServer, type AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
+import type { AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
 import {
   decideOperationApprovalServer,
   listPendingOperationApprovalsServer,
