@@ -322,19 +322,26 @@ export async function searchCurrentOperationFacts(
   load: (operationRef: PublicOperationRef) => Promise<CapabilityOperationSourceRecord | null>,
   now = Date.now(),
   expectedCount?: number,
+  trustedCursorLastOperationRef?: PublicOperationRef,
 ): Promise<OperationSearchResult> {
   const normalized = normalizeSearch(input);
   if (normalized === undefined) return searchUnavailable("query_invalid");
   if (expectedCount !== undefined && facts.length !== expectedCount)
     return searchUnavailable("source_unavailable");
   if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded");
-  const cursor = decodeCursor(
-    normalized.cursor,
-    normalized.query,
-    normalized.filters,
-    snapshotKey,
-  );
-  if (normalized.cursor !== undefined && cursor === undefined)
+  const cursor = trustedCursorLastOperationRef === undefined
+    ? decodeCursor(
+        normalized.cursor,
+        normalized.query,
+        normalized.filters,
+        snapshotKey,
+      )
+    : { lastOperationRef: trustedCursorLastOperationRef };
+  if (
+    normalized.cursor !== undefined &&
+    trustedCursorLastOperationRef === undefined &&
+    cursor === undefined
+  )
     return searchUnavailable("query_invalid");
   const matches = rankOperationSearchCandidates(
     normalized.query,

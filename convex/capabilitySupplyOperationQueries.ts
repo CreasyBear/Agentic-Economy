@@ -6,6 +6,7 @@ import {
   compareCapabilityOperations,
   detailCapabilityOperation,
   inspectCapabilityOperationPlan,
+  isPublicOperationRef,
   searchCapabilityOperations,
   serializeInspectPlanResult,
   serializeOperationCompareResult,
@@ -17,6 +18,7 @@ import {
   type OperationCompareInput,
   type OperationDetailInput,
   type OperationSearchInput,
+  type PublicOperationRef,
 } from '@/modules/capability-supply/public'
 
 import type { QueryCtx } from './_generated/server'
@@ -385,17 +387,23 @@ export const inspectArgs = { operationRefs: v.array(v.string()), mappingRefs: v.
 export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
   const now = Date.now()
   const control = await readCurrentOperationControl(ctx)
-  const projected = async () => await searchProjectedCurrentOperations(
-    ctx,
-    args,
-    now,
-    control.verifiedActiveCount,
-    control.verifiedProjectionDigest,
-  )
+  const projected = async (trustedCursorLastOperationRef?: PublicOperationRef) => (
+    await searchProjectedCurrentOperations(
+      ctx,
+      args,
+      now,
+      control.verifiedActiveCount,
+      control.verifiedProjectionDigest,
+      trustedCursorLastOperationRef,
+    ))
   if (control.mode === 'new') return serializeOperationSearchResult(await projected())
   const oldResult = await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now)
   if (control.mode === 'shadow') {
-    const newResult = await projected()
+    const trustedCursorLastOperationRef = oldResult.kind !== 'unavailable'
+      && args.cursor !== undefined
+      ? operationRefFromAcceptedCursor(args.cursor)
+      : undefined
+    const newResult = await projected(trustedCursorLastOperationRef)
     const oldWire = serializeOperationSearchResult(oldResult)
     const newWire = serializeOperationSearchResult(newResult)
     console.info('CURRENT_OPERATION_SHADOW', JSON.stringify({
@@ -403,10 +411,31 @@ export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
       oldOutcome: oldWire.kind,
       newOutcome: newWire.kind,
       typedOutcomeMatch: oldWire.kind === newWire.kind,
-      canonicalDigestMatch: canonicalDigest(oldWire) === canonicalDigest(newWire),
+      canonicalDigestMatch: canonicalDigest(shadowComparableSearchWire(oldWire))
+        === canonicalDigest(shadowComparableSearchWire(newWire)),
     }))
   }
   return serializeOperationSearchResult(oldResult)
+}
+
+function operationRefFromAcceptedCursor(cursor: string): PublicOperationRef | undefined {
+  const encodedRef = /^cursor:v1:[0-9a-f]{64}:[^:]*:(.+)$/u.exec(cursor)?.[1]
+  if (encodedRef === undefined) return undefined
+  try {
+    const operationRef = decodeURIComponent(encodedRef)
+    return isPublicOperationRef(operationRef) ? operationRef : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function shadowComparableSearchWire(result: ReturnType<typeof serializeOperationSearchResult>) {
+  if (result.kind !== 'ok') return result
+  const { nextCursor, ...pagination } = result.pagination
+  return {
+    ...result,
+    pagination: { ...pagination, cursorPresent: nextCursor !== undefined },
+  }
 }
 export async function detailHandler(ctx: QueryCtx, args: OperationDetailInput) {
   return serializeOperationDetailResult(await detailCapabilityOperation(capabilityOperationSourcePort(ctx), args))

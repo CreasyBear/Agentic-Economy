@@ -14,6 +14,7 @@ import {
   type CurrentOperationSearchFact,
   type OperationSearchInput,
 } from '@/modules/capability-supply/operation-projection'
+import type { PublicOperationRef } from '@/modules/capability-supply/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -370,6 +371,7 @@ export async function searchProjectedCurrentOperations(
   now: number,
   expectedActiveCount?: number,
   expectedProjectionDigest?: string,
+  trustedCursorLastOperationRef?: PublicOperationRef,
 ) {
   const rows = await ctx.db.query('capabilityCurrentOperations')
     .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
@@ -397,6 +399,7 @@ export async function searchProjectedCurrentOperations(
     async (operationRef) => await loadProjectedCurrentOperation(ctx, operationRef),
     now,
     expectedSearchableCount,
+    trustedCursorLastOperationRef,
   )
 }
 
