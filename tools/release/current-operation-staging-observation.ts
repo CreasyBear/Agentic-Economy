@@ -379,16 +379,16 @@ async function bestEffortOld(runtime: StagingRuntime, options: StageOptions, rea
 async function startStage(runtime: StagingRuntime, options: StageOptions): Promise<StartReceipt> {
   const startedAt = runtime.now()
   const logs = await runtime.startLogs()
-  let stateChanged = false
+  let mutationAttempted = false
   try {
     const initial = controlSchema.parse(await runtime.run(
       'capabilitySupplyOperations:readCurrentOperationReadControl',
       {},
     ))
     if (initial.mode === 'new') throw new Error('staging_observation_new_mode_forbidden_at_start')
+    mutationAttempted = true
     await backfillAll(runtime)
     await setMode(runtime, options, 'shadow', `t8_staging_soak:${options.sourceRevision}`)
-    stateChanged = true
     const firstControl = controlSchema.parse(await runtime.run(
       'capabilitySupplyOperations:readCurrentOperationReadControl',
       {},
@@ -435,7 +435,7 @@ async function startStage(runtime: StagingRuntime, options: StageOptions): Promi
       cycleDigest: cycle.cycleDigest,
     } as const))
   } catch (error) {
-    if (stateChanged) {
+    if (mutationAttempted) {
       const rolledBack = await bestEffortOld(runtime, options, 't8_start_failure_rollback')
       throw new Error(`staging_observation_start_failed:rollback_${rolledBack ? 'succeeded' : 'failed'}`, { cause: error })
     }
@@ -462,20 +462,20 @@ async function completeStage(
   if (options.cutoverConfirmation !== expectedConfirmation) {
     throw new Error('staging_observation_cutover_confirmation_invalid')
   }
-  const control = controlSchema.parse(await runtime.run(
-    'capabilitySupplyOperations:readCurrentOperationReadControl',
-    {},
-  ))
-  if (control.mode !== 'shadow') throw new Error('staging_observation_shadow_mode_required')
-  await backfillAll(runtime)
-  const before = await readEvidence(runtime, options, baseline.startedAt)
-  if (before.snapshot.sourceSetDigest !== baseline.sourceSetDigest) {
-    throw new Error('staging_observation_source_set_changed')
-  }
-  let stateChanged = false
+  let mutationAttempted = false
   try {
+    const control = controlSchema.parse(await runtime.run(
+      'capabilitySupplyOperations:readCurrentOperationReadControl',
+      {},
+    ))
+    if (control.mode !== 'shadow') throw new Error('staging_observation_shadow_mode_required')
+    mutationAttempted = true
+    await backfillAll(runtime)
+    const before = await readEvidence(runtime, options, baseline.startedAt)
+    if (before.snapshot.sourceSetDigest !== baseline.sourceSetDigest) {
+      throw new Error('staging_observation_source_set_changed')
+    }
     await setMode(runtime, options, 'new', `t8_cutover:${baseline.receiptDigest}`)
-    stateChanged = true
     const afterControl = controlSchema.parse(await runtime.run(
       'capabilitySupplyOperations:readCurrentOperationReadControl',
       {},
@@ -511,7 +511,7 @@ async function completeStage(
       unobservedSinceCount: after.snapshot.unobservedSinceCount,
     } as const))
   } catch (error) {
-    if (stateChanged) {
+    if (mutationAttempted) {
       const rolledBack = await bestEffortOld(runtime, options, 't8_complete_failure_rollback')
       throw new Error(`staging_observation_complete_failed:rollback_${rolledBack ? 'succeeded' : 'failed'}`, { cause: error })
     }
@@ -605,6 +605,27 @@ type SpawnProcess = (
   options: Readonly<{ cwd: string; env: NodeJS.ProcessEnv; shell: false }>,
 ) => ChildProcessWithoutNullStreams
 
+export function convexCliInvocation(
+  cli: string,
+  args: readonly string[],
+  repositoryRoot: string,
+  deployKey: string | undefined,
+): Readonly<{
+  command: string
+  args: readonly string[]
+  options: Readonly<{ cwd: string; env: NodeJS.ProcessEnv; shell: false }>
+}> {
+  return {
+    command: process.execPath,
+    args: [cli, ...args],
+    options: {
+      cwd: repositoryRoot,
+      env: { PATH: process.env.PATH, CONVEX_DEPLOY_KEY: deployKey },
+      shell: false,
+    },
+  }
+}
+
 function parseRunOutput(output: string): unknown {
   try {
     return JSON.parse(output.trim()) as unknown
@@ -633,15 +654,11 @@ function extractStructuredEvents(raw: unknown): readonly unknown[] {
 }
 
 export function readinessCycleFromLogRecords(records: readonly unknown[]): CycleEvidence | undefined {
-  for (let cycleIndex = 0; cycleIndex < records.length; cycleIndex += 1) {
-    const rawCycle = records[cycleIndex]
+  for (const rawCycle of records) {
     if (typeof rawCycle !== 'object' || rawCycle === null) continue
     const completion = rawCycle as Record<string, unknown>
     if (completion.kind !== 'Completion'
-      || completion.identifier !== 'capabilitySupply:scheduleDueCapabilityProbes'
-      || completion.caller !== 'Cron'
-      || completion.error !== null
-      || completion.willRetry !== false) continue
+      || completion.identifier !== 'capabilitySupply:scheduleDueCapabilityProbes') continue
     const cycleEvents = extractStructuredEvents(completion)
     const matchingCycleEvents = cycleEvents.filter((event) => (
       typeof event === 'object'
@@ -649,7 +666,12 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
       && (event as Record<string, unknown>).kind === 'capability_readiness_scheduled_cycle'
     ))
     if (matchingCycleEvents.length > 1) throw new Error('staging_observation_cycle_duplicate')
-    for (const rawEvent of cycleEvents) {
+    if (matchingCycleEvents.length === 0) continue
+    if (completion.caller !== 'Cron') throw new Error('staging_observation_cycle_caller_invalid')
+    if (completion.error !== null || completion.willRetry !== false) {
+      throw new Error('staging_observation_cycle_completion_error')
+    }
+    for (const rawEvent of matchingCycleEvents) {
       const cycle = z.strictObject({
         kind: z.literal('capability_readiness_scheduled_cycle'),
         schemaVersion: z.literal('capability-readiness-scheduled-cycle:v1'),
@@ -657,7 +679,7 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
         dueCount: z.number().int().min(1).max(20),
         scheduledFunctionIds: z.array(z.string().min(1)).min(1).max(20),
       }).safeParse(rawEvent)
-      if (!cycle.success) continue
+      if (!cycle.success) throw new Error('staging_observation_cycle_malformed')
       if (cycle.data.dueCount !== cycle.data.scheduledFunctionIds.length
         || new Set(cycle.data.scheduledFunctionIds).size !== cycle.data.dueCount) {
         throw new Error('staging_observation_cycle_malformed')
@@ -669,18 +691,30 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
         if (typeof rawChild !== 'object' || rawChild === null) continue
         const child = rawChild as Record<string, unknown>
         if (child.kind !== 'Completion'
-          || child.identifier !== 'capabilitySupplyReadiness:probe'
-          || child.caller !== 'Scheduler') continue
+          || child.identifier !== 'capabilitySupplyReadiness:probe') continue
         const childEvents = extractStructuredEvents(child)
         for (const childEvent of childEvents) {
+          const childKind = typeof childEvent === 'object' && childEvent !== null
+            ? (childEvent as Record<string, unknown>).kind
+            : undefined
+          if (childKind !== 'capability_readiness_probe_started'
+            && childKind !== 'capability_readiness_probe_terminal') continue
+          const rawScheduledFunctionId = (childEvent as Record<string, unknown>).scheduledFunctionId
+          if (typeof rawScheduledFunctionId !== 'string' || !expected.has(rawScheduledFunctionId)) continue
+          if (child.caller !== 'Scheduler') throw new Error('staging_observation_probe_caller_invalid')
+          if (child.error !== null || child.willRetry !== false) {
+            throw new Error('staging_observation_probe_child_error')
+          }
           const start = z.strictObject({
             kind: z.literal('capability_readiness_probe_started'),
             schemaVersion: z.literal('capability-readiness-probe-event:v1'),
             observedAt: z.number().int().nonnegative(),
             scheduledFunctionId: z.string().min(1),
           }).safeParse(childEvent)
-          if (start.success && expected.has(start.data.scheduledFunctionId)) {
-            if (child.error !== null || child.willRetry !== false) throw new Error('staging_observation_probe_child_error')
+          if (childKind === 'capability_readiness_probe_started' && !start.success) {
+            throw new Error('staging_observation_probe_start_malformed')
+          }
+          if (start.success) {
             started.set(start.data.scheduledFunctionId, (started.get(start.data.scheduledFunctionId) ?? 0) + 1)
           }
           const terminal = z.union([
@@ -698,7 +732,11 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
               observedAt: z.number().int().nonnegative(),
               scheduledFunctionId: z.string().min(1),
               terminalKind: z.literal('unavailable'),
-              reason: z.string().min(1),
+              reason: z.enum([
+                'publication_missing', 'publication_stale', 'offering_invalid', 'binding_invalid',
+                'contract_missing', 'input_unrepresentable', 'effectful_probe_unsupported',
+                'mcp_tool_missing', 'authority_stale', 'target_not_public',
+              ]),
             }),
             z.strictObject({
               kind: z.literal('capability_readiness_probe_terminal'),
@@ -706,10 +744,13 @@ export function readinessCycleFromLogRecords(records: readonly unknown[]): Cycle
               observedAt: z.number().int().nonnegative(),
               scheduledFunctionId: z.string().min(1),
               terminalKind: z.literal('refused'),
-              reason: z.string().min(1),
+              reason: z.enum(['revision_changed', 'target_changed']),
             }),
           ]).safeParse(childEvent)
-          if (terminal.success && expected.has(terminal.data.scheduledFunctionId)) {
+          if (childKind === 'capability_readiness_probe_terminal' && !terminal.success) {
+            throw new Error('staging_observation_probe_terminal_malformed')
+          }
+          if (terminal.success) {
             if (terminals.has(terminal.data.scheduledFunctionId)) throw new Error('staging_observation_probe_terminal_duplicate')
             terminals.set(terminal.data.scheduledFunctionId, terminal.data.terminalKind)
           }
@@ -741,16 +782,9 @@ export function createConvexRuntime(
   spawnProcess: SpawnProcess = spawn,
 ): StagingRuntime {
   const cli = resolve(repositoryRoot, 'node_modules/convex/bin/main.js')
-  const childEnvironment: NodeJS.ProcessEnv = {
-    PATH: env.PATH,
-    CONVEX_DEPLOY_KEY: env.CONVEX_DEPLOY_KEY,
-  }
   const execute = async (args: readonly string[]): Promise<string> => await new Promise((resolvePromise, reject) => {
-    const child = spawnProcess(process.execPath, [cli, ...args], {
-      cwd: repositoryRoot,
-      env: childEnvironment,
-      shell: false,
-    })
+    const invocation = convexCliInvocation(cli, args, repositoryRoot, env.CONVEX_DEPLOY_KEY)
+    const child = spawnProcess(invocation.command, invocation.args, invocation.options)
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
@@ -767,11 +801,13 @@ export function createConvexRuntime(
       convexRunArguments(functionName, args, options.deploymentName),
     )),
     startLogs: async () => {
-      const child = spawnProcess(process.execPath, [cli, ...convexLogArguments(options.deploymentName)], {
-        cwd: repositoryRoot,
-        env: childEnvironment,
-        shell: false,
-      })
+      const invocation = convexCliInvocation(
+        cli,
+        convexLogArguments(options.deploymentName),
+        repositoryRoot,
+        env.CONVEX_DEPLOY_KEY,
+      )
+      const child = spawnProcess(invocation.command, invocation.args, invocation.options)
       const recordBuffer = new JsonlRecordBuffer()
       const waiters = new Set<() => void>()
       let streamError: Error | undefined
@@ -784,6 +820,7 @@ export function createConvexRuntime(
         }
         notify()
       })
+      child.stderr.on('data', () => undefined)
       child.on('error', (error) => { streamError = error; notify() })
       child.on('close', (code) => {
         if (code !== null && code !== 0) streamError = new Error(`staging_observation_log_stream_failed:${code}`)

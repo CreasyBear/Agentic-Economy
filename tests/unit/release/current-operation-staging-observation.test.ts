@@ -9,6 +9,7 @@ import {
   JsonlRecordBuffer,
   RollbackReceiptSchema,
   StartReceiptSchema,
+  convexCliInvocation,
   convexLogArguments,
   convexRunArguments,
   observeCurrentOperationStaging,
@@ -65,15 +66,19 @@ type RuntimeControls = Readonly<{
   unexplained?: number
   sourceDigest?: string
   failAfterNew?: boolean
+  failSetMode?: 'shadow' | 'new'
+  cycleError?: Error
   backfill?: readonly unknown[]
   cycle?: Awaited<ReturnType<LogStream['waitForCycle']>>
 }>
 
 function fakeRuntime(controls: RuntimeControls = {}): StagingRuntime & {
   calls: Array<{ functionName: string; args: unknown }>
+  cycleTimeouts: number[]
   mode: 'old' | 'shadow' | 'new'
 } {
   const calls: Array<{ functionName: string; args: unknown }> = []
+  const cycleTimeouts: number[] = []
   const backfill = [...(controls.backfill ?? [{
     processed: 1,
     rebuilt: 1,
@@ -85,13 +90,18 @@ function fakeRuntime(controls: RuntimeControls = {}): StagingRuntime & {
   let backfillIndex = 0
   const runtime = {
     calls,
+    cycleTimeouts,
     mode: 'old' as const,
     now: () => controls.now ?? 1_000,
     startLogs: async () => ({
-      waitForCycle: async () => controls.cycle ?? {
-        dueCount: 1,
-        terminalOutcomeCounts: { observed: 1, unavailable: 0, refused: 0 },
-        cycleDigest,
+      waitForCycle: async (timeoutMs) => {
+        cycleTimeouts.push(timeoutMs)
+        if (controls.cycleError !== undefined) throw controls.cycleError
+        return controls.cycle ?? {
+          dueCount: 1,
+          terminalOutcomeCounts: { observed: 1, unavailable: 0, refused: 0 },
+          cycleDigest,
+        }
       },
       close: async () => undefined,
     }),
@@ -113,6 +123,7 @@ function fakeRuntime(controls: RuntimeControls = {}): StagingRuntime & {
       if (functionName.endsWith('setCurrentOperationReadMode')) {
         const requested = (args as { mode?: unknown }).mode
         if (requested !== 'old' && requested !== 'shadow' && requested !== 'new') throw new Error('bad fake mode')
+        if (controls.failSetMode === requested) throw new Error(`fabricated_${requested}_mode_failure`)
         runtime.mode = requested
         return { mode: requested }
       }
@@ -152,6 +163,7 @@ function fakeRuntime(controls: RuntimeControls = {}): StagingRuntime & {
   }
   return runtime as StagingRuntime & {
     calls: Array<{ functionName: string; args: unknown }>
+    cycleTimeouts: number[]
     mode: 'old' | 'shadow' | 'new'
   }
 }
@@ -212,7 +224,7 @@ function cycleRecords(
               observedAt: 1_100 + index,
               scheduledFunctionId,
               terminalKind: terminals[index],
-              reason: 'fabricated_typed_reason',
+              reason: terminals[index] === 'unavailable' ? 'target_not_public' : 'target_changed',
             },
       ],
     )),
@@ -301,6 +313,24 @@ describe('T8 current Operation staging observation', () => {
       'logs', '--success', '--jsonl', '--deployment', deploymentName,
     ])
     expect(() => convexRunArguments('money:charge' as never, {}, deploymentName)).toThrow('staging_observation_function_forbidden')
+    const invocation = convexCliInvocation(
+      '/fabricated/repository/node_modules/convex/bin/main.js',
+      convexLogArguments(deploymentName),
+      '/fabricated/repository',
+      deployKey,
+    )
+    expect(invocation).toMatchObject({
+      command: process.execPath,
+      args: [
+        '/fabricated/repository/node_modules/convex/bin/main.js',
+        'logs', '--success', '--jsonl', '--deployment', deploymentName,
+      ],
+      options: {
+        cwd: '/fabricated/repository',
+        env: { CONVEX_DEPLOY_KEY: deployKey },
+        shell: false,
+      },
+    })
   })
 
   it('parses fragmented JSONL without retaining an incomplete or malformed line', () => {
@@ -336,10 +366,10 @@ describe('T8 current Operation staging observation', () => {
     const records = cycleRecords(['observed'])
     const wrongCron = structuredClone(records)
     ;(wrongCron[1] as Record<string, unknown>).caller = 'Scheduler'
-    expect(readinessCycleFromLogRecords(wrongCron)).toBeUndefined()
+    expect(() => readinessCycleFromLogRecords(wrongCron)).toThrow('staging_observation_cycle_caller_invalid')
     const wrongScheduler = structuredClone(records)
     ;(wrongScheduler[2] as Record<string, unknown>).caller = 'Cron'
-    expect(readinessCycleFromLogRecords(wrongScheduler)).toBeUndefined()
+    expect(() => readinessCycleFromLogRecords(wrongScheduler)).toThrow('staging_observation_probe_caller_invalid')
     const childError = structuredClone(records)
     ;(childError[2] as Record<string, unknown>).error = 'fabricated failure'
     expect(() => readinessCycleFromLogRecords(childError)).toThrow('staging_observation_probe_child_error')
@@ -361,6 +391,20 @@ describe('T8 current Operation staging observation', () => {
     rawCycle.scheduledFunctionIds = ['fabricated-scheduled-1', 'fabricated-scheduled-1']
     ;(duplicateIds[1] as { logLines: Array<{ messages: string[] }> }).logLines[0]!.messages[0] = JSON.stringify(rawCycle)
     expect(() => readinessCycleFromLogRecords(duplicateIds)).toThrow('staging_observation_cycle_malformed')
+
+    const malformedCycle = structuredClone(records)
+    const malformedCycleLine = (malformedCycle[1] as { logLines: Array<{ messages: string[] }> }).logLines[0]!
+    const malformedCycleEvent = JSON.parse(malformedCycleLine.messages[0]!) as Record<string, unknown>
+    malformedCycleEvent.dueCount = '1'
+    malformedCycleLine.messages[0] = JSON.stringify(malformedCycleEvent)
+    expect(() => readinessCycleFromLogRecords(malformedCycle)).toThrow('staging_observation_cycle_malformed')
+
+    const fabricatedReason = structuredClone(cycleRecords(['unavailable']))
+    const fabricatedReasonLine = (fabricatedReason[2] as { logLines: Array<{ messages: string[] }> }).logLines[0]!
+    const fabricatedTerminal = JSON.parse(fabricatedReasonLine.messages[1]!) as Record<string, unknown>
+    fabricatedTerminal.reason = 'fabricated_reason'
+    fabricatedReasonLine.messages[1] = JSON.stringify(fabricatedTerminal)
+    expect(() => readinessCycleFromLogRecords(fabricatedReason)).toThrow('staging_observation_probe_terminal_malformed')
   })
 
   it('starts logs first, pages twice, proves retry digest stability, leaves shadow, and writes a sanitized 0600 receipt', async () => {
@@ -406,7 +450,44 @@ describe('T8 current Operation staging observation', () => {
     ], 'staging_observation_backfill_cursor_repeated'],
   ])('fails paginated backfill on %s', async (_label, backfill, error) => {
     const root = await temporaryRoot()
-    await expect(observeCurrentOperationStaging(fakeRuntime({ backfill }), options('start'), root)).rejects.toThrow(error)
+    try {
+      await observeCurrentOperationStaging(fakeRuntime({ backfill }), options('start'), root)
+      throw new Error('expected staged backfill failure')
+    } catch (caught) {
+      expect(caught).toMatchObject({
+        message: 'staging_observation_start_failed:rollback_succeeded',
+        cause: { message: error },
+      })
+    }
+  })
+
+  it('fails closed above 256 processed backfill rows', async () => {
+    const root = await temporaryRoot()
+    const pages = Array.from({ length: 33 }, (_, index) => ({
+      processed: index === 32 ? 1 : 8,
+      rebuilt: index === 32 ? 1 : 8,
+      dropped: 0,
+      unavailable: 0,
+      isDone: index === 32,
+      continueCursor: `cursor-${index}`,
+    }))
+    await expect(observeCurrentOperationStaging(fakeRuntime({ backfill: pages }), options('start'), root))
+      .rejects.toThrow('staging_observation_start_failed:rollback_succeeded')
+  })
+
+  it('rolls back old after backfill when shadow transition or the bounded cycle times out', async () => {
+    const shadowRoot = await temporaryRoot()
+    const shadowFailure = fakeRuntime({ failSetMode: 'shadow' })
+    await expect(observeCurrentOperationStaging(shadowFailure, options('start'), shadowRoot))
+      .rejects.toThrow('staging_observation_start_failed:rollback_succeeded')
+    expect(shadowFailure.mode).toBe('old')
+
+    const timeoutRoot = await temporaryRoot()
+    const timeout = fakeRuntime({ cycleError: new Error('staging_observation_cycle_timeout') })
+    await expect(observeCurrentOperationStaging(timeout, options('start'), timeoutRoot))
+      .rejects.toThrow('staging_observation_start_failed:rollback_succeeded')
+    expect(timeout.cycleTimeouts).toEqual([7 * 60_000])
+    expect(timeout.mode).toBe('old')
   })
 
   it('requires a strict 24-hour digest-bound baseline join before cutting over to new', async () => {
@@ -447,13 +528,23 @@ describe('T8 current Operation staging observation', () => {
     badOwner.mode = 'shadow'
     await expect(observeCurrentOperationStaging(badOwner, { ...base, releaseOwner: 'other-owner' }, root))
       .rejects.toThrow('staging_observation_baseline_join_mismatch')
+    const badDeployment = fakeRuntime({ now: 86_401_000 })
+    badDeployment.mode = 'shadow'
+    await expect(observeCurrentOperationStaging(badDeployment, { ...base, deploymentName: 'other-staging-123' }, root))
+      .rejects.toThrow('staging_observation_baseline_join_mismatch')
+    const badSource = fakeRuntime({ now: 86_401_000 })
+    badSource.mode = 'shadow'
+    await expect(observeCurrentOperationStaging(badSource, { ...base, sourceRevision: 'abcdef0123456789abcdef0123456789abcdef01' }, root))
+      .rejects.toThrow('staging_observation_baseline_join_mismatch')
     const badConfirmation = fakeRuntime({ now: 86_401_000 })
     badConfirmation.mode = 'shadow'
     await expect(observeCurrentOperationStaging(badConfirmation, { ...base, cutoverConfirmation: 'cutover:wrong' }, root))
       .rejects.toThrow('staging_observation_cutover_confirmation_invalid')
     const drift = fakeRuntime({ now: 86_401_000, sourceDigest: `sha256:${'9'.repeat(64)}` })
     drift.mode = 'shadow'
-    await expect(observeCurrentOperationStaging(drift, base, root)).rejects.toThrow('staging_observation_source_set_changed')
+    await expect(observeCurrentOperationStaging(drift, base, root))
+      .rejects.toThrow('staging_observation_complete_failed:rollback_succeeded')
+    expect(drift.mode).toBe('old')
   })
 
   it('restores old if post-cutover verification fails', async () => {
