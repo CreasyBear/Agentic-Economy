@@ -84,6 +84,35 @@ export async function withSourceWrite<T extends { operationKey: string; correlat
   }
 }
 
+/**
+ * Sign an internal admission command while returning the narrower public
+ * action arguments. Recovery actions intentionally add their fixed empty
+ * operation/input material before invoking the admission mutation.
+ */
+export async function withSourceWriteCommand<
+  T extends { operationKey: string; correlationId: string },
+>(
+  scope: SourceWriteAdmissionScope,
+  args: T,
+  command: object,
+): Promise<T & { sourceWriteRequest: SourceWriteAdmissionRequest; sourceWrite: SourceWriteAdmission }> {
+  installTestSourceWriteSecret()
+  const sourceWriteRequest = sourceWriteRequestFor(command)
+  return {
+    ...args,
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      scope,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
+      request: sourceWriteRequest,
+      now: new Date().getTime(),
+      env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+    }),
+  }
+}
+
 export function withoutSourceWrite<T extends {
   sourceWrite?: SourceWriteAdmission
   sourceWriteRequest?: SourceWriteAdmissionRequest
