@@ -62,7 +62,8 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(ownerChat.getByRole('complementary', { name: 'Conversation history' })).toBeVisible()
   await expect(ownerChat.getByRole('button', { name: 'New chat' }).first()).toBeVisible()
 
-  const ownerPrompt = `Staging chat ${Date.now()}: reply with ready.`
+  const ownerPrompt = `Use registry.operations.search exactly once for weather. Do not execute. Summarize without implementation jargon. ${Date.now()}`
+  const ownerTitle = Array.from(ownerPrompt).slice(0, 80).join('')
   const ownerMessage = ownerChat.getByRole('textbox', { name: 'Message' })
   await focusByTab(ownerPage, ownerMessage)
   await ownerMessage.fill(ownerPrompt)
@@ -73,12 +74,25 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(ownerTranscript.getByText(ownerPrompt, { exact: true })).toBeVisible()
   const ownerAssistant = ownerTranscript.getByRole('article', { name: 'Assistant' }).last()
   await expectAssistantResponse(ownerAssistant)
+  const ownerSearchCard = ownerTranscript.locator('[data-operation-tool="registry.operations.search"]')
+  await expect(ownerSearchCard).toHaveCount(1, { timeout: 40_000 })
+  await expect(ownerSearchCard.getByText('Search operations', { exact: true })).toBeVisible()
+  await expect(ownerSearchCard.getByText('Complete', { exact: true })).toBeVisible()
+  await expect(ownerSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
+  await expect(ownerSearchCard.getByText(/^\d+ operations$/u)).toBeVisible()
+  await expect(ownerTranscript.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
 
   await ownerChat.getByRole('button', { name: 'Create share link' }).click()
   const shareInput = ownerChat.getByRole('textbox', { name: 'Read-only share link' })
   await expect(shareInput).toHaveAttribute('readonly', '')
-  await expect(shareInput).toHaveValue(/^\/s\/[a-f0-9]{64}$/u)
-  const sharePath = await shareInput.inputValue()
+  await expect.poll(() => shareInput.inputValue()).toMatch(/^https:\/\/.+\/s\/[a-f0-9]{64}$/u)
+  const shareUrl = new URL(await shareInput.inputValue())
+  expect(shareUrl.origin).toBe(baseUrl.origin)
+  expect(shareUrl.username).toBe('')
+  expect(shareUrl.password).toBe('')
+  expect(shareUrl.pathname).toMatch(/^\/s\/[a-f0-9]{64}$/u)
+  expect(shareUrl.search).toBe('')
+  expect(shareUrl.hash).toBe('')
 
   const publicContext = await browser.newContext({
     baseURL: baseUrl.toString(),
@@ -86,12 +100,22 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   })
   const publicPage = await publicContext.newPage()
   await applyVercelProtectionBypassToPage(publicPage, baseUrl)
-  await publicPage.goto(sharePath)
+  await publicPage.goto(shareUrl.toString())
 
   const sharedChat = publicPage.getByRole('region', { name: 'Shared operation chat' })
   await expect(sharedChat).toBeVisible()
   await expect(sharedChat.getByText(ownerPrompt, { exact: true })).toBeVisible()
   await expectAssistantResponse(sharedChat.getByRole('article', { name: 'Assistant' }).last())
+  const sharedSearchCard = sharedChat.locator('[data-operation-tool="registry.operations.search"]')
+  await expect(sharedSearchCard).toHaveCount(1)
+  await expect(sharedSearchCard.getByText('Search operations', { exact: true })).toBeVisible()
+  await expect(sharedSearchCard.getByText('Complete', { exact: true })).toBeVisible()
+  await expect(sharedSearchCard.getByText('Working', { exact: true })).toHaveCount(0)
+  await expect(sharedSearchCard.getByText(/^\d+ operations found$/u)).toBeVisible()
+  await expect(sharedChat.locator('[data-operation-tool="operation.execute"]')).toHaveCount(0)
+  expect(await sharedChat.evaluate((element) => element.outerHTML)).not.toMatch(
+    /\b(?:toolCallId|input|output|endpoint|headers|raw)\b|registry_operations_search/iu,
+  )
   await expect(sharedChat.getByRole('textbox')).toHaveCount(0)
   await expect(sharedChat.getByRole('button', { name: /send message|new chat/i })).toHaveCount(0)
   await expect(publicPage.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/u)
@@ -103,8 +127,8 @@ test('exact staging revision supports anonymous, durable, and shared operation c
   await expect(publicPage.getByRole('heading', { name: 'Shared chat unavailable' })).toBeVisible()
   await publicContext.close()
 
-  await ownerChat.getByRole('button', { name: `Delete ${ownerPrompt}` }).click()
-  const confirmation = ownerChat.getByText(`Delete “${ownerPrompt}”?`, { exact: true }).locator('..')
+  await ownerChat.getByRole('button', { name: `Delete ${ownerTitle}` }).click()
+  const confirmation = ownerChat.getByText(`Delete “${ownerTitle}”?`, { exact: true }).locator('..')
   await confirmation.getByRole('button', { name: 'Delete' }).click()
   await expect(ownerPage).toHaveURL(/\/t\/new$/u)
   await ownerContext.close()
