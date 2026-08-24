@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { fetchAgenticMarketCatalog } from "@/modules/market/registry-source-adapters";
+import {
+  fetchAgenticMarketCatalog,
+  fetchTregCatalog,
+} from "@/modules/market/registry-source-adapters";
 
 function json(document: unknown): Response {
   return Response.json(document);
@@ -198,6 +201,72 @@ describe("registry origin adapters", () => {
     ]);
   });
 
+  it("enumerates every hidden-inclusive Treg shelf as metadata only", async () => {
+    const requested: string[] = [];
+    const result = await fetchTregCatalog({
+      fetch: async (url) => {
+        requested.push(url);
+        if (url.endsWith("/catalog/platforms")) {
+          return json({
+            generated_from: "catalog",
+            platforms: [tregPlatform("companies", 2), tregPlatform("stocks", 2)],
+          });
+        }
+        const slug = new URL(url).pathname.split("/").at(-1)!;
+        return json(tregShelf(slug));
+      },
+      now: () => 2_000,
+    });
+
+    expect(requested).toEqual([
+      "https://treg.to/catalog/platforms",
+      "https://treg.to/catalog/platforms/companies?include_hidden=1",
+      "https://treg.to/catalog/platforms/stocks?include_hidden=1",
+    ]);
+    expect(result).toMatchObject({
+      source: "treg",
+      complete: true,
+      fetchedShelfCount: 2,
+      sourceReportedCount: 4,
+      admittedCount: 4,
+      excludedCount: 0,
+      fetchedAt: 2_000,
+    });
+    expect(result.entries.map((entry) => entry.upstreamEndpointId)).toEqual([
+      "companies.search",
+      "companies.extended",
+      "stocks.search",
+      "stocks.extended",
+    ]);
+    expect(result.entries[0]).toMatchObject({
+      source: "treg",
+      sourceUrl: "https://treg.to/catalog/endpoints/companies.search",
+      access: "provider_account",
+      authority: "source_metadata_only",
+    });
+    expect(result.entries[0]).not.toHaveProperty("endpointUrl");
+    expect(result.entries[0]).not.toHaveProperty("probeRequest");
+    expect(result.entries[0]).not.toHaveProperty("exactPrice");
+  });
+
+  it("marks an incomplete Treg shelf traversal without claiming coverage", async () => {
+    const result = await fetchTregCatalog({
+      maxShelves: 1,
+      fetch: async (url) =>
+        url.endsWith("/catalog/platforms")
+          ? json({ platforms: [tregPlatform("companies", 2), tregPlatform("stocks", 2)] })
+          : json(tregShelf("companies")),
+    });
+
+    expect(result).toMatchObject({
+      source: "treg",
+      complete: false,
+      incompleteReason: "page_ceiling_reached",
+      fetchedShelfCount: 1,
+      sourceReportedCount: 4,
+    });
+  });
+
   it("rejects wrapper drift", async () => {
     await expect(
       fetchAgenticMarketCatalog({
@@ -271,5 +340,64 @@ function agenticService(id: string, endpointCount: number) {
     serviceName: `${id} API`,
     tags: ["search"],
     iconUrl: "",
+  };
+}
+
+function tregPlatform(slug: string, endpoints: number) {
+  return {
+    slug,
+    label: `${slug} label`,
+    category: "Data",
+    featured: null,
+    summary: `${slug} summary`,
+    price_from: null,
+    capabilities: 1,
+    endpoints,
+    verified: 0,
+    providers: [`${slug}-provider`],
+  };
+}
+
+function tregShelf(slug: string) {
+  return {
+    platform: { slug, label: `${slug} label`, category: "Data" },
+    capabilities: [{
+      id: `${slug}.search`,
+      description: `${slug} search`,
+      endpoints: [tregEndpoint(`${slug}.search`, "core")],
+    }],
+    domains: [],
+    extended: [tregEndpoint(`${slug}.extended`, "extended")],
+    hidden_count: 1,
+    providers: {},
+  };
+}
+
+function tregEndpoint(id: string, tier: string) {
+  return {
+    id,
+    provider: id.split(".")[0],
+    provider_display: `${id.split(".")[0]} provider`,
+    name: `${id} endpoint`,
+    summary: `${id} summary`,
+    method: "GET",
+    path: "/v1/search",
+    scope: "any_account",
+    tier,
+    kind: "data",
+    domain: "search",
+    call_template: `treg call ${id}`,
+    cost: { type: "per_call", value: 1, currency: "credit", unit: "call" },
+    platform_eligible: false,
+    platform_blocked: null,
+    miss: null,
+    status: null,
+    status_note: null,
+    superseded_by: null,
+    verified: null,
+    docs_url: "https://example.com/docs",
+    has_example: false,
+    input: null,
+    test_request: null,
   };
 }

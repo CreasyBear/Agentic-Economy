@@ -2,7 +2,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
@@ -14,9 +14,8 @@ describe("Agentic Economy registry generations", () => {
       generation: "generation-1",
       startedAt: 1,
     });
-    const entries = [entry("alpha"), entry("beta")];
-    const firstEntry = entries[0];
-    if (firstEntry === undefined) throw new Error("expected first registry entry");
+    const firstEntry = entry("alpha");
+    const entries = [firstEntry, tregEntry("beta")];
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
       generation: "generation-1",
       entries,
@@ -27,7 +26,7 @@ describe("Agentic Economy registry generations", () => {
     });
 
     expect(
-      await backend.query(internal.marketExternalRegistry.search, {
+      await backend.query(api.marketExternalRegistry.search, {
         query: "",
         access: "all",
         limit: 12,
@@ -41,9 +40,11 @@ describe("Agentic Economy registry generations", () => {
       expectedEntries: 2,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
+      tregReported: 1,
+      tregFetched: 1,
     });
 
-    const result = await backend.query(internal.marketExternalRegistry.search, {
+    const result = await backend.query(api.marketExternalRegistry.search, {
       query: "search",
       access: "all",
       limit: 12,
@@ -59,9 +60,31 @@ describe("Agentic Economy registry generations", () => {
     if (result.kind !== "ok") throw new Error("expected API registry");
     expect(result.page).toHaveLength(2);
     expect(JSON.stringify(result.page)).not.toContain("operationRef");
+    expect(JSON.stringify(result.page)).not.toContain("probeRequest");
+    expect(JSON.stringify(result.page)).not.toContain("sourceDigest");
     expect(result.page.every((item) => item.documentId.startsWith("registry:"))).toBe(true);
     expect(result.page[0]).not.toHaveProperty("source");
     expect(result.page[0]).not.toHaveProperty("upstreamServiceId");
+    expect(result.page.some((item) => item.access === "provider_account")).toBe(true);
+
+    const firstPage = await backend.query(api.marketExternalRegistry.search, {
+      query: "",
+      access: "all",
+      limit: 1,
+      cursor: null,
+    });
+    if (firstPage.kind !== "ok") throw new Error("expected first registry page");
+    const secondPage = await backend.query(api.marketExternalRegistry.search, {
+      query: "",
+      access: "all",
+      limit: 1,
+      cursor: firstPage.continueCursor,
+    });
+    if (secondPage.kind !== "ok") throw new Error("expected second registry page");
+    expect([
+      ...firstPage.page.map((item) => item.documentId),
+      ...secondPage.page.map((item) => item.documentId),
+    ]).toEqual(entries.map((item) => item.documentId).sort());
 
     const detail = await backend.query(internal.marketExternalRegistry.entry, {
       documentId: firstEntry.documentId,
@@ -97,6 +120,12 @@ describe("Agentic Economy registry generations", () => {
       }),
     ).resolves.toEqual({ kind: "source_changed" });
     await expect(
+      backend.query(internal.marketExternalRegistry.admissionCandidate, {
+        documentId: entries[1]!.documentId,
+        expectedSourceDigest: entries[1]!.sourceDigest,
+      }),
+    ).resolves.toEqual({ kind: "not_found" });
+    await expect(
       backend.query(internal.marketExternalRegistry.admissionCandidates, {
         generation: "generation-1",
         cursor: null,
@@ -106,7 +135,6 @@ describe("Agentic Economy registry generations", () => {
       kind: "page",
       candidates: [
         { documentId: entries[0]?.documentId },
-        { documentId: entries[1]?.documentId },
       ],
       isDone: true,
     });
@@ -120,14 +148,16 @@ describe("Agentic Economy registry generations", () => {
     });
     await backend.mutation(internal.marketExternalRegistry.writeBatch, {
       generation: "good",
-      entries: [entry("alpha")],
+      entries: [entry("alpha"), tregEntry("beta")],
     });
     await backend.mutation(internal.marketExternalRegistry.finalize, {
       generation: "good",
       completedAt: 2,
-      expectedEntries: 1,
+      expectedEntries: 2,
       agenticMarketReported: 1,
       agenticMarketFetched: 1,
+      tregReported: 1,
+      tregFetched: 1,
     });
     await backend.mutation(internal.marketExternalRegistry.begin, {
       generation: "partial",
@@ -136,10 +166,10 @@ describe("Agentic Economy registry generations", () => {
     await backend.mutation(internal.marketExternalRegistry.fail, {
       generation: "partial",
       failedAt: 4,
-      reason: "agentic_market:deadline_reached",
+      reason: "treg:deadline_reached",
     });
 
-    const result = await backend.query(internal.marketExternalRegistry.search, {
+    const result = await backend.query(api.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -185,7 +215,7 @@ describe("Agentic Economy registry generations", () => {
       agenticMarketFetched: 1,
     });
 
-    const result = await backend.query(internal.marketExternalRegistry.search, {
+    const result = await backend.query(api.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -230,7 +260,7 @@ describe("Agentic Economy registry generations", () => {
       agenticMarketFetched: 1,
     });
 
-    const result = await backend.query(internal.marketExternalRegistry.search, {
+    const result = await backend.query(api.marketExternalRegistry.search, {
       query: "",
       access: "all",
       limit: 12,
@@ -255,7 +285,7 @@ function entry(id: string) {
     summary: "Search public data",
     provider: `${id} provider`,
     category: "Search",
-    method: "GET",
+    method: "GET" as const,
     tags: ["search"],
     networks: [],
     exactPrice: {
@@ -275,6 +305,29 @@ function entry(id: string) {
     quality: "callable" as const,
     authority: "source_metadata_only" as const,
     sourceDigest: `sha256:${"a".repeat(64)}`,
+    searchText: `${id} search public data provider`,
+  };
+}
+
+function tregEntry(id: string) {
+  return {
+    documentId: `registry:${"b".repeat(64)}`,
+    source: "treg" as const,
+    upstreamServiceId: "service",
+    upstreamEndpointId: id,
+    sourceUrl: `https://treg.to/catalog/endpoints/${id}`,
+    docsUrl: "https://example.com/docs",
+    name: `${id} search`,
+    summary: "Search public data",
+    provider: `${id} provider`,
+    category: "Search",
+    method: "GET" as const,
+    tags: ["search"],
+    networks: [],
+    priceLabel: "1 credit",
+    access: "provider_account" as const,
+    authority: "source_metadata_only" as const,
+    sourceDigest: `sha256:${"b".repeat(64)}`,
     searchText: `${id} search public data provider`,
   };
 }

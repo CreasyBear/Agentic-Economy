@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { setPublicSourceTransportForTests } from '@/lib/server/convex-source'
 import { setHttpRateLimitAdmissionForTests } from '@/lib/server/rate-limit'
 import { handleMarketOperationCompareRequest } from '@/routes/api.v1.market-operations.compare'
 import { handleMarketOperationInspectPlanRequest } from '@/routes/api.v1.market-operations.inspect-plan'
 import { handleMarketOperationDetailRequest } from '@/routes/api.v1.market-operations.detail'
 import { handleMarketOperationSearchRequest } from '@/routes/api.v1.market-operations.search'
+import {
+  handleApiRegistryRequest,
+  Route as RegistryRoute,
+} from '@/routes/api.v1.registry'
 
 const searchResult = {
   kind: 'no_candidates' as const,
@@ -61,6 +66,7 @@ vi.mock('@/modules/capability-supply/operation-source', () => ({
 describe('public market operation routes', () => {
   afterEach(() => {
     setHttpRateLimitAdmissionForTests(undefined)
+    setPublicSourceTransportForTests(undefined)
     vi.clearAllMocks()
   })
 
@@ -115,5 +121,110 @@ describe('public market operation routes', () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(inspectPlanResult)
+  })
+})
+
+describe('public external registry route', () => {
+  afterEach(() => {
+    setHttpRateLimitAdmissionForTests(undefined)
+    setPublicSourceTransportForTests(undefined)
+    vi.clearAllMocks()
+  })
+
+  it('runs bounded GET and HEAD reads through the public Convex query', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const query = vi.fn(async () => ({
+      kind: 'ok' as const,
+      generation: 'mixed-generation',
+      coverage: { entries: 2, completedAt: 1 },
+      page: [{
+        documentId: `registry:${'a'.repeat(64)}`,
+        sourceUrl: 'https://treg.to/catalog/endpoints/companies.search',
+        name: 'Companies search',
+        summary: 'Search company data.',
+        provider: 'Treg provider',
+        category: 'Data',
+        tags: ['data'],
+        networks: [],
+        access: 'provider_account' as const,
+        authority: 'registry_metadata_only' as const,
+      }],
+      isDone: true,
+      continueCursor: '',
+    }))
+    setPublicSourceTransportForTests({
+      query,
+      mutation: vi.fn(),
+      action: vi.fn(),
+    } as never)
+
+    const get = await handleApiRegistryRequest(new Request(
+      'https://ae.test/api/v1/registry?query=companies&access=provider_account&limit=12',
+      { headers: { 'x-ae-request-id': 'registry-route-test' } },
+    ))
+    expect(get.status).toBe(200)
+    expect(get.headers.get('x-ae-request-id')).toBe('registry-route-test')
+    expect(get.headers.get('cache-control')).toBe(
+      'public, max-age=60, stale-while-revalidate=240',
+    )
+    await expect(get.json()).resolves.toMatchObject({
+      schemaVersion: 'api-registry:v1',
+      query: 'companies',
+      access: 'provider_account',
+      kind: 'ok',
+    })
+    expect(query).toHaveBeenCalledWith(
+      expect.anything(),
+      { query: 'companies', access: 'provider_account', limit: 12, cursor: null },
+    )
+
+    const head = await handleApiRegistryRequest(
+      new Request('https://ae.test/api/v1/registry', { method: 'HEAD' }),
+      true,
+    )
+    expect(head.status).toBe(200)
+    expect(await head.text()).toBe('')
+  })
+
+  it('returns bounded validation, method refusal, and unavailable projection', async () => {
+    setHttpRateLimitAdmissionForTests(async () => ({ ok: true }))
+    const query = vi.fn(async () => ({ kind: 'unavailable' as const }))
+    setPublicSourceTransportForTests({
+      query,
+      mutation: vi.fn(),
+      action: vi.fn(),
+    } as never)
+
+    const malformed = await handleApiRegistryRequest(
+      new Request('https://ae.test/api/v1/registry?limit=51'),
+    )
+    expect(malformed.status).toBe(400)
+    expect(malformed.headers.get('content-type')).toContain('application/problem+json')
+    await expect(malformed.json()).resolves.toMatchObject({
+      kind: 'INVALID_ARGUMENT',
+      code: 'invalid_registry_query',
+    })
+    expect(query).not.toHaveBeenCalled()
+
+    const handlers = RegistryRoute.options.server?.handlers
+    const post = typeof handlers === 'object' && handlers !== null && 'POST' in handlers
+      ? handlers.POST
+      : undefined
+    if (typeof post !== 'function') throw new Error('POST handler missing')
+    const refused = await post({ request: new Request('https://ae.test/api/v1/registry', {
+      method: 'POST',
+    }) } as never)
+    if (!(refused instanceof Response)) throw new Error('POST response missing')
+    expect(refused.status).toBe(405)
+    expect(refused.headers.get('allow')).toBe('GET, HEAD')
+
+    const unavailable = await handleApiRegistryRequest(
+      new Request('https://ae.test/api/v1/registry'),
+    )
+    expect(unavailable.status).toBe(200)
+    await expect(unavailable.json()).resolves.toMatchObject({
+      schemaVersion: 'api-registry:v1',
+      kind: 'unavailable',
+    })
   })
 })

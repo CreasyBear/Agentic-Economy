@@ -5,11 +5,11 @@ import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
+  query,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 
-const sourceValue = v.literal("agentic_market");
 const accessValue = v.union(
   v.literal("x402"),
   v.literal("provider_account"),
@@ -27,16 +27,14 @@ const probeRequestValue = v.object({
   headers: v.array(v.object({ name: v.string(), value: v.string() })),
   bodyJson: v.optional(v.string()),
 });
-const entryInputValue = v.object({
+const commonEntryFields = {
   documentId: v.string(),
-  source: sourceValue,
   upstreamServiceId: v.string(),
   upstreamEndpointId: v.string(),
   sourceUrl: v.string(),
   providerUrl: v.optional(v.string()),
   endpointUrl: v.optional(v.string()),
   docsUrl: v.optional(v.string()),
-  routeIdentity: v.string(),
   name: v.string(),
   summary: v.string(),
   provider: v.string(),
@@ -46,16 +44,6 @@ const entryInputValue = v.object({
   tags: v.array(v.string()),
   networks: v.array(v.string()),
   priceLabel: v.optional(v.string()),
-  exactPrice: exactPriceValue,
-  access: accessValue,
-  credentialRequirements: v.array(v.literal("x402_payment")),
-  readiness: v.literal("source_declared_callable"),
-  lastObservedAt: v.string(),
-  lastVerifiedAt: v.optional(v.string()),
-  inputSchemaJson: v.string(),
-  exampleInvocation: v.string(),
-  probeRequest: probeRequestValue,
-  quality: v.literal("callable"),
   sourceCheckedAt: v.optional(v.string()),
   sourceCalls30d: v.optional(v.string()),
   sourcePayers30d: v.optional(v.string()),
@@ -65,14 +53,42 @@ const entryInputValue = v.object({
   authority: v.literal("source_metadata_only"),
   sourceDigest: v.string(),
   searchText: v.string(),
-});
+};
+const entryInputValue = v.union(
+  v.object({
+    ...commonEntryFields,
+    source: v.literal("agentic_market"),
+    endpointUrl: v.string(),
+    routeIdentity: v.string(),
+    method: v.union(v.literal("GET"), v.literal("POST")),
+    exactPrice: exactPriceValue,
+    access: v.literal("x402"),
+    credentialRequirements: v.array(v.literal("x402_payment")),
+    readiness: v.literal("source_declared_callable"),
+    lastObservedAt: v.string(),
+    lastVerifiedAt: v.optional(v.string()),
+    inputSchemaJson: v.string(),
+    exampleInvocation: v.string(),
+    probeRequest: probeRequestValue,
+    quality: v.literal("callable"),
+  }),
+  v.object({
+    ...commonEntryFields,
+    source: v.literal("treg"),
+    endpointUrl: v.optional(v.string()),
+    routeIdentity: v.optional(v.string()),
+    method: v.optional(v.string()),
+    exactPrice: v.optional(exactPriceValue),
+    access: v.literal("provider_account"),
+  }),
+);
 const publicEntryValue = v.object({
   documentId: v.string(),
   sourceUrl: v.string(),
   providerUrl: v.optional(v.string()),
   endpointUrl: v.optional(v.string()),
   docsUrl: v.optional(v.string()),
-  routeIdentity: v.string(),
+  routeIdentity: v.optional(v.string()),
   name: v.string(),
   summary: v.string(),
   provider: v.string(),
@@ -82,14 +98,14 @@ const publicEntryValue = v.object({
   tags: v.array(v.string()),
   networks: v.array(v.string()),
   priceLabel: v.optional(v.string()),
-  exactPrice: exactPriceValue,
+  exactPrice: v.optional(exactPriceValue),
   access: accessValue,
-  credentialRequirements: v.array(v.literal("x402_payment")),
-  readiness: v.literal("source_declared_callable"),
-  lastObservedAt: v.string(),
+  credentialRequirements: v.optional(v.array(v.literal("x402_payment"))),
+  readiness: v.optional(v.literal("source_declared_callable")),
+  lastObservedAt: v.optional(v.string()),
   lastVerifiedAt: v.optional(v.string()),
-  inputSchemaJson: v.string(),
-  exampleInvocation: v.string(),
+  inputSchemaJson: v.optional(v.string()),
+  exampleInvocation: v.optional(v.string()),
   sourceCheckedAt: v.optional(v.string()),
   sourceCalls30d: v.optional(v.string()),
   sourcePayers30d: v.optional(v.string()),
@@ -214,6 +230,9 @@ export const writeBatch = internalMutation({
         )
         .unique();
       if (existing !== null) {
+        if (existing.sourceDigest !== entry.sourceDigest) {
+          throw new Error("external_registry_generation_identity_conflict");
+        }
         replayed += 1;
         continue;
       }
@@ -240,6 +259,8 @@ export const finalize = internalMutation({
     expectedEntries: v.number(),
     agenticMarketReported: v.number(),
     agenticMarketFetched: v.number(),
+    tregReported: v.optional(v.number()),
+    tregFetched: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -262,6 +283,12 @@ export const finalize = internalMutation({
       completedAt: args.completedAt,
       agenticMarketReported: args.agenticMarketReported,
       agenticMarketFetched: args.agenticMarketFetched,
+      ...(args.tregReported === undefined
+        ? {}
+        : { tregReported: args.tregReported }),
+      ...(args.tregFetched === undefined
+        ? {}
+        : { tregFetched: args.tregFetched }),
     });
     const state = await registryState(ctx);
     if (state !== null && state.lastAttemptAt > generation.startedAt) {
@@ -360,7 +387,7 @@ export const deleteGenerationBatch = internalMutation({
   },
 });
 
-export const search = internalQuery({
+export const search = query({
   args: {
     query: v.string(),
     access: v.union(accessValue, v.literal("all")),
@@ -494,7 +521,13 @@ export const admissionCandidate = internalQuery({
         index.eq("generation", activeGeneration).eq("documentId", args.documentId),
       )
       .unique();
-    if (row === null || row.probeRequest === undefined) return { kind: "not_found" as const };
+    if (
+      row === null ||
+      row.source !== "agentic_market" ||
+      row.probeRequest === undefined
+    ) {
+      return { kind: "not_found" as const };
+    }
     if (row.sourceDigest !== args.expectedSourceDigest) return { kind: "source_changed" as const };
     return {
       kind: "found" as const,
@@ -531,7 +564,7 @@ export const admissionCandidates = internalQuery({
     return {
       kind: "page" as const,
       candidates: page.page.flatMap((row) =>
-        row.probeRequest === undefined
+        row.source !== "agentic_market" || row.probeRequest === undefined
           ? []
           : [{ documentId: row.documentId, sourceDigest: row.sourceDigest }],
       ),
@@ -542,46 +575,42 @@ export const admissionCandidates = internalQuery({
 });
 
 function publicEntry(row: Doc<"marketExternalRegistryEntries">) {
-  if (
-    row.quality !== "callable" ||
-    row.endpointUrl === undefined ||
-    row.routeIdentity === undefined ||
-    row.method === undefined ||
-    row.exactPrice === undefined ||
-    row.credentialRequirements === undefined ||
-    row.readiness === undefined ||
-    row.lastObservedAt === undefined ||
-    row.inputSchemaJson === undefined ||
-    row.exampleInvocation === undefined
-  ) {
-    return undefined;
-  }
   return {
     documentId: row.documentId,
     sourceUrl: row.sourceUrl,
     ...(row.providerUrl === undefined ? {} : { providerUrl: row.providerUrl }),
-    endpointUrl: row.endpointUrl,
+    ...(row.endpointUrl === undefined ? {} : { endpointUrl: row.endpointUrl }),
     ...(row.docsUrl === undefined ? {} : { docsUrl: row.docsUrl }),
-    routeIdentity: row.routeIdentity,
+    ...(row.routeIdentity === undefined
+      ? {}
+      : { routeIdentity: row.routeIdentity }),
     name: row.name,
     summary: row.summary,
     provider: row.provider,
     category: row.category,
     ...(row.capability === undefined ? {} : { capability: row.capability }),
-    method: row.method,
+    ...(row.method === undefined ? {} : { method: row.method }),
     tags: row.tags,
     networks: row.networks,
     ...(row.priceLabel === undefined ? {} : { priceLabel: row.priceLabel }),
-    exactPrice: row.exactPrice,
+    ...(row.exactPrice === undefined ? {} : { exactPrice: row.exactPrice }),
     access: row.access,
-    credentialRequirements: row.credentialRequirements,
-    readiness: row.readiness,
-    lastObservedAt: row.lastObservedAt,
+    ...(row.credentialRequirements === undefined
+      ? {}
+      : { credentialRequirements: row.credentialRequirements }),
+    ...(row.readiness === undefined ? {} : { readiness: row.readiness }),
+    ...(row.lastObservedAt === undefined
+      ? {}
+      : { lastObservedAt: row.lastObservedAt }),
     ...(row.lastVerifiedAt === undefined
       ? {}
       : { lastVerifiedAt: row.lastVerifiedAt }),
-    inputSchemaJson: row.inputSchemaJson,
-    exampleInvocation: row.exampleInvocation,
+    ...(row.inputSchemaJson === undefined
+      ? {}
+      : { inputSchemaJson: row.inputSchemaJson }),
+    ...(row.exampleInvocation === undefined
+      ? {}
+      : { exampleInvocation: row.exampleInvocation }),
     ...(row.sourceCheckedAt === undefined ? {} : { sourceCheckedAt: row.sourceCheckedAt }),
     ...(row.sourceCalls30d === undefined ? {} : { sourceCalls30d: row.sourceCalls30d }),
     ...(row.sourcePayers30d === undefined ? {} : { sourcePayers30d: row.sourcePayers30d }),
@@ -612,46 +641,65 @@ async function scheduleGenerationCleanup(
 
 function validEntry(entry: {
   documentId: string;
+  source: "agentic_market" | "treg";
   sourceDigest: string;
   endpointUrl?: string;
-  routeIdentity: string;
+  routeIdentity?: string;
   method?: string;
-  exactPrice: { scheme: "exact"; amount: string; currency: string; network: string };
-  credentialRequirements: string[];
-  readiness: "source_declared_callable";
-  lastObservedAt: string;
-  inputSchemaJson: string;
-  exampleInvocation: string;
-  probeRequest: {
+  exactPrice?: { scheme: "exact"; amount: string; currency: string; network: string };
+  access: "x402" | "provider_account" | "unknown";
+  credentialRequirements?: string[];
+  readiness?: "source_declared_callable";
+  lastObservedAt?: string;
+  inputSchemaJson?: string;
+  exampleInvocation?: string;
+  probeRequest?: {
     method: "GET" | "POST";
     url: string;
     headers: { name: string; value: string }[];
     bodyJson?: string;
   };
-  quality: "callable";
+  quality?: "callable";
   tags: string[];
   networks: string[];
   searchText: string;
 }): boolean {
   const serialized = JSON.stringify(entry);
-  return (
+  const commonValid = (
     /^registry:[0-9a-f]{64}$/u.test(entry.documentId) &&
     /^sha256:[0-9a-f]{64}$/u.test(entry.sourceDigest) &&
+    entry.tags.length <= 50 &&
+    entry.networks.length <= 40 &&
+    entry.searchText.length <= 8_000 &&
+    encoder.encode(serialized).byteLength <= MAX_ENTRY_BYTES
+  );
+  if (!commonValid) return false;
+  if (entry.source === "treg") {
+    return entry.access === "provider_account" && entry.probeRequest === undefined;
+  }
+  return (
     validHttpUrl(entry.endpointUrl) &&
     entry.routeIdentity === `${entry.method} ${entry.endpointUrl}` &&
     /^(?:GET|POST)$/u.test(entry.method ?? "") &&
+    entry.exactPrice !== undefined &&
     entry.exactPrice.scheme === "exact" &&
     /^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(entry.exactPrice.amount) &&
     /[1-9]/u.test(entry.exactPrice.amount) &&
     entry.exactPrice.currency.length > 0 &&
     entry.exactPrice.network.length > 0 &&
+    entry.access === "x402" &&
+    entry.credentialRequirements !== undefined &&
     entry.credentialRequirements.length === 1 &&
     entry.credentialRequirements[0] === "x402_payment" &&
     entry.readiness === "source_declared_callable" &&
+    entry.lastObservedAt !== undefined &&
     Number.isFinite(Date.parse(entry.lastObservedAt)) &&
+    entry.inputSchemaJson !== undefined &&
     validJsonSchemaDocument(entry.inputSchemaJson) &&
+    entry.exampleInvocation !== undefined &&
     entry.exampleInvocation.length > 0 &&
     entry.exampleInvocation.length <= 16_000 &&
+    entry.probeRequest !== undefined &&
     entry.probeRequest.method === entry.method &&
     entry.probeRequest.url === entry.endpointUrl &&
     entry.probeRequest.headers.length <= 32 &&
@@ -661,11 +709,7 @@ function validEntry(entry: {
     (entry.probeRequest.bodyJson === undefined || (
       entry.probeRequest.bodyJson.length <= 16_000 && validJsonObject(entry.probeRequest.bodyJson)
     )) &&
-    entry.quality === "callable" &&
-    entry.tags.length <= 50 &&
-    entry.networks.length <= 40 &&
-    entry.searchText.length <= 8_000 &&
-    encoder.encode(serialized).byteLength <= MAX_ENTRY_BYTES
+    entry.quality === "callable"
   );
 }
 
@@ -708,12 +752,16 @@ function validCoverage(args: {
   expectedEntries: number;
   agenticMarketReported: number;
   agenticMarketFetched: number;
+  tregReported?: number;
+  tregFetched?: number;
 }): boolean {
   return [
     args.expectedEntries,
     args.agenticMarketReported,
     args.agenticMarketFetched,
-  ].every(
+    args.tregReported,
+    args.tregFetched,
+  ].filter((value): value is number => value !== undefined).every(
     (value) => Number.isSafeInteger(value) && value >= 0,
   );
 }

@@ -1,4 +1,6 @@
-export const registryOrigins = ["agentic_market"] as const;
+import { canonicalDigest } from "@/modules/common/canonical-digest";
+
+export const registryOrigins = ["agentic_market", "treg"] as const;
 export type RegistryOrigin = (typeof registryOrigins)[number];
 
 export type RegistryExactPrice = Readonly<{
@@ -15,34 +17,21 @@ export type RegistryProbeRequest = Readonly<{
   bodyJson?: string;
 }>;
 
-export type RegistrySourceEntry = Readonly<{
+type RegistrySourceEntryBase = Readonly<{
   kind: "registry_source_entry";
-  source: RegistryOrigin;
   upstreamServiceId: string;
   upstreamEndpointId: string;
   sourceUrl: string;
   providerUrl?: string;
-  endpointUrl: string;
   docsUrl?: string;
-  routeIdentity: string;
   name: string;
   summary: string;
   provider: string;
   category: string;
   capability?: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
   tags: readonly string[];
   networks: readonly string[];
-  exactPrice: RegistryExactPrice;
-  priceLabel: string;
-  access: "x402";
-  credentialRequirements: readonly ["x402_payment"];
-  readiness: "source_declared_callable";
-  lastObservedAt: string;
-  lastVerifiedAt?: string;
-  inputSchemaJson: string;
-  exampleInvocation: string;
-  probeRequest: RegistryProbeRequest;
+  sourceCheckedAt?: string;
   sourceCalls30d?: string;
   sourcePayers30d?: string;
   sourceMedianLatencyMs?: number;
@@ -52,7 +41,45 @@ export type RegistrySourceEntry = Readonly<{
   sourceDigest: string;
 }>;
 
-export type RegistrySourceFetchResult = Readonly<{
+export type AgenticMarketRegistrySourceEntry = RegistrySourceEntryBase & Readonly<{
+      source: "agentic_market";
+      endpointUrl: string;
+      routeIdentity: string;
+      method: "GET" | "POST";
+      exactPrice: RegistryExactPrice;
+      priceLabel: string;
+      access: "x402";
+      credentialRequirements: readonly ["x402_payment"];
+      readiness: "source_declared_callable";
+      lastObservedAt: string;
+      lastVerifiedAt?: string;
+      inputSchemaJson: string;
+      exampleInvocation: string;
+      probeRequest: RegistryProbeRequest;
+    }>;
+export type TregRegistrySourceEntry = RegistrySourceEntryBase & Readonly<{
+      source: "treg";
+      endpointUrl?: string;
+      routeIdentity?: string;
+      method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+      exactPrice?: RegistryExactPrice;
+      priceLabel?: string;
+      access: "provider_account";
+      credentialRequirements?: never;
+      readiness?: never;
+      lastObservedAt?: never;
+      lastVerifiedAt?: never;
+      inputSchemaJson?: never;
+      exampleInvocation?: never;
+      probeRequest?: never;
+    }>;
+export type RegistrySourceEntry =
+  | AgenticMarketRegistrySourceEntry
+  | TregRegistrySourceEntry;
+
+export type RegistrySourceFetchResult<
+  Entry extends RegistrySourceEntry = RegistrySourceEntry,
+> = Readonly<{
   source: RegistryOrigin;
   fetchedAt: number;
   complete: boolean;
@@ -66,13 +93,22 @@ export type RegistrySourceFetchResult = Readonly<{
   excludedCount: number;
   fetchedServiceCount?: number;
   fetchedShelfCount?: number;
-  entries: readonly RegistrySourceEntry[];
+  entries: readonly Entry[];
 }>;
 
 export function registryDocumentId(
-  entry: Pick<RegistrySourceEntry, "routeIdentity">,
+  entry: Pick<AgenticMarketRegistrySourceEntry, "routeIdentity">,
+): string;
+export function registryDocumentId(entry: RegistrySourceEntry): string;
+export function registryDocumentId(
+  entry: RegistrySourceEntry | Pick<AgenticMarketRegistrySourceEntry, "routeIdentity">,
 ): string {
-  const digest = canonicalDigest({ routeIdentity: entry.routeIdentity });
+  const digest = !("source" in entry) || entry.source === "agentic_market"
+    ? canonicalDigest({ routeIdentity: entry.routeIdentity })
+    : canonicalDigest({
+        source: entry.source,
+        upstreamServiceId: entry.upstreamServiceId,
+        upstreamEndpointId: entry.upstreamEndpointId,
+      });
   return `registry:${digest.slice("sha256:".length)}`;
 }
-import { canonicalDigest } from "@/modules/common/canonical-digest";
