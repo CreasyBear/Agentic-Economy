@@ -20,7 +20,7 @@ import {
   preparedPublicationArgs,
   seedCatalogOffering,
 } from './capability-publication-harness'
-import { withSourceWrite } from '../helpers/source-write-admission'
+import { withSourceWrite, withSourceWriteCommand } from '../helpers/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import { accountRefForOwner } from '@/modules/money/public'
@@ -230,6 +230,28 @@ async function invokeOperation(
   )
 }
 
+async function recoveryActionArgs(
+  principal: TestPrincipal,
+  invocationRef: string,
+  suffix: string,
+  idempotencyKey: string,
+) {
+  const args = {
+    operationKey: `test:operation-workpool:recovery:${suffix}`,
+    correlationId: `test:operation-workpool:recovery:${suffix}`,
+    principal: { ...principal, scopes: [...principal.scopes] },
+    invocationRef,
+  }
+  return await withSourceWriteCommand('protected_action', args, {
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    principal: args.principal,
+    operationRef: '',
+    input: {},
+    idempotencyKey,
+  })
+}
+
 async function readEvidence(
   backend: ConvexFixtureBackend,
   invocationRef: string,
@@ -352,6 +374,82 @@ describe('capability operation Workpool lifecycle', () => {
     ])
     expect(completed.history.map((row) => row.invocationVersion)).toEqual([1, 2, 3])
     expect(completedResult.output).toEqual(providerOutput)
+    await expect(backend.action(
+      api.capabilityOperationInvocations.readInvocationStatus,
+      await recoveryActionArgs(
+        first.principal,
+        pendingInvocationRef,
+        'status-owner',
+        `status:${pendingInvocationRef}`,
+      ),
+    )).resolves.toMatchObject({
+      kind: 'found',
+      invocationRef: pendingInvocationRef,
+      operationRef,
+      state: 'terminal',
+      result: {
+        kind: 'completed',
+        operationRef,
+        output: providerOutput,
+      },
+    })
+    await expect(backend.action(
+      api.capabilityOperationInvocations.readInvocationStatus,
+      await recoveryActionArgs(
+        revoked.principal,
+        pendingInvocationRef,
+        'status-isolated',
+        `status:${pendingInvocationRef}`,
+      ),
+    )).resolves.toMatchObject({
+      kind: 'refused',
+      invocationRef: pendingInvocationRef,
+      code: 'invocation_not_found',
+    })
+    await expect(backend.action(
+      api.capabilityOperationInvocations.cancelInvocation,
+      {
+        ...await recoveryActionArgs(
+          revoked.principal,
+          pendingInvocationRef,
+          'cancel-isolated',
+          'cancel:cancel-isolated',
+        ),
+        idempotencyKey: 'cancel-isolated',
+      },
+    )).resolves.toMatchObject({
+      kind: 'refused',
+      invocationRef: pendingInvocationRef,
+      code: 'invocation_not_found',
+    })
+    await expect(backend.action(
+      api.capabilityOperationInvocations.reconcileInvocation,
+      {
+        ...await recoveryActionArgs(
+          revoked.principal,
+          pendingInvocationRef,
+          'reconcile-isolated',
+          'reconcile:reconcile-isolated',
+        ),
+        idempotencyKey: 'reconcile-isolated',
+        evidence: {
+          kind: 'action_invocation_reconciliation',
+          version: 1,
+          evidenceRef: 'test:operation-workpool:reconcile-isolated',
+          source: 'test',
+          invocationRef: pendingInvocationRef,
+          attemptRef: completed.attempt?.attemptRef ?? 'attempt:missing',
+          effectGeneration: 1,
+          resolution: 'not_released',
+          observedAt: new Date().toISOString(),
+          digest: canonicalDigest({ invocationRef: pendingInvocationRef, isolated: true }),
+        },
+      },
+    )).resolves.toMatchObject({
+      kind: 'refused',
+      invocationRef: pendingInvocationRef,
+      code: 'invocation_not_found',
+    })
     const canonicalCommandJson = JSON.stringify({
       control: completed.control,
       attempt: completed.attempt,

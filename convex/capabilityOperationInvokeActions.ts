@@ -396,7 +396,11 @@ export async function readInvocationStatusHandler(
   args: RecoveryActionArgs,
 ): Promise<Infer<typeof statusResultValue>> {
   await ctx.runMutation(internal.capabilityOperationInvocations.admit, {
-    ...args,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
     operationRef: '',
     input: {},
     idempotencyKey: `status:${args.invocationRef}`,
@@ -419,7 +423,11 @@ export async function cancelInvocationHandler(
   args: RecoveryActionArgs & { idempotencyKey: string },
 ): Promise<Infer<typeof recoveryResultValue>> {
   await ctx.runMutation(internal.capabilityOperationInvocations.admit, {
-    ...args,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
     operationRef: '',
     input: {},
     idempotencyKey: `cancel:${args.idempotencyKey}`,
@@ -440,7 +448,11 @@ export async function reconcileInvocationHandler(
   args: RecoveryActionArgs & { idempotencyKey: string; evidence: RecoveryEvidence },
 ): Promise<Infer<typeof recoveryResultValue>> {
   await ctx.runMutation(internal.capabilityOperationInvocations.admit, {
-    ...args,
+    operationKey: args.operationKey,
+    correlationId: args.correlationId,
+    ...(args.sourceWrite === undefined ? {} : { sourceWrite: args.sourceWrite }),
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+    principal: args.principal,
     operationRef: '',
     input: {},
     idempotencyKey: `reconcile:${args.idempotencyKey}`,
