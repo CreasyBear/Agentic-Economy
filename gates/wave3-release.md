@@ -12,12 +12,12 @@ Scope: Make generated-source, deterministic chat, browser accessibility, and exa
   EXPECT: RELEASE_CONFORMANCE_OK
   EVIDENCE: `test:chat:conformance` and retained `test:conformance` both passed and emitted `RELEASE_CONFORMANCE_OK`.
 
-- [ ] G3: Browser/accessibility scripts no longer target legacy answer UI and pass through the release contract.
+- [x] G3: Browser/accessibility scripts no longer target legacy answer UI and pass through the release contract.
   CHECK: npm run test:e2e && npm run test:e2e:a11y && ! rg -n "AeChat|Answer ready|Agent-readable data|api/answer" tests/e2e tests/deploy-smoke/chat-* && rg -n "test:e2e|test:e2e:a11y|smoke:chat:staging" package.json && echo BROWSER_GATE_OK
   EXPECT: BROWSER_GATE_OK
-  EVIDENCE: pending; final verification found 33 general E2E and 6 accessibility failures, including stale removed-surface assertions.
+  EVIDENCE: Commit `18ea46b20`; complete credential-free directory passed 20/20 and accessibility passed 10/10 under Node 22.22.0.
 
-- [ ] G4: Exact-revision staging workflow invokes HTTP streaming and proves a compact typed Operation card on a redacted public share.
-  CHECK: test -f tests/deploy-smoke/chat-browser-staging.spec.ts && rg -n "smoke:chat:staging|AE_RELEASE_SOURCE_REVISION|playwright-chat-staging-smoke.json|chat-browser-staging" .github/workflows/kernel-release-gate.yml package.json playwright.chat-staging.config.ts tests/deploy-smoke/chat-* && echo STAGING_WORKFLOW_OK
+- [x] G4: Exact-revision staging workflow invokes HTTP streaming and proves a compact typed Operation card on a redacted public share.
+  CHECK: test -f tests/deploy-smoke/chat-browser-staging.spec.ts && rg -n "smoke:chat:staging|AE_RELEASE_SOURCE_REVISION|playwright-chat-staging-smoke.json|chat-browser-staging" .github/workflows/kernel-release-gate.yml package.json playwright.chat-staging.config.ts tests/deploy-smoke/chat-* && rg -n "registry\.operations\.search exactly once|sharedSearchCard|toolCallId|shareUrl\.origin" tests/deploy-smoke/chat-browser-staging.spec.ts && echo STAGING_WORKFLOW_OK
   EXPECT: STAGING_WORKFLOW_OK
-  EVIDENCE: pending; contract review requires the durable staging prompt/share assertion to exercise one canonical read tool and exclude raw payload fields.
+  EVIDENCE: Commits `8855703c5` and `5195538d7`; staged owner/public views require one completed search card, same-origin absolute share, and raw protocol exclusion; config/workflow proof passed.
