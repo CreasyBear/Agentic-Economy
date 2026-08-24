@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const DEFAULT_ORIGIN = 'http://127.0.0.1:3000'
+const DEFAULT_ORIGIN = 'http://127.0.0.1:3024'
 const CHECK_COUNT = 7
 const SCHEMA_VERSION = 'registry-operations:v1'
 const MISSING_OPERATION_REF = `operation:v1:${'0'.repeat(64)}`
