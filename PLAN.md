@@ -44,4 +44,4 @@ The master owns contracts, ordering, gates, conflict resolution, reviews, genera
 
 - Wave 1 accepted: commits `65959ec48` through `5207cbe7e`, dual review passed.
 - Wave 2 accepted: commits `c742476ac` through `79291d274`, dual review passed.
-- Wave 3 dual review returned contained UI/share and browser-suite corrections; original owners are fixing them before re-review.
+- Wave 3 accepted after correction and re-review: thin chat cutover, browser/release proof, and retained payment isolation are green through `68d2cbc7a`.

@@ -2,18 +2,18 @@
 
 Scope: Integrate H-I-J corrections and obtain both independent reviewer approvals.
 
-- [ ] G1: Thin UI correction leaf is complete.
+- [x] G1: Thin UI correction leaf is complete.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave3-ui.md && echo UI_LEAF_OK
   EXPECT: UI_LEAF_OK
-  EVIDENCE: pending
+  EVIDENCE: ALL MET (3 met) | UI_LEAF_OK
 
-- [ ] G2: Release/browser correction leaf is complete.
+- [x] G2: Release/browser correction leaf is complete.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave3-release.md && echo RELEASE_LEAF_OK
   EXPECT: RELEASE_LEAF_OK
-  EVIDENCE: pending
+  EVIDENCE: ALL MET (4 met) | RELEASE_LEAF_OK
 
-- [ ] G3: Contract reviewer accepts Wave 3.
-  EVIDENCE: pending
+- [x] G3: Contract reviewer accepts Wave 3.
+  EVIDENCE: PASS after corrections through `68d2cbc7a`; absolute share parity, public typed-card redaction, and isolated retained-payment proof accepted.
 
-- [ ] G4: Verification reviewer accepts Wave 3.
-  EVIDENCE: pending
+- [x] G4: Verification reviewer accepts Wave 3.
+  EVIDENCE: PASS under Node 22.22.0; chat 85/85, retained 420/420, general browser 20/20, accessibility 10/10, retained payment 7/7, build/CLI/generated checks green.

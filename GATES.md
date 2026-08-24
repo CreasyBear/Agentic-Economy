@@ -5,10 +5,10 @@ Scope: Deliver the narrow Operation market repository, prove its retained bounda
 - [x] G1: Foundations and Agent backend are independently accepted.
   EVIDENCE: Wave 1 and Wave 2 dual reviewers passed; chat conformance 82 tests and retained conformance 420 tests were measured after integration.
 
-- [ ] G2: Product cutover is accepted after all Wave 3 contract findings are closed.
+- [x] G2: Product cutover is accepted after all Wave 3 contract findings are closed.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave3-integration.md && echo WAVE3_OK
   EXPECT: WAVE3_OK
-  EVIDENCE: pending
+  EVIDENCE: Wave 3 integration ledger is 4/4 met; both original reviewers returned PASS after correction through `68d2cbc7a`.
 
 - [ ] G3: Drain, writer freeze, and retained-boundary extraction are accepted.
   CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/wave4-integration.md && echo WAVE4_OK
