@@ -700,7 +700,7 @@ function sameProjection<T extends 'capabilityCurrentOperations' | 'capabilityCur
   existing: Doc<T>,
   next: Omit<Doc<T>, '_id' | '_creationTime'>,
 ): boolean {
-  const { _id: _id, _creationTime: _creationTime, projectedAt: _projectedAt, ...current } = existing
+  const { _id, _creationTime, projectedAt: _projectedAt, ...current } = existing
   const { projectedAt: _nextProjectedAt, ...candidate } = next
   return canonicalDigest(current as StableHashValue) === canonicalDigest(candidate as StableHashValue)
 }

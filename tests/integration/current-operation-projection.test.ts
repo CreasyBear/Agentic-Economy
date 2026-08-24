@@ -78,7 +78,7 @@ async function cloneCurrentPublications(
       ))
       .unique()
     if (source === null) throw new Error('t4_source_publication_missing')
-    const { _id: _id, _creationTime: _creationTime, ...material } = source
+    const { _id, _creationTime, ...material } = source
     const refs = [source.operationRef]
     for (let index = 1; index < total; index += 1) {
       const publicationRef = `${source.publicationRef}:t4:${String(index).padStart(3, '0')}`
