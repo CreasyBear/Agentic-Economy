@@ -32,6 +32,7 @@ import {
 } from './capabilitySupplyOperationShared'
 import {
   loadProjectedCurrentOperation,
+  readCurrentOperationControl,
   readCurrentOperationMode,
   searchProjectedCurrentOperations,
 } from './capabilitySupplyOperationProjection'
@@ -383,10 +384,29 @@ export const inspectArgs = { operationRefs: v.array(v.string()), mappingRefs: v.
 
 export async function searchHandler(ctx: QueryCtx, args: OperationSearchInput) {
   const now = Date.now()
-  const mode = await readCurrentOperationMode(ctx)
-  return serializeOperationSearchResult(mode === 'new'
-    ? await searchProjectedCurrentOperations(ctx, args, now)
-    : await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now))
+  const control = await readCurrentOperationControl(ctx)
+  const projected = async () => await searchProjectedCurrentOperations(
+    ctx,
+    args,
+    now,
+    control.verifiedActiveCount,
+    control.verifiedProjectionDigest,
+  )
+  if (control.mode === 'new') return serializeOperationSearchResult(await projected())
+  const oldResult = await searchCapabilityOperations(capabilityOperationSourcePort(ctx), args, now)
+  if (control.mode === 'shadow') {
+    const newResult = await projected()
+    const oldWire = serializeOperationSearchResult(oldResult)
+    const newWire = serializeOperationSearchResult(newResult)
+    console.info('CURRENT_OPERATION_SHADOW', JSON.stringify({
+      schemaVersion: 'current-operation-shadow-read:v1',
+      oldOutcome: oldWire.kind,
+      newOutcome: newWire.kind,
+      typedOutcomeMatch: oldWire.kind === newWire.kind,
+      canonicalDigestMatch: canonicalDigest(oldWire) === canonicalDigest(newWire),
+    }))
+  }
+  return serializeOperationSearchResult(oldResult)
 }
 export async function detailHandler(ctx: QueryCtx, args: OperationDetailInput) {
   return serializeOperationDetailResult(await detailCapabilityOperation(capabilityOperationSourcePort(ctx), args))

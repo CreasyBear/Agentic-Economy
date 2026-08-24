@@ -228,6 +228,8 @@ export const capabilitySupplyTables = {
     mode: v.union(v.literal('old'), v.literal('shadow'), v.literal('new')),
     reason: v.string(),
     releaseOwner: v.string(),
+    verifiedActiveCount: v.optional(v.number()),
+    verifiedProjectionDigest: v.optional(v.string()),
     updatedAt: v.number(),
   }).index('by_controlRef', ['controlRef']),
 
