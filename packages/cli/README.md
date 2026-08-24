@@ -11,4 +11,5 @@ npx @agentic-economy/cli call "$AE_OPERATION_REF" --input '{"city":"Perth"}' --w
 ```
 
 The package contains one compiled executable and has no runtime dependencies on
-the Agentic Economy source repository.
+the Agentic Economy source repository. Its supported npm interface is the `ae`
+binary only; package-root and deep JavaScript imports are intentionally blocked.

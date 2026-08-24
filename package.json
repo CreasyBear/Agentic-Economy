@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "workspaces": [
+    "packages/cli"
+  ],
   "scripts": {
     "ae": "tsx tools/ae/cli.ts",
-    "build:cli": "node scripts/build-cli.mjs",
-    "prepack": "npm run build:cli",
+    "build:cli": "npm run build --workspace @agentic-economy/cli",
     "test:cli-package": "npm run build:cli && node scripts/test-cli-package.mjs",
     "parity:check": "node eval/parity/check-parity.mjs",
     "audit:actions": "node scripts/audit-action-surfaces.mjs",
