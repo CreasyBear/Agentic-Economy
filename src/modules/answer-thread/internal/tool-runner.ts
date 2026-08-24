@@ -103,7 +103,6 @@ export async function runAnswerToolCall(
       tool,
       input: input.input,
       context,
-      surface: 'chat',
       mode: 'public-read',
       toolCallId,
     })
@@ -112,7 +111,6 @@ export async function runAnswerToolCall(
       tool,
       input: input.input,
       context,
-      surface: 'chat',
       mode: 'public-read',
       toolCallId,
     })

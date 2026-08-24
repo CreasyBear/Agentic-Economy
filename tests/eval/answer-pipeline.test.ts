@@ -297,7 +297,7 @@ describe('answer pipeline eval', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.problems).toContain('capability evidence status is error')
+    expect(result.problems, result.problems.join('; ')).toContain('capability result schema/ref mismatch')
   })
 
   it('rejects a seed-only capability query mismatch instead of treating kind as success', async () => {
