@@ -48,7 +48,41 @@ export const publicAuthentication = v.union(
   v.object({ kind: v.literal('unknown') }),
 )
 
-export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilityPublications'>, now: number): Promise<CapabilityOperationSourceRecord | undefined> {
+export const CURRENT_OPERATION_PROJECTION_DROP_REASONS = [
+  'identity_drift',
+  'missing_offering',
+  'missing_binding',
+  'missing_business',
+  'missing_contract',
+  'business_unpublished',
+  'invalid_transport',
+  'malformed_price',
+] as const
+
+export type CurrentOperationProjectionDropReason = typeof CURRENT_OPERATION_PROJECTION_DROP_REASONS[number]
+export type CurrentOperationProjectionResult =
+  | Readonly<{ kind: 'projected'; record: CapabilityOperationSourceRecord }>
+  | Readonly<{ kind: 'dropped'; reason: CurrentOperationProjectionDropReason }>
+
+export async function operationRecord(
+  ctx: QueryCtx,
+  publication: Doc<'capabilityPublications'>,
+  now: number,
+): Promise<CapabilityOperationSourceRecord | undefined> {
+  const projection = await operationRecordProjection(ctx, publication, now)
+  return projection.kind === 'projected' ? projection.record : undefined
+}
+
+/**
+ * Build the current public Operation projection while retaining a bounded,
+ * privacy-safe reason when malformed source material has to fail closed.
+ * Public readers continue to omit these rows; diagnostics expose counts only.
+ */
+export async function operationRecordProjection(
+  ctx: QueryCtx,
+  publication: Doc<'capabilityPublications'>,
+  now: number,
+): Promise<CurrentOperationProjectionResult> {
   const [offeringDoc, bindingDoc, business, contractResult] = await Promise.all([
     ctx.db.query('capabilityOfferings')
       .withIndex('by_offeringId', (query) => query.eq('offeringId', publication.offeringId))
@@ -74,8 +108,11 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
       contractDigest: publication.contractDigest,
     },
   })
-  if (publication.operationRef !== operationRef) return undefined
-  if (offeringDoc === null || bindingDoc === null || business === null || contractResult.kind !== 'found') return undefined
+  if (publication.operationRef !== operationRef) return { kind: 'dropped', reason: 'identity_drift' }
+  if (offeringDoc === null) return { kind: 'dropped', reason: 'missing_offering' }
+  if (bindingDoc === null) return { kind: 'dropped', reason: 'missing_binding' }
+  if (business === null) return { kind: 'dropped', reason: 'missing_business' }
+  if (contractResult.kind !== 'found') return { kind: 'dropped', reason: 'missing_contract' }
   const offering = toCapabilityOfferingRow(offeringDoc)
   const binding = toCapabilityBindingRow(bindingDoc)
   const qualification = await qualifySuppliedCandidate(capabilitySupplyGraphPorts(ctx.db), {
@@ -94,7 +131,9 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
     },
     now,
   })
-  if (qualification.reasons.includes('business_not_currently_published')) return undefined
+  if (qualification.reasons.includes('business_not_currently_published')) {
+    return { kind: 'dropped', reason: 'business_unpublished' }
+  }
   const integrated = offering.status === 'active'
     && binding.admission === 'admitted'
     && binding.conformance === 'conformant'
@@ -103,7 +142,7 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
   const authorityMode = publication.authorityMode
   const sourcePrice = offering.presentation.price
   const transport = publicOperationTransportFor(binding.endpointUrl, binding.adapterId, binding.configJson)
-  if (transport === undefined) return undefined
+  if (transport === undefined) return { kind: 'dropped', reason: 'invalid_transport' }
   const answerExecutable = isAnonymousKeylessOperationEligible({
     authority: binding.authority,
     adapterId: binding.adapterId,
@@ -114,7 +153,7 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
   })
   const pricingSource = qualification.sources.find(({ kind }) => kind === 'pricing')
   const priceBreakdown = priceBreakdownFor(publication, binding.adapterId, binding.configJson, sourcePrice)
-  if (priceBreakdown === null) return undefined
+  if (priceBreakdown === null) return { kind: 'dropped', reason: 'malformed_price' }
   const priceEvidence = publication.priceDigest === undefined
     ? undefined
     : {
@@ -123,7 +162,7 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
         evidenceRefs: [...(pricingSource?.evidenceRefs ?? publication.registrationEvidenceRefs)],
       }
   const parameterMappings = publicOperationParameterMappingsFor(binding.adapterId, binding.configJson)
-  return {
+  return { kind: 'projected', record: {
     operationId,
     publicationRef: publication.publicationRef,
     publicationRevision: publication.revision,
@@ -159,7 +198,7 @@ export async function operationRecord(ctx: QueryCtx, publication: Doc<'capabilit
     },
     searchTerms: offering.searchTerms,
     snapshotKey: `publication:${publication.publicationRef}:${publication.revision}`,
-  }
+  } }
 }
 
 const BASE_X402_NETWORK = 'eip155:8453' as const
