@@ -61,6 +61,10 @@ const durableTables = [
   'moneyPayoutAllocations',
   'qualifiedUseReceipts',
   'capabilityContractDocuments',
+  'capabilityCurrentOperations',
+  'capabilityCurrentOperationDetails',
+  'capabilityCurrentOperationReadControls',
+  'capabilityCurrentOperationMismatchExplanations',
   'capabilityOfferings',
   'capabilityOperationInvocations',
   'capabilityPublications',
@@ -174,6 +178,21 @@ const requiredIndexes = {
   ],
   agentAccessOAuthClients: ['by_clientId'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
+  capabilityCurrentOperations: [
+    'by_operationRef_and_active',
+    'by_publicationRef_and_publicationRevision',
+    'by_active_and_networkId',
+    'by_active_and_operationRef',
+  ],
+  capabilityCurrentOperationDetails: [
+    'by_operationRef_and_active',
+    'by_publicationRef_and_publicationRevision',
+  ],
+  capabilityCurrentOperationReadControls: ['by_controlRef'],
+  capabilityCurrentOperationMismatchExplanations: [
+    'by_operationRef_and_mismatchKind',
+    'by_expiresAt',
+  ],
   capabilityPublications: [
     'by_publicationRef_and_revision',
     'by_operationRef_and_disposition',
@@ -213,7 +232,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(54)
+    expect(durableTables).toHaveLength(58)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
