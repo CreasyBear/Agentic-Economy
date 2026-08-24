@@ -30,7 +30,11 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly CONVEX_CLOUD_URL: string;
   readonly CONVEX_SITE_URL: string;
+  readonly AE_CHAT_PROXY_SECRET: string | undefined;
+  readonly AE_CHAT_SHARE_KEY_ID: string | undefined;
+  readonly AE_CHAT_SHARE_SECRET: string | undefined;
   readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
+  readonly AE_LLM_MODEL: string | undefined;
   readonly AE_RELEASE_SOURCE_REVISION: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_KEY_ID: string | undefined;
   readonly AE_ROUTE_CALL_SIGNING_SECRET: string | undefined;

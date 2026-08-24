@@ -61,6 +61,7 @@
     "@cfworker/json-schema": "4.1.1",
     "@clerk/tanstack-react-start": "1.4.9",
     "@coinbase/cdp-sdk": "1.55.0",
+    "@convex-dev/agent": "0.7.1",
     "@convex-dev/aggregate": "^0.2.2",
     "@convex-dev/rate-limiter": "^0.3.2",
     "@convex-dev/workpool": "0.4.10",

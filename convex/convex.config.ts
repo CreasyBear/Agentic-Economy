@@ -1,4 +1,5 @@
 import aggregate from '@convex-dev/aggregate/convex.config'
+import agent from '@convex-dev/agent/convex.config'
 import { defineApp } from 'convex/server'
 import { v } from 'convex/values'
 import rateLimiter from '@convex-dev/rate-limiter/convex.config'
@@ -7,6 +8,10 @@ import workpool from '@convex-dev/workpool/convex.config'
 const app = defineApp({
   env: {
     OPENROUTER_API_KEY: v.optional(v.string()),
+    AE_LLM_MODEL: v.optional(v.string()),
+    AE_CHAT_SHARE_SECRET: v.optional(v.string()),
+    AE_CHAT_SHARE_KEY_ID: v.optional(v.string()),
+    AE_CHAT_PROXY_SECRET: v.optional(v.string()),
     AE_SITE_URL: v.optional(v.string()),
     AE_RELEASE_SOURCE_REVISION: v.optional(v.string()),
     CLERK_JWT_ISSUER_DOMAIN: v.optional(v.string()),
@@ -27,6 +32,7 @@ const app = defineApp({
 
 app.use(workpool)
 app.use(rateLimiter)
+app.use(agent)
 app.use(aggregate, { name: 'ownerActivationByStage' })
 app.use(aggregate, { name: 'marketEvidence' })
 app.use(aggregate, { name: 'marketOperationEvidence' })
