@@ -93,11 +93,6 @@ export const MODULE_BOUNDARY_MANIFEST: ModuleBoundaryManifest = {
     { name: 'dev', entrySurfaces: ['public.ts'], allowedDependencies: ['common', 'business', 'catalog', 'registry', 'capability-supply', 'capability-execution', 'actions'] },
   ],
   temporaryRuntimeExceptions: [
-    { id: 'T3-common-action-security-01', from: 'common', to: 'security', importer: 'action.ts', entry: 'source-write-admission.ts', owner: 'module-enforcement', removalTask: 'T3' },
-    { id: 'T3-common-action-execution-01', from: 'common', to: 'capability-execution', importer: 'action.ts', entry: 'operation-invoke.ts', owner: 'module-enforcement', removalTask: 'T3' },
-    { id: 'T3-common-action-supply-01', from: 'common', to: 'capability-supply', importer: 'action.ts', entry: 'supply-actions.ts', owner: 'module-enforcement', removalTask: 'T3' },
-    { id: 'T3-common-action-access-01', from: 'common', to: 'agent-access', importer: 'action.ts', entry: 'agent-access.ts', owner: 'module-enforcement', removalTask: 'T3' },
-    { id: 'T3-common-action-contract-01', from: 'common', to: 'capability-contract', importer: 'action.ts', entry: 'public.ts', owner: 'module-enforcement', removalTask: 'T3' },
     { id: 'T5-kernel-supply-01', from: 'action-invocation', to: 'capability-supply', importer: 'dynamic-published-adapter-commands.ts', entry: 'public.ts', owner: 'call-lifecycle', removalTask: 'T5' },
     { id: 'T5-kernel-supply-02', from: 'action-invocation', to: 'capability-supply', importer: 'dynamic-published-adapter-snapshot.ts', entry: 'public.ts', owner: 'call-lifecycle', removalTask: 'T5' },
     { id: 'T5-kernel-supply-03', from: 'action-invocation', to: 'capability-supply', importer: 'dynamic-published-adapter-transact.ts', entry: 'public.ts', owner: 'call-lifecycle', removalTask: 'T5' },

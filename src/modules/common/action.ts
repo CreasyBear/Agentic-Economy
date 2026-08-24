@@ -1,11 +1,5 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
-import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
-import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
-import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
-import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-
-import type { JsonValue } from '@/modules/capability-contract/public'
 /**
  * Agent-native action contract for AE.
  *
@@ -30,7 +24,11 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 
 export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'chat' | 'cli' | 'mcp'
 
-export type ActionSourceWriteRequest = SourceWriteAdmissionRequest
+export interface ActionContextComposition {}
+
+export type ActionSourceWriteRequest = NonNullable<
+  ActionContextComposition['sourceWriteRequest']
+>
 
 export type ActionTimingSink = {
   record: (
@@ -40,7 +38,9 @@ export type ActionTimingSink = {
   ) => void
 }
 
-export type ActionAgentAccessPrincipal = AgentAccessPrincipal
+export type ActionAgentAccessPrincipal = NonNullable<
+  ActionContextComposition['agentAccessPrincipal']
+>
 export type ActionCredentialAdmission = Readonly<{
   scope: string
   authority: 'descriptor_classified'
@@ -75,7 +75,7 @@ export type ActionModelRequestObservation = Readonly<{
   costUnavailableReason?: string
 }>
 
-export type ActionContext = {
+type ActionBaseContext = {
   /** Kernel-owned execution attribution; action callers must not supply it. */
   actionInvocationExecution?: Readonly<{
     invocationRef: string
@@ -88,8 +88,6 @@ export type ActionContext = {
    * the transport it arrived on.
    */
   caller?: ActionSurface
-  /** Admission context for writes; built from the calling surface's request. */
-  sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available at an HTTP boundary. */
   request?: Request
   /** Internal timing sink; never exposed on human surfaces. */
@@ -113,16 +111,11 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
-  /** Full server-derived agent-access principal; never caller-supplied authority. */
-  agentAccessPrincipal?: ActionAgentAccessPrincipal
   /** Correlation identity propagated by the transport into the application service. */
   correlationId?: string
-  /** One injected operation application service shared by HTTP and MCP adapters. */
-  operationInvokeService?: OperationInvokeService
-  /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
-  supplyManagementService?: SupplyManagementService
 }
- 
+
+export type ActionContext = ActionBaseContext & ActionContextComposition
 
 
 export type ActionRunArgs<Input> = {
@@ -200,9 +193,17 @@ export type ActionInvocationContract = Readonly<{
 export type ActionInvocationPreparation = Readonly<{
   dataUse: Readonly<{
     fields: readonly string[]
-    limits: Readonly<Record<string, JsonValue>>
+    limits: Readonly<Record<string, ActionJsonValue>>
   }>
 }>
+
+type ActionJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly ActionJsonValue[]
+  | Readonly<{ [key: string]: ActionJsonValue }>
 
 export type ActionInvocationResultClassification = Readonly<{
   outcome: string

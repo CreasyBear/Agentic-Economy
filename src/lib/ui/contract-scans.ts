@@ -542,6 +542,9 @@ export function validateModuleBoundaryManifest(
     if (!(["T3", "T4", "T5", "T6", "T7"] as const).includes(exception.removalTask)) {
       violations.push(manifestViolation("module-malformed-exception", `Runtime exception ${exception.id} has invalid removal task ${exception.removalTask}.`));
     }
+    if (exception.removalTask === "T3") {
+      violations.push(manifestViolation("module-expired-exception", `Runtime exception ${exception.id} expired in T3.`));
+    }
     if (!(declared.has(exception.from as ModuleName) || exception.from === "adapter" || exception.from === "convex") || !declared.has(exception.to)) {
       violations.push(manifestViolation("module-malformed-exception", `Runtime exception ${exception.id} names an unknown module.`));
     }
@@ -577,6 +580,7 @@ export function scanTestOnlyModuleBoundaries(
     manifest.modules.map((declaration) => [declaration.name, declaration]),
   );
   const usedTestExceptionIds = new Set<string>();
+  const usedTestExceptionScopes = new Set<string>();
   const violations: ScanViolation[] = [];
   const requiredWhiteBoxImports = new Map<string, Readonly<{
     importer: string;
@@ -626,19 +630,23 @@ export function scanTestOnlyModuleBoundaries(
         ));
       } else {
         usedTestExceptionIds.add(exception.id);
+        usedTestExceptionScopes.add(`${importer}->${targetModule}/${entry}`);
       }
     }
   }
 
   for (const exception of manifest.testOnlyWhiteBoxExceptions) {
-    if (!usedTestExceptionIds.has(exception.id)) {
-      violations.push(moduleViolation(
-        exception.importers[0] ?? "tests",
-        1,
-        "module-unused-test-exception",
-        `Test exception ${exception.id} matches no current white-box import.`,
-        `${exception.to}/${exception.entry}`,
-      ));
+    for (const importer of exception.importers) {
+      const scope = `${importer}->${exception.to}/${exception.entry}`;
+      if (!usedTestExceptionScopes.has(scope)) {
+        violations.push(moduleViolation(
+          importer,
+          1,
+          "module-unused-test-exception",
+          `Test exception ${exception.id} has an unused exact importer scope.`,
+          `${exception.to}/${exception.entry}`,
+        ));
+      }
     }
   }
   return {
