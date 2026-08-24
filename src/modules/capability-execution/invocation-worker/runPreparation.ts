@@ -7,7 +7,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   buildCanonicalClaimCommand,
   type CanonicalClaimInput,
-} from '@/modules/action-invocation'
+} from '@/modules/action-invocation/runtime'
 import {
   paymentLaneAdmission,
   signRouteTransportCall,
@@ -22,9 +22,9 @@ import {
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
-  publishedOperationMaterialMatches,
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
+import { currentOperationCommitmentsMatch } from '../current-operation-commitment'
 import {
   isPrincipalEnvironmentCompatibleWithOperation,
   operationEnvironmentMismatchNextAction,
@@ -140,7 +140,11 @@ export async function prepareInvocationRun(
   if (reservedOperation === undefined || currentOperation === undefined) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_unsupported', false, 'The admitted operation snapshot is invalid.')
   }
-  if (!publishedOperationMaterialMatches(reservedOperation, currentOperation)) {
+  if (!currentOperationCommitmentsMatch({
+    operationRef: dispatch.operationRef,
+    pinned: reservedOperation,
+    current: currentOperation,
+  })) {
     return await refuseBeforeClaim(ctx, dispatch, 'operation_not_current', false, 'The operation publication changed; retry discovery.')
   }
   const operation = currentOperation

@@ -3,9 +3,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { Agent, fetch as guardedFetch } from 'undici'
-import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-invocation'
+import { persistCanonicalReleaseFence, type CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
 import { invokePreparedRouteTransport, prepareRegisteredRouteTransportInvocation, type RouteTransportFetch, type RouteTransportObservation, type RouteTransportRuntime } from '@/modules/capability-supply/route-transport-runtime'
-import { parsePublishedOperationSnapshot, publishedOperationMaterialMatches } from '@/modules/capability-supply/public'
+import { parsePublishedOperationSnapshot } from '@/modules/capability-supply/public'
+import { currentOperationCommitmentsMatch } from '../current-operation-commitment'
 import { chargeSettlementOutcome, credentialFromEnvironment, x402PaymentCredentialRefFromEnvironment } from '@/modules/capability-supply/server'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { internal } from '../../../../convex/_generated/api'
@@ -308,7 +309,11 @@ export async function releaseInvocationRun(
   } catch {
     currentOperation = undefined
   }
-  if (currentOperation === undefined || !publishedOperationMaterialMatches(operation, currentOperation)) {
+  if (currentOperation === undefined || !currentOperationCommitmentsMatch({
+    operationRef: dispatch.operationRef,
+    pinned: operation,
+    current: currentOperation,
+  })) {
     await settleProviderLease(ctx, dispatch, operation, leaseRef, leaseAuthority, false, durableAttemptRef, durableEffectGeneration)
     await closeDispatcher()
     return await convergePreRelease(

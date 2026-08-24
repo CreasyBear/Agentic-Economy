@@ -6,7 +6,8 @@ import {
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StandingMandateAuthorityBasis } from '@/modules/action-invocation/contracts'
+import type { StandingMandateAuthorityBasis } from '@/modules/action-invocation/runtime'
+import { currentOperationDigest } from './current-operation-commitment'
 import {
   operationEnvironmentMismatchNextAction,
   operationInvokeInputSchema,
@@ -288,6 +289,10 @@ export async function admitOperationInvoke(input: Readonly<{
     if (preflightRefusal === undefined && current !== undefined) {
       try {
         descriptor = current.descriptor ?? materializeRuntimePublishedOperation(current.operation)
+        if (currentOperationDigest({
+          operationRef: command.operationRef,
+          operation: current.operation,
+        }) === undefined) throw new Error('operation_not_current')
       } catch {
         preflightRefusal = {
           kind: 'refused',

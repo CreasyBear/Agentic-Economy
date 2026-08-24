@@ -98,7 +98,7 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/modules/action-invocation', async (importOriginal) => {
+vi.mock('@/modules/action-invocation/runtime', async (importOriginal) => {
   const actual = await importOriginal<ActionInvocationModule>()
   return {
     ...actual,
@@ -136,7 +136,12 @@ vi.mock('undici', () => ({
 import { operationInvocationAttemptIdentityDigest, run } from '../../../convex/capabilityOperationInvocationWorker'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
-import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
+import {
+  capabilityBindingRegistrationHash,
+  capabilityOfferingRegistrationHash,
+  createPublicOperationRef,
+  materializeRuntimePublishedOperation,
+} from '@/modules/capability-supply/public'
 import { operationInvokeReceiptAsset } from '@/modules/capability-execution/operation-invoke-contracts'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -183,6 +188,7 @@ type WorkerOptions = Readonly<{
   invalidOutputLossResult?: 'settled' | 'refused' | 'throw'
   consumeLeaseResult?: Readonly<{ kind: 'applied' }> | Readonly<{ kind: 'duplicate' }> | Readonly<{ kind: 'refused'; code: string }>
   currentOperation?: (operation: PublishedOperation) => PublishedOperation
+  releaseCurrentOperation?: (operation: PublishedOperation) => PublishedOperation
   alreadyLeased?: boolean
   claimDispatchRefused?: boolean
   activeCharge?: Readonly<Record<string, unknown>>
@@ -302,6 +308,32 @@ function inRuntimeEnvironment(
   }
 }
 
+function sealCurrentOperation(operation: PublishedOperation): PublishedOperation {
+  const operationRef = createPublicOperationRef({
+    operationId: operation.operationId,
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    contractRef: operation.contract.ref,
+  })
+  const connectionAuthority = operation.connectionAuthority === undefined
+    ? undefined
+    : { ...operation.connectionAuthority, operationRef }
+  const { connectionAuthority: _oldIdentityAuthority, ...identityBase } = operation.identity
+  const identity = {
+    ...identityBase,
+    offeringDigest: capabilityOfferingRegistrationHash(operation.offering),
+    bindingDigest: capabilityBindingRegistrationHash(operation.binding, operation.transport),
+    runtimeEnvironment: operation.runtimeEnvironment,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority: { ...connectionAuthority } }),
+  }
+  return {
+    ...operation,
+    ...(connectionAuthority === undefined ? {} : { connectionAuthority }),
+    identity,
+    materialDigest: canonicalDigest(identity as StableHashValue),
+  }
+}
+
 export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { ctx: Record<string, unknown>; state: WorkerState } {
   const now = Date.now()
   const environment = options.environment ?? 'sandbox'
@@ -311,7 +343,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     options.priceUnits,
     environment === 'production' && kind === 'x402',
   )
-  const operation = inRuntimeEnvironment(
+  const operation = sealCurrentOperation(inRuntimeEnvironment(
     kind === 'x402' && environment === 'production' && baseOperation.identity.payment.kind === 'x402'
       ? {
           ...baseOperation,
@@ -322,7 +354,13 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         }
       : baseOperation,
     environment,
-  )
+  ))
+  const operationRef = createPublicOperationRef({
+    operationId: operation.operationId,
+    publicationRef: operation.identity.publicationRef,
+    publicationRevision: operation.identity.publicationRevision,
+    contractRef: operation.contract.ref,
+  })
   const operatorAccountVersion = options.operatorAccountVersion ?? 0
   const actualOperatorAccountVersion = options.actualOperatorAccountVersion ?? operatorAccountVersion
 
@@ -334,7 +372,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
   const limits = { amount: descriptor.price.kind === 'fixed' ? descriptor.price.amount : { currency: 'USD', units: '1', exponent: 2 } }
   const authorityMaterial = {
     invocationRef,
-    operationRef: operation.operationId,
+    operationRef,
     inputDigest,
     grantRef,
     grantGeneration: 1,
@@ -351,7 +389,10 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     decisionDigest: canonicalDigest({ format: 'operation-invoke-authority:v1', ...authorityMaterial } as StableHashValue),
   }
   const operationJson = JSON.stringify(operation)
-  const currentOperation = options.currentOperation?.(operation) ?? operation
+  const currentOperation = sealCurrentOperation(options.currentOperation?.(operation) ?? operation)
+  const releaseCurrentOperation = sealCurrentOperation(
+    options.releaseCurrentOperation?.(currentOperation) ?? currentOperation,
+  )
   const inputJson = JSON.stringify(input)
   const dispatch: Record<string, unknown> = {
     invocationRef,
@@ -361,7 +402,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     applicationRef: 'application:test-worker',
     environment,
     state: 'pending',
-    operationRef: operation.operationId,
+    operationRef,
     idempotencyKey: 'idempotency:test-worker',
     inputDigest,
     requestDigest: digest('r'),
@@ -379,7 +420,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     credentialId: 'credential:test-worker',
     applicationRef: 'application:test-worker',
     environment,
-    operationRef: operation.operationId,
+    operationRef,
     idempotencyKey: 'idempotency:test-worker',
     inputDigest,
     attemptRef,
@@ -790,7 +831,11 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         case 'capabilitySupplyOperations:readCurrentPublishedOperationSnapshot':
           currentOperationReads += 1
           if (currentOperationReads === 2) state.events.push('current-publication-price-revalidation')
-          return { operationJson: JSON.stringify(currentOperation) }
+          return {
+            operationJson: JSON.stringify(
+              currentOperationReads === 1 ? currentOperation : releaseCurrentOperation,
+            ),
+          }
         case 'moneyLedger:readOperatorAccountVersion': return operatorAccountVersion
         case 'capabilityOperationInvocations:readProviderLeaseAuthority': return providerAuthority
         case 'actionInvocationControl:readControl': return canonicalClaimed ? canonicalControl : undefined
