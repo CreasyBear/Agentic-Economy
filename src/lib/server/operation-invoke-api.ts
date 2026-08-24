@@ -95,7 +95,6 @@ export function createOperationInvokeService(
   const readInvocationStatus = async (input: OperationInvokeRecoveryRequest) => {
     const operationKey = operationKeyFor(input.invocationRef, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
     const command = {
-      invocationRef: input.invocationRef,
       operationRef: '',
       input: {},
       idempotencyKey: `status:${input.invocationRef}`,
@@ -124,7 +123,6 @@ export function createOperationInvokeService(
   const cancelInvocation = async (input: OperationInvokeCancelRequest) => {
     const operationKey = operationKeyFor({ invocationRef: input.invocationRef, idempotencyKey: input.idempotencyKey }, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
     const command = {
-      invocationRef: input.invocationRef,
       idempotencyKey: `cancel:${input.idempotencyKey}`,
       operationRef: '',
       input: {},
@@ -154,8 +152,6 @@ export function createOperationInvokeService(
   const reconcileInvocation = async (input: OperationInvokeReconcileRequest) => {
     const operationKey = operationKeyFor({ invocationRef: input.invocationRef, idempotencyKey: input.idempotencyKey, evidence: input.evidence }, input.principal.principalId, input.principal.credentialId, input.principal.applicationRef, input.principal.environment)
     const command = {
-      invocationRef: input.invocationRef,
-      evidence: input.evidence,
       idempotencyKey: `reconcile:${input.idempotencyKey}`,
       operationRef: '',
       input: {},

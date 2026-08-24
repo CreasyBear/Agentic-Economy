@@ -3,10 +3,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import {
+  createOperationInvokeService,
   handleOperationInvokeCancelPost,
   handleOperationInvokeReconcilePost,
   handleOperationInvokeStatusGet,
 } from '@/lib/server/operation-invoke-api'
+import {
+  createPublicSourceTransport,
+  setPublicSourceTransportForTests,
+} from '@/lib/server/convex-source'
+import { sourceWriteCommandDigest } from '@/modules/security/source-write-admission'
+import { installTestSourceWriteSecret } from '../../helpers/source-write-admission'
+import { convexUrl } from './server-seams-harness'
 
 const operationRef = `operation:v1:${'a'.repeat(64)}`
 const invocationRef = `operation-invocation:v1:${'b'.repeat(64)}`
@@ -68,6 +76,72 @@ function reconciliationEvidence() {
 }
 
 describe('operation recovery HTTP adapters', () => {
+  it('signs only the neutral internal admission command for status, cancel, and reconcile', async () => {
+    installTestSourceWriteSecret()
+    const calls: Array<{ path: string; args: [Record<string, unknown>] }> = []
+    const results = [
+      { kind: 'found', invocationRef, operationRef, state: 'in_progress' },
+      { kind: 'found', invocationRef, operationRef, state: 'cancelled' },
+      { kind: 'found', invocationRef, operationRef, state: 'terminal' },
+    ]
+    const transport = createPublicSourceTransport({
+      env: { CONVEX_URL: convexUrl },
+      fetch: async (_input, init) => {
+        const payload = JSON.parse(String(init?.body)) as { path: string; args: [Record<string, unknown>] }
+        calls.push(payload)
+        return new Response(JSON.stringify({ status: 'success', value: results[calls.length - 1] }))
+      },
+    })
+    const restore = setPublicSourceTransportForTests(transport)
+    const correlationId = 'corr:recovery-source-write'
+    const evidence = reconciliationEvidence()
+    const request = new Request('https://ae.example/api/v1/operations/recovery', { method: 'POST' })
+    const executor = createOperationInvokeService(request, '{}')
+    try {
+      await executor.readInvocationStatus({ invocationRef, principal, correlationId })
+      await executor.cancelInvocation({
+        invocationRef,
+        idempotencyKey: 'cancel:source-write',
+        principal,
+        correlationId,
+      })
+      await executor.reconcileInvocation({
+        invocationRef,
+        idempotencyKey: 'reconcile:source-write',
+        evidence,
+        principal,
+        correlationId,
+      })
+    } finally {
+      restore()
+    }
+
+    expect(calls.map(({ path }) => path)).toEqual([
+      'capabilityOperationInvocations:readInvocationStatus',
+      'capabilityOperationInvocations:cancelInvocation',
+      'capabilityOperationInvocations:reconcileInvocation',
+    ])
+    const expectedIdempotencyKeys = [
+      `status:${invocationRef}`,
+      'cancel:cancel:source-write',
+      'reconcile:reconcile:source-write',
+    ]
+    for (const [index, call] of calls.entries()) {
+      const outbound = call.args[0]
+      const sourceWrite = outbound.sourceWrite as { commandDigest: string }
+      expect(sourceWrite.commandDigest).toBe(sourceWriteCommandDigest({
+        operationRef: '',
+        input: {},
+        idempotencyKey: expectedIdempotencyKeys[index],
+        correlationId,
+        operationKey: outbound.operationKey,
+        principal,
+      }))
+      expect(outbound.invocationRef).toBe(invocationRef)
+    }
+    expect(calls[2]?.args[0]?.evidence).toEqual(evidence)
+  })
+
   it('requires the authenticated invocation scope before status lookup', async () => {
     const executor = service()
     const response = await handleOperationInvokeStatusGet(
