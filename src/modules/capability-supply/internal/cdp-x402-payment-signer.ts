@@ -1,8 +1,4 @@
 import { CdpClient } from '@coinbase/cdp-sdk'
-import {
-  applySpendControls,
-  type SpendControls,
-} from '@coinbase/cdp-sdk/x402'
 import { x402Client } from '@x402/core/client'
 import {
   decodePaymentSignatureHeader,
@@ -325,7 +321,7 @@ export async function createCdpEvmX402PaymentSignature(
     )
     if (material === undefined) throw new Error('x402_payment_unsigned_identity_conflict')
   } else {
-    material = await captureUnsignedMaterial(required, account.address, configuration, identifier)
+    material = await captureUnsignedMaterial(required, account.address, identifier)
     if (material === undefined) return undefined
     const paymentSigningIdempotencyKey = crypto.randomUUID()
     if (!isPaymentSigningIdempotencyKey(paymentSigningIdempotencyKey)) {
@@ -371,7 +367,6 @@ export async function createCdpEvmX402PaymentSignature(
 async function captureUnsignedMaterial(
   required: PaymentRequired,
   address: string,
-  configuration: CdpX402CustodyConfiguration,
   identifier: string,
 ): Promise<CdpX402PaymentUnsignedMaterial | undefined> {
   let capturedTypedData: CdpX402TypedData | undefined
@@ -391,7 +386,6 @@ async function captureUnsignedMaterial(
   try {
     const core = new x402Client()
     core.register(BASE_NETWORK, new ExactEvmScheme(captureSigner))
-    applySpendControls(core, cdpX402SpendControls(configuration))
     const payload = await core.createPaymentPayload(required)
     if (
       payload.x402Version !== 2
@@ -560,24 +554,6 @@ function paymentPayloadFromMaterial(
       authorization: material.authorization,
       signature,
     },
-  }
-}
-
-function cdpX402SpendControls(
-  configuration: CdpX402CustodyConfiguration,
-): SpendControls {
-  return {
-    maxAmountPerPayment: {
-      atomic: configuration.maxAtomic,
-      asset: BASE_USDC_ADDRESS,
-    },
-    maxCumulativeSpend: {
-      atomic: configuration.dailyMaxAtomic,
-      asset: BASE_USDC_ADDRESS,
-    },
-    maxCumulativeSpendWindow: '24h',
-    allowedNetworks: [BASE_NETWORK],
-    allowedAssets: [BASE_USDC_ADDRESS],
   }
 }
 

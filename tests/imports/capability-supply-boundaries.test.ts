@@ -26,6 +26,26 @@ const deepenedFolders = [
 ] as const
 
 describe('capability supply boundaries', () => {
+  it('keeps CDP native loading isolated from optional x402 SVM peers', () => {
+    const signer = readFileSync(
+      'src/modules/capability-supply/internal/cdp-x402-payment-signer.ts',
+      'utf8',
+    )
+    const convexConfiguration = JSON.parse(readFileSync('convex.json', 'utf8')) as {
+      node?: { externalPackages?: unknown }
+    }
+    const packageConfiguration = JSON.parse(readFileSync('package.json', 'utf8')) as Record<
+      string,
+      Record<string, unknown> | undefined
+    >
+
+    expect(signer).not.toContain('@coinbase/cdp-sdk/x402')
+    expect(convexConfiguration.node?.externalPackages).toEqual(['@coinbase/cdp-sdk'])
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      expect(packageConfiguration[field]?.['@x402/svm']).toBeUndefined()
+    }
+  })
+
   it('does not import or fall back to V1 Request, catalog or routing binding authorities', () => {
     for (const source of sources()) {
       const legacyAuthorityImport = /from\s+['"][^'"]*(?:customer-request|catalog|routing-kernel|routingKernelBindings)[^'"]*['"]/
