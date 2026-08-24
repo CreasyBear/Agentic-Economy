@@ -1,10 +1,27 @@
-import type {
-  BusinessOfferingStatus,
-  OfferingAccessPathDescriptor,
-} from "@/modules/catalog/public";
 import type { PricingConfig } from "@/modules/money/public";
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from "@/modules/security/source-write-admission";
 import type { CapabilityPublicationSourceSelector } from "../publication-importers";
+
+type BusinessOfferingStatus = "draft" | "published" | "paused" | "retired";
+type OfferingAccessPathDescriptor =
+  | Readonly<{
+      kind: "human_request";
+      channel: "phone" | "website";
+      disclosure: string;
+      url?: string;
+    }>
+  | Readonly<{
+      kind: "external_operation";
+      name: string;
+      summary: string;
+      url: string;
+      method?: string;
+      documentationUrl?: string;
+      interfaceDescription?: Readonly<{ format: string; url?: string }>;
+      authenticationSummary?: string;
+      pricingSummary?: string;
+      provenance: "business_declared" | "publicly_observed";
+    }>;
 
 export const OWNER_SUPPLY_UNAVAILABLE_MESSAGE =
   "Owner supply is temporarily unavailable. Try again.";
