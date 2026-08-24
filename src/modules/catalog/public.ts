@@ -80,6 +80,7 @@ export type {
 export {
   FirstRequestModeValues,
   PublicFirstRequestChannelValues,
+  buildOfferingSupplyProjection,
   normalizeFirstRequestMode,
   normalizePublicFirstRequestChannel,
 } from './internal/catalog-model'
