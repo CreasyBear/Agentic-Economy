@@ -13,13 +13,13 @@ import type {
 import type {
   ActionInvocationView,
   InvocationActor,
-} from '@/modules/action-invocation/contracts'
-import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation/dynamic-published-contract'
-import type { DynamicPublishedActionInvocationAdapter } from '@/modules/action-invocation/dynamic-published-adapter'
+} from '@/modules/action-invocation/runtime'
+import type { DynamicPublishedInvocationResult } from './legacy-dynamic/dynamic-published-contract'
+import type { DynamicPublishedActionInvocationAdapter } from './legacy-dynamic/dynamic-published-adapter'
 import {
   createInvocationApplication,
   type DevelopmentHostSourceCommands,
-} from '@/modules/action-invocation/application-service'
+} from './legacy-dynamic/application-service'
 import type { OperationInvokePersistedAuthority } from './internal/convex-schema'
 import {
   type OperationInvokeRefusalCode,

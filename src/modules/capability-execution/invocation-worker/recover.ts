@@ -7,15 +7,15 @@ import {
   buildDynamicPublishedInput,
   createDynamicPublishedAction,
   type DynamicPublishedInvocationInput,
-} from '@/modules/action-invocation/dynamic-published-contract'
+} from '../legacy-dynamic/dynamic-published-contract'
 import {
   createDurableActionInvocationTracer,
   readPublicInvocationStatus,
   cancelPublicInvocation,
   reconcilePublicInvocation,
   type ReconciliationEvidence,
-} from '@/modules/action-invocation'
-import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/public'
+} from '@/modules/action-invocation/runtime'
+import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocation/runtime'
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,

@@ -4,7 +4,7 @@ import {
   inspectUserInputContract,
   projectRichInvocationTask,
   projectStructuredInvocationTask,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import {
   buildDevelopmentPublishedOperationEvidence,
 } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'

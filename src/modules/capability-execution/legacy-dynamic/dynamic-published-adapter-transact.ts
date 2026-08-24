@@ -28,8 +28,8 @@ import {
   type DynamicPublishedSourcePort,
   type DynamicPublishedSourceRow,
 } from './dynamic-published-source'
-import type { DurableActionInvocationPort } from './internal/durable-contracts'
-import type { X402PaymentAttemptPort } from './x402-payment-attempt'
+import type { DurableActionInvocationPort } from '@/modules/action-invocation/runtime'
+import type { X402PaymentAttemptPort } from '@/modules/action-invocation/runtime'
 
 export type DynamicPublishedAdapterSemanticClaim = Readonly<{
   kind: 'owner' | 'reuse'

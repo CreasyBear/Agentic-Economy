@@ -5,7 +5,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
 import { inspectUserInputContract } from './input-work'
 import { assertDynamicPublishedSnapshotShape } from './dynamic-published-snapshot-verifier'
-import type { ActionInvocationOrigin, InvocationActor } from './contracts'
+import type { ActionInvocationOrigin, InvocationActor } from '@/modules/action-invocation/runtime'
 export {
   projectRichPaidOperation,
   projectStructuredPaidOperation,

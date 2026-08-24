@@ -1,7 +1,9 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
-import { acceptedAuthorityValue } from '@/modules/action-invocation/public'
-import type { CanonicalClaimAuthority } from '@/modules/action-invocation/canonical-claim'
+import {
+  acceptedAuthorityValue,
+  type CanonicalClaimAuthority,
+} from '@/modules/action-invocation/runtime'
 
 export type OperationInvokePersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'

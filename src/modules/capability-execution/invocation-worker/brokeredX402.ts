@@ -15,7 +15,7 @@ import {
   type OperationInvokeReceipt,
 } from '@/modules/capability-execution/operation-invoke-contracts'
 import type { ActionCtx } from '../../../../convex/_generated/server'
-import type { CanonicalClaimSnapshot } from '@/modules/action-invocation'
+import type { CanonicalClaimSnapshot } from '@/modules/action-invocation/runtime'
 import {
   canonicalTerminalOutcome,
   finalizeOperationDispatch,

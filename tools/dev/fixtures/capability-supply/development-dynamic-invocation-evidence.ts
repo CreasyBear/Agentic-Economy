@@ -12,7 +12,7 @@ import {
   type DynamicPublishedInvocationResult,
   type InvocationActor,
   type DynamicPublishedSnapshotAnchors,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import type {
   RouteTransportFetch,

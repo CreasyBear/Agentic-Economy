@@ -7,7 +7,7 @@ import {
   projectRichPaidOperation,
   projectStructuredPaidOperation,
   type PaidOperationSemantics,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 function baseSemantics(): Omit<PaidOperationSemantics, 'schema'> {

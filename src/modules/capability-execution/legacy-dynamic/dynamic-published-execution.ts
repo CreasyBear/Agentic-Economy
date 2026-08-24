@@ -28,7 +28,7 @@ import {
   x402PaymentAttemptKey,
   type X402PaymentAttempt,
   type X402PaymentAttemptPort,
-} from './x402-payment-attempt'
+} from '@/modules/action-invocation/runtime'
 import { recordCapabilityCallObservation, type CapabilityLiquidityWritePort, type LiquidityEnvironment, type LiquidityZeroReason } from '@/modules/capability-supply/public'
 
 export type DynamicPublishedExecutionToken = Readonly<{

@@ -11,7 +11,7 @@ import type {
   ActionInvocationView,
   InvocationActor,
   PreparedInvocation,
-} from './contracts'
+} from '@/modules/action-invocation/runtime'
 import {
   assertExactDescriptor,
   dynamicPublishedSourceDigest,

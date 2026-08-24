@@ -10,11 +10,11 @@ import {
   validateX402PaymentReconciliationEvidence,
   type DynamicPublishedInvocationResult,
   type X402PaymentReconciliationEvidenceMaterial,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import type { ExactAmount } from '@/modules/money/public'
 import { createDevelopmentFileX402PaymentAttemptPort } from '../../../tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port'
 import type { X402PaymentAttempt, X402PaymentAuthorizationEvent } from '@/modules/action-invocation/x402-payment-attempt'
-import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
+import { createDevelopmentDynamicPublishedSource } from '@/modules/capability-execution/legacy-dynamic'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'

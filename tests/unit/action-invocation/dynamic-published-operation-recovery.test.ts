@@ -8,7 +8,7 @@ import {
   loadDynamicPublishedAdapterSnapshot,
   materialDigest,
   readDevelopmentHostSnapshot,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   buildDevelopmentPublishedOperationEvidence,

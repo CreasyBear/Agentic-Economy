@@ -2,7 +2,7 @@ import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { isRecord } from '@/modules/common/is-record'
 
-import type { ActionInvocationOrigin, InvocationActor } from './contracts'
+import type { ActionInvocationOrigin, InvocationActor } from '@/modules/action-invocation/runtime'
 import { dynamicPublishedSourceDigest } from './dynamic-published-contract'
 import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
 

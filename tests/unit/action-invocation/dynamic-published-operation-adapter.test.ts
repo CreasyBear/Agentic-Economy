@@ -7,7 +7,7 @@ import {
   type ActionInvocationView,
   type DynamicPublishedInvocationResult,
   type InvocationActor,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { defineAction } from '@/modules/common/action'
 import type { RouteTransportFetch } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'

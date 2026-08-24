@@ -4,9 +4,9 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   assertDynamicPublishedSnapshotShape,
 } from './dynamic-published-snapshot-verifier'
-import type { ActionInvocationOrigin } from './contracts'
+import type { ActionInvocationOrigin } from '@/modules/action-invocation/runtime'
 
-import { reconstructDurableControlRow } from './internal/durable-contracts'
+import { reconstructDurableControlRow } from '@/modules/action-invocation/runtime'
 export type DevelopmentHostKind = 'request_owned_human' | 'standalone_external_agent'
 
 export type DevelopmentHostSemanticRead = Readonly<{

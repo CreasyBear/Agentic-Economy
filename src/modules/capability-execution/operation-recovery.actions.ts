@@ -14,7 +14,7 @@ import {
   type OperationInvokeRecoveryResult,
   type OperationInvokeStatusResult,
 } from './operation-recovery-contracts'
-import type { ReconciliationEvidence } from '@/modules/action-invocation/reconciliation-evidence'
+import type { ReconciliationEvidence } from '@/modules/action-invocation/runtime'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from './operation-invoke-entry'
 
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
