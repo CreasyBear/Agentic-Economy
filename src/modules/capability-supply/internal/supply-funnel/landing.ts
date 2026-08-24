@@ -1,7 +1,3 @@
-import { describeActionForAgent, listMcpActions } from "@/modules/actions";
-import type { PublicServicesApiPage } from "@/modules/registry/public";
-import { registryServicesListAction } from "@/modules/registry/registry.actions";
-
 export type SupplyLandingTool = Readonly<{
   id: string;
   name: string;
@@ -10,11 +6,11 @@ export type SupplyLandingTool = Readonly<{
   inputJsonSchema?: string;
   outputJsonSchema?: string;
 }>;
-export type SupplyLandingReadback =
+export type SupplyLandingReadback<Services> =
   | Readonly<{
       kind: "available";
       tools: readonly SupplyLandingTool[];
-      services: PublicServicesApiPage;
+      services: Services;
       evidence: "source" | "labelled_local_dev";
     }>
   | Readonly<{
@@ -23,13 +19,25 @@ export type SupplyLandingReadback =
       retryable: true;
     }>;
 
-export async function loadSupplyLandingReadback(): Promise<SupplyLandingReadback> {
+type SupplyLandingToolDescriptor = Readonly<{
+  id: string;
+  name: string;
+  summary: string;
+  boundaries: readonly string[];
+  inputJsonSchema?: unknown;
+  outputJsonSchema?: unknown;
+}>;
+
+export type SupplyLandingPorts<Services> = Readonly<{
+  listTools: () => readonly SupplyLandingToolDescriptor[];
+  listServices: () => Promise<Services>;
+}>;
+
+export async function loadSupplyLandingReadback<Services>(
+  ports: SupplyLandingPorts<Services>,
+): Promise<SupplyLandingReadback<Services>> {
   try {
-    const tools = listMcpActions()
-      .filter(
-        (action) => action.readOnly && action.credentialAdmission === undefined,
-      )
-      .map(describeActionForAgent)
+    const tools = ports.listTools()
       .slice(0, 32)
       .map((tool) => ({
         id: tool.id,
@@ -45,10 +53,7 @@ export async function loadSupplyLandingReadback(): Promise<SupplyLandingReadback
               outputJsonSchema: JSON.stringify(tool.outputJsonSchema, null, 2),
             }),
       }));
-    const services = await registryServicesListAction.run({
-      data: registryServicesListAction.schema.parse({ limit: 10 }),
-      context: { caller: "ui" },
-    });
+    const services = await ports.listServices();
     return { kind: "available", tools, services, evidence: "source" };
   } catch {
     return { kind: "error", reason: "source_unavailable", retryable: true };

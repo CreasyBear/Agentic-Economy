@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
-import { loadSupplyLandingReadbackServer } from '@/modules/capability-supply/supply-funnel.functions'
+import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 
 export const Route = createFileRoute('/for-providers')({
   loader: () => loadSupplyLandingReadbackServer(),
