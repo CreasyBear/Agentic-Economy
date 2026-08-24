@@ -18,7 +18,13 @@ export function ChatTranscript({
   }
 
   return (
-    <ol className="mx-auto flex w-full max-w-3xl list-none flex-col gap-6 px-4 py-6" aria-label="Conversation">
+    <ol
+      className="mx-auto flex w-full max-w-3xl list-none flex-col gap-6 px-4 py-6"
+      role="log"
+      aria-label="Chat transcript"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
       {messages.map((message, index) => {
         const text = textFromParts(message.parts)
         const cards = message.parts.flatMap((part) => {

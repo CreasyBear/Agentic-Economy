@@ -12,7 +12,7 @@ export function SharedOperationChat({ shareToken }: { shareToken: string }) {
     shareToken,
     paginationOpts: { cursor: null, numItems: 20 },
   })
-  const messages: TranscriptMessage[] = result?.page.map((message) => ({
+  const messages: TranscriptMessage[] = [...(result?.page ?? [])].reverse().map((message) => ({
     id: message.id,
     role: message.role,
     parts: message.parts,

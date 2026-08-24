@@ -11,8 +11,11 @@ import { OperationComposer } from './OperationComposer'
 import { OperationHistory } from './OperationHistory'
 import {
   anonymousRequestSize,
+  clearAnonymousChatHandoff,
   friendlyChatError,
   projectAnonymousTranscript,
+  readAnonymousChatHandoff,
+  rememberAnonymousChatHandoff,
   type ChatStatus,
   type TranscriptMessage,
 } from './presentation'
@@ -21,8 +24,6 @@ const MAX_PROMPT_CHARACTERS = 2_000
 const MAX_ANONYMOUS_MESSAGES = 12
 const MAX_ANONYMOUS_BYTES = 16 * 1024
 const PAGE_SIZE = 20
-
-type AnonymousMessage = TranscriptMessage & { role: 'user' | 'assistant' }
 
 export type OperationChatProps = Readonly<{
   threadId: string | null
@@ -61,16 +62,25 @@ export function OperationChat({
 }: OperationChatProps) {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
   const [prompt, setPrompt] = useState(() => boundPrompt(initialPrompt))
-  const [anonymousMessages, setAnonymousMessages] = useState<AnonymousMessage[]>([])
+  const [initialHandoff] = useState(() => {
+    if (threadId === null) return { threadId: null, messages: [] as TranscriptMessage[] }
+    const handoff = readAnonymousChatHandoff(threadId)
+    return {
+      threadId: handoff.length > 0 ? threadId : null,
+      messages: handoff.map((message) => ({ ...message, parts: [...message.parts] })),
+    }
+  })
+  const [anonymousMessages, setAnonymousMessages] = useState<TranscriptMessage[]>(initialHandoff.messages)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState<ChatStatus>('')
   const [historySearch, setHistorySearch] = useState('')
   const [sharePath, setSharePath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [now] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
   const abortRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(false)
+  const handoffStoredRef = useRef(false)
   const initialSubmitPendingRef = useRef(initialPrompt.trim().length > 0)
 
   const durable = useUIMessages(
@@ -121,6 +131,13 @@ export function OperationChat({
     }
   }, [])
   useEffect(() => {
+    if (initialHandoff.threadId !== null) clearAnonymousChatHandoff(initialHandoff.threadId)
+  }, [initialHandoff])
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(interval)
+  }, [])
+  useEffect(() => {
     if (isAuthenticated) abortRef.current?.abort()
   }, [isAuthenticated])
 
@@ -137,7 +154,7 @@ export function OperationChat({
     && anonymousMessages.length + 2 > MAX_ANONYMOUS_MESSAGES
 
   async function sendAnonymous(nextPrompt: string): Promise<void> {
-    const userMessage: AnonymousMessage = {
+    const userMessage: TranscriptMessage = {
       id: messageId('anonymous-user'),
       role: 'user',
       parts: [{ type: 'text', text: nextPrompt }],
@@ -201,7 +218,13 @@ export function OperationChat({
         })
         setPrompt('')
         setStatus('Message sent.')
-        if (result.threadId !== threadId) onThreadCreated(result.threadId)
+        if (result.threadId !== threadId) {
+          if (!handoffStoredRef.current && anonymousMessages.length > 0) {
+            handoffStoredRef.current = true
+            rememberAnonymousChatHandoff(result.threadId, anonymousMessages)
+          }
+          onThreadCreated(result.threadId)
+        }
       } else {
         await sendAnonymous(nextPrompt)
         setPrompt('')
@@ -264,7 +287,8 @@ export function OperationChat({
       setError('Copy failed. Select the link and copy it manually.')
       return
     }
-    void navigator.clipboard.writeText(sharePath).then(() => {
+    const absoluteShareUrl = new URL(sharePath, window.location.origin).toString()
+    void navigator.clipboard.writeText(absoluteShareUrl).then(() => {
       setCopied(true)
       setStatus('Share link copied.')
     }).catch(() => setError('Copy failed. Select the link and copy it manually.'))

@@ -1,3 +1,4 @@
+import { SignInButton } from '@clerk/tanstack-react-start'
 import { CheckIcon, CopyIcon, MenuIcon, PlusIcon, Share2Icon, UnlinkIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -56,6 +57,11 @@ export function OperationChatHeader({
         <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="New chat" onClick={onNewChat}>
           <PlusIcon aria-hidden="true" />
         </Button>
+        {!authenticated ? (
+          <SignInButton mode="modal">
+            <Button type="button" variant="outline" className="min-h-11">Sign in</Button>
+          </SignInButton>
+        ) : null}
         {authenticated && threadId !== null ? (
           <div className="flex items-center gap-1">
             <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={shareState === 'active' ? 'Get share link' : 'Create share link'} disabled={busy} onClick={onIssueShare}>

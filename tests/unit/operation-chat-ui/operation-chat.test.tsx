@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { StrictMode } from 'react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   uiMessageCalls: [] as unknown[][],
   queryCalls: [] as Array<{ name: string; args: unknown }>,
   threads: [] as Array<{ threadId: string; title: string; busy: boolean; createdAt: number; updatedAt: number }>,
+  activeStartedAt: null as number | null,
   shared: undefined as undefined | { title: string; page: Array<{ id: string; role: 'user' | 'assistant'; parts: unknown[] }>; isDone: boolean; continueCursor: string },
   shareState: 'none' as 'none' | 'active' | 'revoked',
   send: vi.fn(async () => ({ threadId: 'durable-thread', promptMessageId: 'prompt-1' })),
@@ -22,8 +23,18 @@ const state = vi.hoisted(() => ({
   preparedBodies: [] as unknown[],
   transportError: null as Error | null,
   assistantText: 'I found a useful operation.',
+  assistantParts: null as unknown[] | null,
   assistantCounter: 0,
   readCalls: [] as unknown[],
+  signInModes: [] as string[],
+}))
+
+vi.mock('@clerk/tanstack-react-start', () => ({
+  SignInButton: ({ children, mode }: { children: ReactNode; mode: string }) => (
+    <span data-clerk-sign-in-mode={mode} onClick={() => state.signInModes.push(mode)}>
+      {children}
+    </span>
+  ),
 }))
 
 vi.mock('convex/react', async () => {
@@ -45,7 +56,14 @@ vi.mock('convex/react', async () => {
       state.queryCalls.push({ name, args })
       if (args === 'skip') return undefined
       if (name === 'chatThreads:listThreads' || name === 'chatThreads:searchThreads') {
-        return { page: state.threads, isDone: true, continueCursor: '' }
+        const now = (args as { now?: number }).now
+        const page = state.activeStartedAt === null || now === undefined
+          ? state.threads
+          : state.threads.map((thread) => ({
+              ...thread,
+              busy: state.activeStartedAt !== null && state.activeStartedAt > now - 10 * 60 * 1_000,
+            }))
+        return { page, isDone: true, continueCursor: '' }
       }
       if (name === 'chatShares:getShareState') return { threadId: 'thread-1', state: state.shareState }
       if (name === 'chatShares:listSharedMessages') return state.shared
@@ -86,7 +104,7 @@ vi.mock('ai', () => ({
         yield {
           id: `anonymous-assistant-${state.assistantCounter}`,
           role: 'assistant',
-          parts: [{ type: 'text', text: state.assistantText }],
+          parts: state.assistantParts ?? [{ type: 'text', text: state.assistantText }],
         }
       },
     }
@@ -130,6 +148,7 @@ beforeEach(() => {
   state.uiMessageCalls = []
   state.queryCalls = []
   state.threads = []
+  state.activeStartedAt = null
   state.shared = undefined
   state.shareState = 'none'
   state.transportConstructed = 0
@@ -137,8 +156,10 @@ beforeEach(() => {
   state.preparedBodies = []
   state.transportError = null
   state.assistantText = 'I found a useful operation.'
+  state.assistantParts = null
   state.assistantCounter = 0
   state.readCalls = []
+  state.signInModes = []
   state.send.mockClear()
   state.rename.mockClear()
   state.remove.mockClear()
@@ -152,6 +173,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -187,6 +209,9 @@ describe('thin operation chat presentation', () => {
     expect(screen.getByText('Compare operations')).toBeTruthy()
     expect(screen.getByText('Inspect operation plan')).toBeTruthy()
     expect(screen.getByText('Execute operation')).toBeTruthy()
+    const transcript = screen.getByRole('log', { name: 'Chat transcript' })
+    expect(transcript.getAttribute('aria-live')).toBe('polite')
+    expect(transcript.getAttribute('aria-relevant')).toBe('additions text')
     expect(document.body.textContent).not.toContain('TOP_SECRET')
     expect(document.body.textContent).not.toContain('PRIVATE_REASONING')
     expect(document.body.textContent).not.toContain('private.example')
@@ -209,6 +234,24 @@ describe('thin operation chat presentation', () => {
       'skip',
       { initialNumItems: 20, stream: true },
     ])
+  })
+
+  it('offers modal sign-in only while anonymous and keeps the mounted transcript after auth', async () => {
+    const view = renderChat()
+    await sendPrompt('Anonymous weather question')
+
+    const signIn = screen.getByRole('button', { name: 'Sign in' })
+    expect(signIn.closest('[data-clerk-sign-in-mode]')?.getAttribute('data-clerk-sign-in-mode')).toBe('modal')
+    fireEvent.click(signIn)
+    expect(state.signInModes).toEqual(['modal'])
+
+    state.auth = { isAuthenticated: true, isLoading: false, isRefreshing: false }
+    view.rerender(<OperationChat threadId={null} onThreadCreated={vi.fn()} onNewChat={vi.fn()} />)
+
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
+    expect(screen.getByText('Anonymous weather question')).toBeTruthy()
+    expect(screen.getByText('I found a useful operation.')).toBeTruthy()
+    expect(screen.getByText('Signed in — messages from here are saved.')).toBeTruthy()
   })
 
   it('auto-submits a signed-out initial prompt once through anonymous transport', async () => {
@@ -306,7 +349,25 @@ describe('thin operation chat presentation', () => {
     expect(friendlyChatError(new Error('unexpected'))).toContain('temporarily unavailable')
   })
 
-  it('keeps the anonymous transcript through sign-in and persists only the next prompt', async () => {
+  it('carries an allowlisted anonymous transcript across the new-thread remount without persisting it', async () => {
+    state.assistantParts = [
+      { type: 'text', text: 'Anonymous answer' },
+      {
+        type: `tool-${providerSafeActionToolName('registry.operations.search')}`,
+        state: 'output-available',
+        output: {
+          kind: 'ok',
+          operationRef,
+          name: 'Weather finder',
+          raw: 'HANDOFF_RAW_SECRET',
+          provider: 'HANDOFF_PROVIDER_SECRET',
+        },
+      },
+      { type: 'reasoning', text: 'HANDOFF_PRIVATE_REASONING' },
+      { type: 'source-url', url: 'https://private.example/source' },
+      { type: 'file', url: 'https://private.example/file' },
+      { type: 'tool-unknown', state: 'output-available', output: { raw: 'UNKNOWN_HANDOFF_SECRET' } },
+    ]
     const onThreadCreated = vi.fn()
     const view = renderChat({ onThreadCreated })
     await sendPrompt('Anonymous question')
@@ -315,13 +376,32 @@ describe('thin operation chat presentation', () => {
     view.rerender(<OperationChat threadId={null} onThreadCreated={onThreadCreated} onNewChat={vi.fn()} />)
 
     expect(screen.getByText('Anonymous question')).toBeTruthy()
-    expect(screen.getByText('I found a useful operation.')).toBeTruthy()
+    expect(screen.getByText('Anonymous answer')).toBeTruthy()
+    expect(screen.getByText('Search operations')).toBeTruthy()
     expect(screen.getByText('Signed in — messages from here are saved.')).toBeTruthy()
 
     await sendPrompt('First saved question')
     expect(state.send).toHaveBeenCalledWith({ prompt: 'First saved question' })
     expect(JSON.stringify(state.send.mock.calls)).not.toContain('Anonymous question')
     expect(onThreadCreated).toHaveBeenCalledWith('durable-thread')
+
+    view.unmount()
+    const resumed = renderChat({ threadId: 'durable-thread' })
+    expect(screen.getByText('Anonymous question')).toBeTruthy()
+    expect(screen.getByText('Anonymous answer')).toBeTruthy()
+    expect(screen.getByText('Search operations')).toBeTruthy()
+    expect(screen.getByText('Weather finder')).toBeTruthy()
+    expect(screen.getByText('Signed in — messages from here are saved.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('HANDOFF_RAW_SECRET')
+    expect(document.body.textContent).not.toContain('HANDOFF_PROVIDER_SECRET')
+    expect(document.body.textContent).not.toContain('HANDOFF_PRIVATE_REASONING')
+    expect(document.body.textContent).not.toContain('UNKNOWN_HANDOFF_SECRET')
+    expect(document.body.textContent).not.toContain('private.example')
+
+    resumed.unmount()
+    renderChat({ threadId: 'durable-thread' })
+    expect(screen.queryByText('Anonymous question')).toBeNull()
+    expect(screen.queryByText('Signed in — messages from here are saved.')).toBeNull()
   })
 
   it('makes the anonymous message ceiling visible and recovers through New chat', async () => {
@@ -395,42 +475,85 @@ describe('thin operation chat presentation', () => {
     await waitFor(() => expect(state.issue).toHaveBeenCalledWith({ threadId: 'thread-1' }))
     expect(screen.getByDisplayValue('/s/share-token-value')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/s/share-token-value'))
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      new URL('/s/share-token-value', window.location.origin).toString(),
+    ))
     fireEvent.click(screen.getByRole('button', { name: 'Revoke share link' }))
     await waitFor(() => expect(state.revoke).toHaveBeenCalledWith({ threadId: 'thread-1' }))
   })
 
-  it('renders shared projected messages as read-only without a composer or raw payloads', () => {
+  it('refreshes stale busy state every 30 seconds so deletion recovers without a remount', async () => {
+    vi.useFakeTimers()
+    const startedAt = new Date('2026-08-24T00:00:00.000Z').getTime()
+    vi.setSystemTime(startedAt)
+    state.auth = { isAuthenticated: true, isLoading: false, isRefreshing: false }
+    state.activeStartedAt = startedAt
+    state.threads = [{
+      threadId: 'thread-1',
+      title: 'Busy operations',
+      busy: true,
+      createdAt: 1,
+      updatedAt: 2,
+    }]
+    const view = renderChat({ threadId: 'thread-1' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Busy operations' }))
+    const confirmation = within(screen.getByText('Delete “Busy operations”?').parentElement as HTMLElement)
+    expect(confirmation.getByRole('button', { name: 'Delete' }).hasAttribute('disabled')).toBe(true)
+
+    act(() => vi.advanceTimersByTime(10 * 60 * 1_000 + 30_000))
+    expect(confirmation.getByRole('button', { name: 'Delete' }).hasAttribute('disabled')).toBe(false)
+    fireEvent.click(confirmation.getByRole('button', { name: 'Delete' }))
+    await act(async () => Promise.resolve())
+    expect(state.remove).toHaveBeenCalledWith({ threadId: 'thread-1' })
+
+    view.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('renders descending shared results chronologically without mutating them or exposing raw payloads', () => {
     state.shared = {
       title: 'Shared weather chat',
       isDone: true,
       continueCursor: '',
-      page: [{
-        id: 'shared-1',
-        role: 'assistant',
-        parts: [
-          { type: 'text', text: 'Settled answer' },
-          {
-            type: 'operation-card',
-            toolId: 'registry.operations.search',
-            state: 'complete',
-            title: 'ignored title',
-            operationRefs: [operationRef],
-            summary: '2 operations found',
-          },
-          { type: 'reasoning', text: 'SHARED_PRIVATE_REASONING' },
-        ],
-      }],
+      page: [
+        { id: 'newest', role: 'assistant', parts: [{ type: 'text', text: 'Newest settled answer' }] },
+        {
+          id: 'middle',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'Middle operation result' },
+            {
+              type: 'operation-card',
+              toolId: 'registry.operations.search',
+              state: 'complete',
+              title: 'ignored title',
+              operationRefs: [operationRef],
+              summary: '2 operations found',
+            },
+            { type: 'reasoning', text: 'SHARED_PRIVATE_REASONING' },
+          ],
+        },
+        { id: 'oldest', role: 'user', parts: [{ type: 'text', text: 'Oldest question' }] },
+      ],
     }
+    const descendingIds = state.shared.page.map((message) => message.id)
     render(<SharedOperationChat shareToken="share-token" />)
 
     expect(screen.getByRole('heading', { name: 'Shared weather chat' })).toBeTruthy()
     expect(screen.getByText('Read-only')).toBeTruthy()
-    expect(screen.getByText('Settled answer')).toBeTruthy()
+    const transcript = screen.getByRole('log', { name: 'Chat transcript' })
+    expect(transcript.textContent?.indexOf('Oldest question')).toBeLessThan(
+      transcript.textContent?.indexOf('Middle operation result') ?? -1,
+    )
+    expect(transcript.textContent?.indexOf('Middle operation result')).toBeLessThan(
+      transcript.textContent?.indexOf('Newest settled answer') ?? -1,
+    )
     expect(screen.getByText('Search operations')).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /send/i })).toBeNull()
     expect(document.body.textContent).not.toContain('SHARED_PRIVATE_REASONING')
+    expect(state.shared.page.map((message) => message.id)).toEqual(descendingIds)
     expect(state.queryCalls).toContainEqual({
       name: 'chatShares:listSharedMessages',
       args: { shareToken: 'share-token', paginationOpts: { cursor: null, numItems: 20 } },
