@@ -19,6 +19,7 @@ import { x402PaymentReconciliationEvidenceValue } from '@/modules/action-invocat
 import {
   materializeRuntimePublishedOperation,
   parsePublishedOperationSnapshot,
+  createPublicOperationRef,
   type PublishedOperation,
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
@@ -185,7 +186,12 @@ export async function recoverCapabilityOperationInvocation(
     return recoveryNotFound(args.invocationRef)
   }
   if (
-    operation.operationId !== recovered.operationRef
+    createPublicOperationRef({
+      operationId: operation.operationId,
+      publicationRef: operation.identity.publicationRef,
+      publicationRevision: operation.identity.publicationRevision,
+      contractRef: operation.contract.ref,
+    }) !== recovered.operationRef
     || dynamicInput.inputDigest !== recovered.inputDigest
     || (control.preparedMaterialDigest !== undefined && control.preparedMaterialDigest !== dynamicInput.inputDigest)
     || control.control.action.id !== operation.operationId

@@ -21,7 +21,10 @@ import {
   reserve,
 } from '../../../convex/capabilityOperationInvocations'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
-import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
+import {
+  createPublicOperationRef,
+  materializeRuntimePublishedOperation,
+} from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
@@ -129,8 +132,13 @@ const invokeHandler = (invoke as unknown as { _handler: Handler })._handler
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 
 const evidence = buildDevelopmentPublishedOperationEvidence()
-const operationRef = `operation:v1:${canonicalDigest({ fixture: 'approval' }).slice(7)}`
-const operation = { ...evidence.operation, operationId: operationRef }
+const operation = evidence.operation
+const operationRef = createPublicOperationRef({
+  operationId: operation.operationId,
+  publicationRef: operation.identity.publicationRef,
+  publicationRevision: operation.identity.publicationRevision,
+  contractRef: operation.contract.ref,
+})
 const descriptor = materializeRuntimePublishedOperation(operation)
 mocks.readCurrentPublishedOperation.mockResolvedValue(operation)
 const input = { symbol: 'BTC', convert: 'USD' }

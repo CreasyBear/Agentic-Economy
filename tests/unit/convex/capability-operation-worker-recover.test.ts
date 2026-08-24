@@ -203,7 +203,7 @@ describe('capability operation invocation worker recover', () => {
     expect(result).toMatchObject({
       kind: 'found',
       invocationRef,
-      operationRef: operation.operationId,
+      operationRef: dispatch.operationRef,
       state: 'cancelled',
       result: { kind: 'refused', code: 'invocation_cancelled', retryable: false },
     })
@@ -499,7 +499,7 @@ describe('capability operation invocation worker recover', () => {
     }).reservationRef
     worker.state.payment.prepare = {
       dispatchRef: invocationRef,
-      operationRef: worker.state.operation.operationId,
+      operationRef: worker.state.dispatch.operationRef,
       inputDigest: String(worker.state.dispatch.inputDigest),
       challengeDigest: digest('c'),
       attemptRef,
@@ -580,7 +580,7 @@ describe('capability operation invocation worker recover', () => {
     }).reservationRef
     worker.state.payment.prepare = {
       dispatchRef: invocationRef,
-      operationRef: worker.state.operation.operationId,
+      operationRef: worker.state.dispatch.operationRef,
       inputDigest: String(worker.state.dispatch.inputDigest),
       challengeDigest: digest('c'),
       attemptRef,
@@ -913,8 +913,8 @@ function configureExpiryRecovery(
         evidenceSource: 'x402_authorization_expired:provider_transaction_or_chain_nonce_evidence_required',
       }
       return nativeResult === 'failed'
-        ? { kind: 'manual_review', disposition: 'manual_review', invocationRef, operationRef: operation.operationId, evidence }
-        : { kind: 'queued', disposition: 'automatic', invocationRef, operationRef: operation.operationId, evidence }
+        ? { kind: 'manual_review', disposition: 'manual_review', invocationRef, operationRef: worker.state.dispatch.operationRef, evidence }
+        : { kind: 'queued', disposition: 'automatic', invocationRef, operationRef: worker.state.dispatch.operationRef, evidence }
     }
     return await mutationImplementation(reference, args)
   })
