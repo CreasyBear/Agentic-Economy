@@ -576,12 +576,14 @@ export function convexLogArguments(deploymentName: string): readonly string[] {
 export class JsonlRecordBuffer {
   readonly records: unknown[] = []
   #buffer = ''
+  #receivedBytes = 0
 
   push(chunk: string): void {
-    this.#buffer += chunk
-    if (Buffer.byteLength(this.#buffer) > MAX_LOG_BUFFER_BYTES) {
+    this.#receivedBytes += Buffer.byteLength(chunk)
+    if (this.#receivedBytes > MAX_LOG_BUFFER_BYTES) {
       throw new Error('staging_observation_log_buffer_exceeded')
     }
+    this.#buffer += chunk
     const lines = this.#buffer.split('\n')
     this.#buffer = lines.pop() ?? ''
     for (const line of lines) {
