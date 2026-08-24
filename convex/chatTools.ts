@@ -4,7 +4,7 @@ import { stepCountIs } from 'ai'
 import type { FunctionArgs } from 'convex/server'
 import type { z } from 'zod'
 
-import { providerSafeActionToolName } from '@/modules/actions'
+import { providerSafeActionToolName } from '@/modules/actions/tool-contract'
 import { operationExecuteContract } from '@/modules/capability-execution/operation-execute-contract'
 import type {
   InspectPlanInput,

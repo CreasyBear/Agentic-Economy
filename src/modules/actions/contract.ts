@@ -1,5 +1,5 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-import { operationExecuteAction } from '@/modules/capability-execution/operation-execute-mcp.actions'
+import { operationExecuteContract } from '@/modules/capability-execution/operation-execute-contract'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
 import type { OperationProjectionNavigationContract } from '@/modules/capability-supply/operation-projection'
@@ -17,10 +17,10 @@ export const CURRENT_OPERATION_PROJECTION_NAVIGATION = Object.freeze({
   execute: Object.freeze({
     relation: 'execute',
     method: 'POST',
-    actionId: operationExecuteAction.id,
+    actionId: operationExecuteContract.id,
     authentication: 'none',
     surfaces: (['chat', 'mcp'] as const).filter((surface) => (
-      operationExecuteAction.surfaces.includes(surface)
+      operationExecuteContract.surfaces.includes(surface)
     )),
     precondition: 'free_keyless_read_only',
   }),
