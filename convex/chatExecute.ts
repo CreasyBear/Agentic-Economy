@@ -16,7 +16,7 @@ import type {
 import {
   jsonObject,
   jsonValue,
-} from '@/modules/capability-execution/internal/convex-schema'
+} from '@/modules/capability-execution/convex'
 import { deserializeOperationDetailResult } from '@/modules/capability-supply/public'
 import {
   createCustomerRequestServiceAssertion,
