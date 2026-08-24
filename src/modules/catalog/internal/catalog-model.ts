@@ -13,8 +13,8 @@ import {
   type BusinessSupplyProjection,
   type OfferingAccessPathRecord,
 } from './offering-supply'
-import type { DiscoveryStatus } from '@/modules/discovery/public'
-import type { IndexStatus } from '@/modules/registry/public'
+type DiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
+type IndexStatus = 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'
 
 export const FirstRequestModeValues = ['quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]

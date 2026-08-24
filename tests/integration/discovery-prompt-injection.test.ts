@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
+import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import {
   buildOfferingDiscoveryManifest,
   buildLlmsTxt,

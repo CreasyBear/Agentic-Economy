@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { getPublicBusinessCatalog, type PublicCatalogReadState } from '@/modules/catalog/public'
+import type { PublicCatalogReadState } from '@/modules/catalog/public'
+import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 

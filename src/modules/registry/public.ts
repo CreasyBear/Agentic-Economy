@@ -70,6 +70,7 @@ export type {
 } from '@/modules/capability-supply/public'
 export {
   PublicBusinessCatalogApiSchemaVersion,
+  getPublicBusinessCatalog,
   projectBusinessSupplyToPublicApi,
 } from './internal/offering-api-projection'
 export type {

@@ -5,7 +5,9 @@ import type {
   OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
-import { normalizeTrustTier, type BusinessContext } from '@/modules/business/public'
+import { buildOfferingSupplyProjection } from '@/modules/catalog/public'
+import type { GetPublicBusinessCatalogInput, PublicCatalogReadState } from '@/modules/catalog/public'
+import { isPubliclyDiscoverable, normalizeTrustTier, type BusinessContext } from '@/modules/business/public'
 
 // Stays v2 across the `price` addition: an optional field a consumer can ignore
 // is not worth forcing every pinned reader to re-pin for.
@@ -105,6 +107,30 @@ export type PublicBusinessCatalogV2DetailResult =
       business: PublicBusinessCatalogApiV2Dto
     }>
   | Readonly<{ kind: 'not_found'; code: 'business_not_found'; reason: string }>
+
+export function getPublicBusinessCatalog(
+  state: PublicCatalogReadState,
+  input: GetPublicBusinessCatalogInput,
+): { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto } | { kind: 'hidden'; reason: 'not_published' } {
+  const business = state.businesses.find((candidate) => candidate.slug === input.slug)
+  if (business === undefined || !isPubliclyDiscoverable(business)) {
+    return { kind: 'hidden', reason: 'not_published' }
+  }
+  const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+  if (context === undefined) return { kind: 'hidden', reason: 'not_published' }
+  const projection = buildOfferingSupplyProjection({
+    business,
+    context,
+    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
+    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
+    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
+    indexStatus: input.indexStatus,
+    discoveryStatus: input.discoveryStatus,
+  })
+  return projection === undefined
+    ? { kind: 'hidden', reason: 'not_published' }
+    : { kind: 'available', catalog: projectBusinessSupplyToPublicApi(projection) }
+}
 
 /**
  * The only public registry projection for canonical Offering supply.

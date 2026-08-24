@@ -6,7 +6,7 @@ import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
-import { readOwnerStatusServer } from '@/modules/catalog/owner-status.functions'
+import { readOwnerStatusServer } from '@/lib/server/owner-status.functions'
 import { recordServerFunnelEventServer } from '@/modules/observability/funnel.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 

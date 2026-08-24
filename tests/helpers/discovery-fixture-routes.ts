@@ -8,8 +8,7 @@ import {
   type OfferingDiscoveryManifestContract,
   type DiscoverySourceState,
 } from '../../src/modules/discovery/public'
-import { getPublicBusinessCatalog } from '../../src/modules/catalog/public'
-import { readCatalogHealth } from '../../src/modules/registry/public'
+import { getPublicBusinessCatalog, readCatalogHealth } from '../../src/modules/registry/public'
 import { createFixtureDiscoverySourceState } from './discovery-fixture-source-state'
 
 export function handleLlmsTxtRequest(request: Request): Response {

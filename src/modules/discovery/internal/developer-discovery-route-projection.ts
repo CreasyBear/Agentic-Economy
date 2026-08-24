@@ -1,5 +1,5 @@
 import type { BusinessContext } from '@/modules/business/public'
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
+import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import { readCatalogHealth } from '@/modules/registry/public'
