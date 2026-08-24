@@ -21,6 +21,7 @@ import {
   rebuildCapabilityOriginSupplyProjection,
 } from './capabilitySupplyShared'
 import { syncMarketOperationPresence } from './marketPresence'
+import { rebuildCurrentOperationProjection } from './capabilitySupplyOperationProjection'
 
 const READINESS_REFRESH_LEAD_MS = 90_000
 const MAX_READINESS_REFRESH_BATCH = 20
@@ -192,6 +193,11 @@ export async function observeCapabilityReadinessHandler(
     readinessValidUntil: args.validUntil,
     updatedAt: now,
   })
+  await rebuildCurrentOperationProjection(ctx, {
+    publicationRef: publication.publicationRef,
+    publicationRevision: publication.revision,
+    now,
+  })
   await syncMarketOperationPresence(ctx, {
     operationRef: publication.operationRef,
     businessId: publication.businessId,
@@ -355,10 +361,16 @@ export async function recordCapabilityProbeResultHandler(
     ),
   ])
   if (result.kind === 'observed' && publication !== null) {
+    const now = Date.now()
+    await rebuildCurrentOperationProjection(ctx, {
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      now,
+    })
     await rebuildCapabilityOriginSupplyProjection(
       ctx,
       publication.businessId as Id<'businesses'>,
-      Date.now(),
+      now,
     )
   }
   return result.kind === 'observed'

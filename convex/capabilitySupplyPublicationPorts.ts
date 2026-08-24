@@ -15,6 +15,7 @@ import {
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
 import { capabilitySupplyOperationPorts } from './capabilitySupplyOperationPorts'
 import { syncMarketOperationPresence } from './marketPresence'
+import { rebuildCurrentOperationProjection } from './capabilitySupplyOperationProjection'
 export function capabilitySupplyPublicationPorts(
   ctx: MutationCtx,
   writers: Pick<OperationLedgerPorts, 'registerOffering' | 'registerBinding' | 'setEligibility'>,
@@ -126,6 +127,11 @@ export function capabilitySupplyPublicationPorts(
         createdAt: input.createdAt,
         updatedAt: input.updatedAt,
       })
+      await rebuildCurrentOperationProjection(ctx, {
+        publicationRef: input.publicationRef,
+        publicationRevision: input.revision,
+        now: input.updatedAt,
+      })
     },
     patchPublicationSuperseded: async (publicationId, updatedAt) => {
       const id = publicationId as Id<'capabilityPublications'>
@@ -133,6 +139,11 @@ export function capabilitySupplyPublicationPorts(
       await ctx.db.patch(id, {
         disposition: 'superseded',
         updatedAt,
+      })
+      if (publication !== null) await rebuildCurrentOperationProjection(ctx, {
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        now: updatedAt,
       })
       if (publication !== null) await syncMarketOperationPresence(ctx, {
         operationRef: publication.operationRef,
@@ -148,6 +159,11 @@ export function capabilitySupplyPublicationPorts(
         disposition: 'withdrawn',
         withdrawnAt: updatedAt,
         updatedAt,
+      })
+      if (publication !== null) await rebuildCurrentOperationProjection(ctx, {
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        now: updatedAt,
       })
       if (publication !== null) await syncMarketOperationPresence(ctx, {
         operationRef: publication.operationRef,
