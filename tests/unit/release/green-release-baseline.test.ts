@@ -61,6 +61,7 @@ describe('green release baseline', () => {
       'test:chat:conformance',
       'generate:convex',
       'check:convex-codegen',
+      'test:release:architecture',
       'lint',
       'typecheck',
       'test:release:unit',

@@ -125,11 +125,12 @@ async function setMode(
   backend: ConvexFixtureBackend,
   mode: 'old' | 'shadow' | 'new',
   reason = 'source_test',
+  releaseOwner = 't4-source-test',
 ) {
   return await backend.mutation(internal.capabilitySupplyOperations.setCurrentOperationReadMode, {
     mode,
     reason,
-    releaseOwner: 't4-source-test',
+    releaseOwner,
     now: Date.now(),
   })
 }
@@ -285,9 +286,19 @@ describe('T4 current Operation read model', () => {
     expect(repeated).toMatchObject({ kind: 'rebuilt', idempotent: true })
 
     const oldSearch = await backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' })
-    await setMode(backend, 'shadow')
+    await setMode(backend, 'shadow', 'local_shadow_exercise', 't8-local-release-owner')
     const shadowSearch = await backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' })
     expect(shadowSearch).toEqual(oldSearch)
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.readCurrentOperationReadControl,
+      {},
+    )).resolves.toMatchObject({
+      mode: 'shadow',
+      reason: 'local_shadow_exercise',
+      releaseOwner: 't8-local-release-owner',
+      verifiedActiveCount: 2,
+      isDefault: false,
+    })
     await expect(backend.query(
       internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
       { now: Date.now() },
@@ -300,7 +311,7 @@ describe('T4 current Operation read model', () => {
       mismatches: [],
     })
 
-    await setMode(backend, 'new', 'local_cutover_exercise')
+    await setMode(backend, 'new', 'local_cutover_exercise', 't8-local-release-owner')
     const newSearch = await backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' })
     expect(newSearch).toEqual(oldSearch)
     if (newSearch.kind === 'ok') {
@@ -309,15 +320,51 @@ describe('T4 current Operation read model', () => {
           .resolves.toMatchObject({ kind: 'found' })
       }
     }
-    await setMode(backend, 'old', 'rollback_exercise')
+    await setMode(backend, 'old', 'rollback_exercise', 't8-local-release-owner')
     await expect(backend.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
       .resolves.toEqual(oldSearch)
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.readCurrentOperationReadControl,
+      {},
+    )).resolves.toMatchObject({
+      mode: 'old',
+      reason: 'rollback_exercise',
+      releaseOwner: 't8-local-release-owner',
+      isDefault: false,
+    })
     const rowsRemain = await backend.run(async (ctx) => (
       await ctx.db.query('capabilityCurrentOperations')
         .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
         .take(3)
     ))
     expect(rowsRemain).toHaveLength(2)
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('capabilityCurrentOperations')
+        .withIndex('by_operationRef_and_active', (query) => (
+          query.eq('operationRef', first.operationRef).eq('active', true)
+        ))
+        .unique()
+      if (row === null) throw new Error('t8_repair_fixture_missing')
+      await ctx.db.delete(row._id)
+    })
+    const repaired = await backend.mutation(
+      internal.capabilitySupplyOperations.rebuildCurrentOperationProjection,
+      { ...args, now: args.now + 2 },
+    )
+    const repairedAgain = await backend.mutation(
+      internal.capabilitySupplyOperations.rebuildCurrentOperationProjection,
+      { ...args, now: args.now + 3 },
+    )
+    expect(repaired).toMatchObject({ kind: 'rebuilt', idempotent: false })
+    expect(repairedAgain).toMatchObject({ kind: 'rebuilt', idempotent: true })
+    await expect(backend.run(async (ctx) => (
+      await ctx.db.query('capabilityCurrentOperations')
+        .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
+        .take(3)
+    ))).resolves.toHaveLength(2)
+    await expect(backend.run(async (ctx) => (
+      await ctx.db.query('capabilityOperationInvocations').take(1)
+    ))).resolves.toEqual([])
   })
 
   it('reports missing/stale/digest mismatches and requires owned expiring explanations', async () => {
