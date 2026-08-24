@@ -9,6 +9,18 @@ export const CHAT_TOOL_IDS = [
 ] as const
 
 export type ChatToolId = (typeof CHAT_TOOL_IDS)[number]
+export type ChatStatus =
+  | ''
+  | 'Sending message…'
+  | 'Getting a response…'
+  | 'Message sent.'
+  | 'Response complete.'
+  | 'Conversation renamed.'
+  | 'Conversation deleted.'
+  | 'Read-only share link ready.'
+  | 'Share link revoked.'
+  | 'New chat ready.'
+  | 'Share link copied.'
 export type TranscriptMessage = Readonly<{
   id: string
   role: 'user' | 'assistant'

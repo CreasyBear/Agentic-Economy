@@ -3,6 +3,7 @@ import { SendIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import type { ChatStatus } from './presentation'
 
 export function OperationComposer({
   prompt,
@@ -19,7 +20,7 @@ export function OperationComposer({
   busy: boolean
   disabled: boolean
   error: string
-  status: string
+  status: ChatStatus
   anonymousMessageCount?: number
   anonymousMessageLimitReached: boolean
   onPromptChange(value: string): void

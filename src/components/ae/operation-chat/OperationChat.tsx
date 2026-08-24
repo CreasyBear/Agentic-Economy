@@ -13,6 +13,7 @@ import {
   anonymousRequestSize,
   friendlyChatError,
   projectAnonymousTranscript,
+  type ChatStatus,
   type TranscriptMessage,
 } from './presentation'
 
@@ -63,7 +64,7 @@ export function OperationChat({
   const [anonymousMessages, setAnonymousMessages] = useState<AnonymousMessage[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState<ChatStatus>('')
   const [historySearch, setHistorySearch] = useState('')
   const [sharePath, setSharePath] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -231,7 +232,7 @@ export function OperationChat({
     })
   }, [authLoading])
 
-  async function mutateWithError(work: () => Promise<unknown>, success: string): Promise<boolean> {
+  async function mutateWithError(work: () => Promise<void>, success: ChatStatus): Promise<boolean> {
     setBusy(true)
     setError('')
     try {
@@ -279,10 +280,9 @@ export function OperationChat({
       onSearch={setHistorySearch}
       onOpen={onOpenThread}
       onNewChat={startNewChat}
-      onRename={async (targetThreadId, title) => await mutateWithError(
-        async () => await renameThread({ threadId: targetThreadId, title }),
-        'Conversation renamed.',
-      )}
+      onRename={async (targetThreadId, title) => await mutateWithError(async () => {
+        await renameThread({ threadId: targetThreadId, title })
+      }, 'Conversation renamed.')}
       onDelete={async (targetThreadId) => await mutateWithError(async () => {
         await deleteThread({ threadId: targetThreadId })
         if (targetThreadId === threadId) onNewChat()
