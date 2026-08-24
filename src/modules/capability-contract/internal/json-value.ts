@@ -1,10 +1,12 @@
 import { z } from 'zod'
 
+import {
+  isBoundedJsonValue,
+  type JsonValue,
+} from '@/modules/common/bounded-json'
 import { isRecord } from '@/modules/common/is-record'
 
 const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema' as const
-const MAX_VALIDATED_VALUE_NODES = 10_000
-const MAX_VALIDATED_VALUE_DEPTH = 64
 
 const supportedSchemaKeywords = new Set([
   '$anchor', '$comment', '$defs', '$dynamicAnchor', '$dynamicRef', '$id', '$recursiveAnchor',
@@ -31,7 +33,8 @@ const SCHEMA_KEYWORDS = [
 ] as const
 const SCHEMA_ARRAY_KEYWORDS = ['allOf', 'anyOf', 'oneOf', 'prefixItems'] as const
 
-export type JsonValue = null | boolean | number | string | readonly JsonValue[] | Readonly<{ [key: string]: JsonValue }>
+export { isBoundedJsonValue }
+export type { JsonValue }
 
 export const identifier = z.string().trim().min(1).max(200)
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
@@ -49,29 +52,6 @@ export const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((sch
     context.addIssue({ code: 'custom', message: 'json_schema_reference_profile_unsupported' })
   }
 })
-
-export function isBoundedJsonValue(value: unknown): value is JsonValue {
-  const active = new Set<object>()
-  let nodes = 0
-  function visit(candidate: unknown, depth: number): boolean {
-    nodes += 1
-    if (nodes > MAX_VALIDATED_VALUE_NODES || depth > MAX_VALIDATED_VALUE_DEPTH) return false
-    if (candidate === null || typeof candidate === 'string' || typeof candidate === 'boolean') return true
-    if (typeof candidate === 'number') return Number.isFinite(candidate)
-    if (typeof candidate !== 'object') return false
-    if (!Array.isArray(candidate)) {
-      const prototype = Object.getPrototypeOf(candidate)
-      if (prototype !== Object.prototype && prototype !== null) return false
-    }
-    if (active.has(candidate)) return false
-    active.add(candidate)
-    const children = Array.isArray(candidate) ? candidate : Object.values(candidate)
-    for (const child of children) if (!visit(child, depth + 1)) return false
-    active.delete(candidate)
-    return true
-  }
-  return visit(value, 0)
-}
 
 export function isJsonRecord(value: JsonValue | undefined): value is Readonly<Record<string, JsonValue>> {
   return isRecord(value)
