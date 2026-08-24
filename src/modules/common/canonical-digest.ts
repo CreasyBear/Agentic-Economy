@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2'
 import { bytesToHex } from '@noble/hashes/utils'
 
-import { isBoundedJsonValue } from '@/modules/capability-contract/public'
+import { isBoundedJsonValue } from '@/modules/common/bounded-json'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { SourceHash } from '@/modules/common/ids'
 import type { StableHashValue } from '@/modules/common/stable-hash'
