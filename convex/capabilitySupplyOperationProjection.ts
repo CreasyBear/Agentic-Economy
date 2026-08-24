@@ -419,55 +419,108 @@ export async function currentOperationShadowDiagnosticsHandler(
   ctx: QueryCtx,
   args: Readonly<{ now: number }>,
 ) {
-  const [publications, rows] = await Promise.all([
+  const [publicationSentinel, searchSentinel, detailSentinel] = await Promise.all([
     ctx.db.query('capabilityPublications')
       .withIndex('by_disposition_and_readinessValidUntil', (query) => query.eq('disposition', 'current'))
       .take(258),
     ctx.db.query('capabilityCurrentOperations')
       .withIndex('by_active_and_operationRef', (query) => query.eq('active', true))
       .take(258),
+    ctx.db.query('capabilityCurrentOperationDetails')
+      .filter((query) => query.eq(query.field('active'), true))
+      .take(258),
   ])
+  const truncated = publicationSentinel.length > 257
+    || searchSentinel.length > 257
+    || detailSentinel.length > 257
+  const publications = publicationSentinel.slice(0, 257)
+  const rows = searchSentinel.slice(0, 257)
+  const detailRows = detailSentinel.slice(0, 257)
+  if (truncated) return {
+    kind: 'current_operation_shadow_diagnostic' as const,
+    schemaVersion: 'current-operation-shadow-diagnostic:v1' as const,
+    sourceCount: publications.length,
+    projectionCount: rows.length,
+    comparedCount: 0,
+    explainedMismatchCount: 0,
+    unexplainedMismatchCount: 0,
+    truncated: true,
+    mismatches: [],
+  }
   const rowByPublication = new Map(rows.map((row) => (
+    [`${row.publicationRef}:${row.publicationRevision}`, row] as const
+  )))
+  const detailByPublication = new Map(detailRows.map((row) => (
     [`${row.publicationRef}:${row.publicationRevision}`, row] as const
   )))
   const mismatchRows: Array<{ operationRef: string; kind: CurrentOperationMismatchKind }> = []
   let comparedCount = 0
-  for (const publication of publications.slice(0, 257)) {
+  for (const publication of publications) {
     const oldProjection = await operationRecordProjection(ctx, publication, args.now)
-    const row = rowByPublication.get(`${publication.publicationRef}:${publication.revision}`)
+    const publicationKey = `${publication.publicationRef}:${publication.revision}` as const
+    const row = rowByPublication.get(publicationKey)
+    const detail = detailByPublication.get(publicationKey)
     if (row === undefined) {
       mismatchRows.push({ operationRef: publication.operationRef, kind: 'missing_projection' })
-      continue
+    } else {
+      rowByPublication.delete(publicationKey)
+      if (row.sourceUpdatedAt !== publication.updatedAt) {
+        mismatchRows.push({ operationRef: publication.operationRef, kind: 'stale_projection' })
+      }
+      const expectedOutcome = oldProjection.kind === 'dropped'
+        ? `dropped:${oldProjection.reason}`
+        : oldProjection.record.unavailableReason === undefined
+          ? 'current'
+          : `unavailable:${oldProjection.record.unavailableReason}`
+      const actualOutcome = row.outcomeKind === 'dropped'
+        ? `dropped:${row.dropReason ?? 'invalid'}`
+        : row.outcomeKind === 'unavailable'
+          ? `unavailable:${row.unavailableReason ?? 'invalid'}`
+          : 'current'
+      if (actualOutcome !== expectedOutcome) {
+        mismatchRows.push({ operationRef: publication.operationRef, kind: 'typed_outcome' })
+      } else if (oldProjection.kind === 'projected') {
+        const expectedDigest = canonicalDigest(oldProjection.record as StableHashValue)
+        if (row.descriptorDigest === undefined || row.searchFactJson === undefined) {
+          mismatchRows.push({ operationRef: publication.operationRef, kind: 'invalid_projection' })
+        } else if (row.descriptorDigest !== expectedDigest) {
+          mismatchRows.push({ operationRef: publication.operationRef, kind: 'descriptor_digest' })
+        }
+      }
     }
-    rowByPublication.delete(`${publication.publicationRef}:${publication.revision}`)
-    if (row.sourceUpdatedAt !== publication.updatedAt) {
-      mismatchRows.push({ operationRef: publication.operationRef, kind: 'stale_projection' })
-    }
-    const expectedOutcome = oldProjection.kind === 'dropped'
-      ? `dropped:${oldProjection.reason}`
-      : oldProjection.record.unavailableReason === undefined
-        ? 'current'
-        : `unavailable:${oldProjection.record.unavailableReason}`
-    const actualOutcome = row.outcomeKind === 'dropped'
-      ? `dropped:${row.dropReason ?? 'invalid'}`
-      : row.outcomeKind === 'unavailable'
-        ? `unavailable:${row.unavailableReason ?? 'invalid'}`
-        : 'current'
-    if (actualOutcome !== expectedOutcome) {
-      mismatchRows.push({ operationRef: publication.operationRef, kind: 'typed_outcome' })
-      continue
-    }
+
     if (oldProjection.kind === 'projected') {
       comparedCount += 1
       const expectedDigest = canonicalDigest(oldProjection.record as StableHashValue)
-      if (row.descriptorDigest === undefined || row.searchFactJson === undefined) {
-        mismatchRows.push({ operationRef: publication.operationRef, kind: 'invalid_projection' })
-      } else if (row.descriptorDigest !== expectedDigest) {
+      if (detail === undefined) {
+        mismatchRows.push({ operationRef: publication.operationRef, kind: 'missing_projection' })
+        continue
+      }
+      detailByPublication.delete(publicationKey)
+      if (detail.sourceUpdatedAt !== publication.updatedAt) {
+        mismatchRows.push({ operationRef: publication.operationRef, kind: 'stale_projection' })
+      }
+      if (!detailDescriptorIsExact(detail, oldProjection.record, expectedDigest)) {
         mismatchRows.push({ operationRef: publication.operationRef, kind: 'descriptor_digest' })
       }
+      const expectedCommitment = await commitmentFor(
+        ctx,
+        publication,
+        oldProjection.record,
+        args.now,
+      )
+      if (!detailCommitmentIsExact(detail, expectedCommitment, row)) {
+        mismatchRows.push({ operationRef: publication.operationRef, kind: 'invalid_projection' })
+      }
+    } else if (detail !== undefined) {
+      detailByPublication.delete(publicationKey)
+      mismatchRows.push({ operationRef: publication.operationRef, kind: 'invalid_projection' })
     }
   }
   for (const orphan of rowByPublication.values()) {
+    mismatchRows.push({ operationRef: orphan.operationRef, kind: 'orphan_projection' })
+  }
+  for (const orphan of detailByPublication.values()) {
     mismatchRows.push({ operationRef: orphan.operationRef, kind: 'orphan_projection' })
   }
   const explanations = await Promise.all(mismatchRows.map(async (mismatch) => (
@@ -500,16 +553,50 @@ export async function currentOperationShadowDiagnosticsHandler(
   return {
     kind: 'current_operation_shadow_diagnostic' as const,
     schemaVersion: 'current-operation-shadow-diagnostic:v1' as const,
-    sourceCount: Math.min(publications.length, 257),
-    projectionCount: Math.min(rows.length, 257),
+    sourceCount: publications.length,
+    projectionCount: rows.length,
     comparedCount,
     explainedMismatchCount,
     unexplainedMismatchCount: mismatchRows.length - explainedMismatchCount,
-    truncated: publications.length > 257 || rows.length > 257,
+    truncated: false,
     mismatches: kinds.flatMap((kind) => {
       const count = counts.get(kind) ?? 0
       return count === 0 ? [] : [{ kind, count }]
     }),
+  }
+}
+
+function detailDescriptorIsExact(
+  row: Doc<'capabilityCurrentOperationDetails'>,
+  expected: CapabilityOperationSourceRecord,
+  expectedDigest: string,
+): boolean {
+  try {
+    const parsed: unknown = JSON.parse(row.descriptorJson)
+    return typeof parsed === 'object'
+      && parsed !== null
+      && row.descriptorDigest === expectedDigest
+      && canonicalDigest(parsed as StableHashValue) === expectedDigest
+      && canonicalDigest(parsed as StableHashValue) === canonicalDigest(expected as StableHashValue)
+  } catch {
+    return false
+  }
+}
+
+function detailCommitmentIsExact(
+  row: Doc<'capabilityCurrentOperationDetails'>,
+  expected: CurrentOperationCommitment,
+  searchRow: Doc<'capabilityCurrentOperations'> | undefined,
+): boolean {
+  try {
+    const parsed: unknown = JSON.parse(row.commitmentJson)
+    return typeof parsed === 'object'
+      && parsed !== null
+      && row.currentDigest === expected.currentDigest
+      && (searchRow === undefined || searchRow.currentDigest === expected.currentDigest)
+      && canonicalDigest(parsed as StableHashValue) === canonicalDigest(expected as StableHashValue)
+  } catch {
+    return false
   }
 }
 
@@ -571,7 +658,7 @@ async function projectionValue(
 }
 
 async function commitmentFor(
-  ctx: MutationCtx,
+  ctx: Pick<QueryCtx, 'db'>,
   publication: Doc<'capabilityPublications'>,
   record: CapabilityOperationSourceRecord,
   now: number,

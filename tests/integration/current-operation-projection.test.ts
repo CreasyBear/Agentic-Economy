@@ -150,6 +150,13 @@ type DropReason =
   | 'invalid_transport'
   | 'malformed_price'
 
+type DetailCorruption =
+  | 'missing_detail'
+  | 'stale_detail'
+  | 'descriptor_digest'
+  | 'commitment_digest'
+  | 'orphan_detail'
+
 async function corruptProjectionSource(
   backend: ConvexFixtureBackend,
   fixture: Fixture,
@@ -211,6 +218,49 @@ async function corruptProjectionSource(
       pricingConfigJson: '{malformed',
       updatedAt: publication.updatedAt + 1,
     })
+  })
+}
+
+async function corruptDetailProjection(
+  backend: ConvexFixtureBackend,
+  fixture: Fixture,
+  corruption: DetailCorruption,
+): Promise<Readonly<{
+  operationRef: string
+  mismatchKind: 'missing_projection' | 'stale_projection' | 'descriptor_digest'
+    | 'invalid_projection' | 'orphan_projection'
+}>> {
+  return await backend.run(async (ctx) => {
+    const row = await ctx.db.query('capabilityCurrentOperationDetails')
+      .withIndex('by_operationRef_and_active', (query) => (
+        query.eq('operationRef', fixture.operationRef).eq('active', true)
+      ))
+      .unique()
+    if (row === null) throw new Error('t8_detail_projection_missing')
+    if (corruption === 'missing_detail') {
+      await ctx.db.delete(row._id)
+      return { operationRef: fixture.operationRef, mismatchKind: 'missing_projection' }
+    }
+    if (corruption === 'stale_detail') {
+      await ctx.db.patch(row._id, { sourceUpdatedAt: row.sourceUpdatedAt + 1 })
+      return { operationRef: fixture.operationRef, mismatchKind: 'stale_projection' }
+    }
+    if (corruption === 'descriptor_digest') {
+      await ctx.db.patch(row._id, { descriptorDigest: canonicalDigest({ drift: true }) })
+      return { operationRef: fixture.operationRef, mismatchKind: 'descriptor_digest' }
+    }
+    if (corruption === 'commitment_digest') {
+      await ctx.db.patch(row._id, { currentDigest: canonicalDigest({ drift: true }) })
+      return { operationRef: fixture.operationRef, mismatchKind: 'invalid_projection' }
+    }
+    const { _id, _creationTime, ...material } = row
+    const operationRef = `${fixture.operationRef}:orphan-detail`
+    await ctx.db.insert('capabilityCurrentOperationDetails', {
+      ...material,
+      operationRef,
+      publicationRef: `${fixture.publicationRef}:orphan-detail`,
+    })
+    return { operationRef, mismatchKind: 'orphan_projection' }
   })
 }
 
@@ -426,8 +476,8 @@ describe('T4 current Operation read model', () => {
       internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
       { now: now + 3 },
     )).resolves.toMatchObject({
-      unexplainedMismatchCount: 1,
-      mismatches: [{ kind: 'stale_projection', count: 1 }],
+      unexplainedMismatchCount: 2,
+      mismatches: [{ kind: 'stale_projection', count: 2 }],
     })
     await backend.mutation(
       internal.capabilitySupplyOperations.rebuildCurrentOperationProjection,
@@ -454,6 +504,71 @@ describe('T4 current Operation read model', () => {
       mismatches: [{ kind: 'descriptor_digest', count: 1 }],
     })
   })
+
+  it.each([
+    'missing_detail',
+    'stale_detail',
+    'descriptor_digest',
+    'commitment_digest',
+    'orphan_detail',
+  ] as const)(
+    'types the %s mismatch and only accepts a complete non-expired explanation',
+    async (corruption) => {
+      const backend = convexTestWithMarketComponents()
+      const fixture = await publishFixture(backend, `projection-${corruption.replaceAll('_', '-')}`)
+      const mismatch = await corruptDetailProjection(backend, fixture, corruption)
+      const now = Date.now()
+
+      await expect(backend.query(
+        internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
+        { now },
+      )).resolves.toMatchObject({
+        truncated: false,
+        explainedMismatchCount: 0,
+        unexplainedMismatchCount: 1,
+        mismatches: [{ kind: mismatch.mismatchKind, count: 1 }],
+      })
+      await expect(backend.mutation(
+        internal.capabilitySupplyOperations.recordCurrentOperationMismatchExplanation,
+        {
+          operationRef: mismatch.operationRef,
+          mismatchKind: mismatch.mismatchKind,
+          owner: '',
+          reason: `deliberate ${corruption} regression fixture`,
+          expiresAt: now + 60_000,
+          regressionFixture: `current-operation-projection.test.ts:${corruption}`,
+          now,
+        },
+      )).rejects.toThrow('current_operation_mismatch_explanation_invalid')
+      await backend.mutation(
+        internal.capabilitySupplyOperations.recordCurrentOperationMismatchExplanation,
+        {
+          operationRef: mismatch.operationRef,
+          mismatchKind: mismatch.mismatchKind,
+          owner: 't8-detail-diagnostic-owner',
+          reason: `deliberate ${corruption} regression fixture`,
+          expiresAt: now + 60_000,
+          regressionFixture: `current-operation-projection.test.ts:${corruption}`,
+          now,
+        },
+      )
+      await expect(backend.query(
+        internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
+        { now: now + 1 },
+      )).resolves.toMatchObject({
+        explainedMismatchCount: 1,
+        unexplainedMismatchCount: 0,
+      })
+      await expect(backend.query(
+        internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
+        { now: now + 60_001 },
+      )).resolves.toMatchObject({
+        explainedMismatchCount: 0,
+        unexplainedMismatchCount: 1,
+      })
+    },
+    20_000,
+  )
 
   it('executes both reads in shadow mode and fails new reads closed when projection coverage disappears', async () => {
     const backend = convexTestWithMarketComponents()
@@ -788,7 +903,10 @@ describe('T4 current Operation read model', () => {
       await expect(backend.query(
         internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
         { now: Date.now() },
-      )).resolves.toMatchObject({ unexplainedMismatchCount: 0 })
+      )).resolves.toMatchObject({
+        truncated: false,
+        unexplainedMismatchCount: 0,
+      })
       await setMode(backend, 'new', `benchmark-${size}`)
       const samples: number[] = []
       const heapBytes: number[] = []
@@ -843,5 +961,24 @@ describe('T4 current Operation read model', () => {
     await setMode(exceeded, 'new')
     await expect(exceeded.query(api.capabilitySupplyOperations.search, { query: 'lookup' }))
       .resolves.toMatchObject({ kind: 'unavailable', reason: 'source_capacity_exceeded' })
+  }, 60_000)
+
+  it('fails closed on sentinel truncation without manufacturing an orphan mismatch', async () => {
+    const backend = convexTestWithMarketComponents()
+    const fixture = await publishFixture(backend, 'projection-diagnostic-sentinel')
+    await cloneCurrentPublications(backend, fixture, 258)
+    expect(await backfillAll(backend)).toBe(258)
+    await expect(backend.query(
+      internal.capabilitySupplyOperations.currentOperationShadowDiagnostics,
+      { now: Date.now() },
+    )).resolves.toMatchObject({
+      sourceCount: 257,
+      projectionCount: 257,
+      comparedCount: 0,
+      explainedMismatchCount: 0,
+      unexplainedMismatchCount: 0,
+      truncated: true,
+      mismatches: [],
+    })
   }, 60_000)
 })
