@@ -1,21 +1,21 @@
 import { defineSchema } from 'convex/server'
-import { businessTables } from '../src/modules/business/internal/schema'
-import { catalogTables } from '../src/modules/catalog/internal/schema'
-import { capabilityContractRegistryTables } from '../src/modules/capability-contract-registry/internal/convex-schema'
-import { capabilitySupplyTables } from '../src/modules/capability-supply/internal/convex-schema'
+import { businessTables } from '../src/modules/business/schema'
+import { catalogTables } from '../src/modules/catalog/schema'
+import { capabilityContractRegistryTables } from '../src/modules/capability-contract-registry/schema'
+import { capabilitySupplyTables } from '../src/modules/capability-supply/schema'
 import {
   agentAccessOAuthTables,
   agentAccessPolicyTables,
   agentAccessPrincipalTables,
 } from '../src/modules/agent-access/public'
-import { actionInvocationTables } from '../src/modules/action-invocation/internal/convex-schema'
-import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/internal/convex-schema'
-import { observabilityTables } from '../src/modules/observability/internal/schema'
-import { registryTables } from '../src/modules/registry/internal/schema'
-import { securityTables } from '../src/modules/security/internal/schema'
-import { moneyTables } from '../src/modules/money/internal/convex-schema'
-import { marketTables } from '../src/modules/market/internal/convex-schema'
-import { chatTables } from '../src/modules/chat/internal/convex-schema'
+import { actionInvocationTables } from '../src/modules/action-invocation/schema'
+import { capabilityOperationInvocationTables } from '../src/modules/capability-execution/schema'
+import { observabilityTables } from '../src/modules/observability/schema'
+import { registryTables } from '../src/modules/registry/schema'
+import { securityTables } from '../src/modules/security/schema'
+import { moneyTables } from '../src/modules/money/schema'
+import { marketTables } from '../src/modules/market/schema'
+import { chatTables } from '../src/modules/chat/schema'
 
 export default defineSchema({
   ...chatTables,
