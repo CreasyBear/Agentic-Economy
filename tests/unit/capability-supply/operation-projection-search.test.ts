@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import {
   compareCapabilityOperations,
   deserializeOperationDescriptor,
   detailCapabilityOperation,
   operationDetailOutputSchema,
-  projectCapabilityOperation,
+  projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   rankOperationSearchText,
   searchCapabilityOperations,
   serializeOperationDescriptor,
@@ -64,9 +65,18 @@ const sourcePort = (
   operations: readonly CapabilityOperationSourceRecord[],
   snapshotKey = 'snapshot:search',
 ) => ({
+  navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
   listCurrent: async () => ({ operations, snapshotKey }),
   loadCurrent: async () => null,
 })
+const projectCapabilityOperation = (
+  record: CapabilityOperationSourceRecord,
+  now: number,
+) => projectCapabilityOperationWithNavigation(
+  record,
+  now,
+  CURRENT_OPERATION_PROJECTION_NAVIGATION,
+)
 
 describe('capability operation search ranking', () => {
   it('does not select geocoding or cat operations from generic web-search words', () => {
@@ -337,6 +347,7 @@ describe('capability operation search ranking', () => {
     const record = sourceRecord('capability:bitcoin.coherent', 'Bitcoin price', ['bitcoin', 'price'])
     const projected = projectCapabilityOperation(record, 2_000)
     const port = {
+      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
       listCurrent: async () => ({ operations: [record], snapshotKey: 'snapshot:coherence' }),
       loadCurrent: async (operationRef: string) => operationRef === projected.operationRef ? record : null,
     }

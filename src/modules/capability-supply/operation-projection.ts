@@ -33,9 +33,11 @@ export {
 } from "./operation-schemas";
 
 export {
+  CURRENT_OPERATION_CALL_VIA,
   PublicOperationRegistrySchemaVersion,
 } from "./internal/operation-projection-types";
 export type {
+  OperationProjectionNavigationContract,
   PublicOperationBusinessRef,
   PublicOperationOfferingRef,
   PublicOperationPrice,
@@ -95,4 +97,8 @@ export type {
   InspectPlanResult,
 } from "./internal/operation-inspect-plan";
 
-export { projectCapabilityOperation } from "./internal/operation-project";
+export {
+  projectCapabilityOperation,
+  projectCapabilityOperationCatalogPrice,
+  projectCapabilityOperationParameters,
+} from "./internal/operation-project";

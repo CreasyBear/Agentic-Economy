@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 
 import {
   compareCapabilityOperations,
@@ -11,10 +12,11 @@ import {
   operationDetailInputSchema,
   operationDetailOutputSchema,
   operationSearchInputSchema,
-  projectCapabilityOperation,
+  projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   serializeOperationCompareResult,
   serializeOperationDescriptor,
   type CapabilityOperationSourceRecord,
+  type OperationProjectionNavigationContract,
   type OperationCompareResult,
 } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
@@ -88,6 +90,14 @@ const freeKeylessRecord: CapabilityOperationSourceRecord = {
   authentication: { kind: 'keyless' },
   answerExecutable: true,
 }
+const projectCapabilityOperation = (
+  record: CapabilityOperationSourceRecord,
+  now: number,
+) => projectCapabilityOperationWithNavigation(
+  record,
+  now,
+  CURRENT_OPERATION_PROJECTION_NAVIGATION,
+)
 
 describe('public operation read contract', () => {
   it('shares canonical input schemas with registry actions', () => {
@@ -103,6 +113,7 @@ describe('public operation read contract', () => {
       projectCapabilityOperation({ ...operationRecord, routeable: false, integrated: false }, 2_000),
     ]
     const plan = await inspectCapabilityOperationPlan({
+      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
       listCurrent: async () => ({ operations: [operationRecord], snapshotKey: 'snapshot:projection' }),
       loadCurrent: async () => operationRecord,
     }, { operationRefs: [projected[0]!.operationRef] }, 2_000)
@@ -137,6 +148,17 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'registry.operations.detail',
     })
+  })
+  it('refuses an injected invoke path that drifts from the descriptor callVia contract', () => {
+    const drifted = {
+      ...CURRENT_OPERATION_PROJECTION_NAVIGATION,
+      invoke: {
+        ...CURRENT_OPERATION_PROJECTION_NAVIGATION.invoke,
+        pathTemplate: '/api/v1/operations/other',
+      },
+    } as unknown as OperationProjectionNavigationContract
+    expect(() => projectCapabilityOperationWithNavigation(operationRecord, 2_000, drifted))
+      .toThrowError('operation_projection_call_via_mismatch')
   })
   it('carries an additive Base USDC price breakdown through projection and wire roundtrip', () => {
     const operation = projectCapabilityOperation({
@@ -247,6 +269,8 @@ describe('public operation read contract', () => {
       surfaces: ['chat', 'mcp'],
       precondition: 'free_keyless_read_only',
     })
+    expect(CURRENT_OPERATION_PROJECTION_NAVIGATION.execute).toEqual(execute)
+    expect(new Set(execute?.surfaces)).toEqual(new Set(findAction('operation.execute')?.surfaces))
     const roundTripped = deserializeOperationDescriptor(serializeOperationDescriptor(free))
     expect(roundTripped.navigation).toEqual(free.navigation)
     expect(roundTripped.callVia).toBe(free.callVia)
@@ -309,6 +333,7 @@ describe('public operation read contract', () => {
   it('compares populated data-use through the canonical wire schema and rejects object recipients', async () => {
     const operation = projectCapabilityOperation(populatedDataUseRecord, 2_000)
     const result = await compareCapabilityOperations({
+      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
       listCurrent: async () => ({ operations: [populatedDataUseRecord], snapshotKey: 'snapshot:compare' }),
       loadCurrent: async (operationRef) => operationRef === operation.operationRef ? populatedDataUseRecord : null,
     }, { operationRefs: [operation.operationRef] }, 2_000)

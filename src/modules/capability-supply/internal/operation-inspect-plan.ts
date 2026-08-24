@@ -91,7 +91,7 @@ export async function inspectCapabilityOperationPlan(
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "query_invalid",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const records = await Promise.all(refs.map((ref) => port.loadCurrent(ref)));
   const presentRecords = records.filter(
@@ -106,11 +106,11 @@ export async function inspectCapabilityOperationPlan(
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_not_found",
       operationRef: missingOperationRef,
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   }
   const operations = presentRecords.map((record) =>
-    projectCapabilityOperation(record, now),
+    projectCapabilityOperation(record, now, port.navigation),
   );
   // A plan may only be produced against ops that are genuinely routeable right now.
   // Keyed ops whose credential/readiness is absent and observed x402 ops project as
@@ -126,7 +126,7 @@ export async function inspectCapabilityOperationPlan(
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "operation_unavailable",
       operationRef: unavailableOperation.operationRef,
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const mappings: RegisteredOperationMapping[] = [];
   const networkIds = new Set(presentRecords.map((record) => record.networkId));
@@ -141,7 +141,7 @@ export async function inspectCapabilityOperationPlan(
         kind: "unavailable",
         schemaVersion: PublicOperationRegistrySchemaVersion,
         reason: "mapping_unavailable",
-        navigation: noOperationNavigation(),
+        navigation: noOperationNavigation(port.navigation),
       };
     mappings.push(mapping);
   }
@@ -150,14 +150,14 @@ export async function inspectCapabilityOperationPlan(
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "mapping_incompatible",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   if (mappingCycle(mappings))
     return {
       kind: "unavailable",
       schemaVersion: PublicOperationRegistrySchemaVersion,
       reason: "mapping_cycle",
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const expiry = Math.min(
     now + expiresInMs,
@@ -179,7 +179,7 @@ export async function inspectCapabilityOperationPlan(
       effects: mergeEffects(operations),
       expiry,
     },
-    navigation: operationNavigation("inspect_only"),
+    navigation: operationNavigation("inspect_only", port.navigation),
   };
 }
 

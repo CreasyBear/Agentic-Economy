@@ -17,6 +17,7 @@ import {
   PublicOperationRegistrySchemaVersion,
   type CapabilityOperationSourceRecord,
   type CapabilityOperationSourcePort,
+  type OperationProjectionNavigationContract,
   type PublicCommercialTerms,
   type PublicDataUsePolicy,
   type PublicEffectPolicy,
@@ -205,7 +206,7 @@ export async function searchCapabilityOperations(
   now = Date.now(),
 ): Promise<OperationSearchResult> {
   const normalized = normalizeSearch(input);
-  if (normalized === undefined) return searchUnavailable("query_invalid");
+  if (normalized === undefined) return searchUnavailable("query_invalid", port.navigation);
   const source = await port.listCurrent({
     ...(normalized.filters.networkId === undefined
       ? {}
@@ -214,7 +215,7 @@ export async function searchCapabilityOperations(
     now,
   });
   if (source.operations.length > MAX_SOURCE)
-    return searchUnavailable("source_capacity_exceeded");
+    return searchUnavailable("source_capacity_exceeded", port.navigation);
   const cursor = decodeCursor(
     normalized.cursor,
     normalized.query,
@@ -222,12 +223,12 @@ export async function searchCapabilityOperations(
     source.snapshotKey,
   );
   if (normalized.cursor !== undefined && cursor === undefined)
-    return searchUnavailable("query_invalid");
+    return searchUnavailable("query_invalid", port.navigation);
   const projectedMatches: Array<
     OperationSearchTextCandidate<PublicOperationDescriptor>
   > = [];
   for (const record of source.operations) {
-    const operation = projectCapabilityOperation(record, now);
+    const operation = projectCapabilityOperation(record, now, port.navigation);
     if (matchesFilters(operation, normalized.filters)) {
       projectedMatches.push({
         value: operation,
@@ -265,7 +266,7 @@ export async function searchCapabilityOperations(
       appliedFilters: normalized.filters,
       matchedCount: matches.length,
       ranking: [],
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(port.navigation),
     };
   const hasMore = start + items.length < matches.length;
   return {
@@ -289,15 +290,16 @@ export async function searchCapabilityOperations(
           }
         : {}),
     },
-    navigation: operationNavigation("inspect_only"),
+    navigation: operationNavigation("inspect_only", port.navigation),
   };
 }
 
 export function currentOperationSearchFact(
   record: CapabilityOperationSourceRecord,
-  now = Date.now(),
+  now: number,
+  navigation: OperationProjectionNavigationContract,
 ): CurrentOperationSearchFact {
-  const operation = projectCapabilityOperation(record, now);
+  const operation = projectCapabilityOperation(record, now, navigation);
   return {
     operationRef: operation.operationRef,
     networkId: record.networkId,
@@ -320,15 +322,16 @@ export async function searchCurrentOperationFacts(
   facts: readonly CurrentOperationSearchFact[],
   snapshotKey: string,
   load: (operationRef: PublicOperationRef) => Promise<CapabilityOperationSourceRecord | null>,
-  now = Date.now(),
+  now: number,
+  navigation: OperationProjectionNavigationContract,
   expectedCount?: number,
   trustedCursorLastOperationRef?: PublicOperationRef,
 ): Promise<OperationSearchResult> {
   const normalized = normalizeSearch(input);
-  if (normalized === undefined) return searchUnavailable("query_invalid");
+  if (normalized === undefined) return searchUnavailable("query_invalid", navigation);
   if (expectedCount !== undefined && facts.length !== expectedCount)
-    return searchUnavailable("source_unavailable");
-  if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded");
+    return searchUnavailable("source_unavailable", navigation);
+  if (facts.length > MAX_SOURCE) return searchUnavailable("source_capacity_exceeded", navigation);
   const cursor = trustedCursorLastOperationRef === undefined
     ? decodeCursor(
         normalized.cursor,
@@ -342,7 +345,7 @@ export async function searchCurrentOperationFacts(
     trustedCursorLastOperationRef === undefined &&
     cursor === undefined
   )
-    return searchUnavailable("query_invalid");
+    return searchUnavailable("query_invalid", navigation);
   const matches = rankOperationSearchCandidates(
     normalized.query,
     facts.filter((fact) => matchesFactFilters(fact, normalized.filters, now)).map((fact) => ({
@@ -363,14 +366,15 @@ export async function searchCurrentOperationFacts(
       appliedFilters: normalized.filters,
       matchedCount: matches.length,
       ranking: [],
-      navigation: noOperationNavigation(),
+      navigation: noOperationNavigation(navigation),
     };
   }
   const records = await Promise.all(pageMatches.map(({ operationRef }) => load(operationRef as PublicOperationRef)));
-  if (records.some((record) => record === null)) return searchUnavailable("source_unavailable");
+  if (records.some((record) => record === null)) return searchUnavailable("source_unavailable", navigation);
   const items = records.map((record) => projectCapabilityOperation(
     record as CapabilityOperationSourceRecord,
     now,
+    navigation,
   ));
   const ranking = pageMatches.map(({ operationRef, score }, index) => ({
     operationRef: operationRef as PublicOperationRef,
@@ -379,7 +383,7 @@ export async function searchCurrentOperationFacts(
   }));
   const hasMore = start + items.length < matches.length;
   const lastItem = items.at(-1);
-  if (lastItem === undefined) return searchUnavailable("source_unavailable");
+  if (lastItem === undefined) return searchUnavailable("source_unavailable", navigation);
   return {
     kind: "ok",
     schemaVersion: PublicOperationRegistrySchemaVersion,
@@ -401,18 +405,19 @@ export async function searchCurrentOperationFacts(
           }
         : {}),
     },
-    navigation: operationNavigation("inspect_only"),
+    navigation: operationNavigation("inspect_only", navigation),
   };
 }
 
 function searchUnavailable(
   reason: "query_invalid" | "source_unavailable" | "source_capacity_exceeded",
+  navigation: OperationProjectionNavigationContract,
 ): OperationSearchResult {
   return {
     kind: "unavailable",
     schemaVersion: PublicOperationRegistrySchemaVersion,
     reason,
-    navigation: noOperationNavigation(),
+    navigation: noOperationNavigation(navigation),
   };
 }
 function normalizeSearch(input: OperationSearchInput):

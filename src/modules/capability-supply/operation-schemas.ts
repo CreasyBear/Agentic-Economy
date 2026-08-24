@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { exactAmountSchema } from '@/modules/money/public'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CURRENT_OPERATION_CALL_VIA } from './internal/operation-projection-types'
 
 import type {
   InspectPlanInput,
@@ -104,7 +104,7 @@ const priceEvidence = z.strictObject({
 })
 const descriptor = z.strictObject({
   operationRef, operationId: z.string(),
-  callVia: z.literal(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path),
+  callVia: z.literal(CURRENT_OPERATION_CALL_VIA),
   paymentLane: z.literal('brokered'),
   contract: z.strictObject({
     capabilityId: z.string(), version: z.number().int().positive(), inputJsonSchema: publicSchema, outputJsonSchema: publicSchema,

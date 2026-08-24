@@ -195,6 +195,7 @@ export function validateAdmittedOperationRef(input: unknown): input is AdmittedO
 }
 
 export {
+  CURRENT_OPERATION_CALL_VIA,
   PublicOperationRegistrySchemaVersion,
   operationCompareInputSchema,
   operationCompareOutputSchema,
@@ -211,6 +212,8 @@ export {
   compareCapabilityOperations,
   inspectCapabilityOperationPlan,
   projectCapabilityOperation,
+  projectCapabilityOperationCatalogPrice,
+  projectCapabilityOperationParameters,
   rankOperationSearchText,
   serializeOperationDescriptor,
   deserializeOperationDescriptor,
@@ -225,6 +228,7 @@ export {
 } from './operation-projection'
 export type {
   CapabilityOperationSourcePort,
+  OperationProjectionNavigationContract,
   CapabilityOperationSourceRecord,
   CatalogOfferingOperationMapEntry,
   InspectPlanInput,
