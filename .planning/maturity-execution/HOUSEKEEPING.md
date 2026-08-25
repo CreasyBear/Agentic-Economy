@@ -63,6 +63,7 @@ For each completed phase:
 |---|---|---|---|---|
 | 2026-08-26 | Legacy registry child execution | Every clean worktree HEAD remained on its named `codex/ae-arch-*` branch | Six clean inactive `ae-prod-registry-*` and `ae-registry-*` worktrees; worktree metadata pruned | Branches retained pending deliberate branch-integration audit |
 | 2026-08-26 | Superseded architecture/onboarding side task | Two useful untracked research artifacts assigned back to task `01a034a3-3b0e-7540-b012-15b4fc43e3e2` for focused commit | pending clean handoff | Worktree `c778` retained until artifacts are committed and reachable |
+| 2026-08-26 | Retired Phase 2 launch task | Clean preflight `3d97bb1a9` preserved for replacement task `01a039cb-a32a-7952-9c39-330b3c4ec860` | Product goal-resume failure task `01a039c1-e9b8-7282-84f7-835adfe33655` archived; its clean worktree removed | Active Phase 2 work continues only in `/Users/joelchan/.codex/worktrees/6ca7/Agentic-Economy` |
 
 ## Standing exclusions
 

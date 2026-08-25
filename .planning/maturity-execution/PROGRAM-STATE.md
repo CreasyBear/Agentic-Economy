@@ -11,7 +11,7 @@ Last updated: 2026-08-26 Australia/Perth
 |---|---|---|---|
 | 0 | INTEGRATED | `50f74aa72` | Foundation predecessor retained |
 | 1 | SOURCE_ACCEPTED_EVIDENCE_OPEN | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; evidence handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Phase 2 launched |
-| 2 | IMPLEMENTING | task `01a039c1-e9b8-7282-84f7-835adfe33655`; base `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Internal handoff, then fresh acceptance |
+| 2 | IMPLEMENTING | task `01a039cb-a32a-7952-9c39-330b3c4ec860`; base `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Internal handoff, then fresh acceptance |
 | 3 | BLOCKED_BY_DEPENDENCY | waits for Phase 2 source acceptance | Launch Lane A |
 | 4 | BLOCKED_BY_DEPENDENCY | waits for Phase 3 | Complete transaction kernel |
 | 5 | BLOCKED_BY_DEPENDENCY | waits for Phase 2 source acceptance | Launch Lane B foundations |
@@ -36,13 +36,17 @@ Last updated: 2026-08-26 Australia/Perth
 ## Phase 2 dispatch
 
 - Task: `AE Maturity Phase 2 — Authority, Connections, Secrets`
-- Task ID: `01a039c1-e9b8-7282-84f7-835adfe33655`
-- Worktree: `/Users/joelchan/.codex/worktrees/dc78/Agentic-Economy`
+- Task ID: `01a039cb-a32a-7952-9c39-330b3c4ec860`
+- Worktree: `/Users/joelchan/.codex/worktrees/6ca7/Agentic-Economy`
 - Starting ref: `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0`
 - Launch packet commit: `7c84f8df3` (must be verified as two documentation
   files before cherry-pick).
 - Scope: P2-01 through P2-05 plus Phase 2 integration only.
 - Acceptance: not yet started; it must be a new task after exact internal handoff.
+- Retired launch task `01a039c1-e9b8-7282-84f7-835adfe33655` failed because
+  of a product goal-resume defect. Its clean preflight `3d97bb1a9` was preserved,
+  its task was archived and its worktree was removed before this replacement task
+  became active.
 
 ## Open external evidence carried forward
 
