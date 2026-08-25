@@ -27,3 +27,22 @@ export type {
   OidcIdentityToken,
   OidcIdentityTokenProvider,
 } from './infisical-cloud'
+export {
+  createInfisicalCloudSecretRuntime,
+  createProductionSecretRuntime,
+  createSecretRuntime,
+} from './runtime'
+export type {
+  InfisicalCloudSecretRuntimeOptions,
+  InfisicalVaultConfiguration,
+  ProductionSecretRuntimeOptions,
+  ScopedSecretPlaneDependencies,
+  ScopedSecretRuntime,
+  SecretRuntimeConfiguration,
+  SecretVaultScope,
+} from './runtime'
+export { VercelOidcIdentityTokenProvider } from './vercel-oidc'
+export type {
+  VercelOidcIdentityTokenProviderOptions,
+  VercelOidcTokenSource,
+} from './vercel-oidc'
