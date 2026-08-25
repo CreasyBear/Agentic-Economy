@@ -4,29 +4,29 @@ Scope: Declared account recovery and dual-attributed break-glass coexist with a 
 
 Ownership: src/modules/authority/recovery, tests/security/maturity, tests/maturity/leaf-P2-05.test.ts
 
-- [ ] G1: The leaf's observable outcome is implemented completely under the frozen contract.
-  EVIDENCE: pending
+- [x] G1: The leaf's observable outcome is implemented completely under the frozen contract.
+  EVIDENCE: `RecoveryCoordinator`, `generateIsolationMatrix` and `proveSecretCanaryIsolation` implement the operational recovery, six-case-per-surface isolation and exact forbidden-sink canary seams under `src/modules/authority/recovery/**`; 21 focused tests pass.
 
-- [ ] G2: A leaf-specific executable contract test exists.
+- [x] G2: A leaf-specific executable contract test exists.
   CHECK: cd ../.. && test -f tests/maturity/leaf-P2-05.test.ts && echo LEAF_TEST_PRESENT
   EXPECT: LEAF_TEST_PRESENT
-  EVIDENCE: pending
+  EVIDENCE: Raw CHECK prints `LEAF_TEST_PRESENT`.
 
-- [ ] G3: The leaf-specific contract test passes.
+- [x] G3: The leaf-specific contract test passes.
   CHECK: cd ../.. && npx vitest run tests/maturity/leaf-P2-05.test.ts
-  EVIDENCE: pending
+  EVIDENCE: Node 22 raw CHECK passes 2/2 contract tests in `tests/maturity/leaf-P2-05.test.ts`; the complete focused set passes 21/21 tests in 3 files.
 
-- [ ] G4: The critical negative invariant is proved: operator freeze cannot silently transfer ownership or impersonate.
-  EVIDENCE: pending
+- [x] G4: The critical negative invariant is proved: operator freeze cannot silently transfer ownership or impersonate.
+  EVIDENCE: `recovery-break-glass.test.ts` rejects subject/operator equality, caller-selected operator mismatch, single/duplicate operators and forged/replayed proof; `RecoveryCommit` can insert only an operational admission and consume approvals, with no ownership mutation field.
 
-- [ ] G5: Type checking passes with the leaf integrated through context-local exports.
+- [x] G5: Type checking passes with the leaf integrated through context-local exports.
   CHECK: cd ../.. && npm run typecheck
-  EVIDENCE: pending
+  EVIDENCE: Node 22 `npm run typecheck` passes with the context-local `recovery/public.ts` export.
 
-- [ ] G6: Owned production files contain no placeholder implementation markers.
+- [x] G6: Owned production files contain no placeholder implementation markers.
   CHECK: cd ../.. && if rg -n '(TODO|FIXME|not implemented)' tests/maturity/leaf-P2-05.test.ts 2>/dev/null; then exit 1; else echo NO_PLACEHOLDERS; fi
   EXPECT: NO_PLACEHOLDERS
-  EVIDENCE: pending
+  EVIDENCE: Raw CHECK prints `NO_PLACEHOLDERS`; the expanded owned-path placeholder and debt scan prints `P2_05_DEBT_SCAN_CLEAN`.
 
-- [ ] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
-  EVIDENCE: pending
+- [x] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
+  EVIDENCE: Four passes retained malformed persisted-admission rejection, bounded approvals, distinct matrix actors/runtime decisions and non-vacuous canary sink evidence; exact Istanbul coverage is 211/211 statements, 226/226 branches, 44/44 functions and 182/182 lines; scoped oxlint, typecheck and `git diff --check` pass.
