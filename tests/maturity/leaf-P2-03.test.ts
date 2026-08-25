@@ -8,6 +8,7 @@ import {
   type ConnectionActionSnapshot,
   type ConnectionEffectAdmission,
   type ConnectionLease,
+  type ConnectionLifecycleCommand,
   type ConnectionLifecycleStore,
   type ConnectionLifecycleTransaction,
   type ConnectionShare,
@@ -25,11 +26,12 @@ class ContractStore implements ConnectionLifecycleStore {
   readonly shares = new Map<string, ConnectionShare>()
   readonly leases = new Map<string, ConnectionLease>()
   readonly admissions = new Map<string, ConnectionEffectAdmission>()
+  readonly commands = new Map<string, ConnectionLifecycleCommand>()
 
   async transact<Result>(operation: (transaction: ConnectionLifecycleTransaction) => Promise<Result>): Promise<Result> {
     return await operation({
       getConnection: async (ref) => this.connections.get(ref),
-      getConnectionByInstallIdempotency: async (account, idempotency) => this.find(this.connections, account, idempotency),
+      getConnectionByInstallIdempotency: async (account, idempotency) => [...this.connections.values()].find((connection) => connection.installAction.activeAccountRef === account && connection.installAction.idempotencyRef === idempotency),
       getShare: async (ref) => this.shares.get(ref),
       getActiveShare: async (connection, account) => [...this.shares.values()].find((share) => share.connectionRef === connection && share.granteeAccountRef === account && share.lifecycle === 'active'),
       getShareByIdempotency: async (account, idempotency) => this.find(this.shares, account, idempotency),
@@ -37,11 +39,17 @@ class ContractStore implements ConnectionLifecycleStore {
       getLeaseByIdempotency: async (account, idempotency) => this.find(this.leases, account, idempotency),
       getAdmission: async (ref) => this.admissions.get(ref),
       getAdmissionByIdempotency: async (account, idempotency) => this.find(this.admissions, account, idempotency),
+      getLifecycleCommandByIdempotency: async (account, idempotency) => this.commands.get(`${account}:${idempotency}`),
       insertConnection: async (connection) => { this.connections.set(connection.connectionRef, connection) },
       replaceConnection: async (connection) => { this.connections.set(connection.connectionRef, connection) },
       insertShare: async (share) => { this.shares.set(share.shareRef, share) },
       insertLease: async (lease) => { this.leases.set(lease.leaseRef, lease) },
       insertAdmission: async (admission) => { this.admissions.set(admission.effectRef, admission) },
+      insertLifecycleCommand: async (command) => {
+        const key = `${command.action.activeAccountRef}:${command.action.idempotencyRef}`
+        if (this.commands.has(key)) throw new Error('duplicate lifecycle command')
+        this.commands.set(key, command)
+      },
     })
   }
 

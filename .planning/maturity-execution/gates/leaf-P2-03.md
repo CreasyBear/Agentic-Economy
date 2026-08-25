@@ -5,7 +5,7 @@ Scope: Private Connections support install, sharing, lease, refresh, revoke and 
 Ownership: src/modules/connections/lifecycle, tests/unit/connections/lifecycle, tests/maturity/leaf-P2-03.test.ts
 
 - [x] G1: The leaf's observable outcome is implemented completely under the frozen contract.
-  EVIDENCE: Context-local public.ts exposes stable Connection/share/lease/effect refs and transactional install, explicit share, lease, refresh, revoke, delete and begin-effect admission; ownership and actor/Grant attribution come only from the trusted callback authority port.
+  EVIDENCE: Context-local public.ts exposes stable refs and transactional lifecycle operations; every consequence rereads monotonic trusted time inside authority, while immutable install provenance and append-only refresh/revoke/delete command rows preserve exact authority-bound idempotency across intervening mutations.
 
 - [x] G2: A leaf-specific executable contract test exists.
   CHECK: cd ../.. && test -f tests/maturity/leaf-P2-03.test.ts && echo LEAF_TEST_PRESENT
@@ -14,10 +14,10 @@ Ownership: src/modules/connections/lifecycle, tests/unit/connections/lifecycle, 
 
 - [x] G3: The leaf-specific contract test passes.
   CHECK: cd ../.. && npx vitest run tests/maturity/leaf-P2-03.test.ts
-  EVIDENCE: Node v22.22.0 Vitest: tests/maturity/leaf-P2-03.test.ts, 1 file and 6 tests passed in 246ms.
+  EVIDENCE: Node v22.22.0 Vitest: tests/maturity/leaf-P2-03.test.ts, 1 file and 6 tests passed in 245ms.
 
 - [x] G4: The critical negative invariant is proved: revoked or stale-generation Connections cannot start new effects.
-  EVIDENCE: Retained public-seam tests reject old leases after refresh, revoke, delete and Grant-generation advance; they also reject strict-expiry races, wrong Account, forged share/lease proof, replay duplication and unknown external state. Owned run: 22/22 tests passed with exact 100% statements/branches/functions/lines (236/168/47/202).
+  EVIDENCE: Retained public-seam tests reject stale authority and strict expiry; historical regressions prove refresh B→refresh C→exact replay B returns B without mutation, changed B conflicts, cross-operation/ref/state/generation reuse conflicts, and revoke replay remains exact after delete. Owned run: 27/27 passed at exact 100% statements/branches/functions/lines (236/163/50/201).
 
 - [x] G5: Type checking passes with the leaf integrated through context-local exports.
   CHECK: cd ../.. && npm run typecheck
@@ -29,4 +29,4 @@ Ownership: src/modules/connections/lifecycle, tests/unit/connections/lifecycle, 
   EVIDENCE: NO_PLACEHOLDERS across all owned production and test paths; scoped oxlint also passed with zero warnings.
 
 - [x] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
-  EVIDENCE: Four passes complete: full implementation; expert reread kept shares live across refresh while leases stale; defect hunt bound every replay to actor+Grant generation; free polish removed an unauthorised read seam. Final Node 22 tests, exact coverage, typecheck, placeholder scan and scoped lint are green with zero remaining findings.
+  EVIDENCE: Historical-idempotency four passes complete: reproduced B→C→reuse-B; implemented append-only command records; defect hunt covered operation/ref/generation/state and revoke-after-delete history; free polish enforced unique non-overwriting Account+idempotency inserts. Final Node 22 tests, exact coverage, typecheck, placeholder scan and scoped lint are green.

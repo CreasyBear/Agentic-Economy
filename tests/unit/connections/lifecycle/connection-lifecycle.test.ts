@@ -15,6 +15,7 @@ import {
   type ConnectionEffectRef,
   type ConnectionLease,
   type ConnectionLeaseRef,
+  type ConnectionLifecycleCommand,
   type ConnectionLifecycleErrorCode,
   type ConnectionLifecycleStore,
   type ConnectionLifecycleTransaction,
@@ -35,13 +36,14 @@ class MemoryStore implements ConnectionLifecycleStore {
   readonly shares = new Map<ConnectionShareRef, ConnectionShare>()
   readonly leases = new Map<ConnectionLeaseRef, ConnectionLease>()
   readonly admissions = new Map<ConnectionEffectRef, ConnectionEffectAdmission>()
+  readonly commands = new Map<string, ConnectionLifecycleCommand>()
   dropLeaseAfterFirstRead = false
   leaseReads = 0
 
   async transact<Result>(operation: (transaction: ConnectionLifecycleTransaction) => Promise<Result>): Promise<Result> {
     return await operation({
       getConnection: async (ref) => this.connections.get(ref),
-      getConnectionByInstallIdempotency: async (account, idempotency) => this.find(this.connections, account, idempotency),
+      getConnectionByInstallIdempotency: async (account, idempotency) => [...this.connections.values()].find((connection) => connection.installAction.activeAccountRef === account && connection.installAction.idempotencyRef === idempotency),
       getShare: async (ref) => this.shares.get(ref),
       getActiveShare: async (connection, account) => [...this.shares.values()].find((share) => share.connectionRef === connection && share.granteeAccountRef === account && share.lifecycle === 'active'),
       getShareByIdempotency: async (account, idempotency) => this.find(this.shares, account, idempotency),
@@ -53,11 +55,17 @@ class MemoryStore implements ConnectionLifecycleStore {
       getLeaseByIdempotency: async (account, idempotency) => this.find(this.leases, account, idempotency),
       getAdmission: async (ref) => this.admissions.get(ref),
       getAdmissionByIdempotency: async (account, idempotency) => this.find(this.admissions, account, idempotency),
+      getLifecycleCommandByIdempotency: async (account, idempotency) => this.commands.get(`${account}:${idempotency}`),
       insertConnection: async (connection) => { this.connections.set(connection.connectionRef, connection) },
       replaceConnection: async (connection) => { this.connections.set(connection.connectionRef, connection) },
       insertShare: async (share) => { this.shares.set(share.shareRef, share) },
       insertLease: async (lease) => { this.leases.set(lease.leaseRef, lease) },
       insertAdmission: async (admission) => { this.admissions.set(admission.effectRef, admission) },
+      insertLifecycleCommand: async (command) => {
+        const key = `${command.action.activeAccountRef}:${command.action.idempotencyRef}`
+        if (this.commands.has(key)) throw new Error('duplicate lifecycle command')
+        this.commands.set(key, command)
+      },
     })
   }
 
@@ -73,6 +81,7 @@ class MemoryStore implements ConnectionLifecycleStore {
 class MemoryAuthority implements ConnectionActionAuthority {
   generation = 1
   expiresAt = Number.MAX_SAFE_INTEGER
+  beforeConsequence?: (request: ConnectionActionRequest) => void
   override?: (request: ConnectionActionRequest, snapshot: ConnectionActionSnapshot) => ConnectionActionSnapshot
 
   async withCurrentAuthority<Result>(
@@ -86,6 +95,7 @@ class MemoryAuthority implements ConnectionActionAuthority {
       grantGeneration: this.generation,
       grantExpiresAt: this.expiresAt,
     })
+    this.beforeConsequence?.(request)
     return await consequence(this.override?.(request, snapshot) ?? snapshot)
   }
 }
@@ -241,6 +251,30 @@ describe('Connection install and authority provenance', () => {
     await expectCode(setup.service.install({ context, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
   })
 
+  it('durably replays the original install after refresh overwrites the mutable last action', async () => {
+    const setup = harness()
+    const installInput = {
+      context: setup.context('durable-install'),
+      grantRef: 'grant:owner',
+      providerNamespace: 'oauth/acme',
+      providerLocator: 'durable-provider-locator',
+      externalState: { kind: 'known', value: 'ready' } as const,
+    }
+    const installed = await setup.service.install(installInput)
+    const refreshed = await setup.service.refresh({
+      connectionRef: installed.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'unknown', value: 'refresh_ambiguous' },
+      context: setup.context('refresh-after-install'),
+      grantRef: 'grant:owner',
+    })
+    const replay = await setup.service.install(installInput)
+
+    expect(replay).toBe(refreshed)
+    expect(replay.connectionRef).toBe(installed.connectionRef)
+    expect(setup.store.connections).toHaveLength(1)
+  })
+
   it('rejects forged authority snapshots, invalid authority fields and strict Grant expiry', async () => {
     const cases: readonly Readonly<{
       mutate: (setup: ReturnType<typeof harness>, snapshot: ConnectionActionSnapshot) => ConnectionActionSnapshot
@@ -360,6 +394,79 @@ describe('Connection generation transitions and effect admission', () => {
     await expectCode(setup.service.refresh({ ...input, externalState: { kind: 'unknown', value: 'different' } }), 'connection_idempotency_conflict')
   })
 
+  it('keeps refresh idempotency immutable across intervening lifecycle commands', async () => {
+    const setup = harness()
+    const connection = await install(setup)
+    const firstInput = {
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'known', value: 'ready' } as const,
+      context: setup.context('historical-refresh-b'),
+      grantRef: 'grant:owner',
+    }
+    const first = await setup.service.refresh(firstInput)
+    const second = await setup.service.refresh({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 2,
+      externalState: { kind: 'unknown', value: 'provider_timeout' },
+      context: setup.context('historical-refresh-c'),
+      grantRef: 'grant:owner',
+    })
+
+    await expect(setup.service.refresh(firstInput)).resolves.toBe(first)
+    await expectCode(setup.service.refresh({
+      ...firstInput,
+      expectedGeneration: 3,
+      externalState: { kind: 'known', value: 'unavailable' },
+    }), 'connection_idempotency_conflict')
+    await expectCode(setup.service.refresh({
+      ...firstInput,
+      externalState: { kind: 'known', value: 'unavailable' },
+    }), 'connection_idempotency_conflict')
+    const otherConnection = await install(setup, 'other-connection-for-history')
+    await expectCode(setup.service.refresh({
+      ...firstInput,
+      connectionRef: otherConnection.connectionRef,
+    }), 'connection_idempotency_conflict')
+    await expectCode(setup.service.revoke({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 3,
+      externalState: { kind: 'known', value: 'revoked' },
+      context: firstInput.context,
+      grantRef: 'grant:owner',
+    }), 'connection_idempotency_conflict')
+    expect(setup.store.connections.get(connection.connectionRef)).toBe(second)
+    expect(setup.store.commands).toHaveLength(2)
+  })
+
+  it('keeps revoke idempotency immutable after delete replaces latest state', async () => {
+    const setup = harness()
+    const connection = await install(setup)
+    const revokeInput = {
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'known', value: 'revoked' } as const,
+      context: setup.context('historical-revoke'),
+      grantRef: 'grant:owner',
+    }
+    const revoked = await setup.service.revoke(revokeInput)
+    const deleted = await setup.service.delete({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 2,
+      externalState: { kind: 'known', value: 'deleted' },
+      context: setup.context('delete-after-revoke'),
+      grantRef: 'grant:owner',
+    })
+
+    await expect(setup.service.revoke(revokeInput)).resolves.toBe(revoked)
+    await expectCode(setup.service.revoke({
+      ...revokeInput,
+      externalState: { kind: 'unknown', value: 'changed_revoke_input' },
+    }), 'connection_idempotency_conflict')
+    expect(setup.store.connections.get(connection.connectionRef)).toBe(deleted)
+    expect(setup.store.commands).toHaveLength(2)
+  })
+
   it('guards revoke/delete ownership, lifecycle, generation, time and replay', async () => {
     const setup = harness()
     const connection = await install(setup)
@@ -414,6 +521,34 @@ describe('Connection generation transitions and effect admission', () => {
     setup.store.leases.set(otherLease.leaseRef, otherLease)
     await expectCode(setup.service.beginEffect({ leaseRef: otherLease.leaseRef, context: setup.context('effect') }), 'connection_idempotency_conflict')
     await expect(setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('effect') })).resolves.toBe(first)
+  })
+
+  it('rereads trusted server time inside authority before strict consequence expiry', async () => {
+    const setup = harness()
+    const connection = await install(setup)
+    const expiringLease = await setup.service.lease({
+      connectionRef: connection.connectionRef,
+      context: setup.context('boundary-lease'),
+      grantRef: 'grant:owner',
+      expiresAt: 2_000,
+    })
+    setup.authority.beforeConsequence = (request) => {
+      if (request.operation === 'begin_effect') setup.setNow(2_000)
+    }
+
+    await expectCode(setup.service.beginEffect({
+      leaseRef: expiringLease.leaseRef,
+      context: setup.context('boundary-effect'),
+    }), 'connection_lease_expired')
+    expect(setup.store.admissions).toHaveLength(0)
+  })
+
+  it('fails closed when trusted server time moves backwards before consequence', async () => {
+    const setup = harness()
+    setup.authority.beforeConsequence = () => { setup.setNow(999) }
+
+    await expectCode(install(setup, 'backwards-consequence-time'), 'connection_timestamp_invalid')
+    expect(setup.store.connections).toHaveLength(0)
   })
 
   it('detects effect reference collisions', async () => {

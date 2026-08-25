@@ -20,6 +20,7 @@ export type {
   ConnectionLease,
   ConnectionLeaseRef,
   ConnectionLifecycle,
+  ConnectionLifecycleCommand,
   ConnectionLifecycleErrorCode,
   ConnectionLifecycleOptions,
   ConnectionLifecycleStore,

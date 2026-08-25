@@ -59,12 +59,16 @@ export type Connection = Readonly<{
   installedByPrincipalRef: PrincipalRef
   providerNamespace: string
   providerLocator?: string
+  /** Immutable install input used for durable idempotency after lifecycle changes. */
+  installedExternalState: ConnectionExternalState
   externalState: ConnectionExternalState
   lifecycle: ConnectionLifecycle
   generation: number
   revision: number
   createdAt: number
   updatedAt: number
+  /** Immutable authority provenance for the install idempotency key. */
+  installAction: ConnectionAction
   action: ConnectionAction
 }>
 
@@ -107,6 +111,15 @@ export type ConnectionEffectAdmission = Readonly<{
   action: ConnectionAction
 }>
 
+export type ConnectionLifecycleCommand = Readonly<{
+  operation: 'refresh' | 'revoke' | 'delete'
+  connectionRef: ConnectionRef
+  expectedGeneration: number
+  requestedExternalState: ConnectionExternalState
+  action: ConnectionAction
+  result: Connection
+}>
+
 export type ConnectionActionRequest = Readonly<{
   operation: ConnectionOperation
   context: AccountActionContext
@@ -137,6 +150,7 @@ export type ConnectionActionAuthority = Readonly<{
 
 export type ConnectionLifecycleTransaction = Readonly<{
   getConnection(ref: ConnectionRef): Promise<Connection | undefined>
+  /** Must search immutable installAction provenance across every lifecycle state. */
   getConnectionByInstallIdempotency(accountRef: AccountRef, idempotencyRef: string): Promise<Connection | undefined>
   getShare(ref: ConnectionShareRef): Promise<ConnectionShare | undefined>
   getActiveShare(connectionRef: ConnectionRef, accountRef: AccountRef): Promise<ConnectionShare | undefined>
@@ -145,11 +159,15 @@ export type ConnectionLifecycleTransaction = Readonly<{
   getLeaseByIdempotency(accountRef: AccountRef, idempotencyRef: string): Promise<ConnectionLease | undefined>
   getAdmission(ref: ConnectionEffectRef): Promise<ConnectionEffectAdmission | undefined>
   getAdmissionByIdempotency(accountRef: AccountRef, idempotencyRef: string): Promise<ConnectionEffectAdmission | undefined>
+  /** Durable lookup over append-only command rows, unique by Account + idempotency. */
+  getLifecycleCommandByIdempotency(accountRef: AccountRef, idempotencyRef: string): Promise<ConnectionLifecycleCommand | undefined>
   insertConnection(connection: Connection): Promise<void>
   replaceConnection(connection: Connection, expectedRevision: number): Promise<void>
   insertShare(share: ConnectionShare): Promise<void>
   insertLease(lease: ConnectionLease): Promise<void>
   insertAdmission(admission: ConnectionEffectAdmission): Promise<void>
+  /** Inserts one immutable row and must reject an existing Account + idempotency key. */
+  insertLifecycleCommand(command: ConnectionLifecycleCommand): Promise<void>
 }>
 
 export type ConnectionLifecycleStore = Readonly<{
@@ -234,18 +252,17 @@ export class ConnectionLifecycleService {
     providerLocator?: string
     externalState: ConnectionExternalState
   }>): Promise<Connection> {
-    const timestamp = validTimestamp(this.#now())
     const providerNamespace = validOpaque(input.providerNamespace, 'connection_provider_metadata_invalid')
     const providerLocator = input.providerLocator === undefined
       ? undefined
       : validOpaque(input.providerLocator, 'connection_provider_metadata_invalid')
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority('install', input.context, input.grantRef, timestamp, undefined, undefined, async (snapshot, action) => {
+    return await this.#withAuthority('install', input.context, input.grantRef, undefined, undefined, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getConnectionByInstallIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
-          assertReplayAuthority(replay.action, action)
-          if (replay.providerNamespace !== providerNamespace || replay.providerLocator !== providerLocator || !externalStatesEqual(replay.externalState, externalState)) {
+          assertReplayAuthority(replay.installAction, action)
+          if (replay.providerNamespace !== providerNamespace || replay.providerLocator !== providerLocator || !externalStatesEqual(replay.installedExternalState, externalState)) {
             throw new ConnectionLifecycleError('connection_idempotency_conflict')
           }
           return replay
@@ -258,12 +275,14 @@ export class ConnectionLifecycleService {
           installedByPrincipalRef: snapshot.actorPrincipalRef,
           providerNamespace,
           ...(providerLocator === undefined ? {} : { providerLocator }),
+          installedExternalState: externalState,
           externalState,
           lifecycle: 'active',
           generation: 1,
           revision: 1,
           createdAt: timestamp,
           updatedAt: timestamp,
+          installAction: action,
           action,
         })
         await transaction.insertConnection(connection)
@@ -279,9 +298,8 @@ export class ConnectionLifecycleService {
     expiresAt: number
   }>): Promise<ConnectionLease> {
     const ref = connectionRef(input.connectionRef)
-    const timestamp = validTimestamp(this.#now())
     const expiresAt = validTimestamp(input.expiresAt)
-    return await this.#withAuthority('lease', input.context, input.grantRef, timestamp, ref, undefined, async (snapshot, action) => {
+    return await this.#withAuthority('lease', input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
       if (expiresAt <= timestamp || expiresAt > snapshot.grantExpiresAt) {
         throw new ConnectionLifecycleError('connection_lease_expired')
       }
@@ -327,8 +345,7 @@ export class ConnectionLifecycleService {
   }>): Promise<ConnectionShare> {
     const ref = connectionRef(input.connectionRef)
     const granteeAccountRef = accountRef(input.granteeAccountRef)
-    const timestamp = validTimestamp(this.#now())
-    return await this.#withAuthority('share', input.context, input.grantRef, timestamp, ref, granteeAccountRef, async (snapshot, action) => {
+    return await this.#withAuthority('share', input.context, input.grantRef, ref, granteeAccountRef, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const connection = await requiredConnection(transaction, ref)
         if (connection.lifecycle !== 'active') throw new ConnectionLifecycleError('connection_not_active')
@@ -373,17 +390,13 @@ export class ConnectionLifecycleService {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    const timestamp = validTimestamp(this.#now())
-    return await this.#withAuthority('refresh', input.context, input.grantRef, timestamp, ref, undefined, async (snapshot, action) => {
+    return await this.#withAuthority('refresh', input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
-        const current = await requiredConnection(transaction, ref)
-        if (hasSameIdempotencyKey(current.action, action)) {
-          assertReplayAuthority(current.action, action)
-          if (current.action.operation === 'refresh'
-            && current.generation === expectedGeneration + 1
-            && externalStatesEqual(current.externalState, externalState)) return current
-          throw new ConnectionLifecycleError('connection_idempotency_conflict')
+        const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
+        if (replay !== undefined) {
+          return replayLifecycleCommand(replay, 'refresh', ref, expectedGeneration, externalState, action)
         }
+        const current = await requiredConnection(transaction, ref)
         if (current.owningAccountRef !== snapshot.activeAccountRef) throw new ConnectionLifecycleError('connection_access_denied')
         if (current.lifecycle !== 'active') throw new ConnectionLifecycleError('connection_not_active')
         if (current.generation !== expectedGeneration) throw new ConnectionLifecycleError('connection_generation_stale')
@@ -397,6 +410,14 @@ export class ConnectionLifecycleService {
           action,
         })
         await transaction.replaceConnection(refreshed, current.revision)
+        await transaction.insertLifecycleCommand(freezeLifecycleCommand({
+          operation: 'refresh',
+          connectionRef: ref,
+          expectedGeneration,
+          requestedExternalState: externalState,
+          action,
+          result: refreshed,
+        }))
         return refreshed
       })
     })
@@ -427,10 +448,9 @@ export class ConnectionLifecycleService {
     context: AccountActionContext
   }>): Promise<ConnectionEffectAdmission> {
     const leaseRef = connectionLeaseRef(input.leaseRef)
-    const timestamp = validTimestamp(this.#now())
     const lease = await this.#store.transact(async (transaction) => await transaction.getLease(leaseRef))
     if (lease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
-    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, timestamp, lease.connectionRef, undefined, async (snapshot, action) => {
+    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, lease.connectionRef, undefined, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const currentLease = await transaction.getLease(leaseRef)
         if (currentLease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
@@ -481,18 +501,13 @@ export class ConnectionLifecycleService {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    const timestamp = validTimestamp(this.#now())
-    return await this.#withAuthority(operation, input.context, input.grantRef, timestamp, ref, undefined, async (snapshot, action) => {
+    return await this.#withAuthority(operation, input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
-        const current = await requiredConnection(transaction, ref)
-        if (hasSameIdempotencyKey(current.action, action)) {
-          assertReplayAuthority(current.action, action)
-          if (current.action.operation === operation
-            && current.lifecycle === lifecycle
-            && current.generation === expectedGeneration + 1
-            && externalStatesEqual(current.externalState, externalState)) return current
-          throw new ConnectionLifecycleError('connection_idempotency_conflict')
+        const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
+        if (replay !== undefined) {
+          return replayLifecycleCommand(replay, operation, ref, expectedGeneration, externalState, action)
         }
+        const current = await requiredConnection(transaction, ref)
         if (current.owningAccountRef !== snapshot.activeAccountRef) throw new ConnectionLifecycleError('connection_access_denied')
         if (!allowedFrom.includes(current.lifecycle)) throw new ConnectionLifecycleError('connection_not_active')
         if (current.generation !== expectedGeneration) throw new ConnectionLifecycleError('connection_generation_stale')
@@ -507,6 +522,14 @@ export class ConnectionLifecycleService {
           action,
         })
         await transaction.replaceConnection(transitioned, current.revision)
+        await transaction.insertLifecycleCommand(freezeLifecycleCommand({
+          operation,
+          connectionRef: ref,
+          expectedGeneration,
+          requestedExternalState: externalState,
+          action,
+          result: transitioned,
+        }))
         return transitioned
       })
     })
@@ -516,11 +539,11 @@ export class ConnectionLifecycleService {
     operation: ConnectionOperation,
     context: AccountActionContext,
     grantRefInput: string,
-    timestamp: number,
     connectionRefInput: ConnectionRef | undefined,
     counterpartyAccountRef: AccountRef | undefined,
-    consequence: (snapshot: ConnectionActionSnapshot, action: ConnectionAction) => Promise<Result>,
+    consequence: (snapshot: ConnectionActionSnapshot, action: ConnectionAction, timestamp: number) => Promise<Result>,
   ): Promise<Result> {
+    const requestTime = validTimestamp(this.#now())
     const validContext = Object.freeze({
       actorPrincipalRef: principalRef(context.actorPrincipalRef),
       activeAccountRef: accountRef(context.activeAccountRef),
@@ -534,9 +557,11 @@ export class ConnectionLifecycleService {
       grantRef,
       ...(connectionRefInput === undefined ? {} : { connectionRef: connectionRefInput }),
       ...(counterpartyAccountRef === undefined ? {} : { counterpartyAccountRef }),
-      now: timestamp,
+      now: requestTime,
     }, async (snapshotInput) => {
-      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, timestamp)
+      const consequenceTime = validTimestamp(this.#now())
+      if (consequenceTime < requestTime) throw new ConnectionLifecycleError('connection_timestamp_invalid')
+      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, consequenceTime)
       const action = Object.freeze({
         operation,
         actorPrincipalRef: snapshot.actorPrincipalRef,
@@ -545,9 +570,9 @@ export class ConnectionLifecycleService {
         grantGeneration: snapshot.grantGeneration,
         correlationRef: validContext.correlationRef,
         idempotencyRef: validContext.idempotencyRef,
-        occurredAt: timestamp,
+        occurredAt: consequenceTime,
       })
-      return await consequence(snapshot, action)
+      return await consequence(snapshot, action, consequenceTime)
     })
   }
 }
@@ -602,17 +627,30 @@ function externalStatesEqual(left: ConnectionExternalState, right: ConnectionExt
   return left.kind === right.kind && left.value === right.value
 }
 
-function hasSameIdempotencyKey(left: ConnectionAction, right: ConnectionAction): boolean {
-  return left.activeAccountRef === right.activeAccountRef
-    && left.idempotencyRef === right.idempotencyRef
-}
-
 function assertReplayAuthority(left: ConnectionAction, right: ConnectionAction): void {
   if (left.actorPrincipalRef !== right.actorPrincipalRef
     || left.grantRef !== right.grantRef
     || left.grantGeneration !== right.grantGeneration) {
     throw new ConnectionLifecycleError('connection_idempotency_conflict')
   }
+}
+
+function replayLifecycleCommand(
+  command: ConnectionLifecycleCommand,
+  operation: ConnectionLifecycleCommand['operation'],
+  connectionRefInput: ConnectionRef,
+  expectedGeneration: number,
+  externalState: ConnectionExternalState,
+  action: ConnectionAction,
+): Connection {
+  assertReplayAuthority(command.action, action)
+  if (command.operation !== operation
+    || command.connectionRef !== connectionRefInput
+    || command.expectedGeneration !== expectedGeneration
+    || !externalStatesEqual(command.requestedExternalState, externalState)) {
+    throw new ConnectionLifecycleError('connection_idempotency_conflict')
+  }
+  return command.result
 }
 
 function validAuthoritySnapshot(
@@ -678,7 +716,13 @@ function requireCurrentLease(
 }
 
 function freezeConnection(connection: Connection): Connection {
-  return Object.freeze({ ...connection, externalState: Object.freeze({ ...connection.externalState }), action: Object.freeze({ ...connection.action }) })
+  return Object.freeze({
+    ...connection,
+    installedExternalState: Object.freeze({ ...connection.installedExternalState }),
+    externalState: Object.freeze({ ...connection.externalState }),
+    installAction: Object.freeze({ ...connection.installAction }),
+    action: Object.freeze({ ...connection.action }),
+  })
 }
 
 function freezeLease(lease: ConnectionLease): ConnectionLease {
@@ -691,4 +735,13 @@ function freezeShare(share: ConnectionShare): ConnectionShare {
 
 function freezeAdmission(admission: ConnectionEffectAdmission): ConnectionEffectAdmission {
   return Object.freeze({ ...admission, action: Object.freeze({ ...admission.action }) })
+}
+
+function freezeLifecycleCommand(command: ConnectionLifecycleCommand): ConnectionLifecycleCommand {
+  return Object.freeze({
+    ...command,
+    requestedExternalState: Object.freeze({ ...command.requestedExternalState }),
+    action: Object.freeze({ ...command.action }),
+    result: command.result,
+  })
 }
