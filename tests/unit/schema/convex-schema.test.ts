@@ -165,6 +165,7 @@ const requiredIndexes = {
   ],
   authorityDelegationGrants: [
     'by_grantRef',
+    'by_subjectPrincipalRef_and_lifecycle',
     'by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef',
   ],
   authorityDelegationSnapshots: [
