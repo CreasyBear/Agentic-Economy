@@ -230,6 +230,13 @@ export function createJitProviderConsequenceBoundary(
             }
             if (providerInvocation.binding.adapterId !== 'x402-fetch:v2') {
               observation = await invokePreparedRouteTransport(prepared, baseRuntime)
+              if (await observationContainsLeasedSecret(lease, observation)) {
+                observation = unknown(
+                  transport,
+                  prepared.requestDigest,
+                  'provider_consequence_secret_echo',
+                )
+              }
               return
             }
             const x402Runtime = await createCallbackScopedX402Runtime(
@@ -268,6 +275,14 @@ export function createJitProviderConsequenceBoundary(
               ...baseRuntime,
               ...releaseFencedX402Runtime,
             })
+
+            if (await observationContainsLeasedSecret(lease, observation)) {
+              observation = unknown(
+                transport,
+                prepared.requestDigest,
+                'provider_consequence_secret_echo',
+              )
+            }
           },
         )
         if (expiredBeforeRelease) {
@@ -308,6 +323,34 @@ export function createJitProviderConsequenceBoundary(
       }
     },
   })
+}
+
+async function observationContainsLeasedSecret(
+  lease: SecretMaterialLease,
+  observation: RouteTransportObservation,
+): Promise<boolean> {
+  const serialized = JSON.stringify(observation)
+  let contaminated = false
+  await lease.useBytes(async (material) => {
+    if (material.byteLength === 0) return
+    const bytes = Buffer.from(material)
+    try {
+      const representations = [
+        bytes.toString('hex'),
+        bytes.toString('base64'),
+        bytes.toString('base64url'),
+      ]
+      try {
+        representations.push(new TextDecoder('utf-8', { fatal: true }).decode(material))
+      } catch {
+        // Binary credentials are still covered by their lossless encodings.
+      }
+      contaminated = representations.some((value) => value.length > 0 && serialized.includes(value))
+    } finally {
+      bytes.fill(0)
+    }
+  })
+  return contaminated
 }
 
 const REQUIRED_X402_RUNTIME_KEYS = Object.freeze([

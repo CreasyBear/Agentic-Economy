@@ -53,6 +53,7 @@ import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
+import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api.internal.provider-consequence'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
 import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
@@ -305,6 +306,12 @@ const ApiObservabilityClientErrorRoute =
     path: '/api/observability/client-error',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiInternalProviderConsequenceRoute =
+  ApiInternalProviderConsequenceRouteImport.update({
+    id: '/api/internal/provider-consequence',
+    path: '/api/internal/provider-consequence',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiDiscoverySchemaRoute = ApiDiscoverySchemaRouteImport.update({
   id: '/api/discovery/schema',
   path: '/api/discovery/schema',
@@ -500,6 +507,7 @@ export interface FileRoutesByFullPath {
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -571,6 +579,7 @@ export interface FileRoutesByTo {
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -644,6 +653,7 @@ export interface FileRoutesById {
   '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -717,6 +727,7 @@ export interface FileRouteTypes {
     | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-consequence'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -788,6 +799,7 @@ export interface FileRouteTypes {
     | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-consequence'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -860,6 +872,7 @@ export interface FileRouteTypes {
     | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
+    | '/api/internal/provider-consequence'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -918,6 +931,7 @@ export interface RootRouteChildren {
   ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
+  ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
@@ -1240,6 +1254,13 @@ declare module '@tanstack/react-router' {
       path: '/api/observability/client-error'
       fullPath: '/api/observability/client-error'
       preLoaderRoute: typeof ApiObservabilityClientErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/provider-consequence': {
+      id: '/api/internal/provider-consequence'
+      path: '/api/internal/provider-consequence'
+      fullPath: '/api/internal/provider-consequence'
+      preLoaderRoute: typeof ApiInternalProviderConsequenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/discovery/schema': {
@@ -1615,6 +1636,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
+  ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,

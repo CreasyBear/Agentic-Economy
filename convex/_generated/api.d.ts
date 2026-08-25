@@ -31,6 +31,7 @@ import type * as capabilityProviderConnectionLeases from "../capabilityProviderC
 import type * as capabilityProviderConnectionLifecycle from "../capabilityProviderConnectionLifecycle.js";
 import type * as capabilityProviderConnectionOwner from "../capabilityProviderConnectionOwner.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
+import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCommands from "../capabilitySupplyCommands.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
@@ -129,6 +130,7 @@ import type * as moneyX402PaymentAttemptsShared from "../moneyX402PaymentAttempt
 import type * as moneyX402PaymentAuthorization from "../moneyX402PaymentAuthorization.js";
 import type * as moneyX402PaymentObservation from "../moneyX402PaymentObservation.js";
 import type * as moneyX402PaymentRead from "../moneyX402PaymentRead.js";
+import type * as providerConsequenceHttp from "../providerConsequenceHttp.js";
 import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as registry from "../registry.js";
@@ -171,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   capabilityProviderConnectionLifecycle: typeof capabilityProviderConnectionLifecycle;
   capabilityProviderConnectionOwner: typeof capabilityProviderConnectionOwner;
   capabilityProviderConnections: typeof capabilityProviderConnections;
+  capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCommands: typeof capabilitySupplyCommands;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
@@ -269,6 +272,7 @@ declare const fullApi: ApiFromModules<{
   moneyX402PaymentAuthorization: typeof moneyX402PaymentAuthorization;
   moneyX402PaymentObservation: typeof moneyX402PaymentObservation;
   moneyX402PaymentRead: typeof moneyX402PaymentRead;
+  providerConsequenceHttp: typeof providerConsequenceHttp;
   qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
   registry: typeof registry;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodePaymentRequiredHeader } from '@x402/core/http'
+import { encodePaymentRequiredHeader, encodePaymentResponseHeader } from '@x402/core/http'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
@@ -822,6 +822,11 @@ describe('JIT provider consequence boundary', () => {
     expect(result).toMatchObject({ disposition: 'refused', releaseStarted: false, failureCode: 'credential_unavailable' })
     expect(active.send).not.toHaveBeenCalled()
     expect(active.durableJournal.complete).toHaveBeenCalledOnce()
+
+    const empty = harness({ vaultFetch: vaultFetch('') })
+    await expect(empty.boundary.execute({ ticket: 'opaque-ticket', invocation: empty.routeInvocation }))
+      .resolves.toMatchObject({ disposition: 'refused', failureCode: 'credential_unavailable' })
+    expect(empty.send).not.toHaveBeenCalled()
   })
 
   it('refuses x402 support when the callback-scoped custody and reconciliation factory is absent', async () => {
@@ -897,6 +902,59 @@ describe('JIT provider consequence boundary', () => {
     expect(send).toHaveBeenCalledOnce()
     expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
     expect(JSON.stringify(result)).not.toContain('signed-payment')
+  })
+
+  it('quarantines an x402 provider observation that echoes encoded leased secret material', async () => {
+    const routeInvocation = x402Invocation()
+    const createCallbackScopedX402Runtime = vi.fn<JitProviderX402RuntimeFactory>(async () => ({
+      readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
+      validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
+      x402PaymentSigningAvailable: () => true,
+      verifyX402Settlement: async () => true,
+      prepareX402PaymentAuthorization: async () => ({
+        custodyRef: 'sha256:customer-custody-reference',
+        authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
+      }),
+      readX402PaymentAuthorization: async () => 'signed-payment',
+      readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
+      beforeX402PaymentAuthorizationRead: async () => true,
+      markX402PaymentPossiblySubmitted: async () => undefined,
+      observeX402PaymentAttempt: async () => undefined,
+    }))
+    const send = vi.fn<RouteTransportFetch>(async () => Response.json({
+      serviceReference: Buffer.from(CREDENTIAL).toString('base64'),
+    }, {
+      headers: {
+        'Payment-Response': encodePaymentResponseHeader({
+          success: true,
+          transaction: '0xsettled',
+          network: 'eip155:84532',
+          amount: '1250000',
+          payer: 'test:settled-payer',
+        }),
+      },
+    }))
+    const durableJournal = journal()
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      createCallbackScopedX402Runtime,
+      journal: durableJournal,
+      send,
+    })
+
+    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+
+    expect(result).toEqual({
+      transport: 'x402',
+      disposition: 'unknown',
+      releaseStarted: true,
+      requestDigest: requestDigest(routeInvocation),
+      failureCode: 'provider_consequence_secret_echo',
+    })
+    expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
+    expect(JSON.stringify(result)).not.toContain(Buffer.from(CREDENTIAL).toString('base64'))
+    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
   })
 
   it('does not advertise x402 execution when the callback-scoped signer reports unavailable', async () => {
@@ -1058,6 +1116,36 @@ describe('JIT provider consequence boundary', () => {
       failureCode: 'network_error',
     })
     expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
+  })
+
+  it.each([
+    ['raw', CREDENTIAL, 'response_output_invalid'],
+    ['base64', Buffer.from(CREDENTIAL).toString('base64'), 'provider_consequence_secret_echo'],
+  ])('quarantines an HTTP provider observation that echoes the %s leased secret', async (_label, echoed, failureCode) => {
+    const durableJournal = journal()
+    const active = harness({
+      journal: durableJournal,
+      send: vi.fn(async () => Response.json({ serviceReference: echoed })),
+    })
+
+    const result = await active.boundary.execute({
+      ticket: 'opaque-ticket',
+      invocation: active.routeInvocation,
+    })
+
+    expect(result).toEqual({
+      transport: 'http',
+      disposition: 'unknown',
+      releaseStarted: true,
+      requestDigest: requestDigest(active.routeInvocation),
+      failureCode,
+    })
+    expect(JSON.stringify(result)).not.toContain(CREDENTIAL)
+    expect(JSON.stringify(result)).not.toContain(Buffer.from(CREDENTIAL).toString('base64'))
+    expect(durableJournal.complete).toHaveBeenCalledWith({
+      claimRef: 'claim:test',
+      observation: result,
+    })
   })
 
   it('keeps observed transport failures unknown when the journal cannot acknowledge completion', async () => {

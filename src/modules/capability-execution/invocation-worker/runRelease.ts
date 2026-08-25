@@ -16,6 +16,7 @@ import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks,
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runBrokeredX402Transport } from './brokeredX402'
 import type { InvocationPreparation } from './runPreparation'
+import { invokeProviderConsequenceViaVercel } from './providerConsequenceBridge'
 
 type PreparedInvocationRun = Extract<InvocationPreparation, { kind: 'prepared' }>
 
@@ -122,7 +123,9 @@ export async function releaseInvocationRun(
   const preparation = prepareRegisteredRouteTransportInvocation(
     invocation,
     isX402
-      ? dispatch.environment === 'production'
+      ? connectionAuthority !== undefined && economicRail !== 'brokered_x402'
+        ? () => true
+        : dispatch.environment === 'production'
         ? () => true
         : () => x402PaymentCredentialRefFromEnvironment() !== undefined
       : undefined,
@@ -499,7 +502,12 @@ export async function releaseInvocationRun(
     }
     let observation: RouteTransportObservation
     try {
-      observation = await invokePreparedRouteTransport(preparation.prepared, runtime)
+      observation = connectionAuthority !== undefined && economicRail !== 'brokered_x402'
+        ? await invokeProviderConsequenceViaVercel(ctx, {
+            invocation,
+            requestDigest: preparation.prepared.requestDigest,
+          })
+        : await invokePreparedRouteTransport(preparation.prepared, runtime)
     } catch (error) {
       observation = {
         transport: 'unknown',
