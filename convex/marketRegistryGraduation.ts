@@ -23,7 +23,11 @@ const resultValue = v.union(
   v.object({ kind: v.literal("unavailable") }),
 );
 
-type GraduationArgs = { documentId: string; expectedSourceDigest: string };
+type GraduationArgs = {
+  documentId: string;
+  expectedSourceDigest: string;
+  expectedGeneration?: string;
+};
 type CandidateResult =
   | { kind: "found"; candidate: Parameters<typeof probeRegistryEntryForAdmission>[0] }
   | { kind: "not_found" | "source_changed" | "unavailable" };
@@ -33,7 +37,11 @@ type GraduationResult =
   | { kind: "not_found" | "source_changed" | "unavailable" };
 
 export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult> = internalAction({
-  args: { documentId: v.string(), expectedSourceDigest: v.string() },
+  args: {
+    documentId: v.string(),
+    expectedSourceDigest: v.string(),
+    expectedGeneration: v.optional(v.string()),
+  },
   returns: resultValue,
   handler: async (ctx, args): Promise<GraduationResult> => {
     const selected: CandidateResult = await ctx.runQuery(
@@ -67,7 +75,11 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
   },
 });
 
-type SweepArgs = { generation: string; cursor: string | null };
+type SweepArgs = {
+  generation: string;
+  candidates?: { documentId: string; sourceDigest: string }[];
+  cursor?: string | null;
+};
 type SweepResult = {
   kind: "advanced" | "complete" | "stale_generation";
   attempted: number;
@@ -85,9 +97,22 @@ const sweepResultValue = v.object({
 });
 
 export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = internalAction({
-  args: { generation: v.string(), cursor: v.union(v.string(), v.null()) },
+  args: {
+    generation: v.string(),
+    candidates: v.optional(v.array(v.object({
+      documentId: v.string(),
+      sourceDigest: v.string(),
+    }))),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
   returns: sweepResultValue,
   handler: async (ctx, args): Promise<SweepResult> => {
+    if (args.candidates === undefined) {
+      return { kind: "complete", attempted: 0, graduated: 0 };
+    }
+    if (args.candidates.length > 100) {
+      throw new Error("registry_graduation_cohort_too_large");
+    }
     const selected: {
       kind: "stale_generation";
     } | {
@@ -97,32 +122,35 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
       continueCursor: string;
     } = await ctx.runQuery(internal.marketExternalRegistry.admissionCandidates, {
       generation: args.generation,
-      cursor: args.cursor,
-      limit: 4,
+      cursor: null,
+      limit: 1,
     });
     if (selected.kind === "stale_generation") {
       return { kind: "stale_generation", attempted: 0, graduated: 0 };
     }
+    const step = args.candidates.slice(0, 4);
     let graduated = 0;
-    for (const candidate of selected.candidates) {
+    for (const candidate of step) {
       const result: GraduationResult = await ctx.runAction(
         internal.marketRegistryGraduation.run,
         {
           documentId: candidate.documentId,
           expectedSourceDigest: candidate.sourceDigest,
+          expectedGeneration: args.generation,
         },
       );
       if (result.kind === "graduated" && result.published) graduated += 1;
     }
-    if (!selected.isDone) {
+    const remaining = args.candidates.slice(step.length);
+    if (remaining.length > 0) {
       await ctx.scheduler.runAfter(1_000, internal.marketRegistryGraduation.sweep, {
         generation: args.generation,
-        cursor: selected.continueCursor,
+        candidates: remaining,
       });
     }
     return {
-      kind: selected.isDone ? "complete" : "advanced",
-      attempted: selected.candidates.length,
+      kind: remaining.length === 0 ? "complete" : "advanced",
+      attempted: step.length,
       graduated,
     };
   },

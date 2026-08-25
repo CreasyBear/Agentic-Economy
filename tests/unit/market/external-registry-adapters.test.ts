@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   fetchAgenticMarketCatalog,
   fetchTregCatalog,
 } from "@/modules/market/registry-source-adapters";
+
+import { run as refreshExternalRegistry } from "../../../convex/marketExternalRegistryRefresh";
 
 function json(document: unknown): Response {
   return Response.json(document);
@@ -285,7 +287,117 @@ describe("registry origin adapters", () => {
     ).rejects.toThrow();
 
   });
+
+  it("persists all source rows but schedules only a bounded 100-candidate launch cohort", async () => {
+    const services = Array.from({ length: 25 }, (_, index) =>
+      agenticService(`provider-${index}`, 6),
+    );
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.agentic.market") {
+        return json(agenticMarketPage(services, services.length, 200, 0));
+      }
+      if (url.href === "https://treg.to/catalog/platforms") {
+        return json({ generated_from: "catalog", platforms: [] });
+      }
+      throw new Error(`unexpected refresh URL: ${url.href}`);
+    });
+    const writes: number[] = [];
+    const runMutation = vi.fn(async (_reference: unknown, args: Record<string, unknown>) => {
+      if (Array.isArray(args.entries)) {
+        writes.push(args.entries.length);
+        return { inserted: args.entries.length, replayed: 0 };
+      }
+      return null;
+    });
+    const runAfter = vi.fn(async () => undefined);
+    const handler = refreshHandler();
+
+    try {
+      const result = await handler({
+        runMutation,
+        scheduler: { runAfter },
+      });
+      expect(result).toMatchObject({ kind: "refreshed", entries: 150 });
+      expect(writes.reduce((total, count) => total + count, 0)).toBe(150);
+      expect(runAfter).toHaveBeenCalledOnce();
+      const scheduled = runAfter.mock.calls[0]?.[2] as {
+        generation: string;
+        candidates: { documentId: string; sourceDigest: string }[];
+      };
+      expect(scheduled.candidates).toHaveLength(100);
+      expect(new Set(scheduled.candidates.map(({ documentId }) => documentId)).size).toBe(100);
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it("schedules no graduation when either source refresh is incomplete", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.agentic.market") {
+        return json(agenticMarketPage([], 1, 200, 0));
+      }
+      if (url.href === "https://treg.to/catalog/platforms") {
+        return json({ generated_from: "catalog", platforms: [] });
+      }
+      throw new Error(`unexpected refresh URL: ${url.href}`);
+    });
+    const runMutation = vi.fn(async () => null);
+    const runAfter = vi.fn(async () => undefined);
+    const handler = refreshHandler();
+
+    try {
+      await expect(handler({
+        runMutation,
+        scheduler: { runAfter },
+      })).resolves.toMatchObject({
+        kind: "preserved",
+        entries: 0,
+        reason: "agentic_market:source_count_mismatch",
+      });
+      expect(runAfter).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
 });
+
+function refreshHandler() {
+  const handler = (refreshExternalRegistry as unknown as {
+    _handler: (
+      ctx: {
+        runMutation: (
+          reference: unknown,
+          args: Record<string, unknown>,
+        ) => Promise<unknown>;
+        scheduler: {
+          runAfter: (
+            delayMs: number,
+            reference: unknown,
+            args: Record<string, unknown>,
+          ) => Promise<void>;
+        };
+      },
+      args: Record<string, never>,
+    ) => Promise<unknown>;
+  })._handler;
+  return (
+    ctx: {
+      runMutation: (
+        reference: unknown,
+        args: Record<string, unknown>,
+      ) => Promise<unknown>;
+      scheduler: {
+        runAfter: (
+          delayMs: number,
+          reference: unknown,
+          args: Record<string, unknown>,
+        ) => Promise<void>;
+      };
+    },
+  ) => handler(ctx, {});
+}
 
 function agenticMarketPage(
   services: unknown[],
