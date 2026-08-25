@@ -62,6 +62,15 @@ export type ProviderConnectionLeaseApproval = Readonly<{
 
 export type ProviderConnectionInvocationLease = Readonly<{
   leaseRef: string
+  /** Staged compatibility mapping. Absence is a denial, not a legacy fallback. */
+  canonicalLeaseRef?: string
+  canonicalConnectionRef?: string
+  canonicalConnectionGeneration?: number
+  owningAccountRef?: string
+  activeAccountRef?: string
+  actorPrincipalRef?: string
+  grantRef?: string
+  grantGeneration?: number
   invocationRef: string
   operationRef: string
   connectionRef: string

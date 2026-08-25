@@ -1,20 +1,36 @@
 import { v } from 'convex/values'
 import {
+  canonicalProviderLeaseProjection,
+  canonicalProviderLeaseProjectionIsCurrent,
   consumeProviderConnectionLease,
   expireProviderConnectionLease,
   invalidateProviderConnectionLease,
   issueProviderConnectionLease,
-  resolveProviderConnectionCredentialRefForLease,
-  validateProviderConnectionLeaseAuthority,
-  type ProviderConnectionLeaseApproval,
   type ProviderConnectionLeaseCommandResult,
 } from '../src/modules/capability-supply/provider-connection'
+import { DelegationError } from '../src/modules/authority/delegation/public'
+import {
+  ConnectionLifecycleError,
+  parsePersistedConnectionLease,
+  type Connection,
+  type ConnectionLease,
+} from '../src/modules/connections/lifecycle/public'
+import { accountRef, principalRef } from '../src/modules/principal-account/public'
 import {
   isProviderApprovalDecisionIntegrityValid,
   type ProviderApprovalDecision,
 } from '../src/modules/capability-supply/provider-approval'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { toDomain, toLeaseDomain, toLeaseRow } from './capabilityProviderConnectionLifecycle'
+import {
+  canonicalConnectionActionContext,
+  createCanonicalConnectionLifecycleService,
+  failClosedCanonicalLifecycleError,
+  readCanonicalConnectionForProjection,
+  toDomain,
+  toLeaseDomain,
+  toLeaseRow,
+  type CanonicalActor,
+} from './capabilityProviderConnectionLifecycle'
 
 const leaseState = v.union(
   v.literal('active'),
@@ -24,6 +40,14 @@ const leaseState = v.union(
 )
 export const leaseValue = v.object({
   leaseRef: v.string(),
+  canonicalLeaseRef: v.optional(v.string()),
+  canonicalConnectionRef: v.optional(v.string()),
+  canonicalConnectionGeneration: v.optional(v.number()),
+  owningAccountRef: v.optional(v.string()),
+  activeAccountRef: v.optional(v.string()),
+  actorPrincipalRef: v.optional(v.string()),
+  grantRef: v.optional(v.string()),
+  grantGeneration: v.optional(v.number()),
   invocationRef: v.string(),
   operationRef: v.string(),
   connectionRef: v.string(),
@@ -281,12 +305,95 @@ function projectLeaseResult(result: ProviderConnectionLeaseCommandResult) {
     : { kind: 'duplicate' as const, lease, commandDigest: result.commandDigest }
 }
 
-async function leaseRowForConnection(ctx: MutationCtx, leaseRef: string) {
+function withoutSystemFields<Value extends { _id: unknown; _creationTime: number }>(value: Value) {
+  const { _id, _creationTime, ...domain } = value
+  void _id
+  void _creationTime
+  return domain
+}
+
+export async function readCanonicalLeaseForProjection(
+  ctx: Pick<QueryCtx, 'db'>,
+  legacy: ReturnType<typeof toLeaseDomain>,
+  canonicalConnection: Connection,
+): Promise<ConnectionLease | null> {
+  if (legacy.canonicalLeaseRef === undefined) return null
+  const row = await ctx.db.query('connectionLeases')
+    .withIndex('by_leaseRef', (query) => query.eq('leaseRef', legacy.canonicalLeaseRef as never))
+    .unique()
+  if (row === null) return null
+  try {
+    const canonical = parsePersistedConnectionLease(withoutSystemFields(row))
+    return canonicalProviderLeaseProjectionIsCurrent(legacy, canonical, canonicalConnection) ? canonical : null
+  } catch {
+    return null
+  }
+}
+
+export async function issueCanonicalLease(
+  ctx: MutationCtx,
+  args: IssueLeaseArgs,
+  connection: Connection,
+): Promise<ConnectionLease | null> {
+  const invocation = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+    .unique()
+  if (invocation === null || invocation.operationRef !== args.operationRef) return null
+  const grant = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', invocation.grantRef))
+    .unique()
+  const now = Date.now()
+  if (grant === null
+    || grant.lifecycle !== 'active'
+    || grant.generation !== invocation.grantGeneration
+    || grant.expiresAt !== invocation.grantExpiresAt
+    || grant.expiresAt <= now
+    || grant.subjectPrincipalRef !== invocation.principalId
+    || !grant.scopes.includes('connection:lease')
+    || !grant.resourceRefs.includes(invocation.operationRef)
+    || !grant.resourceRefs.includes(`connection:${connection.connectionRef}`)) return null
+  let actor: CanonicalActor
+  try {
+    actor = {
+      principalRef: principalRef(grant.subjectPrincipalRef),
+      accountRef: accountRef(grant.accountRef),
+    }
+  } catch {
+    return null
+  }
+  const expiresAt = Math.min(now + args.leaseMs, args.readinessValidUntil, grant.expiresAt)
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return null
+  try {
+    return await createCanonicalConnectionLifecycleService(ctx, actor).lease({
+      connectionRef: connection.connectionRef,
+      context: canonicalConnectionActionContext(actor, 'lease', args.commandId),
+      grantRef: grant.grantRef,
+      expectedGrantGeneration: grant.generation,
+      expiresAt,
+    })
+  } catch (error) {
+    return failClosedCanonicalLifecycleError(error)
+  }
+}
+
+async function leaseRowForConnection(ctx: Pick<QueryCtx, 'db'>, leaseRef: string) {
   const lease = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_leaseRef', (index) => index.eq('leaseRef', leaseRef)).unique()
   if (lease === null) return null
   return await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (index) => index.eq('connectionRef', lease.connectionRef)).unique()
+}
+
+export async function canonicalLeaseContext(
+  ctx: Pick<QueryCtx, 'db'>,
+  leaseRow: ReturnType<typeof toLeaseDomain> | undefined,
+  connectionRow: ReturnType<typeof toDomain> | undefined,
+) {
+  if (leaseRow === undefined || connectionRow === undefined) return null
+  const connection = await readCanonicalConnectionForProjection(ctx, connectionRow, true)
+  if (connection === null) return null
+  const lease = await readCanonicalLeaseForProjection(ctx, leaseRow, connection)
+  return lease === null ? null : { connection, lease }
 }
 
 export async function issueLeaseHandler(ctx: MutationCtx, args: IssueLeaseArgs) {
@@ -301,8 +408,13 @@ export async function issueLeaseHandler(ctx: MutationCtx, args: IssueLeaseArgs) 
   if (approvalRow === null || !isProviderApprovalDecisionIntegrityValid(approvalRow as ProviderApprovalDecision)) {
     return { kind: 'refused' as const, code: 'approval_missing' as const }
   }
-  const result = issueProviderConnectionLease(
-    connectionRow === null ? undefined : toDomain(connectionRow),
+  if (connectionRow === null) return { kind: 'refused' as const, code: 'connection_not_found' as const }
+  const currentLegacyConnection = toDomain(connectionRow)
+  const canonicalConnection = await readCanonicalConnectionForProjection(ctx, currentLegacyConnection, true)
+  if (canonicalConnection === null) return { kind: 'refused' as const, code: 'connection_not_active' as const }
+  const now = Date.now()
+  const legacyResult = issueProviderConnectionLease(
+    currentLegacyConnection,
     {
       commandId: args.commandId,
       leaseRef: args.leaseRef,
@@ -324,127 +436,146 @@ export async function issueLeaseHandler(ctx: MutationCtx, args: IssueLeaseArgs) 
       leaseMs: args.leaseMs,
       evidenceRefs: args.evidenceRefs,
     },
-    args.now,
+    now,
     existingLeaseRow === null ? undefined : toLeaseDomain(existingLeaseRow),
   )
-  if (result.kind === 'applied') {
+  if (legacyResult.kind === 'refused') return legacyResult
+  const canonicalLease = await issueCanonicalLease(ctx, args, canonicalConnection)
+  if (canonicalLease === null) return { kind: 'refused' as const, code: 'invalid_lease' as const }
+  const projected = canonicalProviderLeaseProjection(legacyResult.lease, canonicalLease)
+  if (legacyResult.kind === 'applied') {
     await ctx.db.insert(
       'capabilityProviderConnectionLeases',
-      toLeaseRow(result.lease, args.commandId, result.commandDigest),
+      toLeaseRow(projected, args.commandId, legacyResult.commandDigest),
     )
+  } else if (existingLeaseRow === null
+    || !canonicalProviderLeaseProjectionIsCurrent(toLeaseDomain(existingLeaseRow), canonicalLease, canonicalConnection)) {
+    return { kind: 'refused' as const, code: 'invalid_lease' as const }
   }
-  return projectLeaseResult(result)
+  return projectLeaseResult({ ...legacyResult, lease: projected })
 }
 
 export async function readLeaseHandler(ctx: QueryCtx, args: { leaseRef: string }) {
   const row = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique()
-  return row === null ? null : toLeaseRow(toLeaseDomain(row), row.lastCommandId, row.lastCommandDigest)
+  if (row === null) return null
+  const connection = await leaseRowForConnection(ctx, args.leaseRef)
+  const legacyLease = toLeaseDomain(row)
+  if (await canonicalLeaseContext(ctx, legacyLease, connection === null ? undefined : toDomain(connection)) === null) return null
+  return toLeaseRow(legacyLease, row.lastCommandId, row.lastCommandDigest)
 }
 
 export async function readLeaseByInvocationHandler(ctx: QueryCtx, args: { invocationRef: string }) {
   const row = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_invocationRef', (index) => index.eq('invocationRef', args.invocationRef)).order('desc').first()
-  return row === null ? null : toLeaseRow(toLeaseDomain(row), row.lastCommandId, row.lastCommandDigest)
+  if (row === null) return null
+  const connection = await ctx.db.query('capabilityProviderConnections')
+    .withIndex('by_connectionRef', (index) => index.eq('connectionRef', row.connectionRef)).unique()
+  const legacyLease = toLeaseDomain(row)
+  if (await canonicalLeaseContext(ctx, legacyLease, connection === null ? undefined : toDomain(connection)) === null) return null
+  return toLeaseRow(legacyLease, row.lastCommandId, row.lastCommandDigest)
 }
 
 export async function resolveLeaseCredentialRefHandler(ctx: QueryCtx, args: ResolveLeaseCredentialRefArgs) {
-  const [connectionRow, leaseRow] = await Promise.all([
-    ctx.db.query('capabilityProviderConnections')
-      .withIndex('by_connectionRef', (index) => index.eq('connectionRef', args.connectionRef)).unique(),
-    ctx.db.query('capabilityProviderConnectionLeases')
-      .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique(),
-  ])
-  const approvalRow = leaseRow === null
-    ? null
-    : await ctx.db.query('capabilityProviderApprovals')
-      .withIndex('by_decisionRef', (index) => index.eq('decisionRef', leaseRow.approvalDecisionRef)).unique()
-  const currentApproval: ProviderConnectionLeaseApproval | null =
-    approvalRow === null || !isProviderApprovalDecisionIntegrityValid(approvalRow as ProviderApprovalDecision)
-      ? null
-      : {
-          decisionRef: approvalRow.decisionRef,
-          decisionDigest: approvalRow.decisionDigest,
-          providerRef: approvalRow.providerRef,
-          providerAccountRef: approvalRow.providerAccountRef,
-          connectionRef: approvalRow.connectionRef,
-          authorityGeneration: approvalRow.authorityGeneration,
-          connectionAuthorityDigest: approvalRow.connectionAuthorityDigest,
-          decision: approvalRow.decision,
-          grantedScopes: approvalRow.grantedScopes,
-          grantedResources: approvalRow.grantedResources,
-        }
-  return resolveProviderConnectionCredentialRefForLease(
-    connectionRow === null ? undefined : toDomain(connectionRow),
-    leaseRow === null ? undefined : toLeaseDomain(leaseRow),
-    {
-      leaseRef: args.leaseRef,
-      invocationRef: args.invocationRef,
-      operationRef: args.operationRef,
-      connectionRef: args.connectionRef,
-      providerRef: args.providerRef,
-      providerAccountRef: args.providerAccountRef,
-      adapterId: args.adapterId,
-      authorityGeneration: args.authorityGeneration,
-      authorityDigest: args.authorityDigest,
-      grantedScopes: args.grantedScopes,
-      grantedResources: args.grantedResources,
-      readinessValidUntil: args.readinessValidUntil,
-      ...(args.readinessDigest === undefined ? {} : { readinessDigest: args.readinessDigest }),
-    },
-    args.now,
-    currentApproval,
-  )
+  void ctx
+  void args
+  // Queries are cached and cannot establish consequence-time lease validity.
+  // The beginLeaseEffect mutation below is the only credential-pointer gate.
+  return { kind: 'unavailable' as const, reason: 'lease_inactive' as const }
 }
 
 export async function validateLeaseAuthorityHandler(ctx: QueryCtx, args: ValidateLeaseAuthorityArgs) {
-  const [connectionRow, leaseRow] = await Promise.all([
-    ctx.db.query('capabilityProviderConnections')
-      .withIndex('by_connectionRef', (index) => index.eq('connectionRef', args.connectionRef)).unique(),
-    ctx.db.query('capabilityProviderConnectionLeases')
-      .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique(),
-  ])
-  const lease = leaseRow === null ? undefined : toLeaseDomain(leaseRow)
-  const approvalRow = leaseRow === null
-    ? null
-    : await ctx.db.query('capabilityProviderApprovals')
-      .withIndex('by_decisionRef', (index) => index.eq('decisionRef', leaseRow.approvalDecisionRef)).unique()
-  const currentApproval: ProviderConnectionLeaseApproval | null =
-    approvalRow === null || !isProviderApprovalDecisionIntegrityValid(approvalRow as ProviderApprovalDecision)
-      ? null
-      : {
-          decisionRef: approvalRow.decisionRef,
-          decisionDigest: approvalRow.decisionDigest,
-          providerRef: approvalRow.providerRef,
-          providerAccountRef: approvalRow.providerAccountRef,
-          connectionRef: approvalRow.connectionRef,
-          authorityGeneration: approvalRow.authorityGeneration,
-          connectionAuthorityDigest: approvalRow.connectionAuthorityDigest,
-          decision: approvalRow.decision,
-          grantedScopes: approvalRow.grantedScopes,
-          grantedResources: approvalRow.grantedResources,
-        }
-  return validateProviderConnectionLeaseAuthority(
-    connectionRow === null ? undefined : toDomain(connectionRow),
-    lease,
-    {
-      leaseRef: args.leaseRef,
-      invocationRef: args.invocationRef,
-      operationRef: args.operationRef,
-      connectionRef: args.connectionRef,
-      providerRef: args.providerRef,
-      providerAccountRef: lease?.providerAccountRef ?? '',
-      adapterId: args.adapterId,
-      authorityGeneration: args.authorityGeneration,
-      authorityDigest: args.authorityDigest,
-      grantedScopes: args.grantedScopes,
-      grantedResources: args.grantedResources,
-      readinessValidUntil: args.readinessValidUntil,
-      ...(args.readinessDigest === undefined ? {} : { readinessDigest: args.readinessDigest }),
-    },
-    args.now,
-    currentApproval,
-  )
+  void ctx
+  void args
+  return { kind: 'unavailable' as const, reason: 'lease_inactive' as const }
+}
+
+export const beginLeaseEffectArgs = {
+  leaseRef: v.string(),
+  invocationRef: v.string(),
+  operationRef: v.string(),
+  commandId: v.string(),
+} as const
+
+export const leaseEffectAdmission = v.union(
+  v.object({
+    kind: v.literal('admitted'),
+    effectRef: v.string(),
+    canonicalLeaseRef: v.string(),
+    canonicalConnectionRef: v.string(),
+    canonicalConnectionGeneration: v.number(),
+    owningAccountRef: v.string(),
+    activeAccountRef: v.string(),
+    actorPrincipalRef: v.string(),
+    grantRef: v.string(),
+    grantGeneration: v.number(),
+    secretRef: v.string(),
+  }),
+  v.object({ kind: v.literal('unavailable'), reason: v.string() }),
+)
+
+export function canonicalLeaseEffectFailureReason(error: unknown): string {
+  if (error instanceof ConnectionLifecycleError || error instanceof DelegationError) return error.code
+  throw error
+}
+
+export async function beginLeaseEffectHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ leaseRef: string; invocationRef: string; operationRef: string; commandId: string }>,
+) {
+  const legacyLeaseRow = await ctx.db.query('capabilityProviderConnectionLeases')
+    .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef))
+    .unique()
+  if (legacyLeaseRow === null
+    || legacyLeaseRow.invocationRef !== args.invocationRef
+    || legacyLeaseRow.operationRef !== args.operationRef
+    || legacyLeaseRow.state !== 'active') {
+    return { kind: 'unavailable' as const, reason: 'lease_inactive' }
+  }
+  const legacyConnectionRow = await ctx.db.query('capabilityProviderConnections')
+    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', legacyLeaseRow.connectionRef))
+    .unique()
+  if (legacyConnectionRow === null) return { kind: 'unavailable' as const, reason: 'connection_not_found' }
+  const legacyConnection = toDomain(legacyConnectionRow)
+  const canonical = await canonicalLeaseContext(ctx, toLeaseDomain(legacyLeaseRow), legacyConnection)
+  if (canonical === null || canonical.connection.secretRef === undefined) {
+    return { kind: 'unavailable' as const, reason: 'canonical_mapping_invalid' }
+  }
+  const invocation = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef))
+    .unique()
+  if (invocation === null
+    || invocation.operationRef !== args.operationRef
+    || invocation.grantRef !== canonical.lease.grantRef
+    || invocation.grantGeneration !== canonical.lease.grantGeneration
+    || invocation.principalId !== canonical.lease.actorPrincipalRef) {
+    return { kind: 'unavailable' as const, reason: 'invocation_authority_mismatch' }
+  }
+  const actor: CanonicalActor = {
+    principalRef: canonical.lease.actorPrincipalRef,
+    accountRef: canonical.lease.activeAccountRef,
+  }
+  try {
+    const admission = await createCanonicalConnectionLifecycleService(ctx, actor).beginEffect({
+      leaseRef: canonical.lease.leaseRef,
+      context: canonicalConnectionActionContext(actor, 'begin_effect', args.commandId),
+    })
+    return {
+      kind: 'admitted' as const,
+      effectRef: admission.effectRef,
+      canonicalLeaseRef: admission.leaseRef,
+      canonicalConnectionRef: admission.connectionRef,
+      canonicalConnectionGeneration: admission.connectionGeneration,
+      owningAccountRef: admission.owningAccountRef,
+      activeAccountRef: admission.activeAccountRef,
+      actorPrincipalRef: admission.actorPrincipalRef,
+      grantRef: admission.grantRef,
+      grantGeneration: admission.grantGeneration,
+      secretRef: canonical.connection.secretRef,
+    }
+  } catch (error) {
+    return { kind: 'unavailable' as const, reason: canonicalLeaseEffectFailureReason(error) }
+  }
 }
 
 export async function consumeLeaseHandler(ctx: MutationCtx, args: ConsumeLeaseArgs) {
@@ -454,8 +585,12 @@ export async function consumeLeaseHandler(ctx: MutationCtx, args: ConsumeLeaseAr
     leaseRowForConnection(ctx, args.leaseRef),
   ])
   const currentConnection = connectionRow === null ? undefined : toDomain(connectionRow)
+  const legacyLease = leaseRow === null ? undefined : toLeaseDomain(leaseRow)
+  if (await canonicalLeaseContext(ctx, legacyLease, currentConnection) === null) {
+    return { kind: 'refused' as const, code: 'lease_inactive' as const }
+  }
   const result = consumeProviderConnectionLease(
-    leaseRow === null ? undefined : toLeaseDomain(leaseRow),
+    legacyLease,
     currentConnection,
     {
       commandId: args.commandId,
@@ -466,7 +601,7 @@ export async function consumeLeaseHandler(ctx: MutationCtx, args: ConsumeLeaseAr
       ...(args.readinessDigest === undefined ? {} : { readinessDigest: args.readinessDigest }),
       evidenceRefs: args.evidenceRefs,
     },
-    args.now,
+    Date.now(),
   )
   if (result.kind === 'applied' && leaseRow !== null) {
     await ctx.db.replace(leaseRow._id, toLeaseRow(result.lease, args.commandId, result.commandDigest))
@@ -477,7 +612,13 @@ export async function consumeLeaseHandler(ctx: MutationCtx, args: ConsumeLeaseAr
 export async function expireLeaseHandler(ctx: MutationCtx, args: ExpireLeaseArgs) {
   const existing = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique()
-  const result = expireProviderConnectionLease(existing === null ? undefined : toLeaseDomain(existing), args, args.now)
+  if (existing === null) return { kind: 'refused' as const, code: 'lease_not_found' as const }
+  const connection = await leaseRowForConnection(ctx, args.leaseRef)
+  const legacyLease = toLeaseDomain(existing)
+  if (await canonicalLeaseContext(ctx, legacyLease, connection === null ? undefined : toDomain(connection)) === null) {
+    return { kind: 'refused' as const, code: 'lease_inactive' as const }
+  }
+  const result = expireProviderConnectionLease(legacyLease, args, Date.now())
   if (result.kind === 'applied' && existing !== null) {
     await ctx.db.replace(existing._id, toLeaseRow(result.lease, args.commandId, result.commandDigest))
   }
@@ -487,7 +628,13 @@ export async function expireLeaseHandler(ctx: MutationCtx, args: ExpireLeaseArgs
 export async function invalidateLeaseHandler(ctx: MutationCtx, args: InvalidateLeaseArgs) {
   const existing = await ctx.db.query('capabilityProviderConnectionLeases')
     .withIndex('by_leaseRef', (index) => index.eq('leaseRef', args.leaseRef)).unique()
-  const result = invalidateProviderConnectionLease(existing === null ? undefined : toLeaseDomain(existing), args, args.now)
+  if (existing === null) return { kind: 'refused' as const, code: 'lease_not_found' as const }
+  const connection = await leaseRowForConnection(ctx, args.leaseRef)
+  const legacyLease = toLeaseDomain(existing)
+  if (await canonicalLeaseContext(ctx, legacyLease, connection === null ? undefined : toDomain(connection)) === null) {
+    return { kind: 'refused' as const, code: 'lease_inactive' as const }
+  }
+  const result = invalidateProviderConnectionLease(legacyLease, args, Date.now())
   if (result.kind === 'applied' && existing !== null) {
     await ctx.db.replace(existing._id, toLeaseRow(result.lease, args.commandId, result.commandDigest))
   }

@@ -8,8 +8,8 @@ vi.mock('../../../convex/marketDispatchWorkpool', () => ({
   marketDispatchWorkpool: { enqueueAction: mocks.enqueueAction },
 }))
 
-import { revokeOwner } from '../../../convex/capabilityProviderConnections'
-import { createProviderConnection } from '@/modules/capability-supply/provider-connection'
+import { enqueueCleanupWork } from '../../../convex/capabilityProviderConnectionLifecycle'
+import { beginProviderConnectionRevocation, createProviderConnection } from '@/modules/capability-supply/provider-connection'
 
 type Row = Record<string, unknown> & { _id: string }
 type QueryBuilder = { eq: (field: string, value: unknown) => QueryBuilder }
@@ -92,9 +92,6 @@ class MemoryDb {
   }
 }
 
-type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
-const handler = (revokeOwner as unknown as { _handler: Handler })._handler
-
 const createCommand = {
   commandId: 'command:create:cleanup-binding',
   connectionRef: 'connection:cleanup-binding',
@@ -115,30 +112,31 @@ describe('provider cleanup enqueue binding', () => {
     mocks.enqueueAction.mockClear()
     const created = createProviderConnection(createCommand, 1_000)
     if (created.kind !== 'applied') throw new Error('provider connection create failed')
+    const revoked = beginProviderConnectionRevocation(created.connection, {
+      commandId: 'command:revoke:cleanup-binding',
+      expectedAuthorityGeneration: created.connection.authorityGeneration,
+      expectedAuthorityDigest: created.connection.authorityDigest,
+      evidenceRefs: ['evidence:revoke'],
+    }, 2_000)
+    if (revoked.kind !== 'applied') throw new Error('provider connection revoke failed')
     const connection = {
-      ...created.connection,
+      ...revoked.connection,
       _id: 'connection:cleanup-binding:row',
       _creationTime: 1_000,
     }
     const db = new MemoryDb()
-    db.seed('owners', { _id: 'owner:cleanup-binding', clerkUserId: 'user:cleanup-binding' })
-    db.seed('businesses', { _id: createCommand.businessId, ownerId: 'owner:cleanup-binding' })
     db.seed('capabilityProviderConnections', connection)
-    const now = vi.spyOn(Date, 'now').mockReturnValue(2_000)
-
-    try {
-      const result = await handler({
-        auth: { getUserIdentity: async () => ({ subject: 'user:cleanup-binding' }) },
-        db,
-      }, {
+    const scheduled = await enqueueCleanupWork({ db } as never, connection._id as never, connection, {
         connectionRef: connection.connectionRef,
         commandId: 'command:revoke:cleanup-binding',
         expectedAuthorityGeneration: connection.authorityGeneration,
         expectedAuthorityDigest: connection.authorityDigest,
-        evidenceRefs: ['evidence:revoke'],
-      })
+        requestDigest: `sha256:${'b'.repeat(64)}`,
+        cleanupAttempt: 1,
+        workKind: 'cleanup',
+      }, 2_000)
 
-      expect(result).toMatchObject({ kind: 'applied', connection: { lifecycle: 'revocation_pending' } })
+      expect(scheduled).toMatchObject({ cleanupAttempt: 1, cleanupWorkKind: 'cleanup' })
       expect(mocks.enqueueAction).toHaveBeenCalledTimes(1)
       const enqueue = mocks.enqueueAction.mock.calls[0]
       if (enqueue === undefined) throw new Error('cleanup enqueue missing')
@@ -157,8 +155,5 @@ describe('provider cleanup enqueue binding', () => {
         authorityDigest: connection.authorityDigest,
       })
       expect(persisted?.cleanupRequestDigest).toEqual((enqueue[2] as Record<string, unknown>).requestDigest)
-    } finally {
-      now.mockRestore()
-    }
   })
 })
