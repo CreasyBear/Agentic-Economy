@@ -8,6 +8,8 @@ import {
   type OidcIdentityTokenProvider,
   type SecretGenerationValidator,
   type SecretMaterialLease,
+  type SecretPointer,
+  type SecretPointerAdvanceRequest,
   type SecretPointerStore,
   type SecretStore,
   type SecretTarget,
@@ -17,6 +19,7 @@ import {
   createProductionSecretRuntime,
   createSecretRuntime,
   type InfisicalVaultConfiguration,
+  type ProductionScopedSecretPlaneDependencies,
   type ScopedSecretPlaneDependencies,
 } from '../../../src/modules/secrets/runtime'
 
@@ -26,6 +29,7 @@ vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 const NOW = 2_000_000_000_000
 const REF = secretRef('sec_11111111111111111111111111111111')
 const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
+const NEXT_GENERATION = secretGeneration('sgn_22222222222222222222222222222222')
 const CANARY = 'secret-runtime-canary-never-return'
 
 function jwt(): string {
@@ -60,6 +64,19 @@ function dependencies(): ScopedSecretPlaneDependencies {
   }
   const validator: SecretGenerationValidator = { validate: async () => true }
   return { pointerStore, validator }
+}
+
+function productionDependencies(randomUuid?: () => string): ProductionScopedSecretPlaneDependencies {
+  const { pointerStore } = dependencies()
+  return {
+    pointerStore,
+    generationProbe: {
+      validate: async (_target, lease) => {
+        await lease.useBytes(async () => undefined)
+      },
+    },
+    ...(randomUuid === undefined ? {} : { randomUuid }),
+  }
 }
 
 function vault(scope: 'platform' | 'customer'): InfisicalVaultConfiguration {
@@ -99,6 +116,42 @@ function successfulVaultFetch(projects: string[]): typeof fetch {
         secretValue: CANARY,
         environment: 'production',
         workspace: projectId,
+      },
+    })
+  }) as typeof fetch
+}
+
+function rotationVaultFetch(): typeof fetch {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input))
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    if (url.pathname === '/api/v1/auth/oidc-auth/login') {
+      return Response.json({
+        accessToken: 'vault-access-token',
+        tokenType: 'Bearer',
+        expiresIn: 600,
+        accessTokenMaxTTL: 600,
+      })
+    }
+    const secretKey = decodeURIComponent(url.pathname.split('/').at(-1) ?? '')
+    if (method === 'POST') {
+      return Response.json({
+        secret: {
+          id: 'created-generation-id',
+          version: 1,
+          secretKey,
+          environment: 'production',
+          workspace: 'project-customer',
+        },
+      })
+    }
+    if (method === 'DELETE') return new Response(null, { status: 204 })
+    return Response.json({
+      secret: {
+        secretKey,
+        secretValue: CANARY,
+        environment: 'production',
+        workspace: 'project-customer',
       },
     })
   }) as typeof fetch
@@ -181,8 +234,8 @@ describe('secret runtime composition', () => {
   it('constructs production defaults without caller-provided time or transport hooks', () => {
     const runtime = createProductionSecretRuntime({
       configuration: { platform: vault('platform'), customer: vault('customer') },
-      platform: dependencies(),
-      customer: dependencies(),
+      platform: productionDependencies(() => '11111111-1111-4111-8111-111111111111'),
+      customer: productionDependencies(),
     })
     expect(runtime.platform).toBeDefined()
     expect(runtime.customer).toBeDefined()
@@ -192,8 +245,8 @@ describe('secret runtime composition', () => {
     getVercelOidcToken.mockRejectedValueOnce(new Error(`identity-${CANARY}`))
     const identityRuntime = createProductionSecretRuntime({
       configuration: { platform: vault('platform'), customer: vault('customer') },
-      platform: dependencies(),
-      customer: dependencies(),
+      platform: productionDependencies(),
+      customer: productionDependencies(),
       fetch: successfulVaultFetch([]),
       now: () => NOW,
     })
@@ -253,14 +306,102 @@ describe('secret runtime composition', () => {
     getVercelOidcToken.mockResolvedValueOnce(jwt())
     const runtime = createProductionSecretRuntime({
       configuration: { platform: vault('platform'), customer: vault('customer') },
-      platform: dependencies(),
-      customer: dependencies(),
+      platform: productionDependencies(),
+      customer: productionDependencies(),
       fetch: successfulVaultFetch([]),
       now: () => NOW,
     })
 
-    await expect(runtime.platform.withActiveSecret({ secretRef: REF }, async () => undefined)).resolves.toBeUndefined()
+    await expect(runtime.consequences.platform.execute({ secretRef: REF }, async () => undefined)).resolves.toBeUndefined()
     expect(getVercelOidcToken).toHaveBeenCalledWith({ expirationBufferMs: 5_000 })
+  })
+
+  it('production rotation validates the fetched generation before the canonical pointer advances', async () => {
+    getVercelOidcToken.mockResolvedValue(jwt())
+    let pointer: SecretPointer = Object.freeze({
+      secretRef: REF,
+      activeGeneration: GENERATION,
+      revision: 1,
+    })
+    const events: string[] = []
+    const pointerStore: SecretPointerStore = {
+      getActive: async () => pointer,
+      advanceActive: async (request: SecretPointerAdvanceRequest) => {
+        events.push('pointer:advance')
+        expect(request).toEqual({
+          secretRef: REF,
+          expectedActiveGeneration: GENERATION,
+          expectedRevision: 1,
+          newGeneration: NEXT_GENERATION,
+        })
+        pointer = Object.freeze({
+          secretRef: request.secretRef,
+          activeGeneration: request.newGeneration,
+          revision: 2,
+        })
+      },
+    }
+    const runtime = createProductionSecretRuntime({
+      configuration: { platform: vault('platform'), customer: vault('customer') },
+      platform: productionDependencies(),
+      customer: {
+        pointerStore,
+        randomUuid: () => '22222222-2222-2222-2222-222222222222',
+        generationProbe: {
+          validate: async (target, lease) => {
+            events.push(`probe:${target.generation}`)
+            await lease.useBytes(async (bytes) => {
+              expect(new TextDecoder().decode(bytes)).toBe(CANARY)
+            })
+          },
+        },
+      },
+      fetch: rotationVaultFetch(),
+      now: () => NOW,
+    })
+
+    await expect(runtime.customer.rotate({ secretRef: REF }, {
+      withMaterial: async (operation) => await withEphemeralSecretMaterial(
+        new TextEncoder().encode('replacement'),
+        operation,
+      ),
+    })).resolves.toEqual({
+      secretRef: REF,
+      previousGeneration: GENERATION,
+      activeGeneration: NEXT_GENERATION,
+      pointerRevision: 2,
+    })
+    expect(events).toEqual([`probe:${NEXT_GENERATION}`, 'pointer:advance'])
+  })
+
+  it('production rotation leaves the canonical pointer unchanged when the probe does not consume material', async () => {
+    getVercelOidcToken.mockResolvedValue(jwt())
+    const pointer: SecretPointer = Object.freeze({
+      secretRef: REF,
+      activeGeneration: GENERATION,
+      revision: 1,
+    })
+    const advanceActive = vi.fn(async () => undefined)
+    const runtime = createProductionSecretRuntime({
+      configuration: { platform: vault('platform'), customer: vault('customer') },
+      platform: productionDependencies(),
+      customer: {
+        pointerStore: { getActive: async () => pointer, advanceActive },
+        randomUuid: () => '22222222-2222-2222-2222-222222222222',
+        generationProbe: { validate: async () => undefined },
+      },
+      fetch: rotationVaultFetch(),
+      now: () => NOW,
+    })
+
+    await expect(runtime.customer.rotate({ secretRef: REF }, {
+      withMaterial: async (operation) => await withEphemeralSecretMaterial(
+        new TextEncoder().encode('replacement'),
+        operation,
+      ),
+    })).rejects.toEqual(new SecretPlaneError('secret_generation_validation_failed'))
+    expect(advanceActive).not.toHaveBeenCalled()
+    expect(pointer.activeGeneration).toBe(GENERATION)
   })
 
   it('does not translate a secret-plane consequence failure into a successful result', async () => {

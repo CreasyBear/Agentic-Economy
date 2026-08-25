@@ -6,6 +6,12 @@ import {
   type SecretPointerStore,
 } from './secret-plane'
 import { VercelOidcIdentityTokenProvider } from './vercel-oidc'
+import {
+  createScopedSecretConsequenceRuntime,
+  ProductionSecretGenerationValidator,
+  type ScopedSecretConsequenceRuntime,
+  type SecretGenerationProbe,
+} from './production-consumer'
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]+$/u
 const VAULT_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/u
@@ -43,14 +49,27 @@ export interface InfisicalCloudSecretRuntimeOptions {
   readonly now?: () => number
 }
 
+export interface ProductionScopedSecretPlaneDependencies {
+  readonly pointerStore: SecretPointerStore
+  readonly generationProbe: SecretGenerationProbe
+  readonly randomUuid?: () => string
+}
+
 export interface ProductionSecretRuntimeOptions extends Omit<
   InfisicalCloudSecretRuntimeOptions,
-  'identityTokenProvider'
-> {}
+  'identityTokenProvider' | 'platform' | 'customer'
+> {
+  readonly platform: ProductionScopedSecretPlaneDependencies
+  readonly customer: ProductionScopedSecretPlaneDependencies
+}
 
 export interface ScopedSecretRuntime {
   readonly platform: SecretPlane
   readonly customer: SecretPlane
+}
+
+export interface ProductionSecretRuntime extends ScopedSecretRuntime {
+  readonly consequences: ScopedSecretConsequenceRuntime
 }
 
 interface ValidatedVaultConfiguration extends InfisicalVaultConfiguration {
@@ -164,11 +183,24 @@ export function createInfisicalCloudSecretRuntime(
 
 export function createProductionSecretRuntime(
   options: ProductionSecretRuntimeOptions,
-): ScopedSecretRuntime {
-  return createInfisicalCloudSecretRuntime({
+): ProductionSecretRuntime {
+  const dependencies = (
+    scoped: ProductionScopedSecretPlaneDependencies,
+  ): ScopedSecretPlaneDependencies => ({
+    pointerStore: scoped.pointerStore,
+    validator: new ProductionSecretGenerationValidator(scoped.generationProbe),
+    ...(scoped.randomUuid === undefined ? {} : { randomUuid: scoped.randomUuid }),
+  })
+  const runtime = createInfisicalCloudSecretRuntime({
     ...options,
+    platform: dependencies(options.platform),
+    customer: dependencies(options.customer),
     identityTokenProvider: new VercelOidcIdentityTokenProvider(
       options.now === undefined ? {} : { now: options.now },
     ),
+  })
+  return Object.freeze({
+    ...runtime,
+    consequences: createScopedSecretConsequenceRuntime(runtime),
   })
 }

@@ -35,6 +35,8 @@ export {
 export type {
   InfisicalCloudSecretRuntimeOptions,
   InfisicalVaultConfiguration,
+  ProductionScopedSecretPlaneDependencies,
+  ProductionSecretRuntime,
   ProductionSecretRuntimeOptions,
   ScopedSecretPlaneDependencies,
   ScopedSecretRuntime,
@@ -46,3 +48,13 @@ export type {
   VercelOidcIdentityTokenProviderOptions,
   VercelOidcTokenSource,
 } from './vercel-oidc'
+export {
+  createScopedSecretConsequenceRuntime,
+  ProductionSecretGenerationValidator,
+} from './production-consumer'
+export type {
+  ScopedSecretConsequenceInput,
+  ScopedSecretConsequenceRuntime,
+  SecretConsequenceExecutor,
+  SecretGenerationProbe,
+} from './production-consumer'
