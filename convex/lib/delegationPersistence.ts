@@ -87,12 +87,14 @@ async function resolveContext(
     || !CONTEXT_REF_PATTERN.test(candidate.idempotencyRef)) {
     throw new DelegationError('delegation_request_invalid')
   }
-  const principal = await ctx.db.query('principals')
-    .withIndex('by_principalRef', (query) => query.eq('principalRef', actor))
-    .unique()
-  const account = await ctx.db.query('accounts')
-    .withIndex('by_accountRef', (query) => query.eq('accountRef', activeAccountRef))
-    .unique()
+  const [principal, account] = await Promise.all([
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', actor))
+      .unique(),
+    ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', activeAccountRef))
+      .unique(),
+  ])
   if (principal === null
     || principal.lifecycle !== 'active'
     || account === null
