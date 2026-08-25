@@ -351,7 +351,12 @@ async function loadApprovals(
     const approval = await transaction.getApproval(approvalRef)
     if (approval === undefined) throw new RecoveryError('recovery_approval_not_found')
     if (approval.lifecycle !== 'verified') throw new RecoveryError('recovery_approval_unavailable')
-    if (approval.expiresAt <= timestamp) throw new RecoveryError('recovery_approval_expired')
+    let operatorPrincipalRef: PrincipalRef
+    try {
+      operatorPrincipalRef = principalRef(approval.operatorPrincipalRef)
+    } catch {
+      throw new RecoveryError('recovery_approval_mismatch')
+    }
     if (approval.approvalRef !== approvalRef
       || approval.accountRef !== request.accountRef
       || approval.subjectPrincipalRef !== request.subjectPrincipalRef
@@ -360,15 +365,22 @@ async function loadApprovals(
       || approval.frozenAccountRevision !== facts.account.revision
       || !OPAQUE_REF_PATTERN.test(approval.verificationRef)
       || !Number.isSafeInteger(approval.verifiedAt)
-      || approval.verifiedAt > timestamp) {
+      || approval.verifiedAt < facts.account.updatedAt
+      || approval.verifiedAt > timestamp
+      || !Number.isSafeInteger(approval.expiresAt)
+      || approval.expiresAt <= approval.verifiedAt) {
       throw new RecoveryError('recovery_approval_mismatch')
     }
-    if (operators.has(approval.operatorPrincipalRef) || verifications.has(approval.verificationRef)) {
+    if (approval.expiresAt <= timestamp) throw new RecoveryError('recovery_approval_expired')
+    if (operatorPrincipalRef === request.subjectPrincipalRef) {
+      throw new RecoveryError('recovery_operator_impersonation')
+    }
+    if (operators.has(operatorPrincipalRef) || verifications.has(approval.verificationRef)) {
       throw new RecoveryError('recovery_approval_duplicate')
     }
-    operators.add(approval.operatorPrincipalRef)
+    operators.add(operatorPrincipalRef)
     verifications.add(approval.verificationRef)
-    approvals.push(approval)
+    approvals.push(Object.freeze({ ...approval, operatorPrincipalRef }))
   }
   return Object.freeze(approvals)
 }

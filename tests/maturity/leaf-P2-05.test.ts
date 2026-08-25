@@ -114,8 +114,11 @@ describe('P2-05 recovery, isolation, and secret-canary contract', () => {
         ? Object.freeze({ kind: 'allowed' as const })
         : Object.freeze({ kind: 'denied' as const, reason: 'authority_denied' }),
     })
-    expect(matrix.rows).toHaveLength(6)
-    expect(matrix.rows.filter((row) => row.decision.kind === 'denied')).toHaveLength(3)
+    expect(matrix.rows).toHaveLength(7)
+    expect(matrix.rows.filter((row) => row.decision.kind === 'denied')).toHaveLength(4)
+    const missingWorkload = matrix.rows.find((row) => row.caseKind === 'missing_workload')
+    expect(missingWorkload?.decision.kind).toBe('denied')
+    expect(missingWorkload).not.toHaveProperty('actorPrincipalRef')
     expect(matrix.rows.find((row) => row.caseKind === 'wrong_account')?.activeAccountRef).toBe(OTHER_ACCOUNT)
     expect(matrix.rows.find((row) => row.caseKind === 'stale_generation')?.presentedGeneration).toBe(8)
 

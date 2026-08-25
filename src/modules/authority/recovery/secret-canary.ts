@@ -44,7 +44,8 @@ export function proveSecretCanaryIsolation(
   if (artifacts.length !== SECRET_CANARY_SINKS.length
     || new Set(sinks).size !== SECRET_CANARY_SINKS.length
     || SECRET_CANARY_SINKS.some((sink) => !sinks.includes(sink))
-    || artifacts.some((artifact) => (artifact.textFragments?.length ?? 0) + (artifact.byteFragments?.length ?? 0) === 0)) {
+    || artifacts.some((artifact) => !(artifact.textFragments?.some((fragment) => fragment.length > 0) ?? false)
+      && !(artifact.byteFragments?.some((fragment) => fragment.byteLength > 0) ?? false))) {
     throw new SecretCanaryError('secret_canary_sink_inventory_invalid')
   }
   let artifactCount = 0

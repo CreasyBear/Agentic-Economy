@@ -24,22 +24,28 @@ const surfaces = Object.freeze([
 ])
 
 describe('P2-05 generated isolation matrix', () => {
-  it('generates all six cases for every surface, freezes evidence, and preserves unknown external state on fail-closed denial', async () => {
+  it('generates all seven cases for every surface, freezes evidence, and preserves unknown external state on fail-closed denial', async () => {
     const proof = await generateIsolationMatrix({
       surfaces, actors, wrongAccountRef: OTHER, currentGeneration: 3,
       evaluate: async (probe) => {
         if (probe.caseKind === 'wrong_account') return Object.freeze({ kind: 'denied' as const, reason: 'wrong_account', externalState: 'provider_future_state' })
+        if (probe.caseKind === 'missing_workload') return Object.freeze({ kind: 'denied' as const, reason: 'workload_context_missing' })
         if (probe.caseKind === 'stranger' || probe.caseKind === 'stale_generation') return Object.freeze({ kind: 'denied' as const, reason: 'authority_denied' })
         return Object.freeze({ kind: 'allowed' as const })
       },
     })
-    expect(proof.rows).toHaveLength(12)
+    expect(proof.rows).toHaveLength(14)
     expect(proof.surfaceCount).toBe(2)
-    expect(proof.caseCount).toBe(12)
+    expect(proof.caseCount).toBe(14)
     expect(Object.isFrozen(proof)).toBe(true)
     expect(Object.isFrozen(proof.rows)).toBe(true)
     expect(proof.rows.every(Object.isFrozen)).toBe(true)
-    expect(proof.rows.filter((row) => row.decision.kind === 'denied')).toHaveLength(6)
+    expect(proof.rows.filter((row) => row.decision.kind === 'denied')).toHaveLength(8)
+    const missingWorkloads = proof.rows.filter((row) => row.caseKind === 'missing_workload')
+    expect(missingWorkloads).toHaveLength(2)
+    expect(missingWorkloads.every((row) => row.decision.kind === 'denied')).toBe(true)
+    expect(missingWorkloads.every((row) => row.decision.kind === 'denied' && row.decision.reason === 'workload_context_missing')).toBe(true)
+    expect(missingWorkloads.every((row) => !('actorPrincipalRef' in row))).toBe(true)
     expect(proof.rows.find((row) => row.caseKind === 'wrong_account')?.decision).toEqual({ kind: 'denied', reason: 'wrong_account', externalState: 'provider_future_state' })
   })
 
@@ -49,7 +55,7 @@ describe('P2-05 generated isolation matrix', () => {
     await expect(generateIsolationMatrix({ surfaces, actors, wrongAccountRef: ACCOUNT, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_account_context_invalid' })
     await expect(generateIsolationMatrix({ surfaces, actors: { ...actors, stranger: actors.owner }, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_account_context_invalid' })
     await expect(generateIsolationMatrix({ surfaces, actors, wrongAccountRef: OTHER, currentGeneration: 0, evaluate: async () => ({ kind: 'denied', reason: 'none' }) })).rejects.toMatchObject({ code: 'isolation_generation_invalid' })
-    for (const caseKind of ['stranger', 'wrong_account', 'stale_generation'] as const) {
+    for (const caseKind of ['stranger', 'wrong_account', 'stale_generation', 'missing_workload'] as const) {
       await expect(generateIsolationMatrix({ surfaces, actors, wrongAccountRef: OTHER, currentGeneration: 3, evaluate: async (probe) => probe.caseKind === caseKind ? ({ kind: 'allowed' }) : probe.caseKind === 'owner' || probe.caseKind === 'member' || probe.caseKind === 'workload' ? ({ kind: 'allowed' }) : ({ kind: 'denied', reason: 'denied' }) })).rejects.toMatchObject({ code: 'isolation_negative_case_allowed' })
     }
     for (const caseKind of ['owner', 'member', 'workload'] as const) {
@@ -77,6 +83,8 @@ describe('P2-05 secret-canary isolation proof', () => {
     expect(() => proveSecretCanaryIsolation(canary, clean().slice(0, 5))).toThrowError('secret_canary_sink_inventory_invalid')
     expect(() => proveSecretCanaryIsolation(canary, [...clean(), clean()[0]!])).toThrowError('secret_canary_sink_inventory_invalid')
     expect(() => proveSecretCanaryIsolation(canary, clean().map((artifact) => artifact.sink === 'log' ? { sink: artifact.sink } : artifact))).toThrowError('secret_canary_sink_inventory_invalid')
+    expect(() => proveSecretCanaryIsolation(canary, clean().map((artifact) => artifact.sink === 'log' ? { sink: artifact.sink, textFragments: [''] } : artifact))).toThrowError('secret_canary_sink_inventory_invalid')
+    expect(() => proveSecretCanaryIsolation(canary, clean().map((artifact) => artifact.sink === 'snapshot' ? { sink: artifact.sink, byteFragments: [new Uint8Array()] } : artifact))).toThrowError('secret_canary_sink_inventory_invalid')
     expect(() => proveSecretCanaryIsolation(canary, clean().map((artifact) => artifact.sink === 'log' ? { ...artifact, textFragments: ['never-reflect-this-canary'] } : artifact))).toThrowError('secret_canary_detected')
     expect(() => proveSecretCanaryIsolation(canary, clean().map((artifact) => artifact.sink === 'snapshot' ? { ...artifact, byteFragments: [Uint8Array.from(canary)] } : artifact))).toThrowError('secret_canary_detected')
     try {

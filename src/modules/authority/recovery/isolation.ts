@@ -5,6 +5,7 @@ export const ISOLATION_CASES = [
   'owner',
   'member',
   'workload',
+  'missing_workload',
   'stranger',
   'wrong_account',
   'stale_generation',
@@ -26,7 +27,7 @@ export type IsolationProbe = Readonly<{
   caseKind: IsolationCaseKind
   surfaceRef: string
   resourceRef: string
-  actorPrincipalRef: PrincipalRef
+  actorPrincipalRef?: PrincipalRef
   owningAccountRef: AccountRef
   activeAccountRef: AccountRef
   presentedGeneration: number
@@ -120,7 +121,9 @@ function probeFor(
   surface: IsolationSurface,
   caseKind: IsolationCaseKind,
 ): IsolationProbe {
-  const actorPrincipalRef = caseKind === 'member'
+  const actorPrincipalRef = caseKind === 'missing_workload'
+    ? undefined
+    : caseKind === 'member'
     ? request.actors.member
     : caseKind === 'workload'
       ? request.actors.workload
@@ -131,7 +134,7 @@ function probeFor(
     caseKind,
     surfaceRef: surface.surfaceRef,
     resourceRef: surface.resourceRef,
-    actorPrincipalRef,
+    ...(actorPrincipalRef === undefined ? {} : { actorPrincipalRef }),
     owningAccountRef: surface.owningAccountRef,
     activeAccountRef: caseKind === 'wrong_account' ? request.wrongAccountRef : surface.owningAccountRef,
     presentedGeneration: caseKind === 'stale_generation'

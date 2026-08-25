@@ -9,6 +9,7 @@ import {
   type RecoveryAccountFacts,
   type RecoveryAdmission,
   type RecoveryCommit,
+  type RecoveryStore,
   type RecoveryTransaction,
   type VerifiedBreakGlassApproval,
 } from '../../../src/modules/authority/recovery/public'
@@ -97,6 +98,44 @@ function setup(options: Readonly<{
   return { coordinator, approvals, admissions, commits, authorityRequests }
 }
 
+class TransactionalRecoveryStore implements RecoveryStore {
+  readonly approvals = new Map<string, VerifiedBreakGlassApproval>()
+  readonly admissions = new Map<string, RecoveryAdmission>()
+  #tail: Promise<void> = Promise.resolve()
+
+  async transact<Result>(operation: (transaction: RecoveryTransaction) => Promise<Result>): Promise<Result> {
+    const predecessor = this.#tail
+    let release: () => void = () => undefined
+    this.#tail = new Promise<void>((resolve) => { release = resolve })
+    await predecessor
+    try {
+      return await operation({
+        getApproval: async (ref) => this.approvals.get(ref),
+        getAdmissionByIdempotency: async (account, operator, idempotency) => [...this.admissions.values()].find(
+          (item) => item.accountRef === account
+            && item.operatorPrincipalRef === operator
+            && item.context.idempotencyRef === idempotency,
+        ),
+        getAdmission: async (ref) => this.admissions.get(ref),
+        commit: async (change) => {
+          if (this.admissions.has(change.admissionInsert.admissionRef)) throw new Error('test_admission_conflict')
+          for (const replacement of change.approvalReplacements) {
+            if (this.approvals.get(replacement.value.approvalRef)?.lifecycle !== replacement.expectedLifecycle) {
+              throw new Error('test_approval_conflict')
+            }
+          }
+          this.admissions.set(change.admissionInsert.admissionRef, change.admissionInsert)
+          for (const replacement of change.approvalReplacements) {
+            this.approvals.set(replacement.value.approvalRef, replacement.value)
+          }
+        },
+      })
+    } finally {
+      release()
+    }
+  }
+}
+
 function request(overrides: Partial<Parameters<RecoveryCoordinator['authorize']>[0]> = {}) {
   return Object.freeze({
     action: 'isolate' as const, accountRef: ACCOUNT, subjectPrincipalRef: OWNER,
@@ -131,6 +170,45 @@ describe('P2-05 operational recovery admission', () => {
     await expectCode(fixture.coordinator.authorize(request({ action: 'inspect_secret_canary' })), 'recovery_idempotency_conflict')
     expect(fixture.authorityRequests).toHaveLength(1)
     expect(fixture.commits).toHaveLength(1)
+  })
+
+  it('atomically consumes one-time approvals when two distinct admissions race', async () => {
+    const store = new TransactionalRecoveryStore()
+    store.approvals.set('approval:one', approval('approval:one', OP1))
+    store.approvals.set('approval:two', approval('approval:two', OP2))
+    const authority = {
+      admitConsequence: async (candidate: AdmitConsequenceRequest): Promise<DelegationAuthoritySnapshot> => Object.freeze({
+        snapshotRef: delegationSnapshotRef('das_00000000000040008000000000000013'),
+        grantRef: candidate.grantRef,
+        generation: candidate.expectedGeneration,
+        accountRef: candidate.context.activeAccountRef,
+        accountRevision: 12,
+        actorPrincipalRef: candidate.context.actorPrincipalRef,
+        subjectPrincipalRef: candidate.context.actorPrincipalRef,
+        scopes: Object.freeze([...candidate.requiredScopes]),
+        resourceRefs: Object.freeze([...candidate.resourceRefs]),
+        budgetAmount: candidate.budgetAmount,
+        admittedAt: 1_100,
+        expiresAt: 1_900,
+        correlationRef: candidate.context.correlationRef,
+        idempotencyRef: candidate.context.idempotencyRef,
+        ancestry: Object.freeze([]),
+      }),
+    }
+    const accounts = { resolve: async () => facts() }
+    const options = { now: () => 1_100, randomUuid: () => '00000000-0000-4000-8000-000000000013' }
+    const first = new RecoveryCoordinator(store, accounts, authority, options)
+    const second = new RecoveryCoordinator(store, accounts, authority, options)
+    const results = await Promise.allSettled([
+      first.authorize(request()),
+      second.authorize(request({ context: context(OP2, ACCOUNT, 'two') })),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.find((result) => result.status === 'rejected')
+    expect(rejected).toMatchObject({ status: 'rejected', reason: { code: 'recovery_approval_unavailable' } })
+    expect(store.admissions).toHaveLength(1)
+    expect([...store.approvals.values()].every((item) => item.lifecycle === 'consumed')).toBe(true)
   })
 
   it('reconstructs only valid immutable persisted admissions and rejects forged replay state', async () => {
@@ -184,9 +262,13 @@ describe('P2-05 operational recovery admission', () => {
     await expectCode(setup().coordinator.authorize(request({ approvalRefs: ['approval:one'] })), 'recovery_threshold_unmet')
     await expectCode(setup().coordinator.authorize(request({ approvalRefs: Array.from({ length: 33 }, (_, index) => `approval:${index}`) })), 'recovery_threshold_unmet')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP1)] }).coordinator.authorize(request()), 'recovery_approval_duplicate')
+    await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OWNER)] }).coordinator.authorize(request()), 'recovery_operator_impersonation')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { verificationRef: 'verification:approval:one' })] }).coordinator.authorize(request()), 'recovery_approval_duplicate')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { lifecycle: 'revoked' })] }).coordinator.authorize(request()), 'recovery_approval_unavailable')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { expiresAt: 1_100 })] }).coordinator.authorize(request()), 'recovery_approval_expired')
+    await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { expiresAt: Number.NaN })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
+    await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { verifiedAt: 0 })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
+    await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { operatorPrincipalRef: 'not-a-principal' as PrincipalRef })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { accountRef: OTHER_ACCOUNT })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { subjectPrincipalRef: OP3 })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
     await expectCode(setup({ approvals: [approval('approval:one', OP1), approval('approval:two', OP2, { action: 'freeze' })] }).coordinator.authorize(request()), 'recovery_approval_mismatch')
