@@ -320,6 +320,15 @@ export const capabilitySupplyTables = {
     ]),
   capabilityProviderConnections: defineTable({
     connectionRef: v.string(),
+    // Optional only for staged migration. Every Phase 2 write must pin the
+    // canonical Connection and authority facts; unmapped legacy rows fail closed.
+    canonicalConnectionRef: v.optional(v.string()),
+    owningAccountRef: v.optional(v.string()),
+    installedByPrincipalRef: v.optional(v.string()),
+    authorityGrantRef: v.optional(v.string()),
+    authorityGrantGeneration: v.optional(v.number()),
+    canonicalConnectionGeneration: v.optional(v.number()),
+    secretRef: v.optional(v.string()),
     businessId: v.id('businesses'),
     providerRef: v.string(),
     providerAccountRef: v.string(),
@@ -356,6 +365,7 @@ export const capabilitySupplyTables = {
     cleanupCallbackGraceUntil: v.optional(v.number()),
   })
     .index('by_connectionRef', ['connectionRef'])
+    .index('by_canonicalConnectionRef', ['canonicalConnectionRef'])
     .index('by_businessId_and_lifecycle', ['businessId', 'lifecycle'])
     .index('by_providerRef_and_lifecycle', ['providerRef', 'lifecycle'])
     .index('by_connectionRef_and_authorityGeneration', [
@@ -364,6 +374,16 @@ export const capabilitySupplyTables = {
     ]),
   capabilityProviderConnectionLeases: defineTable({
     leaseRef: v.string(),
+    // Optional only for staged migration. Effect admission rejects leases that
+    // do not correspond exactly to current canonical Connection authority.
+    canonicalLeaseRef: v.optional(v.string()),
+    canonicalConnectionRef: v.optional(v.string()),
+    canonicalConnectionGeneration: v.optional(v.number()),
+    owningAccountRef: v.optional(v.string()),
+    activeAccountRef: v.optional(v.string()),
+    actorPrincipalRef: v.optional(v.string()),
+    grantRef: v.optional(v.string()),
+    grantGeneration: v.optional(v.number()),
     invocationRef: v.string(),
     operationRef: v.string(),
     connectionRef: v.string(),
@@ -395,6 +415,7 @@ export const capabilitySupplyTables = {
     lastCommandDigest: v.string(),
   })
     .index('by_leaseRef', ['leaseRef'])
+    .index('by_canonicalLeaseRef', ['canonicalLeaseRef'])
     .index('by_connectionRef_and_state', ['connectionRef', 'state'])
     .index('by_invocationRef', ['invocationRef'])
     .index('by_connectionRef_and_authorityGeneration', [

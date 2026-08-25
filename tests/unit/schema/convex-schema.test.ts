@@ -250,6 +250,7 @@ const requiredIndexes = {
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
+    'by_canonicalLeaseRef',
     'by_connectionRef_and_state',
     'by_invocationRef',
     'by_connectionRef_and_authorityGeneration',
@@ -298,6 +299,7 @@ const requiredIndexes = {
   ],
   capabilityProviderConnections: [
     'by_connectionRef',
+    'by_canonicalConnectionRef',
     'by_businessId_and_lifecycle',
     'by_providerRef_and_lifecycle',
     'by_connectionRef_and_authorityGeneration',
