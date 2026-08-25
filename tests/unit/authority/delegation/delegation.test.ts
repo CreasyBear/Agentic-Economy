@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
+  DELEGATION_MAX_RESOURCES,
+  DELEGATION_MAX_SCOPES,
   DelegationError,
   DelegationService,
   delegationGrantRef,
   delegationSnapshotRef,
   generateDelegationGrantRef,
   generateDelegationSnapshotRef,
+  parsePersistedDelegationGrant,
+  reconstructPinnedDelegationSnapshotForReplay,
   type DelegationAuthoritySnapshot,
   type DelegationCommit,
   type DelegationContextPort,
@@ -172,6 +177,21 @@ async function expectCode(promise: Promise<unknown>, code: string): Promise<void
 }
 
 describe('delegation references and validation', () => {
+  it('exports production persistence limits and accepts their exact scope/resource boundaries', async () => {
+    expect(DELEGATION_MAX_SCOPES).toBe(64)
+    expect(DELEGATION_MAX_RESOURCES).toBe(64)
+    expect(DELEGATION_MAX_ANCESTRY_GRANTS).toBe(32)
+    const fixture = setup()
+    const scopes = Array.from({ length: 64 }, (_, index) => `scope:${String(index).padStart(2, '0')}`)
+    const resources = Array.from({ length: 64 }, (_, index) => `resource:${String(index).padStart(2, '0')}`)
+    const issued = await fixture.service.issueRoot({ context: fixture.context(OWNER, 'limit-boundary'), subjectPrincipalRef: OWNER, scopes, resourceRefs: resources, budgetLimit: 1, expiresAt: 200 })
+    expect(issued.scopes).toHaveLength(64)
+    expect(issued.resourceRefs).toHaveLength(64)
+
+    await expectCode(fixture.service.issueRoot({ context: fixture.context(OWNER, 'scope-overflow'), subjectPrincipalRef: OWNER, scopes: [...scopes, 'scope:64'], resourceRefs: ['r'], budgetLimit: 1, expiresAt: 200 }), 'delegation_limit_exceeded')
+    await expectCode(fixture.service.issueRoot({ context: fixture.context(OWNER, 'resource-overflow'), subjectPrincipalRef: OWNER, scopes: ['read'], resourceRefs: [...resources, 'resource:64'], budgetLimit: 1, expiresAt: 200 }), 'delegation_limit_exceeded')
+  })
+
   it('parses and generates opaque authority references independently of credentials and providers', () => {
     expect(delegationGrantRef(`grt_${uuid(1).replaceAll('-', '')}`)).toBe(`grt_${uuid(1).replaceAll('-', '')}`)
     expect(delegationSnapshotRef(`das_${uuid(2).replaceAll('-', '')}`)).toBe(`das_${uuid(2).replaceAll('-', '')}`)
@@ -224,7 +244,8 @@ describe('root grant issuance', () => {
     const fixture = setup()
     const first = await root(fixture)
     const replay = await root(fixture)
-    expect(replay).toBe(first)
+    expect(replay).toStrictEqual(first)
+    expect(replay).not.toBe(first)
     expect(first.scopes).toEqual(['read', 'write'])
     expect(first.resourceRefs).toEqual(['resource:a', 'resource:b'])
     expect(first).toMatchObject({ actorPrincipalRef: OWNER, subjectPrincipalRef: OWNER, generation: 1, revision: 1, lifecycle: 'active' })
@@ -240,6 +261,37 @@ describe('root grant issuance', () => {
     const issued = await root(fixture)
     fixture.store.grants.set(issued.grantRef, Object.freeze({ ...issued, budgetUsed: -1 }))
     await expectCode(root(fixture), 'delegation_ancestry_invalid')
+  })
+
+  it('exports defensive persistence parsers that deep-copy and freeze canonical facts', async () => {
+    const fixture = setup()
+    const issued = await root(fixture)
+    const parsedGrant = parsePersistedDelegationGrant(issued)
+    expect(parsedGrant).toStrictEqual(issued)
+    expect(parsedGrant).not.toBe(issued)
+    expect(Object.isFrozen(parsedGrant)).toBe(true)
+    expect(Object.isFrozen(parsedGrant.createdBy)).toBe(true)
+    expect(() => parsePersistedDelegationGrant({ ...issued, createdBy: undefined })).toThrowError(DelegationError)
+    expect(() => parsePersistedDelegationGrant({ ...issued, grantRef: Symbol('bad') })).toThrowError(DelegationError)
+    expect(() => parsePersistedDelegationGrant({ ...issued, parentGrantRef: Symbol('bad'), parentGeneration: 1 })).toThrowError(DelegationError)
+
+    const delegated = await child(fixture, issued)
+    const request = { grantRef: delegated.grantRef, expectedGeneration: 1, context: fixture.context(AGENT, 'parser-admit'), requiredScopes: ['read'], resourceRefs: ['resource:a'], budgetAmount: 0 } as const
+    const snapshot = await fixture.service.admitConsequence(request)
+    const replayContext: ActiveAccountContext = {
+      accountRef: ACCOUNT,
+      actorPrincipalRef: AGENT,
+      accountRevision: 9,
+      correlationRef: request.context.correlationRef,
+      idempotencyRef: request.context.idempotencyRef,
+    }
+    const parsedSnapshot = reconstructPinnedDelegationSnapshotForReplay(snapshot, replayContext)
+    expect(parsedSnapshot).toStrictEqual(snapshot)
+    expect(parsedSnapshot).not.toBe(snapshot)
+    expect(Object.isFrozen(parsedSnapshot.ancestry[0]?.scopes)).toBe(true)
+    expect(() => reconstructPinnedDelegationSnapshotForReplay(null, replayContext)).toThrowError(DelegationError)
+    expect(() => reconstructPinnedDelegationSnapshotForReplay({ ...snapshot, ancestry: [null] } as unknown as DelegationAuthoritySnapshot, replayContext)).toThrowError(DelegationError)
+    expect(() => reconstructPinnedDelegationSnapshotForReplay({ ...snapshot, snapshotRef: Symbol('bad') }, replayContext)).toThrowError(DelegationError)
   })
 
   it('rejects an active stranger, inactive subject, caller-shaped context and idempotency conflicts', async () => {
@@ -317,6 +369,27 @@ describe('root grant issuance', () => {
 })
 
 describe('multi-hop monotonic delegation', () => {
+  it('accepts 32 ancestry grants and rejects a 33rd grant', async () => {
+    const fixture = setup({ uuids: Array.from({ length: 40 }, (_, index) => uuid(index + 1)) })
+    const rootGrant = await fixture.service.issueRoot({ context: fixture.context(OWNER, 'depth-root'), subjectPrincipalRef: OWNER, scopes: ['read'], resourceRefs: ['r'], budgetLimit: 100, expiresAt: 10_000 })
+    let current = rootGrant
+    for (let depth = 2; depth <= 32; depth += 1) {
+      const subject = depth % 2 === 0 ? AGENT : WORKLOAD
+      current = await fixture.service.delegate({ parentGrantRef: current.grantRef, parentGeneration: 1, context: fixture.context(current.subjectPrincipalRef, `depth-${depth}`), subjectPrincipalRef: subject, scopes: ['read'], resourceRefs: ['r'], budgetLimit: 100, expiresAt: 10_001 - depth })
+    }
+    const snapshot = await fixture.service.admitConsequence({ grantRef: current.grantRef, expectedGeneration: 1, context: fixture.context(current.subjectPrincipalRef, 'depth-admit'), requiredScopes: ['read'], resourceRefs: ['r'], budgetAmount: 0 })
+    expect(snapshot.ancestry).toHaveLength(32)
+    await expectCode(fixture.service.delegate({ parentGrantRef: current.grantRef, parentGeneration: 1, context: fixture.context(current.subjectPrincipalRef, 'depth-overflow'), subjectPrincipalRef: OWNER, scopes: ['read'], resourceRefs: ['r'], budgetLimit: 100, expiresAt: 9_968 }), 'delegation_limit_exceeded')
+
+    const storedRoot = fixture.store.grants.get(rootGrant.grantRef)!
+    fixture.store.grants.set(rootGrant.grantRef, Object.freeze({
+      ...storedRoot,
+      parentGrantRef: delegationGrantRef(`grt_${uuid(40).replaceAll('-', '')}`),
+      parentGeneration: 1,
+    }))
+    await expectCode(fixture.service.admitConsequence({ grantRef: current.grantRef, expectedGeneration: 1, context: fixture.context(current.subjectPrincipalRef, 'persisted-depth-overflow'), requiredScopes: ['read'], resourceRefs: ['r'], budgetAmount: 0 }), 'delegation_limit_exceeded')
+  })
+
   it('permits arbitrary depth while every child strictly narrows every ancestor', async () => {
     const fixture = setup()
     const issued = await fixture.service.issueRoot({ context: fixture.context(OWNER, 'wild-root'), subjectPrincipalRef: OWNER, scopes: ['*'], resourceRefs: ['*'], budgetLimit: 1_000, expiresAt: 1_000 })
@@ -594,13 +667,28 @@ describe('multi-hop monotonic delegation', () => {
       resourceRefs: ['resource:a'],
       budgetAmount: 0,
     }), 'delegation_ancestry_invalid')
+
+    const overLimit = setup()
+    const overLimitRoot = await root(overLimit)
+    overLimit.store.grants.set(overLimitRoot.grantRef, Object.freeze({
+      ...overLimitRoot,
+      scopes: Object.freeze(Array.from({ length: 65 }, (_, index) => `scope:${String(index).padStart(2, '0')}`)),
+    }))
+    await expectCode(overLimit.service.admitConsequence({ grantRef: overLimitRoot.grantRef, expectedGeneration: 1, context: overLimit.context(OWNER, 'persisted-scope-overflow'), requiredScopes: ['read'], resourceRefs: ['resource:a'], budgetAmount: 0 }), 'delegation_limit_exceeded')
+    overLimit.store.grants.set(overLimitRoot.grantRef, Object.freeze({
+      ...overLimitRoot,
+      resourceRefs: Object.freeze(Array.from({ length: 65 }, (_, index) => `resource:${String(index).padStart(2, '0')}`)),
+    }))
+    await expectCode(overLimit.service.admitConsequence({ grantRef: overLimitRoot.grantRef, expectedGeneration: 1, context: overLimit.context(OWNER, 'persisted-resource-overflow'), requiredScopes: ['read'], resourceRefs: ['resource:a'], budgetAmount: 0 }), 'delegation_limit_exceeded')
   })
 
   it('replays matching delegation and rejects conflicting or colliding creation', async () => {
     const fixture = setup()
     const issued = await root(fixture)
     const first = await child(fixture, issued, 'same-child')
-    expect(await child(fixture, issued, 'same-child')).toBe(first)
+    const replay = await child(fixture, issued, 'same-child')
+    expect(replay).toStrictEqual(first)
+    expect(replay).not.toBe(first)
     await expectCode(fixture.service.delegate({ parentGrantRef: issued.grantRef, parentGeneration: 1, context: fixture.context(OWNER, 'same-child'), subjectPrincipalRef: WORKLOAD, scopes: ['read'], resourceRefs: ['resource:a'], budgetLimit: 500, expiresAt: 900 }), 'delegation_idempotency_conflict')
 
     const collision = setup({ uuids: [uuid(1), uuid(1)] })
@@ -688,12 +776,18 @@ describe('consequence admission and revocation', () => {
       budgetAmount: 1,
     } as const
     const snapshot = await fixture.service.admitConsequence(request)
-    const rejectReplay = async (corrupt: DelegationAuthoritySnapshot): Promise<void> => {
+    const rejectReplay = async (
+      corrupt: DelegationAuthoritySnapshot,
+      code = 'delegation_snapshot_invalid',
+    ): Promise<void> => {
       fixture.store.snapshots.set(snapshot.snapshotRef, Object.freeze(corrupt))
-      await expectCode(fixture.service.admitConsequence(request), 'delegation_snapshot_invalid')
+      await expectCode(fixture.service.admitConsequence(request), code)
     }
 
     await rejectReplay({ ...snapshot, snapshotRef: 'das_invalid' as DelegationSnapshotRef })
+    await rejectReplay({ ...snapshot, scopes: Object.freeze(Array.from({ length: 65 }, (_, index) => `scope:${String(index).padStart(2, '0')}`)) }, 'delegation_limit_exceeded')
+    await rejectReplay({ ...snapshot, resourceRefs: Object.freeze(Array.from({ length: 65 }, (_, index) => `resource:${String(index).padStart(2, '0')}`)) }, 'delegation_limit_exceeded')
+    await rejectReplay({ ...snapshot, ancestry: Object.freeze(Array.from({ length: 33 }, (_, index) => snapshot.ancestry[index % snapshot.ancestry.length]!)) }, 'delegation_limit_exceeded')
     await rejectReplay({ ...snapshot, scopes: Object.freeze(['bad value']) })
     await rejectReplay({ ...snapshot, ancestry: Object.freeze([]) })
     await rejectReplay({
@@ -847,7 +941,11 @@ describe('consequence admission and revocation', () => {
     const wrongRoot = await root(wrong)
     const wrongChild = await child(wrong, wrongRoot)
     await expectCode(wrong.service.revoke({ grantRef: wrongChild.grantRef, expectedGeneration: 1, context: wrong.context(WORKLOAD, 'wrong') }), 'delegation_actor_mismatch')
-    wrong.store.grants.set(wrongChild.grantRef, Object.freeze({ ...wrongChild, accountRef: OTHER_ACCOUNT }))
+    wrong.store.grants.set(wrongChild.grantRef, Object.freeze({
+      ...wrongChild,
+      accountRef: OTHER_ACCOUNT,
+      createdBy: Object.freeze({ ...wrongChild.createdBy, activeAccountRef: OTHER_ACCOUNT }),
+    }))
     await expectCode(wrong.service.revoke({ grantRef: wrongChild.grantRef, expectedGeneration: 1, context: wrong.context(AGENT, 'mismatch') }), 'delegation_ancestry_account_mismatch')
     await expect(wrong.service.revoke({ grantRef: wrongChild.grantRef, expectedGeneration: 1, context: wrong.context(AGENT, 'account', OTHER_ACCOUNT) })).rejects.toThrow('canonical_context_rejected')
     await expectCode(wrong.service.revoke({ grantRef: delegationGrantRef(`grt_${uuid(30).replaceAll('-', '')}`), expectedGeneration: 1, context: wrong.context(OWNER, 'missing') }), 'delegation_grant_not_found')

@@ -12,6 +12,10 @@ const PRINCIPAL_REF_PATTERN = /^prn_[0-9a-f]{32}$/u
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const AUTHORITY_VALUE_PATTERN = /^[A-Za-z0-9*][A-Za-z0-9._:/*-]{0,199}$/u
 
+export const DELEGATION_MAX_SCOPES = 64
+export const DELEGATION_MAX_RESOURCES = 64
+export const DELEGATION_MAX_ANCESTRY_GRANTS = 32
+
 declare const delegationGrantRefBrand: unique symbol
 declare const delegationSnapshotRefBrand: unique symbol
 
@@ -135,6 +139,7 @@ export type DelegationErrorCode =
   | 'delegation_grant_ref_conflict'
   | 'delegation_grant_ref_invalid'
   | 'delegation_idempotency_conflict'
+  | 'delegation_limit_exceeded'
   | 'delegation_request_invalid'
   | 'delegation_resource_denied'
   | 'delegation_resource_invalid'
@@ -225,8 +230,8 @@ export class DelegationService {
     const activeContext = await this.#contexts.resolveRootIssuerContext(request.context)
     await this.#contexts.requireActivePrincipal(request.subjectPrincipalRef)
     assertResolvedContext(request.context, activeContext)
-    const scopes = authorityValues(request.scopes, 'delegation_scope_invalid')
-    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid')
+    const scopes = authorityValues(request.scopes, 'delegation_scope_invalid', DELEGATION_MAX_SCOPES)
+    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid', DELEGATION_MAX_RESOURCES)
     const budgetLimit = budget(request.budgetLimit, false)
 
     return await this.#store.transact(async (transaction) => {
@@ -238,8 +243,8 @@ export class DelegationService {
         activeContext.idempotencyRef,
       )
       if (existing !== undefined) {
-        assertStoredGrantIntegrity(existing)
-        if (matchesRoot(existing, request, scopes, resourceRefs)) return existing
+        const parsed = parsePersistedDelegationGrant(existing)
+        if (matchesRoot(parsed, request, scopes, resourceRefs)) return parsed
         throw new DelegationError('delegation_idempotency_conflict')
       }
       const grantRef = generateDelegationGrantRef(this.#randomUuid)
@@ -271,8 +276,8 @@ export class DelegationService {
     const activeContext = await this.#contexts.resolveActiveContext(request.context)
     await this.#contexts.requireActivePrincipal(request.subjectPrincipalRef)
     assertResolvedContext(request.context, activeContext)
-    const scopes = authorityValues(request.scopes, 'delegation_scope_invalid')
-    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid')
+    const scopes = authorityValues(request.scopes, 'delegation_scope_invalid', DELEGATION_MAX_SCOPES)
+    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid', DELEGATION_MAX_RESOURCES)
     const budgetLimit = budget(request.budgetLimit, false)
     assertGeneration(request.parentGeneration)
 
@@ -280,6 +285,9 @@ export class DelegationService {
       const admittedAt = currentTime(this.#now)
       assertFutureExpiry(request.expiresAt, admittedAt)
       const ancestry = await loadAncestry(transaction, request.parentGrantRef)
+      if (ancestry.length >= DELEGATION_MAX_ANCESTRY_GRANTS) {
+        throw new DelegationError('delegation_limit_exceeded')
+      }
       const parent = ancestry[ancestry.length - 1] as DelegationGrant
       assertLiveAncestry(ancestry, admittedAt)
       if (parent.generation !== request.parentGeneration) {
@@ -305,10 +313,10 @@ export class DelegationService {
         activeContext.idempotencyRef,
       )
       if (existing !== undefined) {
-        assertStoredGrantIntegrity(existing)
-        assertDelegationEdgeIntegrity(parent, existing)
-        if (matchesChild(existing, request, scopes, resourceRefs)) {
-          return existing
+        const parsed = parsePersistedDelegationGrant(existing)
+        assertDelegationEdgeIntegrity(parent, parsed)
+        if (matchesChild(parsed, request, scopes, resourceRefs)) {
+          return parsed
         }
         throw new DelegationError('delegation_idempotency_conflict')
       }
@@ -343,8 +351,8 @@ export class DelegationService {
   async admitConsequence(request: AdmitConsequenceRequest): Promise<DelegationAuthoritySnapshot> {
     const activeContext = await this.#contexts.resolveActiveContext(request.context)
     assertResolvedContext(request.context, activeContext)
-    const scopes = authorityValues(request.requiredScopes, 'delegation_scope_invalid')
-    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid')
+    const scopes = authorityValues(request.requiredScopes, 'delegation_scope_invalid', DELEGATION_MAX_SCOPES)
+    const resourceRefs = authorityValues(request.resourceRefs, 'delegation_resource_invalid', DELEGATION_MAX_RESOURCES)
     const budgetAmount = budget(request.budgetAmount, true)
     assertGeneration(request.expectedGeneration)
 
@@ -355,7 +363,7 @@ export class DelegationService {
         activeContext.idempotencyRef,
       )
       if (existing !== undefined) {
-        const replay = reconstructPersistedSnapshot(existing, activeContext)
+        const replay = reconstructPinnedDelegationSnapshotForReplay(existing, activeContext)
         if (matchesAdmission(replay, request, scopes, resourceRefs)) return replay
         throw new DelegationError('delegation_idempotency_conflict')
       }
@@ -430,8 +438,9 @@ export class DelegationService {
     assertResolvedContext(request.context, activeContext)
     assertGeneration(request.expectedGeneration)
     return await this.#store.transact(async (transaction) => {
-      const grant = await transaction.getGrant(request.grantRef)
-      if (grant === undefined) throw new DelegationError('delegation_grant_not_found')
+      const persisted = await transaction.getGrant(request.grantRef)
+      if (persisted === undefined) throw new DelegationError('delegation_grant_not_found')
+      const grant = parsePersistedDelegationGrant(persisted)
       const revokedAt = currentTime(this.#now)
       if (grant.accountRef !== activeContext.accountRef) {
         throw new DelegationError('delegation_ancestry_account_mismatch')
@@ -469,11 +478,14 @@ async function loadAncestry(
   let nextRef: DelegationGrantRef | undefined = leafRef
   let child: DelegationGrant | undefined
   while (nextRef !== undefined) {
+    if (reverse.length >= DELEGATION_MAX_ANCESTRY_GRANTS) {
+      throw new DelegationError('delegation_limit_exceeded')
+    }
     if (visited.has(nextRef)) throw new DelegationError('delegation_ancestry_cycle')
     visited.add(nextRef)
-    const grant = await transaction.getGrant(nextRef)
-    if (grant === undefined) throw new DelegationError('delegation_grant_not_found')
-    assertStoredGrantIntegrity(grant)
+    const persisted = await transaction.getGrant(nextRef)
+    if (persisted === undefined) throw new DelegationError('delegation_grant_not_found')
+    const grant = parsePersistedDelegationGrant(persisted)
     if (child !== undefined) {
       if (child.accountRef !== grant.accountRef) {
         throw new DelegationError('delegation_ancestry_account_mismatch')
@@ -492,6 +504,8 @@ async function loadAncestry(
 
 function assertStoredGrantIntegrity(grant: DelegationGrant): void {
   if (!isRecord(grant)) throw new DelegationError('delegation_ancestry_invalid')
+  assertCollectionLimit(grant.scopes, DELEGATION_MAX_SCOPES)
+  assertCollectionLimit(grant.resourceRefs, DELEGATION_MAX_RESOURCES)
   const hasParentRef = grant.parentGrantRef !== undefined
   const hasParentGeneration = grant.parentGeneration !== undefined
   const createdBy = persistedActionContext(grant.createdBy)
@@ -499,10 +513,13 @@ function assertStoredGrantIntegrity(grant: DelegationGrant): void {
   if (createdBy.activeAccountRef !== grant.accountRef) {
     throw new DelegationError('delegation_ancestry_account_mismatch')
   }
-  if (!GRANT_REF_PATTERN.test(grant.grantRef)
-    || !ACCOUNT_REF_PATTERN.test(grant.accountRef)
-    || !PRINCIPAL_REF_PATTERN.test(grant.actorPrincipalRef)
-    || !PRINCIPAL_REF_PATTERN.test(grant.subjectPrincipalRef)
+  if (!matchesPattern(grant.grantRef, GRANT_REF_PATTERN)
+    || !matchesPattern(grant.accountRef, ACCOUNT_REF_PATTERN)
+    || !matchesPattern(grant.actorPrincipalRef, PRINCIPAL_REF_PATTERN)
+    || !matchesPattern(grant.subjectPrincipalRef, PRINCIPAL_REF_PATTERN)
+    || (hasParentRef && !matchesPattern(grant.parentGrantRef, GRANT_REF_PATTERN))
+    || (hasParentGeneration
+      && (!Number.isSafeInteger(grant.parentGeneration) || (grant.parentGeneration as number) < 1))
     || !isCanonicalAuthorityValues(grant.scopes)
     || !isCanonicalAuthorityValues(grant.resourceRefs)
     || !Number.isSafeInteger(grant.budgetLimit)
@@ -546,6 +563,34 @@ function assertStoredGrantIntegrity(grant: DelegationGrant): void {
   }
 }
 
+/** Defensive Convex-row parser. This validates one stored fact; live admission still requires DelegationService. */
+export function parsePersistedDelegationGrant(value: unknown): DelegationGrant {
+  const grant = value as DelegationGrant
+  assertStoredGrantIntegrity(grant)
+  const createdBy = persistedActionContext(grant.createdBy) as AccountActionContext
+  const revokedBy = persistedActionContext(grant.revokedBy)
+  return Object.freeze({
+    grantRef: grant.grantRef,
+    accountRef: grant.accountRef,
+    actorPrincipalRef: grant.actorPrincipalRef,
+    subjectPrincipalRef: grant.subjectPrincipalRef,
+    ...(grant.parentGrantRef === undefined ? {} : { parentGrantRef: grant.parentGrantRef }),
+    ...(grant.parentGeneration === undefined ? {} : { parentGeneration: grant.parentGeneration }),
+    scopes: Object.freeze([...grant.scopes]),
+    resourceRefs: Object.freeze([...grant.resourceRefs]),
+    budgetLimit: grant.budgetLimit,
+    budgetUsed: grant.budgetUsed,
+    expiresAt: grant.expiresAt,
+    generation: grant.generation,
+    revision: grant.revision,
+    lifecycle: grant.lifecycle,
+    createdAt: grant.createdAt,
+    createdBy: freezeContext(createdBy),
+    ...(grant.revokedAt === undefined ? {} : { revokedAt: grant.revokedAt }),
+    ...(revokedBy === undefined ? {} : { revokedBy: freezeContext(revokedBy) }),
+  })
+}
+
 function assertDelegationEdgeIntegrity(parent: DelegationGrant, child: DelegationGrant): void {
   if (child.actorPrincipalRef !== parent.subjectPrincipalRef
     || child.createdAt < parent.createdAt
@@ -557,16 +602,23 @@ function assertDelegationEdgeIntegrity(parent: DelegationGrant, child: Delegatio
   }
 }
 
-function reconstructPersistedSnapshot(
-  snapshot: DelegationAuthoritySnapshot,
+/** Reconstructs an already-admitted pinned snapshot for idempotent replay; it never admits new authority. */
+export function reconstructPinnedDelegationSnapshotForReplay(
+  value: unknown,
   context: ActiveAccountContext,
 ): DelegationAuthoritySnapshot {
+  const snapshot = value as DelegationAuthoritySnapshot
+  if (isRecord(snapshot)) {
+    assertCollectionLimit(snapshot.scopes, DELEGATION_MAX_SCOPES)
+    assertCollectionLimit(snapshot.resourceRefs, DELEGATION_MAX_RESOURCES)
+    assertCollectionLimit(snapshot.ancestry, DELEGATION_MAX_ANCESTRY_GRANTS)
+  }
   if (!isRecord(snapshot)
-    || !SNAPSHOT_REF_PATTERN.test(snapshot.snapshotRef)
-    || !GRANT_REF_PATTERN.test(snapshot.grantRef)
-    || !ACCOUNT_REF_PATTERN.test(snapshot.accountRef)
-    || !PRINCIPAL_REF_PATTERN.test(snapshot.actorPrincipalRef)
-    || !PRINCIPAL_REF_PATTERN.test(snapshot.subjectPrincipalRef)
+    || !matchesPattern(snapshot.snapshotRef, SNAPSHOT_REF_PATTERN)
+    || !matchesPattern(snapshot.grantRef, GRANT_REF_PATTERN)
+    || !matchesPattern(snapshot.accountRef, ACCOUNT_REF_PATTERN)
+    || !matchesPattern(snapshot.actorPrincipalRef, PRINCIPAL_REF_PATTERN)
+    || !matchesPattern(snapshot.subjectPrincipalRef, PRINCIPAL_REF_PATTERN)
     || !Number.isSafeInteger(snapshot.accountRevision)
     || snapshot.accountRevision < 1
     || !Number.isSafeInteger(snapshot.generation)
@@ -579,8 +631,8 @@ function reconstructPersistedSnapshot(
     || snapshot.admittedAt < 0
     || !Number.isSafeInteger(snapshot.expiresAt)
     || snapshot.expiresAt <= snapshot.admittedAt
-    || !AUTHORITY_VALUE_PATTERN.test(snapshot.correlationRef)
-    || !AUTHORITY_VALUE_PATTERN.test(snapshot.idempotencyRef)
+    || !matchesPattern(snapshot.correlationRef, AUTHORITY_VALUE_PATTERN)
+    || !matchesPattern(snapshot.idempotencyRef, AUTHORITY_VALUE_PATTERN)
     || snapshot.accountRef !== context.accountRef
     || snapshot.actorPrincipalRef !== context.actorPrincipalRef
     || snapshot.correlationRef !== context.correlationRef
@@ -594,14 +646,18 @@ function reconstructPersistedSnapshot(
   const ancestry: DelegationAuthorityAncestor[] = []
   for (const persisted of snapshot.ancestry) {
     const parent = ancestry[ancestry.length - 1]
+    if (isRecord(persisted)) {
+      assertCollectionLimit(persisted.scopes, DELEGATION_MAX_SCOPES)
+      assertCollectionLimit(persisted.resourceRefs, DELEGATION_MAX_RESOURCES)
+    }
     if (!isRecord(persisted)
-      || !GRANT_REF_PATTERN.test(persisted.grantRef)
+      || !matchesPattern(persisted.grantRef, GRANT_REF_PATTERN)
       || !Number.isSafeInteger(persisted.generation)
       || persisted.generation < 1
-      || !ACCOUNT_REF_PATTERN.test(persisted.accountRef)
+      || !matchesPattern(persisted.accountRef, ACCOUNT_REF_PATTERN)
       || persisted.accountRef !== snapshot.accountRef
-      || !PRINCIPAL_REF_PATTERN.test(persisted.actorPrincipalRef)
-      || !PRINCIPAL_REF_PATTERN.test(persisted.subjectPrincipalRef)
+      || !matchesPattern(persisted.actorPrincipalRef, PRINCIPAL_REF_PATTERN)
+      || !matchesPattern(persisted.subjectPrincipalRef, PRINCIPAL_REF_PATTERN)
       || !isCanonicalAuthorityValues(persisted.scopes)
       || !isCanonicalAuthorityValues(persisted.resourceRefs)
       || !isSubset(snapshot.scopes, persisted.scopes)
@@ -668,6 +724,16 @@ function isRecord(value: unknown): boolean {
   return typeof value === 'object' && value !== null
 }
 
+function matchesPattern(value: unknown, pattern: RegExp): value is string {
+  return typeof value === 'string' && pattern.test(value)
+}
+
+function assertCollectionLimit(value: unknown, maximum: number): void {
+  if (Array.isArray(value) && value.length > maximum) {
+    throw new DelegationError('delegation_limit_exceeded')
+  }
+}
+
 function persistedActionContext(value: unknown): AccountActionContext | undefined {
   if (!isRecord(value)) return undefined
   const record = value as Readonly<Record<string, unknown>>
@@ -719,7 +785,12 @@ function assertResolvedContext(request: AccountActionContext, resolved: ActiveAc
   }
 }
 
-function authorityValues(values: readonly string[], code: 'delegation_scope_invalid' | 'delegation_resource_invalid'): readonly string[] {
+function authorityValues(
+  values: readonly string[],
+  code: 'delegation_scope_invalid' | 'delegation_resource_invalid',
+  maximum: number,
+): readonly string[] {
+  assertCollectionLimit(values, maximum)
   if (!Array.isArray(values) || values.length === 0) throw new DelegationError(code)
   const normalized = values.map((value) => {
     if (typeof value !== 'string' || !AUTHORITY_VALUE_PATTERN.test(value)) throw new DelegationError(code)

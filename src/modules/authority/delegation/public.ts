@@ -1,10 +1,15 @@
 export {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
+  DELEGATION_MAX_RESOURCES,
+  DELEGATION_MAX_SCOPES,
   DelegationError,
   DelegationService,
   delegationGrantRef,
   delegationSnapshotRef,
   generateDelegationGrantRef,
   generateDelegationSnapshotRef,
+  parsePersistedDelegationGrant,
+  reconstructPinnedDelegationSnapshotForReplay,
 } from './delegation'
 
 export type {
