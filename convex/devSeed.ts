@@ -18,9 +18,14 @@ import {
   deriveBusinessOfferingSupportFromCapabilitySupply,
   readCatalogDescriptor,
   rebuildBusinessSupplyProjectionSnapshotCommand,
+} from './catalog'
+import {
+  admitDevSeedCatalogAuthority,
+  DEV_SEED_CATALOG_ACCOUNT_REF,
+  DEV_SEED_CATALOG_PRINCIPAL_REF,
   reviseBusinessOfferingCommand,
   upsertOfferingAccessPathCommand,
-} from './catalog'
+} from './catalogOfferingMutations'
 
 type SeedDevCatalogResult = Readonly<{
   kind: 'seeded'
@@ -40,9 +45,14 @@ export const seedDevCatalog = internalMutation({
     businessIdsBySlug: v.record(v.string(), v.string()),
   }),
   handler: async (ctx): Promise<SeedDevCatalogResult> => {
+    await admitDevSeedCatalogAuthority(ctx, 'seedDevCatalog')
     // Reconcile existing capability publications before catalog and offering ingest.
     const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
     const result = await persistDevSeedCatalogState(ctx.db, bundle)
+    await ctx.db.patch(result.ownerId, {
+      canonicalPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      canonicalAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+    })
     let offeringSeed: {
       processed: number
       seeded: number
@@ -81,12 +91,19 @@ export const seedOfferingSupply = internalMutation({
     done: v.boolean(),
   }),
   handler: async (ctx, args) => {
+    await admitDevSeedCatalogAuthority(ctx, `seedOfferingSupply:${args.cursor ?? 'start'}`)
     const now = Date.now()
     const page = await ctx.db.query('businesses').paginate({ cursor: args.cursor, numItems: 10 })
     const errors: string[] = []
     let seeded = 0
     for (const business of page.page) {
-      const result = await seedBusinessOfferings(ctx, business, now)
+      const result = await seedBusinessOfferings(
+        ctx,
+        business,
+        now,
+        DEV_SEED_PRICING_BY_SLUG,
+        DEV_SEED_PRICE_BY_SLUG,
+      )
       if (result.kind === 'error') {
         errors.push(`${business.slug}:${result.code}`)
         continue
@@ -106,18 +123,18 @@ export const seedOfferingSupply = internalMutation({
   },
 })
 
-async function seedBusinessOfferings(
+export async function seedBusinessOfferings(
   ctx: MutationCtx,
   business: Doc<'businesses'>,
   now: number,
+  pricingBySlug: Readonly<Record<string, string>>,
+  priceBySlug: Readonly<Record<string, OfferingPrice>>,
 ): Promise<{ kind: 'ok'; seeded: number } | { kind: 'error'; code: string }> {
   const offerings = await ctx.db
     .query('businessOfferings')
     .withIndex('by_businessId_and_status', (query) => query.eq('businessId', business._id))
     .take(MAX_OFFERINGS_PER_BUSINESS + 1)
   if (offerings.length > MAX_OFFERINGS_PER_BUSINESS) return { kind: 'error', code: 'offering_capacity_exceeded' }
-  const owner = await ctx.db.get(business.ownerId)
-  if (owner === null) return { kind: 'error', code: 'owner_not_found' }
   let seeded = 0
 
   for (const offering of offerings) {
@@ -128,8 +145,8 @@ async function seedBusinessOfferings(
       ))
       .unique()
     if (revision === null) return { kind: 'error', code: 'revision_not_found' }
-    const pricingSummary = DEV_SEED_PRICING_BY_SLUG[business.slug]
-    const price = DEV_SEED_PRICE_BY_SLUG[business.slug]
+    const pricingSummary = pricingBySlug[business.slug]
+    const price = priceBySlug[business.slug]
     if (pricingSummary !== undefined) {
       const facts = {
         name: revision.name,
@@ -142,8 +159,7 @@ async function seedBusinessOfferings(
       }
       const priceMatches = canonicalDigest(revision.price ?? null) === canonicalDigest(price ?? null)
       if (revision.pricingSummary !== pricingSummary || !priceMatches) {
-        const revised = await reviseBusinessOfferingCommand(ctx.db, {
-          actorRef: owner.clerkUserId,
+        const revised = await reviseBusinessOfferingCommand(ctx, {
           businessId: business._id,
           offeringRef: offering.offeringRef,
           expectedRevision: revision.revision,
@@ -173,8 +189,7 @@ async function seedBusinessOfferings(
         ) {
           continue
         }
-        const updated = await upsertOfferingAccessPathCommand(ctx.db, {
-          actorRef: owner.clerkUserId,
+        const updated = await upsertOfferingAccessPathCommand(ctx, {
           businessId: business._id,
           offeringRef: offering.offeringRef,
           accessPathRef: accessPath.accessPathRef,

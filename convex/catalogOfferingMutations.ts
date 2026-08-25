@@ -39,6 +39,35 @@ import {
   type OfferingFactsInput,
 } from '../src/modules/catalog/public'
 import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '../src/modules/money/public'
+import {
+  accountRef,
+  principalRef,
+  WorkloadContextAdmission,
+  type Account,
+  type AccountOwnership,
+  type AccountRef,
+  type Membership,
+  type Principal,
+  type PrincipalRef,
+  type WorkloadContextStore,
+} from '../src/modules/principal-account/public'
+import {
+  DelegationService,
+  delegationGrantRef,
+  type DelegationAuthoritySnapshot,
+} from '../src/modules/authority/delegation/public'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import {
+  createConvexDelegationContextPort,
+  createConvexDelegationStore,
+} from './lib/delegationPersistence'
+
+export const DEV_SEED_CATALOG_PRINCIPAL_REF = 'prn_d2000000000000000000000000000001' as PrincipalRef
+export const DEV_SEED_CATALOG_ACCOUNT_REF = 'acc_d2000000000000000000000000000001' as AccountRef
+export const DEV_SEED_CATALOG_SCOPE = 'catalog:dev_seed' as const
+export const DEV_SEED_CATALOG_RESOURCE = 'catalog:dev-seed' as const
+const DEV_SEED_CATALOG_PRINCIPAL_NAME = 'Agentic Economy development catalog seed workload'
+const DEV_SEED_CATALOG_ACCOUNT_NAME = 'Agentic Economy development catalog seed account'
 
 type OfferingCommandResult =
   | { kind: 'ok'; code: string; resultRef?: string; currentRevision?: number }
@@ -52,9 +81,8 @@ type WithdrawOfferingAccessPathArgs = OfferingSourceMutationArgs & { accessPathR
 type RetryBusinessSupplyProjectionArgs = { businessId: Id<'businesses'> }
 
 export async function reviseBusinessOfferingCommand(
-  db: GenericDatabaseWriter<DataModel>,
+  ctx: MutationCtx,
   command: Readonly<{
-    actorRef: string
     businessId: Id<'businesses'>
     offeringRef: string
     expectedRevision: number
@@ -63,7 +91,7 @@ export async function reviseBusinessOfferingCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'reviseOffering' }, (state, authority) => reviseOfferingInState(state, {
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'reviseOffering' }, (state, authority) => reviseOfferingInState(state, {
     authority,
     operationKey: command.operationKey,
     offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
@@ -73,9 +101,8 @@ export async function reviseBusinessOfferingCommand(
   }), now)
 }
 export async function upsertOfferingAccessPathCommand(
-  db: GenericDatabaseWriter<DataModel>,
+  ctx: MutationCtx,
   command: Readonly<{
-    actorRef: string
     businessId: Id<'businesses'>
     offeringRef: string
     accessPathRef: string
@@ -85,7 +112,7 @@ export async function upsertOfferingAccessPathCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'upsertAccessPath' }, (state, authority) => upsertAccessPathInState(state, {
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'upsertAccessPath' }, (state, authority) => upsertAccessPathInState(state, {
     authority,
     operationKey: command.operationKey,
     offeringRef: brandNonEmpty(command.offeringRef, 'OfferingRef'),
@@ -97,9 +124,8 @@ export async function upsertOfferingAccessPathCommand(
   }), now)
 }
 export async function withdrawOfferingAccessPathCommand(
-  db: GenericDatabaseWriter<DataModel>,
+  ctx: MutationCtx,
   command: Readonly<{
-    actorRef: string
     businessId: Id<'businesses'>
     accessPathRef: string
     expectedRevision: number
@@ -107,7 +133,7 @@ export async function withdrawOfferingAccessPathCommand(
   }>,
   now: number,
 ) {
-  return runSystemOfferingSourceCommand(db, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => (
+  return runSystemOfferingSourceCommand(ctx, { ...command, operationName: 'withdrawAccessPath' }, (state, authority) => (
     withdrawAccessPathInState(state, {
       authority,
       operationKey: command.operationKey,
@@ -131,6 +157,7 @@ async function runOfferingSourceCore(
     now: number,
   ) => OfferingSourceResult<unknown>,
   now: number,
+  actorKind: 'owner' | 'system',
 ): Promise<OfferingCommandResult> {
   const state = await loadOfferingSourceState(db, businessId, {
     actorRef: ownerRef,
@@ -139,7 +166,7 @@ async function runOfferingSourceCore(
   })
   const result = mutate(state, { actorRef, ownerRef, businessOwnerRef: ownerRef }, now)
   if (result.kind === 'error') return { kind: 'error', code: result.code, reason: result.reason }
-  const persisted = await persistOfferingSourceState(db, businessId, state, result.state)
+  const persisted = await persistOfferingSourceState(db, businessId, state, result.state, actorKind)
   if (persisted.kind === 'error') return persisted
   const value = result.value
   const resultRef = typeof value === 'object' && value !== null
@@ -154,13 +181,12 @@ async function runOfferingSourceCore(
 }
 
 type SystemOfferingCommand = Readonly<{
-  actorRef: string
   businessId: Id<'businesses'>
   operationName: string
   operationKey: string
 }>
 async function runSystemOfferingSourceCommand(
-  db: GenericDatabaseWriter<DataModel>,
+  ctx: MutationCtx,
   command: SystemOfferingCommand,
   mutate: (
     state: OfferingSourceState,
@@ -168,14 +194,142 @@ async function runSystemOfferingSourceCommand(
   ) => OfferingSourceResult<unknown>,
   now: number,
 ): Promise<OfferingCommandResult> {
-  const business = await db.get(command.businessId)
-  if (business === null) return { kind: 'error', code: 'not_found', reason: 'Business was not found.' }
-  const owner = await db.get(business.ownerId)
-  const ownerRef = owner?.clerkUserId ?? ''
-  if (ownerRef.length === 0 || command.actorRef !== ownerRef) {
-    return { kind: 'error', code: 'wrong_owner', reason: 'Only the source-bound owner may change this business.' }
+  let snapshot: DelegationAuthoritySnapshot
+  try {
+    snapshot = await admitDevSeedCatalogAuthority(ctx, command.operationKey, command.businessId)
+  } catch {
+    return {
+      kind: 'error',
+      code: 'authority_denied',
+      reason: 'Declared development seed workload authority is not current.',
+    }
   }
-  return runOfferingSourceCore(db, command.businessId, ownerRef, command.actorRef, command.operationName, command.operationKey, mutate, now)
+  return runOfferingSourceCore(
+    ctx.db,
+    command.businessId,
+    snapshot.actorPrincipalRef,
+    snapshot.actorPrincipalRef,
+    command.operationName,
+    command.operationKey,
+    mutate,
+    now,
+    'system',
+  )
+}
+
+export class DevSeedCatalogAuthorityError extends Error {
+  constructor() {
+    super('dev_seed_catalog_authority_denied')
+    this.name = 'DevSeedCatalogAuthorityError'
+  }
+}
+
+class DevSeedCatalogWorkloadStore implements WorkloadContextStore {
+  constructor(private readonly ctx: Pick<MutationCtx, 'db'>) {}
+
+  async getPrincipal(ref: PrincipalRef): Promise<Principal | undefined> {
+    const row = await this.ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', ref))
+      .unique()
+    return row === null ? undefined : row as unknown as Principal
+  }
+
+  async getAccount(ref: AccountRef): Promise<Account | undefined> {
+    const row = await this.ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', ref))
+      .unique()
+    return row === null ? undefined : row as unknown as Account
+  }
+
+  async getOwnership(account: Account): Promise<AccountOwnership | undefined> {
+    const row = await this.ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+      .unique()
+    return row === null ? undefined : row as unknown as AccountOwnership
+  }
+
+  async getActiveMembership(ref: AccountRef, principal: PrincipalRef): Promise<Membership | undefined> {
+    const row = await this.ctx.db.query('memberships')
+      .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+        .eq('accountRef', ref)
+        .eq('memberPrincipalRef', principal)
+        .eq('lifecycle', 'active'))
+      .unique()
+    return row === null ? undefined : row as unknown as Membership
+  }
+}
+
+export async function admitDevSeedCatalogAuthority(
+  ctx: MutationCtx,
+  operationKey: string,
+  businessId?: Id<'businesses'>,
+): Promise<DelegationAuthoritySnapshot> {
+  const [principal, account] = await Promise.all([
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', DEV_SEED_CATALOG_PRINCIPAL_REF))
+      .unique(),
+    ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', DEV_SEED_CATALOG_ACCOUNT_REF))
+      .unique(),
+  ])
+  const nonce = crypto.randomUUID()
+  const context = await new WorkloadContextAdmission(new DevSeedCatalogWorkloadStore(ctx)).admit({
+    workloadKind: 'job',
+    actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+    activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+    correlationRef: `dev-seed:${nonce}`,
+    idempotencyRef: `dev-seed:${nonce}`,
+    purpose: 'Seed the development-only catalog fixture',
+    source: 'convex/devSeed:seedOfferingSupply',
+  })
+  if (principal?.displayName !== DEV_SEED_CATALOG_PRINCIPAL_NAME
+    || account?.displayName !== DEV_SEED_CATALOG_ACCOUNT_NAME) {
+    throw new DevSeedCatalogAuthorityError()
+  }
+  const consequenceNow = Date.now()
+  // The grant is scoped to the declared development catalog only. Exact
+  // business ownership is established separately from canonical owner facts
+  // below, so dynamically allocated Convex ids never become authority inputs.
+  const resources = [DEV_SEED_CATALOG_RESOURCE]
+  const candidates = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
+      .eq('subjectPrincipalRef', DEV_SEED_CATALOG_PRINCIPAL_REF)
+      .eq('lifecycle', 'active'))
+    .collect()
+  const matching = candidates.filter((grant) => grant.accountRef === DEV_SEED_CATALOG_ACCOUNT_REF
+    && grant.expiresAt > consequenceNow
+    && Number.isSafeInteger(grant.generation)
+    && grant.generation > 0
+    && grant.scopes.includes(DEV_SEED_CATALOG_SCOPE)
+    && resources.every((resource) => grant.resourceRefs.includes(resource)))
+  if (matching.length !== 1) throw new DevSeedCatalogAuthorityError()
+  const grant = matching[0]!
+  const digest = canonicalDigest({ operationKey, businessId: businessId ?? null, nonce })
+  const snapshot = await new DelegationService(
+    createConvexDelegationStore(ctx),
+    createConvexDelegationContextPort(ctx, principalRef(context.actorPrincipalRef)),
+  ).admitConsequence({
+    grantRef: delegationGrantRef(grant.grantRef),
+    expectedGeneration: grant.generation,
+    context: {
+      actorPrincipalRef: principalRef(context.actorPrincipalRef),
+      activeAccountRef: accountRef(context.activeAccountRef),
+      correlationRef: `dev-seed-admit:${digest.slice('sha256:'.length, 'sha256:'.length + 32)}`,
+      idempotencyRef: `dev-seed-admit:${digest.slice('sha256:'.length, 'sha256:'.length + 32)}`,
+    },
+    requiredScopes: [DEV_SEED_CATALOG_SCOPE],
+    resourceRefs: resources,
+    budgetAmount: 0,
+  })
+  if (businessId !== undefined) {
+    const business = await ctx.db.get(businessId)
+    const owner = business === null ? null : await ctx.db.get(business.ownerId)
+    if (owner?.canonicalPrincipalRef !== snapshot.actorPrincipalRef
+      || owner.canonicalAccountRef !== snapshot.accountRef) {
+      throw new DevSeedCatalogAuthorityError()
+    }
+  }
+  return snapshot
 }
 
 export async function createBusinessOfferingHandler(ctx: MutationCtx, args: CreateBusinessOfferingArgs) {
@@ -261,6 +415,7 @@ async function runOfferingSourceMutation(
     args.operationKey,
     mutate,
     now,
+    'owner',
   )
   if (core.kind === 'error') return core
   const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, args.businessId, now)
@@ -536,6 +691,7 @@ export async function persistOfferingSourceState(
   businessId: Id<'businesses'>,
   before: OfferingSourceState,
   after: OfferingSourceState,
+  actorKind: 'owner' | 'system' = 'owner',
 ): Promise<{ kind: 'ok' } | { kind: 'error'; code: 'operation_conflict'; reason: string }> {
   // Preflight the entire write set before the first patch/insert. Domain refs are globally
   // addressable, but an owner command may never capture another business's ref.
@@ -605,7 +761,7 @@ export async function persistOfferingSourceState(
   }
   await Promise.all(after.operations.slice(before.operations.length).map((operation) => db.insert('operationKeys', {
     scope: 'catalog_offering',
-    actorKind: 'owner',
+    actorKind,
     actorRef: operation.actorRef,
     operationName: operation.operationName,
     key: operation.operationKey,

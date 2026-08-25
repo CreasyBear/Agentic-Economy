@@ -22,6 +22,7 @@ import type {
   RegistrationContext,
 } from '@/modules/capability-supply/public'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
 
 
 async function runEligibility(
@@ -198,20 +199,17 @@ async function registerProviderConnection(backend: ConvexFixtureBackend, busines
   if (SECURITY_AUTHORITY.kind !== 'provider_connection') {
     throw new Error('provider connection fixture authority kind changed')
   }
-  const result = await backend.mutation(internal.capabilityProviderConnections.create, {
+  const result = await installCanonicalProviderConnectionFixture(backend, {
     commandId: 'command:create:capability-publication-security',
     connectionRef: SECURITY_AUTHORITY.connectionRef,
     businessId,
     providerRef: SECURITY_AUTHORITY.providerRef,
     providerAccountRef: 'account:capability-publication-security',
     adapterId: 'http-json:v1',
-    credentialRef: 'env:SECURITY_CAPABILITY_KEY',
-    requestedScopes: ['capability:security.atomic.lookup'],
-    grantedScopes: ['capability:security.atomic.lookup'],
-    requestedResources: ['endpoint:https://security.example.test/capability'],
-    grantedResources: ['endpoint:https://security.example.test/capability'],
+    secretRef: 'sec_11111111111111111111111111111111',
+    scopes: ['capability:security.atomic.lookup'],
+    resources: ['endpoint:https://security.example.test/capability'],
     evidenceRefs: ['test:provider-connection:capability-publication-security'],
-    now: 1,
   })
   if (result.kind !== 'applied') throw new Error(`provider_connection_fixture_${result.kind}`)
 }

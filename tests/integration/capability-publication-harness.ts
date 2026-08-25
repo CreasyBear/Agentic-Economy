@@ -154,6 +154,88 @@ export function operationContext(suffix: string): PublicationOperationContext {
   }
 }
 
+export async function installCanonicalProviderConnectionFixture(
+  backend: ConvexFixtureBackend,
+  input: Readonly<{
+    businessId: Id<'businesses'>
+    connectionRef: string
+    providerRef: string
+    providerAccountRef: string
+    adapterId: string
+    secretRef: string | null
+    scopes: readonly string[]
+    resources: readonly string[]
+    evidenceRefs: readonly string[]
+    commandId: string
+  }>,
+) {
+  const owner = await backend.run(async (ctx) => {
+    const business = await ctx.db.get(input.businessId)
+    if (business === null) throw new Error('provider_connection_fixture_business_missing')
+    const row = await ctx.db.get(business.ownerId)
+    if (row?.canonicalPrincipalRef === undefined || row.canonicalAccountRef === undefined) {
+      throw new Error('provider_connection_fixture_canonical_owner_missing')
+    }
+    return {
+      principalRef: row.canonicalPrincipalRef,
+      accountRef: row.canonicalAccountRef,
+    }
+  })
+  const providerNamespace = `capability-provider/${input.adapterId}`
+  const installResources = [
+    `connection-provider:${providerNamespace}`,
+    `connection-provider:${providerNamespace}:${input.providerAccountRef}`,
+    ...(input.secretRef === null ? [] : [`secret:${input.secretRef}`]),
+  ].sort()
+  const suffix = canonicalDigest({
+    kind: 'canonical-provider-connection-fixture:v1',
+    commandId: input.commandId,
+    principalRef: owner.principalRef,
+    accountRef: owner.accountRef,
+    installResources,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)
+  const grantRef = `grt_${suffix}`
+  const expiresAt = Date.now() + 300_000
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef,
+      accountRef: owner.accountRef,
+      actorPrincipalRef: owner.principalRef,
+      subjectPrincipalRef: owner.principalRef,
+      scopes: ['connection:install'],
+      resourceRefs: installResources,
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: owner.principalRef,
+        activeAccountRef: owner.accountRef,
+        correlationRef: `fixture:${grantRef}`,
+        idempotencyRef: `fixture:${grantRef}`,
+      },
+    })
+  })
+  return await backend.mutation(internal.capabilityProviderConnections.create, {
+    connectionRef: input.connectionRef,
+    businessId: input.businessId,
+    providerRef: input.providerRef,
+    providerAccountRef: input.providerAccountRef,
+    adapterId: input.adapterId,
+    credentialRef: input.secretRef,
+    requestedScopes: [...input.scopes],
+    grantedScopes: [...input.scopes],
+    requestedResources: [...input.resources],
+    grantedResources: [...input.resources],
+    evidenceRefs: [...input.evidenceRefs],
+    commandId: input.commandId,
+    now: Date.now(),
+  })
+}
+
 export async function runEligibilityThroughCommand(
   backend: ConvexFixtureBackend,
   args: EligibilityInput & RegistrationContext,
