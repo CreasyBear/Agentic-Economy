@@ -7,6 +7,7 @@ export {
 } from './secret-plane'
 export type {
   SecretGeneration,
+  SecretGenerationCreation,
   SecretGenerationValidator,
   SecretMaterialLease,
   SecretMaterialSource,

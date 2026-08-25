@@ -7,6 +7,7 @@ import {
   secretRef,
   withEphemeralSecretMaterial,
   type SecretGenerationValidator,
+  type SecretGenerationCreation,
   type SecretMaterialLease,
   type SecretMaterialSource,
   type SecretPointer,
@@ -21,6 +22,7 @@ const REF = secretRef('sec_11111111111111111111111111111111')
 const OTHER_REF = secretRef('sec_22222222222222222222222222222222')
 const FIRST = secretGeneration('sgn_11111111111111111111111111111111')
 const NEXT = secretGeneration('sgn_00000000000040008000000000000002')
+const THIRD = secretGeneration('sgn_00000000000040008000000000000003')
 const CANARY = 'core-plane-canary'
 
 class MemorySecretStore implements SecretStore {
@@ -42,18 +44,21 @@ class MemorySecretStore implements SecretStore {
     await withEphemeralSecretMaterial(material, operation)
   }
 
-  async putGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<void> {
+  async createGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<SecretGenerationCreation> {
     this.events.push(`write:${target.generation}`)
     if (this.failWrite) throw new Error(`provider ${CANARY}`)
-    await material.useUtf8(async (value) => {
-      this.material.set(this.#key(target), new TextEncoder().encode(value))
+    if (this.material.has(this.#key(target))) return Object.freeze({ kind: 'already-exists' })
+    await material.useBytes(async (bytes) => {
+      this.material.set(this.#key(target), Uint8Array.from(bytes))
     })
-  }
-
-  async deleteGeneration(target: SecretTarget): Promise<void> {
-    this.events.push(`delete:${target.generation}`)
-    if (this.failDelete) throw new Error(`provider ${CANARY}`)
-    this.material.delete(this.#key(target))
+    return Object.freeze({
+      kind: 'created',
+      discard: async () => {
+        this.events.push(`delete:${target.generation}`)
+        if (this.failDelete) throw new Error(`provider ${CANARY}`)
+        this.material.delete(this.#key(target))
+      },
+    })
   }
 
   #key(target: SecretTarget): string {
@@ -118,7 +123,7 @@ function setup(validation: boolean | 'throw' = true, useDefaultUuid = false) {
   const validator: SecretGenerationValidator = {
     validate: async (target, lease) => {
       store.events.push(`validate:${target.generation}`)
-      await lease.useUtf8(async () => undefined)
+      await lease.useBytes(async () => undefined)
       if (validation === 'throw') throw new Error(`validator ${CANARY}`)
       return validation
     },
@@ -160,8 +165,8 @@ describe('SecretPlane', () => {
       providerId: 'provider-fake',
       generation: secretGeneration('sgn_ffffffffffffffffffffffffffffffff'),
     } as { secretRef: SecretRef }, async (lease) => {
-      await lease.useUtf8(async (value) => {
-        matchedCanonicalMaterial = value === 'current'
+      await lease.useBytes(async (bytes) => {
+        matchedCanonicalMaterial = new TextDecoder().decode(bytes) === 'current'
       })
     })
     expect(matchedCanonicalMaterial).toBe(true)
@@ -230,7 +235,7 @@ describe('SecretPlane', () => {
     write.store.failWrite = true
     await expectSafeFailure(write.plane.rotate({ secretRef: REF }, source()), 'secret_store_unavailable')
     expect(write.pointerStore.events).toEqual(['pointer:read'])
-    expect(write.store.events).toEqual([`write:${NEXT}`, `delete:${NEXT}`])
+    expect(write.store.events).toEqual([`write:${NEXT}`])
 
     const read = setup()
     read.store.failRead = true
@@ -241,10 +246,14 @@ describe('SecretPlane', () => {
     invalid.store.failDelete = true
     await expectSafeFailure(invalid.plane.rotate({ secretRef: REF }, source()), 'secret_generation_validation_failed')
     expect(invalid.pointerStore.events).toEqual(['pointer:read'])
+    expect(invalid.store.events).toContain(`delete:${NEXT}`)
+    expect(invalid.store.material.has(`${REF}:${NEXT}`)).toBe(true)
 
     const validatorError = setup('throw')
     await expectSafeFailure(validatorError.plane.rotate({ secretRef: REF }, source()), 'secret_generation_validation_failed')
     expect(validatorError.pointerStore.events).toEqual(['pointer:read'])
+    expect(validatorError.store.events).toContain(`delete:${NEXT}`)
+    expect(validatorError.store.material.has(`${REF}:${NEXT}`)).toBe(false)
   })
 
   it('rejects stale advance and forged rotation results and removes the uncommitted generation', async () => {
@@ -307,7 +316,23 @@ describe('SecretPlane', () => {
         throw new Error(CANARY)
       },
     }), 'secret_store_unavailable')
-    expect(sourceFailure.store.events).toEqual([`delete:${NEXT}`])
+    expect(sourceFailure.store.events).toEqual([])
+
+    const omittedSource = setup()
+    await expectSafeFailure(omittedSource.plane.rotate({ secretRef: REF }, {
+      withMaterial: async () => undefined,
+    }), 'secret_store_unavailable')
+    expect(omittedSource.store.events).toEqual([])
+
+    const postCreateSourceFailure = setup()
+    await expectSafeFailure(postCreateSourceFailure.plane.rotate({ secretRef: REF }, {
+      withMaterial: async (operation) => {
+        await withEphemeralSecretMaterial(new TextEncoder().encode(CANARY), operation)
+        throw new Error(CANARY)
+      },
+    }), 'secret_store_unavailable')
+    expect(postCreateSourceFailure.store.events).toEqual([`write:${NEXT}`, `delete:${NEXT}`])
+    expect(postCreateSourceFailure.store.material.has(`${REF}:${NEXT}`)).toBe(false)
 
     const invalidGeneration = setup()
     const plane = new SecretPlane({
@@ -317,5 +342,60 @@ describe('SecretPlane', () => {
       randomUuid: () => 'forged-provider-generation',
     })
     await expectSafeFailure(plane.rotate({ secretRef: REF }, source()), 'invalid_secret_generation')
+  })
+
+  it('rejects a generated active-generation collision before write and never deletes active material', async () => {
+    const context = setup()
+    const plane = new SecretPlane({
+      store: context.store,
+      pointerStore: context.pointerStore,
+      validator: { validate: async () => true },
+      randomUuid: () => '11111111-1111-1111-1111-111111111111',
+    })
+    await expect(plane.rotate({ secretRef: REF }, source('replacement'))).rejects.toMatchObject({
+      code: 'secret_generation_collision',
+    })
+    expect(context.store.events).toEqual([])
+    expect(context.pointerStore.pointer).toEqual({ secretRef: REF, activeGeneration: FIRST, revision: 1 })
+    expect(new TextDecoder().decode(context.store.material.get(`${REF}:${FIRST}`))).toBe('current')
+  })
+
+  it('retries an inactive-generation collision without deleting the concurrent or orphaned secret', async () => {
+    const context = setup()
+    context.store.material.set(`${REF}:${NEXT}`, new TextEncoder().encode('concurrent-orphan'))
+    const generated = [
+      '00000000-0000-4000-8000-000000000002',
+      '00000000-0000-4000-8000-000000000003',
+    ]
+    const plane = new SecretPlane({
+      store: context.store,
+      pointerStore: context.pointerStore,
+      validator: { validate: async () => true },
+      randomUuid: () => generated.shift()!,
+    })
+
+    await expect(plane.rotate({ secretRef: REF }, source('replacement'))).resolves.toMatchObject({
+      activeGeneration: THIRD,
+    })
+    expect(new TextDecoder().decode(context.store.material.get(`${REF}:${NEXT}`))).toBe('concurrent-orphan')
+    expect(context.store.material.has(`${REF}:${THIRD}`)).toBe(true)
+  })
+
+  it('accepts exactly one material-source callback and cleans only its proven creation', async () => {
+    const context = setup()
+    const plane = new SecretPlane({
+      store: context.store,
+      pointerStore: context.pointerStore,
+      validator: { validate: async () => true },
+      randomUuid: () => '00000000-0000-4000-8000-000000000002',
+    })
+    await expectSafeFailure(plane.rotate({ secretRef: REF }, {
+      withMaterial: async (operation) => {
+        await withEphemeralSecretMaterial(new TextEncoder().encode('first'), operation)
+        await withEphemeralSecretMaterial(new TextEncoder().encode('second'), operation)
+      },
+    }), 'secret_store_unavailable')
+    expect(context.store.events).toEqual([`write:${NEXT}`, `delete:${NEXT}`])
+    expect(context.store.material.has(`${REF}:${NEXT}`)).toBe(false)
   })
 })

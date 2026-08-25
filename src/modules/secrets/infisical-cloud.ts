@@ -2,6 +2,7 @@ import {
   SecretPlaneError,
   withEphemeralSecretMaterial,
   type SecretMaterialLease,
+  type SecretGenerationCreation,
   type SecretStore,
   type SecretTarget,
 } from './secret-plane'
@@ -17,7 +18,7 @@ export interface OidcIdentityToken {
 }
 
 export interface OidcIdentityTokenProvider {
-  getIdentityToken(): Promise<OidcIdentityToken>
+  getIdentityToken(signal: AbortSignal): Promise<OidcIdentityToken>
 }
 
 export interface InfisicalCloudSecretStoreOptions {
@@ -135,10 +136,13 @@ export class InfisicalCloudSecretStore implements SecretStore {
     }
   }
 
-  async putGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<void> {
+  async createGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<SecretGenerationCreation> {
     try {
-      await material.useUtf8(async (value) => {
-        const response = await this.#authorizedRequest(`/api/v4/secrets/${encodeURIComponent(this.#secretName(target))}`, {
+      const expectedName = this.#secretName(target)
+      let response: Response | undefined
+      await material.useBytes(async (bytes) => {
+        const value = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        response = await this.#authorizedRequest(`/api/v4/secrets/${encodeURIComponent(expectedName)}`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -149,8 +153,37 @@ export class InfisicalCloudSecretStore implements SecretStore {
             type: 'shared',
             skipMultilineEncoding: true,
           }),
-        })
+        }, true)
+      })
+      if (response === undefined) throw new SecretPlaneError('secret_store_invalid_response')
+      if (response.status === 409) {
         await this.#discardBody(response)
+        return Object.freeze({ kind: 'already-exists' })
+      }
+      if (response.status === 400) {
+        if (await this.#isExactDuplicateBadRequest(response)) {
+          return Object.freeze({ kind: 'already-exists' })
+        }
+        throw new SecretPlaneError('secret_store_unavailable')
+      }
+      const payload = await this.#readJson(response)
+      const secret = isRecord(payload) && isRecord(payload.secret) ? payload.secret : undefined
+      if (
+        secret === undefined ||
+        typeof secret.id !== 'string' ||
+        secret.id.trim().length === 0 ||
+        typeof secret.version !== 'number' ||
+        !Number.isInteger(secret.version) ||
+        secret.version < 1 ||
+        secret.secretKey !== expectedName ||
+        secret.environment !== this.#environment ||
+        secret.workspace !== this.#projectId
+      ) {
+        throw new SecretPlaneError('secret_store_invalid_response')
+      }
+      return Object.freeze({
+        kind: 'created',
+        discard: async () => await this.#deleteGeneration(target),
       })
     } catch (error) {
       if (error instanceof SecretPlaneError) throw error
@@ -158,7 +191,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
     }
   }
 
-  async deleteGeneration(target: SecretTarget): Promise<void> {
+  async #deleteGeneration(target: SecretTarget): Promise<void> {
     const response = await this.#authorizedRequest(`/api/v4/secrets/${encodeURIComponent(this.#secretName(target))}`, {
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
@@ -176,7 +209,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
     return `${target.secretRef}--${target.generation}`
   }
 
-  async #authorizedRequest(path: string, init: RequestInit): Promise<Response> {
+  async #authorizedRequest(path: string, init: RequestInit, acceptCreateOutcome = false): Promise<Response> {
     const token = await this.#getAccessToken()
     const headers = new Headers(init.headers)
     headers.set('authorization', `Bearer ${token.value}`)
@@ -186,6 +219,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
         ...init,
         headers,
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        redirect: 'error',
       })
     } catch {
       throw new SecretPlaneError('secret_store_unavailable')
@@ -195,11 +229,29 @@ export class InfisicalCloudSecretStore implements SecretStore {
       await this.#discardBody(response)
       throw new SecretPlaneError('secret_store_authentication_failed')
     }
+    if (acceptCreateOutcome && (response.status === 400 || response.status === 409)) return response
     if (!response.ok) {
       await this.#discardBody(response)
       throw new SecretPlaneError('secret_store_unavailable')
     }
     return response
+  }
+
+  async #isExactDuplicateBadRequest(response: Response): Promise<boolean> {
+    if (!response.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+      await this.#discardBody(response)
+      return false
+    }
+    let payload: unknown
+    try {
+      payload = await response.json()
+    } catch {
+      return false
+    }
+    return isRecord(payload) &&
+      payload.statusCode === 400 &&
+      payload.error === 'BadRequest' &&
+      payload.message === 'Secret already exists'
   }
 
   async #getAccessToken(): Promise<AccessToken> {
@@ -209,22 +261,29 @@ export class InfisicalCloudSecretStore implements SecretStore {
     ) {
       return this.#accessToken
     }
-    if (this.#tokenAcquisition === undefined) {
-      this.#tokenAcquisition = this.#acquireAccessToken()
-    }
+    const acquisition = this.#tokenAcquisition ?? this.#acquireAccessToken()
+    this.#tokenAcquisition = acquisition
     try {
-      const token = await this.#tokenAcquisition
+      const token = await acquisition
       this.#accessToken = token
       return token
     } finally {
-      this.#tokenAcquisition = undefined
+      if (this.#tokenAcquisition === acquisition) this.#tokenAcquisition = undefined
     }
   }
 
   async #acquireAccessToken(): Promise<AccessToken> {
     let identityToken: OidcIdentityToken
     try {
-      identityToken = await this.#identityTokenProvider.getIdentityToken()
+      const signal = AbortSignal.timeout(this.#requestTimeoutMs)
+      identityToken = await Promise.race([
+        this.#identityTokenProvider.getIdentityToken(signal),
+        new Promise<never>((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            reject(new SecretPlaneError('secret_store_authentication_failed'))
+          }, { once: true })
+        }),
+      ])
     } catch {
       throw new SecretPlaneError('secret_store_authentication_failed')
     }
@@ -248,6 +307,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
           ...(this.#organizationSlug === undefined ? {} : { organizationSlug: this.#organizationSlug }),
         }),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        redirect: 'error',
       })
     } catch {
       throw new SecretPlaneError('secret_store_authentication_failed')

@@ -46,14 +46,18 @@ class ContractSecretStore implements SecretStore {
     await withEphemeralSecretMaterial(value, operation)
   }
 
-  async putGeneration(target: { secretRef: SecretPointer['secretRef']; generation: SecretPointer['activeGeneration'] }, material: Parameters<SecretStore['putGeneration']>[1]): Promise<void> {
-    await material.useUtf8(async (value) => {
-      this.material.set(`${target.secretRef}:${target.generation}`, new TextEncoder().encode(value))
+  async createGeneration(target: { secretRef: SecretPointer['secretRef']; generation: SecretPointer['activeGeneration'] }, material: Parameters<SecretStore['createGeneration']>[1]): ReturnType<SecretStore['createGeneration']> {
+    const key = `${target.secretRef}:${target.generation}`
+    if (this.material.has(key)) return Object.freeze({ kind: 'already-exists' })
+    await material.useBytes(async (bytes) => {
+      this.material.set(key, Uint8Array.from(bytes))
     })
-  }
-
-  async deleteGeneration(target: { secretRef: SecretPointer['secretRef']; generation: SecretPointer['activeGeneration'] }): Promise<void> {
-    this.material.delete(`${target.secretRef}:${target.generation}`)
+    return Object.freeze({
+      kind: 'created',
+      discard: async () => {
+        this.material.delete(key)
+      },
+    })
   }
 }
 
@@ -69,8 +73,8 @@ describe('P2-04 Infisical secret-plane contract', () => {
     const validator: SecretGenerationValidator = {
       validate: async (_target, lease) => {
         let valid = false
-        await lease.useUtf8(async (value) => {
-          valid = value === 'rotated-canary'
+        await lease.useBytes(async (bytes) => {
+          valid = new TextDecoder().decode(bytes) === 'rotated-canary'
         })
         return valid
       },
@@ -84,8 +88,8 @@ describe('P2-04 Infisical secret-plane contract', () => {
 
     let matchedActiveGeneration = false
     await plane.withActiveSecret({ secretRef: ref }, async (lease) => {
-      await lease.useUtf8(async (value) => {
-        matchedActiveGeneration = value === 'initial-canary'
+      await lease.useBytes(async (bytes) => {
+        matchedActiveGeneration = new TextDecoder().decode(bytes) === 'initial-canary'
       })
     })
     expect(matchedActiveGeneration).toBe(true)

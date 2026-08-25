@@ -16,6 +16,7 @@ export type SecretPlaneErrorCode =
   | 'secret_store_invalid_response'
   | 'invalid_secret_material'
   | 'secret_generation_validation_failed'
+  | 'secret_generation_collision'
   | 'secret_pointer_advance_failed'
   | 'secret_pointer_reconciliation_failed'
   | 'secret_pointer_stale'
@@ -31,6 +32,7 @@ const ERROR_MESSAGES: Readonly<Record<SecretPlaneErrorCode, string>> = Object.fr
   secret_store_invalid_response: 'Secret storage returned an invalid response.',
   invalid_secret_material: 'Secret material is invalid.',
   secret_generation_validation_failed: 'The new secret generation did not validate.',
+  secret_generation_collision: 'The new secret generation collides with the active generation.',
   secret_pointer_advance_failed: 'The active secret generation could not be advanced.',
   secret_pointer_reconciliation_failed: 'The active secret generation could not be reconciled.',
   secret_pointer_stale: 'The active secret generation changed before use.',
@@ -65,7 +67,12 @@ export interface SecretTarget {
 
 export interface SecretMaterialLease {
   readonly byteLength: number
-  useUtf8(operation: (material: string) => Promise<void>): Promise<void>
+  /**
+   * Supplies the sole mutable view of the leased bytes. The view is zeroed when
+   * the enclosing lease callback exits, and callback return values are ignored.
+   * Consumers must not deliberately copy leased bytes into durable storage.
+   */
+  useBytes(operation: (material: Uint8Array) => Promise<void>): Promise<void>
 }
 
 class EphemeralSecretMaterial implements SecretMaterialLease {
@@ -81,9 +88,9 @@ class EphemeralSecretMaterial implements SecretMaterialLease {
     return this.#bytes.byteLength
   }
 
-  async useUtf8(operation: (material: string) => Promise<void>): Promise<void> {
+  async useBytes(operation: (material: Uint8Array) => Promise<void>): Promise<void> {
     this.#assertActive()
-    await operation(new TextDecoder('utf-8', { fatal: true }).decode(this.#bytes))
+    await operation(this.#bytes)
   }
 
   expire(): void {
@@ -110,9 +117,17 @@ export async function withEphemeralSecretMaterial(
 
 export interface SecretStore {
   withSecret(target: SecretTarget, operation: (lease: SecretMaterialLease) => Promise<void>): Promise<void>
-  putGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<void>
-  deleteGeneration(target: SecretTarget): Promise<void>
+  /** Atomically creates without replacing; duplicates return no deletion authority. */
+  createGeneration(target: SecretTarget, material: SecretMaterialLease): Promise<SecretGenerationCreation>
 }
+
+export type SecretGenerationCreation =
+  | { readonly kind: 'already-exists' }
+  | {
+    readonly kind: 'created'
+    /** Attempt-local authority to discard only the generation this create produced. */
+    discard(): Promise<void>
+  }
 
 export interface SecretMaterialSource {
   withMaterial(operation: (lease: SecretMaterialLease) => Promise<void>): Promise<void>
@@ -197,17 +212,9 @@ export class SecretPlane {
     readonly secretRef: SecretRef
   }, materialSource: SecretMaterialSource): Promise<SecretRotationResult> {
     const current = await this.#getActivePointer(input.secretRef)
-    const generation = secretGeneration(`sgn_${this.#randomUuid().replaceAll('-', '')}`)
-    const target = Object.freeze({ secretRef: current.secretRef, generation })
-
-    try {
-      await materialSource.withMaterial(async (material) => {
-        await this.#store.putGeneration(target, material)
-      })
-    } catch {
-      await this.#discard(target)
-      throw new SecretPlaneError('secret_store_unavailable')
-    }
+    const prepared = await this.#createFreshGeneration(current, materialSource)
+    const { target, creation } = prepared
+    const { generation } = target
 
     let valid = false
     let validationFailed = false
@@ -221,13 +228,13 @@ export class SecretPlane {
         }
       })
     } catch {
-      await this.#discard(target)
+      await this.#discard(creation)
       throw new SecretPlaneError(validationFailed
         ? 'secret_generation_validation_failed'
         : 'secret_store_unavailable')
     }
     if (!valid) {
-      await this.#discard(target)
+      await this.#discard(creation)
       throw new SecretPlaneError('secret_generation_validation_failed')
     }
 
@@ -252,7 +259,7 @@ export class SecretPlane {
     if (!this.#isValidPointer(reconciled, current.secretRef) ||
       reconciled.activeGeneration !== generation ||
       reconciled.revision !== current.revision + 1) {
-      await this.#discard(target)
+      await this.#discard(creation)
       throw new SecretPlaneError('secret_pointer_advance_failed')
     }
 
@@ -262,6 +269,36 @@ export class SecretPlane {
       activeGeneration: generation,
       pointerRevision: reconciled.revision,
     })
+  }
+
+  async #createFreshGeneration(
+    current: SecretPointer,
+    materialSource: SecretMaterialSource,
+  ): Promise<{ readonly target: SecretTarget; readonly creation: Extract<SecretGenerationCreation, { kind: 'created' }> }> {
+    let prepared: { readonly target: SecretTarget; readonly creation: Extract<SecretGenerationCreation, { kind: 'created' }> } | undefined
+    let sourceEntered = false
+    try {
+      await materialSource.withMaterial(async (material) => {
+        if (sourceEntered) throw new SecretPlaneError('secret_store_unavailable')
+        sourceEntered = true
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const generation = secretGeneration(`sgn_${this.#randomUuid().replaceAll('-', '')}`)
+          if (generation === current.activeGeneration) continue
+          const target = Object.freeze({ secretRef: current.secretRef, generation })
+          const creation = await this.#store.createGeneration(target, material)
+          if (creation.kind === 'already-exists') continue
+          prepared = Object.freeze({ target, creation })
+          return
+        }
+      })
+    } catch (error) {
+      if (prepared !== undefined) await this.#discard(prepared.creation)
+      if (error instanceof SecretPlaneError && error.code === 'invalid_secret_generation') throw error
+      throw new SecretPlaneError('secret_store_unavailable')
+    }
+    if (!sourceEntered) throw new SecretPlaneError('secret_store_unavailable')
+    if (prepared === undefined) throw new SecretPlaneError('secret_generation_collision')
+    return prepared
   }
 
   async #getActivePointer(ref: SecretRef): Promise<SecretPointer> {
@@ -289,9 +326,9 @@ export class SecretPlane {
     }
   }
 
-  async #discard(target: SecretTarget): Promise<void> {
+  async #discard(creation: Extract<SecretGenerationCreation, { kind: 'created' }>): Promise<void> {
     try {
-      await this.#store.deleteGeneration(target)
+      await creation.discard()
     } catch {
       // The active pointer still references the previous generation. Cleanup is
       // intentionally best-effort and must never turn an unvalidated write active.
