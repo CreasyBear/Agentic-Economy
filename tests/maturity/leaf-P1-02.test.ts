@@ -175,8 +175,12 @@ describe('P1-02 Account ownership and lifecycle contract', () => {
     const second = await setup.registry.create({ ownerPrincipalRef: counterparty, displayName: 'Counterparty tenancy', recoveryPolicy: { kind: 'no_transfer', revision: 1 }, correlationRef: 'correlation:second', idempotencyRef: 'idempotency:second' })
     const secondActive = await setup.registry.activate({ accountRef: second.account.accountRef, expectedRevision: 1, context: setup.context(second.account.accountRef, counterparty, 'activate-second') })
     const context = setup.context(firstActive.accountRef, actor, 'cross-account')
+    const stranger = setup.store.principal(3, 'human')
 
     await expect(setup.registry.requireActiveContext(context)).resolves.toMatchObject({ accountRef: firstActive.accountRef, actorPrincipalRef: actor })
+    await expect(setup.registry.requireActiveContext(setup.context(firstActive.accountRef, stranger, 'stranger'))).rejects.toMatchObject({ code: 'account_context_access_denied' })
+    await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).rejects.toMatchObject({ code: 'account_context_access_denied' })
+    await setup.registry.addMembership({ accountRef: secondActive.accountRef, memberPrincipalRef: actor, expectedAccountRevision: secondActive.revision, context: setup.context(secondActive.accountRef, counterparty, 'cross-account-membership') })
     await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).resolves.toMatchObject({ activeAccountRef: firstActive.accountRef, counterpartyAccountRef: secondActive.accountRef, actorPrincipalRef: actor })
     await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: firstActive.accountRef })).rejects.toMatchObject({ code: 'account_cross_account_self_forbidden' })
   })

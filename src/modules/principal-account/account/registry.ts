@@ -125,6 +125,7 @@ export type CrossAccountAttribution = Readonly<{
 }>
 
 export type AccountRegistryErrorCode =
+  | 'account_context_access_denied'
   | 'account_context_mismatch'
   | 'account_cross_account_self_forbidden'
   | 'account_display_name_invalid'
@@ -514,6 +515,7 @@ export class AccountRegistry {
       const account = await requireAccount(transaction, context.activeAccountRef)
       assertLifecycle(account, 'active', 'account_not_operational')
       await requireActivePrincipal(transaction, context.actorPrincipalRef)
+      await requireAccountAccess(transaction, account, context.actorPrincipalRef)
       return Object.freeze({
         accountRef: account.accountRef,
         actorPrincipalRef: context.actorPrincipalRef,
@@ -539,6 +541,8 @@ export class AccountRegistry {
       assertLifecycle(activeAccount, 'active', 'account_not_operational')
       assertLifecycle(counterpartyAccount, 'active', 'account_not_operational')
       await requireActivePrincipal(transaction, context.actorPrincipalRef)
+      await requireAccountAccess(transaction, activeAccount, context.actorPrincipalRef)
+      await requireAccountAccess(transaction, counterpartyAccount, context.actorPrincipalRef)
       return Object.freeze({
         ...context,
         counterpartyAccountRef: counterpartyRef,
@@ -780,6 +784,17 @@ async function requireActiveOwnerContext(
 ): Promise<void> {
   assertOwnerContext(ownership, context)
   await requireActivePrincipal(transaction, context.actorPrincipalRef)
+}
+
+async function requireAccountAccess(
+  transaction: AccountRegistryTransaction,
+  account: Account,
+  actorPrincipalRef: PrincipalRef,
+): Promise<void> {
+  const ownership = await requireCurrentOwnership(transaction, account)
+  if (ownership.ownerPrincipalRef === actorPrincipalRef) return
+  const membership = await transaction.getActiveMembership(account.accountRef, actorPrincipalRef)
+  if (membership === undefined) throw new AccountRegistryError('account_context_access_denied')
 }
 
 function assertLifecycle(

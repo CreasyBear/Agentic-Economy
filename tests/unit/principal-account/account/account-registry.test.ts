@@ -679,6 +679,11 @@ describe('Account registry contract', () => {
     const second = await createAccount(fixture, 'organization')
     const secondActive = await activateAccount(fixture, second)
     const context = fixture.nextContext(firstActive.accountRef, first.owner, 'cross-account')
+    const activeStranger = fixture.store.seedPrincipal('3')
+    await expectCode(
+      fixture.registry.requireActiveContext(fixture.nextContext(firstActive.accountRef, activeStranger, 'stranger')),
+      'account_context_access_denied',
+    )
     await expect(fixture.registry.requireActiveContext(context)).resolves.toEqual({
       accountRef: firstActive.accountRef,
       actorPrincipalRef: first.owner,
@@ -686,14 +691,46 @@ describe('Account registry contract', () => {
       correlationRef: 'correlation:cross-account',
       idempotencyRef: 'idempotency:cross-account',
     })
+    await expectCode(
+      fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef }),
+      'account_context_access_denied',
+    )
+    const counterpartyMembership = await fixture.registry.addMembership({
+      accountRef: secondActive.accountRef,
+      memberPrincipalRef: first.owner,
+      expectedAccountRevision: secondActive.revision,
+      context: fixture.nextContext(secondActive.accountRef, second.owner, 'grant-cross-account-access'),
+    })
     await expect(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).resolves.toMatchObject({
       activeAccountRef: firstActive.accountRef,
       counterpartyAccountRef: secondActive.accountRef,
       actorPrincipalRef: first.owner,
       activeAccountRevision: firstActive.revision,
-      counterpartyAccountRevision: secondActive.revision,
+      counterpartyAccountRevision: counterpartyMembership.account.revision,
     })
     await expectCode(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: firstActive.accountRef }), 'account_cross_account_self_forbidden')
+  })
+
+  it('accepts an active Membership as Account-context access without conflating it with ownership', async () => {
+    const fixture = setup({ times: [10, 20, 30] })
+    const created = await createAccount(fixture)
+    const active = await activateAccount(fixture, created)
+    const member = fixture.store.seedPrincipal('2', 'agent')
+    const added = await fixture.registry.addMembership({
+      accountRef: active.accountRef,
+      memberPrincipalRef: member,
+      expectedAccountRevision: active.revision,
+      context: fixture.nextContext(active.accountRef, created.owner, 'add-member'),
+    })
+
+    await expect(fixture.registry.requireActiveContext(
+      fixture.nextContext(active.accountRef, member, 'member-work'),
+    )).resolves.toMatchObject({
+      accountRef: active.accountRef,
+      actorPrincipalRef: member,
+      accountRevision: added.account.revision,
+    })
+    expect(fixture.store.ownerships.get(created.ownership.ownershipRef)?.ownerPrincipalRef).toBe(created.owner)
   })
 
   it('rejects inactive actors and non-operational counterparties for protected context proofs', async () => {
