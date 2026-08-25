@@ -19,14 +19,14 @@ Ownership: src/modules/authority/recovery, tests/security/maturity, tests/maturi
 - [ ] G4: The critical negative invariant is proved: operator freeze cannot silently transfer ownership or impersonate.
   EVIDENCE: pending
 
-- [x] G5: Type checking passes with the leaf integrated through context-local exports.
+- [ ] G5: Type checking passes with the leaf integrated through context-local exports.
   CHECK: cd ../.. && npm run typecheck
-  EVIDENCE: > agentic-economy@0.1.0 typecheck | > tsc --noEmit
+  EVIDENCE: pending
 
-- [x] G6: Owned production files contain no placeholder implementation markers.
+- [ ] G6: Owned production files contain no placeholder implementation markers.
   CHECK: cd ../.. && if rg -n '(TODO|FIXME|not implemented)' tests/maturity/leaf-P2-05.test.ts 2>/dev/null; then exit 1; else echo NO_PLACEHOLDERS; fi
   EXPECT: NO_PLACEHOLDERS
-  EVIDENCE: NO_PLACEHOLDERS
+  EVIDENCE: pending
 
 - [ ] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
   EVIDENCE: pending

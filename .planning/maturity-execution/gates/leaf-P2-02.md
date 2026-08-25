@@ -19,14 +19,14 @@ Ownership: src/modules/authority/context, src/lib/server/authority-boundary, tes
 - [ ] G4: The critical negative invariant is proved: no protected surface bypasses account or generation checks.
   EVIDENCE: pending
 
-- [x] G5: Type checking passes with the leaf integrated through context-local exports.
+- [ ] G5: Type checking passes with the leaf integrated through context-local exports.
   CHECK: cd ../.. && npm run typecheck
-  EVIDENCE: > agentic-economy@0.1.0 typecheck | > tsc --noEmit
+  EVIDENCE: pending
 
-- [x] G6: Owned production files contain no placeholder implementation markers.
+- [ ] G6: Owned production files contain no placeholder implementation markers.
   CHECK: cd ../.. && if rg -n '(TODO|FIXME|not implemented)' tests/maturity/leaf-P2-02.test.ts 2>/dev/null; then exit 1; else echo NO_PLACEHOLDERS; fi
   EXPECT: NO_PLACEHOLDERS
-  EVIDENCE: NO_PLACEHOLDERS
+  EVIDENCE: pending
 
 - [ ] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
   EVIDENCE: pending
