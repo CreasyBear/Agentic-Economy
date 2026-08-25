@@ -72,16 +72,34 @@ describe("registry entry graduation", () => {
   });
 
   it("selects a replay-deterministic top 100 with at most five routes per provider", () => {
-    const candidates = Array.from({ length: 25 }, (_, providerIndex) =>
+    const candidates: RegistryLaunchCandidate[] = Array.from(
+      { length: 25 },
+      (_, providerIndex) =>
       Array.from({ length: 6 }, (_, routeIndex) => launchCandidate(
         `provider-${providerIndex}-route-${routeIndex}`,
         {
           provider: `Provider ${providerIndex}`,
-          sourceCalls30d: String(10_000 - providerIndex * 100 - routeIndex),
+          sourceCalls30d: String(300 - providerIndex * 10 - routeIndex),
           sourcePayers30d: String(100 - routeIndex),
         },
       )),
     ).flat();
+    const repeatedRoute = candidates[0];
+    if (repeatedRoute === undefined) throw new Error("expected repeated route fixture");
+    candidates[0] = {
+      ...repeatedRoute,
+      provider: "myceliasignal.com",
+      sourceCalls30d: "366",
+      sourcePayers30d: "10",
+      sourceDigest: `sha256:${"d".repeat(64)}`,
+    };
+    candidates.push({
+      ...repeatedRoute,
+      provider: "api.myceliasignal.com",
+      sourceCalls30d: "366",
+      sourcePayers30d: "10",
+      sourceDigest: `sha256:${"c".repeat(64)}`,
+    });
     candidates.push(launchCandidate("treg-top", {
       source: "treg",
       provider: "Treg provider",
@@ -93,14 +111,25 @@ describe("registry entry graduation", () => {
     const replayed = selectRegistryLaunchCohort(candidates.toReversed());
     const providerCounts = new Map<string, number>();
     for (const item of selected) {
-      providerCounts.set(item.provider, (providerCounts.get(item.provider) ?? 0) + 1);
+      const provider = item.provider.trim().toLowerCase();
+      providerCounts.set(provider, (providerCounts.get(provider) ?? 0) + 1);
     }
 
     expect(selected).toHaveLength(100);
+    expect(new Set(selected.map(({ documentId }) => documentId)).size).toBe(100);
     expect(Math.max(...providerCounts.values())).toBe(5);
     expect(selected.every(({ source }) => source === "agentic_market")).toBe(true);
+    expect(selected.filter(({ documentId }) =>
+      documentId === repeatedRoute.documentId
+    )).toEqual([expect.objectContaining({
+      provider: "api.myceliasignal.com",
+      sourceDigest: `sha256:${"c".repeat(64)}`,
+    })]);
     expect(replayed.map(({ documentId }) => documentId)).toEqual(
       selected.map(({ documentId }) => documentId),
+    );
+    expect(replayed.map(({ sourceDigest }) => sourceDigest)).toEqual(
+      selected.map(({ sourceDigest }) => sourceDigest),
     );
   });
 
@@ -139,6 +168,23 @@ describe("registry entry graduation", () => {
       "registry:zero",
       "registry:malformed",
     ]);
+  });
+
+  it("uses source digest as the final same-provider duplicate tiebreak", () => {
+    const route = launchCandidate("digest-tie", {
+      provider: "api.example.com",
+      sourceCalls30d: "366",
+      sourcePayers30d: "10",
+      sourceDigest: `sha256:${"d".repeat(64)}`,
+    });
+    const preferred = {
+      ...route,
+      sourceDigest: `sha256:${"c".repeat(64)}`,
+    };
+
+    for (const candidates of [[route, preferred], [preferred, route]]) {
+      expect(selectRegistryLaunchCohort(candidates)).toEqual([preferred]);
+    }
   });
 
   it("attempts only four selected digest-pinned candidates per sweep step", async () => {
