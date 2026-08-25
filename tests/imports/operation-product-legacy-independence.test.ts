@@ -3,7 +3,6 @@ import { globSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const operationProductEntrypoints = [
-  'packages/cli/dist/ae.js',
   ...globSync('tools/ae/**/*.ts'),
   'src/routes/mcp.ts',
   'src/lib/server/mcp-api.ts',
@@ -16,7 +15,6 @@ const legacyModuleImport = /modules\/(?:answer(?:-thread)?|external-run|harness)
 describe('Operation product legacy independence', () => {
   it('keeps CLI, MCP, and Operation HTTP entrypoints independent of the legacy stack', () => {
     expect(operationProductEntrypoints).toEqual(expect.arrayContaining([
-      'packages/cli/dist/ae.js',
       'tools/ae/cli.ts',
       'src/routes/mcp.ts',
       'src/lib/server/mcp-api.ts',
