@@ -11,7 +11,7 @@ import type {
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AdminAction, AdminAuthorityMutationResult, AdminAuthorityResult, AdminMembership } from '../src/modules/security/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import type { ActionCtx, QueryCtx } from './_generated/server'
+import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
 import {
   InteractiveAuthorityError,
   resolveInteractiveAuthorityContext,
@@ -26,12 +26,15 @@ type AuthzCtx = {
 type BusinessActorCtx = Readonly<{
   auth: QueryCtx['auth']
 }> & (
-  | Readonly<{ db: GenericDatabaseReader<DataModel> }>
-  | Readonly<{ runQuery: ActionCtx['runQuery'] }>
+  | Readonly<{
+      db: GenericDatabaseReader<DataModel>
+      scheduler?: MutationCtx['scheduler']
+    }>
+  | Readonly<{ runAction: ActionCtx['runAction'] }>
 )
 
 const resolveCurrentInteractiveAuthorityRef = makeFunctionReference<
-  'query',
+  'action',
   Record<string, never>,
   InteractiveBusinessAuthorityContext | null
 >('interactiveAuthority:resolveCurrentInteractiveAuthority')
@@ -46,9 +49,18 @@ export async function resolveBusinessActor(
 
   let authority: InteractiveBusinessAuthorityContext | null
   try {
-    authority = 'db' in ctx
-      ? await resolveInteractiveAuthorityContext(ctx.db, identity)
-      : await ctx.runQuery(resolveCurrentInteractiveAuthorityRef, {})
+    if ('db' in ctx) {
+      // Queries are cached and therefore cannot safely establish wall-clock
+      // credential validity. Until credential expiry is materialized by a
+      // scheduled lifecycle transition, authenticated query disclosures fail
+      // closed. Mutations are non-cached consequence boundaries.
+      if (!('scheduler' in ctx) || ctx.scheduler === undefined) {
+        return anonymousBusinessActor()
+      }
+      authority = await resolveInteractiveAuthorityContext(ctx.db, identity)
+    } else {
+      authority = await ctx.runAction(resolveCurrentInteractiveAuthorityRef, {})
+    }
   } catch (error) {
     if (error instanceof InteractiveAuthorityError) return anonymousBusinessActor()
     throw error

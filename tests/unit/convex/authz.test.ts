@@ -49,6 +49,14 @@ describe('Convex authz helpers', () => {
       kind: 'anonymous',
       anonymousBucket: 'convex:anonymous',
     })
+
+    await expect(resolveBusinessActor({
+      ...authCtx(new FakeDb(), sam()),
+      scheduler: {} as never,
+    })).resolves.toEqual({
+      kind: 'anonymous',
+      anonymousBucket: 'convex:anonymous',
+    })
   })
 
   it('denies callers without a durable admin membership', async () => {
@@ -65,7 +73,7 @@ describe('Convex authz helpers', () => {
     })
   })
 
-  it('keeps action authority on the same canonical query and rejects identity drift', async () => {
+  it('keeps action authority on the non-cached canonical boundary and rejects identity drift', async () => {
     const authority = {
       principalRef: `prn_${'1'.repeat(32)}`,
       accountRef: `acc_${'2'.repeat(32)}`,
@@ -94,7 +102,7 @@ describe('Convex authz helpers', () => {
     }
     const actor = await resolveBusinessActor({
       auth: authCtx(new FakeDb(), sam()).auth,
-      runQuery: async () => authority,
+      runAction: async () => authority,
     } as Parameters<typeof resolveBusinessActor>[0])
     expect(actor).toMatchObject({
       kind: 'authenticated_owner',
@@ -106,7 +114,7 @@ describe('Convex authz helpers', () => {
 
     await expect(resolveBusinessActor({
       auth: authCtx(new FakeDb(), sam()).auth,
-      runQuery: async () => null,
+      runAction: async () => null,
     } as Parameters<typeof resolveBusinessActor>[0])).resolves.toEqual({
       kind: 'anonymous',
       anonymousBucket: 'convex:anonymous',
@@ -115,7 +123,7 @@ describe('Convex authz helpers', () => {
     const unexpected = new Error('database_unavailable')
     await expect(resolveBusinessActor({
       auth: authCtx(new FakeDb(), sam()).auth,
-      runQuery: async () => {
+      runAction: async () => {
         throw unexpected
       },
     } as Parameters<typeof resolveBusinessActor>[0])).rejects.toBe(unexpected)

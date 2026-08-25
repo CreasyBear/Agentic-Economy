@@ -29,10 +29,15 @@ const BINDING_REF = `eib_${'5'.repeat(32)}`
 const CREDENTIAL_REF = `crd_${'6'.repeat(32)}`
 const TOKEN_IDENTIFIER = 'https://clerk.example.test|user_sam'
 const resolveCurrentInteractiveAuthorityRef = makeFunctionReference<
-  'query',
+  'action',
   Record<string, never>,
   unknown
 >('interactiveAuthority:resolveCurrentInteractiveAuthority')
+const readCurrentInteractiveAuthorityFactsRef = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  unknown
+>('interactiveAuthority:readCurrentInteractiveAuthorityFacts')
 
 describe('canonical interactive authority', () => {
   beforeEach(() => {
@@ -85,6 +90,7 @@ describe('canonical interactive authority', () => {
 
     const actor = await backend.run(async (ctx) => resolveBusinessActor({
       db: ctx.db,
+      scheduler: ctx.scheduler,
       auth: {
         getUserIdentity: async () => identity({ subject: 'caller-shaped-subject' }),
       },
@@ -117,16 +123,50 @@ describe('canonical interactive authority', () => {
     expect(context.revision.currentOwnerPrincipal).toBe(2)
   })
 
-  it('re-resolves the current authenticated session inside the registered query', async () => {
+  it('resolves current authenticated sessions only at the non-cached action boundary', async () => {
     const backend = convexTest(schema, modules)
+    await expect(backend.withIdentity(identity()).action(resolveCurrentInteractiveAuthorityRef, {}))
+      .resolves.toBeNull()
     await seedAuthority(backend, { omitOwnerProfile: true })
 
-    await expect(backend.query(resolveCurrentInteractiveAuthorityRef, {})).resolves.toBeNull()
-    await expect(backend.withIdentity(identity()).query(resolveCurrentInteractiveAuthorityRef, {}))
+    await expect(backend.action(resolveCurrentInteractiveAuthorityRef, {})).resolves.toBeNull()
+    await expect(backend.withIdentity(identity()).action(resolveCurrentInteractiveAuthorityRef, {}))
       .resolves.toMatchObject({
         principalRef: PRINCIPAL_REF,
         accountRef: ACCOUNT_REF,
       })
+  })
+
+  it('expires authority after a cached fact read without accepting caller-shaped time', async () => {
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend, { expiresAt: NOW + 1 })
+    const authenticated = backend.withIdentity(identity())
+
+    await expect(authenticated.query(readCurrentInteractiveAuthorityFactsRef, {}))
+      .resolves.toMatchObject({
+        context: { provenance: { resolvedAt: 0 } },
+        credentialExpiresAt: NOW + 1,
+      })
+    await expect(authenticated.action(resolveCurrentInteractiveAuthorityRef, {}))
+      .resolves.toMatchObject({ provenance: { resolvedAt: NOW } })
+
+    vi.setSystemTime(NOW + 1)
+    await expect(authenticated.query(readCurrentInteractiveAuthorityFactsRef, {}))
+      .resolves.toMatchObject({ credentialExpiresAt: NOW + 1 })
+    await expect(authenticated.action(resolveCurrentInteractiveAuthorityRef, {})).resolves.toBeNull()
+  })
+
+  it('fails authenticated query disclosures closed until expiry is materialized', async () => {
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend)
+
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity() },
+    }))).resolves.toEqual({
+      kind: 'anonymous',
+      anonymousBucket: 'convex:anonymous',
+    })
   })
 
   it.each([

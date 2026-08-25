@@ -1,4 +1,5 @@
-import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
+import { makeFunctionReference, type GenericDatabaseReader, type UserIdentity } from 'convex/server'
+import { v } from 'convex/values'
 
 import {
   accountRef,
@@ -19,7 +20,7 @@ import type {
   InteractiveBusinessAuthorityContext,
 } from '../src/modules/business/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import { internalQuery } from './_generated/server'
+import { internalAction, internalQuery } from './_generated/server'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
 
@@ -61,12 +62,86 @@ export class InteractiveAuthorityError extends Error {
   }
 }
 
-export const resolveCurrentInteractiveAuthority = internalQuery({
+const interactiveAuthorityContextValue = v.object({
+  principalRef: v.string(),
+  accountRef: v.string(),
+  legacyOwnerId: v.string(),
+  legacyOwnerLocator: v.string(),
+  displayName: v.optional(v.string()),
+  emailHash: v.optional(v.string()),
+  revision: v.object({
+    binding: v.number(),
+    credential: v.number(),
+    principal: v.number(),
+    account: v.number(),
+    access: v.number(),
+    currentOwnership: v.number(),
+    currentOwnerPrincipal: v.number(),
+    compatibilityUpdatedAt: v.number(),
+  }),
+  provenance: v.object({
+    providerNamespace: v.literal(CLERK_USER_PROVIDER_NAMESPACE),
+    bindingRef: v.string(),
+    credentialRef: v.string(),
+    credentialGeneration: v.number(),
+    accessKind: v.union(v.literal('ownership'), v.literal('membership')),
+    accessRef: v.string(),
+    currentOwnershipRef: v.string(),
+    resolvedAt: v.number(),
+  }),
+})
+
+const interactiveAuthorityFactsValue = v.object({
+  context: interactiveAuthorityContextValue,
+  credentialIssuedAt: v.number(),
+  credentialExpiresAt: v.number(),
+})
+
+type InteractiveAuthorityFacts = Readonly<{
+  context: InteractiveBusinessAuthorityContext
+  credentialIssuedAt: number
+  credentialExpiresAt: number
+}>
+
+const readCurrentInteractiveAuthorityFactsRef = makeFunctionReference<
+  'query',
+  Record<string, never>,
+  InteractiveAuthorityFacts | null
+>('interactiveAuthority:readCurrentInteractiveAuthorityFacts')
+
+/**
+ * A non-cached authority consequence boundary. Wall clock validity is checked
+ * here, after the cached query has returned only current database facts.
+ */
+export const resolveCurrentInteractiveAuthority = internalAction({
   args: {},
+  returns: v.union(interactiveAuthorityContextValue, v.null()),
   handler: async (ctx): Promise<InteractiveBusinessAuthorityContext | null> => {
+    const facts = await ctx.runQuery(readCurrentInteractiveAuthorityFactsRef, {})
+    if (facts === null) return null
+    return currentContextAtTrustedServerTime(facts, Date.now())
+  },
+})
+
+/**
+ * This query deliberately does not read wall-clock time. Its result is safe to
+ * cache because every input is a database fact and any fact change invalidates
+ * the cache. Only the internal action above may turn these facts into current
+ * authority.
+ */
+export const readCurrentInteractiveAuthorityFacts = internalQuery({
+  args: {},
+  returns: v.union(interactiveAuthorityFactsValue, v.null()),
+  handler: async (ctx): Promise<InteractiveAuthorityFacts | null> => {
     const identity = await ctx.auth.getUserIdentity()
     if (identity === null) return null
-    return await resolveInteractiveAuthorityContext(ctx.db, identity)
+    try {
+      return await resolveInteractiveAuthorityFacts(ctx.db, identity)
+    } catch {
+      // This is an authority read: malformed facts and storage failures both
+      // deny rather than exposing a partially resolved identity.
+      return null
+    }
   },
 })
 
@@ -84,6 +159,18 @@ export async function resolveInteractiveAuthorityContext(
   identity: UserIdentity,
 ): Promise<InteractiveBusinessAuthorityContext> {
   const now = Date.now()
+  const current = currentContextAtTrustedServerTime(
+    await resolveInteractiveAuthorityFacts(db, identity),
+    now,
+  )
+  if (current === null) throw new InteractiveAuthorityError('credential_not_current')
+  return current
+}
+
+async function resolveInteractiveAuthorityFacts(
+  db: AuthorityDb,
+  identity: UserIdentity,
+): Promise<InteractiveAuthorityFacts> {
   const tokenIdentifier = identity.tokenIdentifier
   if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) {
     throw new InteractiveAuthorityError('identity_invalid')
@@ -130,8 +217,6 @@ export async function resolveInteractiveAuthorityContext(
     Number.isSafeInteger(credential.expiresAt),
     credential.issuedAt >= 0,
     credential.expiresAt > credential.issuedAt,
-    now >= credential.issuedAt,
-    now < credential.expiresAt,
   ]
   if (!credentialWindowChecks.every(Boolean)) {
     throw new InteractiveAuthorityError('credential_not_current')
@@ -224,7 +309,7 @@ export async function resolveInteractiveAuthorityContext(
     currentOwner.revision,
   ], owner.updatedAt, owner.clerkUserId)
 
-  return freezeInteractiveContext({
+  const context = freezeInteractiveContext({
     principalRef: canonicalPrincipalRef,
     accountRef: canonicalAccountRef,
     legacyOwnerId: owner._id,
@@ -251,6 +336,30 @@ export async function resolveInteractiveAuthorityContext(
         ? requireCanonicalRef(access.row.ownershipRef, ownershipRef)
         : requireCanonicalRef(access.row.membershipRef, membershipRef),
       currentOwnershipRef: canonicalCurrentOwnershipRef,
+      // A cached fact query cannot assert wall-clock resolution time. The
+      // non-cached consequence boundary replaces this sentinel before release.
+      resolvedAt: 0,
+    },
+  })
+  return Object.freeze({
+    context,
+    credentialIssuedAt: credential.issuedAt,
+    credentialExpiresAt: credential.expiresAt,
+  })
+}
+
+function currentContextAtTrustedServerTime(
+  facts: InteractiveAuthorityFacts,
+  now: number,
+): InteractiveBusinessAuthorityContext | null {
+  if (!Number.isSafeInteger(now)
+    || now < 0
+    || now < facts.credentialIssuedAt
+    || now >= facts.credentialExpiresAt) return null
+  return freezeInteractiveContext({
+    ...facts.context,
+    provenance: {
+      ...facts.context.provenance,
       resolvedAt: now,
     },
   })
