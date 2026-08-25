@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 
+import { resolveAgenticMarketRouteWinner } from "@/modules/market/registry-launch-cohort";
+
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
@@ -230,8 +232,26 @@ export const writeBatch = internalMutation({
         )
         .unique();
       if (existing !== null) {
-        if (existing.sourceDigest !== entry.sourceDigest) {
+        if (
+          existing.source !== entry.source ||
+          existing.routeIdentity !== entry.routeIdentity
+        ) {
           throw new Error("external_registry_generation_identity_conflict");
+        }
+        if (existing.sourceDigest !== entry.sourceDigest) {
+          if (
+            existing.source !== "agentic_market" ||
+            entry.source !== "agentic_market"
+          ) {
+            throw new Error("external_registry_generation_identity_conflict");
+          }
+          if (resolveAgenticMarketRouteWinner(existing, entry) === "right") {
+            await ctx.db.replace(existing._id, {
+              generation: args.generation,
+              ...entry,
+              updatedAt: Date.now(),
+            });
+          }
         }
         replayed += 1;
         continue;
