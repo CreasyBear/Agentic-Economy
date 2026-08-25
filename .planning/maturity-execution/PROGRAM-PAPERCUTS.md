@@ -1,0 +1,37 @@
+# AE maturity execution papercut registry
+
+Papercuts are small product, code, evidence, tool or process defects that create
+repeated friction, hide risk or make correct execution unnecessarily difficult.
+They are not allowed to disappear into chat history.
+
+Statuses: `OPEN`, `MITIGATED`, `REPAIRED`, `ACCEPTED_LIMITATION`.
+
+| ID | Category | Status | Papercut and evidence | Consequence | Owner / owning gate | Required follow-up |
+|---|---|---|---|---|---|---|
+| AE-PAP-001 | process | MITIGATED | Some GSD workflows assume `.planning/ROADMAP.md` and phase summaries, while this program intentionally uses the frozen maturity tree. | Agents can waste time replanning or fail on missing unrelated artifacts. | Program manager / every launch | Dispatch typed executor/verifier roles directly; prohibit roadmap/discovery workflows in launch prompts. |
+| AE-PAP-002 | tool | OPEN | Gate checkers can prove command/regex agreement without proving the semantic trust boundary. Phase 1 mechanical gates initially missed forged succession and reset receipts. | False confidence in security-sensitive completion. | Every phase reviewer / root G1/G7 | Pair every mechanical gate with hostile semantic counterexamples and an independent diff/trust-boundary review. |
+| AE-PAP-003 | code | REPAIRED | Phase 1 release imports could pass because ignored `packages/cli/dist` artifacts existed locally. | Non-hermetic release evidence; clean checkout failure. | Phase 1 / release gate | Hermetic repair landed and passed from a fresh clone with artifacts absent; preserve the clean-checkout probe in later phases. |
+| AE-PAP-004 | evidence | MITIGATED | Hosted credentials, vendor access and elapsed-time proof were being treated as source blockers. | Safe source work stalled on non-source work. | Program manager / later owning gates | Use `SOURCE_ACCEPTED_EVIDENCE_OPEN`; track exact open proof without weakening root completion. |
+| AE-PAP-005 | process | MITIGATED | Phase implementation and acceptance previously risked sharing context or self-certifying. | Reviewer inherits assumptions and misses semantic defects. | Program manager / every phase | New task for every acceptance attempt; reviewer never silently repairs reviewed source. |
+| AE-PAP-006 | process | MITIGATED | Phase handoffs can be ambiguous about implementation source versus evidence-only commits. | Successor may start from the wrong revision or omit acceptance artifacts. | Program manager / every handoff | Report accepted source and final evidence handoff separately; launch from the explicit final handoff and retain ancestry proof. |
+| AE-PAP-007 | tool | OPEN | Desktop task creation can return a queued client ID before a usable task ID and rejects subtly malformed target shapes with only `invalid arguments`. | Dispatch becomes brittle and easy to duplicate. | Program manager / task dispatch | Stage creation, resolve the created task through the task list, then send the full contract once; record exact task ID/worktree. |
+| AE-PAP-008 | process | OPEN | A new task may begin before the complete long execution contract is delivered. | Early source edits can precede frozen ownership and safety constraints. | Program manager / task dispatch | First prompt creates the goal and explicitly waits; second prompt supplies full contract before edits. Confirm through monitoring. |
+| AE-PAP-009 | tool | OPEN | Ox/provider review can be disrupted by rate limits or safety-filter behavior unrelated to the source verdict. | Acceptance may stall or be mistaken for a product failure. | Acceptance reviewer / every acceptance gate | Preserve prompts and partial output, retry boundedly, independently verify all claims, and classify provider failure as evidence/tool friction rather than source failure. |
+| AE-PAP-010 | architecture | OPEN | Authorization and identity assumptions span far more files and surfaces than a local helper suggests. Phase 2 measurement found legacy identity, environment, connection, cron, callback and reconciliation touchpoints. | Partial migration can leave bypasses on background or adapter surfaces. | Phase 2 / P2-02 and phase gate | Maintain a generated cross-surface isolation matrix and driver-owned measured migration inventory. |
+| AE-PAP-011 | evidence | OPEN | Existing checked gate lines can be stale baseline evidence before the phase implementation begins (for example Phase 2 integration G3 was already checked). | A child phase could inherit a green mark without proving its changed source. | Phase 2 reviewer, then all phases / phase gates | Treat pre-existing checkmarks as historical baseline only; replace/remeasure evidence against the exact candidate ref and flag stale gate state during acceptance. |
+| AE-PAP-012 | process | MITIGATED | Completed tasks, review worktrees, scratch output and side-chat artifacts can outlive their useful evidence. | Worktree/task sprawl obscures the active source, consumes space and encourages stale evidence reuse. | Program manager / every phase close | Mandatory housekeeping ledger; archive tasks and remove only clean reachable worktrees after evidence preservation; retain branches until downstream integration. |
+
+## Intake rule
+
+Every new entry must include reproducible evidence, consequence, an owner and an
+owning gate. Repair safe in-scope papercuts immediately. A deferred papercut must
+be copied into the next affected launch packet and may not be described as closed
+until the repair or accepted limitation is evidenced.
+
+## Review cadence
+
+- Phase driver: review at leaf integration and internal handoff.
+- Acceptance reviewer: add semantic, evidence and tooling failures discovered.
+- Program manager: deduplicate after each verdict and promote repeated papercuts
+  into mandatory counterexamples or release checks.
+- Root close: zero unowned `OPEN` items that affect an L3 gate.
