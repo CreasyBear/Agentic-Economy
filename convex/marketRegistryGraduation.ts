@@ -36,6 +36,13 @@ type GraduationResult =
   | { kind: "refused"; documentId: string; reason: string }
   | { kind: "not_found" | "source_changed" | "unavailable" };
 
+const publicationRefusalReason = (error: unknown): string | undefined => {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail.includes("facilitator_discovery_publication_prepare_failed")
+    ? "publication_prepare_failed"
+    : undefined;
+};
+
 export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult> = internalAction({
   args: {
     documentId: v.string(),
@@ -61,11 +68,18 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
     );
     if (current.kind !== "found") return current;
 
-    const reconciled: { published: number } = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
-      items: [structuredClone(result.draft)] as FunctionArgs<typeof internal.facilitatorDiscovery.reconcile>["items"],
-      complete: false,
-      deadlineAt: Date.now() + 30_000,
-    });
+    let reconciled: { published: number };
+    try {
+      reconciled = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
+        items: [structuredClone(result.draft)] as FunctionArgs<typeof internal.facilitatorDiscovery.reconcile>["items"],
+        complete: false,
+        deadlineAt: Date.now() + 30_000,
+      });
+    } catch (error) {
+      const reason = publicationRefusalReason(error);
+      if (reason === undefined) throw error;
+      return { kind: "refused", documentId: result.documentId, reason };
+    }
     return {
       kind: "graduated" as const,
       documentId: result.documentId,
@@ -131,15 +145,29 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
     const step = args.candidates.slice(0, 4);
     let graduated = 0;
     for (const candidate of step) {
-      const result: GraduationResult = await ctx.runAction(
-        internal.marketRegistryGraduation.run,
-        {
-          documentId: candidate.documentId,
-          expectedSourceDigest: candidate.sourceDigest,
-          expectedGeneration: args.generation,
-        },
-      );
+      let result: GraduationResult;
+      try {
+        result = await ctx.runAction(
+          internal.marketRegistryGraduation.run,
+          {
+            documentId: candidate.documentId,
+            expectedSourceDigest: candidate.sourceDigest,
+            expectedGeneration: args.generation,
+          },
+        );
+      } catch (error) {
+        const reason = publicationRefusalReason(error);
+        if (reason === undefined) throw error;
+        result = { kind: "refused", documentId: candidate.documentId, reason };
+      }
       if (result.kind === "graduated" && result.published) graduated += 1;
+      if (result.kind === "refused") {
+        console.info(JSON.stringify({
+          event: "REGISTRY_GRADUATION_CANDIDATE_REFUSED",
+          documentId: result.documentId,
+          reason: result.reason,
+        }));
+      }
     }
     const remaining = args.candidates.slice(step.length);
     if (remaining.length > 0) {

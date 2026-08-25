@@ -256,6 +256,71 @@ describe("registry entry graduation", () => {
     });
   });
 
+  it("continues after one publication preparation failure and schedules later candidates", async () => {
+    const runQuery = vi.fn(async () => ({
+      kind: "page" as const,
+      candidates: [],
+      isDone: false,
+      continueCursor: "ignored",
+    }));
+    const runAction = vi.fn()
+      .mockRejectedValueOnce(new Error(
+        "Unhandled Error: facilitator_discovery_publication_prepare_failed",
+      ))
+      .mockResolvedValue({
+        kind: "refused" as const,
+        documentId: "registry:refused",
+        reason: "payment_required_missing",
+      });
+    const runAfter = vi.fn(async (
+      _delayMs: number,
+      _reference: unknown,
+      _args: {
+        generation: string;
+        candidates: { documentId: string; sourceDigest: string }[];
+      },
+    ) => undefined);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const handler = (sweep as unknown as {
+      _handler: (
+        ctx: {
+          runQuery: typeof runQuery;
+          runAction: typeof runAction;
+          scheduler: { runAfter: typeof runAfter };
+        },
+        args: {
+          generation: string;
+          candidates: { documentId: string; sourceDigest: string }[];
+        },
+      ) => Promise<unknown>;
+    })._handler;
+    const candidates = Array.from({ length: 5 }, (_, index) => ({
+      documentId: `registry:selected-${index}`,
+      sourceDigest: `sha256:digest-${index}`,
+    }));
+
+    await expect(handler({
+      runQuery,
+      runAction,
+      scheduler: { runAfter },
+    }, {
+      generation: "generation-1",
+      candidates,
+    })).resolves.toEqual({ kind: "advanced", attempted: 4, graduated: 0 });
+
+    expect(runAction).toHaveBeenCalledTimes(4);
+    expect(runAfter).toHaveBeenCalledOnce();
+    expect(runAfter.mock.calls[0]?.[2]).toEqual({
+      generation: "generation-1",
+      candidates: candidates.slice(4),
+    });
+    expect(info).toHaveBeenCalledWith(JSON.stringify({
+      event: "REGISTRY_GRADUATION_CANDIDATE_REFUSED",
+      documentId: candidates[0]?.documentId,
+      reason: "publication_prepare_failed",
+    }));
+  });
+
   it("stops a stale generation without probing or rescheduling candidates", async () => {
     const runQuery = vi.fn(async () => ({ kind: "stale_generation" as const }));
     const runAction = vi.fn();
