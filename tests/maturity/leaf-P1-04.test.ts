@@ -23,8 +23,10 @@ import {
   type CanonicalIdentityTable,
   type LegacyIdentityResetApplyReceipt,
   type LegacyIdentityResetExecutionPort,
+  type LegacyIdentityResetExecutionIdentity,
   type LegacyIdentityResetPlan,
   type LegacyIdentityTable,
+  type LegacyIdentityResetTrustedExecution,
 } from '../../tools/maturity-reset/public'
 
 const workloadRef = principalRef('prn_00000000000000000000000000000001')
@@ -87,14 +89,29 @@ function context(workloadKind: typeof WORKLOAD_KINDS[number]) {
 
 class ResetPort implements LegacyIdentityResetExecutionPort {
   readonly receipts = new Map<string, LegacyIdentityResetApplyReceipt>()
+  readonly executions = new Map<string, LegacyIdentityResetTrustedExecution>()
   applies = 0
 
   async findReceipt(digest: string): Promise<LegacyIdentityResetApplyReceipt | undefined> { return this.receipts.get(digest) }
   async applyExact(plan: LegacyIdentityResetPlan): Promise<LegacyIdentityResetApplyReceipt> {
     this.applies += 1
-    const receipt = { planDigest: plan.planDigest, removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })) }
+    const receipt = {
+      planDigest: plan.planDigest,
+      executionRef: 'reset-execution:p1-04',
+      transactionRef: 'reset-transaction:p1-04',
+      removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+    }
     this.receipts.set(plan.planDigest, receipt)
+    this.executions.set(receipt.executionRef, {
+      ...receipt,
+      targetPostState: plan.targets.map(({ table }) => ({ table, facts: 0 })),
+      retainedCanonicalPostState: plan.retainedCanonical.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+    })
     return receipt
+  }
+
+  async readTrustedExecution(identity: LegacyIdentityResetExecutionIdentity): Promise<LegacyIdentityResetTrustedExecution | undefined> {
+    return this.executions.get(identity.executionRef)
   }
 }
 

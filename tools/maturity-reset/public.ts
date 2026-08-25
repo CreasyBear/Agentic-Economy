@@ -11,9 +11,11 @@ export type {
   LegacyIdentityResetEntry,
   LegacyIdentityResetErrorCode,
   LegacyIdentityResetExecutionPort,
+  LegacyIdentityResetExecutionIdentity,
   LegacyIdentityResetInventoryPort,
   LegacyIdentityResetPlan,
   LegacyIdentityResetResult,
+  LegacyIdentityResetTrustedExecution,
   LegacyIdentityTable,
   RetainedCanonicalEntry,
 } from './legacy-identity-reset'

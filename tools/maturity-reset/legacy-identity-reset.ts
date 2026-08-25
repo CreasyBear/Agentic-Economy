@@ -47,17 +47,45 @@ export type LegacyIdentityResetPlan = Readonly<{
 
 export type LegacyIdentityResetApplyReceipt = Readonly<{
   planDigest: string
+  executionRef: string
+  transactionRef: string
   removed: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
+}>
+
+export type LegacyIdentityResetExecutionIdentity = Readonly<{
+  executionRef: string
+  transactionRef: string
+}>
+
+export type LegacyIdentityResetTrustedExecution = Readonly<{
+  /** Adapter-attested record written by the same durable transaction as the exact deletion. */
+  planDigest: string
+  executionRef: string
+  transactionRef: string
+  removed: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
+  targetPostState: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
+  retainedCanonicalPostState: readonly Readonly<{ table: CanonicalIdentityTable; facts: number }>[]
 }>
 
 export type LegacyIdentityResetExecutionPort = Readonly<{
   findReceipt(planDigest: string): Promise<LegacyIdentityResetApplyReceipt | undefined>
+  /**
+   * Adapter contract: delete exactly the planned facts and durably record the
+   * receipt plus reconciled post-state in one transaction. Live wiring is deferred.
+   */
   applyExact(plan: LegacyIdentityResetPlan): Promise<LegacyIdentityResetApplyReceipt>
+  /**
+   * Resolve an execution from an adapter-owned durable transaction ledger.
+   * The receipt is only a lookup hint; it is never proof of execution by itself.
+   */
+  readTrustedExecution(identity: LegacyIdentityResetExecutionIdentity): Promise<LegacyIdentityResetTrustedExecution | undefined>
 }>
 
 export type LegacyIdentityResetResult = Readonly<{
   mode: 'dry-run' | 'applied' | 'already-applied'
   planDigest: string
+  executionRef?: string
+  transactionRef?: string
   factsPlannedForRemoval: number
   factsRemoved: number
   canonicalFactsRetained: number
@@ -68,12 +96,18 @@ export type LegacyIdentityResetErrorCode =
   | 'reset_apply_digest_required'
   | 'reset_count_invalid'
   | 'reset_duplicate_target'
+  | 'reset_execution_mismatch'
   | 'reset_plan_digest_invalid'
   | 'reset_plan_invalid'
+  | 'reset_post_state_invalid'
   | 'reset_protected_target'
   | 'reset_receipt_invalid'
+  | 'reset_receipt_untrusted'
   | 'reset_snapshot_ref_invalid'
+  | 'reset_target_not_empty'
   | 'reset_target_invalid'
+  | 'reset_transaction_mismatch'
+  | 'reset_canonical_count_changed'
   | 'reset_unknown_target'
 
 export class LegacyIdentityResetError extends Error {
@@ -126,7 +160,7 @@ export async function executeLegacyIdentityReset(
   options: Readonly<{ apply?: boolean; confirmedPlanDigest?: string }> = {},
 ): Promise<LegacyIdentityResetResult> {
   assertValidPlan(plan)
-  if (options.apply !== true) return resultFromPlan(plan, 'dry-run', [])
+  if (options.apply !== true) return resultFromPlan(plan, 'dry-run')
   if (options.confirmedPlanDigest === undefined) {
     throw new LegacyIdentityResetError('reset_apply_digest_required')
   }
@@ -136,11 +170,64 @@ export async function executeLegacyIdentityReset(
   const prior = await port.findReceipt(plan.planDigest)
   if (prior !== undefined) {
     assertValidReceipt(plan, prior)
-    return resultFromPlan(plan, 'already-applied', prior.removed)
+    await assertTrustedReconciledExecution(plan, prior, port)
+    return resultFromPlan(plan, 'already-applied', prior)
   }
   const receipt = await port.applyExact(plan)
   assertValidReceipt(plan, receipt)
-  return resultFromPlan(plan, 'applied', receipt.removed)
+  await assertTrustedReconciledExecution(plan, receipt, port)
+  return resultFromPlan(plan, 'applied', receipt)
+}
+
+async function assertTrustedReconciledExecution(
+  plan: LegacyIdentityResetPlan,
+  receipt: LegacyIdentityResetApplyReceipt,
+  port: LegacyIdentityResetExecutionPort,
+): Promise<void> {
+  if (typeof port.readTrustedExecution !== 'function') {
+    throw new LegacyIdentityResetError('reset_receipt_untrusted')
+  }
+  const execution = await port.readTrustedExecution({
+    executionRef: receipt.executionRef,
+    transactionRef: receipt.transactionRef,
+  })
+  if (execution === undefined) throw new LegacyIdentityResetError('reset_receipt_untrusted')
+  if (!isRecord(execution)
+    || typeof execution.planDigest !== 'string'
+    || typeof execution.executionRef !== 'string'
+    || typeof execution.transactionRef !== 'string'
+    || !Array.isArray(execution.removed)
+    || !Array.isArray(execution.targetPostState)
+    || !Array.isArray(execution.retainedCanonicalPostState)) {
+    throw new LegacyIdentityResetError('reset_post_state_invalid')
+  }
+  if (execution.executionRef !== receipt.executionRef) {
+    throw new LegacyIdentityResetError('reset_execution_mismatch')
+  }
+  if (execution.transactionRef !== receipt.transactionRef) {
+    throw new LegacyIdentityResetError('reset_transaction_mismatch')
+  }
+  if (execution.planDigest !== plan.planDigest
+    || !sameRemoved(execution.removed, receipt.removed)) {
+    throw new LegacyIdentityResetError('reset_execution_mismatch')
+  }
+  if (execution.targetPostState.length !== plan.targets.length
+    || execution.targetPostState.some((entry, index) => !isFactCountEntry(entry)
+      || entry.table !== plan.targets[index]?.table)) {
+    throw new LegacyIdentityResetError('reset_post_state_invalid')
+  }
+  if (execution.targetPostState.some(({ facts }) => validCount(facts) !== 0)) {
+    throw new LegacyIdentityResetError('reset_target_not_empty')
+  }
+  if (execution.retainedCanonicalPostState.length !== plan.retainedCanonical.length
+    || execution.retainedCanonicalPostState.some((entry, index) => !isFactCountEntry(entry)
+      || entry.table !== plan.retainedCanonical[index]?.table)) {
+    throw new LegacyIdentityResetError('reset_post_state_invalid')
+  }
+  if (execution.retainedCanonicalPostState.some((entry, index) =>
+    validCount(entry.facts) !== plan.retainedCanonical[index]?.measuredFacts)) {
+    throw new LegacyIdentityResetError('reset_canonical_count_changed')
+  }
 }
 
 function validTargets(values: readonly string[]): readonly LegacyIdentityTable[] {
@@ -227,6 +314,10 @@ function assertValidPlan(plan: LegacyIdentityResetPlan): void {
 function assertValidReceipt(plan: LegacyIdentityResetPlan, receipt: LegacyIdentityResetApplyReceipt): void {
   if (!isRecord(receipt)
     || typeof receipt.planDigest !== 'string'
+    || typeof receipt.executionRef !== 'string'
+    || !OPAQUE_REF_PATTERN.test(receipt.executionRef)
+    || typeof receipt.transactionRef !== 'string'
+    || !OPAQUE_REF_PATTERN.test(receipt.transactionRef)
     || !Array.isArray(receipt.removed)
     || receipt.removed.some((entry) => !isRemovedEntry(entry))
     || receipt.planDigest !== plan.planDigest
@@ -237,14 +328,29 @@ function assertValidReceipt(plan: LegacyIdentityResetPlan, receipt: LegacyIdenti
   }
 }
 
+function sameRemoved(
+  left: LegacyIdentityResetTrustedExecution['removed'],
+  right: LegacyIdentityResetApplyReceipt['removed'],
+): boolean {
+  return left.length === right.length
+    && left.every((entry, index) => isRemovedEntry(entry)
+      && entry.table === right[index]?.table
+      && entry.facts === right[index]?.facts)
+}
+
 function resultFromPlan(
   plan: LegacyIdentityResetPlan,
   mode: LegacyIdentityResetResult['mode'],
-  removed: LegacyIdentityResetApplyReceipt['removed'],
+  receipt?: LegacyIdentityResetApplyReceipt,
 ): LegacyIdentityResetResult {
+  const removed = receipt?.removed ?? []
   return Object.freeze({
     mode,
     planDigest: plan.planDigest,
+    ...(receipt === undefined ? {} : {
+      executionRef: receipt.executionRef,
+      transactionRef: receipt.transactionRef,
+    }),
     factsPlannedForRemoval: plan.factsPlannedForRemoval,
     factsRemoved: sum(removed.map(({ facts }) => facts)),
     canonicalFactsRetained: plan.canonicalFactsRetained,
@@ -282,6 +388,12 @@ function isRetainedEntry(value: unknown): value is RetainedCanonicalEntry {
 }
 
 function isRemovedEntry(value: unknown): value is LegacyIdentityResetApplyReceipt['removed'][number] {
+  return isRecord(value)
+    && typeof value.table === 'string'
+    && typeof value.facts === 'number'
+}
+
+function isFactCountEntry(value: unknown): value is Readonly<{ table: string; facts: number }> {
   return isRecord(value)
     && typeof value.table === 'string'
     && typeof value.facts === 'number'

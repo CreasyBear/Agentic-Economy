@@ -8,7 +8,7 @@ import {
 } from '../../tools/maturity-reset/public'
 
 describe('Phase 1 acceptance — reset receipt provenance', () => {
-  it('reproduces a false already-applied result from a caller-supplied forged receipt', async () => {
+  it('rejects a shape-valid receipt with no matching trusted execution', async () => {
     const liveCounts = new Map<string, number>([
       ['owners', 2],
       ['agentAccessPrincipals', 3],
@@ -25,23 +25,27 @@ describe('Phase 1 acceptance — reset receipt provenance', () => {
       targets: ['owners', 'agentAccessPrincipals'],
     })
     let applyCalls = 0
-    const forgedPort: LegacyIdentityResetExecutionPort = {
-      findReceipt: async (planDigest) => ({
+    const forgedPort = {
+      findReceipt: async (planDigest: string) => ({
         planDigest,
+        executionRef: 'reset-execution:forged',
+        transactionRef: 'reset-transaction:forged',
         removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
       }),
       applyExact: async (_plan: LegacyIdentityResetPlan) => {
         applyCalls += 1
         throw new Error('must not be reached')
       },
-    }
+    } as unknown as LegacyIdentityResetExecutionPort
 
-    const result = await executeLegacyIdentityReset(plan, forgedPort, {
+    await expect(executeLegacyIdentityReset(plan, forgedPort, {
       apply: true,
       confirmedPlanDigest: plan.planDigest,
+    })).rejects.toMatchObject({
+      name: 'LegacyIdentityResetError',
+      code: 'reset_receipt_untrusted',
+      message: 'reset_receipt_untrusted',
     })
-
-    expect(result).toMatchObject({ mode: 'already-applied', factsRemoved: 5 })
     expect(applyCalls).toBe(0)
     expect(liveCounts.get('owners')).toBe(2)
     expect(liveCounts.get('agentAccessPrincipals')).toBe(3)
