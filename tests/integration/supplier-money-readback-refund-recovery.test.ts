@@ -21,12 +21,127 @@ describe('supplier money readback refund recovery', () => {
     const { backend, owner, businessRef, providerAccountRef } =
       await createSupplierMoneyOwner('supplier-earnings')
     const ownerAccountId = 'user_supplier-earnings'
-    const principalId = `principal:${businessRef}`
+    const principalId = `prn_${'1'.repeat(32)}`
+    const authorityOwnerPrincipalRef = `prn_${'2'.repeat(32)}`
+    const authorityAccountRef = `acc_${'3'.repeat(32)}`
+    const authorityOwnershipRef = `own_${'4'.repeat(32)}`
+    const authorityMembershipRef = `mem_${'5'.repeat(32)}`
+    const authorityGrantRef = `grt_${'6'.repeat(32)}`
+    const authorityGrantGeneration = 1
+    const authorityExpiresAt = 8_000_000_000_000_000
+    const authorityOperationRef = `operation:${businessRef}`
+    const authorityInvocationRef = `invocation:${businessRef}`
     const credentialId = `credential:${businessRef}`
     const transactionRef = `transaction:${businessRef}:charge`
     const billing = withBillingIdentity(backend, principalId)
 
     await backend.run(async (ctx) => {
+      await ctx.db.insert('principals', {
+        principalRef: authorityOwnerPrincipalRef,
+        kind: 'human',
+        displayName: 'Supplier authority owner',
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('principals', {
+        principalRef: principalId,
+        kind: 'agent',
+        displayName: 'Supplier authority agent',
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await ctx.db.insert('accounts', {
+        accountRef: authorityAccountRef,
+        displayName: 'Supplier authority Account',
+        lifecycle: 'active',
+        recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+        creationActorPrincipalRef: authorityOwnerPrincipalRef,
+        creationIdempotencyRef: `create:${authorityAccountRef}`,
+        initialOwnershipRef: authorityOwnershipRef,
+        currentOwnershipRef: authorityOwnershipRef,
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        lastAction: {
+          actorPrincipalRef: authorityOwnerPrincipalRef,
+          activeAccountRef: authorityAccountRef,
+          correlationRef: `create:${authorityAccountRef}`,
+          idempotencyRef: `create:${authorityAccountRef}`,
+        },
+      })
+      await ctx.db.insert('accountOwnerships', {
+        ownershipRef: authorityOwnershipRef,
+        accountRef: authorityAccountRef,
+        ownerPrincipalRef: authorityOwnerPrincipalRef,
+        lifecycle: 'active',
+        changeKind: 'creation',
+        revision: 1,
+        createdAt: 1,
+        createdBy: {
+          actorPrincipalRef: authorityOwnerPrincipalRef,
+          activeAccountRef: authorityAccountRef,
+          correlationRef: `create:${authorityOwnershipRef}`,
+          idempotencyRef: `create:${authorityOwnershipRef}`,
+        },
+      })
+      await ctx.db.insert('memberships', {
+        membershipRef: authorityMembershipRef,
+        accountRef: authorityAccountRef,
+        memberPrincipalRef: principalId,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 1,
+        createdBy: {
+          actorPrincipalRef: authorityOwnerPrincipalRef,
+          activeAccountRef: authorityAccountRef,
+          correlationRef: `create:${authorityMembershipRef}`,
+          idempotencyRef: `create:${authorityMembershipRef}`,
+        },
+      })
+      await ctx.db.insert('authorityDelegationGrants', {
+        grantRef: authorityGrantRef,
+        accountRef: authorityAccountRef,
+        actorPrincipalRef: principalId,
+        subjectPrincipalRef: principalId,
+        scopes: ['market.operations.invoke'],
+        resourceRefs: [authorityOperationRef],
+        budgetLimit: 1_000,
+        budgetUsed: 1,
+        expiresAt: authorityExpiresAt,
+        generation: authorityGrantGeneration,
+        revision: 1,
+        lifecycle: 'active',
+        createdAt: 1,
+        createdBy: {
+          actorPrincipalRef: principalId,
+          activeAccountRef: authorityAccountRef,
+          correlationRef: `create:${authorityGrantRef}`,
+          idempotencyRef: `create:${authorityGrantRef}`,
+        },
+      })
+      await ctx.db.insert('capabilityOperationInvocations', {
+        invocationRef: authorityInvocationRef,
+        principalId,
+        ownerId: ownerAccountId,
+        credentialId,
+        applicationRef: `application:${businessRef}`,
+        operationRef: authorityOperationRef,
+        idempotencyKey: `invoke:${authorityInvocationRef}`,
+        environment: 'production',
+        grantRef: authorityGrantRef,
+        grantGeneration: authorityGrantGeneration,
+        policyDigest: 'sha256:supplier-authority-policy',
+        grantExpiresAt: authorityExpiresAt,
+        inputDigest: 'sha256:supplier-authority-input',
+        requestDigest: 'sha256:supplier-authority-request',
+        state: 'completed',
+        createdAt: 1,
+        updatedAt: 1,
+      })
       const account = (
         row: Pick<
           Doc<'moneyAccounts'>,
@@ -156,7 +271,7 @@ describe('supplier money readback refund recovery', () => {
         direction: 'debit',
         amountUnits: '1000',
         principalId,
-        invocationRef: `invocation:${businessRef}`,
+        invocationRef: authorityInvocationRef,
         attemptRef: `attempt:${businessRef}`,
       })
       await entry({
@@ -166,7 +281,7 @@ describe('supplier money readback refund recovery', () => {
         direction: 'credit',
         amountUnits: '900',
         businessId: businessRef,
-        invocationRef: `invocation:${businessRef}`,
+        invocationRef: authorityInvocationRef,
         attemptRef: `attempt:${businessRef}`,
       })
       await entry({
@@ -187,9 +302,9 @@ describe('supplier money readback refund recovery', () => {
         serviceRef: `service:${businessRef}`,
         offeringRef: `offering:${businessRef}`,
         businessId: businessRef,
-        invocationRef: `invocation:${businessRef}`,
+        invocationRef: authorityInvocationRef,
         attemptRef: `attempt:${businessRef}`,
-        operationKey: `operation:${businessRef}`,
+        operationKey: authorityOperationRef,
         priceDigest: 'sha256:price',
         chargeState: 'paid',
         amountUnits: '1000',
@@ -248,14 +363,14 @@ describe('supplier money readback refund recovery', () => {
     expect(firstPayout).not.toHaveProperty('payoutRef')
     expect(firstPayout).not.toHaveProperty('idempotencyKey')
     const qualifiedIdentity = {
-      invocationRef: `invocation:${businessRef}`,
+      invocationRef: authorityInvocationRef,
       attemptRef: `attempt:${businessRef}`,
       effectGeneration: 1,
     }
     const qualifiedMaterial = {
       ...qualifiedIdentity,
       businessId: businessRef,
-      operationRef: `operation:${businessRef}`,
+      operationRef: authorityOperationRef,
       publicationRef: `publication:${businessRef}`,
       publicationRevision: 1,
       contractDigest: 'sha256:contract',
@@ -278,7 +393,14 @@ describe('supplier money readback refund recovery', () => {
     }
     const payoutRef = await backend.run(async (ctx) => {
       await recordQualifiedUsePayoutAllocation(ctx, qualifiedReceipt, principalId)
-      await ctx.db.insert('qualifiedUseReceipts', qualifiedReceipt)
+      await ctx.db.insert('qualifiedUseReceipts', {
+        ...qualifiedReceipt,
+        owningAccountRef: authorityAccountRef,
+        authorityPrincipalRef: principalId,
+        authorityGrantRef,
+        authorityGrantGeneration,
+        authorityResourceRef: authorityOperationRef,
+      })
       const payouts = await ctx.db
         .query('moneyPayouts')
         .withIndex('by_businessId_and_currency_and_updatedAt', (q) =>
