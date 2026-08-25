@@ -154,6 +154,23 @@ This set is small enough to inspect and supplies actual comparison inside one na
 
 There is one operational caveat: the current refresh action unconditionally schedules the full Agentic Market sweep when it activates a generation. The existing per-candidate action is the smallest maintained promotion primitive, but the current orchestration cannot import a generation and then stop at three. A genuinely bounded production seed therefore needs the same focused fix to expose an operational “metadata refresh without bulk sweep” mode (or equivalent exact-candidate bound) while leaving the per-candidate admission contract unchanged. Until that exists, the honest maintained action is the full observed refresh/sweep described above, not a hand-written table import.
 
+### Founder launch decision after this audit
+
+After reviewing the concentration evidence, the founder chose a larger launch seed: rank Agentic Market candidates by reported 30-day calls, break ties by reported payers and stable route identity, cap each normalized provider at five Operations, and submit at most 100 unique route identities to the unchanged live graduation probe. This decision supersedes the three-search recommendation above; it does not change the audit's authority or safety findings.
+
+The focused implementation also repairs the concrete-probe persistence contradiction and resolves repeated Agentic Market listings of the same route to one deterministic metadata winner. A read-only replay against the live catalogue after those fixes produced:
+
+| Measure | Result |
+|---|---:|
+| Reported/fetched services | 2,374 / 2,374 |
+| Adapter-admissible candidates | 24,551 |
+| Selected unique route identities | 100 |
+| Distinct normalized providers | 63 |
+| Maximum Operations from one provider | 5 |
+| Lowest selected 30-day call count | 195 |
+
+Source category metadata is not reliable enough to call this a segment-balanced set: 85 selected routes are labelled `Uncategorised`, with the remaining labels split across Search, Data, Inference and Storage. The operative diversity control is therefore provider concentration, not an invented category taxonomy. Every selected route remains only a candidate until the live 402/Bazaar admission and canonical capability-supply publication succeed.
+
 ## Residual unknowns and evidence gaps
 
 - The exact number of Agentic Market entries that currently return a conforming 402/Bazaar document is unknown until the guarded graduation probes run. This audit did not send those requests.
