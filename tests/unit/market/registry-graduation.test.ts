@@ -148,12 +148,26 @@ describe("registry entry graduation", () => {
       isDone: false,
       continueCursor: "ignored",
     }));
-    const runAction = vi.fn(async () => ({
+    const runAction = vi.fn(async (
+      _reference: unknown,
+      _args: {
+        documentId: string;
+        expectedSourceDigest: string;
+        expectedGeneration: string;
+      },
+    ) => ({
       kind: "refused" as const,
       documentId: "registry:refused",
       reason: "request_failed",
     }));
-    const runAfter = vi.fn(async () => undefined);
+    const runAfter = vi.fn(async (
+      _delayMs: number,
+      _reference: unknown,
+      _args: {
+        generation: string;
+        candidates: { documentId: string; sourceDigest: string }[];
+      },
+    ) => undefined);
     const handler = (sweep as unknown as {
       _handler: (
         ctx: {

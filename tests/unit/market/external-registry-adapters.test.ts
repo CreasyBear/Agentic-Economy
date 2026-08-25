@@ -310,7 +310,11 @@ describe("registry origin adapters", () => {
       }
       return null;
     });
-    const runAfter = vi.fn(async () => undefined);
+    const runAfter = vi.fn(async (
+      _delayMs: number,
+      _reference: unknown,
+      _args: Record<string, unknown>,
+    ) => undefined);
     const handler = refreshHandler();
 
     try {
@@ -321,7 +325,7 @@ describe("registry origin adapters", () => {
       expect(result).toMatchObject({ kind: "refreshed", entries: 150 });
       expect(writes.reduce((total, count) => total + count, 0)).toBe(150);
       expect(runAfter).toHaveBeenCalledOnce();
-      const scheduled = runAfter.mock.calls[0]?.[2] as {
+      const scheduled = runAfter.mock.calls[0]?.[2] as unknown as {
         generation: string;
         candidates: { documentId: string; sourceDigest: string }[];
       };
@@ -344,7 +348,11 @@ describe("registry origin adapters", () => {
       throw new Error(`unexpected refresh URL: ${url.href}`);
     });
     const runMutation = vi.fn(async () => null);
-    const runAfter = vi.fn(async () => undefined);
+    const runAfter = vi.fn(async (
+      _delayMs: number,
+      _reference: unknown,
+      _args: Record<string, unknown>,
+    ) => undefined);
     const handler = refreshHandler();
 
     try {
