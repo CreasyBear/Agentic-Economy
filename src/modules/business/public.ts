@@ -1,6 +1,12 @@
 import { v } from 'convex/values'
 
 import type { BusinessId, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
+import type {
+  AccountRef,
+  MembershipRef,
+  OwnershipRef,
+} from '@/modules/principal-account/account/public'
+import type { PrincipalRef } from '@/modules/principal-account/principal/public'
 
 export const PublicStatusValues = ['unpublished', 'published', 'suppressed'] as const
 export type PublicStatus = (typeof PublicStatusValues)[number]
@@ -106,14 +112,60 @@ export type BusinessIdentity = {
 export type BusinessOwnerRecord = {
   ownerId: OwnerId
   clerkUserId: string
+  canonicalPrincipalRef?: PrincipalRef
+  canonicalAccountRef?: AccountRef
   displayName?: string
   emailHash?: string
   createdAt: number
   updatedAt: number
 }
 
+export type BusinessAuthorityRevision = Readonly<{
+  binding: number
+  credential: number
+  principal: number
+  account: number
+  access: number
+  currentOwnership: number
+  currentOwnerPrincipal: number
+  compatibilityUpdatedAt: number
+}>
+
+export type BusinessAuthorityProvenance = Readonly<{
+  providerNamespace: 'clerk/user'
+  bindingRef: string
+  credentialRef: string
+  credentialGeneration: number
+  accessKind: 'ownership' | 'membership'
+  accessRef: OwnershipRef | MembershipRef
+  currentOwnershipRef: OwnershipRef
+  resolvedAt: number
+}>
+
+export type InteractiveBusinessAuthorityContext = Readonly<{
+  principalRef: PrincipalRef
+  accountRef: AccountRef
+  legacyOwnerId: string
+  legacyOwnerLocator: string
+  displayName?: string
+  emailHash?: string
+  revision: BusinessAuthorityRevision
+  provenance: BusinessAuthorityProvenance
+}>
+
 export type BusinessActor =
-  | { kind: 'authenticated_owner'; clerkUserId: string; displayName?: string; emailHash?: string; sessionRef?: string }
+  | Readonly<{
+    kind: 'authenticated_owner'
+    /** Compatibility locator copied from the canonically matched owner row. */
+    clerkUserId: string
+    canonicalPrincipalRef: PrincipalRef
+    canonicalAccountRef: AccountRef
+    legacyOwnerId: string
+    authorityRevision: BusinessAuthorityRevision
+    authorityProvenance: BusinessAuthorityProvenance
+    displayName?: string
+    emailHash?: string
+  }>
   | { kind: 'anonymous'; anonymousBucket: string }
 
 export type BusinessSourceRef = {

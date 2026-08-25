@@ -222,7 +222,12 @@ const requiredIndexes = {
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   qualifiedUseReceipts: ['by_qualifiedUseRef', 'by_businessId_and_qualifiedAt', 'by_invocationRef', 'by_operationRef_and_qualifiedAt'],
-  owners: ['by_clerkUserId'],
+  owners: [
+    'by_canonicalAccountRef',
+    'by_canonicalPrincipalRef',
+    'by_canonicalPrincipalRef_and_canonicalAccountRef',
+    'by_clerkUserId',
+  ],
   businesses: ['by_slug', 'by_owner_updatedAt', 'by_publicStatus_slug'],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
