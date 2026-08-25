@@ -5,6 +5,11 @@ import {
   type AccountRef,
   type PrincipalRef,
 } from '../../principal-account/public'
+import {
+  delegationSnapshotRef,
+  type DelegationSnapshotRef,
+} from '../../authority/delegation/public'
+import { secretRef, type SecretRef } from '../../secrets/public'
 
 const CONNECTION_REF_PATTERN = /^con_[0-9a-f]{32}$/u
 const CONNECTION_SHARE_REF_PATTERN = /^csh_[0-9a-f]{32}$/u
@@ -44,12 +49,14 @@ export type ConnectionOperation =
 
 export type ConnectionAction = Readonly<{
   operation: ConnectionOperation
+  snapshotRef: DelegationSnapshotRef
   actorPrincipalRef: PrincipalRef
   activeAccountRef: AccountRef
   grantRef: string
   grantGeneration: number
   correlationRef: string
   idempotencyRef: string
+  resourceRefs: readonly string[]
   occurredAt: number
 }>
 
@@ -59,6 +66,7 @@ export type Connection = Readonly<{
   installedByPrincipalRef: PrincipalRef
   providerNamespace: string
   providerLocator?: string
+  secretRef?: SecretRef
   /** Immutable install input used for durable idempotency after lifecycle changes. */
   installedExternalState: ConnectionExternalState
   externalState: ConnectionExternalState
@@ -126,15 +134,18 @@ export type ConnectionActionRequest = Readonly<{
   grantRef: string
   connectionRef?: ConnectionRef
   counterpartyAccountRef?: AccountRef
+  resourceRefs: readonly string[]
   now: number
 }>
 
 export type ConnectionActionSnapshot = Readonly<{
+  snapshotRef: DelegationSnapshotRef
   actorPrincipalRef: PrincipalRef
   activeAccountRef: AccountRef
   grantRef: string
   grantGeneration: number
   grantExpiresAt: number
+  resourceRefs: readonly string[]
 }>
 
 /**
@@ -202,6 +213,7 @@ export type ConnectionLifecycleErrorCode =
   | 'connection_external_state_invalid'
   | 'connection_provider_metadata_invalid'
   | 'connection_idempotency_conflict'
+  | 'connection_persistence_invalid'
 
 export class ConnectionLifecycleError extends Error {
   readonly code: ConnectionLifecycleErrorCode
@@ -228,6 +240,122 @@ export function connectionLeaseRef(value: string): ConnectionLeaseRef {
   return value as ConnectionLeaseRef
 }
 
+export function parsePersistedConnection(value: unknown): Connection {
+  return parsePersistence(() => parseConnectionRecord(value))
+}
+
+export function parsePersistedConnectionShare(value: unknown): ConnectionShare {
+  return parsePersistence(() => {
+    const row = persistedRecord(value)
+    persistedExactKeys(row, ['shareRef', 'connectionRef', 'connectionGeneration', 'owningAccountRef', 'granteeAccountRef', 'lifecycle', 'createdAt', 'action'])
+    const action = parseActionRecord(row.action)
+    const share = freezeShare({
+      shareRef: connectionShareRef(persistedString(row.shareRef)),
+      connectionRef: connectionRef(persistedString(row.connectionRef)),
+      connectionGeneration: persistedGeneration(row.connectionGeneration),
+      owningAccountRef: accountRef(persistedString(row.owningAccountRef)),
+      granteeAccountRef: accountRef(persistedString(row.granteeAccountRef)),
+      lifecycle: persistedLiteral(row.lifecycle, ['active'] as const),
+      createdAt: validTimestamp(persistedNumber(row.createdAt)),
+      action,
+    })
+    requirePersisted(share.owningAccountRef !== share.granteeAccountRef
+      && action.operation === 'share'
+      && action.activeAccountRef === share.owningAccountRef
+      && action.occurredAt === share.createdAt
+      && stringArraysEqual(action.resourceRefs, connectionResourceRefs(share.connectionRef, share.granteeAccountRef)))
+    return share
+  })
+}
+
+export function parsePersistedConnectionLease(value: unknown): ConnectionLease {
+  return parsePersistence(() => {
+    const row = persistedRecord(value)
+    persistedExactKeys(row, ['leaseRef', 'connectionRef', 'connectionGeneration', 'owningAccountRef', 'activeAccountRef', 'actorPrincipalRef', 'grantRef', 'grantGeneration', 'expiresAt', 'createdAt', 'action'])
+    const action = parseActionRecord(row.action)
+    const lease = freezeLease({
+      leaseRef: connectionLeaseRef(persistedString(row.leaseRef)),
+      connectionRef: connectionRef(persistedString(row.connectionRef)),
+      connectionGeneration: persistedGeneration(row.connectionGeneration),
+      owningAccountRef: accountRef(persistedString(row.owningAccountRef)),
+      activeAccountRef: accountRef(persistedString(row.activeAccountRef)),
+      actorPrincipalRef: principalRef(persistedString(row.actorPrincipalRef)),
+      grantRef: validOpaque(persistedString(row.grantRef), 'connection_persistence_invalid'),
+      grantGeneration: persistedGeneration(row.grantGeneration),
+      expiresAt: validTimestamp(persistedNumber(row.expiresAt)),
+      createdAt: validTimestamp(persistedNumber(row.createdAt)),
+      action,
+    })
+    requirePersisted(lease.expiresAt > lease.createdAt
+      && action.operation === 'lease'
+      && action.activeAccountRef === lease.activeAccountRef
+      && action.actorPrincipalRef === lease.actorPrincipalRef
+      && action.grantRef === lease.grantRef
+      && action.grantGeneration === lease.grantGeneration
+      && action.occurredAt === lease.createdAt
+      && stringArraysEqual(action.resourceRefs, connectionResourceRefs(lease.connectionRef)))
+    return lease
+  })
+}
+
+export function parsePersistedConnectionEffectAdmission(value: unknown): ConnectionEffectAdmission {
+  return parsePersistence(() => {
+    const row = persistedRecord(value)
+    persistedExactKeys(row, ['effectRef', 'leaseRef', 'connectionRef', 'connectionGeneration', 'owningAccountRef', 'activeAccountRef', 'actorPrincipalRef', 'grantRef', 'grantGeneration', 'admittedAt', 'action'])
+    const action = parseActionRecord(row.action)
+    const admission = freezeAdmission({
+      effectRef: connectionEffectRef(persistedString(row.effectRef)),
+      leaseRef: connectionLeaseRef(persistedString(row.leaseRef)),
+      connectionRef: connectionRef(persistedString(row.connectionRef)),
+      connectionGeneration: persistedGeneration(row.connectionGeneration),
+      owningAccountRef: accountRef(persistedString(row.owningAccountRef)),
+      activeAccountRef: accountRef(persistedString(row.activeAccountRef)),
+      actorPrincipalRef: principalRef(persistedString(row.actorPrincipalRef)),
+      grantRef: validOpaque(persistedString(row.grantRef), 'connection_persistence_invalid'),
+      grantGeneration: persistedGeneration(row.grantGeneration),
+      admittedAt: validTimestamp(persistedNumber(row.admittedAt)),
+      action,
+    })
+    requirePersisted(action.operation === 'begin_effect'
+      && action.activeAccountRef === admission.activeAccountRef
+      && action.actorPrincipalRef === admission.actorPrincipalRef
+      && action.grantRef === admission.grantRef
+      && action.grantGeneration === admission.grantGeneration
+      && action.occurredAt === admission.admittedAt
+      && stringArraysEqual(action.resourceRefs, connectionResourceRefs(admission.connectionRef)))
+    return admission
+  })
+}
+
+export function parsePersistedConnectionLifecycleCommand(value: unknown): ConnectionLifecycleCommand {
+  return parsePersistence(() => {
+    const row = persistedRecord(value)
+    persistedExactKeys(row, ['operation', 'connectionRef', 'expectedGeneration', 'requestedExternalState', 'action', 'result'])
+    const operation = persistedLiteral(row.operation, ['refresh', 'revoke', 'delete'] as const)
+    const action = parseActionRecord(row.action)
+    const result = parseConnectionRecord(row.result)
+    const command = freezeLifecycleCommand({
+      operation,
+      connectionRef: connectionRef(persistedString(row.connectionRef)),
+      expectedGeneration: persistedGeneration(row.expectedGeneration),
+      requestedExternalState: validExternalState(persistedExternalState(row.requestedExternalState)),
+      action,
+      result,
+    })
+    const expectedLifecycle = operation === 'refresh' ? 'active' : operation === 'revoke' ? 'revoked' : 'deleted'
+    requirePersisted(action.operation === operation
+      && command.connectionRef === result.connectionRef
+      && result.generation === command.expectedGeneration + 1
+      && result.revision === result.generation
+      && result.lifecycle === expectedLifecycle
+      && result.action.snapshotRef === action.snapshotRef
+      && result.action.occurredAt === action.occurredAt
+      && externalStatesEqual(command.requestedExternalState, result.externalState))
+    assertReplayAuthority(result.action, action)
+    return command
+  })
+}
+
 export class ConnectionLifecycleService {
   readonly #store: ConnectionLifecycleStore
   readonly #authority: ConnectionActionAuthority
@@ -250,6 +378,7 @@ export class ConnectionLifecycleService {
     grantRef: string
     providerNamespace: string
     providerLocator?: string
+    secretRef?: SecretRef
     externalState: ConnectionExternalState
   }>): Promise<Connection> {
     const providerNamespace = validOpaque(input.providerNamespace, 'connection_provider_metadata_invalid')
@@ -257,12 +386,14 @@ export class ConnectionLifecycleService {
       ? undefined
       : validOpaque(input.providerLocator, 'connection_provider_metadata_invalid')
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority('install', input.context, input.grantRef, undefined, undefined, async (snapshot, action, timestamp) => {
+    const installedSecretRef = input.secretRef === undefined ? undefined : secretRef(input.secretRef)
+    const resources = installResourceRefs(providerNamespace, providerLocator, installedSecretRef)
+    return await this.#withAuthority('install', input.context, input.grantRef, undefined, undefined, resources, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getConnectionByInstallIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
           assertReplayAuthority(replay.installAction, action)
-          if (replay.providerNamespace !== providerNamespace || replay.providerLocator !== providerLocator || !externalStatesEqual(replay.installedExternalState, externalState)) {
+          if (replay.providerNamespace !== providerNamespace || replay.providerLocator !== providerLocator || replay.secretRef !== installedSecretRef || !externalStatesEqual(replay.installedExternalState, externalState)) {
             throw new ConnectionLifecycleError('connection_idempotency_conflict')
           }
           return replay
@@ -275,6 +406,7 @@ export class ConnectionLifecycleService {
           installedByPrincipalRef: snapshot.actorPrincipalRef,
           providerNamespace,
           ...(providerLocator === undefined ? {} : { providerLocator }),
+          ...(installedSecretRef === undefined ? {} : { secretRef: installedSecretRef }),
           installedExternalState: externalState,
           externalState,
           lifecycle: 'active',
@@ -299,7 +431,7 @@ export class ConnectionLifecycleService {
   }>): Promise<ConnectionLease> {
     const ref = connectionRef(input.connectionRef)
     const expiresAt = validTimestamp(input.expiresAt)
-    return await this.#withAuthority('lease', input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('lease', input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       if (expiresAt <= timestamp || expiresAt > snapshot.grantExpiresAt) {
         throw new ConnectionLifecycleError('connection_lease_expired')
       }
@@ -345,7 +477,7 @@ export class ConnectionLifecycleService {
   }>): Promise<ConnectionShare> {
     const ref = connectionRef(input.connectionRef)
     const granteeAccountRef = accountRef(input.granteeAccountRef)
-    return await this.#withAuthority('share', input.context, input.grantRef, ref, granteeAccountRef, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('share', input.context, input.grantRef, ref, granteeAccountRef, connectionResourceRefs(ref, granteeAccountRef), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const connection = await requiredConnection(transaction, ref)
         if (connection.lifecycle !== 'active') throw new ConnectionLifecycleError('connection_not_active')
@@ -390,7 +522,7 @@ export class ConnectionLifecycleService {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority('refresh', input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('refresh', input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
@@ -450,7 +582,7 @@ export class ConnectionLifecycleService {
     const leaseRef = connectionLeaseRef(input.leaseRef)
     const lease = await this.#store.transact(async (transaction) => await transaction.getLease(leaseRef))
     if (lease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
-    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, lease.connectionRef, undefined, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, lease.connectionRef, undefined, connectionResourceRefs(lease.connectionRef), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const currentLease = await transaction.getLease(leaseRef)
         if (currentLease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
@@ -501,7 +633,7 @@ export class ConnectionLifecycleService {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority(operation, input.context, input.grantRef, ref, undefined, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority(operation, input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
@@ -541,6 +673,7 @@ export class ConnectionLifecycleService {
     grantRefInput: string,
     connectionRefInput: ConnectionRef | undefined,
     counterpartyAccountRef: AccountRef | undefined,
+    resourceRefsInput: readonly string[],
     consequence: (snapshot: ConnectionActionSnapshot, action: ConnectionAction, timestamp: number) => Promise<Result>,
   ): Promise<Result> {
     const requestTime = validTimestamp(this.#now())
@@ -551,25 +684,29 @@ export class ConnectionLifecycleService {
       idempotencyRef: validOpaque(context.idempotencyRef, 'connection_authority_invalid'),
     })
     const grantRef = validOpaque(grantRefInput, 'connection_authority_invalid')
+    const resourceRefs = validResourceRefs(resourceRefsInput)
     return await this.#authority.withCurrentAuthority({
       operation,
       context: validContext,
       grantRef,
       ...(connectionRefInput === undefined ? {} : { connectionRef: connectionRefInput }),
       ...(counterpartyAccountRef === undefined ? {} : { counterpartyAccountRef }),
+      resourceRefs,
       now: requestTime,
     }, async (snapshotInput) => {
       const consequenceTime = validTimestamp(this.#now())
       if (consequenceTime < requestTime) throw new ConnectionLifecycleError('connection_timestamp_invalid')
-      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, consequenceTime)
+      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, resourceRefs, consequenceTime)
       const action = Object.freeze({
         operation,
+        snapshotRef: snapshot.snapshotRef,
         actorPrincipalRef: snapshot.actorPrincipalRef,
         activeAccountRef: snapshot.activeAccountRef,
         grantRef: snapshot.grantRef,
         grantGeneration: snapshot.grantGeneration,
         correlationRef: validContext.correlationRef,
         idempotencyRef: validContext.idempotencyRef,
+        resourceRefs: snapshot.resourceRefs,
         occurredAt: consequenceTime,
       })
       return await consequence(snapshot, action, consequenceTime)
@@ -595,6 +732,133 @@ function generateStableRef<Ref extends string>(
 function validTimestamp(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0) throw new ConnectionLifecycleError('connection_timestamp_invalid')
   return value
+}
+
+function parsePersistence<Value>(parse: () => Value): Value {
+  try {
+    return parse()
+  } catch {
+    throw new ConnectionLifecycleError('connection_persistence_invalid')
+  }
+}
+
+function persistedRecord(value: unknown): Record<string, unknown> {
+  requirePersisted(typeof value === 'object' && value !== null && !Array.isArray(value))
+  return value as Record<string, unknown>
+}
+
+function persistedString(value: unknown): string {
+  requirePersisted(typeof value === 'string')
+  return value
+}
+
+function persistedNumber(value: unknown): number {
+  requirePersisted(typeof value === 'number')
+  return value
+}
+
+function persistedGeneration(value: unknown): number {
+  const generation = persistedNumber(value)
+  requirePersisted(Number.isSafeInteger(generation) && generation > 0)
+  return generation
+}
+
+function persistedLiteral<const Value extends string>(value: unknown, values: readonly Value[]): Value {
+  const literal = persistedString(value)
+  requirePersisted(values.includes(literal as Value))
+  return literal as Value
+}
+
+function persistedExternalState(value: unknown): ConnectionExternalState {
+  const state = persistedRecord(value)
+  persistedExactKeys(state, ['kind', 'value'])
+  const kind = persistedLiteral(state.kind, ['known', 'unknown'] as const)
+  const stateValue = persistedString(state.value)
+  return kind === 'known'
+    ? { kind, value: stateValue as KnownConnectionExternalState }
+    : { kind, value: stateValue }
+}
+
+function requirePersisted(condition: boolean): asserts condition {
+  if (!condition) throw new ConnectionLifecycleError('connection_persistence_invalid')
+}
+
+function parseActionRecord(value: unknown): ConnectionAction {
+  const action = persistedRecord(value)
+  persistedExactKeys(action, ['operation', 'snapshotRef', 'actorPrincipalRef', 'activeAccountRef', 'grantRef', 'grantGeneration', 'correlationRef', 'idempotencyRef', 'resourceRefs', 'occurredAt'])
+  return freezeAction({
+    operation: persistedLiteral(action.operation, ['install', 'share', 'lease', 'refresh', 'revoke', 'delete', 'begin_effect'] as const),
+    snapshotRef: delegationSnapshotRef(persistedString(action.snapshotRef)),
+    actorPrincipalRef: principalRef(persistedString(action.actorPrincipalRef)),
+    activeAccountRef: accountRef(persistedString(action.activeAccountRef)),
+    grantRef: validOpaque(persistedString(action.grantRef), 'connection_persistence_invalid'),
+    grantGeneration: persistedGeneration(action.grantGeneration),
+    correlationRef: validOpaque(persistedString(action.correlationRef), 'connection_persistence_invalid'),
+    idempotencyRef: validOpaque(persistedString(action.idempotencyRef), 'connection_persistence_invalid'),
+    resourceRefs: validResourceRefs(persistedStringArray(action.resourceRefs)),
+    occurredAt: validTimestamp(persistedNumber(action.occurredAt)),
+  })
+}
+
+function persistedStringArray(value: unknown): readonly string[] {
+  requirePersisted(Array.isArray(value))
+  return value.map(persistedString)
+}
+
+function persistedExactKeys(record: Record<string, unknown>, allowed: readonly string[]): void {
+  requirePersisted(Object.keys(record).every((key) => allowed.includes(key)))
+}
+
+function parseConnectionRecord(value: unknown): Connection {
+  const row = persistedRecord(value)
+  persistedExactKeys(row, ['connectionRef', 'owningAccountRef', 'installedByPrincipalRef', 'providerNamespace', 'providerLocator', 'secretRef', 'installedExternalState', 'externalState', 'lifecycle', 'generation', 'revision', 'createdAt', 'updatedAt', 'installAction', 'action'])
+  const providerNamespace = validOpaque(persistedString(row.providerNamespace), 'connection_persistence_invalid')
+  const providerLocator = row.providerLocator === undefined
+    ? undefined
+    : validOpaque(persistedString(row.providerLocator), 'connection_persistence_invalid')
+  const installedSecretRef = row.secretRef === undefined ? undefined : secretRef(persistedString(row.secretRef))
+  const installAction = parseActionRecord(row.installAction)
+  const action = parseActionRecord(row.action)
+  const connection = freezeConnection({
+    connectionRef: connectionRef(persistedString(row.connectionRef)),
+    owningAccountRef: accountRef(persistedString(row.owningAccountRef)),
+    installedByPrincipalRef: principalRef(persistedString(row.installedByPrincipalRef)),
+    providerNamespace,
+    ...(providerLocator === undefined ? {} : { providerLocator }),
+    ...(installedSecretRef === undefined ? {} : { secretRef: installedSecretRef }),
+    installedExternalState: validExternalState(persistedExternalState(row.installedExternalState)),
+    externalState: validExternalState(persistedExternalState(row.externalState)),
+    lifecycle: persistedLiteral(row.lifecycle, CONNECTION_LIFECYCLES),
+    generation: persistedGeneration(row.generation),
+    revision: persistedGeneration(row.revision),
+    createdAt: validTimestamp(persistedNumber(row.createdAt)),
+    updatedAt: validTimestamp(persistedNumber(row.updatedAt)),
+    installAction,
+    action,
+  })
+  const expectedAction = connection.generation === 1
+    ? 'install'
+    : connection.lifecycle === 'active'
+      ? 'refresh'
+      : connection.lifecycle === 'revoked'
+        ? 'revoke'
+        : 'delete'
+  requirePersisted(connection.generation === connection.revision
+    && connection.updatedAt >= connection.createdAt
+    && (connection.generation !== 1 || connection.updatedAt === connection.createdAt)
+    && (connection.generation !== 1 || connection.lifecycle === 'active')
+    && installAction.operation === 'install'
+    && installAction.activeAccountRef === connection.owningAccountRef
+    && installAction.actorPrincipalRef === connection.installedByPrincipalRef
+    && installAction.occurredAt === connection.createdAt
+    && stringArraysEqual(installAction.resourceRefs, installResourceRefs(providerNamespace, providerLocator, installedSecretRef))
+    && action.operation === expectedAction
+    && action.activeAccountRef === connection.owningAccountRef
+    && action.occurredAt === connection.updatedAt
+    && (action.operation === 'install'
+      ? actionsEqualExceptTimestamp(installAction, action)
+      : stringArraysEqual(action.resourceRefs, connectionResourceRefs(connection.connectionRef))))
+  return connection
 }
 
 function validPositiveGeneration(value: number): number {
@@ -628,11 +892,21 @@ function externalStatesEqual(left: ConnectionExternalState, right: ConnectionExt
 }
 
 function assertReplayAuthority(left: ConnectionAction, right: ConnectionAction): void {
-  if (left.actorPrincipalRef !== right.actorPrincipalRef
-    || left.grantRef !== right.grantRef
-    || left.grantGeneration !== right.grantGeneration) {
+  if (!actionsEqualExceptTimestamp(left, right)) {
     throw new ConnectionLifecycleError('connection_idempotency_conflict')
   }
+}
+
+function actionsEqualExceptTimestamp(left: ConnectionAction, right: ConnectionAction): boolean {
+  return left.snapshotRef === right.snapshotRef
+    && left.operation === right.operation
+    && left.actorPrincipalRef === right.actorPrincipalRef
+    && left.activeAccountRef === right.activeAccountRef
+    && left.grantRef === right.grantRef
+    && left.grantGeneration === right.grantGeneration
+    && left.correlationRef === right.correlationRef
+    && left.idempotencyRef === right.idempotencyRef
+    && stringArraysEqual(left.resourceRefs, right.resourceRefs)
 }
 
 function replayLifecycleCommand(
@@ -657,18 +931,50 @@ function validAuthoritySnapshot(
   snapshot: ConnectionActionSnapshot,
   context: AccountActionContext,
   grantRef: string,
+  resourceRefs: readonly string[],
   timestamp: number,
 ): ConnectionActionSnapshot {
+  const snapshotRef = delegationSnapshotRef(snapshot.snapshotRef)
   const actorPrincipalRef = principalRef(snapshot.actorPrincipalRef)
   const activeAccountRef = accountRef(snapshot.activeAccountRef)
   const snapshotGrantRef = validOpaque(snapshot.grantRef, 'connection_authority_invalid')
   const grantGeneration = validPositiveGeneration(snapshot.grantGeneration)
   const grantExpiresAt = validTimestamp(snapshot.grantExpiresAt)
+  const snapshotResourceRefs = validResourceRefs(snapshot.resourceRefs)
   if (actorPrincipalRef !== context.actorPrincipalRef || activeAccountRef !== context.activeAccountRef || snapshotGrantRef !== grantRef) {
     throw new ConnectionLifecycleError('connection_authority_invalid')
   }
   if (grantExpiresAt <= timestamp) throw new ConnectionLifecycleError('connection_grant_expired')
-  return Object.freeze({ actorPrincipalRef, activeAccountRef, grantRef: snapshotGrantRef, grantGeneration, grantExpiresAt })
+  if (!stringArraysEqual(snapshotResourceRefs, resourceRefs)) throw new ConnectionLifecycleError('connection_authority_invalid')
+  return Object.freeze({ snapshotRef, actorPrincipalRef, activeAccountRef, grantRef: snapshotGrantRef, grantGeneration, grantExpiresAt, resourceRefs: snapshotResourceRefs })
+}
+
+function installResourceRefs(namespace: string, locator: string | undefined, installedSecretRef: SecretRef | undefined): readonly string[] {
+  return validResourceRefs([
+    `connection-provider:${namespace}`,
+    ...(locator === undefined ? [] : [`connection-provider:${namespace}:${locator}`]),
+    ...(installedSecretRef === undefined ? [] : [`secret:${installedSecretRef}`]),
+  ])
+}
+
+function connectionResourceRefs(ref: ConnectionRef, counterparty?: AccountRef): readonly string[] {
+  return validResourceRefs([
+    `connection:${ref}`,
+    ...(counterparty === undefined ? [] : [`account:${counterparty}`]),
+  ])
+}
+
+function validResourceRefs(values: readonly string[]): readonly string[] {
+  if (!Array.isArray(values) || values.length === 0 || values.length > 64) {
+    throw new ConnectionLifecycleError('connection_authority_invalid')
+  }
+  const resources = values.map((value) => validOpaque(value, 'connection_authority_invalid'))
+  if (new Set(resources).size !== resources.length) throw new ConnectionLifecycleError('connection_authority_invalid')
+  return Object.freeze(resources)
+}
+
+function stringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 async function requiredConnection(transaction: ConnectionLifecycleTransaction, ref: ConnectionRef): Promise<Connection> {
@@ -720,28 +1026,32 @@ function freezeConnection(connection: Connection): Connection {
     ...connection,
     installedExternalState: Object.freeze({ ...connection.installedExternalState }),
     externalState: Object.freeze({ ...connection.externalState }),
-    installAction: Object.freeze({ ...connection.installAction }),
-    action: Object.freeze({ ...connection.action }),
+    installAction: freezeAction(connection.installAction),
+    action: freezeAction(connection.action),
   })
 }
 
 function freezeLease(lease: ConnectionLease): ConnectionLease {
-  return Object.freeze({ ...lease, action: Object.freeze({ ...lease.action }) })
+  return Object.freeze({ ...lease, action: freezeAction(lease.action) })
 }
 
 function freezeShare(share: ConnectionShare): ConnectionShare {
-  return Object.freeze({ ...share, action: Object.freeze({ ...share.action }) })
+  return Object.freeze({ ...share, action: freezeAction(share.action) })
 }
 
 function freezeAdmission(admission: ConnectionEffectAdmission): ConnectionEffectAdmission {
-  return Object.freeze({ ...admission, action: Object.freeze({ ...admission.action }) })
+  return Object.freeze({ ...admission, action: freezeAction(admission.action) })
 }
 
 function freezeLifecycleCommand(command: ConnectionLifecycleCommand): ConnectionLifecycleCommand {
   return Object.freeze({
     ...command,
     requestedExternalState: Object.freeze({ ...command.requestedExternalState }),
-    action: Object.freeze({ ...command.action }),
+    action: freezeAction(command.action),
     result: command.result,
   })
+}
+
+function freezeAction(action: ConnectionAction): ConnectionAction {
+  return Object.freeze({ ...action, resourceRefs: Object.freeze([...action.resourceRefs]) })
 }

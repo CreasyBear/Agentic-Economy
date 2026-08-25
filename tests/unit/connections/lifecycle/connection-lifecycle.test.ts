@@ -7,6 +7,11 @@ import {
   connectionLeaseRef,
   connectionRef,
   connectionShareRef,
+  parsePersistedConnection,
+  parsePersistedConnectionEffectAdmission,
+  parsePersistedConnectionLease,
+  parsePersistedConnectionLifecycleCommand,
+  parsePersistedConnectionShare,
   type Connection,
   type ConnectionActionAuthority,
   type ConnectionActionRequest,
@@ -23,6 +28,8 @@ import {
   type ConnectionShare,
   type ConnectionShareRef,
 } from '../../../../src/modules/connections/lifecycle/public'
+import { delegationSnapshotRef } from '../../../../src/modules/authority/delegation/public'
+import { secretRef } from '../../../../src/modules/secrets/public'
 import {
   accountRef,
   principalRef,
@@ -82,18 +89,22 @@ class MemoryAuthority implements ConnectionActionAuthority {
   generation = 1
   expiresAt = Number.MAX_SAFE_INTEGER
   beforeConsequence?: (request: ConnectionActionRequest) => void
-  override?: (request: ConnectionActionRequest, snapshot: ConnectionActionSnapshot) => ConnectionActionSnapshot
+  override: ((request: ConnectionActionRequest, snapshot: ConnectionActionSnapshot) => ConnectionActionSnapshot) | undefined
+  readonly requests: ConnectionActionRequest[] = []
 
   async withCurrentAuthority<Result>(
     request: ConnectionActionRequest,
     consequence: (snapshot: ConnectionActionSnapshot) => Promise<Result>,
   ): Promise<Result> {
+    this.requests.push(request)
     const snapshot = Object.freeze({
+      snapshotRef: delegationSnapshotRef('das_00000000000000000000000000000001'),
       actorPrincipalRef: request.context.actorPrincipalRef,
       activeAccountRef: request.context.activeAccountRef,
       grantRef: request.grantRef,
       grantGeneration: this.generation,
       grantExpiresAt: this.expiresAt,
+      resourceRefs: request.resourceRefs,
     })
     this.beforeConsequence?.(request)
     return await consequence(this.override?.(request, snapshot) ?? snapshot)
@@ -224,6 +235,168 @@ describe('Connection lifecycle validation and references', () => {
 })
 
 describe('Connection install and authority provenance', () => {
+  it('binds exact authority snapshot, canonical resources and optional SecretRef through replay', async () => {
+    const setup = harness()
+    const installedSecretRef = secretRef('sec_00000000000000000000000000000001')
+    const input = {
+      context: setup.context('composed-install'),
+      grantRef: 'grant:owner',
+      providerNamespace: 'oauth/acme',
+      providerLocator: 'tenant-42',
+      secretRef: installedSecretRef,
+      externalState: { kind: 'known', value: 'ready' } as const,
+    }
+    const installed = await setup.service.install(input)
+
+    expect(installed.secretRef).toBe(installedSecretRef)
+    expect(installed.action.snapshotRef).toBe('das_00000000000000000000000000000001')
+    expect(setup.authority.requests[0]?.resourceRefs).toEqual([
+      'connection-provider:oauth/acme',
+      'connection-provider:oauth/acme:tenant-42',
+      `secret:${installedSecretRef}`,
+    ])
+    expect(installed.action.resourceRefs).toEqual(setup.authority.requests[0]?.resourceRefs)
+    setup.setNow(1_001)
+    await expect(setup.service.install(input)).resolves.toBe(installed)
+
+    setup.authority.override = (_request, snapshot) => ({
+      ...snapshot,
+      snapshotRef: delegationSnapshotRef('das_00000000000000000000000000000002'),
+    })
+    await expectCode(setup.service.install(input), 'connection_idempotency_conflict')
+
+    setup.authority.override = (_request, snapshot) => ({ ...snapshot, resourceRefs: ['connection-provider:forged'] })
+    await expectCode(setup.service.install({ ...input, context: setup.context('resource-forgery') }), 'connection_authority_invalid')
+    setup.authority.override = undefined
+    await expectCode(setup.service.install({ ...input, secretRef: secretRef('sec_00000000000000000000000000000002') }), 'connection_idempotency_conflict')
+  })
+
+  it('deep-copies, freezes and rejects malformed persisted lifecycle records', async () => {
+    const setup = harness()
+    const connection = await setup.service.install({
+      context: setup.context('parse-install'),
+      grantRef: 'grant:owner',
+      providerNamespace: 'oauth/acme',
+      secretRef: secretRef('sec_00000000000000000000000000000001'),
+      externalState: { kind: 'known', value: 'ready' },
+    })
+    const share = await setup.service.share({
+      connectionRef: connection.connectionRef,
+      granteeAccountRef: setup.otherAccountRef,
+      context: setup.context('parse-share'),
+      grantRef: 'grant:owner',
+    })
+    const activeLease = await lease(setup, connection, 'parse-lease')
+    const admission = await setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('parse-effect') })
+    const refreshed = await setup.service.refresh({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'unknown', value: 'provider_timeout' },
+      context: setup.context('parse-refresh'),
+      grantRef: 'grant:owner',
+    })
+    const command = [...setup.store.commands.values()][0]!
+    const source = structuredClone(refreshed)
+    const parsed = parsePersistedConnection(source)
+    ;(source.externalState as { value: string }).value = 'mutated'
+    expect(parsed.externalState.value).toBe('provider_timeout')
+    expect(Object.isFrozen(parsed)).toBe(true)
+    expect(Object.isFrozen(parsed.action.resourceRefs)).toBe(true)
+    expect(parsePersistedConnectionShare(structuredClone(share))).toEqual(share)
+    expect(parsePersistedConnectionLease(structuredClone(activeLease))).toEqual(activeLease)
+    expect(parsePersistedConnectionEffectAdmission(structuredClone(admission))).toEqual(admission)
+    expect(parsePersistedConnectionLifecycleCommand(structuredClone(command))).toEqual(command)
+
+    const revoked = await setup.service.revoke({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 2,
+      externalState: { kind: 'known', value: 'revoked' },
+      context: setup.context('parse-revoke'),
+      grantRef: 'grant:owner',
+    })
+    const deleted = await setup.service.delete({
+      connectionRef: connection.connectionRef,
+      expectedGeneration: 3,
+      externalState: { kind: 'known', value: 'deleted' },
+      context: setup.context('parse-delete'),
+      grantRef: 'grant:owner',
+    })
+    expect(parsePersistedConnection(structuredClone(connection))).toEqual(connection)
+    expect(parsePersistedConnection(structuredClone(revoked))).toEqual(revoked)
+    expect(parsePersistedConnection(structuredClone(deleted))).toEqual(deleted)
+    for (const lifecycleCommand of [...setup.store.commands.values()]) {
+      expect(parsePersistedConnectionLifecycleCommand(structuredClone(lifecycleCommand))).toEqual(lifecycleCommand)
+    }
+
+    const located = await install(harness(), 'parse-locator-no-secret')
+    expect(parsePersistedConnection(structuredClone(located))).toEqual(located)
+
+    const invalidRows: readonly [() => unknown, (value: unknown) => unknown][] = [
+      [() => ({ ...structuredClone(refreshed), revision: 1 }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), updatedAt: 999 }), parsePersistedConnection],
+      [() => ({ ...structuredClone(connection), lifecycle: 'revoked' }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), installAction: { ...refreshed.installAction, operation: 'share' } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), installAction: { ...refreshed.installAction, activeAccountRef: setup.otherAccountRef } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), installAction: { ...refreshed.installAction, actorPrincipalRef: setup.otherPrincipalRef } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), installAction: { ...refreshed.installAction, occurredAt: 999 } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), installAction: { ...refreshed.installAction, resourceRefs: ['connection-provider:forged'] } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), action: { ...refreshed.action, operation: 'delete' } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), action: { ...refreshed.action, activeAccountRef: setup.otherAccountRef } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), action: { ...refreshed.action, occurredAt: 999 } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), action: { ...refreshed.action, resourceRefs: ['connection:forged'] } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), secretRef: 'secret-material' }), parsePersistedConnection],
+      [() => ({ ...structuredClone(refreshed), secretMaterial: 'must-never-persist' }), parsePersistedConnection],
+      [() => ({ ...structuredClone(connection), action: { ...connection.action, resourceRefs: ['connection-provider:forged'] } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(share), granteeAccountRef: share.owningAccountRef }), parsePersistedConnectionShare],
+      [() => ({ ...structuredClone(activeLease), expiresAt: activeLease.createdAt }), parsePersistedConnectionLease],
+      [() => ({ ...structuredClone(admission), action: { ...admission.action, operation: 'lease' } }), parsePersistedConnectionEffectAdmission],
+      [() => ({ ...structuredClone(command), expectedGeneration: Number.MAX_SAFE_INTEGER + 1 }), parsePersistedConnectionLifecycleCommand],
+      [() => null, parsePersistedConnection],
+      [() => ({ ...structuredClone(connection), action: { ...connection.action, resourceRefs: [] } }), parsePersistedConnection],
+      [() => ({ ...structuredClone(connection), action: { ...connection.action, resourceRefs: ['connection:duplicate', 'connection:duplicate'] } }), parsePersistedConnection],
+    ]
+    for (const [makeValue, parse] of invalidRows) {
+      expect(() => parse(makeValue())).toThrowError(expect.objectContaining({ code: 'connection_persistence_invalid' }))
+    }
+  })
+
+  it('rejects persisted timestamp contradictions while tolerating later retry time', async () => {
+    const setup = harness()
+    const installed = await install(setup, 'timestamp-coherence-install')
+    const refreshed = await setup.service.refresh({
+      connectionRef: installed.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'known', value: 'ready' },
+      context: setup.context('timestamp-coherence-refresh'),
+      grantRef: 'grant:owner',
+    })
+    const command = [...setup.store.commands.values()][0]!
+    const mismatchedCommand = {
+      ...structuredClone(command),
+      action: { ...structuredClone(command.action), occurredAt: command.action.occurredAt + 1 },
+    }
+    expect(() => parsePersistedConnectionLifecycleCommand(mismatchedCommand)).toThrowError(
+      expect.objectContaining({ code: 'connection_persistence_invalid' }),
+    )
+
+    const splitInstallTime = {
+      ...structuredClone(installed),
+      createdAt: 900,
+      installAction: { ...structuredClone(installed.installAction), occurredAt: 900 },
+    }
+    expect(() => parsePersistedConnection(splitInstallTime)).toThrowError(
+      expect.objectContaining({ code: 'connection_persistence_invalid' }),
+    )
+
+    setup.setNow(1_001)
+    await expect(setup.service.refresh({
+      connectionRef: installed.connectionRef,
+      expectedGeneration: 1,
+      externalState: { kind: 'known', value: 'ready' },
+      context: setup.context('timestamp-coherence-refresh'),
+      grantRef: 'grant:owner',
+    })).resolves.toBe(refreshed)
+  })
   it('replays an identical install but rejects every conflicting replay dimension', async () => {
     const setup = harness()
     const firstInput = { context: setup.context('install-replay'), grantRef: 'grant:owner', providerNamespace: 'oauth/acme', providerLocator: 'provider-locator', externalState: { kind: 'known', value: 'ready' } as const }
@@ -245,6 +418,7 @@ describe('Connection install and authority provenance', () => {
     const setup = harness()
     const context = setup.context('authority-bound-replay')
     await setup.service.install({ context, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } })
+    await expectCode(setup.service.install({ context: { ...context, correlationRef: 'correlation:drifted' }, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
     await expectCode(setup.service.install({ context: { ...context, actorPrincipalRef: setup.otherPrincipalRef }, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
     await expectCode(setup.service.install({ context, grantRef: 'grant:other', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
     setup.authority.generation = 2
@@ -319,6 +493,9 @@ describe('Connection sharing and leasing', () => {
     const shared = await setup.service.share(input)
     await expect(setup.service.share(input)).resolves.toBe(shared)
     await expectCode(setup.service.share({ ...input, granteeAccountRef: accountRef('acc_00000000000000000000000000000003') }), 'connection_idempotency_conflict')
+    setup.store.shares.set(shared.shareRef, { ...shared, connectionRef: connectionRef('con_ffffffffffffffffffffffffffffffff') })
+    await expectCode(setup.service.share(input), 'connection_idempotency_conflict')
+    setup.store.shares.set(shared.shareRef, shared)
     await expect(setup.service.share({ ...input, context: setup.context('dedupe') })).resolves.toBe(shared)
     setup.store.shares.set(shared.shareRef, { ...shared, granteeAccountRef: accountRef('acc_00000000000000000000000000000003') })
     await expectCode(setup.service.share({ ...input, context: setup.context('collision') }), 'connection_share_ref_conflict')

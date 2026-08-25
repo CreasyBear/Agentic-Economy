@@ -20,6 +20,8 @@ import {
   type AccountRef,
   type PrincipalRef,
 } from '../../src/modules/principal-account/public'
+import { delegationSnapshotRef } from '../../src/modules/authority/delegation/public'
+import { secretRef } from '../../src/modules/secrets/public'
 
 class ContractStore implements ConnectionLifecycleStore {
   readonly connections = new Map<string, Connection>()
@@ -64,17 +66,21 @@ class ContractStore implements ConnectionLifecycleStore {
 
 class ContractAuthority implements ConnectionActionAuthority {
   readonly generations = new Map<string, number>()
+  readonly requests: ConnectionActionRequest[] = []
 
   async withCurrentAuthority<Result>(
     request: ConnectionActionRequest,
     consequence: (snapshot: ConnectionActionSnapshot) => Promise<Result>,
   ): Promise<Result> {
+    this.requests.push(request)
     return await consequence(Object.freeze({
+      snapshotRef: delegationSnapshotRef('das_00000000000000000000000000000001'),
       actorPrincipalRef: request.context.actorPrincipalRef,
       activeAccountRef: request.context.activeAccountRef,
       grantRef: request.grantRef,
       grantGeneration: this.generations.get(request.grantRef) ?? 1,
       grantExpiresAt: 100_000,
+      resourceRefs: request.resourceRefs,
     }))
   }
 }
@@ -110,11 +116,13 @@ function fixture() {
 describe('P2-03 canonical Connection lifecycle contract', () => {
   it('installs a stable Account-owned Connection and admits an attributed generation-pinned lease', async () => {
     const setup = fixture()
+    const installedSecretRef = secretRef('sec_00000000000000000000000000000001')
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install'),
       grantRef: 'grant:owner',
       providerNamespace: 'oauth/acme',
       providerLocator: 'provider-connection-42',
+      secretRef: installedSecretRef,
       externalState: { kind: 'known', value: 'ready' },
     })
     const lease = await setup.service.lease({
@@ -134,6 +142,16 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       installedByPrincipalRef: setup.ownerPrincipalRef,
       generation: 1,
       lifecycle: 'active',
+      secretRef: installedSecretRef,
+    })
+    expect(setup.authority.requests[0]?.resourceRefs).toEqual([
+      'connection-provider:oauth/acme',
+      'connection-provider:oauth/acme:provider-connection-42',
+      `secret:${installedSecretRef}`,
+    ])
+    expect(installed.action).toMatchObject({
+      snapshotRef: 'das_00000000000000000000000000000001',
+      resourceRefs: setup.authority.requests[0]?.resourceRefs,
     })
     expect(lease).toMatchObject({
       connectionRef: installed.connectionRef,

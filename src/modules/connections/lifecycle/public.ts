@@ -7,6 +7,11 @@ export {
   connectionLeaseRef,
   connectionRef,
   connectionShareRef,
+  parsePersistedConnection,
+  parsePersistedConnectionEffectAdmission,
+  parsePersistedConnectionLease,
+  parsePersistedConnectionLifecycleCommand,
+  parsePersistedConnectionShare,
 } from './lifecycle'
 export type {
   Connection,
