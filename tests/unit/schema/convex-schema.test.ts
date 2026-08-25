@@ -50,6 +50,16 @@ const durableTables = [
   'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
+  'authorityDelegationGrants',
+  'authorityDelegationSnapshots',
+  'authorityDelegationSnapshotAncestors',
+  'connections',
+  'connectionShares',
+  'connectionLeases',
+  'connectionEffectAdmissions',
+  'connectionLifecycleCommands',
+  'secretPointers',
+  'secretPointerCommands',
   'owners',
   'businesses',
   'businessOfferings',
@@ -152,6 +162,40 @@ const requiredIndexes = {
     'by_principalRef_and_lifecycle',
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
+  ],
+  authorityDelegationGrants: [
+    'by_grantRef',
+    'by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef',
+  ],
+  authorityDelegationSnapshots: [
+    'by_snapshotRef',
+    'by_accountRef_and_actorPrincipalRef_and_idempotencyRef',
+  ],
+  authorityDelegationSnapshotAncestors: ['by_snapshotRef_and_position'],
+  connections: [
+    'by_connectionRef',
+    'by_owningAccountRef_and_installAction_idempotencyRef',
+  ],
+  connectionShares: [
+    'by_shareRef',
+    'by_connectionRef_and_granteeAccountRef_and_lifecycle',
+    'by_owningAccountRef_and_action_idempotencyRef',
+  ],
+  connectionLeases: [
+    'by_leaseRef',
+    'by_activeAccountRef_and_action_idempotencyRef',
+  ],
+  connectionEffectAdmissions: [
+    'by_effectRef',
+    'by_activeAccountRef_and_action_idempotencyRef',
+  ],
+  connectionLifecycleCommands: [
+    'by_action_activeAccountRef_and_action_idempotencyRef',
+  ],
+  secretPointers: ['by_secretRef'],
+  secretPointerCommands: [
+    'by_accountRef_and_idempotencyRef',
+    'by_secretRef_and_newRevision',
   ],
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
   moneyLedgerEntries: [
@@ -268,7 +312,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(63)
+    expect(durableTables).toHaveLength(73)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
