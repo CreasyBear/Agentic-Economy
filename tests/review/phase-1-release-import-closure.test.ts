@@ -2,13 +2,16 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { globSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { build } from 'esbuild'
 import { describe, expect, it } from 'vitest'
 
-const legacyModuleImport = /modules\/(?:answer(?:-thread)?|external-run|harness)(?:\/|['"])/u
+import {
+  bundledCliInputs,
+  legacyInputs,
+  legacyModuleImport,
+} from '../imports/support/operation-product-dependency-closure'
 
 describe('Phase 1 repair acceptance — CLI import closure', () => {
-  it('proves the repaired source-file scan misses a transitive legacy dependency bundled into the CLI', async () => {
+  it('rejects a transitive legacy dependency bundled into the CLI', async () => {
     const fixture = mkdtempSync(join(tmpdir(), 'ae-phase-1-import-closure-'))
     mkdirSync(join(fixture, 'tools', 'ae'), { recursive: true })
     mkdirSync(join(fixture, 'src', 'modules', 'answer'), { recursive: true })
@@ -21,23 +24,15 @@ describe('Phase 1 repair acceptance — CLI import closure', () => {
       legacyModuleImport.test(readFileSync(join(fixture, path), 'utf8'))
     ))).toEqual([])
 
-    const bundle = await build({
-      absWorkingDir: fixture,
-      entryPoints: ['tools/ae/cli.ts'],
-      bundle: true,
-      platform: 'node',
-      format: 'esm',
-      target: 'node20',
-      legalComments: 'none',
-      write: false,
-    })
-    expect(bundle.outputFiles).toHaveLength(1)
-    expect(legacyModuleImport.test(bundle.outputFiles[0]!.text)).toBe(true)
+    const closure = await bundledCliInputs('tools/ae/cli.ts', fixture)
+    expect(legacyInputs(closure)).toEqual(['src/modules/answer/index.ts'])
   })
 
-  it('confirms the repaired production gate no longer inspects the freshly built CLI bundle', () => {
+  it('confirms the production gate is hermetic and closure-aware', () => {
     const gateSource = readFileSync('tests/imports/operation-product-legacy-independence.test.ts', 'utf8')
     expect(gateSource).not.toContain("'packages/cli/dist/ae.js'")
     expect(gateSource).toContain("...globSync('tools/ae/**/*.ts')")
+    expect(gateSource).toContain("bundledCliInputs('tools/ae/cli.ts')")
+    expect(gateSource).toContain('legacyInputs(cliInputs)')
   })
 })

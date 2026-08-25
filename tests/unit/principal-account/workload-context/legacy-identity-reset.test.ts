@@ -7,10 +7,12 @@ import {
   executeLegacyIdentityReset,
   planLegacyIdentityReset,
   type CanonicalIdentityTable,
+  type LegacyIdentityResetActionContext,
   type LegacyIdentityResetApplyReceipt,
   type LegacyIdentityResetExecutionPort,
   type LegacyIdentityResetExecutionIdentity,
   type LegacyIdentityResetPlan,
+  type LegacyIdentityResetReconciliationSnapshot,
   type LegacyIdentityResetTrustedExecution,
   type LegacyIdentityTable,
 } from '../../../../tools/maturity-reset/public'
@@ -37,32 +39,66 @@ async function createPlan(targets: readonly string[] = LEGACY_IDENTITY_RESET_MAN
 class MemoryExecutionPort implements LegacyIdentityResetExecutionPort {
   readonly receipts = new Map<string, LegacyIdentityResetApplyReceipt>()
   readonly executions = new Map<string, LegacyIdentityResetTrustedExecution>()
+  readonly postCounts = new Map<LegacyIdentityTable | CanonicalIdentityTable, number>([
+    ['owners', 0],
+    ['agentAccessPrincipals', 0],
+    ...CANONICAL_IDENTITY_TABLES.map((table) => [table, counts[table]] as const),
+  ])
   applyCalls = 0
   receiptOverride?: LegacyIdentityResetApplyReceipt
   executionOverride?: LegacyIdentityResetTrustedExecution
+  snapshotOverride?: LegacyIdentityResetReconciliationSnapshot
 
-  async findReceipt(planDigest: string): Promise<LegacyIdentityResetApplyReceipt | undefined> {
-    return this.receipts.get(planDigest)
+  readonly mutation = {
+    applyExact: async (plan: LegacyIdentityResetPlan, context: LegacyIdentityResetActionContext) => {
+      this.applyCalls += 1
+      const receipt = this.receiptOverride !== undefined ? this.receiptOverride : Object.freeze({
+        planDigest: plan.planDigest,
+        executionRef: 'reset-execution:memory',
+        transactionRef: 'reset-transaction:memory',
+        removed: Object.freeze(plan.targets.map(({ table, measuredFacts }) => Object.freeze({ table, facts: measuredFacts }))),
+        createdAt: 100,
+        createdBy: context,
+      })
+      this.receipts.set(plan.planDigest, receipt)
+      if (this.receiptOverride === undefined) {
+        this.executions.set(receipt.executionRef, trustedExecution(plan, receipt))
+      }
+      return receipt
+    },
   }
 
-  async applyExact(plan: LegacyIdentityResetPlan): Promise<LegacyIdentityResetApplyReceipt> {
-    this.applyCalls += 1
-    const receipt = this.receiptOverride !== undefined ? this.receiptOverride : Object.freeze({
-      planDigest: plan.planDigest,
-      executionRef: 'reset-execution:memory',
-      transactionRef: 'reset-transaction:memory',
-      removed: Object.freeze(plan.targets.map(({ table, measuredFacts }) => Object.freeze({ table, facts: measuredFacts }))),
-    })
-    this.receipts.set(plan.planDigest, receipt)
-    if (this.receiptOverride === undefined) {
-      this.executions.set(receipt.executionRef, trustedExecution(plan, receipt))
-    }
-    return receipt
+  readonly evidence = {
+    findReceipt: async (planDigest: string) => this.receipts.get(planDigest),
+    readTrustedExecution: async (identity: LegacyIdentityResetExecutionIdentity) => (
+      this.executionOverride ?? this.executions.get(identity.executionRef)
+    ),
   }
 
-  async readTrustedExecution(identity: LegacyIdentityResetExecutionIdentity): Promise<LegacyIdentityResetTrustedExecution | undefined> {
-    return this.executionOverride ?? this.executions.get(identity.executionRef)
+  readonly inventory = {
+    readSnapshot: async () => this.snapshotOverride !== undefined
+      ? this.snapshotOverride
+      : ({
+          observationRef: 'reset-observation:memory',
+          observedAt: 101,
+          counts: [
+            ...LEGACY_IDENTITY_RESET_MANIFEST.map(({ table }) => ({ table, facts: this.postCounts.get(table) ?? 0 })),
+            ...CANONICAL_IDENTITY_TABLES.map((table) => ({ table, facts: this.postCounts.get(table) ?? 0 })),
+          ],
+        }),
   }
+}
+
+const resetContext: LegacyIdentityResetActionContext = Object.freeze({
+  actorPrincipalRef: 'prn_00000000000000000000000000000001',
+  activeAccountRef: 'acc_00000000000000000000000000000001',
+  activeAccountRevision: 7,
+  correlationRef: 'correlation:reset:test',
+  idempotencyRef: 'idempotency:reset:test',
+})
+
+function applyOptions(plan: LegacyIdentityResetPlan) {
+  return { apply: true, confirmedPlanDigest: plan.planDigest, context: resetContext } as const
 }
 
 function receiptFor(plan: LegacyIdentityResetPlan): LegacyIdentityResetApplyReceipt {
@@ -71,6 +107,8 @@ function receiptFor(plan: LegacyIdentityResetPlan): LegacyIdentityResetApplyRece
     executionRef: 'reset-execution:test',
     transactionRef: 'reset-transaction:test',
     removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+    createdAt: 100,
+    createdBy: resetContext,
   }
 }
 
@@ -146,7 +184,8 @@ describe('legacy internal identity reset planning and execution', () => {
     const port = new MemoryExecutionPort()
     await expectCode(executeLegacyIdentityReset(plan, port, { apply: true }), 'reset_apply_digest_required')
     await expectCode(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: `sha256:${'0'.repeat(64)}` }), 'reset_plan_digest_invalid')
-    const applied = await executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest })
+    await expectCode(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }), 'reset_action_context_required')
+    const applied = await executeLegacyIdentityReset(plan, port, applyOptions(plan))
     expect(applied).toMatchObject({
       mode: 'applied',
       executionRef: 'reset-execution:memory',
@@ -162,11 +201,54 @@ describe('legacy internal identity reset planning and execution', () => {
     expect(port.applyCalls).toBe(1)
   })
 
+  it('rejects malformed action attribution and non-independent execution capabilities', async () => {
+    const plan = await createPlan()
+    const port = new MemoryExecutionPort()
+    const invalidContexts: readonly unknown[] = [
+      null,
+      { ...resetContext, actorPrincipalRef: 1 },
+      { ...resetContext, actorPrincipalRef: 'bad ref' },
+      { ...resetContext, activeAccountRef: 1 },
+      { ...resetContext, activeAccountRef: 'bad ref' },
+      { ...resetContext, activeAccountRevision: 1.5 },
+      { ...resetContext, activeAccountRevision: 0 },
+      { ...resetContext, correlationRef: 1 },
+      { ...resetContext, correlationRef: 'bad ref' },
+      { ...resetContext, idempotencyRef: 1 },
+      { ...resetContext, idempotencyRef: 'bad ref' },
+    ]
+    for (const context of invalidContexts) {
+      await expectCode(executeLegacyIdentityReset(plan, port, {
+        apply: true,
+        confirmedPlanDigest: plan.planDigest,
+        context: context as LegacyIdentityResetActionContext,
+      }), 'reset_action_context_invalid')
+    }
+
+    const invalidPorts: readonly unknown[] = [
+      null,
+      { ...port, mutation: null },
+      { ...port, evidence: null },
+      { ...port, inventory: null },
+      { ...port, mutation: {} },
+      { ...port, evidence: { readTrustedExecution: port.evidence.readTrustedExecution } },
+      { ...port, evidence: { findReceipt: port.evidence.findReceipt } },
+      { ...port, inventory: {} },
+    ]
+    for (const invalidPort of invalidPorts) {
+      await expectCode(executeLegacyIdentityReset(
+        plan,
+        invalidPort as LegacyIdentityResetExecutionPort,
+        applyOptions(plan),
+      ), 'reset_port_trust_invalid')
+    }
+  })
+
   it('replays an exact prior receipt idempotently without a second apply', async () => {
     const plan = await createPlan()
     const port = new MemoryExecutionPort()
-    await executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest })
-    const replay = await executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest })
+    await executeLegacyIdentityReset(plan, port, applyOptions(plan))
+    const replay = await executeLegacyIdentityReset(plan, port, applyOptions(plan))
     expect(replay).toMatchObject({
       mode: 'already-applied',
       executionRef: 'reset-execution:memory',
@@ -182,14 +264,14 @@ describe('legacy internal identity reset planning and execution', () => {
     const replayPort = new MemoryExecutionPort()
     replayPort.receipts.set(plan.planDigest, receipt)
     await expectCode(
-      executeLegacyIdentityReset(plan, replayPort, { apply: true, confirmedPlanDigest: plan.planDigest }),
+      executeLegacyIdentityReset(plan, replayPort, applyOptions(plan)),
       'reset_receipt_untrusted',
     )
 
     const applyPort = new MemoryExecutionPort()
     applyPort.receiptOverride = receipt
     await expectCode(
-      executeLegacyIdentityReset(plan, applyPort, { apply: true, confirmedPlanDigest: plan.planDigest }),
+      executeLegacyIdentityReset(plan, applyPort, applyOptions(plan)),
       'reset_receipt_untrusted',
     )
   })
@@ -208,7 +290,7 @@ describe('legacy internal identity reset planning and execution', () => {
       port.receipts.set(plan.planDigest, receipt)
       port.executionOverride = execution
       await expectCode(
-        executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }),
+        executeLegacyIdentityReset(plan, port, applyOptions(plan)),
         code,
       )
     }
@@ -224,7 +306,7 @@ describe('legacy internal identity reset planning and execution', () => {
       targetPostState: [{ table: 'owners', facts: 1 }, { table: 'agentAccessPrincipals', facts: 0 }],
     }
     await expectCode(
-      executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }),
+      executeLegacyIdentityReset(plan, port, applyOptions(plan)),
       'reset_target_not_empty',
     )
   })
@@ -242,7 +324,16 @@ describe('legacy internal identity reset planning and execution', () => {
       })),
     }
     await expectCode(
-      executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }),
+      executeLegacyIdentityReset(plan, port, applyOptions(plan)),
+      'reset_canonical_count_changed',
+    )
+
+    const independentlyDrifted = new MemoryExecutionPort()
+    independentlyDrifted.receipts.set(plan.planDigest, receipt)
+    independentlyDrifted.executions.set(receipt.executionRef, trustedExecution(plan, receipt))
+    independentlyDrifted.postCounts.set('credentials', counts.credentials + 1)
+    await expectCode(
+      executeLegacyIdentityReset(plan, independentlyDrifted, applyOptions(plan)),
       'reset_canonical_count_changed',
     )
   })
@@ -265,10 +356,30 @@ describe('legacy internal identity reset planning and execution', () => {
       port.receipts.set(plan.planDigest, receipt)
       port.executionOverride = execution
       await expectCode(
-        executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }),
+        executeLegacyIdentityReset(plan, port, applyOptions(plan)),
         'reset_post_state_invalid',
       )
     }
+  })
+
+  it('fails closed on malformed or table-mismatched independent inventory snapshots', async () => {
+    const plan = await createPlan()
+    const receipt = receiptFor(plan)
+    const malformed = new MemoryExecutionPort()
+    malformed.receipts.set(plan.planDigest, receipt)
+    malformed.executions.set(receipt.executionRef, trustedExecution(plan, receipt))
+    malformed.snapshotOverride = null as unknown as LegacyIdentityResetReconciliationSnapshot
+    await expectCode(executeLegacyIdentityReset(plan, malformed, applyOptions(plan)), 'reset_post_state_invalid')
+
+    const mismatched = new MemoryExecutionPort()
+    mismatched.receipts.set(plan.planDigest, receipt)
+    mismatched.executions.set(receipt.executionRef, trustedExecution(plan, receipt))
+    mismatched.snapshotOverride = {
+      observationRef: 'reset-observation:mismatched',
+      observedAt: 101,
+      counts: [],
+    }
+    await expectCode(executeLegacyIdentityReset(plan, mismatched, applyOptions(plan)), 'reset_post_state_invalid')
   })
 
   it('rejects forged or internally inconsistent plans before consulting the execution port', async () => {
@@ -308,6 +419,7 @@ describe('legacy internal identity reset planning and execution', () => {
       { ...base, planDigest: 1 as unknown as string, removed: [] },
       { ...base, executionRef: '' },
       { ...base, transactionRef: '' },
+      { ...base, createdBy: null as unknown as LegacyIdentityResetActionContext },
       { ...base, removed: null as unknown as LegacyIdentityResetApplyReceipt['removed'] },
       { ...base, removed: [null as unknown as LegacyIdentityResetApplyReceipt['removed'][number]] },
       { ...base, removed: [{ table: 1 as unknown as LegacyIdentityTable, facts: 2 }] },
@@ -320,11 +432,11 @@ describe('legacy internal identity reset planning and execution', () => {
     for (const receipt of invalidReceipts) {
       const port = new MemoryExecutionPort()
       port.receiptOverride = receipt
-      await expectCode(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest }), 'reset_receipt_invalid')
+      await expectCode(executeLegacyIdentityReset(plan, port, applyOptions(plan)), 'reset_receipt_invalid')
     }
     const priorPort = new MemoryExecutionPort()
     priorPort.receipts.set(plan.planDigest, invalidReceipts[9]!)
-    await expectCode(executeLegacyIdentityReset(plan, priorPort, { apply: true, confirmedPlanDigest: plan.planDigest }), 'reset_receipt_invalid')
+    await expectCode(executeLegacyIdentityReset(plan, priorPort, applyOptions(plan)), 'reset_receipt_invalid')
   })
 
   it('exposes stable typed errors for callers', () => {

@@ -110,6 +110,8 @@ export type VerifiedRecoveryParticipantApproval = Readonly<{
   expiresAt: number
   verificationRef: string
   lifecycle: 'verified' | 'revoked'
+  createdAt: number
+  createdBy: AccountActionContext
 }>
 
 export type SuccessionAuthorizationParticipant = Readonly<{
@@ -119,7 +121,10 @@ export type SuccessionAuthorizationParticipant = Readonly<{
   participantPrincipalRef: PrincipalRef
   verificationRef: string
   verifiedAt: number
+  recoveryPolicyRevision: number
+  frozenAccountRevision: number
   createdAt: number
+  createdBy: AccountActionContext
 }>
 
 export type SuccessionAuthorization = Readonly<{
@@ -137,6 +142,7 @@ export type SuccessionAuthorization = Readonly<{
   lifecycle: 'active' | 'consumed'
   revision: number
   createdAt: number
+  createdBy: AccountActionContext
   consumedAt?: number
   consumedBy?: AccountActionContext
   successorOwnershipRef?: OwnershipRef
@@ -439,6 +445,7 @@ export class AccountRegistry {
 
       const participantRefs = new Set<PrincipalRef>()
       const verificationRefs = new Set<string>()
+      const approvalIdempotencyRefs = new Set<string>()
       const approvals: VerifiedRecoveryParticipantApproval[] = []
       for (const approvalRef of approvalRefs) {
         const approval = requireTrustedRecoveryApproval({
@@ -451,12 +458,15 @@ export class AccountRegistry {
           timestamp,
         })
         if (participantRefs.has(approval.participantPrincipalRef)
-          || verificationRefs.has(approval.verificationRef)) {
+          || verificationRefs.has(approval.verificationRef)
+          || approvalIdempotencyRefs.has(approval.createdBy.idempotencyRef)) {
           throw new AccountRegistryError('recovery_participant_duplicate')
         }
         await requireActivePrincipal(transaction, approval.participantPrincipalRef)
+        await requireActivePrincipal(transaction, approval.createdBy.actorPrincipalRef)
         participantRefs.add(approval.participantPrincipalRef)
         verificationRefs.add(approval.verificationRef)
+        approvalIdempotencyRefs.add(approval.createdBy.idempotencyRef)
         approvals.push(approval)
       }
       if (await transaction.getSuccessionAuthorization(authorizationRef) !== undefined) {
@@ -478,6 +488,7 @@ export class AccountRegistry {
         lifecycle: 'active',
         revision: 1,
         createdAt: timestamp,
+        createdBy: context,
       })
       const participants = Object.freeze(approvals.map((approval) => Object.freeze({
         authorizationRef,
@@ -486,7 +497,10 @@ export class AccountRegistry {
         participantPrincipalRef: approval.participantPrincipalRef,
         verificationRef: approval.verificationRef,
         verifiedAt: approval.verifiedAt,
+        recoveryPolicyRevision: approval.recoveryPolicyRevision,
+        frozenAccountRevision: approval.frozenAccountRevision,
         createdAt: timestamp,
+        createdBy: context,
       })))
       await transaction.commit({
         successionAuthorizationInsert: authorization,
@@ -1068,11 +1082,24 @@ function requireTrustedRecoveryApproval(input: Readonly<{
   timestamp: number
 }>): VerifiedRecoveryParticipantApproval {
   const { approval, account, incumbentRef, successorRef } = input
-  if (approval === undefined
-    || approval.approvalRef !== input.approvalRef
+  if (approval === undefined) {
+    throw new AccountRegistryError('recovery_participant_approval_invalid')
+  }
+  let createdBy: AccountActionContext
+  try {
+    createdBy = validActionContext(approval.createdBy)
+  } catch {
+    throw new AccountRegistryError('recovery_participant_approval_invalid')
+  }
+  if (approval.approvalRef !== input.approvalRef
     || !OPAQUE_REF_PATTERN.test(approval.approvalRef)
     || !OPAQUE_REF_PATTERN.test(approval.verificationRef)
     || approval.lifecycle !== 'verified'
+    || !Number.isSafeInteger(approval.createdAt)
+    || approval.createdAt < approval.frozenAt
+    || approval.createdAt > approval.verifiedAt
+    || createdBy.activeAccountRef !== account.accountRef
+    || createdBy.actorPrincipalRef !== approval.participantPrincipalRef
     || approval.accountRef !== account.accountRef
     || approval.incumbentOwnerPrincipalRef !== incumbentRef
     || approval.successorOwnerPrincipalRef !== successorRef

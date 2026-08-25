@@ -171,6 +171,8 @@ describe('P1-02 Account ownership and lifecycle contract', () => {
         expiresAt: 6_000,
         verificationRef: `independent-verification:${index + 1}`,
         lifecycle: 'verified',
+        createdAt: 3_500 + index,
+        createdBy: setup.context(active.accountRef, participant, `approve-recovery-${index + 1}`),
       })
     }
     const registered = await setup.registry.registerSuccessionAuthorization({ accountRef: active.accountRef, incumbentOwnerPrincipalRef: owner, successorOwnerPrincipalRef: successor, expectedAccountRevision: suspended.revision, expectedOwnershipRevision: 1, participantApprovalRefs: ['trusted-approval:1', 'trusted-approval:2'], expiresAt: 6_000, context: setup.context(active.accountRef, successor, 'authorize-succession') })

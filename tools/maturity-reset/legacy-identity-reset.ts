@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 const TABLE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,99}$/u
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
+const PRINCIPAL_REF_PATTERN = /^prn_[0-9a-f]{32}$/u
+const ACCOUNT_REF_PATTERN = /^acc_[0-9a-f]{32}$/u
 
 export const LEGACY_IDENTITY_RESET_MANIFEST = Object.freeze([
   Object.freeze({ table: 'owners', reason: 'Legacy Clerk-bound owner identity facts' }),
@@ -50,6 +52,16 @@ export type LegacyIdentityResetApplyReceipt = Readonly<{
   executionRef: string
   transactionRef: string
   removed: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
+  createdAt: number
+  createdBy: LegacyIdentityResetActionContext
+}>
+
+export type LegacyIdentityResetActionContext = Readonly<{
+  actorPrincipalRef: string
+  activeAccountRef: string
+  activeAccountRevision: number
+  correlationRef: string
+  idempotencyRef: string
 }>
 
 export type LegacyIdentityResetExecutionIdentity = Readonly<{
@@ -65,20 +77,45 @@ export type LegacyIdentityResetTrustedExecution = Readonly<{
   removed: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
   targetPostState: readonly Readonly<{ table: LegacyIdentityTable; facts: number }>[]
   retainedCanonicalPostState: readonly Readonly<{ table: CanonicalIdentityTable; facts: number }>[]
+  createdAt: number
+  createdBy: LegacyIdentityResetActionContext
 }>
 
-export type LegacyIdentityResetExecutionPort = Readonly<{
+export type LegacyIdentityResetMutationPort = Readonly<{
+  /** Delete exactly the planned facts and return the transaction receipt. */
+  applyExact(
+    plan: LegacyIdentityResetPlan,
+    context: LegacyIdentityResetActionContext,
+  ): Promise<LegacyIdentityResetApplyReceipt>
+}>
+
+export type LegacyIdentityResetEvidencePort = Readonly<{
   findReceipt(planDigest: string): Promise<LegacyIdentityResetApplyReceipt | undefined>
   /**
-   * Adapter contract: delete exactly the planned facts and durably record the
-   * receipt plus reconciled post-state in one transaction. Live wiring is deferred.
-   */
-  applyExact(plan: LegacyIdentityResetPlan): Promise<LegacyIdentityResetApplyReceipt>
-  /**
-   * Resolve an execution from an adapter-owned durable transaction ledger.
+   * Resolve an execution from an independently owned durable transaction ledger.
    * The receipt is only a lookup hint; it is never proof of execution by itself.
    */
   readTrustedExecution(identity: LegacyIdentityResetExecutionIdentity): Promise<LegacyIdentityResetTrustedExecution | undefined>
+}>
+
+export type LegacyIdentityResetReconciliationSnapshot = Readonly<{
+  observationRef: string
+  observedAt: number
+  counts: readonly Readonly<{
+    table: LegacyIdentityTable | CanonicalIdentityTable
+    facts: number
+  }>[]
+}>
+
+export type LegacyIdentityResetReconciliationPort = Readonly<{
+  /** Return every target and protected count from one consistent database snapshot. */
+  readSnapshot(): Promise<LegacyIdentityResetReconciliationSnapshot>
+}>
+
+export type LegacyIdentityResetExecutionPort = Readonly<{
+  mutation: LegacyIdentityResetMutationPort
+  evidence: LegacyIdentityResetEvidencePort
+  inventory: LegacyIdentityResetReconciliationPort
 }>
 
 export type LegacyIdentityResetResult = Readonly<{
@@ -94,12 +131,15 @@ export type LegacyIdentityResetResult = Readonly<{
 
 export type LegacyIdentityResetErrorCode =
   | 'reset_apply_digest_required'
+  | 'reset_action_context_invalid'
+  | 'reset_action_context_required'
   | 'reset_count_invalid'
   | 'reset_duplicate_target'
   | 'reset_execution_mismatch'
   | 'reset_plan_digest_invalid'
   | 'reset_plan_invalid'
   | 'reset_post_state_invalid'
+  | 'reset_port_trust_invalid'
   | 'reset_protected_target'
   | 'reset_receipt_invalid'
   | 'reset_receipt_untrusted'
@@ -156,8 +196,12 @@ export async function planLegacyIdentityReset(input: Readonly<{
 
 export async function executeLegacyIdentityReset(
   plan: LegacyIdentityResetPlan,
-  port: LegacyIdentityResetExecutionPort,
-  options: Readonly<{ apply?: boolean; confirmedPlanDigest?: string }> = {},
+  ports: LegacyIdentityResetExecutionPort,
+  options: Readonly<{
+    apply?: boolean
+    confirmedPlanDigest?: string
+    context?: LegacyIdentityResetActionContext
+  }> = {},
 ): Promise<LegacyIdentityResetResult> {
   assertValidPlan(plan)
   if (options.apply !== true) return resultFromPlan(plan, 'dry-run')
@@ -167,27 +211,30 @@ export async function executeLegacyIdentityReset(
   if (options.confirmedPlanDigest !== plan.planDigest) {
     throw new LegacyIdentityResetError('reset_plan_digest_invalid')
   }
-  const prior = await port.findReceipt(plan.planDigest)
+  if (options.context === undefined) {
+    throw new LegacyIdentityResetError('reset_action_context_required')
+  }
+  const context = validActionContext(options.context)
+  assertIndependentPorts(ports)
+  const prior = await ports.evidence.findReceipt(plan.planDigest)
   if (prior !== undefined) {
-    assertValidReceipt(plan, prior)
-    await assertTrustedReconciledExecution(plan, prior, port)
+    assertValidReceipt(plan, prior, context)
+    await assertTrustedReconciledExecution(plan, prior, ports.evidence, ports.inventory)
     return resultFromPlan(plan, 'already-applied', prior)
   }
-  const receipt = await port.applyExact(plan)
-  assertValidReceipt(plan, receipt)
-  await assertTrustedReconciledExecution(plan, receipt, port)
+  const receipt = await ports.mutation.applyExact(plan, context)
+  assertValidReceipt(plan, receipt, context)
+  await assertTrustedReconciledExecution(plan, receipt, ports.evidence, ports.inventory)
   return resultFromPlan(plan, 'applied', receipt)
 }
 
 async function assertTrustedReconciledExecution(
   plan: LegacyIdentityResetPlan,
   receipt: LegacyIdentityResetApplyReceipt,
-  port: LegacyIdentityResetExecutionPort,
+  evidence: LegacyIdentityResetEvidencePort,
+  inventory: LegacyIdentityResetReconciliationPort,
 ): Promise<void> {
-  if (typeof port.readTrustedExecution !== 'function') {
-    throw new LegacyIdentityResetError('reset_receipt_untrusted')
-  }
-  const execution = await port.readTrustedExecution({
+  const execution = await evidence.readTrustedExecution({
     executionRef: receipt.executionRef,
     transactionRef: receipt.transactionRef,
   })
@@ -198,7 +245,9 @@ async function assertTrustedReconciledExecution(
     || typeof execution.transactionRef !== 'string'
     || !Array.isArray(execution.removed)
     || !Array.isArray(execution.targetPostState)
-    || !Array.isArray(execution.retainedCanonicalPostState)) {
+    || !Array.isArray(execution.retainedCanonicalPostState)
+    || !sameActionContext(execution.createdBy, receipt.createdBy)
+    || execution.createdAt !== receipt.createdAt) {
     throw new LegacyIdentityResetError('reset_post_state_invalid')
   }
   if (execution.executionRef !== receipt.executionRef) {
@@ -228,6 +277,82 @@ async function assertTrustedReconciledExecution(
     validCount(entry.facts) !== plan.retainedCanonical[index]?.measuredFacts)) {
     throw new LegacyIdentityResetError('reset_canonical_count_changed')
   }
+  const snapshot = await inventory.readSnapshot()
+  if (!isRecord(snapshot)
+    || typeof snapshot.observationRef !== 'string'
+    || !OPAQUE_REF_PATTERN.test(snapshot.observationRef)
+    || !Number.isSafeInteger(snapshot.observedAt)
+    || snapshot.observedAt < receipt.createdAt
+    || !Array.isArray(snapshot.counts)) {
+    throw new LegacyIdentityResetError('reset_post_state_invalid')
+  }
+  const expectedTables = [
+    ...plan.targets.map(({ table }) => table),
+    ...plan.retainedCanonical.map(({ table }) => table),
+  ] as const
+  if (snapshot.counts.length !== expectedTables.length
+    || snapshot.counts.some((entry, index) => !isFactCountEntry(entry)
+      || entry.table !== expectedTables[index])) {
+    throw new LegacyIdentityResetError('reset_post_state_invalid')
+  }
+  for (let index = 0; index < plan.targets.length; index += 1) {
+    if (validCount(snapshot.counts[index]!.facts) !== 0) {
+      throw new LegacyIdentityResetError('reset_target_not_empty')
+    }
+  }
+  for (let index = 0; index < plan.retainedCanonical.length; index += 1) {
+    const observed = snapshot.counts[plan.targets.length + index]!
+    if (validCount(observed.facts) !== plan.retainedCanonical[index]!.measuredFacts) {
+      throw new LegacyIdentityResetError('reset_canonical_count_changed')
+    }
+  }
+}
+
+function assertIndependentPorts(ports: LegacyIdentityResetExecutionPort): void {
+  if (!isRecord(ports)
+    || !isRecord(ports.mutation)
+    || !isRecord(ports.evidence)
+    || !isRecord(ports.inventory)
+    || typeof ports.mutation.applyExact !== 'function'
+    || typeof ports.evidence.findReceipt !== 'function'
+    || typeof ports.evidence.readTrustedExecution !== 'function'
+    || typeof ports.inventory.readSnapshot !== 'function') {
+    throw new LegacyIdentityResetError('reset_port_trust_invalid')
+  }
+  const mutationIdentity: unknown = ports.mutation
+  const evidenceIdentity: unknown = ports.evidence
+  const inventoryIdentity: unknown = ports.inventory
+  if (mutationIdentity === evidenceIdentity
+    || mutationIdentity === inventoryIdentity
+    || evidenceIdentity === inventoryIdentity) {
+    throw new LegacyIdentityResetError('reset_port_trust_invalid')
+  }
+}
+
+function validActionContext(context: LegacyIdentityResetActionContext): LegacyIdentityResetActionContext {
+  if (!isRecord(context)
+    || typeof context.actorPrincipalRef !== 'string'
+    || !PRINCIPAL_REF_PATTERN.test(context.actorPrincipalRef)
+    || typeof context.activeAccountRef !== 'string'
+    || !ACCOUNT_REF_PATTERN.test(context.activeAccountRef)
+    || !Number.isSafeInteger(context.activeAccountRevision)
+    || context.activeAccountRevision < 1
+    || typeof context.correlationRef !== 'string'
+    || !OPAQUE_REF_PATTERN.test(context.correlationRef)
+    || typeof context.idempotencyRef !== 'string'
+    || !OPAQUE_REF_PATTERN.test(context.idempotencyRef)) {
+    throw new LegacyIdentityResetError('reset_action_context_invalid')
+  }
+  return Object.freeze({ ...context })
+}
+
+function sameActionContext(left: unknown, right: LegacyIdentityResetActionContext): boolean {
+  if (!isRecord(left)) return false
+  return left.actorPrincipalRef === right.actorPrincipalRef
+    && left.activeAccountRef === right.activeAccountRef
+    && left.activeAccountRevision === right.activeAccountRevision
+    && left.correlationRef === right.correlationRef
+    && left.idempotencyRef === right.idempotencyRef
 }
 
 function validTargets(values: readonly string[]): readonly LegacyIdentityTable[] {
@@ -311,13 +436,20 @@ function assertValidPlan(plan: LegacyIdentityResetPlan): void {
   }
 }
 
-function assertValidReceipt(plan: LegacyIdentityResetPlan, receipt: LegacyIdentityResetApplyReceipt): void {
+function assertValidReceipt(
+  plan: LegacyIdentityResetPlan,
+  receipt: LegacyIdentityResetApplyReceipt,
+  context: LegacyIdentityResetActionContext,
+): void {
   if (!isRecord(receipt)
     || typeof receipt.planDigest !== 'string'
     || typeof receipt.executionRef !== 'string'
     || !OPAQUE_REF_PATTERN.test(receipt.executionRef)
     || typeof receipt.transactionRef !== 'string'
     || !OPAQUE_REF_PATTERN.test(receipt.transactionRef)
+    || !Number.isSafeInteger(receipt.createdAt)
+    || receipt.createdAt < 0
+    || !sameActionContext(receipt.createdBy, context)
     || !Array.isArray(receipt.removed)
     || receipt.removed.some((entry) => !isRemovedEntry(entry))
     || receipt.planDigest !== plan.planDigest

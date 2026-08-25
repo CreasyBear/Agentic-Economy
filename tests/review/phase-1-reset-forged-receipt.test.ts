@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   executeLegacyIdentityReset,
   planLegacyIdentityReset,
+  type LegacyIdentityResetActionContext,
   type LegacyIdentityResetExecutionPort,
   type LegacyIdentityResetPlan,
 } from '../../tools/maturity-reset/public'
@@ -25,22 +26,40 @@ describe('Phase 1 acceptance — reset receipt provenance', () => {
       targets: ['owners', 'agentAccessPrincipals'],
     })
     let applyCalls = 0
-    const forgedPort = {
-      findReceipt: async (planDigest: string) => ({
-        planDigest,
-        executionRef: 'reset-execution:forged',
-        transactionRef: 'reset-transaction:forged',
-        removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
-      }),
-      applyExact: async (_plan: LegacyIdentityResetPlan) => {
-        applyCalls += 1
-        throw new Error('must not be reached')
+    const context: LegacyIdentityResetActionContext = {
+      actorPrincipalRef: 'prn_00000000000000000000000000000001',
+      activeAccountRef: 'acc_00000000000000000000000000000001',
+      activeAccountRevision: 1,
+      correlationRef: 'correlation:forged-receipt',
+      idempotencyRef: 'idempotency:forged-receipt',
+    }
+    const forgedPort: LegacyIdentityResetExecutionPort = {
+      mutation: {
+        applyExact: async (_plan: LegacyIdentityResetPlan) => {
+          applyCalls += 1
+          throw new Error('must not be reached')
+        },
       },
-    } as unknown as LegacyIdentityResetExecutionPort
+      evidence: {
+        findReceipt: async (planDigest: string) => ({
+          planDigest,
+          executionRef: 'reset-execution:forged',
+          transactionRef: 'reset-transaction:forged',
+          removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+          createdAt: 100,
+          createdBy: context,
+        }),
+        readTrustedExecution: async () => undefined,
+      },
+      inventory: {
+        readSnapshot: async () => ({ observationRef: 'reset-observation:forged', observedAt: 101, counts: [] }),
+      },
+    }
 
     await expect(executeLegacyIdentityReset(plan, forgedPort, {
       apply: true,
       confirmedPlanDigest: plan.planDigest,
+      context,
     })).rejects.toMatchObject({
       name: 'LegacyIdentityResetError',
       code: 'reset_receipt_untrusted',

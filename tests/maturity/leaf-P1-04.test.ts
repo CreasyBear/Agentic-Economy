@@ -21,6 +21,7 @@ import {
   executeLegacyIdentityReset,
   planLegacyIdentityReset,
   type CanonicalIdentityTable,
+  type LegacyIdentityResetActionContext,
   type LegacyIdentityResetApplyReceipt,
   type LegacyIdentityResetExecutionPort,
   type LegacyIdentityResetExecutionIdentity,
@@ -90,30 +91,55 @@ function context(workloadKind: typeof WORKLOAD_KINDS[number]) {
 class ResetPort implements LegacyIdentityResetExecutionPort {
   readonly receipts = new Map<string, LegacyIdentityResetApplyReceipt>()
   readonly executions = new Map<string, LegacyIdentityResetTrustedExecution>()
+  targets: readonly LegacyIdentityTable[] = ['owners']
   applies = 0
 
-  async findReceipt(digest: string): Promise<LegacyIdentityResetApplyReceipt | undefined> { return this.receipts.get(digest) }
-  async applyExact(plan: LegacyIdentityResetPlan): Promise<LegacyIdentityResetApplyReceipt> {
-    this.applies += 1
-    const receipt = {
-      planDigest: plan.planDigest,
-      executionRef: 'reset-execution:p1-04',
-      transactionRef: 'reset-transaction:p1-04',
-      removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
-    }
-    this.receipts.set(plan.planDigest, receipt)
-    this.executions.set(receipt.executionRef, {
-      ...receipt,
-      targetPostState: plan.targets.map(({ table }) => ({ table, facts: 0 })),
-      retainedCanonicalPostState: plan.retainedCanonical.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
-    })
-    return receipt
+  readonly mutation = {
+    applyExact: async (plan: LegacyIdentityResetPlan, context: LegacyIdentityResetActionContext) => {
+      this.applies += 1
+      this.targets = plan.targets.map(({ table }) => table)
+      const receipt = {
+        planDigest: plan.planDigest,
+        executionRef: 'reset-execution:p1-04',
+        transactionRef: 'reset-transaction:p1-04',
+        removed: plan.targets.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+        createdAt: 4_000,
+        createdBy: context,
+      }
+      this.receipts.set(plan.planDigest, receipt)
+      this.executions.set(receipt.executionRef, {
+        ...receipt,
+        targetPostState: plan.targets.map(({ table }) => ({ table, facts: 0 })),
+        retainedCanonicalPostState: plan.retainedCanonical.map(({ table, measuredFacts }) => ({ table, facts: measuredFacts })),
+      })
+      return receipt
+    },
   }
 
-  async readTrustedExecution(identity: LegacyIdentityResetExecutionIdentity): Promise<LegacyIdentityResetTrustedExecution | undefined> {
-    return this.executions.get(identity.executionRef)
+  readonly evidence = {
+    findReceipt: async (digest: string) => this.receipts.get(digest),
+    readTrustedExecution: async (identity: LegacyIdentityResetExecutionIdentity) => this.executions.get(identity.executionRef),
+  }
+
+  readonly inventory = {
+    readSnapshot: async () => ({
+      observationRef: 'reset-observation:p1-04',
+      observedAt: 4_001,
+      counts: [
+        ...this.targets.map((table) => ({ table, facts: 0 })),
+        ...CANONICAL_IDENTITY_TABLES.map((table) => ({ table, facts: 1 })),
+      ],
+    }),
   }
 }
+
+const resetActionContext: LegacyIdentityResetActionContext = Object.freeze({
+  actorPrincipalRef: 'prn_00000000000000000000000000000001',
+  activeAccountRef: 'acc_00000000000000000000000000000001',
+  activeAccountRevision: 1,
+  correlationRef: 'correlation:reset:p1-04',
+  idempotencyRef: 'idempotency:reset:p1-04',
+})
 
 describe('P1-04 workload context and clean reset contract', () => {
   it('admits jobs, crons, callbacks and reconciliation only with one explicit workload Principal and active Account', async () => {
@@ -162,8 +188,9 @@ describe('P1-04 workload context and clean reset contract', () => {
     const plan = await planLegacyIdentityReset({ inventory: { countFacts: async () => 1 }, snapshotRef: 'snapshot:p1-04:apply', targets: ['owners'] })
     const port = new ResetPort()
     await expect(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: 'wrong' })).rejects.toMatchObject({ code: 'reset_plan_digest_invalid' })
-    await expect(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest })).resolves.toMatchObject({ mode: 'applied', factsRemoved: 1, canonicalFactsRetained: 6 })
-    await expect(executeLegacyIdentityReset(plan, port, { apply: true, confirmedPlanDigest: plan.planDigest })).resolves.toMatchObject({ mode: 'already-applied', factsRemoved: 1 })
+    const options = { apply: true, confirmedPlanDigest: plan.planDigest, context: resetActionContext } as const
+    await expect(executeLegacyIdentityReset(plan, port, options)).resolves.toMatchObject({ mode: 'applied', factsRemoved: 1, canonicalFactsRetained: 6 })
+    await expect(executeLegacyIdentityReset(plan, port, options)).resolves.toMatchObject({ mode: 'already-applied', factsRemoved: 1 })
     expect(port.applies).toBe(1)
   })
 })

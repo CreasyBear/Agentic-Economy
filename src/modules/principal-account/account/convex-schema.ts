@@ -93,6 +93,8 @@ export const verifiedRecoveryParticipantApprovalValue = v.object({
   expiresAt: v.number(),
   verificationRef: v.string(),
   lifecycle: recoveryParticipantApprovalLifecycleValue,
+  createdAt: v.number(),
+  createdBy: accountActionContextValue,
 })
 
 export const successionAuthorizationValue = v.object({
@@ -110,6 +112,7 @@ export const successionAuthorizationValue = v.object({
   lifecycle: successionAuthorizationLifecycleValue,
   revision: v.number(),
   createdAt: v.number(),
+  createdBy: accountActionContextValue,
   consumedAt: v.optional(v.number()),
   consumedBy: v.optional(accountActionContextValue),
   successorOwnershipRef: v.optional(v.string()),
@@ -122,7 +125,10 @@ export const successionAuthorizationParticipantValue = v.object({
   participantPrincipalRef: v.string(),
   verificationRef: v.string(),
   verifiedAt: v.number(),
+  recoveryPolicyRevision: v.number(),
+  frozenAccountRevision: v.number(),
   createdAt: v.number(),
+  createdBy: accountActionContextValue,
 })
 
 export const accountTables = {

@@ -7,13 +7,18 @@ export {
 } from './legacy-identity-reset'
 export type {
   CanonicalIdentityTable,
+  LegacyIdentityResetActionContext,
   LegacyIdentityResetApplyReceipt,
   LegacyIdentityResetEntry,
   LegacyIdentityResetErrorCode,
+  LegacyIdentityResetEvidencePort,
   LegacyIdentityResetExecutionPort,
   LegacyIdentityResetExecutionIdentity,
   LegacyIdentityResetInventoryPort,
+  LegacyIdentityResetMutationPort,
   LegacyIdentityResetPlan,
+  LegacyIdentityResetReconciliationPort,
+  LegacyIdentityResetReconciliationSnapshot,
   LegacyIdentityResetResult,
   LegacyIdentityResetTrustedExecution,
   LegacyIdentityTable,

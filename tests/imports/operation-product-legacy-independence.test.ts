@@ -2,6 +2,12 @@ import { readFileSync } from 'node:fs'
 import { globSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+import {
+  bundledCliInputs,
+  legacyInputs,
+  legacyModuleImport,
+} from './support/operation-product-dependency-closure'
+
 const operationProductEntrypoints = [
   ...globSync('tools/ae/**/*.ts'),
   'src/routes/mcp.ts',
@@ -10,10 +16,8 @@ const operationProductEntrypoints = [
   ...globSync('src/routes/api.v1.operations*.ts'),
 ].sort()
 
-const legacyModuleImport = /modules\/(?:answer(?:-thread)?|external-run|harness)(?:\/|['"])/u
-
 describe('Operation product legacy independence', () => {
-  it('keeps CLI, MCP, and Operation HTTP entrypoints independent of the legacy stack', () => {
+  it('keeps CLI, MCP, and Operation HTTP entrypoints independent of the legacy stack', async () => {
     expect(operationProductEntrypoints).toEqual(expect.arrayContaining([
       'tools/ae/cli.ts',
       'src/routes/mcp.ts',
@@ -25,5 +29,9 @@ describe('Operation product legacy independence', () => {
     expect(operationProductEntrypoints.filter((path) => (
       legacyModuleImport.test(readFileSync(path, 'utf8'))
     ))).toEqual([])
+
+    const cliInputs = await bundledCliInputs('tools/ae/cli.ts')
+    expect(cliInputs).toContain('tools/ae/cli.ts')
+    expect(legacyInputs(cliInputs)).toEqual([])
   })
 })

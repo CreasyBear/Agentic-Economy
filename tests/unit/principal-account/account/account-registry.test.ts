@@ -254,6 +254,8 @@ function seedRecoveryApprovals(
       expiresAt: account.updatedAt + 100,
       verificationRef: `trusted-verification:${index + 1}`,
       lifecycle: 'verified',
+      createdAt: account.updatedAt + 1,
+      createdBy: fixture.nextContext(account.accountRef, participantPrincipalRef, `approve-recovery-${index + 1}`),
     }
     const stored = options.mutate?.(approval, index) ?? approval
     fixture.store.seedRecoveryApproval(stored)
@@ -691,7 +693,10 @@ describe('Account registry contract', () => {
       expiresAt: 50,
       verificationRef: `trusted-verification:${index + 1}`,
       lifecycle: 'verified',
+      createdAt: 35 + index,
+      createdBy: fixture.nextContext(active.accountRef, participantPrincipalRef, `approve-recovery-${index + 1}`),
     }))
+    const authorizationContext = fixture.nextContext(active.accountRef, successor, 'authorize-succession')
     const registered = await fixture.registry.registerSuccessionAuthorization({
       accountRef: active.accountRef,
       incumbentOwnerPrincipalRef: created.owner,
@@ -700,7 +705,7 @@ describe('Account registry contract', () => {
       expectedOwnershipRevision: 1,
       participantApprovalRefs: ['approval:1', 'approval:2'],
       expiresAt: 50,
-      context: fixture.nextContext(active.accountRef, successor, 'authorize-succession'),
+      context: authorizationContext,
     })
     const successionInput = {
       accountRef: active.accountRef,
@@ -742,8 +747,16 @@ describe('Account registry contract', () => {
       verifiedParticipantCount: 2,
       lifecycle: 'active',
       revision: 1,
+      createdBy: authorizationContext,
     })
     expect(registered.participants.map((participant) => participant.participantPrincipalRef)).toEqual(participants)
+    expect(registered.participants).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        recoveryPolicyRevision: 1,
+        frozenAccountRevision: suspended.revision,
+        createdBy: authorizationContext,
+      }),
+    ]))
     expect(fixture.store.successionAuthorizations.get(registered.authorization.authorizationRef)).toMatchObject({
       lifecycle: 'consumed',
       revision: 2,
@@ -797,6 +810,8 @@ describe('Account registry contract', () => {
         expiresAt: 40,
         verificationRef: `strict-expiry-verification:${index + 1}`,
         lifecycle: 'verified',
+        createdAt: 35,
+        createdBy: fixture.nextContext(active.accountRef, participantPrincipalRef, `strict-expiry-approval-${index + 1}`),
       })
     }
     await expectCode(fixture.registry.registerSuccessionAuthorization({
@@ -871,6 +886,42 @@ describe('Account registry contract', () => {
     const wrongAccount = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') } : approval })
     await expectCode(register(wrongAccount), 'recovery_participant_approval_invalid')
 
+    const wrongCreationAccount = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdBy: { ...approval.createdBy, activeAccountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') },
+    } : approval })
+    await expectCode(register(wrongCreationAccount), 'recovery_participant_approval_invalid')
+
+    const wrongCreationActor = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdBy: { ...approval.createdBy, actorPrincipalRef: approval.incumbentOwnerPrincipalRef },
+    } : approval })
+    await expectCode(register(wrongCreationActor), 'recovery_participant_approval_invalid')
+
+    const mismatchedCreationTime = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdAt: approval.verifiedAt + 1,
+    } : approval })
+    await expectCode(register(mismatchedCreationTime), 'recovery_participant_approval_invalid')
+
+    const invalidCreationTime = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdAt: 1.5,
+    } : approval })
+    await expectCode(register(invalidCreationTime), 'recovery_participant_approval_invalid')
+
+    const creationBeforeFreeze = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdAt: approval.frozenAt - 1,
+    } : approval })
+    await expectCode(register(creationBeforeFreeze), 'recovery_participant_approval_invalid')
+
+    const malformedCreationContext = await prepare({ mutate: (approval, index) => index === 0 ? {
+      ...approval,
+      createdBy: undefined as unknown as AccountActionContext,
+    } : approval })
+    await expectCode(register(malformedCreationContext), 'recovery_participant_approval_invalid')
+
     const wrongParties = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, successorOwnerPrincipalRef: approval.incumbentOwnerPrincipalRef } : approval })
     await expectCode(register(wrongParties), 'recovery_participant_approval_invalid')
 
@@ -886,7 +937,11 @@ describe('Account registry contract', () => {
     const duplicateParticipant = await prepare()
     const firstApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[0]!)!
     const secondApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[1]!)!
-    duplicateParticipant.fixture.store.seedRecoveryApproval({ ...secondApproval, participantPrincipalRef: firstApproval.participantPrincipalRef })
+    duplicateParticipant.fixture.store.seedRecoveryApproval({
+      ...secondApproval,
+      participantPrincipalRef: firstApproval.participantPrincipalRef,
+      createdBy: { ...secondApproval.createdBy, actorPrincipalRef: firstApproval.participantPrincipalRef },
+    })
     await expectCode(register(duplicateParticipant), 'recovery_participant_duplicate')
 
     const duplicateVerification = await prepare()
@@ -894,6 +949,15 @@ describe('Account registry contract', () => {
     const secondVerification = duplicateVerification.fixture.store.recoveryApprovals.get(duplicateVerification.approvalRefs[1]!)!
     duplicateVerification.fixture.store.seedRecoveryApproval({ ...secondVerification, verificationRef: firstVerification.verificationRef })
     await expectCode(register(duplicateVerification), 'recovery_participant_duplicate')
+
+    const duplicateIdempotency = await prepare()
+    const firstIdempotency = duplicateIdempotency.fixture.store.recoveryApprovals.get(duplicateIdempotency.approvalRefs[0]!)!
+    const secondIdempotency = duplicateIdempotency.fixture.store.recoveryApprovals.get(duplicateIdempotency.approvalRefs[1]!)!
+    duplicateIdempotency.fixture.store.seedRecoveryApproval({
+      ...secondIdempotency,
+      createdBy: { ...secondIdempotency.createdBy, idempotencyRef: firstIdempotency.createdBy.idempotencyRef },
+    })
+    await expectCode(register(duplicateIdempotency), 'recovery_participant_duplicate')
 
     const collision = await prepare()
     collision.fixture.store.successionAuthorizations.set('sau_00000000000040008000000000000003', {} as SuccessionAuthorization)
