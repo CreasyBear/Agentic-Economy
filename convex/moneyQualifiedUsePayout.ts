@@ -1067,6 +1067,8 @@ export async function recordQualifiedUsePayoutAllocation(
     ctx,
     receipt.invocationRef,
   )
+  if (authority.authorityPrincipalRef !== eligibilityPrincipalId)
+    return qualifiedUsePayoutFailure()
   if (authority.authorityResourceRef !== receipt.operationRef)
     return qualifiedUseAuthorityFailure()
   const persistedReceipt = await ctx.db

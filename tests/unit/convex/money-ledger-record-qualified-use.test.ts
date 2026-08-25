@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { qualifiedUseMaterialDigest } from '@/modules/money/public'
-import { requireCanonicalPayoutAuthority } from '../../../convex/moneyQualifiedUsePayout'
+import {
+  buildQualifiedUseReceipt,
+  qualifiedUseMaterialDigest,
+} from '@/modules/money/public'
+import {
+  recordQualifiedUsePayoutAllocation,
+  requireCanonicalPayoutAuthority,
+} from '../../../convex/moneyQualifiedUsePayout'
 
 import {
   MemoryDb,
@@ -285,6 +291,102 @@ describe('exact invocation money reconciliation', () => {
         qualifiedUseArgs({ principalId: 'principal:substitute' }),
       ),
     ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects foreign commercial principal rows even when the caller repeats that principal', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const foreignPrincipalRef = 'prn_99999999999999999999999999999999'
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    const usage = db.rows('moneyUsageEvents').find(
+      (row) => row._id === 'usage:money',
+    )
+    const charge = db.rows('moneyLedgerEntries').find(
+      (row) => row._id === 'entry:charge',
+    )
+    if (transaction === undefined || usage === undefined || charge === undefined)
+      throw new Error('commercial_principal_fixture_missing')
+    transaction.principalId = foreignPrincipalRef
+    usage.principalId = foreignPrincipalRef
+    charge.principalId = foreignPrincipalRef
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ principalId: foreignPrincipalRef }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects a foreign commercial principal at the allocation helper seam', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const foreignPrincipalRef = 'prn_99999999999999999999999999999999'
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    const usage = db.rows('moneyUsageEvents').find(
+      (row) => row._id === 'usage:money',
+    )
+    const charge = db.rows('moneyLedgerEntries').find(
+      (row) => row._id === 'entry:charge',
+    )
+    if (transaction === undefined || usage === undefined || charge === undefined)
+      throw new Error('commercial_principal_fixture_missing')
+    transaction.principalId = foreignPrincipalRef
+    usage.principalId = foreignPrincipalRef
+    charge.principalId = foreignPrincipalRef
+
+    await expect(
+      recordQualifiedUsePayoutAllocation(
+        { db } as never,
+        buildQualifiedUseReceipt(
+          qualifiedUseArgs() as unknown as Parameters<
+            typeof buildQualifiedUseReceipt
+          >[0],
+        ),
+        foreignPrincipalRef,
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects a caller-shaped operation outside the invocation authority', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ operationRef: 'operation:caller-shaped' }),
+      ),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    await expect(
+      recordQualifiedUsePayoutAllocation(
+        { db } as never,
+        buildQualifiedUseReceipt(
+          qualifiedUseArgs({
+            operationRef: 'operation:caller-shaped',
+          }) as unknown as Parameters<typeof buildQualifiedUseReceipt>[0],
+        ),
+        principalId,
+      ),
+    ).rejects.toThrow('qualified_use_authority_invalid')
     expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
     expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
     expect(db.rows('moneyPayouts')).toHaveLength(0)
@@ -769,6 +871,25 @@ describe('exact invocation money reconciliation', () => {
         qualifiedUseArgs({ transactionRef: undefined }),
       ),
     ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects provider-direct replay when its pinned authority Principal drifts', async () => {
+    const db = new MemoryDb()
+    seedCanonicalQualifiedUseAuthority(db)
+    const args = qualifiedUseArgs({ transactionRef: undefined })
+    await expect(qualifiedUseHandler({ db }, args)).resolves.toMatchObject({
+      kind: 'recorded',
+    })
+    const receipt = db.rows('qualifiedUseReceipts')[0]
+    if (receipt === undefined) throw new Error('receipt_fixture_missing')
+    receipt.authorityPrincipalRef = 'prn_99999999999999999999999999999999'
+
+    await expect(qualifiedUseHandler({ db }, args)).rejects.toThrow(
+      'qualified_use_payout_allocation_invalid',
+    )
     expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
     expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
     expect(db.rows('moneyPayouts')).toHaveLength(0)

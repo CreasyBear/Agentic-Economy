@@ -117,6 +117,7 @@ function receiptAuthorityMatches(
 ): boolean {
   const pinned = row as typeof row & Partial<CanonicalQualifiedUseAuthority>
   return pinned.owningAccountRef === authority.owningAccountRef &&
+    pinned.authorityPrincipalRef === authority.authorityPrincipalRef &&
     pinned.authorityGrantRef === authority.authorityGrantRef &&
     pinned.authorityGrantGeneration === authority.authorityGrantGeneration &&
     pinned.authorityResourceRef === authority.authorityResourceRef
@@ -179,6 +180,8 @@ export const recordQualifiedUse = internalMutation({
       ctx,
       args.invocationRef,
     )
+    if (authority.authorityPrincipalRef !== args.principalId)
+      throw new Error('qualified_use_payout_allocation_invalid')
     if (authority.authorityResourceRef !== args.operationRef)
       throw new Error('qualified_use_authority_invalid')
     const candidate = buildQualifiedUseReceipt(args)
