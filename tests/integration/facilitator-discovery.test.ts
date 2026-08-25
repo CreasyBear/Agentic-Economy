@@ -2,13 +2,70 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
 
 import { admitFacilitatorDiscoveryItems } from '../../convex/facilitatorDiscoveryAction'
-import { internal } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
 import { admitRegistryPaymentRequiredItem } from '@/modules/capability-supply/internal/facilitator-discovery-admission'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
 
 describe('facilitator discovery reconciliation', () => {
+  it('reconciles a captured x402 draft with next_token into public current Operation search', async () => {
+    const backend = convexTest(schema, convexModules)
+    const captured = structuredClone(timezoneFixture.paymentRequired)
+    Object.assign(captured.extensions.bazaar.info.input.queryParams, {
+      next_token: 'next-page',
+    })
+    Object.assign(
+      captured.extensions.bazaar.schema.properties.input.properties.queryParams.properties,
+      {
+        next_token: {
+          type: 'string',
+          description: 'Public pagination cursor returned by the provider.',
+        },
+      },
+    )
+
+    const admission = await admitFacilitatorDiscoveryItems([captured])
+    expect(admission.skipped).toEqual([])
+    expect(admission.admitted).toHaveLength(1)
+    const item = admission.admitted[0]
+    if (item === undefined) throw new Error('expected captured cursor admission')
+    expect(item.execution.query).toEqual(expect.arrayContaining([
+      { inputPointer: '/next_token', parameter: 'next_token', required: false },
+    ]))
+
+    const reconciled = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
+      items: [item],
+      complete: false,
+      deadlineAt: Date.now() + 60_000,
+    })
+    expect(reconciled).toMatchObject({ admitted: 1, published: 1, skipped: 0 })
+
+    const persisted = await backend.run(async (ctx) => ({
+      businesses: await ctx.db.query('businesses').collect(),
+      connections: await ctx.db.query('capabilityProviderConnections').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
+      currentOperations: await ctx.db.query('capabilityCurrentOperations').collect(),
+    }))
+    expect(persisted.businesses).toHaveLength(1)
+    expect(persisted.connections).toHaveLength(1)
+    expect(persisted.publications).toHaveLength(1)
+    expect(persisted.currentOperations).toHaveLength(1)
+    expect(persisted.currentOperations[0]?.operationRef).toBe(
+      persisted.publications[0]?.operationRef,
+    )
+
+    const search = await backend.query(api.capabilitySupplyOperations.search, {
+      query: 'timezone',
+      limit: 20,
+    })
+    expect(search.kind).toBe('ok')
+    if (search.kind !== 'ok') throw new Error(`expected public search result:${search.kind}`)
+    expect(search.items.map(({ operationRef }) => operationRef)).toContain(
+      persisted.publications[0]?.operationRef,
+    )
+  })
+
   it('creates deterministic provider state and replays the same publication', async () => {
     const backend = convexTest(schema, convexModules)
     const deadlineAt = Date.now() + 60_000
