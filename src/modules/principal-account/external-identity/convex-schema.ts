@@ -41,6 +41,19 @@ export const credentialLifecycleValue = v.union(
   v.literal('revoked'),
 )
 
+export const credentialExpiryMaterializationValue = v.object({
+  state: v.union(
+    v.literal('scheduled'),
+    v.literal('reconciliation_required'),
+    v.literal('expired'),
+  ),
+  credentialGeneration: v.number(),
+  credentialExpiresAt: v.number(),
+  scheduleNonce: v.string(),
+  scheduleRef: v.optional(v.string()),
+  materializedAt: v.number(),
+})
+
 export const credentialValue = v.object({
   credentialRef: v.string(),
   bindingRef: v.string(),
@@ -52,6 +65,9 @@ export const credentialValue = v.object({
   revision: v.number(),
   issuedAt: v.number(),
   expiresAt: v.number(),
+  // Optional only for staged deployment. Interactive authority rejects rows
+  // without a matching generation-bound materialization until backfilled.
+  expiryMaterialization: v.optional(credentialExpiryMaterializationValue),
   updatedAt: v.number(),
   predecessorCredentialRef: v.optional(v.string()),
   staleAt: v.optional(v.number()),

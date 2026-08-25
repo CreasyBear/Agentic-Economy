@@ -12,6 +12,24 @@ import {
 } from './capability-supply-owner-funnel-harness'
 
 describe('owner supply funnel read', () => {
+  it('does not disclose another canonical Account through a legacy owner locator', async () => {
+    const backend = convexTest(schema, modules)
+    const { businessId } = await createPublishedBusinessOwner(
+      backend,
+      'owner-funnel-account-a',
+    )
+    const { owner: foreignOwner } = await createPublishedBusinessOwner(
+      backend,
+      'owner-funnel-account-b',
+    )
+
+    await expect(
+      foreignOwner.query(api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel, {
+        businessId,
+      }),
+    ).resolves.toEqual({ kind: 'not_found' })
+  })
+
   it('returns a typed incomplete readback before capped joins instead of a false unadmitted operation', async () => {
     const backend = convexTest(schema, modules)
     const { businessId, owner } = await createPublishedBusinessOwner(

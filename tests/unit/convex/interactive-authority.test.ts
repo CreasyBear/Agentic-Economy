@@ -139,34 +139,90 @@ describe('canonical interactive authority', () => {
 
   it('expires authority after a cached fact read without accepting caller-shaped time', async () => {
     const backend = convexTest(schema, modules)
-    await seedAuthority(backend, { expiresAt: NOW + 1 })
-    const authenticated = backend.withIdentity(identity())
+    await seedAuthority(backend, { expiresAt: NOW + 1_000 })
+    const authenticated = backend.withIdentity(identity({ exp: 11 }))
 
     await expect(authenticated.query(readCurrentInteractiveAuthorityFactsRef, {}))
       .resolves.toMatchObject({
         context: { provenance: { resolvedAt: 0 } },
-        credentialExpiresAt: NOW + 1,
+        credentialExpiresAt: NOW + 1_000,
+        authorityMaterializedAt: 6,
       })
     await expect(authenticated.action(resolveCurrentInteractiveAuthorityRef, {}))
       .resolves.toMatchObject({ provenance: { resolvedAt: NOW } })
 
-    vi.setSystemTime(NOW + 1)
+    vi.setSystemTime(NOW + 1_000)
     await expect(authenticated.query(readCurrentInteractiveAuthorityFactsRef, {}))
-      .resolves.toMatchObject({ credentialExpiresAt: NOW + 1 })
+      .resolves.toMatchObject({ credentialExpiresAt: NOW + 1_000 })
     await expect(authenticated.action(resolveCurrentInteractiveAuthorityRef, {})).resolves.toBeNull()
   })
 
-  it('fails authenticated query disclosures closed until expiry is materialized', async () => {
+  it('denies a late-callback read through platform token expiry while durable state is still scheduled', async () => {
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend, { expiresAt: NOW + 1_000 })
+
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity({ exp: 11 }) },
+    }))).resolves.toMatchObject({ kind: 'authenticated_owner' })
+
+    vi.setSystemTime(NOW + 1_000)
+    // Convex returns null once its verified Clerk JWT has expired, even if a
+    // durable scheduled callback has not yet changed the credential row.
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => null },
+    }))).resolves.toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })
+    // A still-valid token cannot bridge the gap unless its verified expiry is
+    // exactly the canonical credential expiry persisted for this generation.
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity({ exp: 12 }) },
+    }))).resolves.toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })
+  })
+
+  it('invalidates account-scoped reads when the canonical credential is revoked', async () => {
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend)
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity() },
+    }))).resolves.toMatchObject({ kind: 'authenticated_owner' })
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('credentials')
+        .withIndex('by_credentialRef', (query) => query.eq('credentialRef', CREDENTIAL_REF)).unique()
+      if (row === null) throw new Error('credential missing')
+      await ctx.db.patch(row._id, { lifecycle: 'revoked', revokedAt: NOW, revision: row.revision + 1 })
+    })
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity() },
+    }))).resolves.toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })
+  })
+
+  it('preserves authenticated account-scoped queries from materialized current facts', async () => {
     const backend = convexTest(schema, modules)
     await seedAuthority(backend)
 
     await expect(backend.run(async (ctx) => resolveBusinessActor({
       db: ctx.db,
       auth: { getUserIdentity: async () => identity() },
-    }))).resolves.toEqual({
-      kind: 'anonymous',
-      anonymousBucket: 'convex:anonymous',
+    }))).resolves.toMatchObject({
+      kind: 'authenticated_owner',
+      canonicalPrincipalRef: PRINCIPAL_REF,
+      canonicalAccountRef: ACCOUNT_REF,
+      authorityProvenance: { resolvedAt: 6 },
     })
+  })
+
+  it('fails unmaterialized credential rollout rows closed without a legacy fallback', async () => {
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend, { omitExpiryMaterialization: true })
+
+    await expect(backend.run(async (ctx) => resolveBusinessActor({
+      db: ctx.db,
+      auth: { getUserIdentity: async () => identity() },
+    }))).resolves.toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })
   })
 
   it.each([
@@ -252,6 +308,7 @@ type SeedOptions = Readonly<{
   credentialGeneration?: number
   credentialLifecycle?: 'active' | 'stale'
   credentialType?: 'provider_token' | 'api_key'
+  omitExpiryMaterialization?: boolean
   issuedAt?: number
   expiresAt?: number
   principalLifecycle?: 'active' | 'suspended'
@@ -321,7 +378,17 @@ async function seedAuthority(backend: Backend, options: SeedOptions = {}): Promi
         issueIdempotencyRef: 'credential:sam',
         revision: 6,
         issuedAt: options.issuedAt ?? 5,
-        expiresAt: options.expiresAt ?? Number.MAX_SAFE_INTEGER,
+        expiresAt: options.expiresAt ?? 20_000,
+        ...(options.omitExpiryMaterialization === true ? {} : {
+          expiryMaterialization: {
+            state: 'scheduled' as const,
+            credentialGeneration: options.credentialGeneration ?? options.bindingGeneration ?? 2,
+            credentialExpiresAt: options.expiresAt ?? 20_000,
+            scheduleNonce: 'sha256:interactive-credential-expiry',
+            scheduleRef: 'scheduled:interactive-credential-expiry',
+            materializedAt: 6,
+          },
+        }),
         updatedAt: 5,
       }
       await ctx.db.insert('credentials', credential)
@@ -477,6 +544,7 @@ function identity(overrides: Partial<UserIdentity> = {}): UserIdentity {
     subject: 'user_sam',
     issuer: 'https://clerk.example.test',
     tokenIdentifier: TOKEN_IDENTIFIER,
+    exp: 20,
     ...overrides,
   }
 }

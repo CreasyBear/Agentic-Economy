@@ -95,12 +95,14 @@ const interactiveAuthorityFactsValue = v.object({
   context: interactiveAuthorityContextValue,
   credentialIssuedAt: v.number(),
   credentialExpiresAt: v.number(),
+  authorityMaterializedAt: v.number(),
 })
 
 type InteractiveAuthorityFacts = Readonly<{
   context: InteractiveBusinessAuthorityContext
   credentialIssuedAt: number
   credentialExpiresAt: number
+  authorityMaterializedAt: number
 }>
 
 const readCurrentInteractiveAuthorityFactsRef = makeFunctionReference<
@@ -167,6 +169,24 @@ export async function resolveInteractiveAuthorityContext(
   return current
 }
 
+/**
+ * Cache-safe query projection. Current validity comes exclusively from the
+ * generation-bound scheduled lifecycle materialized on the credential row.
+ */
+export async function resolveMaterializedInteractiveAuthorityContext(
+  db: AuthorityDb,
+  identity: UserIdentity,
+): Promise<InteractiveBusinessAuthorityContext> {
+  const facts = await resolveInteractiveAuthorityFacts(db, identity)
+  return freezeInteractiveContext({
+    ...facts.context,
+    provenance: {
+      ...facts.context.provenance,
+      resolvedAt: facts.authorityMaterializedAt,
+    },
+  })
+}
+
 async function resolveInteractiveAuthorityFacts(
   db: AuthorityDb,
   identity: UserIdentity,
@@ -219,6 +239,27 @@ async function resolveInteractiveAuthorityFacts(
     credential.expiresAt > credential.issuedAt,
   ]
   if (!credentialWindowChecks.every(Boolean)) {
+    throw new InteractiveAuthorityError('credential_not_current')
+  }
+  // `exp` is the actual JWT expiry verified by Convex before it exposes the
+  // identity. It is used only to bind the credential's time window; canonical
+  // Principal, Account, access, and ownership come exclusively from DB facts.
+  const verifiedTokenExpirySeconds = identity.exp
+  if (!Number.isSafeInteger(verifiedTokenExpirySeconds)
+    || (verifiedTokenExpirySeconds as number) < 1
+    || (verifiedTokenExpirySeconds as number) * 1_000 !== credential.expiresAt) {
+    throw new InteractiveAuthorityError('credential_not_current')
+  }
+  const materialization = credential.expiryMaterialization
+  if (materialization === undefined
+    || materialization.state !== 'scheduled'
+    || materialization.credentialGeneration !== credential.generation
+    || materialization.credentialExpiresAt !== credential.expiresAt
+    || materialization.scheduleRef === undefined
+    || materialization.scheduleRef.trim().length === 0
+    || materialization.scheduleNonce.trim().length === 0
+    || !Number.isSafeInteger(materialization.materializedAt)
+    || materialization.materializedAt < 0) {
     throw new InteractiveAuthorityError('credential_not_current')
   }
 
@@ -345,6 +386,7 @@ async function resolveInteractiveAuthorityFacts(
     context,
     credentialIssuedAt: credential.issuedAt,
     credentialExpiresAt: credential.expiresAt,
+    authorityMaterializedAt: materialization.materializedAt,
   })
 }
 

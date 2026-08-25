@@ -10,7 +10,7 @@ import {
 import { registeredOperationMappingValue } from './capabilitySupplyValues'
 import { toRegisteredOperationMapping } from './capabilitySupplyRowMappers'
 import { eligibleSupplyPorts } from './capabilitySupplyEligiblePorts'
-import { resolveBusinessActor } from './authz'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 import type { Id } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
 import {
@@ -18,7 +18,6 @@ import {
   cancellationValue,
   continuationValue,
   offeringOriginValue,
-  ownsPublishedBusiness,
   presentationValue,
   type ContractRef,
 } from './capabilitySupplyShared'
@@ -246,10 +245,14 @@ export async function authorizeOwnerSupplyActionHandler(
   args: { businessId: Id<'businesses'> },
 ) {
   const actor = await resolveBusinessActor(ctx)
-  return (
-    actor.kind === 'authenticated_owner' &&
-    (await ownsPublishedBusiness(ctx, args.businessId))
-  )
+  if (actor.kind !== 'authenticated_owner') return false
+  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
+  if (owner === null) return false
+  const business = await ctx.db.get(args.businessId)
+  return business !== null &&
+    business.ownerId === owner._id &&
+    business.publicStatus === 'published' &&
+    business.suppressedAt === undefined
 }
 
 export async function recordCapabilityCallEventHandler() {

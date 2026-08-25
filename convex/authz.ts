@@ -15,6 +15,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
 import {
   InteractiveAuthorityError,
   resolveInteractiveAuthorityContext,
+  resolveMaterializedInteractiveAuthorityContext,
 } from './interactiveAuthority'
 type AdminIdentityLookup = Pick<UserIdentity, 'tokenIdentifier'>
 
@@ -50,14 +51,11 @@ export async function resolveBusinessActor(
   let authority: InteractiveBusinessAuthorityContext | null
   try {
     if ('db' in ctx) {
-      // Queries are cached and therefore cannot safely establish wall-clock
-      // credential validity. Until credential expiry is materialized by a
-      // scheduled lifecycle transition, authenticated query disclosures fail
-      // closed. Mutations are non-cached consequence boundaries.
       if (!('scheduler' in ctx) || ctx.scheduler === undefined) {
-        return anonymousBusinessActor()
+        authority = await resolveMaterializedInteractiveAuthorityContext(ctx.db, identity)
+      } else {
+        authority = await resolveInteractiveAuthorityContext(ctx.db, identity)
       }
-      authority = await resolveInteractiveAuthorityContext(ctx.db, identity)
     } else {
       authority = await ctx.runAction(resolveCurrentInteractiveAuthorityRef, {})
     }
@@ -84,6 +82,21 @@ function anonymousBusinessActor(): Extract<BusinessActor, { kind: 'anonymous' }>
     kind: 'anonymous',
     anonymousBucket: 'convex:anonymous',
   })
+}
+
+export async function readCanonicalCompatibilityOwner(
+  db: GenericDatabaseReader<DataModel>,
+  actor: Extract<BusinessActor, { kind: 'authenticated_owner' }>,
+): Promise<Doc<'owners'> | null> {
+  const ownerId = db.normalizeId('owners', actor.legacyOwnerId)
+  if (ownerId === null) return null
+  const owner = await db.get(ownerId)
+  return owner !== null &&
+    String(owner._id) === actor.legacyOwnerId &&
+    owner.canonicalPrincipalRef === actor.canonicalPrincipalRef &&
+    owner.canonicalAccountRef === actor.canonicalAccountRef
+    ? owner
+    : null
 }
 
 export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction): Promise<AdminAuthorityResult> {

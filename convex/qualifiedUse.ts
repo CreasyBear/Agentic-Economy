@@ -7,7 +7,7 @@ import {
   query,
   type QueryCtx,
 } from './_generated/server'
-import { resolveBusinessActor } from './authz'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 import {
   buildQualifiedUseReceipt,
   decideQualifiedUseWrite,
@@ -293,12 +293,7 @@ export const readOwnerQualifiedUse = query({
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
       return { kind: 'error' as const, code: 'unauthenticated' as const }
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_clerkUserId', (q) =>
-        q.eq('clerkUserId', actor.clerkUserId),
-      )
-      .unique()
+    const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
     if (owner === null) return { kind: 'not_found' as const }
     const business = await ctx.db
       .query('businesses')

@@ -5,7 +5,7 @@ import type { QueryCtx } from './_generated/server'
 import type { DataModel, Id } from './_generated/dataModel'
 
 import { literalUnion } from '../src/modules/common/convex-literals'
-import { resolveBusinessActor } from './authz'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 import { loadOfferingSourceState } from './catalogOfferingMutations'
 import { readBusinessSupplyProjectionSnapshot } from './businessSupplyProjectionSnapshot'
 import {
@@ -230,10 +230,7 @@ export async function getCurrentOwnerPublicCatalogHandler(ctx: QueryCtx) {
     return catalogReadNotFound()
   }
 
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
-    .unique()
+  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
   if (owner === null) {
     return catalogReadNotFound()
   }
@@ -255,7 +252,7 @@ export async function getCurrentOwnerPublicCatalogHandler(ctx: QueryCtx) {
 export async function getCurrentOwnerOfferingSupplyHandler(ctx: QueryCtx) {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error' as const, code: 'unauthenticated' as const }
-  const owner = await ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId)).unique()
+  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
   if (owner === null) return { kind: 'not_found' as const }
   const business = await ctx.db
     .query('businesses')

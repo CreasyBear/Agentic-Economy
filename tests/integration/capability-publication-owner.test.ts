@@ -19,6 +19,22 @@ import {
 } from './capability-publication-harness'
 
 describe('capability publication owner', () => {
+  it('preserves canonical owner catalog and editor reads', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { businessId, owner } = await publishedBusinessOwner(
+      backend,
+      'canonical-owner-reads',
+    )
+    await seedCatalogOffering(backend, businessId, 'canonical-owner-reads')
+
+    await expect(
+      owner.query(api.catalog.getCurrentOwnerPublicCatalog, {}),
+    ).resolves.toMatchObject({ kind: 'available' })
+    await expect(
+      owner.query(api.catalog.getCurrentOwnerOfferingSupply, {}),
+    ).resolves.not.toMatchObject({ kind: 'error', code: 'unauthenticated' })
+  })
+
   it('fails closed across readiness, stale health, and withdrawal transitions', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
