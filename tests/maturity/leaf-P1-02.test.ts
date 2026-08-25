@@ -179,9 +179,8 @@ describe('P1-02 Account ownership and lifecycle contract', () => {
 
     await expect(setup.registry.requireActiveContext(context)).resolves.toMatchObject({ accountRef: firstActive.accountRef, actorPrincipalRef: actor })
     await expect(setup.registry.requireActiveContext(setup.context(firstActive.accountRef, stranger, 'stranger'))).rejects.toMatchObject({ code: 'account_context_access_denied' })
-    await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).rejects.toMatchObject({ code: 'account_context_access_denied' })
-    await setup.registry.addMembership({ accountRef: secondActive.accountRef, memberPrincipalRef: actor, expectedAccountRevision: secondActive.revision, context: setup.context(secondActive.accountRef, counterparty, 'cross-account-membership') })
     await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).resolves.toMatchObject({ activeAccountRef: firstActive.accountRef, counterpartyAccountRef: secondActive.accountRef, actorPrincipalRef: actor })
+    expect([...setup.store.memberships.values()].some((membership) => membership.accountRef === secondActive.accountRef && membership.memberPrincipalRef === actor)).toBe(false)
     await expect(setup.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: firstActive.accountRef })).rejects.toMatchObject({ code: 'account_cross_account_self_forbidden' })
   })
 })

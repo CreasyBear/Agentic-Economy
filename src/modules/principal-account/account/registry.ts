@@ -542,7 +542,6 @@ export class AccountRegistry {
       assertLifecycle(counterpartyAccount, 'active', 'account_not_operational')
       await requireActivePrincipal(transaction, context.actorPrincipalRef)
       await requireAccountAccess(transaction, activeAccount, context.actorPrincipalRef)
-      await requireAccountAccess(transaction, counterpartyAccount, context.actorPrincipalRef)
       return Object.freeze({
         ...context,
         counterpartyAccountRef: counterpartyRef,

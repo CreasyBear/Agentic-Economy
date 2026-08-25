@@ -691,23 +691,17 @@ describe('Account registry contract', () => {
       correlationRef: 'correlation:cross-account',
       idempotencyRef: 'idempotency:cross-account',
     })
-    await expectCode(
-      fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef }),
-      'account_context_access_denied',
-    )
-    const counterpartyMembership = await fixture.registry.addMembership({
-      accountRef: secondActive.accountRef,
-      memberPrincipalRef: first.owner,
-      expectedAccountRevision: secondActive.revision,
-      context: fixture.nextContext(secondActive.accountRef, second.owner, 'grant-cross-account-access'),
-    })
     await expect(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: secondActive.accountRef })).resolves.toMatchObject({
       activeAccountRef: firstActive.accountRef,
       counterpartyAccountRef: secondActive.accountRef,
       actorPrincipalRef: first.owner,
       activeAccountRevision: firstActive.revision,
-      counterpartyAccountRevision: counterpartyMembership.account.revision,
+      counterpartyAccountRevision: secondActive.revision,
     })
+    expect([...fixture.store.memberships.values()].some(
+      (membership) => membership.accountRef === secondActive.accountRef
+        && membership.memberPrincipalRef === first.owner,
+    )).toBe(false)
     await expectCode(fixture.registry.attributeCrossAccountAction({ context, counterpartyAccountRef: firstActive.accountRef }), 'account_cross_account_self_forbidden')
   })
 

@@ -5,7 +5,7 @@ Scope: Accounts own tenancy and resources with explicit creation, suspension, cl
 Ownership: src/modules/principal-account/account, tests/unit/principal-account/account, tests/maturity/leaf-P1-02.test.ts
 
 - [x] G1: The leaf's observable outcome is implemented completely under the frozen contract.
-  EVIDENCE: Account, AccountOwnership, Membership, recovery declarations, optimistic revisions, idempotent creation, lifecycle, transfer, succession and account-isolated context attribution are implemented in src/modules/principal-account/account. Active context now requires active ownership or active membership for every asserted Account, including both sides of cross-account attribution; 29 focused unit tests and 5 leaf-contract tests pass with 100% line/branch/function/statement coverage over the canonical module.
+  EVIDENCE: Account, AccountOwnership, Membership, recovery declarations, optimistic revisions, idempotent creation, lifecycle, transfer, succession and account-isolated context attribution are implemented in src/modules/principal-account/account. The exactly-one active Account context requires active ownership or active membership; an explicit cross-account counterparty must independently exist, be active, differ from the context Account and be revision-pinned without becoming a second access context. 29 focused unit tests and 5 leaf-contract tests pass with 100% line/branch/function/statement coverage over the canonical module.
 
 - [x] G2: A leaf-specific executable contract test exists.
   CHECK: cd ../.. && test -f tests/maturity/leaf-P1-02.test.ts && echo LEAF_TEST_PRESENT
@@ -29,4 +29,4 @@ Ownership: src/modules/principal-account/account, tests/unit/principal-account/a
   EVIDENCE: NO_PLACEHOLDERS
 
 - [x] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
-  EVIDENCE: Four original passes plus the independent-verifier correction pass completed. The correction reproduces and closes active-stranger context binding, permits only active owners or active members, checks both Accounts in cross-account attribution, and preserves ownership/membership separation. Final owned lint, typecheck, diff, placeholder, 34-test and 100%-coverage checks pass with no remaining finding.
+  EVIDENCE: Four original passes plus independent-verifier and contract-reread correction passes completed. Active strangers cannot bind the selected Account; active owners or members can. Cross-account attribution preserves exactly one access context while requiring an explicit, active, distinct and revision-pinned counterparty without counterparty membership. Final owned lint, typecheck, diff, placeholder, 34-test and 100%-coverage checks pass with no remaining finding.
