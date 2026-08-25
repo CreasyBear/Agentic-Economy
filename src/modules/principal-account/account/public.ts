@@ -34,7 +34,9 @@ export type {
   RecoveryPolicy,
   RevisionedReplacement,
   SuccessionAuthorization,
+  SuccessionAuthorizationParticipant,
   ThresholdRecoveryPolicy,
+  VerifiedRecoveryParticipantApproval,
 } from './registry'
 export {
   accountActionContextValue,
@@ -47,4 +49,9 @@ export {
   ownershipChangeKindValue,
   ownershipLifecycleValue,
   recoveryPolicyValue,
+  recoveryParticipantApprovalLifecycleValue,
+  successionAuthorizationLifecycleValue,
+  successionAuthorizationParticipantValue,
+  successionAuthorizationValue,
+  verifiedRecoveryParticipantApprovalValue,
 } from './convex-schema'

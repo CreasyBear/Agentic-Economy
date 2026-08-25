@@ -13,6 +13,7 @@ import {
   type MembershipRef,
   type OwnershipRef,
   type SuccessionAuthorization,
+  type VerifiedRecoveryParticipantApproval,
 } from '../../src/modules/principal-account/account/public'
 import {
   principalRef,
@@ -26,6 +27,8 @@ class ContractStore implements AccountRegistryStore {
   readonly accounts = new Map<AccountRef, Account>()
   readonly ownerships = new Map<OwnershipRef, AccountOwnership>()
   readonly memberships = new Map<MembershipRef, Membership>()
+  readonly recoveryApprovals = new Map<string, VerifiedRecoveryParticipantApproval>()
+  readonly successionAuthorizations = new Map<string, SuccessionAuthorization>()
   commits = 0
 
   async transact<Result>(operation: (transaction: AccountRegistryTransaction) => Promise<Result>): Promise<Result> {
@@ -42,6 +45,8 @@ class ContractStore implements AccountRegistryStore {
           && membership.memberPrincipalRef === memberPrincipalRef
           && membership.lifecycle === 'active',
       ),
+      getVerifiedRecoveryParticipantApproval: async (ref) => this.recoveryApprovals.get(ref),
+      getSuccessionAuthorization: async (ref) => this.successionAuthorizations.get(ref),
       commit: async (change) => this.apply(change),
     })
   }
@@ -52,6 +57,10 @@ class ContractStore implements AccountRegistryStore {
     return ref
   }
 
+  recoveryApproval(approval: VerifiedRecoveryParticipantApproval): void {
+    this.recoveryApprovals.set(approval.approvalRef, Object.freeze(approval))
+  }
+
   private apply(change: AccountRegistryCommit): void {
     this.commits += 1
     if (change.accountInsert !== undefined) this.accounts.set(change.accountInsert.accountRef, change.accountInsert)
@@ -60,6 +69,8 @@ class ContractStore implements AccountRegistryStore {
     for (const replacement of change.ownershipReplacements ?? []) this.ownerships.set(replacement.value.ownershipRef, replacement.value)
     for (const membership of change.membershipInserts ?? []) this.memberships.set(membership.membershipRef, membership)
     for (const replacement of change.membershipReplacements ?? []) this.memberships.set(replacement.value.membershipRef, replacement.value)
+    if (change.successionAuthorizationInsert !== undefined) this.successionAuthorizations.set(change.successionAuthorizationInsert.authorizationRef, change.successionAuthorizationInsert)
+    if (change.successionAuthorizationReplacement !== undefined) this.successionAuthorizations.set(change.successionAuthorizationReplacement.value.authorizationRef, change.successionAuthorizationReplacement.value)
   }
 }
 
@@ -146,22 +157,29 @@ describe('P1-02 Account ownership and lifecycle contract', () => {
     const created = await setup.registry.create({ ownerPrincipalRef: owner, displayName: 'Succession', recoveryPolicy: { kind: 'threshold', threshold: 2, participantCount: 3, delayMs: 1_000, freezeRequired: true, revision: 7 }, correlationRef: 'correlation:create', idempotencyRef: 'idempotency:create' })
     const active = await setup.registry.activate({ accountRef: created.account.accountRef, expectedRevision: 1, context: setup.context(created.account.accountRef, owner, 'activate') })
     const suspended = await setup.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: setup.context(active.accountRef, owner, 'freeze') })
-    const authorization: SuccessionAuthorization = {
-      authorizationRef: 'recovery-proof:verified',
-      accountRef: active.accountRef,
-      incumbentOwnerPrincipalRef: owner,
-      successorOwnerPrincipalRef: successor,
-      recoveryPolicyRevision: 7,
-      verifiedAt: 4_000,
-      expiresAt: 6_000,
+    for (const [index, participant] of [setup.store.principal(3, 'human'), setup.store.principal(4, 'organization')].entries()) {
+      setup.store.recoveryApproval({
+        approvalRef: `trusted-approval:${index + 1}`,
+        accountRef: active.accountRef,
+        participantPrincipalRef: participant,
+        incumbentOwnerPrincipalRef: owner,
+        successorOwnerPrincipalRef: successor,
+        recoveryPolicyRevision: 7,
+        frozenAccountRevision: suspended.revision,
+        frozenAt: suspended.updatedAt,
+        verifiedAt: 3_500 + index,
+        expiresAt: 6_000,
+        verificationRef: `independent-verification:${index + 1}`,
+        lifecycle: 'verified',
+      })
     }
-    await expect(setup.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: suspended.revision, expectedOwnershipRevision: 1, authorization: { ...authorization, recoveryPolicyRevision: 6 }, context: setup.context(active.accountRef, successor, 'bad-succession') })).rejects.toMatchObject({ code: 'succession_authorization_invalid' })
-    const succeeded = await setup.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: suspended.revision, expectedOwnershipRevision: 1, authorization, context: setup.context(active.accountRef, successor, 'succession') })
+    const registered = await setup.registry.registerSuccessionAuthorization({ accountRef: active.accountRef, incumbentOwnerPrincipalRef: owner, successorOwnerPrincipalRef: successor, expectedAccountRevision: suspended.revision, expectedOwnershipRevision: 1, participantApprovalRefs: ['trusted-approval:1', 'trusted-approval:2'], expiresAt: 6_000, context: setup.context(active.accountRef, successor, 'authorize-succession') })
+    const succeeded = await setup.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: suspended.revision, expectedOwnershipRevision: 1, authorizationRef: registered.authorization.authorizationRef, context: setup.context(active.accountRef, successor, 'succession') })
 
     expect(succeeded.currentOwnership).toMatchObject({
       ownerPrincipalRef: successor,
       changeKind: 'succession',
-      successionAuthorizationRef: 'recovery-proof:verified',
+      successionAuthorizationRef: registered.authorization.authorizationRef,
     })
     expect(succeeded.account.lifecycle).toBe('suspended')
   })

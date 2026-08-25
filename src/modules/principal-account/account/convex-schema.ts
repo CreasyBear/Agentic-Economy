@@ -10,6 +10,8 @@ export const accountLifecycleValue = v.union(
 
 export const ownershipLifecycleValue = v.union(v.literal('active'), v.literal('ended'))
 export const membershipLifecycleValue = v.union(v.literal('active'), v.literal('ended'))
+export const recoveryParticipantApprovalLifecycleValue = v.union(v.literal('verified'), v.literal('revoked'))
+export const successionAuthorizationLifecycleValue = v.union(v.literal('active'), v.literal('consumed'))
 export const ownershipChangeKindValue = v.union(
   v.literal('creation'),
   v.literal('transfer'),
@@ -78,6 +80,51 @@ export const membershipValue = v.object({
   endedBy: v.optional(accountActionContextValue),
 })
 
+export const verifiedRecoveryParticipantApprovalValue = v.object({
+  approvalRef: v.string(),
+  accountRef: v.string(),
+  participantPrincipalRef: v.string(),
+  incumbentOwnerPrincipalRef: v.string(),
+  successorOwnerPrincipalRef: v.string(),
+  recoveryPolicyRevision: v.number(),
+  frozenAccountRevision: v.number(),
+  frozenAt: v.number(),
+  verifiedAt: v.number(),
+  expiresAt: v.number(),
+  verificationRef: v.string(),
+  lifecycle: recoveryParticipantApprovalLifecycleValue,
+})
+
+export const successionAuthorizationValue = v.object({
+  authorizationRef: v.string(),
+  accountRef: v.string(),
+  incumbentOwnerPrincipalRef: v.string(),
+  successorOwnerPrincipalRef: v.string(),
+  recoveryPolicyRevision: v.number(),
+  frozenAccountRevision: v.number(),
+  frozenAt: v.number(),
+  availableAt: v.number(),
+  authorizedAt: v.number(),
+  expiresAt: v.number(),
+  verifiedParticipantCount: v.number(),
+  lifecycle: successionAuthorizationLifecycleValue,
+  revision: v.number(),
+  createdAt: v.number(),
+  consumedAt: v.optional(v.number()),
+  consumedBy: v.optional(accountActionContextValue),
+  successorOwnershipRef: v.optional(v.string()),
+})
+
+export const successionAuthorizationParticipantValue = v.object({
+  authorizationRef: v.string(),
+  accountRef: v.string(),
+  approvalRef: v.string(),
+  participantPrincipalRef: v.string(),
+  verificationRef: v.string(),
+  verifiedAt: v.number(),
+  createdAt: v.number(),
+})
+
 export const accountTables = {
   accounts: defineTable(accountValue)
     .index('by_accountRef', ['accountRef'])
@@ -93,4 +140,16 @@ export const accountTables = {
     .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_memberPrincipalRef_and_lifecycle', ['memberPrincipalRef', 'lifecycle'])
     .index('by_accountRef_and_memberPrincipalRef_and_lifecycle', ['accountRef', 'memberPrincipalRef', 'lifecycle']),
+  accountRecoveryParticipantApprovals: defineTable(verifiedRecoveryParticipantApprovalValue)
+    .index('by_approvalRef', ['approvalRef'])
+    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
+    .index('by_participantPrincipalRef_and_lifecycle', ['participantPrincipalRef', 'lifecycle']),
+  accountSuccessionAuthorizations: defineTable(successionAuthorizationValue)
+    .index('by_authorizationRef', ['authorizationRef'])
+    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
+    .index('by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle', ['accountRef', 'successorOwnerPrincipalRef', 'lifecycle']),
+  accountSuccessionAuthorizationParticipants: defineTable(successionAuthorizationParticipantValue)
+    .index('by_authorizationRef', ['authorizationRef'])
+    .index('by_accountRef_and_createdAt', ['accountRef', 'createdAt'])
+    .index('by_participantPrincipalRef_and_createdAt', ['participantPrincipalRef', 'createdAt']),
 } as const

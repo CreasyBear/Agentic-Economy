@@ -7,6 +7,7 @@ import {
 const ACCOUNT_REF_PATTERN = /^acc_[0-9a-f]{32}$/u
 const OWNERSHIP_REF_PATTERN = /^own_[0-9a-f]{32}$/u
 const MEMBERSHIP_REF_PATTERN = /^mem_[0-9a-f]{32}$/u
+const SUCCESSION_AUTHORIZATION_REF_PATTERN = /^sau_[0-9a-f]{32}$/u
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u
 const DISPLAY_NAME_MAX_LENGTH = 200
@@ -96,14 +97,49 @@ export type Membership = Readonly<{
   endedBy?: AccountActionContext
 }>
 
+export type VerifiedRecoveryParticipantApproval = Readonly<{
+  approvalRef: string
+  accountRef: AccountRef
+  participantPrincipalRef: PrincipalRef
+  incumbentOwnerPrincipalRef: PrincipalRef
+  successorOwnerPrincipalRef: PrincipalRef
+  recoveryPolicyRevision: number
+  frozenAccountRevision: number
+  frozenAt: number
+  verifiedAt: number
+  expiresAt: number
+  verificationRef: string
+  lifecycle: 'verified' | 'revoked'
+}>
+
+export type SuccessionAuthorizationParticipant = Readonly<{
+  authorizationRef: string
+  accountRef: AccountRef
+  approvalRef: string
+  participantPrincipalRef: PrincipalRef
+  verificationRef: string
+  verifiedAt: number
+  createdAt: number
+}>
+
 export type SuccessionAuthorization = Readonly<{
   authorizationRef: string
   accountRef: AccountRef
   incumbentOwnerPrincipalRef: PrincipalRef
   successorOwnerPrincipalRef: PrincipalRef
   recoveryPolicyRevision: number
-  verifiedAt: number
+  frozenAccountRevision: number
+  frozenAt: number
+  availableAt: number
+  authorizedAt: number
   expiresAt: number
+  verifiedParticipantCount: number
+  lifecycle: 'active' | 'consumed'
+  revision: number
+  createdAt: number
+  consumedAt?: number
+  consumedBy?: AccountActionContext
+  successorOwnershipRef?: OwnershipRef
 }>
 
 export type ActiveAccountContext = Readonly<{
@@ -156,8 +192,14 @@ export type AccountRegistryErrorCode =
   | 'principal_inactive'
   | 'principal_not_found'
   | 'recovery_policy_invalid'
+  | 'recovery_participant_approval_invalid'
+  | 'recovery_participant_duplicate'
+  | 'recovery_participant_threshold_unmet'
   | 'succession_authorization_expired'
   | 'succession_authorization_invalid'
+  | 'succession_authorization_not_found'
+  | 'succession_authorization_consumed'
+  | 'succession_authorization_ref_conflict'
   | 'succession_forbidden_by_recovery_policy'
   | 'successor_same_as_incumbent'
 
@@ -183,6 +225,9 @@ export type AccountRegistryCommit = Readonly<{
   ownershipReplacements?: readonly RevisionedReplacement<AccountOwnership>[]
   membershipInserts?: readonly Membership[]
   membershipReplacements?: readonly RevisionedReplacement<Membership>[]
+  successionAuthorizationParticipantInserts?: readonly SuccessionAuthorizationParticipant[]
+  successionAuthorizationInsert?: SuccessionAuthorization
+  successionAuthorizationReplacement?: RevisionedReplacement<SuccessionAuthorization>
 }>
 
 export type AccountRegistryTransaction = Readonly<{
@@ -192,6 +237,8 @@ export type AccountRegistryTransaction = Readonly<{
   getOwnership(ownershipRef: OwnershipRef): Promise<AccountOwnership | undefined>
   getMembership(membershipRef: MembershipRef): Promise<Membership | undefined>
   getActiveMembership(accountRef: AccountRef, memberPrincipalRef: PrincipalRef): Promise<Membership | undefined>
+  getVerifiedRecoveryParticipantApproval(approvalRef: string): Promise<VerifiedRecoveryParticipantApproval | undefined>
+  getSuccessionAuthorization(authorizationRef: string): Promise<SuccessionAuthorization | undefined>
   commit(change: AccountRegistryCommit): Promise<void>
 }>
 
@@ -328,6 +375,127 @@ export class AccountRegistry {
     return await this.#store.transact(async (transaction) => await transaction.getMembership(validRef))
   }
 
+  async getSuccessionAuthorization(ref: string): Promise<SuccessionAuthorization | undefined> {
+    const validRef = validSuccessionAuthorizationRef(ref)
+    return await this.#store.transact(
+      async (transaction) => await transaction.getSuccessionAuthorization(validRef),
+    )
+  }
+
+  async registerSuccessionAuthorization(input: Readonly<{
+    accountRef: AccountRef
+    incumbentOwnerPrincipalRef: PrincipalRef
+    successorOwnerPrincipalRef: PrincipalRef
+    expectedAccountRevision: number
+    expectedOwnershipRevision: number
+    participantApprovalRefs: readonly string[]
+    expiresAt: number
+    context: AccountActionContext
+  }>): Promise<Readonly<{
+    authorization: SuccessionAuthorization
+    participants: readonly SuccessionAuthorizationParticipant[]
+  }>> {
+    const ref = accountRef(input.accountRef)
+    const incumbentRef = principalRef(input.incumbentOwnerPrincipalRef)
+    const successorRef = principalRef(input.successorOwnerPrincipalRef)
+    const context = validActionContext(input.context)
+    const timestamp = validTimestamp(this.#now())
+    const expiresAt = validTimestamp(input.expiresAt)
+    const approvalRefs = input.participantApprovalRefs.map((approvalRef) => {
+      if (!OPAQUE_REF_PATTERN.test(approvalRef)) {
+        throw new AccountRegistryError('recovery_participant_approval_invalid')
+      }
+      return approvalRef
+    })
+    const authorizationRef = generateSuccessionAuthorizationRef(this.#randomUuid)
+
+    return await this.#store.transact(async (transaction) => {
+      const account = await requireAccount(transaction, ref)
+      assertAccountContext(account, context)
+      assertAccountRevision(account, input.expectedAccountRevision)
+      assertLifecycle(account, 'suspended')
+      if (context.actorPrincipalRef !== successorRef) {
+        throw new AccountRegistryError('succession_authorization_invalid')
+      }
+      if (account.recoveryPolicy.kind === 'no_transfer') {
+        throw new AccountRegistryError('succession_forbidden_by_recovery_policy')
+      }
+      const currentOwnership = await requireCurrentOwnership(transaction, account)
+      assertOwnershipRevision(currentOwnership, input.expectedOwnershipRevision)
+      if (currentOwnership.ownerPrincipalRef !== incumbentRef || incumbentRef === successorRef) {
+        throw new AccountRegistryError('succession_authorization_invalid')
+      }
+      await requireActivePrincipal(transaction, successorRef)
+      if (approvalRefs.length < account.recoveryPolicy.threshold) {
+        throw new AccountRegistryError('recovery_participant_threshold_unmet')
+      }
+      if (approvalRefs.length > account.recoveryPolicy.participantCount) {
+        throw new AccountRegistryError('recovery_participant_approval_invalid')
+      }
+      const availableAt = account.updatedAt + account.recoveryPolicy.delayMs
+      if (!Number.isSafeInteger(availableAt) || expiresAt <= timestamp || expiresAt < availableAt) {
+        throw new AccountRegistryError('succession_authorization_invalid')
+      }
+
+      const participantRefs = new Set<PrincipalRef>()
+      const verificationRefs = new Set<string>()
+      const approvals: VerifiedRecoveryParticipantApproval[] = []
+      for (const approvalRef of approvalRefs) {
+        const approval = requireTrustedRecoveryApproval({
+          approval: await transaction.getVerifiedRecoveryParticipantApproval(approvalRef),
+          approvalRef,
+          account,
+          incumbentRef,
+          successorRef,
+          authorizationExpiresAt: expiresAt,
+          timestamp,
+        })
+        if (participantRefs.has(approval.participantPrincipalRef)
+          || verificationRefs.has(approval.verificationRef)) {
+          throw new AccountRegistryError('recovery_participant_duplicate')
+        }
+        await requireActivePrincipal(transaction, approval.participantPrincipalRef)
+        participantRefs.add(approval.participantPrincipalRef)
+        verificationRefs.add(approval.verificationRef)
+        approvals.push(approval)
+      }
+      if (await transaction.getSuccessionAuthorization(authorizationRef) !== undefined) {
+        throw new AccountRegistryError('succession_authorization_ref_conflict')
+      }
+
+      const authorization = freezeSuccessionAuthorization({
+        authorizationRef,
+        accountRef: ref,
+        incumbentOwnerPrincipalRef: incumbentRef,
+        successorOwnerPrincipalRef: successorRef,
+        recoveryPolicyRevision: account.recoveryPolicy.revision,
+        frozenAccountRevision: account.revision,
+        frozenAt: account.updatedAt,
+        availableAt,
+        authorizedAt: timestamp,
+        expiresAt,
+        verifiedParticipantCount: participantRefs.size,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: timestamp,
+      })
+      const participants = Object.freeze(approvals.map((approval) => Object.freeze({
+        authorizationRef,
+        accountRef: ref,
+        approvalRef: approval.approvalRef,
+        participantPrincipalRef: approval.participantPrincipalRef,
+        verificationRef: approval.verificationRef,
+        verifiedAt: approval.verifiedAt,
+        createdAt: timestamp,
+      })))
+      await transaction.commit({
+        successionAuthorizationInsert: authorization,
+        successionAuthorizationParticipantInserts: participants,
+      })
+      return Object.freeze({ authorization, participants })
+    })
+  }
+
   async activate(input: Readonly<{
     accountRef: AccountRef
     expectedRevision: number
@@ -405,7 +573,7 @@ export class AccountRegistry {
     successorOwnerPrincipalRef: PrincipalRef
     expectedAccountRevision: number
     expectedOwnershipRevision: number
-    authorization: SuccessionAuthorization
+    authorizationRef: string
     context: AccountActionContext
   }>): Promise<Readonly<{
     account: Account
@@ -592,7 +760,7 @@ export class AccountRegistry {
       successorOwnerPrincipalRef: PrincipalRef
       expectedAccountRevision: number
       expectedOwnershipRevision: number
-      authorization?: SuccessionAuthorization
+      authorizationRef?: string
       context: AccountActionContext
     }>,
     changeKind: 'transfer' | 'succession',
@@ -613,18 +781,35 @@ export class AccountRegistry {
       assertLifecycle(account, changeKind === 'transfer' ? 'active' : 'suspended')
       const currentOwnership = await requireCurrentOwnership(transaction, account)
       assertOwnershipRevision(currentOwnership, input.expectedOwnershipRevision)
-      if (currentOwnership.ownerPrincipalRef === successorRef) {
+      if (changeKind === 'transfer' && currentOwnership.ownerPrincipalRef === successorRef) {
         throw new AccountRegistryError('successor_same_as_incumbent')
       }
       let successionAuthorizationRef: string | undefined
+      let trustedSuccessionAuthorization: SuccessionAuthorization | undefined
       if (changeKind === 'transfer') {
         await requireActiveOwnerContext(transaction, currentOwnership, context)
       } else {
+        if (account.recoveryPolicy.kind !== 'threshold') {
+          throw new AccountRegistryError('succession_forbidden_by_recovery_policy')
+        }
         if (context.actorPrincipalRef !== successorRef) {
           throw new AccountRegistryError('succession_authorization_invalid')
         }
-        assertSuccessionAuthorization(account, currentOwnership, successorRef, input.authorization, timestamp)
-        successionAuthorizationRef = input.authorization.authorizationRef
+        const authorizationRef = validSuccessionAuthorizationRef(input.authorizationRef)
+        const authorization = await transaction.getSuccessionAuthorization(authorizationRef)
+        if (authorization === undefined) {
+          throw new AccountRegistryError('succession_authorization_not_found')
+        }
+        assertSuccessionAuthorization(
+          account,
+          account.recoveryPolicy,
+          currentOwnership,
+          successorRef,
+          authorization,
+          timestamp,
+        )
+        successionAuthorizationRef = authorization.authorizationRef
+        trustedSuccessionAuthorization = authorization
       }
       await requireActivePrincipal(transaction, successorRef)
       if (await transaction.getOwnership(newOwnershipRef) !== undefined) {
@@ -662,6 +847,21 @@ export class AccountRegistry {
         accountReplacement: { value: updatedAccount, expectedRevision: account.revision },
         ownershipInserts: [nextOwnership],
         ownershipReplacements: [{ value: endedOwnership, expectedRevision: currentOwnership.revision }],
+        ...(trustedSuccessionAuthorization === undefined
+          ? {}
+          : {
+              successionAuthorizationReplacement: {
+                value: freezeSuccessionAuthorization({
+                  ...trustedSuccessionAuthorization,
+                  lifecycle: 'consumed',
+                  revision: trustedSuccessionAuthorization.revision + 1,
+                  consumedAt: timestamp,
+                  consumedBy: context,
+                  successorOwnershipRef: nextOwnership.ownershipRef,
+                }),
+                expectedRevision: trustedSuccessionAuthorization.revision,
+              },
+            }),
       })
       return Object.freeze({
         account: updatedAccount,
@@ -672,12 +872,14 @@ export class AccountRegistry {
   }
 }
 
-function generateStableRef(prefix: 'acc' | 'own' | 'mem', randomUuid: () => string): string {
+function generateStableRef(prefix: 'acc' | 'own' | 'mem' | 'sau', randomUuid: () => string): string {
   const uuid = randomUuid()
   if (!UUID_PATTERN.test(uuid)) {
     const code = prefix === 'acc'
       ? 'account_ref_invalid'
-      : prefix === 'own' ? 'ownership_ref_invalid' : 'membership_ref_invalid'
+      : prefix === 'own'
+        ? 'ownership_ref_invalid'
+        : prefix === 'mem' ? 'membership_ref_invalid' : 'succession_authorization_invalid'
     throw new AccountRegistryError(code)
   }
   return `${prefix}_${uuid.replaceAll('-', '')}`
@@ -694,6 +896,17 @@ function validDisplayName(value: string): string {
 function validOpaqueRef(value: string, code: 'correlation_ref_invalid' | 'account_idempotency_ref_invalid'): string {
   if (!OPAQUE_REF_PATTERN.test(value)) throw new AccountRegistryError(code)
   return value
+}
+
+function validSuccessionAuthorizationRef(value: string | undefined): string {
+  if (value === undefined || !SUCCESSION_AUTHORIZATION_REF_PATTERN.test(value)) {
+    throw new AccountRegistryError('succession_authorization_invalid')
+  }
+  return value
+}
+
+function generateSuccessionAuthorizationRef(randomUuid: () => string): string {
+  return generateStableRef('sau', randomUuid)
 }
 
 function validActionContext(context: AccountActionContext): AccountActionContext {
@@ -845,33 +1058,84 @@ async function requireMembership(
   return membership
 }
 
+function requireTrustedRecoveryApproval(input: Readonly<{
+  approval: VerifiedRecoveryParticipantApproval | undefined
+  approvalRef: string
+  account: Account
+  incumbentRef: PrincipalRef
+  successorRef: PrincipalRef
+  authorizationExpiresAt: number
+  timestamp: number
+}>): VerifiedRecoveryParticipantApproval {
+  const { approval, account, incumbentRef, successorRef } = input
+  if (approval === undefined
+    || approval.approvalRef !== input.approvalRef
+    || !OPAQUE_REF_PATTERN.test(approval.approvalRef)
+    || !OPAQUE_REF_PATTERN.test(approval.verificationRef)
+    || approval.lifecycle !== 'verified'
+    || approval.accountRef !== account.accountRef
+    || approval.incumbentOwnerPrincipalRef !== incumbentRef
+    || approval.successorOwnerPrincipalRef !== successorRef
+    || approval.participantPrincipalRef === incumbentRef
+    || approval.participantPrincipalRef === successorRef
+    || approval.recoveryPolicyRevision !== account.recoveryPolicy.revision
+    || approval.frozenAccountRevision !== account.revision
+    || approval.frozenAt !== account.updatedAt
+    || !Number.isSafeInteger(approval.verifiedAt)
+    || !Number.isSafeInteger(approval.expiresAt)
+    || approval.verifiedAt < approval.frozenAt
+    || approval.verifiedAt > input.timestamp
+    || approval.expiresAt <= approval.verifiedAt
+    || approval.expiresAt < input.authorizationExpiresAt) {
+    throw new AccountRegistryError('recovery_participant_approval_invalid')
+  }
+  return approval
+}
+
 function assertSuccessionAuthorization(
   account: Account,
+  recoveryPolicy: ThresholdRecoveryPolicy,
   currentOwnership: AccountOwnership,
   successorRef: PrincipalRef,
-  authorization: SuccessionAuthorization | undefined,
+  authorization: SuccessionAuthorization,
   timestamp: number,
-): asserts authorization is SuccessionAuthorization {
-  if (account.recoveryPolicy.kind === 'no_transfer') {
-    throw new AccountRegistryError('succession_forbidden_by_recovery_policy')
+): void {
+  if (authorization.lifecycle !== 'active') {
+    throw new AccountRegistryError('succession_authorization_consumed')
   }
-  if (authorization === undefined
-    || !OPAQUE_REF_PATTERN.test(authorization.authorizationRef)
+  if (!SUCCESSION_AUTHORIZATION_REF_PATTERN.test(authorization.authorizationRef)
     || authorization.accountRef !== account.accountRef
     || authorization.incumbentOwnerPrincipalRef !== currentOwnership.ownerPrincipalRef
     || authorization.successorOwnerPrincipalRef !== successorRef
-    || authorization.recoveryPolicyRevision !== account.recoveryPolicy.revision
-    || !Number.isSafeInteger(authorization.verifiedAt)
+    || authorization.recoveryPolicyRevision !== recoveryPolicy.revision
+    || authorization.frozenAccountRevision !== account.revision
+    || authorization.frozenAt !== account.updatedAt
+    || authorization.availableAt !== authorization.frozenAt + recoveryPolicy.delayMs
+    || !Number.isSafeInteger(authorization.availableAt)
+    || !Number.isSafeInteger(authorization.authorizedAt)
     || !Number.isSafeInteger(authorization.expiresAt)
-    || authorization.verifiedAt < 0
-    || authorization.expiresAt < authorization.verifiedAt
-    || authorization.verifiedAt > timestamp
-    || authorization.verifiedAt - account.updatedAt < account.recoveryPolicy.delayMs) {
+    || authorization.authorizedAt < authorization.frozenAt
+    || authorization.authorizedAt > timestamp
+    || authorization.expiresAt < authorization.authorizedAt
+    || authorization.verifiedParticipantCount < recoveryPolicy.threshold
+    || authorization.verifiedParticipantCount > recoveryPolicy.participantCount
+    || !isPositiveRevision(authorization.revision)
+    || authorization.createdAt !== authorization.authorizedAt) {
     throw new AccountRegistryError('succession_authorization_invalid')
   }
-  if (authorization.expiresAt < timestamp) {
+  if (timestamp < authorization.availableAt) {
+    throw new AccountRegistryError('succession_authorization_invalid')
+  }
+  if (authorization.expiresAt <= timestamp) {
     throw new AccountRegistryError('succession_authorization_expired')
   }
+}
+
+function freezeSuccessionAuthorization(value: SuccessionAuthorization): SuccessionAuthorization {
+  return Object.freeze({
+    ...value,
+    ...(value.consumedBy === undefined ? {} : { consumedBy: Object.freeze(value.consumedBy) }),
+  })
 }
 
 function freezeAccount(value: Account): Account {

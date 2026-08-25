@@ -12,6 +12,7 @@ import {
   type Membership,
   type MembershipRef,
   type OwnershipRef,
+  type SuccessionAuthorization,
 } from '../../src/modules/principal-account/account/public'
 import {
   principalRef,
@@ -24,6 +25,7 @@ class AcceptanceStore implements AccountRegistryStore {
   readonly accounts = new Map<AccountRef, Account>()
   readonly ownerships = new Map<OwnershipRef, AccountOwnership>()
   readonly memberships = new Map<MembershipRef, Membership>()
+  readonly successionAuthorizations = new Map<string, SuccessionAuthorization>()
 
   async transact<Result>(operation: (transaction: AccountRegistryTransaction) => Promise<Result>): Promise<Result> {
     return await operation({
@@ -40,6 +42,8 @@ class AcceptanceStore implements AccountRegistryStore {
           && membership.memberPrincipalRef === memberPrincipalRef
           && membership.lifecycle === 'active',
       ),
+      getVerifiedRecoveryParticipantApproval: async () => undefined,
+      getSuccessionAuthorization: async (ref) => this.successionAuthorizations.get(ref),
       commit: async (change) => this.apply(change),
     })
   }
@@ -71,11 +75,20 @@ class AcceptanceStore implements AccountRegistryStore {
     for (const replacement of change.ownershipReplacements ?? []) {
       this.ownerships.set(replacement.value.ownershipRef, replacement.value)
     }
+    if (change.successionAuthorizationInsert !== undefined) {
+      this.successionAuthorizations.set(change.successionAuthorizationInsert.authorizationRef, change.successionAuthorizationInsert)
+    }
+    if (change.successionAuthorizationReplacement !== undefined) {
+      this.successionAuthorizations.set(
+        change.successionAuthorizationReplacement.value.authorizationRef,
+        change.successionAuthorizationReplacement.value,
+      )
+    }
   }
 }
 
 describe('Phase 1 acceptance — succession authorization provenance', () => {
-  it('reproduces Account takeover with a caller-constructed threshold authorization', async () => {
+  it('rejects Account takeover with a caller-constructed threshold authorization', async () => {
     const store = new AcceptanceStore()
     const incumbent = store.addPrincipal(1)
     const attacker = store.addPrincipal(2)
@@ -117,11 +130,15 @@ describe('Phase 1 acceptance — succession authorization provenance', () => {
       context: context(active.accountRef, incumbent, 'suspend'),
     })
 
-    const taken = await registry.succeedOwnership({
+    const accountBefore = store.accounts.get(suspended.accountRef)
+    const ownershipBefore = store.ownerships.get(created.ownership.ownershipRef)
+
+    const callerConstructedRequest = {
       accountRef: suspended.accountRef,
       successorOwnerPrincipalRef: attacker,
       expectedAccountRevision: suspended.revision,
       expectedOwnershipRevision: created.ownership.revision,
+      authorizationRef: 'sau_ffffffffffffffffffffffffffffffff',
       authorization: {
         authorizationRef: 'attacker-invented-proof',
         accountRef: suspended.accountRef,
@@ -132,13 +149,13 @@ describe('Phase 1 acceptance — succession authorization provenance', () => {
         expiresAt: 5_000,
       },
       context: context(suspended.accountRef, attacker, 'takeover'),
-    })
+    } as Parameters<AccountRegistry['succeedOwnership']>[0]
+    await expect(registry.succeedOwnership(callerConstructedRequest))
+      .rejects.toMatchObject({ code: 'succession_authorization_not_found' })
 
-    expect(taken.currentOwnership).toMatchObject({
-      ownerPrincipalRef: attacker,
-      changeKind: 'succession',
-      successionAuthorizationRef: 'attacker-invented-proof',
-    })
+    expect(store.accounts.get(suspended.accountRef)).toBe(accountBefore)
+    expect(store.ownerships.get(created.ownership.ownershipRef)).toBe(ownershipBefore)
+    expect([...store.ownerships.values()]).toHaveLength(1)
     expect([...store.memberships.values()]).toEqual([])
   })
 })

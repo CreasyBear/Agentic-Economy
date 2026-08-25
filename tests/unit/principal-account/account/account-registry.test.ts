@@ -22,6 +22,11 @@ import {
   ownershipLifecycleValue,
   ownershipRef,
   recoveryPolicyValue,
+  recoveryParticipantApprovalLifecycleValue,
+  successionAuthorizationLifecycleValue,
+  successionAuthorizationParticipantValue,
+  successionAuthorizationValue,
+  verifiedRecoveryParticipantApprovalValue,
   type Account,
   type AccountActionContext,
   type AccountOwnership,
@@ -34,6 +39,8 @@ import {
   type OwnershipRef,
   type RecoveryPolicy,
   type SuccessionAuthorization,
+  type SuccessionAuthorizationParticipant,
+  type VerifiedRecoveryParticipantApproval,
 } from '../../../../src/modules/principal-account/account/public'
 import {
   principalRef,
@@ -48,10 +55,21 @@ class MemoryAccountStore implements AccountRegistryStore {
   readonly accounts = new Map<AccountRef, Account>()
   readonly ownerships = new Map<OwnershipRef, AccountOwnership>()
   readonly memberships = new Map<MembershipRef, Membership>()
+  readonly recoveryApprovals = new Map<string, VerifiedRecoveryParticipantApproval>()
+  readonly successionAuthorizations = new Map<string, SuccessionAuthorization>()
+  readonly successionAuthorizationParticipants: SuccessionAuthorizationParticipant[] = []
   readonly commits: AccountRegistryCommit[] = []
+  #transactionTail: Promise<void> = Promise.resolve()
 
   async transact<Result>(operation: (transaction: AccountRegistryTransaction) => Promise<Result>): Promise<Result> {
-    return await operation({
+    const previous = this.#transactionTail
+    let release: (() => void) | undefined
+    this.#transactionTail = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous
+    try {
+      return await operation({
       getPrincipal: async (ref) => this.principals.get(ref),
       getAccount: async (ref) => this.accounts.get(ref),
       getAccountByCreationIdempotency: async (actor, idempotency) => [...this.accounts.values()].find(
@@ -64,6 +82,8 @@ class MemoryAccountStore implements AccountRegistryStore {
           && membership.memberPrincipalRef === principal
           && membership.lifecycle === 'active',
       ),
+      getVerifiedRecoveryParticipantApproval: async (ref) => this.recoveryApprovals.get(ref),
+      getSuccessionAuthorization: async (ref) => this.successionAuthorizations.get(ref),
       commit: async (change) => {
         this.assertCommit(change)
         this.commits.push(change)
@@ -79,8 +99,23 @@ class MemoryAccountStore implements AccountRegistryStore {
         for (const replacement of change.membershipReplacements ?? []) {
           this.memberships.set(replacement.value.membershipRef, replacement.value)
         }
+        for (const participant of change.successionAuthorizationParticipantInserts ?? []) {
+          this.successionAuthorizationParticipants.push(participant)
+        }
+        if (change.successionAuthorizationInsert !== undefined) {
+          this.successionAuthorizations.set(change.successionAuthorizationInsert.authorizationRef, change.successionAuthorizationInsert)
+        }
+        if (change.successionAuthorizationReplacement !== undefined) {
+          this.successionAuthorizations.set(
+            change.successionAuthorizationReplacement.value.authorizationRef,
+            change.successionAuthorizationReplacement.value,
+          )
+        }
       },
-    })
+      })
+    } finally {
+      release?.()
+    }
   }
 
   seedPrincipal(
@@ -99,6 +134,10 @@ class MemoryAccountStore implements AccountRegistryStore {
       updatedAt: 1,
     }))
     return ref
+  }
+
+  seedRecoveryApproval(approval: VerifiedRecoveryParticipantApproval): void {
+    this.recoveryApprovals.set(approval.approvalRef, Object.freeze(approval))
   }
 
   private assertCommit(change: AccountRegistryCommit): void {
@@ -120,6 +159,14 @@ class MemoryAccountStore implements AccountRegistryStore {
     }
     for (const replacement of change.membershipReplacements ?? []) {
       expect(this.memberships.get(replacement.value.membershipRef)?.revision).toBe(replacement.expectedRevision)
+    }
+    if (change.successionAuthorizationInsert !== undefined
+      && this.successionAuthorizations.has(change.successionAuthorizationInsert.authorizationRef)) {
+      throw new Error('test_succession_authorization_insert_conflict')
+    }
+    if (change.successionAuthorizationReplacement !== undefined) {
+      expect(this.successionAuthorizations.get(change.successionAuthorizationReplacement.value.authorizationRef)?.revision)
+        .toBe(change.successionAuthorizationReplacement.expectedRevision)
     }
   }
 }
@@ -181,6 +228,40 @@ async function activateAccount(
   })
 }
 
+function seedRecoveryApprovals(
+  fixture: ReturnType<typeof setup>,
+  account: Account,
+  incumbentOwnerPrincipalRef: PrincipalRef,
+  successorOwnerPrincipalRef: PrincipalRef,
+  options: Readonly<{
+    count?: number
+    mutate?: (approval: VerifiedRecoveryParticipantApproval, index: number) => VerifiedRecoveryParticipantApproval
+  }> = {},
+): readonly string[] {
+  const approvalRefs: string[] = []
+  for (let index = 0; index < (options.count ?? 2); index += 1) {
+    const participantPrincipalRef = fixture.store.seedPrincipal(String(100 + index))
+    const approval: VerifiedRecoveryParticipantApproval = {
+      approvalRef: `trusted-approval:${index + 1}`,
+      accountRef: account.accountRef,
+      participantPrincipalRef,
+      incumbentOwnerPrincipalRef,
+      successorOwnerPrincipalRef,
+      recoveryPolicyRevision: account.recoveryPolicy.revision,
+      frozenAccountRevision: account.revision,
+      frozenAt: account.updatedAt,
+      verifiedAt: account.updatedAt + 1,
+      expiresAt: account.updatedAt + 100,
+      verificationRef: `trusted-verification:${index + 1}`,
+      lifecycle: 'verified',
+    }
+    const stored = options.mutate?.(approval, index) ?? approval
+    fixture.store.seedRecoveryApproval(stored)
+    approvalRefs.push(stored.approvalRef)
+  }
+  return approvalRefs
+}
+
 async function expectCode(promise: Promise<unknown>, code: string): Promise<void> {
   await expect(promise).rejects.toMatchObject({ name: 'AccountRegistryError', message: code, code })
 }
@@ -200,9 +281,17 @@ describe('Account registry contract', () => {
       ownershipChangeKindValue,
       ownershipLifecycleValue,
       recoveryPolicyValue,
+      recoveryParticipantApprovalLifecycleValue,
+      successionAuthorizationLifecycleValue,
+      successionAuthorizationParticipantValue,
+      successionAuthorizationValue,
+      verifiedRecoveryParticipantApprovalValue,
       accountTables.accounts,
       accountTables.accountOwnerships,
       accountTables.memberships,
+      accountTables.accountRecoveryParticipantApprovals,
+      accountTables.accountSuccessionAuthorizations,
+      accountTables.accountSuccessionAuthorizationParticipants,
     ].every((value) => value !== undefined)).toBe(true)
   })
 
@@ -588,29 +677,86 @@ describe('Account registry contract', () => {
     const active = await activateAccount(fixture, created)
     const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
     const successor = fixture.store.seedPrincipal('2', 'agent')
-    const authorization: SuccessionAuthorization = {
-      authorizationRef: 'recovery-proof:1',
+    const participants = [fixture.store.seedPrincipal('3'), fixture.store.seedPrincipal('4')]
+    participants.forEach((participantPrincipalRef, index) => fixture.store.seedRecoveryApproval({
+      approvalRef: `approval:${index + 1}`,
       accountRef: active.accountRef,
+      participantPrincipalRef,
       incumbentOwnerPrincipalRef: created.owner,
       successorOwnerPrincipalRef: successor,
       recoveryPolicyRevision: 1,
-      verifiedAt: 35,
+      frozenAccountRevision: suspended.revision,
+      frozenAt: suspended.updatedAt,
+      verifiedAt: 35 + index,
       expiresAt: 50,
-    }
-    const succeeded = await fixture.registry.succeedOwnership({
+      verificationRef: `trusted-verification:${index + 1}`,
+      lifecycle: 'verified',
+    }))
+    const registered = await fixture.registry.registerSuccessionAuthorization({
+      accountRef: active.accountRef,
+      incumbentOwnerPrincipalRef: created.owner,
+      successorOwnerPrincipalRef: successor,
+      expectedAccountRevision: suspended.revision,
+      expectedOwnershipRevision: 1,
+      participantApprovalRefs: ['approval:1', 'approval:2'],
+      expiresAt: 50,
+      context: fixture.nextContext(active.accountRef, successor, 'authorize-succession'),
+    })
+    const successionInput = {
       accountRef: active.accountRef,
       successorOwnerPrincipalRef: successor,
       expectedAccountRevision: suspended.revision,
       expectedOwnershipRevision: 1,
-      authorization,
+      authorizationRef: registered.authorization.authorizationRef,
       context: fixture.nextContext(active.accountRef, successor, 'succession'),
-    })
+    } as const
+    const commitsBeforeSuccession = fixture.store.commits.length
+    const outcomes = await Promise.allSettled([
+      fixture.registry.succeedOwnership(successionInput),
+      fixture.registry.succeedOwnership(successionInput),
+    ])
+    const fulfilled = outcomes.filter((outcome): outcome is PromiseFulfilledResult<Awaited<ReturnType<AccountRegistry['succeedOwnership']>>> => outcome.status === 'fulfilled')
+    const rejected = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toMatchObject({ code: 'account_revision_conflict' })
+    const succeeded = fulfilled[0]!.value
+    expect(fixture.store.commits).toHaveLength(commitsBeforeSuccession + 1)
+    expect(fixture.store.ownerships).toHaveLength(2)
     expect(succeeded.account.lifecycle).toBe('suspended')
     expect(succeeded.currentOwnership).toMatchObject({
       changeKind: 'succession',
       ownerPrincipalRef: successor,
-      successionAuthorizationRef: 'recovery-proof:1',
+      successionAuthorizationRef: registered.authorization.authorizationRef,
     })
+    expect(registered.authorization).toMatchObject({
+      accountRef: active.accountRef,
+      incumbentOwnerPrincipalRef: created.owner,
+      successorOwnerPrincipalRef: successor,
+      recoveryPolicyRevision: 1,
+      frozenAccountRevision: suspended.revision,
+      frozenAt: suspended.updatedAt,
+      availableAt: 35,
+      authorizedAt: 40,
+      expiresAt: 50,
+      verifiedParticipantCount: 2,
+      lifecycle: 'active',
+      revision: 1,
+    })
+    expect(registered.participants.map((participant) => participant.participantPrincipalRef)).toEqual(participants)
+    expect(fixture.store.successionAuthorizations.get(registered.authorization.authorizationRef)).toMatchObject({
+      lifecycle: 'consumed',
+      revision: 2,
+      successorOwnershipRef: succeeded.currentOwnership.ownershipRef,
+    })
+    await expectCode(fixture.registry.succeedOwnership({
+      accountRef: active.accountRef,
+      successorOwnerPrincipalRef: successor,
+      expectedAccountRevision: succeeded.account.revision,
+      expectedOwnershipRevision: succeeded.currentOwnership.revision,
+      authorizationRef: registered.authorization.authorizationRef,
+      context: fixture.nextContext(active.accountRef, successor, 'replay'),
+    }), 'succession_authorization_consumed')
     const reactivated = await fixture.registry.activate({ accountRef: active.accountRef, expectedRevision: 4, context: fixture.nextContext(active.accountRef, successor, 'reactivate') })
     expect(reactivated.lifecycle).toBe('active')
   })
@@ -626,41 +772,224 @@ describe('Account registry contract', () => {
       successorOwnerPrincipalRef: successor,
       expectedAccountRevision: suspended.revision,
       expectedOwnershipRevision: 1,
-      authorization: { authorizationRef: 'proof:1', accountRef: active.accountRef, incumbentOwnerPrincipalRef: created.owner, successorOwnerPrincipalRef: successor, recoveryPolicyRevision: 1, verifiedAt: 25, expiresAt: 50 },
+      authorizationRef: 'sau_ffffffffffffffffffffffffffffffff',
       context: fixture.nextContext(active.accountRef, successor, 'succession'),
     }), 'succession_forbidden_by_recovery_policy')
   })
 
-  it('rejects missing, malformed, mismatched, premature and expired succession proofs', async () => {
+  it('rejects an authorization that expires at the registration instant', async () => {
+    const fixture = setup({ times: [10, 20, 30, 40] })
+    const created = await createAccount(fixture)
+    const active = await activateAccount(fixture, created)
+    const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
+    const successor = fixture.store.seedPrincipal('2')
+    for (const [index, participantPrincipalRef] of [fixture.store.seedPrincipal('3'), fixture.store.seedPrincipal('4')].entries()) {
+      fixture.store.seedRecoveryApproval({
+        approvalRef: `strict-expiry-approval:${index + 1}`,
+        accountRef: active.accountRef,
+        participantPrincipalRef,
+        incumbentOwnerPrincipalRef: created.owner,
+        successorOwnerPrincipalRef: successor,
+        recoveryPolicyRevision: 1,
+        frozenAccountRevision: suspended.revision,
+        frozenAt: suspended.updatedAt,
+        verifiedAt: 35,
+        expiresAt: 40,
+        verificationRef: `strict-expiry-verification:${index + 1}`,
+        lifecycle: 'verified',
+      })
+    }
+    await expectCode(fixture.registry.registerSuccessionAuthorization({
+      accountRef: active.accountRef,
+      incumbentOwnerPrincipalRef: created.owner,
+      successorOwnerPrincipalRef: successor,
+      expectedAccountRevision: suspended.revision,
+      expectedOwnershipRevision: 1,
+      participantApprovalRefs: ['strict-expiry-approval:1', 'strict-expiry-approval:2'],
+      expiresAt: 40,
+      context: fixture.nextContext(active.accountRef, successor, 'strict-expiry'),
+    }), 'succession_authorization_invalid')
+  })
+
+  it('fails closed while registering untrusted, duplicate, below-threshold, stale or wrongly bound recovery approvals', async () => {
+    const prepare = async (options: Readonly<{
+      policy?: RecoveryPolicy
+      approvalCount?: number
+      mutate?: (approval: VerifiedRecoveryParticipantApproval, index: number) => VerifiedRecoveryParticipantApproval
+      uuids?: readonly string[]
+    }> = {}) => {
+      const fixture = setup({
+        times: [10, 20, 30, 40, 40, 40],
+        ...(options.uuids === undefined ? {} : { uuids: options.uuids }),
+      })
+      const created = await createAccount(fixture, 'human', options.policy)
+      const active = await activateAccount(fixture, created)
+      const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'freeze') })
+      const successor = fixture.store.seedPrincipal('2')
+      const approvalRefs = seedRecoveryApprovals(fixture, suspended, created.owner, successor, {
+        ...(options.approvalCount === undefined ? {} : { count: options.approvalCount }),
+        ...(options.mutate === undefined ? {} : { mutate: options.mutate }),
+      })
+      return { fixture, created, active, suspended, successor, approvalRefs }
+    }
+    const register = async (prepared: Awaited<ReturnType<typeof prepare>>, overrides: Readonly<Record<string, unknown>> = {}) => await prepared.fixture.registry.registerSuccessionAuthorization({
+      accountRef: prepared.active.accountRef,
+      incumbentOwnerPrincipalRef: prepared.created.owner,
+      successorOwnerPrincipalRef: prepared.successor,
+      expectedAccountRevision: prepared.suspended.revision,
+      expectedOwnershipRevision: 1,
+      participantApprovalRefs: prepared.approvalRefs,
+      expiresAt: 100,
+      context: prepared.fixture.nextContext(prepared.active.accountRef, prepared.successor, 'authorize'),
+      ...overrides,
+    })
+
+    const malformedRef = await prepare()
+    await expectCode(register(malformedRef, { participantApprovalRefs: ['bad proof', 'trusted-approval:2'] }), 'recovery_participant_approval_invalid')
+
+    const wrongActor = await prepare()
+    await expectCode(register(wrongActor, { context: wrongActor.fixture.nextContext(wrongActor.active.accountRef, wrongActor.created.owner, 'wrong-actor') }), 'succession_authorization_invalid')
+
+    const noTransfer = await prepare({ policy: { kind: 'no_transfer', revision: 1 } })
+    await expectCode(register(noTransfer), 'succession_forbidden_by_recovery_policy')
+
+    const wrongIncumbent = await prepare()
+    const outsider = wrongIncumbent.fixture.store.seedPrincipal('9')
+    await expectCode(register(wrongIncumbent, { incumbentOwnerPrincipalRef: outsider }), 'succession_authorization_invalid')
+    await expectCode(register(wrongIncumbent, { incumbentOwnerPrincipalRef: wrongIncumbent.successor }), 'succession_authorization_invalid')
+
+    const belowThreshold = await prepare({ approvalCount: 1 })
+    await expectCode(register(belowThreshold), 'recovery_participant_threshold_unmet')
+
+    const aboveParticipantCount = await prepare({ approvalCount: 4 })
+    await expectCode(register(aboveParticipantCount), 'recovery_participant_approval_invalid')
+
+    const missing = await prepare()
+    missing.fixture.store.recoveryApprovals.delete(missing.approvalRefs[0]!)
+    await expectCode(register(missing), 'recovery_participant_approval_invalid')
+
+    const wrongAccount = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') } : approval })
+    await expectCode(register(wrongAccount), 'recovery_participant_approval_invalid')
+
+    const wrongParties = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, successorOwnerPrincipalRef: approval.incumbentOwnerPrincipalRef } : approval })
+    await expectCode(register(wrongParties), 'recovery_participant_approval_invalid')
+
+    const stalePolicy = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, recoveryPolicyRevision: 99 } : approval })
+    await expectCode(register(stalePolicy), 'recovery_participant_approval_invalid')
+
+    const missingFreeze = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, frozenAt: approval.frozenAt - 1 } : approval })
+    await expectCode(register(missingFreeze), 'recovery_participant_approval_invalid')
+
+    const revoked = await prepare({ mutate: (approval, index) => index === 0 ? { ...approval, lifecycle: 'revoked' } : approval })
+    await expectCode(register(revoked), 'recovery_participant_approval_invalid')
+
+    const duplicateParticipant = await prepare()
+    const firstApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[0]!)!
+    const secondApproval = duplicateParticipant.fixture.store.recoveryApprovals.get(duplicateParticipant.approvalRefs[1]!)!
+    duplicateParticipant.fixture.store.seedRecoveryApproval({ ...secondApproval, participantPrincipalRef: firstApproval.participantPrincipalRef })
+    await expectCode(register(duplicateParticipant), 'recovery_participant_duplicate')
+
+    const duplicateVerification = await prepare()
+    const firstVerification = duplicateVerification.fixture.store.recoveryApprovals.get(duplicateVerification.approvalRefs[0]!)!
+    const secondVerification = duplicateVerification.fixture.store.recoveryApprovals.get(duplicateVerification.approvalRefs[1]!)!
+    duplicateVerification.fixture.store.seedRecoveryApproval({ ...secondVerification, verificationRef: firstVerification.verificationRef })
+    await expectCode(register(duplicateVerification), 'recovery_participant_duplicate')
+
+    const collision = await prepare()
+    collision.fixture.store.successionAuthorizations.set('sau_00000000000040008000000000000003', {} as SuccessionAuthorization)
+    await expectCode(register(collision), 'succession_authorization_ref_conflict')
+
+    const invalidGeneratedRef = await prepare({ uuids: [uuid(1), uuid(2), 'invalid'] })
+    await expectCode(register(invalidGeneratedRef), 'succession_authorization_invalid')
+  })
+
+  it('resolves only canonical authorizations and rejects stale, mutated, premature and expired records', async () => {
+    const prepareRegistered = async (options: Readonly<{ delayMs?: number; expiresAt?: number }> = {}) => {
+      const fixture = setup({ times: [10, 20, 30, 40, 45, 60] })
+      const created = await createAccount(fixture, 'human', { kind: 'threshold', threshold: 2, participantCount: 3, delayMs: options.delayMs ?? 5, freezeRequired: true, revision: 1 })
+      const active = await activateAccount(fixture, created)
+      const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'freeze') })
+      const successor = fixture.store.seedPrincipal('2')
+      const approvalRefs = seedRecoveryApprovals(fixture, suspended, created.owner, successor, {
+        mutate: (approval) => ({ ...approval, expiresAt: 200 }),
+      })
+      const registered = await fixture.registry.registerSuccessionAuthorization({
+        accountRef: active.accountRef,
+        incumbentOwnerPrincipalRef: created.owner,
+        successorOwnerPrincipalRef: successor,
+        expectedAccountRevision: suspended.revision,
+        expectedOwnershipRevision: 1,
+        participantApprovalRefs: approvalRefs,
+        expiresAt: options.expiresAt ?? 100,
+        context: fixture.nextContext(active.accountRef, successor, 'authorize'),
+      })
+      return { fixture, created, active, suspended, successor, registered }
+    }
+    const attempt = async (prepared: Awaited<ReturnType<typeof prepareRegistered>>, actor = prepared.successor) => await prepared.fixture.registry.succeedOwnership({
+      accountRef: prepared.active.accountRef,
+      successorOwnerPrincipalRef: prepared.successor,
+      expectedAccountRevision: prepared.suspended.revision,
+      expectedOwnershipRevision: 1,
+      authorizationRef: prepared.registered.authorization.authorizationRef,
+      context: prepared.fixture.nextContext(prepared.active.accountRef, actor, 'succeed'),
+    })
+
+    const resolved = await prepareRegistered()
+    await expect(resolved.fixture.registry.getSuccessionAuthorization(resolved.registered.authorization.authorizationRef))
+      .resolves.toBe(resolved.registered.authorization)
+    await expectCode(resolved.fixture.registry.getSuccessionAuthorization('not-canonical'), 'succession_authorization_invalid')
+
+    const wrongActor = await prepareRegistered()
+    await expectCode(attempt(wrongActor, wrongActor.created.owner), 'succession_authorization_invalid')
+
+    for (const mutate of [
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, incumbentOwnerPrincipalRef: authorization.successorOwnerPrincipalRef }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, successorOwnerPrincipalRef: authorization.incumbentOwnerPrincipalRef }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, recoveryPolicyRevision: 99 }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, frozenAccountRevision: authorization.frozenAccountRevision - 1 }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, frozenAt: authorization.frozenAt - 1 }),
+      (authorization: SuccessionAuthorization): SuccessionAuthorization => ({ ...authorization, verifiedParticipantCount: 1 }),
+    ]) {
+      const corrupted = await prepareRegistered()
+      corrupted.fixture.store.successionAuthorizations.set(
+        corrupted.registered.authorization.authorizationRef,
+        Object.freeze(mutate(corrupted.registered.authorization)),
+      )
+      await expectCode(attempt(corrupted), 'succession_authorization_invalid')
+    }
+
+    const stalePolicy = await prepareRegistered()
+    stalePolicy.fixture.store.accounts.set(stalePolicy.active.accountRef, Object.freeze({
+      ...stalePolicy.suspended,
+      recoveryPolicy: { ...stalePolicy.suspended.recoveryPolicy, revision: 2 },
+    }))
+    await expectCode(attempt(stalePolicy), 'succession_authorization_invalid')
+
+    const premature = await prepareRegistered({ delayMs: 20 })
+    await expectCode(attempt(premature), 'succession_authorization_invalid')
+
+    const expired = await prepareRegistered({ expiresAt: 45 })
+    await expectCode(attempt(expired), 'succession_authorization_expired')
+  })
+
+  it('rejects missing, malformed and untrusted succession authorization references', async () => {
     const fixture = setup({ times: [10, 20, 30, 40, 40, 40, 40, 40, 40, 40, 40, 40] })
     const created = await createAccount(fixture)
     const active = await activateAccount(fixture, created)
     const suspended = await fixture.registry.suspend({ accountRef: active.accountRef, expectedRevision: 2, context: fixture.nextContext(active.accountRef, created.owner, 'suspend') })
     const successor = fixture.store.seedPrincipal('2')
-    const other = fixture.store.seedPrincipal('3')
-    const valid: SuccessionAuthorization = { authorizationRef: 'proof:1', accountRef: active.accountRef, incumbentOwnerPrincipalRef: created.owner, successorOwnerPrincipalRef: successor, recoveryPolicyRevision: 1, verifiedAt: 35, expiresAt: 50 }
-    const attempt = async (authorization: SuccessionAuthorization | undefined, actor = successor): Promise<unknown> => await fixture.registry.succeedOwnership({
+    const attempt = async (authorizationRef: string | undefined): Promise<unknown> => await fixture.registry.succeedOwnership({
       accountRef: active.accountRef,
       successorOwnerPrincipalRef: successor,
       expectedAccountRevision: suspended.revision,
       expectedOwnershipRevision: 1,
-      authorization: authorization as SuccessionAuthorization,
-      context: fixture.nextContext(active.accountRef, actor, 'succession'),
+      authorizationRef: authorizationRef as string,
+      context: fixture.nextContext(active.accountRef, successor, 'succession'),
     })
     await expectCode(attempt(undefined), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, authorizationRef: 'bad proof' }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, accountRef: accountRef('acc_ffffffffffffffffffffffffffffffff') }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, incumbentOwnerPrincipalRef: other }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, successorOwnerPrincipalRef: other }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, recoveryPolicyRevision: 2 }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, verifiedAt: -1 }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, expiresAt: 20 }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, verifiedAt: 41, expiresAt: 50 }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, verifiedAt: Number.NaN }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, expiresAt: Number.NaN }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, verifiedAt: 34 }), 'succession_authorization_invalid')
-    await expectCode(attempt({ ...valid, expiresAt: 39 }), 'succession_authorization_expired')
-    await expectCode(attempt(valid, other), 'succession_authorization_invalid')
+    await expectCode(attempt('bad proof'), 'succession_authorization_invalid')
+    await expectCode(attempt('sau_ffffffffffffffffffffffffffffffff'), 'succession_authorization_not_found')
   })
 
   it('requires suspension for succession and active state for voluntary transfer', async () => {
@@ -668,8 +997,7 @@ describe('Account registry contract', () => {
     const created = await createAccount(fixture)
     const active = await activateAccount(fixture, created)
     const successor = fixture.store.seedPrincipal('2')
-    const authorization: SuccessionAuthorization = { authorizationRef: 'proof:1', accountRef: active.accountRef, incumbentOwnerPrincipalRef: created.owner, successorOwnerPrincipalRef: successor, recoveryPolicyRevision: 1, verifiedAt: 20, expiresAt: 50 }
-    await expectCode(fixture.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: 2, expectedOwnershipRevision: 1, authorization, context: fixture.nextContext(active.accountRef, successor, 'succession') }), 'account_lifecycle_transition_forbidden')
+    await expectCode(fixture.registry.succeedOwnership({ accountRef: active.accountRef, successorOwnerPrincipalRef: successor, expectedAccountRevision: 2, expectedOwnershipRevision: 1, authorizationRef: 'sau_ffffffffffffffffffffffffffffffff', context: fixture.nextContext(active.accountRef, successor, 'succession') }), 'account_lifecycle_transition_forbidden')
   })
 
   it('proves exactly one active Account context and explicit cross-Account attribution', async () => {
