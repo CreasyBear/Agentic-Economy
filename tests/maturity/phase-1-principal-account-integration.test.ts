@@ -14,11 +14,23 @@ import {
   principalValue,
 } from '../../src/modules/principal-account/public'
 
-const canonicalTableNames = [
+const canonicalIdentityTableNames = [
   'principals',
   'accounts',
   'accountOwnerships',
   'memberships',
+  'externalIdentityBindings',
+  'credentials',
+] as const
+
+const principalAccountTableNames = [
+  'principals',
+  'accounts',
+  'accountOwnerships',
+  'memberships',
+  'accountRecoveryParticipantApprovals',
+  'accountSuccessionAuthorizations',
+  'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
 ] as const
@@ -30,8 +42,8 @@ describe('Phase 1 principal/account integration', () => {
       ...accountTables,
       ...externalIdentityTables,
     })
-    expect(Object.keys(principalAccountTables)).toEqual(canonicalTableNames)
-    for (const tableName of canonicalTableNames) {
+    expect(Object.keys(principalAccountTables)).toEqual(principalAccountTableNames)
+    for (const tableName of principalAccountTableNames) {
       expect(schema.tables[tableName]).toBe(principalAccountTables[tableName])
     }
   })
@@ -41,7 +53,7 @@ describe('Phase 1 principal/account integration', () => {
     for (const { table } of LEGACY_IDENTITY_RESET_MANIFEST) {
       expect(canonical.has(table)).toBe(false)
     }
-    expect(CANONICAL_IDENTITY_TABLES).toEqual(canonicalTableNames)
+    expect(CANONICAL_IDENTITY_TABLES).toEqual(canonicalIdentityTableNames)
   })
 
   it('keeps identity bindings referential and never makes them resource owners', () => {

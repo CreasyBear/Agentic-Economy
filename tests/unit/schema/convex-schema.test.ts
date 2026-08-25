@@ -45,6 +45,9 @@ const durableTables = [
   'accounts',
   'accountOwnerships',
   'memberships',
+  'accountRecoveryParticipantApprovals',
+  'accountSuccessionAuthorizations',
+  'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
   'owners',
@@ -121,6 +124,21 @@ const requiredIndexes = {
     'by_accountRef_and_lifecycle',
     'by_memberPrincipalRef_and_lifecycle',
     'by_accountRef_and_memberPrincipalRef_and_lifecycle',
+  ],
+  accountRecoveryParticipantApprovals: [
+    'by_approvalRef',
+    'by_accountRef_and_lifecycle',
+    'by_participantPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizations: [
+    'by_authorizationRef',
+    'by_accountRef_and_lifecycle',
+    'by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizationParticipants: [
+    'by_authorizationRef',
+    'by_accountRef_and_createdAt',
+    'by_participantPrincipalRef_and_createdAt',
   ],
   externalIdentityBindings: [
     'by_bindingRef',
@@ -250,7 +268,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(60)
+    expect(durableTables).toHaveLength(63)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
