@@ -151,6 +151,10 @@ describe("Agentic Economy registry generations", () => {
     );
 
     for (const [index, ordered] of [[preferred, alternate], [alternate, preferred]].entries()) {
+      const [first, second] = ordered;
+      if (first === undefined || second === undefined) {
+        throw new Error("duplicate route fixture requires exactly two entries");
+      }
       const backend = convexTest(schema, modules);
       const generation = `duplicate-order-${index}`;
       await backend.mutation(internal.marketExternalRegistry.begin, {
@@ -159,11 +163,11 @@ describe("Agentic Economy registry generations", () => {
       });
       await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
         generation,
-        entries: [ordered[0]!],
+        entries: [first],
       })).resolves.toEqual({ inserted: 1, replayed: 0 });
       await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
         generation,
-        entries: [ordered[1]!],
+        entries: [second],
       })).resolves.toEqual({ inserted: 0, replayed: 1 });
 
       const stored = await backend.run(async (ctx) => ({
