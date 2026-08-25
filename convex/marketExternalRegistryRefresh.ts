@@ -5,6 +5,10 @@ import {
   type RegistrySourceEntry,
 } from "@/modules/market/registry-source-contracts";
 import {
+  selectRegistryLaunchCohort,
+  type RegistryLaunchCandidate,
+} from "@/modules/market/registry-launch-cohort";
+import {
   fetchAgenticMarketCatalog,
   fetchTregCatalog,
 } from "@/modules/market/registry-source-adapters";
@@ -31,10 +35,15 @@ export const run = internalAction({
     });
     try {
       let insertedEntries = 0;
+      let launchCohort: RegistryLaunchCandidate[] = [];
       const [agenticMarket, treg] = await Promise.all([
         fetchAgenticMarketCatalog({
           jobTimeoutMs: 300_000,
           onEntries: async (sourceEntries) => {
+            launchCohort = selectRegistryLaunchCohort([
+              ...launchCohort,
+              ...sourceEntries.map(toLaunchCandidate),
+            ]);
             const written = await ctx.runMutation(
               internal.marketExternalRegistry.writeBatch,
               {
@@ -84,10 +93,15 @@ export const run = internalAction({
         tregReported: treg.sourceReportedCount,
         tregFetched: treg.entries.length,
       });
-      await ctx.scheduler.runAfter(0, internal.marketRegistryGraduation.sweep, {
-        generation,
-        cursor: null,
-      });
+      if (launchCohort.length > 0) {
+        await ctx.scheduler.runAfter(0, internal.marketRegistryGraduation.sweep, {
+          generation,
+          candidates: launchCohort.map(({ documentId, sourceDigest }) => ({
+            documentId,
+            sourceDigest,
+          })),
+        });
+      }
       return {
         kind: "refreshed" as const,
         generation,
@@ -104,6 +118,24 @@ export const run = internalAction({
     }
   },
 });
+
+function toLaunchCandidate(
+  entry: Extract<RegistrySourceEntry, { source: "agentic_market" }>,
+): RegistryLaunchCandidate {
+  return {
+    source: entry.source,
+    documentId: registryDocumentId(entry),
+    sourceDigest: entry.sourceDigest,
+    provider: entry.provider,
+    routeIdentity: entry.routeIdentity,
+    ...(entry.sourceCalls30d === undefined
+      ? {}
+      : { sourceCalls30d: entry.sourceCalls30d }),
+    ...(entry.sourcePayers30d === undefined
+      ? {}
+      : { sourcePayers30d: entry.sourcePayers30d }),
+  };
+}
 
 function toPersistedEntry(entry: RegistrySourceEntry) {
   const common = {

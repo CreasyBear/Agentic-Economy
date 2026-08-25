@@ -178,6 +178,63 @@ describe("Agentic Economy registry generations", () => {
     expect(result).toMatchObject({ kind: "ok", generation: "good" });
   });
 
+  it("persists concrete same-origin path and query probe URLs", async () => {
+    const backend = convexTest(schema, modules);
+    await backend.mutation(internal.marketExternalRegistry.begin, {
+      generation: "concrete-probes",
+      startedAt: 1,
+    });
+    const pathEndpoint = "https://api.example.com/users/{userId}";
+    const queryEndpoint = "https://api.example.com/search";
+    const pathEntry = {
+      ...entry("alpha"),
+      endpointUrl: pathEndpoint,
+      routeIdentity: `GET ${pathEndpoint}`,
+      probeRequest: {
+        method: "GET" as const,
+        url: "https://api.example.com/users/example-user",
+        headers: [],
+      },
+    };
+    const queryEntry = {
+      ...entry("beta"),
+      endpointUrl: queryEndpoint,
+      routeIdentity: `GET ${queryEndpoint}`,
+      probeRequest: {
+        method: "GET" as const,
+        url: "https://api.example.com/search?q=example",
+        headers: [],
+      },
+    };
+
+    await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "concrete-probes",
+      entries: [pathEntry, queryEntry],
+    })).resolves.toEqual({ inserted: 2, replayed: 0 });
+  });
+
+  it("refuses cross-origin, malformed, unsafe-scheme, and method-mismatched probes", async () => {
+    const invalidProbes = [
+      { method: "GET" as const, url: "https://other.example.com/alpha", headers: [] },
+      { method: "GET" as const, url: "not-a-url", headers: [] },
+      { method: "GET" as const, url: "file:///tmp/alpha", headers: [] },
+      { method: "POST" as const, url: "https://api.example.com/alpha", headers: [] },
+    ];
+
+    for (const [index, probeRequest] of invalidProbes.entries()) {
+      const backend = convexTest(schema, modules);
+      const generation = `invalid-probe-${index}`;
+      await backend.mutation(internal.marketExternalRegistry.begin, {
+        generation,
+        startedAt: index + 1,
+      });
+      await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+        generation,
+        entries: [{ ...entry("alpha"), probeRequest }],
+      })).rejects.toThrow("external_registry_batch_invalid");
+    }
+  });
+
   it("withdraws entries absent from the next complete generation", async () => {
     const backend = convexTest(schema, modules);
     const firstEntries = [entry("alpha"), entry("beta")];
