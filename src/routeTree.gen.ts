@@ -49,6 +49,7 @@ import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as OperationsInvocationsInvocationRefRouteImport } from './routes/operations.invocations.$invocationRef'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
+import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
@@ -283,6 +284,11 @@ const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
   path: '/api/v1/release',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1RegistryRoute = ApiV1RegistryRouteImport.update({
+  id: '/api/v1/registry',
+  path: '/api/v1/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
   id: '/api/v1/market-metrics',
   path: '/api/v1/market-metrics',
@@ -497,6 +503,7 @@ export interface FileRoutesByFullPath {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -567,6 +574,7 @@ export interface FileRoutesByTo {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -639,6 +647,7 @@ export interface FileRoutesById {
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
@@ -711,6 +720,7 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -781,6 +791,7 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -852,6 +863,7 @@ export interface FileRouteTypes {
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
@@ -909,6 +921,7 @@ export interface RootRouteChildren {
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
+  ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
   ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
@@ -1199,6 +1212,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/release'
       fullPath: '/api/v1/release'
       preLoaderRoute: typeof ApiV1ReleaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/registry': {
+      id: '/api/v1/registry'
+      path: '/api/v1/registry'
+      fullPath: '/api/v1/registry'
+      preLoaderRoute: typeof ApiV1RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/market-metrics': {
@@ -1598,6 +1618,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
+  ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
   ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,

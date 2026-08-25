@@ -1,0 +1,11 @@
+{
+  "schema": "ae.coverage-ratchet-policy:v1",
+  "criticalPathPrefixes": [
+    "src/modules/principal-account",
+    "src/modules/authority",
+    "src/modules/connections",
+    "src/modules/commercial",
+    "src/modules/invocation-core",
+    "src/modules/evidence"
+  ]
+}

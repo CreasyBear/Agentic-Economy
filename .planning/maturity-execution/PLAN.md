@@ -1,0 +1,203 @@
+# Plan: AE Full-Maturity Platform
+
+Depth: tree 6
+Mode: orchestrated
+Target: operated L3 platform with L4-compatible seams
+
+## Contract
+
+This contract is frozen before implementation fan-out. Amendments require a
+status-log entry naming the affected leaves and must be made before those leaves
+resume.
+
+### Public interfaces
+
+- `POST /api/v1/operations/resolve`
+- `POST /api/v1/quotes`
+- `POST /api/v1/operations/call`
+- `GET /api/v1/invocations/{ref}`
+- `POST /api/v1/invocations/{ref}/continue`
+- `POST /api/v1/invocations/{ref}/cancel`
+- Signed, replayable, at-least-once invocation and settlement webhooks.
+- HTTP, MCP and CLI share schemas, scopes, problem codes and idempotency rules.
+- `/api/v1/operations/call` is canonical; stale `/execute` documentation is corrected.
+- Unknown additive provider states remain `unknown`.
+
+### Domain ownership
+
+- `principal-account` exclusively owns Principal, Account, AccountOwnership,
+  Membership, ExternalIdentityBinding, Credential, Harness and RecoveryPolicy.
+- `authority` exclusively owns generation-bound Grants and authorization decisions.
+- `connections` owns connection lifecycle and secret references, never secret material.
+- `commercial` owns Operation, Offer, Resolution, Quote and Order.
+- `invocation-core` owns Invocation identity; runtime attempts are separate records.
+- `money` owns Settlement, reservation, refund, dispute and supplier-entitlement facts.
+- `evidence` owns immutable authority, invocation, usage, money and audit evidence.
+- `registry` and operator views are projections, never alternative sources of truth.
+- Convex is the sole writable primary. Infisical stores secret material. The external
+  archive is append-only recovery/evidence, not a live writable application database.
+
+### Identifier and naming rules
+
+- Stable resource references are independent of credentials and provider identifiers.
+- Every consequential record carries actor principal, active account, authority
+  generation, correlation/idempotency reference and relevant commercial roles.
+- Credentials authenticate principals but never own resources.
+- Server time is authoritative for expiry and consequence admission.
+- Convex index names include all indexed fields in order.
+- Unknown external enums are preserved rather than coerced.
+
+### Account and authority semantics
+
+- Autonomous agents may own Accounts directly.
+- Each protected action has exactly one active Account context.
+- Cross-account actions are explicit, attributed transactions.
+- Human, organization, agent and workload principals use the same authorization path.
+- Child grants can only narrow ancestor scope, budget, expiry and resources.
+- Delegation cycles are rejected. Revocation advances a generation.
+- New consequential work requires live current authority. Admitted work finishes
+  against a pinned snapshot or becomes reconcilable/uncertain.
+- Recovery is declared per Account: threshold recovery with delay/freeze or explicit
+  no-transfer recovery. Operator freeze does not imply transfer authority.
+- Operators never impersonate users; privileged actions retain dual attribution.
+
+### Commercial and execution state machines
+
+`Operation -> Offer -> Resolution -> Quote -> Order -> Invocation -> Attempt -> Outcome -> Settlement`
+
+- Quote pins buyer/account, supplier Offer, price, terms, readiness, provider version,
+  authority generation and expiry.
+- Accepting a Quote creates one Order under idempotent admission.
+- Invocation is not the commercial commitment; it fulfills an Order.
+- Ambiguous irreversible effects are never blindly retried.
+- Outcomes include success, failure, cancelled, input-required and uncertain.
+- L3 money posture is Australian B2B reseller: AE sells completed execution in AUD
+  and pays suppliers from AE treasury. No customer stored value or transfers.
+
+### Secret contract
+
+- Managed Infisical Cloud is accessed through a provider-neutral `SecretStore` port.
+- Platform boot secrets and customer connector material use separate vault projects.
+- Workloads authenticate to Infisical with OIDC machine identities and short-lived tokens.
+- Customer connector material is fetched just in time, held only in memory and never
+  stored in Convex, environment variables, logs, responses, evidence or support views.
+- Rotation is two-phase: write and validate a new vault generation, then atomically
+  advance the active Convex secret-generation pointer.
+- New consequential calls fail closed while the vault is unavailable.
+
+### Error and versioning contract
+
+- Public errors use stable problem codes and correlation references.
+- Retryability and whether an external effect may have occurred are explicit.
+- Public v1 begins a 180-day default breaking-change deprecation window at GA,
+  except immediate security withdrawals with a migration notice.
+
+### Test contract
+
+- New canonical domain modules and changed critical paths require 100% line, branch,
+  function and statement coverage.
+- Existing code follows a no-regression coverage ratchet.
+- Authority and money invariants require property/state-machine and concurrency tests.
+- Every protected resource/surface participates in a generated isolation matrix.
+- Leaf tests do not substitute for phase integration gates.
+- Hosted evidence must name the exact deployed source revision.
+
+### Shared-file ownership
+
+Feature leaves do not edit shared composition files. The active phase integration
+driver exclusively owns `convex/schema.ts`, `convex/http.ts`, `src/routeTree.gen.ts`,
+root `package.json`, root configuration, public cross-context barrels and generated
+files. Leaves expose context-local typed exports for the driver to compose.
+
+## Tree
+
+- 1 AE L3 maturity
+  - 1.1 Foundation ................................ `gates/node-foundation.md`
+    - Phase 0 Trustworthy baseline ................. `gates/phase-0.md`
+      - P0-01 route/codegen baseline ............... `gates/leaf-P0-01.md`
+      - P0-02 contract inventory and ADR repair .... `gates/leaf-P0-02.md`
+      - P0-03 release/coverage/package integrity ... `gates/leaf-P0-03.md`
+    - Phase 1 Principals and Accounts .............. `gates/phase-1.md`
+      - P1-01 Principal registry ................... `gates/leaf-P1-01.md`
+      - P1-02 Account lifecycle .................... `gates/leaf-P1-02.md`
+      - P1-03 Identity bindings and credentials .... `gates/leaf-P1-03.md`
+      - P1-04 Workload context and reset ........... `gates/leaf-P1-04.md`
+    - Phase 2 Authority/connections/secrets ........ `gates/phase-2.md`
+      - P2-01 Memberships and delegation ........... `gates/leaf-P2-01.md`
+      - P2-02 Cross-surface authorization .......... `gates/leaf-P2-02.md`
+      - P2-03 Connection lifecycle ................. `gates/leaf-P2-03.md`
+      - P2-04 Infisical and rotation ............... `gates/leaf-P2-04.md`
+      - P2-05 Recovery/isolation/secret proof ....... `gates/leaf-P2-05.md`
+  - 1.2 Commercial transaction kernel ............. `gates/node-commerce.md`
+    - Phase 3 Commercial model ..................... `gates/phase-3.md`
+      - P3-01 Operation and Offer .................. `gates/leaf-P3-01.md`
+      - P3-02 Resolution and Quote ................. `gates/leaf-P3-02.md`
+      - P3-03 Idempotent Order ..................... `gates/leaf-P3-03.md`
+      - P3-04 Public commercial contracts .......... `gates/leaf-P3-04.md`
+    - Phase 4 Invocation/evidence/money ............ `gates/phase-4.md`
+      - P4-01 Invocation-root merge ................ `gates/leaf-P4-01.md`
+      - P4-02 Async/continuation/uncertainty ........ `gates/leaf-P4-02.md`
+      - P4-03 Admission and limits ................. `gates/leaf-P4-03.md`
+      - P4-04 Reseller money state machine ......... `gates/leaf-P4-04.md`
+      - P4-05 Evidence archive/reconciliation ...... `gates/leaf-P4-05.md`
+  - 1.3 Operated agent platform .................... `gates/node-operations.md`
+    - Phase 5 Reliability/resilience/release ....... `gates/phase-5.md`
+      - P5-01 Observability and SLOs ............... `gates/leaf-P5-01.md`
+      - P5-02 Incidents/runbooks/error budgets ..... `gates/leaf-P5-02.md`
+      - P5-03 Backup/archive/restore ............... `gates/leaf-P5-03.md`
+      - P5-04 Canary/rollback/migration ............ `gates/leaf-P5-04.md`
+    - Phase 6 Agent APIs/connectors/distribution ... `gates/phase-6.md`
+      - P6-01 HTTP agent API ....................... `gates/leaf-P6-01.md`
+      - P6-02 Agent OAuth and token exchange ....... `gates/leaf-P6-02.md`
+      - P6-03 MCP/CLI/SDK/docs parity .............. `gates/leaf-P6-03.md`
+      - P6-04 Connectors and webhooks .............. `gates/leaf-P6-04.md`
+      - P6-05 Harness pilot/truth probes ........... `gates/leaf-P6-05.md`
+    - Phase 7 Scale/fairness/cost .................. `gates/phase-7.md`
+      - P7-01 Materialized search .................. `gates/leaf-P7-01.md`
+      - P7-02 Pagination and fleet fairness ........ `gates/leaf-P7-02.md`
+      - P7-03 Capacity and abuse load .............. `gates/leaf-P7-03.md`
+      - P7-04 Cost and extraction triggers ......... `gates/leaf-P7-04.md`
+    - Phase 8 Support/lifecycle/integrity .......... `gates/phase-8.md`
+      - P8-01 Operator support ..................... `gates/leaf-P8-01.md`
+      - P8-02 Export/deletion/succession ........... `gates/leaf-P8-02.md`
+      - P8-03 Economic abuse controls .............. `gates/leaf-P8-03.md`
+      - P8-04 Disputes and reputation .............. `gates/leaf-P8-04.md`
+  - 1.4 L3 completion .............................. `gates/node-ga.md`
+    - Phase 9 Readiness and GA ..................... `gates/phase-9.md`
+      - P9-01 Security/resilience/revision proof ... `gates/leaf-P9-01.md`
+      - P9-02 SLO and commercial soak .............. `gates/leaf-P9-02.md`
+      - P9-03 GA compatibility/evidence package .... `gates/leaf-P9-03.md`
+
+## Parallel lanes
+
+- Sequential: ledger -> Phase 0 -> Phase 1 -> Phase 2.
+- After Phase 2: Lane A Phase 3 -> Phase 4; Lane B Phase 5 foundations;
+  Lane C Phase 6 resolve/contracts/connectors.
+- Phase 4 merges before Lane C integrates call/continuation behavior.
+- Phase 7 and Phase 8 may then run in parallel.
+- Phase 9 waits for every program-branch gate.
+
+## Completion targets
+
+- Public control/transaction availability: 99.9% monthly.
+- Authorization p95: <150 ms.
+- Top-20 resolution p95: <500 ms.
+- AE admission overhead p95: <400 ms excluding supplier execution.
+- Consequential evidence RPO: 15 minutes; reconstructible projections: 24 hours.
+- Service RTO: 4 hours.
+- One-stamp envelope: 10,000 active accounts; 100,000 principals; 100,000
+  admitted Operations/Offers; 1,000 new invocations/minute sustained; 5,000/minute
+  for five minutes; 500 concurrent supplier calls; 10x hot-account skew; 5x retry storm.
+- Ninety-day gate: 20 paying organizations; 1,000 paid invocations; 30% repeat;
+  zero AE duplicate charges/effects; AE refunds <1%; manual reconciliation <0.5%;
+  no unknown money state >24 hours; positive contribution margin; counsel approval.
+
+## Status log
+
+- 2026-08-25: execution contract and tree created before implementation work.
+- 2026-08-25: P0-01 verified by worker and independently rerun by driver; 7/7 leaf gates met, 3/3 maturity tests passed, typecheck passed.
+- 2026-08-25: P0-02 verified by worker and independently rerun by driver; 7/7 leaf gates met, 4/4 maturity tests passed, inventory remeasured at 39 HTTP, 14 MCP, 12 CLI and 5 planned routes.
+- 2026-08-25: P0-03 verified by worker and independently rerun by driver; 7/7 leaf gates met, 10/10 targeted maturity/release-contract tests passed, source-integrity and CLI package proofs passed, 738-file coverage ratchet calibrated from measured runs, and npm audit reported zero vulnerabilities.
+- 2026-08-25: P0-03 integration defect pass superseded the earlier 738-file V8 calibration after repeated identical runs exposed order-sensitive counters. The release gate now uses deterministic Istanbul instrumentation over 699 executable source files; an explicit async CodeBlock test closes the only remaining order-sensitive path. The earlier 738 count is retained as historical evidence and is not a completion claim.
+- 2026-08-25: User execution directive — Phase 0 closes in this task. Each subsequent phase runs in its own Codex task using the GSD phase execution skill, delegates discrete bounded leaves to subagents, preserves the frozen Unlazy gates, and stops at its independent phase gate. Dependent phase tasks are dispatched only after predecessor integration; Phase 3/5/6 fan-out begins only after Phase 2, and Phase 6 call/continuation integration waits for Phase 4.
+- 2026-08-25: Phase 0 integration independently verified. All 21 child gates and all 6 phase gates are met; the exact Node 22 source release gate, zero-vulnerability audit, generated-source integrity, deterministic 699-file coverage ratchet, package proof and production build passed. Phase 1 may now start in its own orchestrated task.

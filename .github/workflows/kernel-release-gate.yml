@@ -80,14 +80,8 @@ jobs:
       - name: Run deterministic operation chat conformance
         run: npm run test:chat:conformance
 
-      - name: Generate Convex source normally
-        run: npm run generate:convex
-
-      - name: Verify generated Convex source with a dry run
-        run: npm run check:convex-codegen
-
-      - name: Prove committed Convex generated source is current
-        run: git diff --exit-code -- convex/_generated
+      - name: Verify generated source and pinned release inputs
+        run: npm run verify:maturity-release-integrity
 
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
