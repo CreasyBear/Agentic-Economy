@@ -57,6 +57,13 @@ For each completed phase:
 | 1 | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | implementation `01a03874-128c-7aa0-b2bc-bc02a2b6193e`, superseded review `01a0390e-8b60-7cc1-863c-a2bedc223fc0`, passing review `01a03961-c8d0-7812-8b4d-1fc13f2ba589` | clean worktrees `1cf4`, `27d0`, `7cf7` removed after reachability proof | retain `agent-p1-01-principal` and `codex/phase-2-unblock` through Phase 2 acceptance | CLOSED 2026-08-26 |
 | 2 | implementation active | not applicable | active worktree retained | active | ACTIVE |
 
+## Side-task cleanup log
+
+| Date | Scope | Preserved | Removed | Retained / reason |
+|---|---|---|---|---|
+| 2026-08-26 | Legacy registry child execution | Every clean worktree HEAD remained on its named `codex/ae-arch-*` branch | Six clean inactive `ae-prod-registry-*` and `ae-registry-*` worktrees; worktree metadata pruned | Branches retained pending deliberate branch-integration audit |
+| 2026-08-26 | Superseded architecture/onboarding side task | Two useful untracked research artifacts assigned back to task `01a034a3-3b0e-7540-b012-15b4fc43e3e2` for focused commit | pending clean handoff | Worktree `c778` retained until artifacts are committed and reachable |
+
 ## Standing exclusions
 
 - Current workspace root.
