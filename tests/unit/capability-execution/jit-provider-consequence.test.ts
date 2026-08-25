@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { encodePaymentRequiredHeader } from '@x402/core/http'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   createJitProviderConsequenceBoundary,
   providerConsequenceInvocationDigest,
+  providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
+  type JitProviderX402Runtime,
+  type JitProviderX402RuntimeFactory,
   type ProviderConsequenceJournal,
   type ProviderConsequenceJournalBeginResult,
   type ProviderConsequenceTicketVerifier,
@@ -76,6 +80,57 @@ function invocation(): ProviderRouteTransportInvocation {
       readinessDigest: canonicalDigest({ readiness: 'test' }),
     },
     inputJson: JSON.stringify({ destination: 'PER' }),
+  }
+}
+
+const X402_PAYMENT_CREDENTIAL_REF = 'env:AE_X402_PAYMENT_PRIVATE_KEY'
+
+function x402Challenge() {
+  return {
+    x402Version: 2 as const,
+    resource: { url: 'https://provider.example/paid' },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:84532' as const,
+      amount: '1250000',
+      asset: '0x0000000000000000000000000000000000000001',
+      payTo: '0x0000000000000000000000000000000000000002',
+      maxTimeoutSeconds: 60,
+      extra: {},
+    }],
+  }
+}
+
+function x402Invocation(): ProviderRouteTransportInvocation {
+  const base = invocation()
+  const challenge = x402Challenge()
+  const requirement = challenge.accepts[0]
+  if (requirement === undefined) throw new Error('test_fixture_invalid')
+  const config = {
+    method: 'POST' as const,
+    requestTimeoutMs: 5_000,
+    scheme: 'exact' as const,
+    network: requirement.network,
+    currency: 'USD',
+    routeAmountExponent: 2,
+    assetAmountExponent: 6,
+    asset: requirement.asset,
+    payTo: requirement.payTo,
+    paymentRequiredJson: stableStringify(challenge as StableHashValue),
+  }
+  return {
+    ...base,
+    binding: {
+      ...base.binding,
+      adapterId: 'x402-fetch:v2',
+      endpointUrl: challenge.resource.url,
+      configJson: JSON.stringify(config),
+      configDigest: canonicalDigest(config),
+    },
+    authority: {
+      ...base.authority,
+      maximumSpend: { currency: 'USD', units: '125', exponent: 2 },
+    },
   }
 }
 
@@ -224,6 +279,7 @@ type HarnessOverrides = Readonly<{
   send?: RouteTransportFetch
   now?: number
   boundaryNow?: () => number
+  createCallbackScopedX402Runtime?: JitProviderX402RuntimeFactory
 }>
 
 function harness(overrides: HarnessOverrides = {}) {
@@ -244,8 +300,32 @@ function harness(overrides: HarnessOverrides = {}) {
     secretRuntime: secretRuntimeOptions(pointer, overrides.vaultFetch ?? vaultFetch(), () => overrides.now ?? NOW),
     send,
     now: overrides.boundaryNow ?? (() => overrides.now ?? NOW),
+    ...(overrides.createCallbackScopedX402Runtime === undefined
+      ? {}
+      : { createCallbackScopedX402Runtime: overrides.createCallbackScopedX402Runtime }),
   })
   return { boundary, durableJournal, routeInvocation, send }
+}
+
+function callbackScopedX402Runtime(
+  overrides: Partial<JitProviderX402Runtime> = {},
+): JitProviderX402Runtime {
+  return {
+    readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
+    validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
+    x402PaymentSigningAvailable: () => true,
+    verifyX402Settlement: async () => true,
+    prepareX402PaymentAuthorization: async () => ({
+      custodyRef: 'sha256:customer-custody-reference',
+      authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
+    }),
+    readX402PaymentAuthorization: async () => 'signed-payment',
+    readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
+    beforeX402PaymentAuthorizationRead: async () => true,
+    markX402PaymentPossiblySubmitted: async () => undefined,
+    observeX402PaymentAttempt: async () => undefined,
+    ...overrides,
+  }
 }
 
 describe('JIT provider consequence boundary', () => {
@@ -298,6 +378,7 @@ describe('JIT provider consequence boundary', () => {
       effectRef: canonicalTicket.effectRef,
       requestDigest: canonicalTicket.requestDigest,
       invocationDigest: canonicalTicket.invocationDigest,
+      ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
       expiresAt: canonicalTicket.expiresAt,
       now: NOW,
     })
@@ -341,6 +422,7 @@ describe('JIT provider consequence boundary', () => {
     ['readiness substitution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, readinessValidUntil: value.readinessValidUntil - 1 })],
     ['pointer generation malformed', (value: CanonicalProviderConsequenceTicket) => ({ ...value, secret: { ...value.secret, activeGeneration: 'provider-generation' } })],
     ['account attribution malformed', (value: CanonicalProviderConsequenceTicket) => ({ ...value, activeAccountRef: 'account:caller' })],
+    ['unverified cross-account attribution', (value: CanonicalProviderConsequenceTicket) => ({ ...value, activeAccountRef: 'acc_22222222222222222222222222222222' })],
   ])('rejects hostile canonical-ticket mismatch: %s', async (_case, mutate) => {
     const routeInvocation = invocation()
     const durableJournal = journal()
@@ -383,6 +465,44 @@ describe('JIT provider consequence boundary', () => {
     expect(result).toMatchObject({ disposition: 'refused', failureCode: 'provider_consequence_ticket_invalid' })
     expect(send).not.toHaveBeenCalled()
     expect(JSON.stringify(result)).not.toContain('acc_11111111111111111111111111111111')
+  })
+
+  it('binds account and secret claims to the durable issued ticket before secret or provider I/O', async () => {
+    const routeInvocation = invocation()
+    const issued = ticket(routeInvocation)
+    const substituted: CanonicalProviderConsequenceTicket = {
+      ...issued,
+      owningAccountRef: 'acc_22222222222222222222222222222222',
+      activeAccountRef: 'acc_22222222222222222222222222222222',
+      secret: {
+        secretRef: secretRef('sec_22222222222222222222222222222222'),
+        activeGeneration: secretGeneration('sgn_22222222222222222222222222222222'),
+        pointerRevision: 9,
+      },
+    }
+    expect(substituted.requestDigest).toBe(issued.requestDigest)
+    expect(substituted.invocationDigest).toBe(issued.invocationDigest)
+    expect(providerConsequenceTicketClaimsDigest(substituted)).not.toBe(
+      providerConsequenceTicketClaimsDigest(issued),
+    )
+    const durableJournal: ProviderConsequenceJournal = {
+      ...journal(),
+      begin: vi.fn(async (input) => input.ticketClaimsDigest === providerConsequenceTicketClaimsDigest(issued)
+        ? { kind: 'claimed', claimRef: 'claim:test' }
+        : { kind: 'unavailable' }),
+    }
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: substituted,
+      journal: durableJournal,
+    })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'provider_consequence_ticket_unavailable',
+    })
+    expect(getVercelOidcToken).not.toHaveBeenCalled()
+    expect(active.send).not.toHaveBeenCalled()
   })
 
   it('binds call identity and monetary authority even though the legacy request digest omits them', async () => {
@@ -505,6 +625,49 @@ describe('JIT provider consequence boundary', () => {
       releaseStarted: false,
       failureCode: 'provider_consequence_journal_unavailable',
     })
+  })
+
+  it.each([
+    ['non-object result', null],
+    ['missing result kind', {}],
+    ['unrecognized kind', { kind: 'other' }],
+    ['claimed without a canonical claim ref', { kind: 'claimed', claimRef: ' claim:test ' }],
+    ['started with caller-shaped fields', { kind: 'started', claimRef: 'claim:test' }],
+    ['unavailable with caller-shaped fields', { kind: 'unavailable', retry: true }],
+    ['completed without a canonical observation', {
+      kind: 'completed',
+      observation: { transport: 'http', disposition: 'succeeded', releaseStarted: 'yes' },
+    }],
+  ])('rejects malformed remote journal result before secret or provider I/O: %s', async (_case, remoteResult) => {
+    const durableJournal: ProviderConsequenceJournal = {
+      ...journal(),
+      begin: vi.fn(async () => remoteResult),
+    }
+    const active = harness({ journal: durableJournal })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'provider_consequence_journal_invalid',
+    })
+    expect(getVercelOidcToken).not.toHaveBeenCalled()
+    expect(active.send).not.toHaveBeenCalled()
+    expect(durableJournal.complete).not.toHaveBeenCalled()
+    expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
+  })
+
+  it('rejects a non-serializable completed journal observation before secret or provider I/O', async () => {
+    const observation: Record<string, unknown> = { kind: 'completed' }
+    observation.observation = observation
+    const durableJournal: ProviderConsequenceJournal = {
+      ...journal(),
+      begin: vi.fn(async () => observation),
+    }
+    const active = harness({ journal: durableJournal })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: active.routeInvocation })).resolves.toMatchObject({
+      disposition: 'refused',
+      failureCode: 'provider_consequence_journal_invalid',
+    })
+    expect(active.send).not.toHaveBeenCalled()
   })
 
   it('fails closed before provider I/O on exact stale pointer, identity, and vault outages', async () => {
@@ -659,6 +822,208 @@ describe('JIT provider consequence boundary', () => {
     expect(result).toMatchObject({ disposition: 'refused', releaseStarted: false, failureCode: 'credential_unavailable' })
     expect(active.send).not.toHaveBeenCalled()
     expect(active.durableJournal.complete).toHaveBeenCalledOnce()
+  })
+
+  it('refuses x402 support when the callback-scoped custody and reconciliation factory is absent', async () => {
+    const routeInvocation = x402Invocation()
+    const active = harness({ routeInvocation, verifiedTicket: ticket(routeInvocation) })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      transport: 'x402',
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_custody_unavailable',
+    })
+    expect(active.send).not.toHaveBeenCalled()
+  })
+
+  it('runs the existing x402 custody, submission marker, and reconciliation ports inside the JIT callback without retry', async () => {
+    const routeInvocation = x402Invocation()
+    const challenge = x402Challenge()
+    const prepareX402PaymentAuthorization = vi.fn(async () => ({
+      custodyRef: 'sha256:customer-custody-reference',
+      authorizationDigest: canonicalDigest({ authorization: 'signed-payment' }),
+    }))
+    const readX402PaymentAuthorization = vi.fn(async () => 'signed-payment')
+    const readX402PaymentAuthorizationByDigest = vi.fn(async () => 'signed-payment')
+    const markX402PaymentPossiblySubmitted = vi.fn(async () => undefined)
+    const observeX402PaymentAttempt = vi.fn(async () => undefined)
+    const createCallbackScopedX402Runtime = vi.fn<JitProviderX402RuntimeFactory>(async () => ({
+      readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
+      validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
+      x402PaymentSigningAvailable: () => true,
+      verifyX402Settlement: async () => true,
+      prepareX402PaymentAuthorization,
+      readX402PaymentAuthorization,
+      readX402PaymentAuthorizationByDigest,
+      beforeX402PaymentAuthorizationRead: async () => true,
+      markX402PaymentPossiblySubmitted,
+      observeX402PaymentAttempt,
+    }))
+    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
+      status: 402,
+      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+    }))
+    const durableJournal = journal()
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      createCallbackScopedX402Runtime,
+      journal: durableJournal,
+      send,
+    })
+
+    const result = await active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })
+
+    expect(result).toMatchObject({
+      transport: 'x402',
+      disposition: 'unknown',
+      releaseStarted: true,
+      failureCode: 'payment_required_after_submission',
+      paymentAuthorizationStatus: 'created',
+      paymentSubmissionStatus: 'observed',
+      settlementEvidence: { kind: 'unknown', reason: 'payment_required_after_submission' },
+    })
+    expect(createCallbackScopedX402Runtime).toHaveBeenCalledWith({
+      ticket: ticket(routeInvocation),
+      invocation: routeInvocation,
+    })
+    expect(prepareX402PaymentAuthorization).toHaveBeenCalledOnce()
+    expect(readX402PaymentAuthorization).toHaveBeenCalledOnce()
+    expect(readX402PaymentAuthorizationByDigest).not.toHaveBeenCalled()
+    expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledOnce()
+    expect(observeX402PaymentAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      state: 'reconciliation_required',
+    }))
+    expect(send).toHaveBeenCalledOnce()
+    expect(durableJournal.complete).toHaveBeenCalledWith({ claimRef: 'claim:test', observation: result })
+    expect(JSON.stringify(result)).not.toContain('signed-payment')
+  })
+
+  it('does not advertise x402 execution when the callback-scoped signer reports unavailable', async () => {
+    const routeInvocation = x402Invocation()
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
+        x402PaymentSigningAvailable: () => false,
+      }),
+    })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      transport: 'x402',
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_signature_unavailable',
+    })
+    expect(active.send).not.toHaveBeenCalled()
+  })
+
+  it('leaves a post-release x402 exception started and unknown without making the ticket retryable', async () => {
+    const routeInvocation = x402Invocation()
+    const challenge = x402Challenge()
+    const durableJournal = journal()
+    const send = vi.fn<RouteTransportFetch>(async () => new Response(null, {
+      status: 402,
+      headers: { 'Payment-Required': encodePaymentRequiredHeader(challenge) },
+    }))
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      journal: durableJournal,
+      send,
+      createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
+        observeX402PaymentAttempt: async () => { throw new Error('reconciliation-port-outage') },
+      }),
+    })
+
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      transport: 'x402',
+      disposition: 'unknown',
+      releaseStarted: true,
+      failureCode: 'provider_consequence_release_unknown',
+    })
+    expect(send).toHaveBeenCalledOnce()
+    expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
+    expect(durableJournal.complete).not.toHaveBeenCalled()
+  })
+
+  it('does not abort or retry when expiry is detected after x402 authorization and submission fencing', async () => {
+    const routeInvocation = x402Invocation()
+    const durableJournal = journal()
+    const markX402PaymentPossiblySubmitted = vi.fn(async () => undefined)
+    const clock = vi.fn()
+      .mockReturnValueOnce(NOW)
+      .mockReturnValueOnce(NOW)
+      .mockReturnValue(NOW + 10_000)
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      journal: durableJournal,
+      boundaryNow: clock,
+      createCallbackScopedX402Runtime: async () => callbackScopedX402Runtime({
+        markX402PaymentPossiblySubmitted,
+      }),
+    })
+
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      transport: 'x402',
+      disposition: 'unknown',
+      releaseStarted: true,
+      failureCode: 'provider_consequence_release_unknown',
+    })
+    expect(markX402PaymentPossiblySubmitted).toHaveBeenCalledOnce()
+    expect(active.send).not.toHaveBeenCalled()
+    expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
+    expect(durableJournal.complete).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the callback-scoped x402 runtime factory is unavailable', async () => {
+    const routeInvocation = x402Invocation()
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      createCallbackScopedX402Runtime: async () => { throw new Error('x402-runtime-factory-outage') },
+    })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_custody_unavailable',
+    })
+    expect(active.send).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['non-object runtime', null],
+    ['missing required custody port', {}],
+    ['runtime attempting to replace the provider send port', {
+      ...callbackScopedX402Runtime(),
+      send: async () => Response.json({ attacker: true }),
+    }],
+    ['invalid optional submission fence', {
+      readX402PaymentCredentialRef: async () => X402_PAYMENT_CREDENTIAL_REF,
+      validateProviderConnectionAuthority: async () => ({ kind: 'valid' as const }),
+      x402PaymentSigningAvailable: () => true,
+      verifyX402Settlement: async () => true,
+      prepareX402PaymentAuthorization: async () => undefined,
+      readX402PaymentAuthorization: async () => undefined,
+      readX402PaymentAuthorizationByDigest: async () => undefined,
+      beforeX402PaymentAuthorizationRead: true,
+      markX402PaymentPossiblySubmitted: async () => undefined,
+      observeX402PaymentAttempt: async () => undefined,
+    }],
+  ])('fails closed for malformed callback-scoped x402 runtime: %s', async (_case, runtime) => {
+    const routeInvocation = x402Invocation()
+    const createCallbackScopedX402Runtime = (async () => runtime) as unknown as JitProviderX402RuntimeFactory
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: ticket(routeInvocation),
+      createCallbackScopedX402Runtime,
+    })
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'payment_custody_unavailable',
+    })
+    expect(active.send).not.toHaveBeenCalled()
   })
 
   it('rechecks ticket expiry immediately before the underlying provider call', async () => {

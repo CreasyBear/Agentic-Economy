@@ -5,8 +5,11 @@ import {
   type RouteTransportFetch,
   type RouteTransportInvocation,
   type RouteTransportObservation,
+  type RouteTransportRuntime,
+  type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import {
@@ -60,6 +63,7 @@ export type ProviderConsequenceJournalBegin = Readonly<{
   effectRef: string
   requestDigest: string
   invocationDigest: string
+  ticketClaimsDigest: string
   expiresAt: number
   now: number
 }>
@@ -71,7 +75,7 @@ export type ProviderConsequenceJournalBeginResult =
   | Readonly<{ kind: 'unavailable' }>
 
 export interface ProviderConsequenceJournal {
-  begin(input: ProviderConsequenceJournalBegin): Promise<ProviderConsequenceJournalBeginResult>
+  begin(input: ProviderConsequenceJournalBegin): Promise<unknown>
   complete(input: Readonly<{ claimRef: string; observation: RouteTransportObservation }>): Promise<void>
   abortBeforeRelease(input: Readonly<{ claimRef: string }>): Promise<void>
 }
@@ -92,6 +96,7 @@ export type JitProviderConsequenceBoundaryOptions = Readonly<{
   journal: ProviderConsequenceJournal
   secretRuntime: ProductionSecretRuntimeOptions
   send: RouteTransportFetch
+  createCallbackScopedX402Runtime?: JitProviderX402RuntimeFactory
   now?: () => number
 }>
 
@@ -99,6 +104,28 @@ type ProviderRouteTransportInvocation = Extract<
   RouteTransportInvocation,
   Readonly<{ binding: Readonly<{ authority: Readonly<{ kind: 'provider_connection' }> }> }>
 >
+
+type RequiredJitProviderX402RuntimeKey =
+  | 'readX402PaymentCredentialRef'
+  | 'validateProviderConnectionAuthority'
+  | 'x402PaymentSigningAvailable'
+  | 'verifyX402Settlement'
+  | 'prepareX402PaymentAuthorization'
+  | 'readX402PaymentAuthorization'
+  | 'readX402PaymentAuthorizationByDigest'
+  | 'markX402PaymentPossiblySubmitted'
+  | 'observeX402PaymentAttempt'
+
+export type JitProviderX402Runtime = Readonly<{
+  [Key in RequiredJitProviderX402RuntimeKey]-?: NonNullable<X402RouteTransportRuntime[Key]>
+}> & Pick<X402RouteTransportRuntime, 'beforeX402PaymentAuthorizationRead'>
+
+export type JitProviderX402RuntimeFactory = (
+  input: Readonly<{
+    ticket: CanonicalProviderConsequenceTicket
+    invocation: ProviderRouteTransportInvocation
+  }>,
+) => JitProviderX402Runtime | Promise<JitProviderX402Runtime>
 
 export function createJitProviderConsequenceBoundary(
   options: JitProviderConsequenceBoundaryOptions,
@@ -113,6 +140,10 @@ export function createJitProviderConsequenceBoundary(
       if (preparation.kind === 'refused') return preparation.observation
       const { prepared } = preparation
       const transport = transportFor(input.invocation.binding.adapterId)
+      if (!isProviderInvocation(input.invocation)) {
+        return refused(transport, prepared.requestDigest, 'provider_consequence_ticket_invalid')
+      }
+      const providerInvocation = input.invocation
       if (!OPAQUE_REF.test(input.ticket)) {
         return refused(transport, prepared.requestDigest, 'provider_consequence_ticket_invalid')
       }
@@ -123,21 +154,27 @@ export function createJitProviderConsequenceBoundary(
       } catch {
         ticket = undefined
       }
-      const canonical = canonicalTicket(ticket, input.invocation, prepared.requestDigest, now())
+      const canonical = canonicalTicket(ticket, providerInvocation, prepared.requestDigest, now())
       if (canonical === undefined) {
         return refused(transport, prepared.requestDigest, 'provider_consequence_ticket_invalid')
       }
 
       let journalResult: ProviderConsequenceJournalBeginResult
       try {
-        journalResult = await options.journal.begin({
+        const remoteResult = await options.journal.begin({
           ticketRef: canonical.ticketRef,
           effectRef: canonical.effectRef,
           requestDigest: canonical.requestDigest,
           invocationDigest: canonical.invocationDigest,
+          ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonical),
           expiresAt: canonical.expiresAt,
           now: now(),
         })
+        const parsedResult = parseProviderConsequenceJournalBeginResult(remoteResult)
+        if (parsedResult === undefined) {
+          return refused(transport, prepared.requestDigest, 'provider_consequence_journal_invalid')
+        }
+        journalResult = parsedResult
       } catch {
         return refused(transport, prepared.requestDigest, 'provider_consequence_journal_unavailable')
       }
@@ -154,11 +191,13 @@ export function createJitProviderConsequenceBoundary(
 
       const { claimRef } = journalResult
       let expiredBeforeRelease = false
+      let releaseAttempted = false
       const send: RouteTransportFetch = async (target, init) => {
         if (now() >= canonical.expiresAt) {
           expiredBeforeRelease = true
           throw new Error('provider_consequence_expired')
         }
+        releaseAttempted = true
         return await options.send(target, init)
       }
       try {
@@ -181,17 +220,64 @@ export function createJitProviderConsequenceBoundary(
         await runtime.consequences.customer.execute(
           { secretRef: canonical.secret.secretRef },
           async (lease) => {
-            observation = await invokePreparedRouteTransport(prepared, {
+            const baseRuntime: RouteTransportRuntime = {
               send,
               resolveCredential: callbackScopedCredentialResolver(lease),
               readProviderConnectionCredentialRef: () => ({
                 kind: 'resolved',
                 credentialRef: canonical.secret.secretRef,
               }),
+            }
+            if (providerInvocation.binding.adapterId !== 'x402-fetch:v2') {
+              observation = await invokePreparedRouteTransport(prepared, baseRuntime)
+              return
+            }
+            const x402Runtime = await createCallbackScopedX402Runtime(
+              options.createCallbackScopedX402Runtime,
+              canonical,
+              providerInvocation,
+            )
+            if (x402Runtime === undefined) {
+              observation = refused(
+                transport,
+                prepared.requestDigest,
+                'payment_custody_unavailable',
+              )
+              return
+            }
+            const x402Preparation = prepareRegisteredRouteTransportInvocation(
+              providerInvocation,
+              x402Runtime.x402PaymentSigningAvailable,
+            )
+            if (x402Preparation.kind === 'refused') {
+              observation = x402Preparation.observation
+              return
+            }
+            const releaseFencedX402Runtime: JitProviderX402Runtime = {
+              ...x402Runtime,
+              prepareX402PaymentAuthorization: async (request) => {
+                releaseAttempted = true
+                return await x402Runtime.prepareX402PaymentAuthorization(request)
+              },
+              markX402PaymentPossiblySubmitted: async (event) => {
+                releaseAttempted = true
+                await x402Runtime.markX402PaymentPossiblySubmitted(event)
+              },
+            }
+            observation = await invokePreparedRouteTransport(x402Preparation.prepared, {
+              ...baseRuntime,
+              ...releaseFencedX402Runtime,
             })
           },
         )
         if (expiredBeforeRelease) {
+          if (releaseAttempted) {
+            return unknown(
+              transport,
+              prepared.requestDigest,
+              'provider_consequence_release_unknown',
+            )
+          }
           try {
             await options.journal.abortBeforeRelease({ claimRef })
           } catch {
@@ -206,6 +292,13 @@ export function createJitProviderConsequenceBoundary(
         }
         return observation
       } catch {
+        if (releaseAttempted) {
+          return unknown(
+            transport,
+            prepared.requestDigest,
+            'provider_consequence_release_unknown',
+          )
+        }
         try {
           await options.journal.abortBeforeRelease({ claimRef })
         } catch {
@@ -217,13 +310,84 @@ export function createJitProviderConsequenceBoundary(
   })
 }
 
+const REQUIRED_X402_RUNTIME_KEYS = Object.freeze([
+  'readX402PaymentCredentialRef',
+  'validateProviderConnectionAuthority',
+  'x402PaymentSigningAvailable',
+  'verifyX402Settlement',
+  'prepareX402PaymentAuthorization',
+  'readX402PaymentAuthorization',
+  'readX402PaymentAuthorizationByDigest',
+  'markX402PaymentPossiblySubmitted',
+  'observeX402PaymentAttempt',
+] as const satisfies readonly RequiredJitProviderX402RuntimeKey[])
+
+async function createCallbackScopedX402Runtime(
+  factory: JitProviderX402RuntimeFactory | undefined,
+  ticket: CanonicalProviderConsequenceTicket,
+  invocation: ProviderRouteTransportInvocation,
+): Promise<JitProviderX402Runtime | undefined> {
+  if (factory === undefined) return undefined
+  let candidate: unknown
+  try {
+    candidate = await factory({ ticket, invocation })
+  } catch {
+    return undefined
+  }
+  if (!isRecord(candidate)
+    || Object.keys(candidate).some((key) => (
+      key !== 'beforeX402PaymentAuthorizationRead'
+      && !REQUIRED_X402_RUNTIME_KEYS.includes(key as RequiredJitProviderX402RuntimeKey)
+    ))
+    || REQUIRED_X402_RUNTIME_KEYS.some((key) => typeof candidate[key] !== 'function')
+    || (candidate.beforeX402PaymentAuthorizationRead !== undefined
+      && typeof candidate.beforeX402PaymentAuthorizationRead !== 'function')) return undefined
+  return candidate as JitProviderX402Runtime
+}
+
+function parseProviderConsequenceJournalBeginResult(
+  value: unknown,
+): ProviderConsequenceJournalBeginResult | undefined {
+  if (!isRecord(value) || typeof value.kind !== 'string') return undefined
+  if (value.kind === 'claimed') {
+    return hasExactKeys(value, ['kind', 'claimRef'])
+      && typeof value.claimRef === 'string'
+      && OPAQUE_REF.test(value.claimRef)
+      ? { kind: 'claimed', claimRef: value.claimRef }
+      : undefined
+  }
+  if (value.kind === 'started' || value.kind === 'unavailable') {
+    return hasExactKeys(value, ['kind']) ? { kind: value.kind } : undefined
+  }
+  if (value.kind !== 'completed' || !hasExactKeys(value, ['kind', 'observation'])) {
+    return undefined
+  }
+  let serialized: string | undefined
+  try {
+    serialized = JSON.stringify(value.observation)
+  } catch {
+    serialized = undefined
+  }
+  if (serialized === undefined) return undefined
+  const observation = parseRouteTransportObservationJson(serialized)
+  return observation === undefined ? undefined : { kind: 'completed', observation }
+}
+
+function hasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: readonly string[],
+): boolean {
+  const keys = Object.keys(value)
+  return keys.length === expected.length
+    && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+}
+
 function canonicalTicket(
   candidate: CanonicalProviderConsequenceTicket | undefined,
-  invocation: RouteTransportInvocation,
+  invocation: ProviderRouteTransportInvocation,
   requestDigest: string,
   now: number,
 ): CanonicalProviderConsequenceTicket | undefined {
-  if (!isProviderInvocation(invocation)) return undefined
   const authority = invocation.authority
   const {
     invocationRef,
@@ -278,6 +442,7 @@ function canonicalTicket(
     || !sameStrings(candidate.grantedResources, grantedResources)
     || candidate.readinessValidUntil !== readinessValidUntil
     || candidate.readinessDigest !== authority.readinessDigest
+    || candidate.owningAccountRef !== candidate.activeAccountRef
     || !Number.isSafeInteger(candidate.grantGeneration)
     || candidate.grantGeneration < 1
     || !Number.isSafeInteger(candidate.secret.pointerRevision)
@@ -335,6 +500,20 @@ export function providerConsequenceInvocationDigest(
       ...(authority.readinessDigest === undefined ? {} : { readinessDigest: authority.readinessDigest }),
     },
     inputJson: invocation.inputJson,
+  } as StableHashValue)
+}
+
+export function providerConsequenceTicketClaimsDigest(
+  ticket: CanonicalProviderConsequenceTicket,
+): string {
+  return canonicalDigest({
+    kind: 'provider-consequence-ticket-claims:v1',
+    ticket: {
+      ...ticket,
+      grantedScopes: [...ticket.grantedScopes],
+      grantedResources: [...ticket.grantedResources],
+      secret: { ...ticket.secret },
+    },
   } as StableHashValue)
 }
 
