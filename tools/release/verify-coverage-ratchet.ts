@@ -7,7 +7,7 @@ import {
   parseCoveragePolicy,
   parseCoverageSummary,
 } from './coverage-ratchet'
-import { hasCoverageRelevantStatement } from './coverage-source-classification'
+import { filterCoverageRelevantPaths } from './coverage-source-classification'
 
 function argument(name: string): string {
   const index = process.argv.indexOf(name)
@@ -40,12 +40,10 @@ const requiredCriticalFiles = (await Promise.all(policy.criticalPathPrefixes.map
     throw error
   }
   const entries = await readdir(directory, { recursive: true, withFileTypes: true })
-  const candidates = entries
+  return await filterCoverageRelevantPaths(root, entries
     .filter((entry) => entry.isFile() && /\.(?:ts|tsx)$/u.test(entry.name) && !entry.name.endsWith('.d.ts'))
     .map((entry) => relative(root, join(entry.parentPath, entry.name)).split('\\').join('/'))
-  return (await Promise.all(candidates.map(async (path) => (
-    hasCoverageRelevantStatement(path, await readFile(resolve(root, path), 'utf8')) ? path : undefined
-  )))).filter((path): path is string => path !== undefined)
+  )
 }))).flat()
 assertCoverageRatchet(current, baseline, policy, requiredCriticalFiles)
 process.stdout.write(`COVERAGE_RATCHET_PASS files=${Object.keys(current).length}\n`)

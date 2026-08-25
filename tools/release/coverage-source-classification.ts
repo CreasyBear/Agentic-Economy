@@ -1,4 +1,6 @@
 import ts from 'typescript'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
 function declaredOnly(statement: ts.Statement): boolean {
   return ts.canHaveModifiers(statement)
@@ -18,4 +20,11 @@ export function hasCoverageRelevantStatement(path: string, source: string): bool
       || ts.isEmptyStatement(statement)) return false
     return !declaredOnly(statement)
   })
+}
+
+export async function filterCoverageRelevantPaths(root: string, paths: readonly string[]): Promise<string[]> {
+  const classified = await Promise.all(paths.map(async (path) => (
+    hasCoverageRelevantStatement(path, await readFile(resolve(root, path), 'utf8')) ? path : undefined
+  )))
+  return classified.filter((path): path is string => path !== undefined)
 }
