@@ -3,7 +3,6 @@ import { mutation, internalMutation, internalQuery, type MutationCtx, type Query
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
 
-import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
 const authorityMode = v.union(v.literal('inspect_only'), v.literal('approve_each'), v.literal('bounded_mandate'), v.literal('full_yolo'))
@@ -173,74 +172,6 @@ export const registerAgentPrincipal = mutation({
     })
   },
 })
-const resolvedAgentPrincipal = v.object({
-  principalId: v.string(),
-  ownerId: v.string(),
-  credentialId: v.string(),
-  applicationRef: v.string(),
-  environment,
-  scopes: v.array(v.string()),
-  authorityMode,
-})
-
-export const resolveAgentPrincipal = mutation({
-  args: {
-    principalId: v.string(),
-    ownerId: v.string(),
-    credentialId: v.string(),
-    applicationRef: v.string(),
-    environment,
-    scopes: v.array(v.string()),
-    authorityMode,
-    operationKey: v.string(),
-    correlationId: v.string(),
-    ...sourceWriteArgs,
-  },
-  returns: v.union(resolvedAgentPrincipal, v.null()),
-  handler: async (ctx: MutationCtx, args) => {
-    const admitted = await requireSourceWrite(ctx, args, 'agent_identity')
-    if (admitted.kind === 'rejected') {
-      throw new Error(`agent_access_principal_source_write_rejected:${admitted.reason}`)
-    }
-    if (args.environment === 'production' && args.authorityMode === 'full_yolo') return null
-    const principal = await ctx.db.query('agentAccessPrincipals')
-      .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
-    if (principal === null
-      || principal.ownerId !== args.ownerId
-      || principal.credentialId !== args.credentialId
-      || principal.applicationRef !== args.applicationRef
-      || principal.environment !== args.environment
-      || principal.authorityMode !== args.authorityMode
-      || principal.lifecycle !== 'active'
-      || (principal.expiresAt !== undefined && principal.expiresAt <= Date.now())
-      || args.scopes.some((scope) => !principal.scopes.includes(scope))) return null
-
-    const grant = (await ctx.db.query('agentAccessGrants')
-      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => (
-        query.eq('credentialId', args.credentialId).eq('environment', args.environment).eq('lifecycle', 'active')
-      ))
-      .take(8))
-      .find((candidate) => candidate.principalId === args.principalId
-        && candidate.ownerId === args.ownerId
-        && candidate.applicationRef === args.applicationRef
-        && candidate.generation === principal.grantGeneration
-        && candidate.policyDigest === principal.policyDigest
-        && candidate.authorityMode === principal.authorityMode
-        && candidate.operationAccess === 'all_admitted'
-        && candidate.expiresAt > Date.now())
-    if (grant === undefined) return null
-    return {
-      principalId: principal.principalId,
-      ownerId: principal.ownerId,
-      credentialId: principal.credentialId,
-      applicationRef: principal.applicationRef,
-      environment: principal.environment,
-      scopes: principal.scopes,
-      authorityMode: principal.authorityMode,
-    }
-  },
-})
-
 export const getAgentPrincipal = internalQuery({
   args: { principalId: v.string() },
   returns: v.union(v.object({
