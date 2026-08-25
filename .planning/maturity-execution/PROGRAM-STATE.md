@@ -29,6 +29,9 @@ Last updated: 2026-08-26 Australia/Perth
   release passed, Ox Alpha B1/B2/B3 and regressions passed.
 - Open later evidence: hosted Clerk proof, live reset-adapter proof and production
   context wiring. These do not block Phase 2 source work.
+- Housekeeping: completed implementation and both acceptance tasks archived; their
+  three clean worktrees removed after exact refs were proven reachable. Phase 1
+  branches remain retained through Phase 2 acceptance.
 
 ## Phase 2 dispatch
 

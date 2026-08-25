@@ -54,7 +54,7 @@ For each completed phase:
 | Phase | Evidence preserved | Tasks archived | Worktrees removed | Branch disposition | Result |
 |---|---|---|---|---|---|
 | 0 | Phase 0 ledger and commit `50f74aa72` | pending inventory | pending inventory | retain through foundation integration | OPEN |
-| 1 | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | pending | pending clean/reachability audit | retain through Phase 2 acceptance | IN_PROGRESS |
+| 1 | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | implementation `01a03874-128c-7aa0-b2bc-bc02a2b6193e`, superseded review `01a0390e-8b60-7cc1-863c-a2bedc223fc0`, passing review `01a03961-c8d0-7812-8b4d-1fc13f2ba589` | clean worktrees `1cf4`, `27d0`, `7cf7` removed after reachability proof | retain `agent-p1-01-principal` and `codex/phase-2-unblock` through Phase 2 acceptance | CLOSED 2026-08-26 |
 | 2 | implementation active | not applicable | active worktree retained | active | ACTIVE |
 
 ## Standing exclusions
