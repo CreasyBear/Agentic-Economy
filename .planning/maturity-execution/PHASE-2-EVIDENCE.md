@@ -124,6 +124,26 @@ Phase-local intake is recorded here during implementation, then canonicalized in
 `PROGRAM-PAPERCUTS.md` at Phase 2 close with category, evidence, consequence,
 owner, owning gate and follow-up.
 
+- `AE-PAP-014`: the Unlazy checker command without an explicit `--timeout`
+  dropped its sole positional ledger and scanned/wrote sibling ledgers. Exact
+  reproducer: from `.planning/maturity-execution`, run
+  `node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs gates/leaf-P2-01.md`.
+  The executor stopped on detection. The driver reviewed the exact diff, restored
+  only confirmed foreign P2-02 through P2-05 evidence lines, and proved the
+  supported one-ledger form `--status --timeout 120 gates/leaf-P2-XX.md` names
+  exactly one ledger before resuming. P2-01 raw G3 was independently rerun and
+  passed. No leaf-owned source was repaired or reverted by the driver.
+- `AE-PAP-015`: a provider classifier interrupted the task turn in response to
+  quality-review wording while Wave 1 findings were being returned to their
+  original executors. The active goal, branch, worktree and edits were preserved.
+  The driver resumed from exact state, retained all P2-01/P2-03/P2-04 regressions,
+  kept Wave 2 closed and used neutral quality-assurance commentary. The child-goal
+  product ledger continued to display stale `blocked` state after the root program
+  goal and this task were explicitly confirmed operationally active. The mismatch
+  is preserved for product evidence and final disposition by the root program
+  manager; the child ledger is not healthy. This is a tooling-continuity papercut,
+  not a source blocker.
+
 ## Open external evidence
 
 - Hosted Infisical OIDC, live vault retrieval/rotation and audit-stream evidence:
