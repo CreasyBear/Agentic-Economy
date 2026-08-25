@@ -144,7 +144,7 @@ describe('MCP host adapter operation recovery', () => {
       invocationRef,
       principal: expect.objectContaining({
         credentialId: 'key:test',
-        ownerId: 'user_test',
+        ownerId: 'acc_00000000000040008000000000000044',
       }),
       correlationId: expect.any(String),
     }))

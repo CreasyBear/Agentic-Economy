@@ -356,9 +356,9 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       const admitted = await authenticateAgentAccess({
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
         ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
-        ...(options.authenticate !== undefined && resolvePrincipal === undefined
-          ? { allowTestPrincipalProjection: true }
-          : {}),
+        consequenceResource: protectedTarget.generic
+          ? 'surface:mcp:tools-list'
+          : `surface:mcp:${protectedAction.id}`,
         ...(requiredScope === undefined ? {} : { requiredScope }),
         requiredScopes: resolverRequiredScopes,
         requiredMode,

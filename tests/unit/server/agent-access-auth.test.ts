@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   authenticateAgentAccess,
   resolveAgentAccessPrincipal,
+  type AgentAccessAuthenticationOptions,
   type AgentAccessPrincipalResolver,
 } from '@/lib/server/agent-access-auth'
 import {
@@ -13,6 +14,20 @@ import {
 } from '@/modules/agent-access/contract'
 
 const liveScopes = [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE]
+const TEST_CONSEQUENCE_RESOURCE = 'surface:test:agent-access'
+const resolveCanonicalPrincipal: AgentAccessPrincipalResolver = async (projection) => ({
+  ...projection,
+  principalId: 'prn_00000000000040008000000000000040',
+  ownerId: 'acc_00000000000040008000000000000040',
+})
+
+async function authenticateCanonically(options: AgentAccessAuthenticationOptions) {
+  return await authenticateAgentAccess({
+    consequenceResource: TEST_CONSEQUENCE_RESOURCE,
+    resolvePrincipal: resolveCanonicalPrincipal,
+    ...options,
+  })
+}
 
 const adapterMocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -64,12 +79,17 @@ describe('agent access authentication', () => {
       env: { CONVEX_URL: 'https://convex.example' },
     })
 
-    await expect(resolver(projection, [MARKET_OPERATIONS_INVOKE_SCOPE])).resolves.toEqual(canonical)
+    await expect(resolver(
+      projection,
+      [MARKET_OPERATIONS_INVOKE_SCOPE],
+      'surface:http:operations-call',
+    )).resolves.toEqual(canonical)
     expect(adapterMocks.sourceWriteAdmissionFromRequest).toHaveBeenCalledWith(expect.objectContaining({
       scope: 'agent_identity',
       command: expect.objectContaining({
         credentialId: 'ak_source_resolver',
         requiredScopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+        operationKey: 'surface:http:operations-call',
       }),
       env: { CONVEX_URL: 'https://convex.example' },
     }))
@@ -79,7 +99,7 @@ describe('agent access authentication', () => {
     expect(args).not.toHaveProperty('principalId')
     expect(args).not.toHaveProperty('ownerId')
 
-    await expect(resolver(projection, [])).resolves.toEqual(canonical)
+    await expect(resolver(projection, [], 'surface:http:operations-call')).resolves.toEqual(canonical)
     expect(adapterMocks.callPublicSourceMutation.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
       requiredScopes: [...liveScopes],
     }))
@@ -88,7 +108,52 @@ describe('agent access authentication', () => {
     await expect(resolveAgentAccessPrincipal(request, new Uint8Array([1]), 'correlation:failure')(
       projection,
       [MARKET_OPERATIONS_INVOKE_SCOPE],
+      'surface:http:operations-call',
     )).resolves.toBeNull()
+
+    for (const invalidResource of [undefined, ' surface:http:operations-call', 'credential:ak_source_resolver']) {
+      await expect(resolver(
+        projection,
+        [MARKET_OPERATIONS_INVOKE_SCOPE],
+        invalidResource as never,
+      )).resolves.toBeNull()
+    }
+  })
+
+  it('keeps the consequence resource stable when the credential locator changes', async () => {
+    adapterMocks.sourceWriteAdmissionFromRequest.mockResolvedValue({ kind: 'admitted' })
+    adapterMocks.sourceWriteRequestFromAdmission.mockReturnValue({ digest: 'source-request' })
+    adapterMocks.callPublicSourceMutation.mockResolvedValue(null)
+    const resolver = resolveAgentAccessPrincipal(
+      new Request('https://ae.example/api'),
+      'body',
+      'correlation:stable-resource',
+    )
+    const baseProjection = {
+      applicationRef: 'agentic-economy',
+      environment: 'sandbox' as const,
+      scopes: liveScopes,
+      authorityMode: 'inspect_only' as const,
+    }
+
+    await resolver(
+      { ...baseProjection, credentialId: 'ak_first' },
+      [MARKET_OPERATIONS_INVOKE_SCOPE],
+      'surface:http:operations-call',
+    )
+    await resolver(
+      { ...baseProjection, credentialId: 'ak_second' },
+      [MARKET_OPERATIONS_INVOKE_SCOPE],
+      'surface:http:operations-call',
+    )
+
+    expect(adapterMocks.callPublicSourceMutation.mock.calls.map(([, args]) => ({
+      credentialId: (args as Record<string, unknown>).credentialId,
+      operationKey: (args as Record<string, unknown>).operationKey,
+    }))).toEqual([
+      { credentialId: 'ak_first', operationKey: 'surface:http:operations-call' },
+      { credentialId: 'ak_second', operationKey: 'surface:http:operations-call' },
+    ])
   })
 
   it('uses canonical Principal and Account refs even when credential subject and id claim different ownership', async () => {
@@ -98,7 +163,7 @@ describe('agent access authentication', () => {
       ownerId: 'acc_00000000000040008000000000000041',
     })
 
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true,
@@ -137,7 +202,7 @@ describe('agent access authentication', () => {
     })
     adapterMocks.clerkClient.mockReturnValue({ apiKeys: { get } })
 
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       resolvePrincipal: async (projection) => ({
         ...projection,
         principalId: 'prn_00000000000040008000000000000046',
@@ -160,7 +225,7 @@ describe('agent access authentication', () => {
     })
   })
 
-  it('fails closed without canonical resolution unless an injected caller explicitly enables a test projection', async () => {
+  it('fails closed without canonical resolution and has no test-only ownership projection', async () => {
     const authenticate = async () => ({
       isAuthenticated: true as const,
       tokenType: 'api_key' as const,
@@ -171,8 +236,11 @@ describe('agent access authentication', () => {
 
     await expect(authenticateAgentAccess({ authenticate }))
       .resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
-    await expect(authenticateAgentAccess({ authenticate, allowTestPrincipalProjection: true }))
-      .resolves.toMatchObject({ kind: 'authenticated', principal: { credentialId: 'ak_no_resolver' } })
+    await expect(authenticateAgentAccess({
+      authenticate,
+      consequenceResource: 'credential:ak_no_resolver',
+      resolvePrincipal: resolveCanonicalPrincipal,
+    })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
   })
 
   it('passes exact protected scopes to canonical resolution and refuses malformed or mismatched canonical fields', async () => {
@@ -193,7 +261,7 @@ describe('agent access authentication', () => {
       scopes: [...liveScopes].sort(),
       authorityMode: 'inspect_only' as const,
     }
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate,
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       resolvePrincipal: async (_projection, requiredScopes) => {
@@ -215,19 +283,19 @@ describe('agent access authentication', () => {
       { ...canonical, scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE] },
       { ...canonical, scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 42] },
     ]) {
-      await expect(authenticateAgentAccess({
+      await expect(authenticateCanonically({
         authenticate,
         requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
         resolvePrincipal: async () => stored as never,
       })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
     }
 
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate,
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       resolvePrincipal: async () => null,
     })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate,
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       resolvePrincipal: async () => { throw new Error('resolver unavailable') },
@@ -243,27 +311,24 @@ describe('agent access authentication', () => {
       scopes: liveScopes,
       claims: { aeApplicationRef: '  claims-app  ', aeEnvironment: 'development' },
     })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate,
       requiredScope: null,
       requiredScopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
-      allowTestPrincipalProjection: true,
     })).resolves.toMatchObject({
       kind: 'authenticated',
       principal: { applicationRef: 'claims-app', environment: 'sandbox' },
     })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate,
       requiredScope: null,
-      allowTestPrincipalProjection: true,
     })).resolves.toMatchObject({ kind: 'authenticated' })
     for (const aeEnvironment of ['sandbox', '', 42]) {
-      await expect(authenticateAgentAccess({
+      await expect(authenticateCanonically({
         authenticate: async () => ({
           ...await authenticate(),
           claims: { aeApplicationRef: 42, aeEnvironment },
         }),
-        allowTestPrincipalProjection: true,
       })).resolves.toMatchObject({
         kind: 'authenticated',
         principal: { applicationRef: 'agentic-economy', environment: 'sandbox' },
@@ -271,27 +336,26 @@ describe('agent access authentication', () => {
     }
   })
 
-  it('creates a stable per-key principal from a scoped Clerk API key', async () => {
+  it('keeps a scoped Clerk API key as a locator for a canonical principal', async () => {
     const verifyKeyState = async () => ({
       id: 'ak_123', subject: 'user_123', revoked: false, expired: false, scopes: liveScopes,
     })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', userId: 'user_123', orgId: null,
         scopes: liveScopes,
       }),
       verifyKeyState,
-      allowTestPrincipalProjection: true,
     })).resolves.toEqual({ kind: 'authenticated', principal: {
-      principalId: 'clerk_api_key:ak_123', ownerId: 'user_123', credentialId: 'ak_123',
+      principalId: 'prn_00000000000040008000000000000040', ownerId: 'acc_00000000000040008000000000000040', credentialId: 'ak_123',
       applicationRef: 'agentic-economy', environment: 'sandbox',
       scopes: [CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE], authorityMode: 'inspect_only',
     } })
   })
 
-  it('keeps the explicitly test-only projection on the Clerk user when an organization claim is present', async () => {
-    await expect(authenticateAgentAccess({
+  it('does not let an organization claim alter canonical Principal or Account ownership', async () => {
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true,
@@ -309,18 +373,17 @@ describe('agent access authentication', () => {
         expired: false,
         scopes: liveScopes,
       }),
-      allowTestPrincipalProjection: true,
     })).resolves.toMatchObject({
       kind: 'authenticated',
       principal: {
-        principalId: 'clerk_api_key:ak_org_scoped',
-        ownerId: 'user_org_owner',
+        principalId: 'prn_00000000000040008000000000000040',
+        ownerId: 'acc_00000000000040008000000000000040',
       },
     })
   })
 
   it('refuses organization-scoped keys when ownership is user-bound', async () => {
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true,
@@ -349,12 +412,12 @@ describe('agent access authentication', () => {
       { id: 'ak_other', subject: 'user_123', revoked: false, expired: false, scopes: liveScopes },
       { id: 'ak_123', subject: 'user_other', revoked: false, expired: false, scopes: liveScopes },
     ]) {
-      await expect(authenticateAgentAccess({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, verifyKeyState: async () => current }))
+      await expect(authenticateCanonically({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, verifyKeyState: async () => current }))
         .resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
     }
-    await expect(authenticateAgentAccess({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, verifyKeyState: async () => { throw new Error('unavailable') } }))
+    await expect(authenticateCanonically({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, verifyKeyState: async () => { throw new Error('unavailable') } }))
       .resolves.toEqual({ kind: 'refused', status: 401, reason: 'authentication_required' })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate,
       verifyKeyState: async () => ({
@@ -364,7 +427,7 @@ describe('agent access authentication', () => {
   })
 
   it('fails closed when the authentication provider is unavailable', async () => {
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       authenticate: async () => {
         throw new Error('authentication provider unavailable')
       },
@@ -376,10 +439,10 @@ describe('agent access authentication', () => {
   })
 
   it('refuses missing, wrong-type and unscoped credentials', async () => {
-    await expect(authenticateAgentAccess({ authenticate: async () => ({
+    await expect(authenticateCanonically({ authenticate: async () => ({
       isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null,
     }) })).resolves.toMatchObject({ kind: 'refused', status: 401 })
-    await expect(authenticateAgentAccess({ authenticate: async () => ({
+    await expect(authenticateCanonically({ authenticate: async () => ({
       isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123', scopes: [],
     }) })).resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
   })
@@ -389,18 +452,17 @@ describe('agent access authentication', () => {
       isAuthenticated: true, tokenType: 'api_key' as const, id: 'ak_123', subject: 'user_123',
       userId: 'user_123', orgId: null, scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE],
     })
-    await expect(authenticateAgentAccess({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, requiredMode: 'approve_each' }))
+    await expect(authenticateCanonically({ requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE, authenticate, requiredMode: 'approve_each' }))
       .resolves.toEqual({ kind: 'refused', status: 403, reason: 'scope_required' })
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate,
-      allowTestPrincipalProjection: true,
     }))
       .resolves.toMatchObject({ kind: 'authenticated', principal: { authorityMode: 'inspect_only' } })
   })
 
   it('refuses create-only keys at the market invoke door', async () => {
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123',
@@ -410,7 +472,7 @@ describe('agent access authentication', () => {
   })
 
   it('refuses undefined authority mode instead of falling through to inspect_only', async () => {
-    await expect(authenticateAgentAccess({
+    await expect(authenticateCanonically({
       requiredScope: MARKET_OPERATIONS_INVOKE_SCOPE,
       authenticate: async () => ({
         isAuthenticated: true, tokenType: 'api_key', id: 'ak_123', subject: 'user_123',

@@ -346,9 +346,7 @@ export async function authenticateOperationGateway(
   const admitted = await authenticateAgentAccess({
     ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-    ...(options.authenticate !== undefined && resolvePrincipal === undefined
-      ? { allowTestPrincipalProjection: true }
-      : {}),
+    consequenceResource: 'surface:http:operations-call',
     requiredScope: OPERATION_INVOKE_SCOPE,
   })
   if (admitted.kind === 'authenticated') return { kind: admitted.kind, principal: admitted.principal }

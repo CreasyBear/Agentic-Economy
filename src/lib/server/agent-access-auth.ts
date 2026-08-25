@@ -67,6 +67,7 @@ export type AgentAccessCredentialProjection = Readonly<{
 export type AgentAccessPrincipalResolver = (
   projection: AgentAccessCredentialProjection,
   requiredScopes: readonly string[],
+  consequenceResource: string,
 ) => Promise<AgentAccessPrincipal | null>
 
 export function resolveAgentAccessPrincipal(
@@ -75,9 +76,10 @@ export function resolveAgentAccessPrincipal(
   correlationId: string,
   options: Readonly<{ env?: Record<string, string | undefined> }> = {},
 ): AgentAccessPrincipalResolver {
-  return async (projection, requiredScopes) => {
+  return async (projection, requiredScopes, consequenceResource) => {
     try {
-      const operationKey = `agent-access:resolve:${projection.credentialId}`
+      const operationKey = canonicalConsequenceResource(consequenceResource)
+      if (operationKey === undefined) return null
       const bindingRequiredScopes = requiredScopes.length === 0 ? projection.scopes : requiredScopes
       const command = {
         credentialId: projection.credentialId,
@@ -116,7 +118,7 @@ export type AgentAccessAuthenticationOptions = Readonly<{
   requiredScope?: string | null
   requiredScopes?: readonly string[]
   requiredMode?: AgentAccessAuthorityMode
-  allowTestPrincipalProjection?: boolean
+  consequenceResource?: string
 }>
 
 export async function authenticateAgentAccess(
@@ -183,9 +185,13 @@ export async function authenticateAgentAccess(
     authorityMode,
   })
   if (options.resolvePrincipal !== undefined) {
+    const consequenceResource = canonicalConsequenceResource(options.consequenceResource)
+    if (consequenceResource === undefined) {
+      return { kind: 'refused', status: 403, reason: 'scope_required' }
+    }
     try {
       const stored = canonicalResolvedPrincipal(
-        await options.resolvePrincipal(projection, requiredScopes),
+        await options.resolvePrincipal(projection, requiredScopes, consequenceResource),
         projection,
         requiredScopes,
       )
@@ -197,14 +203,12 @@ export async function authenticateAgentAccess(
       return { kind: 'refused', status: 401, reason: 'authentication_required' }
     }
   }
-  if (options.allowTestPrincipalProjection === true && options.authenticate !== undefined) {
-    return { kind: 'authenticated', principal: Object.freeze({
-      principalId: `clerk_api_key:${candidate.id}`,
-      ownerId: candidate.subject,
-      ...projection,
-    }) }
-  }
   return { kind: 'refused', status: 401, reason: 'authentication_required' }
+}
+
+function canonicalConsequenceResource(value: string | undefined): string | undefined {
+  if (value === undefined || value !== value.trim()) return undefined
+  return /^surface:[a-z0-9][a-z0-9:._/-]{0,199}$/.test(value) ? value : undefined
 }
 
 function canonicalResolvedPrincipal(
