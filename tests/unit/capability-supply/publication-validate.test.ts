@@ -63,6 +63,38 @@ describe('capability publication validate (pre-flight admission)', () => {
     })).toBe(true)
   })
 
+  it.each([
+    'next_token',
+  ])('accepts the public pagination query input mapping %s', (parameter) => {
+    expect(publicationMaterialContainsCredential({
+      inputPointer: `/${parameter}`,
+      parameter,
+    })).toBe(false)
+  })
+
+  it.each([
+    'token',
+    'access_token',
+    'api_key',
+    'authorization',
+    'signature',
+  ])('rejects the credential query input mapping %s', (parameter) => {
+    expect(publicationMaterialContainsCredential({
+      inputPointer: `/${parameter}`,
+      parameter,
+    })).toBe(true)
+  })
+
+  it('keeps the next_token exception dynamic and rejects fixed secret material', () => {
+    expect(publicationMaterialContainsCredential({
+      parameter: 'next_token',
+      value: 'opaquePaginationCredentialValueThatMustNotPersist',
+    })).toBe(true)
+    expect(publicationMaterialContainsCredential({
+      resourceUrl: 'https://api.example.test/search?next_token=fixed',
+    })).toBe(true)
+  })
+
 
   it('refuses a circular $ref import with the NAMED admit-schema code (not blanket schema_profile_unsupported)', async () => {
     const document = openApiDocument()

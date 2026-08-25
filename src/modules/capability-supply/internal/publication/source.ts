@@ -108,9 +108,15 @@ function sensitiveQueryName(key: string): boolean {
     || normalized.endsWith('sig')
 }
 
+function isPublicPaginationQueryParameter(key: string): boolean {
+  return key === 'next_token'
+}
+
 function queryEntryContainsCredential(value: Record<string, unknown>): boolean {
   const parameter = value.parameter
-  if (typeof parameter === 'string' && sensitiveSourceKey(parameter)) return true
+  if (typeof parameter === 'string'
+    && sensitiveSourceKey(parameter)
+    && !isPublicPaginationQueryParameter(parameter)) return true
   if (value.in === 'query' && typeof value.name === 'string' && sensitiveQueryName(value.name)) {
     return true
   }
