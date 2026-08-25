@@ -140,6 +140,94 @@ describe("Agentic Economy registry generations", () => {
     });
   });
 
+  it("resolves same-route Agentic duplicates identically across batches and order", async () => {
+    const preferred = duplicateAgenticEntry(
+      "api.myceliasignal.com",
+      `sha256:${"c".repeat(64)}`,
+    );
+    const alternate = duplicateAgenticEntry(
+      "myceliasignal.com",
+      `sha256:${"d".repeat(64)}`,
+    );
+
+    for (const [index, ordered] of [[preferred, alternate], [alternate, preferred]].entries()) {
+      const [first, second] = ordered;
+      if (first === undefined || second === undefined) {
+        throw new Error("duplicate route fixture requires exactly two entries");
+      }
+      const backend = convexTest(schema, modules);
+      const generation = `duplicate-order-${index}`;
+      await backend.mutation(internal.marketExternalRegistry.begin, {
+        generation,
+        startedAt: index + 1,
+      });
+      await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+        generation,
+        entries: [first],
+      })).resolves.toEqual({ inserted: 1, replayed: 0 });
+      await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+        generation,
+        entries: [second],
+      })).resolves.toEqual({ inserted: 0, replayed: 1 });
+
+      const stored = await backend.run(async (ctx) => ({
+        entry: await ctx.db
+          .query("marketExternalRegistryEntries")
+          .withIndex("by_generation_and_documentId", (query) =>
+            query.eq("generation", generation).eq("documentId", preferred.documentId),
+          )
+          .unique(),
+        generation: await ctx.db
+          .query("marketExternalRegistryGenerations")
+          .withIndex("by_generation", (query) => query.eq("generation", generation))
+          .unique(),
+      }));
+      expect(stored.entry).toMatchObject({
+        provider: preferred.provider,
+        sourceDigest: preferred.sourceDigest,
+      });
+      expect(stored.generation?.ingestedCount).toBe(1);
+    }
+  });
+
+  it("retains hard conflicts for TREG and differing Agentic route identities", async () => {
+    const tregBackend = convexTest(schema, modules);
+    await tregBackend.mutation(internal.marketExternalRegistry.begin, {
+      generation: "treg-conflict",
+      startedAt: 1,
+    });
+    const treg = tregEntry("beta");
+    await tregBackend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "treg-conflict",
+      entries: [treg],
+    });
+    await expect(tregBackend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "treg-conflict",
+      entries: [{ ...treg, sourceDigest: `sha256:${"e".repeat(64)}` }],
+    })).rejects.toThrow("external_registry_generation_identity_conflict");
+
+    const routeBackend = convexTest(schema, modules);
+    await routeBackend.mutation(internal.marketExternalRegistry.begin, {
+      generation: "route-conflict",
+      startedAt: 1,
+    });
+    const original = entry("alpha");
+    await routeBackend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "route-conflict",
+      entries: [original],
+    });
+    const conflictingUrl = "https://api.example.com/different";
+    await expect(routeBackend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "route-conflict",
+      entries: [{
+        ...original,
+        endpointUrl: conflictingUrl,
+        routeIdentity: `GET ${conflictingUrl}`,
+        probeRequest: { method: "GET" as const, url: conflictingUrl, headers: [] },
+      }],
+    })).rejects.toThrow("external_registry_generation_identity_conflict");
+  });
+
   it("preserves the last-known-good generation when a refresh is incomplete", async () => {
     const backend = convexTest(schema, modules);
     await backend.mutation(internal.marketExternalRegistry.begin, {
@@ -176,6 +264,63 @@ describe("Agentic Economy registry generations", () => {
       cursor: null,
     });
     expect(result).toMatchObject({ kind: "ok", generation: "good" });
+  });
+
+  it("persists concrete same-origin path and query probe URLs", async () => {
+    const backend = convexTest(schema, modules);
+    await backend.mutation(internal.marketExternalRegistry.begin, {
+      generation: "concrete-probes",
+      startedAt: 1,
+    });
+    const pathEndpoint = "https://api.example.com/users/{userId}";
+    const queryEndpoint = "https://api.example.com/search";
+    const pathEntry = {
+      ...entry("alpha"),
+      endpointUrl: pathEndpoint,
+      routeIdentity: `GET ${pathEndpoint}`,
+      probeRequest: {
+        method: "GET" as const,
+        url: "https://api.example.com/users/example-user",
+        headers: [],
+      },
+    };
+    const queryEntry = {
+      ...entry("beta"),
+      endpointUrl: queryEndpoint,
+      routeIdentity: `GET ${queryEndpoint}`,
+      probeRequest: {
+        method: "GET" as const,
+        url: "https://api.example.com/search?q=example",
+        headers: [],
+      },
+    };
+
+    await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+      generation: "concrete-probes",
+      entries: [pathEntry, queryEntry],
+    })).resolves.toEqual({ inserted: 2, replayed: 0 });
+  });
+
+  it("refuses cross-origin, malformed, unsafe-scheme, and method-mismatched probes", async () => {
+    const invalidProbes = [
+      { method: "GET" as const, url: "https://other.example.com/alpha", headers: [] },
+      { method: "GET" as const, url: "not-a-url", headers: [] },
+      { method: "GET" as const, url: "file:///tmp/alpha", headers: [] },
+      { method: "POST" as const, url: "https://api.example.com/alpha", headers: [] },
+    ];
+
+    for (const [index, probeRequest] of invalidProbes.entries()) {
+      const backend = convexTest(schema, modules);
+      const generation = `invalid-probe-${index}`;
+      await backend.mutation(internal.marketExternalRegistry.begin, {
+        generation,
+        startedAt: index + 1,
+      });
+      await expect(backend.mutation(internal.marketExternalRegistry.writeBatch, {
+        generation,
+        entries: [{ ...entry("alpha"), probeRequest }],
+      })).rejects.toThrow("external_registry_batch_invalid");
+    }
   });
 
   it("withdraws entries absent from the next complete generation", async () => {
@@ -306,6 +451,17 @@ function entry(id: string) {
     authority: "source_metadata_only" as const,
     sourceDigest: `sha256:${"a".repeat(64)}`,
     searchText: `${id} search public data provider`,
+  };
+}
+
+function duplicateAgenticEntry(provider: string, sourceDigest: string) {
+  return {
+    ...entry("alpha"),
+    upstreamServiceId: provider,
+    provider,
+    sourceCalls30d: "366",
+    sourcePayers30d: "10",
+    sourceDigest,
   };
 }
 

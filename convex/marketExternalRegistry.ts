@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 
+import { resolveAgenticMarketRouteWinner } from "@/modules/market/registry-launch-cohort";
+
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
@@ -230,8 +232,26 @@ export const writeBatch = internalMutation({
         )
         .unique();
       if (existing !== null) {
-        if (existing.sourceDigest !== entry.sourceDigest) {
+        if (
+          existing.source !== entry.source ||
+          existing.routeIdentity !== entry.routeIdentity
+        ) {
           throw new Error("external_registry_generation_identity_conflict");
+        }
+        if (existing.sourceDigest !== entry.sourceDigest) {
+          if (
+            existing.source !== "agentic_market" ||
+            entry.source !== "agentic_market"
+          ) {
+            throw new Error("external_registry_generation_identity_conflict");
+          }
+          if (resolveAgenticMarketRouteWinner(existing, entry) === "right") {
+            await ctx.db.replace(existing._id, {
+              generation: args.generation,
+              ...entry,
+              updatedAt: Date.now(),
+            });
+          }
         }
         replayed += 1;
         continue;
@@ -503,7 +523,11 @@ export const entry = internalQuery({
 });
 
 export const admissionCandidate = internalQuery({
-  args: { documentId: v.string(), expectedSourceDigest: v.string() },
+  args: {
+    documentId: v.string(),
+    expectedSourceDigest: v.string(),
+    expectedGeneration: v.optional(v.string()),
+  },
   returns: admissionCandidateResultValue,
   handler: async (ctx, args) => {
     if (
@@ -514,6 +538,12 @@ export const admissionCandidate = internalQuery({
     }
     const state = await registryState(ctx);
     if (state?.activeGeneration === undefined) return { kind: "unavailable" as const };
+    if (
+      args.expectedGeneration !== undefined &&
+      state.activeGeneration !== args.expectedGeneration
+    ) {
+      return { kind: "unavailable" as const };
+    }
     const activeGeneration = state.activeGeneration;
     const row = await ctx.db
       .query("marketExternalRegistryEntries")
@@ -701,7 +731,7 @@ function validEntry(entry: {
     entry.exampleInvocation.length <= 16_000 &&
     entry.probeRequest !== undefined &&
     entry.probeRequest.method === entry.method &&
-    entry.probeRequest.url === entry.endpointUrl &&
+    validSameOriginProbeUrl(entry.endpointUrl, entry.probeRequest.url) &&
     entry.probeRequest.headers.length <= 32 &&
     entry.probeRequest.headers.every(({ name, value }) =>
       /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,100}$/u.test(name) && value.length <= 2_000
@@ -727,6 +757,32 @@ function validHttpUrl(value: string | undefined): boolean {
   try {
     const protocol = new URL(value).protocol;
     return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function validSameOriginProbeUrl(
+  endpointValue: string | undefined,
+  probeValue: string,
+): boolean {
+  if (
+    endpointValue === undefined ||
+    !validHttpUrl(endpointValue) ||
+    !validHttpUrl(probeValue)
+  ) {
+    return false;
+  }
+  try {
+    const endpoint = new URL(endpointValue);
+    const probe = new URL(probeValue);
+    return (
+      endpoint.username === "" &&
+      endpoint.password === "" &&
+      probe.username === "" &&
+      probe.password === "" &&
+      endpoint.origin === probe.origin
+    );
   } catch {
     return false;
   }
