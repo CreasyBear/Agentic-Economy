@@ -166,7 +166,7 @@ export const qualifiedUseHandler: Handler = async (ctx, args) =>
   )
 export const completionHandler = completionExport._handler
 export const invocationRef = 'operation-invocation:test-money'
-export const principalId = 'principal:test-money'
+export const principalId = 'prn_33333333333333333333333333333333'
 export const ownerId = 'owner:test-money'
 export const credentialId = 'credential:test-money'
 export const attemptRef = `operation-attempt:${invocationRef}:1`

@@ -37,6 +37,132 @@ import {
   transactionRef,
 } from './money-ledger-test-harness'
 
+export const canonicalQualifiedUseAccountRef =
+  'acc_11111111111111111111111111111111'
+export const canonicalQualifiedUseGrantRef =
+  'grt_22222222222222222222222222222222'
+
+export function seedCanonicalQualifiedUseAuthority(
+  db: MemoryDb,
+  nextInvocationRef = invocationRef,
+  overrides: Readonly<{
+    accountRef?: string
+    grantRef?: string
+    generation?: number
+    lifecycle?: 'active' | 'revoked'
+    expiresAt?: number
+    principalRef?: string
+    operationRef?: string
+  }> = {},
+): void {
+  const accountRef = overrides.accountRef ?? canonicalQualifiedUseAccountRef
+  const grantRef = overrides.grantRef ?? canonicalQualifiedUseGrantRef
+  const generation = overrides.generation ?? 1
+  const expiresAt = overrides.expiresAt ?? 8_000_000_000_000_000
+  const principalRef = overrides.principalRef ?? principalId
+  const operationRef = overrides.operationRef ?? 'operation:money'
+  if (!db.rows('accounts').some((row) => row.accountRef === accountRef)) {
+    db.seed('accounts', {
+      _id: `account:${accountRef}`,
+      accountRef,
+      displayName: 'Qualified Use authority account',
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: principalRef,
+      creationIdempotencyRef: `create:${accountRef}`,
+      initialOwnershipRef: `ownership:${accountRef}`,
+      currentOwnershipRef: `ownership:${accountRef}`,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastAction: {
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        correlationRef: `correlation:${accountRef}`,
+        idempotencyRef: `create:${accountRef}`,
+      },
+    })
+  }
+  if (!db.rows('principals').some((row) => row.principalRef === principalRef)) {
+    db.seed('principals', {
+      _id: `principal:${principalRef}`,
+      principalRef,
+      kind: 'agent',
+      displayName: 'Qualified Use authority principal',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+  if (!db.rows('memberships').some((row) =>
+    row.accountRef === accountRef && row.memberPrincipalRef === principalRef)) {
+    db.seed('memberships', {
+      _id: `membership:${accountRef}:${principalRef}`,
+      membershipRef: `membership:${accountRef}:${principalRef}`,
+      accountRef,
+      memberPrincipalRef: principalRef,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        correlationRef: `correlation:${grantRef}`,
+        idempotencyRef: `membership:${grantRef}`,
+      },
+    })
+  }
+  if (!db.rows('authorityDelegationGrants').some((row) =>
+    row.grantRef === grantRef && row.generation === generation)) {
+    db.seed('authorityDelegationGrants', {
+      _id: `authority-grant:${grantRef}:${generation}`,
+      grantRef,
+      accountRef,
+      actorPrincipalRef: principalRef,
+      subjectPrincipalRef: principalRef,
+      scopes: ['market.operations.invoke'],
+      resourceRefs: [operationRef],
+      budgetLimit: 1_000,
+      budgetUsed: 1,
+      expiresAt,
+      generation,
+      revision: 1,
+      lifecycle: overrides.lifecycle ?? 'active',
+      createdAt: now,
+      createdBy: {
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        correlationRef: `correlation:${grantRef}`,
+        idempotencyRef: `create:${grantRef}`,
+      },
+    })
+  }
+  if (!db.rows('capabilityOperationInvocations').some((row) =>
+    row.invocationRef === nextInvocationRef)) {
+    db.seed('capabilityOperationInvocations', {
+      _id: `authority-invocation:${nextInvocationRef}`,
+      invocationRef: nextInvocationRef,
+      principalId: principalRef,
+      ownerId,
+      credentialId,
+      applicationRef: 'application:test-money',
+      operationRef,
+      idempotencyKey: `idempotency:${nextInvocationRef}`,
+      environment: 'production',
+      grantRef,
+      grantGeneration: generation,
+      policyDigest: 'sha256:policy-money',
+      grantExpiresAt: expiresAt,
+      inputDigest,
+      requestDigest: `sha256:request:${nextInvocationRef}`,
+      state: 'completed',
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+}
+
 export function seedInvocation(db: MemoryDb): void {
   db.seed('capabilityOperationInvocations', {
     _id: 'invocation:money',
@@ -557,6 +683,7 @@ export function settleSeededChargeBudget(
   usageCredentialId = originalCredentialId,
   withSettledAt = false,
 ): void {
+  seedCanonicalQualifiedUseAuthority(db)
   const transaction = db
     .rows('moneyTransactions')
     .find((row) => row._id === 'transaction:charge')
@@ -584,10 +711,14 @@ export function seedCanonicalFreeTierCharge(db: MemoryDb): FreeTierFixture {
     attemptRef: 'operation-attempt:free-tier:1',
     transactionRef: 'operation-money:free-tier:1',
     usageRef: 'operation-invocation:free-tier:usage',
-    principalId: 'principal:free-tier',
+    principalId: 'prn_44444444444444444444444444444444',
     businessId: 'business:free-tier',
     operationRef: 'operation:free-tier',
   }
+  seedCanonicalQualifiedUseAuthority(db, fixture.invocationRef, {
+    principalRef: fixture.principalId,
+    operationRef: fixture.operationRef,
+  })
   db.seed('moneyTransactions', {
     _id: 'transaction:free-tier',
     transactionRef: fixture.transactionRef,
@@ -652,6 +783,11 @@ export function seedDailyAllocationComposition(
     _id: 'payout:allocation-limit',
     payoutRef,
     businessId: 'business:money',
+    owningAccountRef: canonicalQualifiedUseAccountRef,
+    authorityPrincipalRef: principalId,
+    authorityGrantRef: canonicalQualifiedUseGrantRef,
+    authorityGrantGeneration: 1,
+    authorityResourceRefs: ['operation:money'],
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: String(count * 100),
@@ -682,6 +818,11 @@ export function seedDailyAllocationComposition(
       transactionRef: `transaction:allocation-limit:${index}`,
       usageRef: `usage:allocation-limit:${index}`,
       businessId: 'business:money',
+      owningAccountRef: canonicalQualifiedUseAccountRef,
+      authorityPrincipalRef: principalId,
+      authorityGrantRef: canonicalQualifiedUseGrantRef,
+      authorityGrantGeneration: 1,
+      authorityResourceRef: 'operation:money',
       currency: 'USD',
       exponent: 2,
       grossAccrualUnits: '100',
@@ -703,6 +844,7 @@ export function seedSecondPaidCharge(
   nextTransactionRef: string,
   observedAt: number,
 ): void {
+  seedCanonicalQualifiedUseAuthority(db, nextInvocationRef)
   const usage = db.rows('moneyUsageEvents').find((row) => row._id === 'usage:money')
   const transaction = db.rows('moneyTransactions').find(
     (row) => row._id === 'transaction:charge',

@@ -15,7 +15,11 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import { recordQualifiedUsePayoutAllocation } from './moneyQualifiedUsePayout'
+import {
+  recordQualifiedUsePayoutAllocation,
+  resolveCanonicalInvocationAuthority,
+  type CanonicalQualifiedUseAuthority,
+} from './moneyQualifiedUsePayout'
 import type { Id } from './_generated/dataModel'
 import { recordMarketEvidenceFact } from './marketEvidence'
 
@@ -107,15 +111,15 @@ function toReceipt(row: Doc<'qualifiedUseReceipts'>): QualifiedUseReceipt {
   }
 }
 
-async function readReceiptByRef(
-  ctx: QueryCtx,
-  ref: string,
-): Promise<QualifiedUseReceipt | undefined> {
-  const row = await ctx.db
-    .query('qualifiedUseReceipts')
-    .withIndex('by_qualifiedUseRef', (q) => q.eq('qualifiedUseRef', ref))
-    .unique()
-  return row === null ? undefined : toReceipt(row)
+function receiptAuthorityMatches(
+  row: Doc<'qualifiedUseReceipts'>,
+  authority: CanonicalQualifiedUseAuthority,
+): boolean {
+  const pinned = row as typeof row & Partial<CanonicalQualifiedUseAuthority>
+  return pinned.owningAccountRef === authority.owningAccountRef &&
+    pinned.authorityGrantRef === authority.authorityGrantRef &&
+    pinned.authorityGrantGeneration === authority.authorityGrantGeneration &&
+    pinned.authorityResourceRef === authority.authorityResourceRef
 }
 
 /**
@@ -171,8 +175,22 @@ export const recordQualifiedUse = internalMutation({
     })
     if (eligibility.kind === 'excluded')
       return { kind: 'excluded' as const, reason: eligibility.reason }
+    const authority = await resolveCanonicalInvocationAuthority(
+      ctx,
+      args.invocationRef,
+    )
+    if (authority.authorityResourceRef !== args.operationRef)
+      throw new Error('qualified_use_authority_invalid')
     const candidate = buildQualifiedUseReceipt(args)
-    const existing = await readReceiptByRef(ctx, candidate.qualifiedUseRef)
+    const existingRow = await ctx.db
+      .query('qualifiedUseReceipts')
+      .withIndex('by_qualifiedUseRef', (q) =>
+        q.eq('qualifiedUseRef', candidate.qualifiedUseRef),
+      )
+      .unique()
+    if (existingRow !== null && !receiptAuthorityMatches(existingRow, authority))
+      throw new Error('qualified_use_payout_allocation_invalid')
+    const existing = existingRow === null ? undefined : toReceipt(existingRow)
     if (
       existing !== undefined &&
       (existing.usageRef !== candidate.usageRef ||
@@ -219,7 +237,10 @@ export const recordQualifiedUse = internalMutation({
               reason: 'refunded_before_delivery' as const,
             }
         }
-        await ctx.db.insert('qualifiedUseReceipts', toWire(decision.receipt))
+        await ctx.db.insert('qualifiedUseReceipts', {
+          ...toWire(decision.receipt),
+          ...authority,
+        })
         await recordMarketEvidenceFact(
           ctx,
           'ae_qualified_use',

@@ -287,6 +287,12 @@ export const moneyTables = {
     attemptRef: identifier,
     effectGeneration: v.number(),
     businessId: identifier,
+    /** Canonical Phase-1 authority pinned when the receipt is admitted. */
+    owningAccountRef: v.optional(identifier),
+    authorityPrincipalRef: v.optional(identifier),
+    authorityGrantRef: v.optional(identifier),
+    authorityGrantGeneration: v.optional(v.number()),
+    authorityResourceRef: v.optional(identifier),
     operationRef: identifier,
     publicationRef: identifier,
     publicationRevision: v.number(),
@@ -381,6 +387,12 @@ export const moneyTables = {
   moneyPayouts: defineTable({
     payoutRef: identifier,
     businessId: identifier,
+    /** Optional only so pre-migration rows remain readable and held. */
+    owningAccountRef: v.optional(identifier),
+    authorityPrincipalRef: v.optional(identifier),
+    authorityGrantRef: v.optional(identifier),
+    authorityGrantGeneration: v.optional(v.number()),
+    authorityResourceRefs: v.optional(v.array(identifier)),
     currency,
     exponent,
     grossAccrualUnits: units,
@@ -425,6 +437,12 @@ export const moneyTables = {
     transactionRef: identifier,
     usageRef: identifier,
     businessId: identifier,
+    /** Optional only so pre-migration rows remain readable and held. */
+    owningAccountRef: v.optional(identifier),
+    authorityPrincipalRef: v.optional(identifier),
+    authorityGrantRef: v.optional(identifier),
+    authorityGrantGeneration: v.optional(v.number()),
+    authorityResourceRef: v.optional(identifier),
     currency,
     exponent,
     grossAccrualUnits: units,

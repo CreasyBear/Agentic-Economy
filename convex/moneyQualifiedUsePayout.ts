@@ -22,8 +22,257 @@ import {
   type MoneyLedgerEntryRow,
   validateChargeJournal,
 } from './moneyChargeJournal'
+import {
+  DELEGATION_MAX_RESOURCES,
+  delegationGrantRef,
+  DelegationService,
+  type DelegationStore,
+} from '../src/modules/authority/delegation/public'
+import {
+  accountRef,
+  principalRef,
+} from '../src/modules/principal-account/public'
+import {
+  createConvexDelegationContextPort,
+  createConvexDelegationStore,
+} from './lib/delegationPersistence'
 
 const DAILY_PAYOUT_ALLOCATION_READ_LIMIT = 1_000
+const ACCOUNT_REF_PATTERN = /^acc_[0-9a-f]{32}$/u
+
+export type CanonicalPayoutAuthority = Readonly<{
+  owningAccountRef: string
+  authorityPrincipalRef: string
+  authorityGrantRef: string
+  authorityGrantGeneration: number
+}>
+
+export type CanonicalQualifiedUseAuthority = CanonicalPayoutAuthority &
+  Readonly<{ authorityResourceRef: string }>
+
+export type CanonicalPayoutSettlementAuthority = CanonicalPayoutAuthority &
+  Readonly<{ authorityResourceRefs: readonly string[] }>
+
+type PinnedAuthorityFields = Readonly<{
+  owningAccountRef?: string
+  authorityPrincipalRef?: string
+  authorityGrantRef?: string
+  authorityGrantGeneration?: number
+}>
+
+type PinnedResourceFields = Readonly<{
+  authorityResourceRef?: string
+  authorityResourceRefs?: readonly string[]
+}>
+
+function qualifiedUseAuthorityFailure(): never {
+  throw new Error('qualified_use_authority_invalid')
+}
+
+function pinnedAuthorityFromRow(
+  row: PinnedAuthorityFields,
+): CanonicalPayoutAuthority | undefined {
+  return typeof row.owningAccountRef === 'string' &&
+    /^acc_[0-9a-f]{32}$/u.test(row.owningAccountRef) &&
+    typeof row.authorityPrincipalRef === 'string' &&
+    /^prn_[0-9a-f]{32}$/u.test(row.authorityPrincipalRef) &&
+    typeof row.authorityGrantRef === 'string' &&
+    /^grt_[0-9a-f]{32}$/u.test(row.authorityGrantRef) &&
+    Number.isSafeInteger(row.authorityGrantGeneration) &&
+    (row.authorityGrantGeneration ?? -1) >= 0
+    ? {
+        owningAccountRef: row.owningAccountRef,
+        authorityPrincipalRef: row.authorityPrincipalRef,
+        authorityGrantRef: row.authorityGrantRef,
+        authorityGrantGeneration: row.authorityGrantGeneration as number,
+      }
+    : undefined
+}
+
+function samePinnedAuthority(
+  row: PinnedAuthorityFields,
+  authority: CanonicalPayoutAuthority,
+): boolean {
+  return row.owningAccountRef === authority.owningAccountRef &&
+    row.authorityPrincipalRef === authority.authorityPrincipalRef &&
+    row.authorityGrantRef === authority.authorityGrantRef &&
+    row.authorityGrantGeneration === authority.authorityGrantGeneration
+}
+
+async function resolveCurrentGrantAuthority(
+  ctx: MutationCtx,
+  input: Readonly<{
+    grantRef: string
+    generation: number
+    expectedAccountRef?: string
+    expectedPrincipalRef?: string
+    expectedExpiresAt?: number
+    requiredResourceRefs: readonly string[]
+  }>,
+): Promise<CanonicalPayoutAuthority> {
+  if (!/^grt_[0-9a-f]{32}$/u.test(input.grantRef) ||
+    !Number.isSafeInteger(input.generation) || input.generation < 0)
+    return qualifiedUseAuthorityFailure()
+  const grant = await ctx.db
+    .query('authorityDelegationGrants')
+    .withIndex('by_grantRef', (query) => query.eq('grantRef', input.grantRef))
+    .unique()
+  const consequenceNow = Date.now()
+  if (grant === null || !Number.isFinite(consequenceNow) ||
+    grant.grantRef !== input.grantRef ||
+    grant.generation !== input.generation ||
+    grant.lifecycle !== 'active' || grant.expiresAt <= consequenceNow ||
+    (input.expectedExpiresAt !== undefined &&
+      grant.expiresAt !== input.expectedExpiresAt) ||
+    (input.expectedPrincipalRef !== undefined &&
+      grant.subjectPrincipalRef !== input.expectedPrincipalRef) ||
+    (input.expectedAccountRef !== undefined &&
+      grant.accountRef !== input.expectedAccountRef) ||
+    grant.createdBy.activeAccountRef !== grant.accountRef ||
+    !ACCOUNT_REF_PATTERN.test(grant.accountRef))
+    return qualifiedUseAuthorityFailure()
+  const account = await ctx.db
+    .query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', grant.accountRef))
+    .unique()
+  if (account === null || account.accountRef !== grant.accountRef ||
+    account.lifecycle !== 'active') return qualifiedUseAuthorityFailure()
+  const trustedPrincipalRef = grant.subjectPrincipalRef
+  try {
+    const baseStore = createConvexDelegationStore(ctx)
+    const readOnlyStore: DelegationStore = {
+      transact: async (operation) => await baseStore.transact(
+        async (transaction) => await operation({
+          ...transaction,
+          getSnapshotByAdmissionIdempotency: async () => undefined,
+          getSnapshot: async () => undefined,
+          commit: async () => undefined,
+        }),
+      ),
+    }
+    const evidenceRef = canonicalDigest({
+      format: 'qualified-use-authority-validation:v1',
+      grantRef: grant.grantRef,
+      generation: grant.generation,
+      accountRef: grant.accountRef,
+      principalRef: trustedPrincipalRef,
+      resourceRefs: [...input.requiredResourceRefs],
+    } as StableHashValue)
+    const snapshot = await new DelegationService(
+      readOnlyStore,
+      createConvexDelegationContextPort(ctx, principalRef(trustedPrincipalRef)),
+      { randomUuid: () => '00000000-0000-4000-8000-000000000001' },
+    ).admitConsequence({
+      grantRef: delegationGrantRef(grant.grantRef),
+      expectedGeneration: grant.generation,
+      context: {
+        actorPrincipalRef: principalRef(trustedPrincipalRef),
+        activeAccountRef: accountRef(grant.accountRef),
+        correlationRef: evidenceRef,
+        idempotencyRef: evidenceRef,
+      },
+      requiredScopes: grant.scopes,
+      resourceRefs: input.requiredResourceRefs,
+      budgetAmount: 0,
+    })
+    if (snapshot.accountRef !== grant.accountRef ||
+      snapshot.actorPrincipalRef !== trustedPrincipalRef ||
+      snapshot.subjectPrincipalRef !== trustedPrincipalRef ||
+      snapshot.grantRef !== grant.grantRef ||
+      snapshot.generation !== grant.generation) return qualifiedUseAuthorityFailure()
+  } catch (error) {
+    void error
+    return qualifiedUseAuthorityFailure()
+  }
+  return {
+    owningAccountRef: grant.accountRef,
+    authorityPrincipalRef: trustedPrincipalRef,
+    authorityGrantRef: grant.grantRef,
+    authorityGrantGeneration: grant.generation,
+  }
+}
+
+/** Resolve Account provenance only from the durable invocation's pinned grant. */
+export async function resolveCanonicalInvocationAuthority(
+  ctx: MutationCtx,
+  invocationRef: string,
+): Promise<CanonicalQualifiedUseAuthority> {
+  if (invocationRef.trim().length === 0) return qualifiedUseAuthorityFailure()
+  const invocation = await ctx.db
+    .query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) =>
+      query.eq('invocationRef', invocationRef),
+    )
+    .unique()
+  if (invocation === null || invocation.invocationRef !== invocationRef ||
+    invocation.environment !== 'production') return qualifiedUseAuthorityFailure()
+  return await resolveCurrentGrantAuthority(ctx, {
+    grantRef: invocation.grantRef,
+    generation: invocation.grantGeneration,
+    expectedPrincipalRef: invocation.principalId,
+    expectedExpiresAt: invocation.grantExpiresAt,
+    requiredResourceRefs: [invocation.operationRef],
+  }).then((authority) => ({
+    ...authority,
+    authorityResourceRef: invocation.operationRef,
+  }))
+}
+
+/**
+ * Consequence-time seam for payout settlement. Legacy rows and mixed authority
+ * compositions are held instead of becoming transferable.
+ */
+export async function requireCanonicalPayoutAuthority(
+  ctx: MutationCtx,
+  payout: Pick<Doc<'moneyPayouts'>, '_id' | 'payoutRef'> &
+    PinnedAuthorityFields & PinnedResourceFields,
+): Promise<CanonicalPayoutSettlementAuthority> {
+  const pinned = pinnedAuthorityFromRow(payout)
+  if (pinned === undefined) return qualifiedUseAuthorityFailure()
+  const allocations = await ctx.db
+    .query('moneyPayoutAllocations')
+    .withIndex('by_payoutRef_and_qualifiedAt', (query) =>
+      query.eq('payoutRef', payout.payoutRef),
+    )
+    .take(DAILY_PAYOUT_ALLOCATION_READ_LIMIT + 1)
+  const resourceRefs = canonicalAuthorityResourceRefs(
+    allocations.map((allocation) =>
+      (allocation as typeof allocation & PinnedResourceFields)
+        .authorityResourceRef,
+    ),
+  )
+  const pinnedResourceRefs = canonicalAuthorityResourceRefs(
+    payout.authorityResourceRefs ?? [],
+  )
+  if (allocations.length === 0 ||
+    allocations.length > DAILY_PAYOUT_ALLOCATION_READ_LIMIT ||
+    resourceRefs === undefined || pinnedResourceRefs === undefined ||
+    resourceRefs.length !== pinnedResourceRefs.length ||
+    resourceRefs.some((resourceRef, index) =>
+      resourceRef !== pinnedResourceRefs[index]) ||
+    allocations.some((allocation) => !samePinnedAuthority(
+      allocation as typeof allocation & PinnedAuthorityFields,
+      pinned,
+    ))) return qualifiedUseAuthorityFailure()
+  const authority = await resolveCurrentGrantAuthority(ctx, {
+    grantRef: pinned.authorityGrantRef,
+    generation: pinned.authorityGrantGeneration,
+    expectedAccountRef: pinned.owningAccountRef,
+    expectedPrincipalRef: pinned.authorityPrincipalRef,
+    requiredResourceRefs: resourceRefs,
+  })
+  return { ...authority, authorityResourceRefs: resourceRefs }
+}
+
+function canonicalAuthorityResourceRefs(
+  values: readonly unknown[],
+): readonly string[] | undefined {
+  if (values.length === 0 || values.length > DELEGATION_MAX_RESOURCES ||
+    values.some((value) => typeof value !== 'string' ||
+      !/^[A-Za-z0-9*][A-Za-z0-9._:/*-]{0,199}$/u.test(value))) return undefined
+  const sorted = [...new Set(values as readonly string[])].sort()
+  return sorted.length === values.length ? sorted : undefined
+}
 type QualifiedUsePayoutAmounts = Readonly<{
   businessId: string
   currency: string
@@ -416,6 +665,7 @@ export async function readDailyPayoutComposition(
   if (rows.length > DAILY_PAYOUT_ALLOCATION_READ_LIMIT)
     return qualifiedUsePayoutFailure()
   const allocations = new Map<string, Doc<'moneyPayoutAllocations'>>()
+  let compositionAuthority: CanonicalPayoutAuthority | undefined
   let grossAccrual = zeroExactAmount(currency, exponent)
   let rake = zeroExactAmount(currency, exponent)
   let providerNet = zeroExactAmount(currency, exponent)
@@ -423,8 +673,18 @@ export async function readDailyPayoutComposition(
     return qualifiedUsePayoutFailure()
   for (const row of rows) {
     const amounts = allocationAmountsFromRow(row)
+    const rowAuthority = pinnedAuthorityFromRow(
+      row as typeof row & PinnedAuthorityFields,
+    )
+    const rowResourceRef = (
+      row as typeof row & PinnedResourceFields
+    ).authorityResourceRef
     if (
       amounts === undefined ||
+      rowAuthority === undefined ||
+      canonicalAuthorityResourceRefs([rowResourceRef]) === undefined ||
+      (compositionAuthority !== undefined &&
+        !samePinnedAuthority(rowAuthority, compositionAuthority)) ||
       row.allocationRef !== qualifiedUseAllocationRef({
         qualifiedUseRef: row.qualifiedUseRef,
         materialDigest: row.materialDigest,
@@ -441,6 +701,7 @@ export async function readDailyPayoutComposition(
       allocations.has(row.allocationRef)
     )
       return qualifiedUsePayoutFailure()
+    compositionAuthority = rowAuthority
     allocations.set(row.allocationRef, row)
   }
   const corrections = await ctx.db
@@ -541,6 +802,7 @@ function allocationReplayMatchesReceipt(
   row: Doc<'moneyPayoutAllocations'>,
   receipt: QualifiedUseReceipt,
   allocationRef: string,
+  authority: CanonicalQualifiedUseAuthority,
 ): boolean {
   const amounts = allocationAmountsFromRow(row)
   let period: DailyPayoutIdentity
@@ -560,6 +822,9 @@ function allocationReplayMatchesReceipt(
     receipt.qualifiedUseRef === qualifiedUseRef(receipt) &&
     receipt.materialDigest === qualifiedUseMaterialDigest(receipt) &&
     row.allocationRef === allocationRef &&
+    samePinnedAuthority(row as typeof row & PinnedAuthorityFields, authority) &&
+    (row as typeof row & PinnedResourceFields).authorityResourceRef ===
+      authority.authorityResourceRef &&
     row.qualifiedUseRef === receipt.qualifiedUseRef &&
     row.transactionRef === receipt.transactionRef &&
     row.usageRef === receipt.usageRef &&
@@ -578,9 +843,15 @@ async function validateQualifiedUseAllocationReplay(
   eligibilityPrincipalId: string,
   allocation: Doc<'moneyPayoutAllocations'>,
   allocationRef: string,
+  authority: CanonicalQualifiedUseAuthority,
 ): Promise<void> {
   if (
-    !allocationReplayMatchesReceipt(allocation, receipt, allocationRef) ||
+    !allocationReplayMatchesReceipt(
+      allocation,
+      receipt,
+      allocationRef,
+      authority,
+    ) ||
     receipt.transactionRef === undefined ||
     receipt.usageRef === undefined
   )
@@ -691,6 +962,14 @@ async function validateQualifiedUseAllocationReplay(
     payout.providerAccountRef !==
       accountRefForProvider(allocation.businessId, allocation.currency) ||
     payout.idempotencyKey !== period.payoutRef ||
+    !samePinnedAuthority(
+      payout as typeof payout & PinnedAuthorityFields,
+      authority,
+    ) ||
+    !sameAuthorityResourceComposition(
+      payout as typeof payout & PinnedResourceFields,
+      composition.rows,
+    ) ||
     minimumPayout.units !== '0' ||
     compareExactAmounts(currentExpectedGross, currentGross) !== 0 ||
     providerAccount.accountRef !== payout.providerAccountRef ||
@@ -719,6 +998,7 @@ async function validateQualifiedUseAllocationReplay(
 function sameQualifiedUseReceipt(
   row: Doc<'qualifiedUseReceipts'>,
   receipt: QualifiedUseReceipt,
+  authority: CanonicalQualifiedUseAuthority,
 ): boolean {
   if (!Array.isArray(row.evidenceRefs)) return false
   const identity = {
@@ -743,6 +1023,9 @@ function sameQualifiedUseReceipt(
     qualifiedUseRef(identity) === row.qualifiedUseRef &&
     qualifiedUseMaterialDigest(material) === row.materialDigest &&
     row.qualifiedUseRef === receipt.qualifiedUseRef &&
+    samePinnedAuthority(row as typeof row & PinnedAuthorityFields, authority) &&
+    (row as typeof row & PinnedResourceFields).authorityResourceRef ===
+      authority.authorityResourceRef &&
     row.materialDigest === receipt.materialDigest &&
     row.invocationRef === receipt.invocationRef &&
     row.attemptRef === receipt.attemptRef &&
@@ -770,7 +1053,7 @@ function sameQualifiedUseReceipt(
  * carries the journal link; all economic and period identity is recovered here.
  */
 export async function recordQualifiedUsePayoutAllocation(
-  ctx: Pick<MutationCtx, 'db'>,
+  ctx: MutationCtx,
   receipt: QualifiedUseReceipt,
   eligibilityPrincipalId: string,
 ): Promise<
@@ -780,6 +1063,12 @@ export async function recordQualifiedUsePayoutAllocation(
     return qualifiedUsePayoutFailure()
   const transactionRef = receipt.transactionRef
   const usageRef = receipt.usageRef
+  const authority = await resolveCanonicalInvocationAuthority(
+    ctx,
+    receipt.invocationRef,
+  )
+  if (authority.authorityResourceRef !== receipt.operationRef)
+    return qualifiedUseAuthorityFailure()
   const persistedReceipt = await ctx.db
     .query('qualifiedUseReceipts')
     .withIndex('by_qualifiedUseRef', (query) =>
@@ -788,7 +1077,7 @@ export async function recordQualifiedUsePayoutAllocation(
     .unique()
   if (
     persistedReceipt !== null &&
-    !sameQualifiedUseReceipt(persistedReceipt, receipt)
+    !sameQualifiedUseReceipt(persistedReceipt, receipt, authority)
   )
     return qualifiedUsePayoutFailure()
   const allocationRef = qualifiedUseAllocationRef(receipt)
@@ -833,6 +1122,7 @@ export async function recordQualifiedUsePayoutAllocation(
       eligibilityPrincipalId,
       allocationByRef,
       allocationRef,
+      authority,
     )
     return 'allocated'
   }
@@ -904,6 +1194,18 @@ export async function recordQualifiedUsePayoutAllocation(
         accountRefForProvider(amounts.businessId, amounts.currency) ||
       payout.idempotencyKey !== period.payoutRef ||
       payout.minimumPayoutUnits !== '0' ||
+      !samePinnedAuthority(
+        payout as typeof payout & PinnedAuthorityFields,
+        authority,
+      ) ||
+      !sameAuthorityResourceComposition(
+        payout as typeof payout & PinnedResourceFields,
+        composition.rows,
+      ) ||
+      composition.rows.some((row) => !samePinnedAuthority(
+        row as typeof row & PinnedAuthorityFields,
+        authority,
+      )) ||
       payout.state === 'paid' ||
       payout.state === 'reversed' ||
       payout.state === 'transfer_pending' ||
@@ -928,6 +1230,7 @@ export async function recordQualifiedUsePayoutAllocation(
     transactionRef,
     usageRef,
     businessId: amounts.businessId,
+    ...authority,
     currency: amounts.currency,
     exponent: amounts.exponent,
     grossAccrualUnits: amounts.grossAccrual.units,
@@ -939,9 +1242,12 @@ export async function recordQualifiedUsePayoutAllocation(
     createdAt: receipt.qualifiedAt,
   })
   if (payout === null) {
+    const { authorityResourceRef, ...payoutAuthority } = authority
     await ctx.db.insert('moneyPayouts', {
       payoutRef: period.payoutRef,
       businessId: amounts.businessId,
+      ...payoutAuthority,
+      authorityResourceRefs: [authorityResourceRef],
       currency: amounts.currency,
       exponent: amounts.exponent,
       grossAccrualUnits: amounts.grossAccrual.units,
@@ -989,13 +1295,43 @@ export async function recordQualifiedUsePayoutAllocation(
     currentProvider === undefined
       ? undefined
       : addExactAmounts(currentProvider, amounts.providerNet)
-  if (nextGross === undefined || nextRake === undefined || nextProvider === undefined)
+  const currentResourceRefs = canonicalAuthorityResourceRefs(
+    (payout as typeof payout & PinnedResourceFields).authorityResourceRefs ?? [],
+  )
+  const nextResourceRefs = currentResourceRefs === undefined
+    ? undefined
+    : canonicalAuthorityResourceRefs([
+        ...new Set([...currentResourceRefs, authority.authorityResourceRef]),
+      ])
+  if (nextGross === undefined || nextRake === undefined ||
+    nextProvider === undefined || nextResourceRefs === undefined)
     return qualifiedUsePayoutFailure()
   await ctx.db.patch(payout._id, {
     grossAccrualUnits: nextGross.units,
     rakeUnits: nextRake.units,
     providerNetUnits: nextProvider.units,
+    authorityResourceRefs: [...nextResourceRefs],
     updatedAt: Math.max(payout.updatedAt, receipt.qualifiedAt),
   })
   return 'allocated'
+}
+
+function sameAuthorityResourceComposition(
+  payout: PinnedResourceFields,
+  allocations: readonly Doc<'moneyPayoutAllocations'>[],
+): boolean {
+  const payoutResourceRefs = canonicalAuthorityResourceRefs(
+    payout.authorityResourceRefs ?? [],
+  )
+  const allocationResourceRefs = canonicalAuthorityResourceRefs(
+    [...new Set(allocations.map((allocation) =>
+      (allocation as typeof allocation & PinnedResourceFields)
+        .authorityResourceRef,
+    ))],
+  )
+  return payoutResourceRefs !== undefined &&
+    allocationResourceRefs !== undefined &&
+    payoutResourceRefs.length === allocationResourceRefs.length &&
+    payoutResourceRefs.every((resourceRef, index) =>
+      resourceRef === allocationResourceRefs[index])
 }
