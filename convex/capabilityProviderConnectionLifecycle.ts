@@ -9,10 +9,10 @@ import {
   invalidateProviderConnectionLease,
   recordProviderConnectionCleanupResult,
   reauthorizeProviderConnection,
-  resolveProviderConnectionCredentialRef,
-  validateProviderConnectionAuthority,
   type ProviderConnection,
+  type ProviderConnectionAuthorityValidation,
   type ProviderConnectionCommandResult,
+  type ProviderConnectionCredentialResolution,
   type ProviderConnectionInvocationLease,
 } from '../src/modules/capability-supply/provider-connection'
 import {
@@ -1030,34 +1030,15 @@ export async function readAtGenerationHandler(
 }
 
 export async function resolveCredentialRefHandler(
-  ctx: QueryCtx,
-  args: { connectionRef: string; expectedAuthorityGeneration: number; expectedAuthorityDigest: string; now: number },
-) {
-  const row = await ctx.db.query('capabilityProviderConnections')
-    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
-  if (row === null) return { kind: 'unavailable' as const, reason: 'not_found' as const }
-  const legacy = toDomain(row)
-  if (await readCanonicalConnectionForProjection(ctx, legacy, true) === null) {
-    return { kind: 'unavailable' as const, reason: 'inactive' as const }
-  }
-  return resolveProviderConnectionCredentialRef(legacy, args.expectedAuthorityGeneration, args.expectedAuthorityDigest, legacy.updatedAt)
+  _ctx: QueryCtx,
+  _args: { connectionRef: string; expectedAuthorityGeneration: number; expectedAuthorityDigest: string; now: number },
+): Promise<ProviderConnectionCredentialResolution> {
+  return { kind: 'unavailable' as const, reason: 'inactive' as const }
 }
 
 export async function validateAuthorityHandler(
-  ctx: QueryCtx,
-  args: { connectionRef: string; expectedAuthorityGeneration: number; expectedAuthorityDigest: string; now: number },
-) {
-  const row = await ctx.db.query('capabilityProviderConnections')
-    .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
-  if (row === null) return { kind: 'unavailable' as const, reason: 'not_found' as const }
-  const legacy = toDomain(row)
-  if (await readCanonicalConnectionForProjection(ctx, legacy, true) === null) {
-    return { kind: 'unavailable' as const, reason: 'inactive' as const }
-  }
-  return validateProviderConnectionAuthority(
-    legacy,
-    args.expectedAuthorityGeneration,
-    args.expectedAuthorityDigest,
-    legacy.updatedAt,
-  )
+  _ctx: QueryCtx,
+  _args: { connectionRef: string; expectedAuthorityGeneration: number; expectedAuthorityDigest: string; now: number },
+): Promise<ProviderConnectionAuthorityValidation> {
+  return { kind: 'unavailable' as const, reason: 'inactive' as const }
 }

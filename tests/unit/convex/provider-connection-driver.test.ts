@@ -170,13 +170,13 @@ describe('canonical provider-connection driver', () => {
       expectedAuthorityGeneration: first.connection.authorityGeneration,
       expectedAuthorityDigest: first.connection.authorityDigest,
       now: 0,
-    })).resolves.toEqual({ kind: 'resolved', credentialRef: SECRET_REF })
+    })).resolves.toEqual({ kind: 'unavailable', reason: 'inactive' })
     await expect(backend.query(internal.capabilityProviderConnections.validateAuthority, {
       connectionRef: first.connection.connectionRef,
       expectedAuthorityGeneration: first.connection.authorityGeneration,
       expectedAuthorityDigest: first.connection.authorityDigest,
       now: 0,
-    })).resolves.toEqual({ kind: 'valid' })
+    })).resolves.toEqual({ kind: 'unavailable', reason: 'inactive' })
     await expect(fixture.owner.query(api.capabilityProviderConnections.listOwner, {})).resolves.toHaveLength(1)
     await expect(fixture.owner.query(api.capabilityProviderConnections.readOwner, {
       connectionRef: first.connection.connectionRef,
@@ -222,13 +222,17 @@ describe('canonical provider-connection driver', () => {
     await grant(backend, owner, '8', 'connection:refresh', [
       `connection:${first.connection.canonicalConnectionRef}`,
     ])
-    await expect(fixture.owner.mutation(api.capabilityProviderConnections.rotateOwner, {
+    const rotateArgs = {
       connectionRef: 'connection:driver',
       commandId: 'command:refresh:driver',
       expectedAuthorityGeneration: first.connection.authorityGeneration,
       expectedAuthorityDigest: first.connection.authorityDigest,
       evidenceRefs: ['evidence:refresh:driver'],
-    })).resolves.toMatchObject({ kind: 'applied', connection: { lifecycle: 'active', authorityGeneration: 2 } })
+    }
+    await expect(fixture.owner.mutation(api.capabilityProviderConnections.rotateOwner, rotateArgs))
+      .resolves.toMatchObject({ kind: 'applied', connection: { lifecycle: 'active', authorityGeneration: 2 } })
+    await expect(fixture.owner.mutation(api.capabilityProviderConnections.rotateOwner, rotateArgs))
+      .resolves.toMatchObject({ kind: 'duplicate', connection: { lifecycle: 'active', authorityGeneration: 2 } })
     const refreshed = await backend.run(async (ctx) => {
       const row = await ctx.db.query('capabilityProviderConnections')
         .withIndex('by_connectionRef', (query) => query.eq('connectionRef', 'connection:driver'))
@@ -411,6 +415,12 @@ describe('canonical provider-connection driver', () => {
     })
     expect(connected).toMatchObject({ kind: 'applied', connection: { lifecycle: 'active' } })
     if (connected.kind === 'refused') throw new Error(connected.code)
+    await expect(fixture.owner.mutation(api.capabilityProviderConnections.connectX402Owner, {
+      businessId: fixture.businessId,
+      resourceUrl,
+      commandId: 'command:x402:connect',
+      evidenceRefs: ['evidence:x402'],
+    })).resolves.toMatchObject({ kind: 'duplicate', connection: { lifecycle: 'active' } })
     await expect(backend.run(async (ctx) => await ctx.db.query('capabilityProviderConnections')
       .withIndex('by_connectionRef', (query) => query.eq('connectionRef', connected.connection.connectionRef))
       .unique())).resolves.toMatchObject({ owningAccountRef: owner.accountRef })
@@ -511,13 +521,13 @@ describe('canonical provider-connection driver', () => {
       expectedAuthorityGeneration: 1,
       expectedAuthorityDigest: `sha256:${'a'.repeat(64)}`,
       now: 0,
-    })).resolves.toEqual({ kind: 'unavailable', reason: 'not_found' })
+    })).resolves.toEqual({ kind: 'unavailable', reason: 'inactive' })
     await expect(backend.query(internal.capabilityProviderConnections.validateAuthority, {
       connectionRef: missingConnection,
       expectedAuthorityGeneration: 1,
       expectedAuthorityDigest: `sha256:${'a'.repeat(64)}`,
       now: 0,
-    })).resolves.toEqual({ kind: 'unavailable', reason: 'not_found' })
+    })).resolves.toEqual({ kind: 'unavailable', reason: 'inactive' })
     await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, {
       connectionRef: missingConnection,
       commandId: 'cleanup:missing',
@@ -589,7 +599,7 @@ describe('canonical provider-connection driver', () => {
   })
 
   it('revalidates every internal lifecycle command against current canonical authority', async () => {
-    const backend = convexTestWithMarketComponents()
+    const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'connection-driver-internal')
     const owner = await canonicalOwner(backend, fixture.businessId)
     await grant(backend, owner, 'a', 'connection:install', [
@@ -746,7 +756,7 @@ describe('canonical provider-connection driver', () => {
         .unique()
       if (row === null) throw new Error('revoked_projection_missing')
       await ctx.db.patch(row._id, {
-        cleanupWorkKind: 'cleanup',
+        cleanupWorkKind: 'lease_drain',
         cleanupCommandId: cleanupIdentity.commandId,
         cleanupRequestDigest: cleanupIdentity.requestDigest,
         cleanupAttempt: cleanupIdentity.cleanupAttempt,
