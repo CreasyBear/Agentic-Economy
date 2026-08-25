@@ -5,6 +5,7 @@ import {
   dailyPayoutPeriodEnd,
   dailyPayoutPeriodStart,
   dailyPayoutRef,
+  dailySettlementWorkload,
   dailySettle,
   identity,
   seedAdditionalDailyPayout,
@@ -22,7 +23,7 @@ describe('Convex payout persistence — settlement', () => {
     seedPayout(db)
     const now = Date.parse(dailyPayoutPeriodEnd) + 1
     await expect(
-      dailySettle({ db, auth: identity }, { now }),
+      dailySettle({ db, auth: identity }, { now, workload: dailySettlementWorkload }),
     ).resolves.toMatchObject({
       kind: 'ran',
       periodStart: dailyPayoutPeriodStart,
@@ -35,7 +36,7 @@ describe('Convex payout persistence — settlement', () => {
       payoutRef: dailyPayoutRef,
     })
     await expect(
-      dailySettle({ db, auth: identity }, { now }),
+      dailySettle({ db, auth: identity }, { now, workload: dailySettlementWorkload }),
     ).resolves.toMatchObject({
       kind: 'ran',
       begunCount: 0,
@@ -54,16 +55,36 @@ describe('Convex payout persistence — settlement', () => {
     )
     const now = Date.parse(dailyPayoutPeriodEnd) + 1
     await expect(
-      dailySettle({ db, auth: identity }, { now }),
+      dailySettle({ db, auth: identity }, { now, workload: dailySettlementWorkload }),
     ).resolves.toMatchObject({
       kind: 'ran',
       begunCount: 0,
     })
-    const result = await dailySettle({ db, auth: identity }, { now })
+    const result = await dailySettle({ db, auth: identity }, { now, workload: dailySettlementWorkload })
     expect(result).toMatchObject({ kind: 'ran', begunCount: 0 })
     expect(
       (result as { unresolvedReservationCount: number }).unresolvedReservationCount,
     ).toBeGreaterThan(0)
     expect(db.rows('moneyTransactions')).toHaveLength(0)
+  })
+
+  it('holds a legacy payout with missing canonical provenance and creates no transfer effects', async () => {
+    const db = new MemoryDb()
+    seedPayout(db)
+    const payout = db.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('payout_fixture_missing')
+    delete payout.owningAccountRef
+    const now = Date.parse(dailyPayoutPeriodEnd) + 1
+
+    await expect(
+      dailySettle({ db, auth: identity }, { now, workload: dailySettlementWorkload }),
+    ).resolves.toMatchObject({
+      kind: 'ran',
+      begunCount: 0,
+      notReadyCount: 1,
+    })
+    expect(db.rows('moneyPayouts')[0]).toMatchObject({ state: 'held_threshold' })
+    expect(db.rows('moneyTransactions')).toHaveLength(0)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(0)
   })
 })

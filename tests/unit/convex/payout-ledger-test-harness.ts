@@ -14,6 +14,11 @@ import {
   runDailySupplierSettlement,
 } from '../../../convex/moneyLedger'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
+import {
+  PHASE_2_CRON_ACCOUNT_REF,
+  PHASE_2_CRON_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from '../../../convex/workloadCron'
 
 export { canonicalDigest, STRIPE_TRANSFER_RECOVERY_WINDOW_MS }
 
@@ -201,6 +206,24 @@ export const dailyPayoutRef = canonicalDigest({
   periodEnd: dailyPayoutPeriodEnd,
 } as const)
 export const dailyPayoutQualifiedUseRef = 'qualified-use:payout-1'
+export const payoutOwningAccountRef = 'acc_11111111111111111111111111111111'
+export const payoutAuthorityPrincipalRef = 'prn_33333333333333333333333333333333'
+export const payoutAuthorityGrantRef = 'grt_44444444444444444444444444444444'
+export const payoutAuthorityGrantGeneration = 1
+export const dailySettlementWorkload: WorkloadCronSnapshot = {
+  name: 'run daily supplier settlement',
+  workloadKind: 'cron',
+  actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+  activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+  correlationRef: 'cron:test:daily-settlement',
+  idempotencyRef: 'cron:test:daily-settlement',
+  purpose: 'run daily supplier settlement',
+  source: 'convex/workloadCron:runDailySupplierSettlement',
+  principalRevision: 1,
+  activeAccountRevision: 1,
+  accessVia: 'membership',
+  admittedAt: 1,
+}
 export const dailyPayoutMaterialDigest = 'sha256:payout-material'
 export const dailyPayoutAllocationRef = canonicalDigest({
   format: 'money-qualified-use-allocation:v1',
@@ -215,6 +238,85 @@ export function seedPayout(
     | 'transfer_pending'
     | 'outcome_unknown' = 'held_threshold',
 ): void {
+  const authorityContext = {
+    actorPrincipalRef: payoutAuthorityPrincipalRef,
+    activeAccountRef: payoutOwningAccountRef,
+    correlationRef: 'payout:test:authority',
+    idempotencyRef: 'payout:test:authority',
+  }
+  const workloadOwnershipRef = 'own_55555555555555555555555555555555'
+  const payoutOwnershipRef = 'own_66666666666666666666666666666666'
+  db.seed('principals', {
+    _id: 'principals:payout-authority',
+    principalRef: payoutAuthorityPrincipalRef,
+    kind: 'agent',
+    displayName: 'Payout authority',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('principals', {
+    _id: 'principals:cron-workload',
+    principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    kind: 'workload',
+    displayName: 'Phase 2 scheduled workload',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('accounts', {
+    _id: 'accounts:payout-authority',
+    accountRef: payoutOwningAccountRef,
+    lifecycle: 'active',
+    revision: 1,
+    currentOwnershipRef: payoutOwnershipRef,
+  })
+  db.seed('accounts', {
+    _id: 'accounts:cron-workload',
+    accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    lifecycle: 'active',
+    revision: 1,
+    currentOwnershipRef: workloadOwnershipRef,
+  })
+  db.seed('accountOwnerships', {
+    _id: 'accountOwnerships:payout-authority',
+    ownershipRef: payoutOwnershipRef,
+    accountRef: payoutOwningAccountRef,
+    ownerPrincipalRef: payoutAuthorityPrincipalRef,
+    lifecycle: 'active',
+  })
+  db.seed('accountOwnerships', {
+    _id: 'accountOwnerships:cron-workload',
+    ownershipRef: workloadOwnershipRef,
+    accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    ownerPrincipalRef: payoutAuthorityPrincipalRef,
+    lifecycle: 'active',
+  })
+  db.seed('memberships', {
+    _id: 'memberships:cron-workload',
+    accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    lifecycle: 'active',
+  })
+  db.seed('authorityDelegationGrants', {
+    _id: 'authorityDelegationGrants:payout-authority',
+    grantRef: payoutAuthorityGrantRef,
+    accountRef: payoutOwningAccountRef,
+    actorPrincipalRef: payoutAuthorityPrincipalRef,
+    subjectPrincipalRef: payoutAuthorityPrincipalRef,
+    scopes: ['money:payout'],
+    resourceRefs: ['operation:money'],
+    budgetLimit: 1,
+    budgetUsed: 0,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    generation: payoutAuthorityGrantGeneration,
+    revision: 1,
+    lifecycle: 'active',
+    createdAt: 1,
+    createdBy: authorityContext,
+  })
   db.seed('moneyAccounts', {
     _id: 'moneyAccounts:1',
     accountRef: 'business:business-1:USD',
@@ -247,6 +349,11 @@ export function seedPayout(
     _id: 'moneyPayouts:1',
     payoutRef: dailyPayoutRef,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRefs: ['operation:money'],
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -270,6 +377,11 @@ export function seedPayout(
     transactionRef: 'transaction:payout-1',
     usageRef: 'usage:payout-1',
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRef: 'operation:money',
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -305,6 +417,11 @@ export function seedAdditionalDailyPayout(
     _id: `moneyPayouts:${suffix}`,
     payoutRef,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRefs: ['operation:money'],
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',
@@ -329,6 +446,11 @@ export function seedAdditionalDailyPayout(
     transactionRef: `transaction:payout-${suffix}`,
     usageRef: `usage:payout-${suffix}`,
     businessId: 'business-1',
+    owningAccountRef: payoutOwningAccountRef,
+    authorityPrincipalRef: payoutAuthorityPrincipalRef,
+    authorityGrantRef: payoutAuthorityGrantRef,
+    authorityGrantGeneration: payoutAuthorityGrantGeneration,
+    authorityResourceRef: 'operation:money',
     currency: 'USD',
     exponent: 2,
     grossAccrualUnits: '5500',

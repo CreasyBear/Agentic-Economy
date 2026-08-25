@@ -7,6 +7,81 @@ import schema from '../../convex/schema'
 import { admitRegistryPaymentRequiredItem } from '@/modules/capability-supply/internal/facilitator-discovery-admission'
 import timezoneFixture from '@/modules/capability-supply/internal/x402-bazaar-fixtures/timezone-payment-required-2026-08-19.json'
 import { convexModules } from '../helpers/convex-fixtures'
+import {
+  PHASE_2_CRON_ACCOUNT_REF,
+  PHASE_2_CRON_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from '../../convex/workloadCron'
+
+async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof convexTest>): Promise<WorkloadCronSnapshot> {
+  const admittedAt = Date.now()
+  await backend.run(async (ctx) => {
+    const ownerPrincipalRef = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const action = {
+      actorPrincipalRef: ownerPrincipalRef,
+      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      correlationRef: 'cron-test:account',
+      idempotencyRef: 'cron-test:account',
+    }
+    await ctx.db.insert('principals', {
+      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      kind: 'workload',
+      displayName: 'Phase 2 scheduled workload',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: admittedAt,
+      updatedAt: admittedAt,
+    })
+    await ctx.db.insert('accounts', {
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      displayName: 'Phase 2 operations',
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: ownerPrincipalRef,
+      creationIdempotencyRef: 'cron-test:account',
+      initialOwnershipRef: ownershipRef,
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+      createdAt: admittedAt,
+      updatedAt: admittedAt,
+      lastAction: action,
+    })
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef,
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      ownerPrincipalRef,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: admittedAt,
+      createdBy: action,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: admittedAt,
+      createdBy: action,
+    })
+  })
+  return {
+    name: 'refresh facilitator discovery',
+    workloadKind: 'cron',
+    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    correlationRef: `cron:refresh-facilitator-discovery:${admittedAt}`,
+    idempotencyRef: `cron:refresh-facilitator-discovery:${admittedAt}`,
+    purpose: 'refresh facilitator discovery',
+    source: 'convex/workloadCron:refreshFacilitatorDiscovery',
+    principalRevision: 1,
+    activeAccountRevision: 1,
+    accessVia: 'membership',
+    admittedAt,
+  }
+}
 
 describe('facilitator discovery reconciliation', () => {
   it('creates deterministic provider state and replays the same publication', async () => {
@@ -158,12 +233,13 @@ describe('facilitator discovery reconciliation', () => {
 
   it('reports admission and reconciliation skips in the action total', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const response = new Response(JSON.stringify({
       items: [timezoneFixture.paymentRequired, { malformed: true }],
     }), { status: 200, headers: { 'content-type': 'application/json' } })
     vi.stubGlobal('fetch', vi.fn(async () => response.clone()))
     try {
-      await expect(backend.action(internal.facilitatorDiscoveryAction.run, {})).resolves.toEqual({
+      await expect(backend.action(internal.facilitatorDiscoveryAction.run, { workload })).resolves.toEqual({
         pages: 2,
         admitted: 2,
         skipped: 3,

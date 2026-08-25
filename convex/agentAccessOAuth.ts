@@ -2,6 +2,11 @@ import { ConvexError, v } from 'convex/values'
 import type { GenericDatabaseReader } from 'convex/server'
 import { internal } from './_generated/api'
 import { internalMutation, mutation, query } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 import type { DataModel, Doc } from './_generated/dataModel'
 import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { sourceWriteCommandDigest, verifySourceWriteAdmission, type SourceWriteAdmission, type SourceWriteAdmissionRequest } from '../src/modules/security/source-write-admission'
@@ -60,9 +65,17 @@ export const cleanupExpiredOAuthGrants = internalMutation({
   args: {
     now: v.optional(v.number()),
     batchSize: v.optional(v.number()),
+    workload: v.optional(workloadCronSnapshotValue),
   },
   returns: oauthGrantCleanupResult,
   handler: async (ctx, args) => {
+    if (args.workload !== undefined) {
+      await reconcileWorkloadCronSnapshot(
+        ctx,
+        'cleanup expired agent access oauth grants',
+        parseWorkloadCronSnapshot(args.workload),
+      )
+    }
     const effectiveNow = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
     const cutoff = effectiveNow - 60 * 60 * 1_000
     const batchSize = args.batchSize === undefined || !Number.isFinite(args.batchSize)
@@ -85,7 +98,7 @@ export const cleanupExpiredOAuthGrants = internalMutation({
 
     const rescheduled = deleted === batchSize
     if (rescheduled) {
-      await ctx.scheduler.runAfter(0, internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      await ctx.scheduler.runAfter(0, internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants, {
         now: effectiveNow,
         batchSize,
       })

@@ -11,6 +11,10 @@ import {
 import { internal } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+} from './workloadCron'
 import { capabilitySupplyGraphPorts } from './capabilitySupplyGraphPorts'
 import {
   convexPublicationLifecycle,
@@ -366,7 +370,16 @@ export async function recordCapabilityProbeResultHandler(
     : result
 }
 
-export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
+export async function scheduleDueCapabilityProbesHandler(
+  ctx: MutationCtx,
+  args: Readonly<{ workload: unknown }>,
+) {
+  const workload = parseWorkloadCronSnapshot(args.workload)
+  await reconcileWorkloadCronSnapshot(
+    ctx,
+    'refresh capability supply readiness',
+    workload,
+  )
   const due = await ctx.db
     .query('capabilityPublications')
     .withIndex('by_disposition_and_readinessValidUntil', (index) =>
@@ -377,9 +390,10 @@ export async function scheduleDueCapabilityProbesHandler(ctx: MutationCtx) {
     .take(MAX_READINESS_REFRESH_BATCH)
   await Promise.all(
     due.map((publication) =>
-      ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probeFromCron, {
         publicationRef: publication.publicationRef,
         expectedRevision: publication.revision,
+        workload,
       }),
     ),
   )

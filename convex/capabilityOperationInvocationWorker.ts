@@ -12,6 +12,12 @@ import {
 } from '@/modules/capability-execution/invocation-worker/recover'
 import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
+import {
+  bindWorkloadCronActionContext,
+  parseWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+  type WorkloadCronSnapshot,
+} from './workloadCron'
 
 export {
   operationInvocationAttemptIdentityDigest,
@@ -77,9 +83,13 @@ export const recover = internalAction({
 })
 
 export const reconcileScheduled = internalAction({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: reconciliationScheduledResult,
-  handler: async (ctx): Promise<Infer<typeof reconciliationScheduledResult>> => {
+  handler: async (ctx, args): Promise<Infer<typeof reconciliationScheduledResult>> => {
+    const workload: WorkloadCronSnapshot = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: 'reconcile due facilitator invocations',
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    })
     const startedAt = Date.now()
     const deadlineAt = startedAt + RECONCILIATION_SWEEP_DEADLINE_MS
     const leaseOwner = `reconciliation-sweep:${crypto.randomUUID()}`
@@ -116,7 +126,11 @@ export const reconcileScheduled = internalAction({
       }
       if (ownerRecovery === null) continue
       try {
-        const result = await recoverCapabilityOperationInvocation(ctx, {
+        const result = await recoverCapabilityOperationInvocation(bindWorkloadCronActionContext(ctx, {
+          name: 'reconcile due facilitator invocations',
+          snapshot: workload,
+          resourceInvocationRef: candidate.dispatchRef,
+        }), {
           invocationRef: candidate.dispatchRef,
           principalId: ownerRecovery.principalId,
           credentialId: ownerRecovery.credentialId,
@@ -143,8 +157,13 @@ export const reconcileScheduled = internalAction({
     for (const candidate of candidates) {
       if (Date.now() >= deadlineAt) break
       let claim: { kind: string; principalId?: string; credentialId?: string }
+      const invocationContext = bindWorkloadCronActionContext(ctx, {
+        name: 'reconcile due facilitator invocations',
+        snapshot: workload,
+        resourceInvocationRef: candidate.invocationRef,
+      })
       try {
-        claim = await ctx.runMutation(
+        claim = await invocationContext.runMutation(
           internal.capabilityOperationInvocations.claimAutomaticReconciliationCandidate,
           { invocationRef: candidate.invocationRef, leaseOwner, now: Date.now() },
         )
@@ -160,7 +179,7 @@ export const reconcileScheduled = internalAction({
         reason = 'recovery_failed'
       } else {
         try {
-          const result = await recoverCapabilityOperationInvocation(ctx, {
+          const result = await recoverCapabilityOperationInvocation(invocationContext, {
             invocationRef: candidate.invocationRef,
             principalId: claim.principalId,
             credentialId: claim.credentialId,
@@ -173,7 +192,7 @@ export const reconcileScheduled = internalAction({
         }
       }
       try {
-        const finished = await ctx.runMutation(
+        const finished = await invocationContext.runMutation(
           internal.capabilityOperationInvocations.finishAutomaticReconciliation,
           {
             invocationRef: candidate.invocationRef,

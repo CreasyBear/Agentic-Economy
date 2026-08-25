@@ -7,70 +7,70 @@ const crons = cronJobs()
 crons.interval(
   'reconcile due facilitator invocations',
   { minutes: 1 },
-  internal.capabilityOperationInvocationWorker.reconcileScheduled,
+  internal.workloadCron.reconcileDueFacilitatorInvocations,
   {},
 )
 
 crons.interval(
   'refresh facilitator discovery',
   { minutes: 10 },
-  internal.facilitatorDiscoveryAction.run,
+  internal.workloadCron.refreshFacilitatorDiscovery,
   {},
 )
 
 crons.interval(
   'refresh Agentic Market snapshots',
   { minutes: 5 },
-  internal.marketExternalRefresh.run,
+  internal.workloadCron.refreshAgenticMarketSnapshots,
   {},
 )
 
 crons.interval(
   'refresh Agentic Economy API registry',
   { hours: 24 },
-  internal.marketExternalRegistryRefresh.run,
+  internal.workloadCron.refreshAgenticEconomyApiRegistry,
   {},
 )
 
 crons.interval(
   'continue market aggregate backfill',
   { hours: 1 },
-  internal.marketAggregateBackfill.run,
+  internal.workloadCron.continueMarketAggregateBackfill,
   {},
 )
 
 crons.interval(
   'refresh current market presence',
   { minutes: 5 },
-  internal.marketPresence.refresh,
-  { cursor: null },
+  internal.workloadCron.refreshCurrentMarketPresence,
+  {},
 )
 
 crons.interval(
   'refresh capability supply readiness',
   { minutes: 1 },
-  internal.capabilitySupply.scheduleDueCapabilityProbes,
+  internal.workloadCron.refreshCapabilitySupplyReadiness,
   {}
 )
 
 crons.interval(
   'cleanup expired source write nonces',
   { hours: 1 },
-  internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces,
+  internal.workloadCron.cleanupExpiredSourceWriteNonces,
   {}
 )
 
 crons.interval(
   'cleanup expired agent access oauth grants',
   { hours: 1 },
-  internal.agentAccessOAuth.cleanupExpiredOAuthGrants,
+  internal.workloadCron.cleanupExpiredAgentAccessOAuthGrants,
   {},
 )
 
 crons.cron(
   'run daily supplier settlement',
   '0 0 * * *',
-  internal.moneyLedger.runDailySupplierSettlement,
+  internal.workloadCron.runDailySupplierSettlement,
   {},
 )
 

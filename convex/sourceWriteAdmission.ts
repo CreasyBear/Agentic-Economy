@@ -2,6 +2,11 @@ import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
   isSourceWriteBodyDigest,
@@ -225,9 +230,17 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
   args: {
     now: v.optional(v.number()),
     batchSize: v.optional(v.number()),
+    workload: v.optional(workloadCronSnapshotValue),
   },
   returns: sourceWriteNonceCleanupResult,
   handler: async (ctx, args) => {
+    if (args.workload !== undefined) {
+      await reconcileWorkloadCronSnapshot(
+        ctx,
+        'cleanup expired source write nonces',
+        parseWorkloadCronSnapshot(args.workload),
+      )
+    }
     const cutoff = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
     const batchSize = args.batchSize !== undefined && Number.isFinite(args.batchSize)
       ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)
@@ -243,7 +256,7 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
     const deleted = expiredNonces.length
     const rescheduled = deleted >= batchSize
     if (rescheduled) {
-      await ctx.scheduler.runAfter(0, internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
+      await ctx.scheduler.runAfter(0, internal.workloadCron.cleanupExpiredSourceWriteNonces, {
         now: cutoff,
         batchSize,
       })

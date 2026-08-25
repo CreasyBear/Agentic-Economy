@@ -10,7 +10,13 @@ import {
 } from '@/modules/capability-supply/public'
 import { credentialFromEnvironment, runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import { internal } from './_generated/api'
-import { internalAction } from './_generated/server'
+import { internalAction, type ActionCtx } from './_generated/server'
+import {
+  bindWorkloadCronActionContext,
+  parseWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+  type WorkloadCronSnapshot,
+} from './workloadCron'
 type PublicationLifecycle = {
   state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
   reasons: Array<
@@ -78,10 +84,7 @@ const probeResultValue = v.union(
     lifecycle: publicationLifecycleValue,
   }),
 )
-export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = internalAction({
-  args: { publicationRef: v.string(), expectedRevision: v.number() },
-  returns: probeResultValue,
-  handler: async (ctx, args): Promise<ProbeResult> => {
+export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<ProbeResult> {
     const result: ProbeTargetResult = await ctx.runQuery(
       internal.capabilitySupply.readCapabilityProbeTarget,
       args,
@@ -144,6 +147,35 @@ export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = inter
       },
     )
     return recorded
-  },
+}
+
+export async function probeFromCronHandler(
+  ctx: ActionCtx,
+  args: ProbeArgs & Readonly<{ workload: unknown }>,
+): Promise<ProbeResult> {
+  const parsed = parseWorkloadCronSnapshot(args.workload)
+  const workload: WorkloadCronSnapshot = await ctx.runQuery(internal.workloadCron.reconcile, {
+    name: 'refresh capability supply readiness',
+    snapshot: parsed,
+  })
+  return await probeHandler(bindWorkloadCronActionContext(ctx, {
+    name: 'refresh capability supply readiness',
+    snapshot: workload,
+  }), args)
+}
+
+export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = internalAction({
+  args: { publicationRef: v.string(), expectedRevision: v.number() },
+  returns: probeResultValue,
+  handler: probeHandler,
 })
 
+export const probeFromCron = internalAction({
+  args: {
+    publicationRef: v.string(),
+    expectedRevision: v.number(),
+    workload: workloadCronSnapshotValue,
+  },
+  returns: probeResultValue,
+  handler: probeFromCronHandler,
+})

@@ -9,6 +9,11 @@ import { sendGuardedHttpRequest } from "@/modules/network-guard/server";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import {
+  bindWorkloadCronActionContext,
+  parseWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from "./workloadCron";
 
 const resultValue = v.union(
   v.object({
@@ -23,7 +28,11 @@ const resultValue = v.union(
   v.object({ kind: v.literal("unavailable") }),
 );
 
-type GraduationArgs = { documentId: string; expectedSourceDigest: string };
+type GraduationArgs = {
+  documentId: string;
+  expectedSourceDigest: string;
+  workload?: unknown;
+};
 type CandidateResult =
   | { kind: "found"; candidate: Parameters<typeof probeRegistryEntryForAdmission>[0] }
   | { kind: "not_found" | "source_changed" | "unavailable" };
@@ -33,12 +42,32 @@ type GraduationResult =
   | { kind: "not_found" | "source_changed" | "unavailable" };
 
 export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult> = internalAction({
-  args: { documentId: v.string(), expectedSourceDigest: v.string() },
+  args: {
+    documentId: v.string(),
+    expectedSourceDigest: v.string(),
+    workload: v.optional(workloadCronSnapshotValue),
+  },
   returns: resultValue,
   handler: async (ctx, args): Promise<GraduationResult> => {
+    const workload = args.workload === undefined
+      ? undefined
+      : await ctx.runQuery(internal.workloadCron.reconcile, {
+          name: "refresh Agentic Economy API registry",
+          snapshot: parseWorkloadCronSnapshot(args.workload),
+        });
+    const authorized = workload === undefined
+      ? ctx
+      : bindWorkloadCronActionContext(ctx, {
+          name: "refresh Agentic Economy API registry",
+          snapshot: workload,
+        });
+    const candidateArgs = {
+      documentId: args.documentId,
+      expectedSourceDigest: args.expectedSourceDigest,
+    };
     const selected: CandidateResult = await ctx.runQuery(
       internal.marketExternalRegistry.admissionCandidate,
-      args,
+      candidateArgs,
     );
     if (selected.kind !== "found") return selected;
     const result = await probeRegistryEntryForAdmission(selected.candidate, {
@@ -49,11 +78,11 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
 
     const current: CandidateResult = await ctx.runQuery(
       internal.marketExternalRegistry.admissionCandidate,
-      args,
+      candidateArgs,
     );
     if (current.kind !== "found") return current;
 
-    const reconciled: { published: number } = await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
+    const reconciled: { published: number } = await authorized.runMutation(internal.facilitatorDiscovery.reconcile, {
       items: [structuredClone(result.draft)] as FunctionArgs<typeof internal.facilitatorDiscovery.reconcile>["items"],
       complete: false,
       deadlineAt: Date.now() + 30_000,
@@ -67,7 +96,11 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
   },
 });
 
-type SweepArgs = { generation: string; cursor: string | null };
+type SweepArgs = {
+  generation: string;
+  cursor: string | null;
+  workload?: unknown;
+};
 type SweepResult = {
   kind: "advanced" | "complete" | "stale_generation";
   attempted: number;
@@ -85,9 +118,19 @@ const sweepResultValue = v.object({
 });
 
 export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = internalAction({
-  args: { generation: v.string(), cursor: v.union(v.string(), v.null()) },
+  args: {
+    generation: v.string(),
+    cursor: v.union(v.string(), v.null()),
+    workload: v.optional(workloadCronSnapshotValue),
+  },
   returns: sweepResultValue,
   handler: async (ctx, args): Promise<SweepResult> => {
+    const workload = args.workload === undefined
+      ? undefined
+      : await ctx.runQuery(internal.workloadCron.reconcile, {
+          name: "refresh Agentic Economy API registry",
+          snapshot: parseWorkloadCronSnapshot(args.workload),
+        });
     const selected: {
       kind: "stale_generation";
     } | {
@@ -110,6 +153,7 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
         {
           documentId: candidate.documentId,
           expectedSourceDigest: candidate.sourceDigest,
+          ...(workload === undefined ? {} : { workload }),
         },
       );
       if (result.kind === "graduated" && result.published) graduated += 1;
@@ -118,6 +162,7 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
       await ctx.scheduler.runAfter(1_000, internal.marketRegistryGraduation.sweep, {
         generation: args.generation,
         cursor: selected.continueCursor,
+        ...(workload === undefined ? {} : { workload }),
       });
     }
     return {

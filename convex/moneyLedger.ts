@@ -112,6 +112,7 @@ import {
   readProviderEarningsArgs,
   readProviderEarningsHandler,
 } from './moneyProviderEarnings'
+import { workloadCronSnapshotValue } from './workloadCron'
 import {
   appendRefundArgs,
   appendRefundHandler,
@@ -371,7 +372,7 @@ export const beginPayoutTransfer = mutation({
  * Stripe Transfer I/O is not issued here; this reuses beginPayoutTransferReservation only.
  */
 export const runDailySupplierSettlement = internalMutation({
-  args: { now: v.optional(v.number()) },
+  args: { now: v.optional(v.number()), workload: workloadCronSnapshotValue },
   returns: dailySettlementResultValue,
   handler: runDailySupplierSettlementHandler,
 })
