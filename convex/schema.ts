@@ -16,6 +16,7 @@ import { securityTables } from '../src/modules/security/internal/schema'
 import { moneyTables } from '../src/modules/money/internal/convex-schema'
 import { marketTables } from '../src/modules/market/internal/convex-schema'
 import { chatTables } from '../src/modules/chat/internal/convex-schema'
+import { principalAccountTables } from '../src/modules/principal-account/public'
 
 export default defineSchema({
   ...chatTables,
@@ -33,4 +34,5 @@ export default defineSchema({
   ...securityTables,
   ...moneyTables,
   ...marketTables,
+  ...principalAccountTables,
 })
