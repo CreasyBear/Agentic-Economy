@@ -55,6 +55,9 @@ export default defineConfig({
       "seroval",
     ],
   },
+  ssr: {
+    external: ["@clerk/tanstack-react-start"],
+  },
   resolve: {
     tsconfigPaths: true,
   },

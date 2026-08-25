@@ -162,4 +162,11 @@ describe('Operation architecture local release proof', () => {
     expect(sourceRelease).toBeGreaterThan(browserInstall)
     expect(sourceProof.match(/playwright install/g)).toHaveLength(1)
   })
+
+  it('keeps the Clerk TanStack entry external from SSR dependency optimization', () => {
+    const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
+    expect(viteConfig).toMatch(
+      /ssr:\s*\{\s*external:\s*\[\s*["']@clerk\/tanstack-react-start["']\s*\]/u,
+    )
+  })
 })
