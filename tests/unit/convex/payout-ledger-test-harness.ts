@@ -49,6 +49,12 @@ export class MemoryDb {
     return [...(this.tables.get(table) ?? [])]
   }
 
+  normalizeId(table: string, id: string): string | null {
+    return (this.tables.get(table) ?? []).some((row) => row._id === id)
+      ? id
+      : null
+  }
+
   query(table: string): Query {
     const filters: Array<(row: Row) => boolean> = []
     let orderDirection: 'asc' | 'desc' | undefined
@@ -149,6 +155,7 @@ export class MemoryDb {
 type Handler = (
   ctx: {
     db: MemoryDb
+    scheduler?: Record<string, never>
     auth: {
       getUserIdentity: () => Promise<{ tokenIdentifier: string; subject?: string } | null>
     }
@@ -156,7 +163,11 @@ type Handler = (
   args: Record<string, unknown>,
 ) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
-export const begin = (beginPayoutTransfer as unknown as HandlerExport)._handler
+const withConsequenceScheduler = (handler: Handler): Handler => async (ctx, args) =>
+  handler({ ...ctx, scheduler: {} }, args)
+export const begin = withConsequenceScheduler(
+  (beginPayoutTransfer as unknown as HandlerExport)._handler,
+)
 export const dailySettle = (runDailySupplierSettlement as unknown as HandlerExport)
   ._handler
 export const readOwnerTransfer = (
@@ -166,11 +177,15 @@ export const readStatus = (readPayoutStatus as unknown as HandlerExport)._handle
 export const readOwnerEarnings = (
   readOwnerProviderEarnings as unknown as HandlerExport
 )._handler
-export const complete = (completePayoutTransfer as unknown as HandlerExport)._handler
-export const reconcile = (reconcilePayoutTransfer as unknown as HandlerExport)._handler
-export const markUnknown = (
+export const complete = withConsequenceScheduler(
+  (completePayoutTransfer as unknown as HandlerExport)._handler,
+)
+export const reconcile = withConsequenceScheduler(
+  (reconcilePayoutTransfer as unknown as HandlerExport)._handler,
+)
+export const markUnknown = withConsequenceScheduler((
   markPayoutTransferOutcomeUnknown as unknown as HandlerExport
-)._handler
+)._handler)
 export const reserveConnect = (reserveConnectAccount as unknown as HandlerExport)
   ._handler
 export const finalizeConnect = (finalizeConnectAccount as unknown as HandlerExport)
@@ -184,13 +199,15 @@ export const sourceArgs = {
 }
 export const amount = { currency: 'USD', units: '5000', exponent: 2 }
 export const identity = {
-  getUserIdentity: async () => ({ tokenIdentifier: 'principal:test' }),
+  getUserIdentity: async () => ({
+    subject: 'owner:payout',
+    issuer: 'https://identity.example',
+    tokenIdentifier: 'https://identity.example|owner:payout',
+    exp: 8_000_000_000,
+  }),
 }
 export const ownerIdentity = {
-  getUserIdentity: async () => ({
-    tokenIdentifier: 'owner-token',
-    subject: 'owner:test',
-  }),
+  getUserIdentity: identity.getUserIdentity,
 }
 export const dailyPayoutPeriodStart = '2026-07-01T00:00:00.000Z'
 export const dailyPayoutPeriodEnd = '2026-07-02T00:00:00.000Z'
@@ -249,7 +266,7 @@ export function seedPayout(
   db.seed('principals', {
     _id: 'principals:payout-authority',
     principalRef: payoutAuthorityPrincipalRef,
-    kind: 'agent',
+    kind: 'human',
     displayName: 'Payout authority',
     lifecycle: 'active',
     revision: 1,
@@ -286,13 +303,15 @@ export function seedPayout(
     accountRef: payoutOwningAccountRef,
     ownerPrincipalRef: payoutAuthorityPrincipalRef,
     lifecycle: 'active',
+    revision: 1,
   })
   db.seed('accountOwnerships', {
     _id: 'accountOwnerships:cron-workload',
     ownershipRef: workloadOwnershipRef,
     accountRef: PHASE_2_CRON_ACCOUNT_REF,
-    ownerPrincipalRef: payoutAuthorityPrincipalRef,
+    ownerPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
     lifecycle: 'active',
+    revision: 1,
   })
   db.seed('memberships', {
     _id: 'memberships:cron-workload',
@@ -317,6 +336,74 @@ export function seedPayout(
     createdAt: 1,
     createdBy: authorityContext,
   })
+  const credentialExpiresAt = 8_000_000_000_000
+  const bindingRef = 'eib_77777777777777777777777777777777'
+  const credentialRef = 'crd_88888888888888888888888888888888'
+  db.seed('externalIdentityBindings', {
+    _id: 'externalIdentityBindings:payout-owner',
+    bindingRef,
+    principalRef: payoutAuthorityPrincipalRef,
+    providerNamespace: 'clerk/user',
+    providerIdentifier: 'https://identity.example|owner:payout',
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  db.seed('credentials', {
+    _id: 'credentials:payout-owner',
+    credentialRef,
+    bindingRef,
+    principalRef: payoutAuthorityPrincipalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation: 1,
+    issueIdempotencyRef: `issue:${credentialRef}`,
+    revision: 1,
+    issuedAt: 1,
+    expiresAt: credentialExpiresAt,
+    expiryMaterialization: {
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt,
+      scheduleNonce: 'sha256:payout-owner-expiry',
+      scheduleRef: `scheduled:${credentialRef}`,
+      materializedAt: 1,
+    },
+    updatedAt: 1,
+  })
+  const existingBusiness = db.rows('businesses').find((row) => row._id === 'business-1')
+  if (existingBusiness === undefined) {
+    db.seed('owners', {
+      _id: 'owners:payout-owner',
+      clerkUserId: 'owner:payout',
+      canonicalPrincipalRef: payoutAuthorityPrincipalRef,
+      canonicalAccountRef: payoutOwningAccountRef,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    db.seed('businesses', {
+      _id: 'business-1',
+      ownerId: 'owners:payout-owner',
+      slug: 'payout-owner',
+      name: 'Payout Owner',
+      normalizedName: 'payout owner',
+      category: 'testing',
+      businessContext: { kind: 'local_human', suburb: 'Perth', stateTerritory: 'WA' },
+      publicStatus: 'published',
+      trustTier: 'listed',
+      sourceHash: 'source:payout-owner',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  } else {
+    const existingOwner = db.rows('owners').find((row) => row._id === existingBusiness.ownerId)
+    if (existingOwner === undefined) throw new Error('payout_owner_fixture_missing')
+    existingOwner.canonicalPrincipalRef = payoutAuthorityPrincipalRef
+    existingOwner.canonicalAccountRef = payoutOwningAccountRef
+  }
   db.seed('moneyAccounts', {
     _id: 'moneyAccounts:1',
     accountRef: 'business:business-1:USD',
@@ -483,7 +570,7 @@ export function creditProvider(
 
 export function commandArgs(): Record<string, unknown> {
   return {
-    authority: { principalId: 'principal:test' },
+    authority: { principalId: payoutAuthorityPrincipalRef },
     businessId: 'business-1',
     amount,
     providerAccountRef: 'business:business-1:USD',

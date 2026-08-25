@@ -4,7 +4,11 @@ import type { MutationCtx } from './_generated/server'
 import type { DataModel, Doc, Id } from './_generated/dataModel'
 
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import {
+  readActiveAdminMembership,
+  readCanonicalCompatibilityOwner,
+  resolveBusinessActor,
+} from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import {
@@ -236,16 +240,28 @@ async function runOfferingSourceMutation(
   operationName: string,
   mutate: (state: OfferingSourceState, authority: { actorRef?: string; ownerRef: string; businessOwnerRef: string }, now: number) => OfferingSourceResult<unknown>,
 ): Promise<OfferingCommandResult> {
-  const admitted = await requireSourceWrite(ctx, args, 'catalog_publish')
-  if (admitted.kind === 'rejected') return { kind: 'error', code: 'operation_conflict', reason: admitted.reason }
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return { kind: 'error', code: 'unauthenticated', reason: 'Authentication is required.' }
-  const now = Date.now()
+  const canonicalOwner = await readCanonicalCompatibilityOwner(ctx.db, actor)
+  if (canonicalOwner === null) return { kind: 'error', code: 'wrong_owner', reason: 'Canonical owner context is invalid.' }
   const business = await ctx.db.get(args.businessId)
   if (business === null) return { kind: 'error', code: 'wrong_owner', reason: 'Business was not found.' }
-  const owner = await ctx.db.get(business.ownerId)
-  const businessOwnerRef = owner?.clerkUserId ?? ''
-  const core = await runOfferingSourceCore(ctx.db, args.businessId, businessOwnerRef, actor.clerkUserId, operationName, args.operationKey, mutate, now)
+  if (business.ownerId !== canonicalOwner._id) {
+    return { kind: 'error', code: 'wrong_owner', reason: 'Only the canonical business owner may change this business.' }
+  }
+  const admitted = await requireSourceWrite(ctx, args, 'catalog_publish')
+  if (admitted.kind === 'rejected') return { kind: 'error', code: 'operation_conflict', reason: admitted.reason }
+  const now = Date.now()
+  const core = await runOfferingSourceCore(
+    ctx.db,
+    args.businessId,
+    actor.canonicalPrincipalRef,
+    actor.canonicalPrincipalRef,
+    operationName,
+    args.operationKey,
+    mutate,
+    now,
+  )
   if (core.kind === 'error') return core
   const support = await deriveBusinessOfferingSupportFromCapabilitySupply(ctx.db, args.businessId, now)
   await rebuildBusinessSupplyProjectionSnapshotCommand({ db: ctx.db, sourceDb: ctx.db, businessId: args.businessId, support, now })
