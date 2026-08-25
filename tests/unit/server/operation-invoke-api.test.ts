@@ -29,6 +29,49 @@ function post(body: unknown, path = '/api/v1/operations/call'): Request {
 }
 
 describe('operation.invoke HTTP adapter', () => {
+  it('passes the protected operation scope into canonical production-style resolution', async () => {
+    const executor = service({
+      kind: 'completed',
+      invocationRef: 'invocation:canonical-scope',
+      operationRef,
+      output: { ok: true },
+      evidenceHash: 'evidence:canonical-scope',
+      usage: {
+        usageRef: 'usage:canonical-scope',
+        observedAt: 1_700_000_000_000,
+        chargeState: 'free_tier',
+        priceDigest: 'price:canonical-scope',
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    })
+    const resolvedScopes: Array<readonly string[]> = []
+    const response = await handleOperationInvokePost(post({
+      operationRef,
+      input: {},
+      idempotencyKey: 'canonical-scope',
+    }), {
+      authenticate,
+      resolvePrincipal: async (projection, requiredScopes) => {
+        resolvedScopes.push(requiredScopes)
+        return {
+          ...projection,
+          principalId: 'prn_00000000000040008000000000000043',
+          ownerId: 'acc_00000000000040008000000000000043',
+        }
+      },
+      operationInvokeService: executor,
+    })
+
+    expect(response.status).toBe(200)
+    expect(resolvedScopes).toEqual([['market_operations:invoke']])
+    expect(executor.invokeOperation).toHaveBeenCalledWith(expect.objectContaining({
+      principal: expect.objectContaining({
+        principalId: 'prn_00000000000040008000000000000043',
+        ownerId: 'acc_00000000000040008000000000000043',
+      }),
+    }))
+  })
+
   it('returns a canonical bearer challenge for missing authentication', async () => {
     const executor = service({ kind: 'completed' })
     const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {

@@ -15,6 +15,7 @@ import {
   type AgentAccessPrincipal,
 } from '@/modules/agent-access/agent-access'
 import type { AgentAccessAuthorityMode } from '@/modules/agent-access/contract'
+import { accountRef, principalRef } from '@/modules/principal-account/public'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 export type { AgentAccessPrincipal }
 
@@ -39,12 +40,11 @@ export type AgentAccessCurrentApiKey = Readonly<{
 }>
 
 type ResolveAgentPrincipalArgs = Readonly<{
-  principalId: string
-  ownerId: string
   credentialId: string
   applicationRef: string
   environment: AgentAccessEnvironment
   scopes: readonly string[]
+  requiredScopes: readonly string[]
   authorityMode: AgentAccessAuthorityMode
   operationKey: string
   correlationId: string
@@ -53,26 +53,39 @@ type ResolveAgentPrincipalArgs = Readonly<{
 }>
 
 const resolveAgentPrincipalMutation = sourceMutation<ResolveAgentPrincipalArgs, AgentAccessPrincipal | null>(
-  'agentAccessPrincipals:resolveAgentPrincipal',
+  'authorityBoundary:resolveAgentBinding',
 )
+
+export type AgentAccessCredentialProjection = Readonly<{
+  credentialId: string
+  applicationRef: string
+  environment: AgentAccessEnvironment
+  scopes: readonly string[]
+  authorityMode: AgentAccessAuthorityMode
+}>
+
+export type AgentAccessPrincipalResolver = (
+  projection: AgentAccessCredentialProjection,
+  requiredScopes: readonly string[],
+) => Promise<AgentAccessPrincipal | null>
 
 export function resolveAgentAccessPrincipal(
   request: Request,
   body: string | Uint8Array,
   correlationId: string,
   options: Readonly<{ env?: Record<string, string | undefined> }> = {},
-): (principal: AgentAccessPrincipal) => Promise<AgentAccessPrincipal | null> {
-  return async (principal) => {
+): AgentAccessPrincipalResolver {
+  return async (projection, requiredScopes) => {
     try {
-      const operationKey = `agent-access:resolve:${principal.credentialId}`
+      const operationKey = `agent-access:resolve:${projection.credentialId}`
+      const bindingRequiredScopes = requiredScopes.length === 0 ? projection.scopes : requiredScopes
       const command = {
-        principalId: principal.principalId,
-        ownerId: principal.ownerId,
-        credentialId: principal.credentialId,
-        applicationRef: principal.applicationRef,
-        environment: principal.environment,
-        scopes: [...principal.scopes],
-        authorityMode: principal.authorityMode,
+        credentialId: projection.credentialId,
+        applicationRef: projection.applicationRef,
+        environment: projection.environment,
+        scopes: [...projection.scopes],
+        requiredScopes: [...bindingRequiredScopes],
+        authorityMode: projection.authorityMode,
         operationKey,
         correlationId,
       }
@@ -99,9 +112,11 @@ export function resolveAgentAccessPrincipal(
 export type AgentAccessAuthenticationOptions = Readonly<{
   authenticate?: () => Promise<AgentAccessApiKeyAuth>
   verifyKeyState?: (keyId: string) => Promise<AgentAccessCurrentApiKey>
-  resolvePrincipal?: (principal: AgentAccessPrincipal) => Promise<AgentAccessPrincipal | null>
+  resolvePrincipal?: AgentAccessPrincipalResolver
   requiredScope?: string | null
+  requiredScopes?: readonly string[]
   requiredMode?: AgentAccessAuthorityMode
+  allowTestPrincipalProjection?: boolean
 }>
 
 export async function authenticateAgentAccess(
@@ -112,6 +127,9 @@ export async function authenticateAgentAccess(
   reason: 'authentication_required' | 'scope_required'
 }>> {
   const requiredScope = options.requiredScope === undefined ? MARKET_OPERATIONS_INVOKE_SCOPE : options.requiredScope
+  const requiredScopes = Object.freeze([...new Set(
+    options.requiredScopes ?? (requiredScope === null ? [] : [requiredScope]),
+  )].sort())
   let candidate: AgentAccessApiKeyAuth
   try {
     candidate = await (options.authenticate ?? (async () =>
@@ -125,8 +143,9 @@ export async function authenticateAgentAccess(
   if (!candidate.subject.startsWith('user_')) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
-  if (requiredScope !== null && !candidate.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
-  let admittedScopes = candidate.scopes
+  const candidateScopes = candidate.scopes
+  if (requiredScopes.some((scope) => !candidateScopes.includes(scope))) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  let admittedScopes = candidateScopes
   let claims = candidate.claims
   if (options.verifyKeyState !== undefined || options.authenticate === undefined) {
     try {
@@ -144,7 +163,7 @@ export async function authenticateAgentAccess(
       if (current.id !== candidate.id || current.subject !== candidate.subject || current.revoked || current.expired) {
         return { kind: 'refused', status: 401, reason: 'authentication_required' }
       }
-      if (requiredScope !== null && !current.scopes.includes(requiredScope)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+      if (requiredScopes.some((scope) => !current.scopes.includes(scope))) return { kind: 'refused', status: 403, reason: 'scope_required' }
       admittedScopes = current.scopes
       claims = current.claims
     } catch {
@@ -156,11 +175,7 @@ export async function authenticateAgentAccess(
   if (options.requiredMode !== undefined && !agentAuthorityModeAllows(authorityMode, options.requiredMode)) {
     return { kind: 'refused', status: 403, reason: 'scope_required' }
   }
-  const ownerId = candidate.subject
-  const principalId = `clerk_api_key:${candidate.id}`
-  const principal: AgentAccessPrincipal = Object.freeze({
-    principalId,
-    ownerId,
+  const projection: AgentAccessCredentialProjection = Object.freeze({
     credentialId: candidate.id,
     applicationRef: claimString(claims, 'aeApplicationRef') ?? AGENT_ACCESS_DEFAULT_APPLICATION_REF,
     environment: environmentFromClaims(claims),
@@ -169,11 +184,12 @@ export async function authenticateAgentAccess(
   })
   if (options.resolvePrincipal !== undefined) {
     try {
-      const stored = await options.resolvePrincipal(principal)
-      if (stored === null || stored.credentialId !== principal.credentialId || stored.ownerId !== principal.ownerId
-        || stored.applicationRef !== principal.applicationRef || stored.environment !== principal.environment
-        || stored.authorityMode !== principal.authorityMode
-        || stored.scopes.some((scope) => !principal.scopes.includes(scope))) {
+      const stored = canonicalResolvedPrincipal(
+        await options.resolvePrincipal(projection, requiredScopes),
+        projection,
+        requiredScopes,
+      )
+      if (stored === undefined) {
         return { kind: 'refused', status: 403, reason: 'scope_required' }
       }
       return { kind: 'authenticated', principal: stored }
@@ -181,9 +197,54 @@ export async function authenticateAgentAccess(
       return { kind: 'refused', status: 401, reason: 'authentication_required' }
     }
   }
-  return { kind: 'authenticated', principal }
+  if (options.allowTestPrincipalProjection === true && options.authenticate !== undefined) {
+    return { kind: 'authenticated', principal: Object.freeze({
+      principalId: `clerk_api_key:${candidate.id}`,
+      ownerId: candidate.subject,
+      ...projection,
+    }) }
+  }
+  return { kind: 'refused', status: 401, reason: 'authentication_required' }
 }
 
+function canonicalResolvedPrincipal(
+  value: AgentAccessPrincipal | null,
+  projection: AgentAccessCredentialProjection,
+  requiredScopes: readonly string[],
+): AgentAccessPrincipal | undefined {
+  if (value === null) return undefined
+  try {
+    const principalId = principalRef(value.principalId)
+    const ownerId = accountRef(value.ownerId)
+    const credentialId = value.credentialId
+    const applicationRef = value.applicationRef
+    const environment = value.environment
+    const authorityMode = value.authorityMode
+    const scopeValues = value.scopes
+    if (!Array.isArray(scopeValues)
+      || scopeValues.length === 0
+      || scopeValues.some((scope) => typeof scope !== 'string')
+      || new Set(scopeValues).size !== scopeValues.length) return undefined
+    const scopes = Object.freeze([...scopeValues].sort())
+    if (credentialId !== projection.credentialId
+      || applicationRef !== projection.applicationRef
+      || environment !== projection.environment
+      || authorityMode !== projection.authorityMode
+      || scopes.some((scope) => !projection.scopes.includes(scope))
+      || requiredScopes.some((scope) => !scopes.includes(scope))) return undefined
+    return Object.freeze({
+      principalId,
+      ownerId,
+      credentialId,
+      applicationRef,
+      environment,
+      scopes,
+      authorityMode,
+    })
+  } catch {
+    return undefined
+  }
+}
 
 function claimString(claims: Readonly<Record<string, unknown>> | null | undefined, name: string): string | undefined {
   const value = claims?.[name]
