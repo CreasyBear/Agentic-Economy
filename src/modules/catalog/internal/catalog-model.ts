@@ -1,14 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
-  BusinessContext,
   BusinessContextRecord,
-  BusinessMutationActor,
   BusinessRecord,
   BusinessSourceState,
-  ClaimRecord,
 } from '@/modules/business/public'
-import type { AuditEventContract } from '@/modules/common/audit-events'
-import type { CorrelationId, OperationKey, Slug } from '@/modules/common/ids'
+import type { Slug } from '@/modules/common/ids'
 import { sanitizeText } from '@/modules/common/sanitize-text'
 import {
   buildBusinessSupplyProjection,
@@ -17,13 +13,10 @@ import {
   type BusinessSupplyProjection,
   type OfferingAccessPathRecord,
 } from './offering-supply'
-import type { DiscoveryManifestAttemptContract, DiscoveryStatus } from '@/modules/discovery/public'
-import type { OperationKeyRecord } from '@/modules/observability/public'
-import type { IndexStatus, RegistryProjectionAttemptContract } from '@/modules/registry/public'
-import type { CsrfCheckInput, SuppressionRuleRecord } from '@/modules/security/public'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+type DiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
+type IndexStatus = 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'
 
-export const FirstRequestModeValues = ['inquiry_available', 'quote_request_available', 'not_available_yet'] as const
+export const FirstRequestModeValues = ['quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]
 
 export const PublicFirstRequestChannelValues = [
@@ -35,9 +28,7 @@ export type PublicFirstRequestChannel = (typeof PublicFirstRequestChannelValues)
 
 
 export function normalizeFirstRequestMode(value: unknown): FirstRequestMode {
-  return value === 'inquiry_available' || value === 'quote_request_available'
-    ? value
-    : 'not_available_yet'
+  return value === 'quote_request_available' ? value : 'not_available_yet'
 }
 
 export function normalizePublicFirstRequestChannel(value: unknown): PublicFirstRequestChannel {
@@ -57,7 +48,7 @@ export type PublicFirstRequestDisclosure = {
 
 export type FirstRequestDisclosureInput =
   | {
-      mode: Extract<FirstRequestMode, 'inquiry_available' | 'quote_request_available'>
+      mode: Extract<FirstRequestMode, 'quote_request_available'>
       publicDisclosure: string
       publicChannel: Extract<PublicFirstRequestChannel, 'public_business_contact' | 'ae_status_only'>
       rawContactValue?: string
@@ -98,64 +89,13 @@ export type CatalogSourceState = {
   accessPaths: OfferingAccessPathRecord[]
 }
 
-export type CatalogPublishSourceState = CatalogSourceState & {
-  operationKeys: OperationKeyRecord[]
-  auditEvents: AuditEventContract[]
-  registryProjectionAttempts: RegistryProjectionAttemptContract[]
-  discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
-}
-
-export type PublicCatalogReadState = BusinessSourceState &
-  CatalogSourceState & {
-    suppressionRules: SuppressionRuleRecord[]
-  }
+export type PublicCatalogReadState = BusinessSourceState & CatalogSourceState
 
 export type GetPublicBusinessCatalogInput = {
   slug: Slug
   indexStatus: IndexStatus
   discoveryStatus: DiscoveryStatus
 }
-
-export type PublishBusinessCatalogCommand = {
-  actor: BusinessMutationActor
-  claimId: ClaimRecord['claimId']
-  services: readonly ServiceCatalogInput[]
-  security: {
-    csrf: CsrfCheckInput
-  }
-  operationKey: OperationKey
-  correlationId: CorrelationId
-  now: number
-}
-
-export type PublishBusinessCatalogErrorCode =
-  | 'catalog_publish_unauthenticated'
-  | 'catalog_publish_csrf_rejected'
-  | 'catalog_publish_claim_not_found'
-  | 'catalog_publish_wrong_owner'
-  | 'catalog_publish_pending_review'
-  | 'catalog_publish_invalid_services'
-  | 'catalog_publish_operation_conflict'
-
-export type PublishBusinessCatalogResult =
-  | {
-      kind: 'ok'
-      code: 'catalog_published' | 'catalog_publish_replayed'
-      business: BusinessRecord
-      claim: ClaimRecord
-      catalog: PublicBusinessCatalogApiV2Dto
-      auditEvent: AuditEventContract
-      registryProjectionAttempts: readonly RegistryProjectionAttemptContract[]
-      discoveryManifestAttempts: readonly DiscoveryManifestAttemptContract[]
-    }
-  | {
-      kind: 'error'
-      code: PublishBusinessCatalogErrorCode
-      retryable: boolean
-      reason: string
-    }
-
-export type PublishBusinessCatalogState = BusinessSourceState & CatalogPublishSourceState
 
 export function createEmptyCatalogSourceState(): CatalogSourceState {
   return {

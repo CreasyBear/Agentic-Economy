@@ -15,8 +15,9 @@ import {
   QUALIFIED_USE_EXCLUSIONS,
   type QualifiedUseReceipt,
 } from '../src/modules/money/public'
-import { recordQualifiedUsePayoutAllocation } from './moneyLedger'
+import { recordQualifiedUsePayoutAllocation } from './moneyQualifiedUsePayout'
 import type { Id } from './_generated/dataModel'
+import { recordMarketEvidenceFact } from './marketEvidence'
 
 const identifier = v.string()
 
@@ -219,6 +220,12 @@ export const recordQualifiedUse = internalMutation({
             }
         }
         await ctx.db.insert('qualifiedUseReceipts', toWire(decision.receipt))
+        await recordMarketEvidenceFact(
+          ctx,
+          'ae_qualified_use',
+          decision.receipt.qualifiedUseRef,
+          decision.receipt.qualifiedAt,
+        )
         return { kind: 'recorded' as const, receipt: toWire(decision.receipt) }
       }
       default: {

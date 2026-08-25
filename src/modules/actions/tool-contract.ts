@@ -16,7 +16,6 @@ import {
   findStrictToolSchemaViolation,
   type StrictSchemaViolation,
 } from './strict-schema'
-import { isQuarantineSurfaceRetired, QUARANTINE_SURFACE_RETIRED_CODE } from '@/modules/product-frontier/quarantine-write-admission'
 
 export type ActionToolSchemaDiagnostic = StrictSchemaViolation & {
   schema: 'input' | 'output'
@@ -72,6 +71,14 @@ export type ActionToolExecutionValidationMetadata = {
   outputJsonSchema?: JSONSchema
 }
 
+export function providerSafeActionToolName(actionId: string): string {
+  const name = actionId.replace(/[^A-Za-z0-9_-]/g, '_')
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(name)) {
+    throw new Error(`Action ${actionId} cannot be represented as a provider tool name`)
+  }
+  return name
+}
+
 export function actionToToolContract(
   action: AnyAction,
 ): ActionToolContract<unknown, unknown> {
@@ -93,12 +100,7 @@ export function actionToToolContract(
     readOnly: descriptor.readOnly,
     surfaces: action.surfaces,
     schemas,
-    execute: async ({ input, context }) => {
-      if (isQuarantineSurfaceRetired(action.id)) {
-        throw new Error(QUARANTINE_SURFACE_RETIRED_CODE)
-      }
-      return await action.run({ data: input, context })
-    },
+    execute: async ({ input, context }) => await action.run({ data: input, context }),
   }
 }
 

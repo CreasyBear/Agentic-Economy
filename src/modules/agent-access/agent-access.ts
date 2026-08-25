@@ -6,13 +6,14 @@ import {
   agentAuthorityModeAllows,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
-  isWorkTreeAgentScope,
-  workTreeScopeAllowedForMode,
   type AgentAccessAuthorityMode,
 } from './contract'
 import type { AgentAccessPolicy } from './policy'
+import { compareExactAmounts, type ExactAmount } from '@/modules/money/public'
 
 export const AGENT_ACCESS_KEY_TTL_SECONDS = 7 * 24 * 60 * 60
+export const AGENT_ACCESS_MIN_TTL_SECONDS = 1
+export const AGENT_ACCESS_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 export const AGENT_ACCESS_PURPOSE = 'agent_access' as const
 export const AGENT_ACCESS_DEFAULT_APPLICATION_REF = 'agentic-economy' as const
 export const AGENT_ACCESS_ENVIRONMENT_VALUES = ['sandbox', 'production'] as const
@@ -135,6 +136,22 @@ export type AgentAccessKeyRecord = Readonly<{
   expiresAt?: number
 }>
 
+export type AgentAccessKeyIssueInput = Readonly<{
+  name: string
+  idempotencyKey: string
+  scopes?: readonly string[]
+  grantRef?: string
+  applicationRef?: string
+  environment?: AgentAccessEnvironment
+  maximumSpendPerInvocation?: ExactAmount
+  maximumDailySpend?: ExactAmount
+  maximumMonthlySpend?: ExactAmount
+  maximumConcurrentInvocations?: number
+  maximumCallsPerMinute?: number
+  maximumCallsPerHour?: number
+  expiresInSeconds?: number
+}>
+
 export type AgentAccessKeyCreateInput = Readonly<{
   name: string
   subject: string
@@ -148,14 +165,7 @@ export type AgentAccessKeyCreateInput = Readonly<{
 type IssueInput = Readonly<{
   ownerId?: string
   principal: { userId: string } | undefined
-  input: {
-    name: string
-    idempotencyKey: string
-    scopes?: readonly string[]
-    grantRef?: string
-    applicationRef?: string
-    environment?: AgentAccessEnvironment
-  }
+  input: AgentAccessKeyIssueInput
   policy: AgentAccessPolicy
   api: AgentAccessKeyApi
   registerPrincipal?: (input: AgentAccessPrincipalRegistration) => Promise<AgentAccessPrincipalRegistrationResult>
@@ -167,17 +177,22 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
   if (ownerId === undefined) return { kind: 'error', code: 'missing_auth', retryable: false }
   const name = input.input.name.trim()
   const idempotencyKey = input.input.idempotencyKey.trim()
-  const rawScopes = input.input.scopes ?? [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, agentAuthorityScopeForMode('inspect_only')]
+  const rawScopes = input.input.scopes ?? [MARKET_OPERATIONS_INVOKE_SCOPE, agentAuthorityScopeForMode('inspect_only')]
   const scopes = canonicalAgentScopes(rawScopes)
   const authorityMode = scopes === undefined ? undefined : agentAuthorityModeForScopes(scopes)
   const grantRef = input.input.grantRef?.trim() || idempotencyKey
   const applicationRef = input.input.applicationRef?.trim() || AGENT_ACCESS_DEFAULT_APPLICATION_REF
   const environment = input.input.environment ?? 'sandbox'
+  const expiresInSeconds = input.input.expiresInSeconds ?? AGENT_ACCESS_KEY_TTL_SECONDS
   if (name.length < 1 || name.length > 80 || !/^[A-Za-z0-9][A-Za-z0-9 _.-]{7,127}$/u.test(idempotencyKey)
     || grantRef.length < 1 || grantRef.length > 300 || applicationRef.length < 1 || applicationRef.length > 200
-    || authorityMode === undefined || scopes === undefined) {
+    || authorityMode === undefined || scopes === undefined
+    || !validExpiry(expiresInSeconds)
+    || !policyMatchesRequestedControls(input.policy, input.input)
+    || (environment === 'production' && authorityMode === 'full_yolo')) {
     return { kind: 'error', code: 'invalid_input', retryable: false }
   }
+  const issuanceClaims = issuanceClaimMaterial(input.input)
   try {
     const existing = (await input.api.list({ subject: ownerId, includeInvalid: false, limit: 100 })).data.find((key) => !key.revoked && !key.expired
       && key.claims?.aePurpose === AGENT_ACCESS_PURPOSE
@@ -187,7 +202,9 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
         || existing.claims.aeAuthorityMode !== authorityMode
         || existing.claims.aeApplicationRef !== applicationRef
         || existing.claims.aeEnvironment !== environment
+        || existing.claims.aeScopes !== JSON.stringify(scopes)
         || existing.claims.aeGrantRef !== grantRef
+        || Object.entries(issuanceClaims).some(([key, value]) => existing.claims?.[key] !== value)
         || existing.scopes === undefined
         || existing.scopes.length !== scopes.length
         || existing.scopes.some((scope) => !scopes.includes(scope))) {
@@ -199,14 +216,14 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
         return { kind: 'error', code: 'issuance_unavailable', retryable: true }
       }
       const secret = input.returnSecret === false ? '' : (await input.api.getSecret(existing.id)).secret
-      return { kind: 'replayed', keyId: existing.id, secret, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS, authorityMode, scopes: [...scopes], grantRef: binding.grantRef }
+      return { kind: 'replayed', keyId: existing.id, secret, expiresInSeconds, authorityMode, scopes: [...scopes], grantRef: binding.grantRef }
     }
     const created = await input.api.create({
       name: `AE Agent ${idempotencyKey.slice(-16)}`,
       subject: ownerId,
       createdBy: ownerId,
       scopes: [...scopes],
-      secondsUntilExpiration: AGENT_ACCESS_KEY_TTL_SECONDS,
+      secondsUntilExpiration: expiresInSeconds,
       claims: {
         aePurpose: AGENT_ACCESS_PURPOSE,
         aeGrantRef: grantRef,
@@ -215,11 +232,13 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
         aeIssuanceKey: idempotencyKey,
         aeApplicationRef: applicationRef,
         aeEnvironment: environment,
+        aeScopes: JSON.stringify(scopes),
+        ...issuanceClaims,
       },
       description: 'Use Agentic Economy Market Operations with this assistant.',
     })
     const createdAt = Date.now()
-    const expiresAt = createdAt + AGENT_ACCESS_KEY_TTL_SECONDS * 1000
+    const expiresAt = createdAt + expiresInSeconds * 1000
     const binding = await bindAgentPrincipal(input, created.id, ownerId, scopes, authorityMode, applicationRef, environment, expiresAt, grantRef, createdAt)
     if (binding === null) {
       await rollbackAgentKey(input.api, created.id)
@@ -227,7 +246,7 @@ export async function issueAgentAccessKey(input: IssueInput): Promise<AgentAcces
     }
     try {
       const secret = input.returnSecret === false ? '' : (created.secret ?? (await input.api.getSecret(created.id)).secret)
-      return { kind: 'created', keyId: created.id, secret, expiresInSeconds: AGENT_ACCESS_KEY_TTL_SECONDS, authorityMode, scopes: [...scopes], grantRef: binding.grantRef }
+      return { kind: 'created', keyId: created.id, secret, expiresInSeconds, authorityMode, scopes: [...scopes], grantRef: binding.grantRef }
     } catch (error) {
       await rollbackAgentKey(input.api, created.id)
       throw error
@@ -394,24 +413,65 @@ export async function revokeAgentAccessKey(input: Readonly<{
   }
 }
 
+function validExpiry(value: number): boolean {
+  return Number.isSafeInteger(value)
+    && value >= AGENT_ACCESS_MIN_TTL_SECONDS
+    && value <= AGENT_ACCESS_MAX_TTL_SECONDS
+}
+
+function policyMatchesRequestedControls(
+  policy: AgentAccessPolicy,
+  input: AgentAccessKeyIssueInput,
+): boolean {
+  const amounts: readonly [ExactAmount | undefined, ExactAmount][] = [
+    [input.maximumSpendPerInvocation, policy.budget.maximumSpendPerInvocation],
+    [input.maximumDailySpend, policy.budget.maximumDailySpend],
+    [input.maximumMonthlySpend, policy.budget.maximumMonthlySpend],
+  ]
+  if (amounts.some(([requested, actual]) => requested !== undefined && compareExactAmounts(requested, actual) !== 0)) return false
+  const limits: readonly [number | undefined, number][] = [
+    [input.maximumConcurrentInvocations, policy.budget.maximumConcurrentInvocations],
+    [input.maximumCallsPerMinute, policy.rate.maximumCallsPerMinute],
+    [input.maximumCallsPerHour, policy.rate.maximumCallsPerHour],
+  ]
+  return limits.every(([requested, actual]) => requested === undefined || requested === actual)
+}
+
+function amountClaim(amount: ExactAmount): string {
+  return `${amount.currency}:${amount.units}:${amount.exponent}`
+}
+
+function issuanceClaimMaterial(input: AgentAccessKeyIssueInput): Record<string, string> {
+  return {
+    ...(input.maximumSpendPerInvocation === undefined ? {} : { aeMaximumSpendPerInvocation: amountClaim(input.maximumSpendPerInvocation) }),
+    ...(input.maximumDailySpend === undefined ? {} : { aeMaximumDailySpend: amountClaim(input.maximumDailySpend) }),
+    ...(input.maximumMonthlySpend === undefined ? {} : { aeMaximumMonthlySpend: amountClaim(input.maximumMonthlySpend) }),
+    ...(input.maximumConcurrentInvocations === undefined ? {} : { aeMaximumConcurrentInvocations: String(input.maximumConcurrentInvocations) }),
+    ...(input.maximumCallsPerMinute === undefined ? {} : { aeMaximumCallsPerMinute: String(input.maximumCallsPerMinute) }),
+    ...(input.maximumCallsPerHour === undefined ? {} : { aeMaximumCallsPerHour: String(input.maximumCallsPerHour) }),
+    ...(input.expiresInSeconds === undefined ? {} : { aeExpiresInSeconds: String(input.expiresInSeconds) }),
+  }
+}
+
 function canonicalAgentScopes(scopes: readonly string[]): readonly string[] | undefined {
   if (scopes.length === 0 || new Set(scopes).size !== scopes.length) return undefined
   const hasSupplyScope = scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
   const withGatewayScope = scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE) || hasSupplyScope
     ? [...scopes]
     : [MARKET_OPERATIONS_INVOKE_SCOPE, ...scopes]
+  if (withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return undefined
   const authorityMode = agentAuthorityModeForScopes(withGatewayScope)
   if (authorityMode === undefined) return undefined
-  const modeScope = withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? agentAuthorityScopeForMode(authorityMode) : undefined
+  const modeScope = agentAuthorityScopeForMode(authorityMode)
+  const hasRequestedModeScope = withGatewayScope.includes(modeScope)
   const extras = withGatewayScope.filter((scope) => scope !== MARKET_OPERATIONS_INVOKE_SCOPE
     && scope !== MARKET_SUPPLY_MANAGE_SCOPE
-    && scope !== CUSTOMER_REQUEST_AGENT_SCOPE && scope !== modeScope)
-  if (extras.some((scope) => !isWorkTreeAgentScope(scope) || !workTreeScopeAllowedForMode(scope, authorityMode))) return undefined
+    && scope !== modeScope)
+  if (extras.length > 0) return undefined
   return [
     ...(withGatewayScope.includes(MARKET_OPERATIONS_INVOKE_SCOPE) ? [MARKET_OPERATIONS_INVOKE_SCOPE] : []),
     ...(withGatewayScope.includes(MARKET_SUPPLY_MANAGE_SCOPE) ? [MARKET_SUPPLY_MANAGE_SCOPE] : []),
-    ...(withGatewayScope.includes(CUSTOMER_REQUEST_AGENT_SCOPE) ? [CUSTOMER_REQUEST_AGENT_SCOPE, modeScope as string] : []),
-    ...extras.sort(),
+    ...(hasRequestedModeScope ? [modeScope] : []),
   ]
 }
 

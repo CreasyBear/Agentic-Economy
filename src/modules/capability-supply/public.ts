@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { compareExactAmounts, exactAmountSchema } from '@/modules/money/public'
 import type { ExactAmount } from '@/modules/money/public'
-import { identifier, jsonValueSchema, type CapabilityContractRef, type JsonValue } from '@/modules/capability-contract/public'
+import { identifier, jsonValueSchema, type CapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -195,6 +195,7 @@ export function validateAdmittedOperationRef(input: unknown): input is AdmittedO
 }
 
 export {
+  CURRENT_OPERATION_CALL_VIA,
   PublicOperationRegistrySchemaVersion,
   operationCompareInputSchema,
   operationCompareOutputSchema,
@@ -211,6 +212,8 @@ export {
   compareCapabilityOperations,
   inspectCapabilityOperationPlan,
   projectCapabilityOperation,
+  projectCapabilityOperationCatalogPrice,
+  projectCapabilityOperationParameters,
   rankOperationSearchText,
   serializeOperationDescriptor,
   deserializeOperationDescriptor,
@@ -225,6 +228,7 @@ export {
 } from './operation-projection'
 export type {
   CapabilityOperationSourcePort,
+  OperationProjectionNavigationContract,
   CapabilityOperationSourceRecord,
   CatalogOfferingOperationMapEntry,
   InspectPlanInput,
@@ -363,6 +367,7 @@ export {
 } from './internal/quarantine'
 export {
   registerCapabilityTransportBinding,
+  rotateCapabilityTransportBindingAuthority,
   connectionAuthoritySnapshotFromProviderConnection,
   connectionAuthoritySnapshotIsValid,
   connectionAuthoritySnapshotMatches,
@@ -473,8 +478,8 @@ export {
   type SupplyAuditEventRow,
 } from './internal/shared'
 export { defaultSupplyPricingConfig } from './internal/supply-funnel/pricing-port'
+export { transportObservationDigest } from './internal/x402-invocation-policy'
 
-export { buildExaSearchContentsMapping } from './curated-provider-mapping'
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
 const evidenceRefs = z.array(identifier).min(1).max(64)

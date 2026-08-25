@@ -44,7 +44,7 @@ describe('negotiateAgentPage', () => {
   })
 
   it('never intercepts a route that already answers machines', () => {
-    for (const path of ['/api/businesses', '/api/v1/requests', '/llms.txt', '/SKILL.md', '/robots.txt', '/sitemap.xml', '/.well-known/ucp', '/adelaide-locksmith/ucp']) {
+    for (const path of ['/api/businesses', '/api/v1/operations/call', '/llms.txt', '/SKILL.md', '/robots.txt', '/sitemap.xml', '/.well-known/ucp', '/adelaide-locksmith/ucp']) {
       expect(negotiateAgentPage(request(path, 'application/json')).kind).toBe('serve_html')
     }
   })
@@ -60,7 +60,7 @@ describe('negotiateAgentPage', () => {
 
   it('never intercepts an operator surface, an asset, or a write', () => {
     expect(negotiateAgentPage(request('/owner/status', 'text/markdown')).kind).toBe('serve_html')
-    expect(negotiateAgentPage(request('/admin/claims', 'text/markdown')).kind).toBe('serve_html')
+    expect(negotiateAgentPage(request('/admin/audit-events', 'text/markdown')).kind).toBe('serve_html')
     expect(negotiateAgentPage(request('/assets/app.css', 'text/markdown')).kind).toBe('serve_html')
     expect(negotiateAgentPage(request('/', 'text/markdown', 'POST')).kind).toBe('serve_html')
   })

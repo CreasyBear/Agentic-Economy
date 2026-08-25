@@ -18,7 +18,7 @@ import type {
   PaidOperationContinuation,
   PaidOperationPresentationBlock,
   PaidOperationSemantics,
-} from '@/modules/action-invocation/paid-operation-semantics'
+} from '@/modules/capability-execution/legacy-dynamic/paid-operation-semantics'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { formatUtcTimestamp } from '@/lib/ui/format-time'
 

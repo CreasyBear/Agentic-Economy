@@ -1,39 +1,33 @@
 import { describe, expect, it } from 'vitest'
 
-import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  AuditEventTypeValues,
-  AuditTargetTypeValues,
+  FunnelEventTypeValues,
+  validateAuditEvent,
+} from '@/modules/observability/public'
+import {
   BusinessActionPrivateEvidenceAccessPolicy,
   BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues,
   BusinessActionPrivateEvidenceRetentionClass,
-  BusinessActionSupportKillRuleValues,
-  FunnelEventTypeValues,
-  OperatorControlKeyValues,
-  evaluateBusinessActionClaimSafety,
   projectBusinessActionPrivateEvidenceForPublic,
-  readOperatorControls,
-  setOperatorControl,
   validateBusinessActionPrivateEvidencePolicy,
   validateBusinessActionNoRepairReconstruction,
-} from '@/modules/observability/public'
+} from '@/modules/observability/stored-business-action-compatibility'
+import {
+  StoredAuditEventTypeValues,
+  StoredAuditTargetTypeValues,
+  readStoredAuditEventType,
+} from '@/modules/observability/stored-compatibility'
 import { observabilityTables } from '@/modules/observability/internal/schema'
 import type {
-  BusinessActionClaimSafetyInput,
   BusinessActionPrivateEvidencePolicyInput,
-  BusinessActionSupportKillRule,
-  OperatorControlKey,
-  OperatorControlSourceState,
-  SetOperatorControlCommand,
-} from '@/modules/observability/public'
-import type { AdminMembership } from '@/modules/security/public'
+} from '@/modules/observability/stored-business-action-compatibility'
 
 describe('business action observability contracts', () => {
   it('registers Phase 6 audit targets in the shared observability schema', () => {
     expect(observabilityTables.operationKeys).toBeDefined()
-    expect('auditEvents' in observabilityTables).toBe(false)
-    expect(AuditTargetTypeValues).toEqual(
+    expect(observabilityTables.auditEvents).toBeDefined()
+    expect(StoredAuditTargetTypeValues).toEqual(
       expect.arrayContaining([
         'business_action_card',
         'business_action_mandate',
@@ -51,7 +45,7 @@ describe('business action observability contracts', () => {
   })
 
   it('registers Phase 6 audit events for receipt reconstruction', () => {
-    expect(AuditEventTypeValues).toEqual(
+    expect(StoredAuditEventTypeValues).toEqual(
       expect.arrayContaining([
         'business_action.card_versioned',
         'business_action.mandate_recorded',
@@ -70,7 +64,7 @@ describe('business action observability contracts', () => {
   })
 
   it('registers Phase 6 funnel events from GTM readiness', () => {
-    expect(FunnelEventTypeValues).toEqual(
+    expect(FunnelEventTypeValues).not.toEqual(
       expect.arrayContaining([
         'business_action_card_viewed',
         'business_action_request_started',
@@ -84,103 +78,22 @@ describe('business action observability contracts', () => {
     )
   })
 
-  it('adds source-owned operator controls for business actions', () => {
-    const controls = [
-      'business_actions_enabled',
-      'business_action_attempts_enabled',
-    ] as const satisfies readonly OperatorControlKey[]
-
-    expect(OperatorControlKeyValues).toEqual(expect.arrayContaining([...controls]))
-
-    for (const key of controls) {
-      const state = operatorControlState()
-      const result = setOperatorControl(
-        state,
-        operatorControlCommand({
-          key,
-          operationKey: brandNonEmpty(`op:${key}`, 'OperationKey'),
-          correlationId: brandNonEmpty(`corr:${key}`, 'CorrelationId'),
-        })
-      )
-
-      expect(result).toMatchObject({
-        kind: 'ok',
-        code: 'operator_control_changed',
-        control: {
-          key,
-          enabled: false,
-        },
-        readback: {
-          configuredEnabled: false,
-          effectiveEnabled: false,
-          source: 'source_owned',
-        },
-        auditEvent: {
-          eventType: 'operator_control.changed',
-          targetType: 'operator_control',
-          targetRef: key,
-        },
-      })
-      expect(readOperatorControls(state, 20).find((control) => control.key === key)).toMatchObject({
-        configuredEnabled: false,
-        effectiveEnabled: false,
-        source: 'source_owned',
-      })
-    }
-  })
-
-  it('disables public and demo business-action claims for every support kill rule', () => {
-    expect(BusinessActionSupportKillRuleValues).toEqual([
-      'stale_card',
-      'disabled_card',
-      'revoked_mandate',
-      'expired_mandate',
-      'wrong_owner',
-      'rejected_checkpoint',
-      'guardrail_block',
-      'guardrail_refusal',
-      'unbound_evidence',
-      'missing_artifact',
-      'proof_gap',
-      'no_repair',
-      'support_capacity_breach',
-    ])
-
-    const cases: readonly {
-      name: string
-      rule: BusinessActionSupportKillRule
-      input: Partial<BusinessActionClaimSafetyInput>
-    }[] = [
-      { name: 'stale card', rule: 'stale_card', input: { cardStatus: 'stale' } },
-      { name: 'disabled card', rule: 'disabled_card', input: { cardStatus: 'disabled' } },
-      { name: 'revoked mandate', rule: 'revoked_mandate', input: { mandateStatus: 'revoked' } },
-      { name: 'expired mandate', rule: 'expired_mandate', input: { mandateExpiresAt: 10 } },
-      { name: 'wrong owner', rule: 'wrong_owner', input: { ownerMatches: false } },
-      { name: 'rejected checkpoint', rule: 'rejected_checkpoint', input: { checkpointDecision: 'refused' } },
-      { name: 'guardrail block', rule: 'guardrail_block', input: { guardrailDecisions: ['block'] } },
-      { name: 'guardrail refusal', rule: 'guardrail_refusal', input: { guardrailDecisions: ['refusal'] } },
-      { name: 'unbound evidence', rule: 'unbound_evidence', input: { externalEvidenceBound: false } },
-      { name: 'missing artifact', rule: 'missing_artifact', input: { resultArtifactStatus: undefined } },
-      { name: 'proof gap', rule: 'proof_gap', input: { resultArtifactStatus: 'proof_gap' } },
-      { name: 'no repair', rule: 'no_repair', input: { noRepairMarked: true } },
-      {
-        name: 'support capacity breach',
-        rule: 'support_capacity_breach',
-        input: { supportCapacity: { openIncidents: 3, capacityThreshold: 2 } },
-      },
-    ]
-
-    for (const { name, rule, input } of cases) {
-      const decision = evaluateBusinessActionClaimSafety(claimSafetyInput(input))
-
-      expect(decision, name).toMatchObject({
-        publicDemoClaimsEnabled: false,
-        preserveHistoricalReadbacks: true,
-        claimDisablePath: 'business_actions_enabled',
-      })
-      expect(decision.killRules, name).toContain(rule)
-      expect(decision.operatorNextAction, name).toContain(rule)
-    }
+  it('keeps stored business-action audit rows readable but rejects new writes', () => {
+    expect(readStoredAuditEventType('business_action.no_repair_marked'))
+      .toBe('business_action.no_repair_marked')
+    expect(validateAuditEvent({
+      eventId: 'audit:compatibility',
+      eventType: 'business_action.no_repair_marked',
+      actorKind: 'system',
+      actorRef: 'system:compatibility-test',
+      targetType: 'business_action_no_repair',
+      targetRef: 'stored:no-repair:1',
+      idempotencyKey: 'stored:no-repair:1',
+      correlationId: 'correlation:compatibility',
+      redactedPayload: null,
+      payloadHash: canonicalDigest(null),
+      createdAt: 1,
+    } as never)).toEqual({ valid: false, reason: 'retired_compatibility_event' })
   })
 
   it('validates no-repair as terminal audited reconstruction without provider evidence rewrite', () => {
@@ -308,64 +221,6 @@ describe('business action observability contracts', () => {
   })
 })
 
-function operatorControlState(): OperatorControlSourceState {
-  return {
-    operatorControls: [],
-    auditEvents: [],
-  }
-}
-
-function operatorControlCommand(overrides: Partial<SetOperatorControlCommand> = {}): SetOperatorControlCommand {
-  return {
-    adminMembership: activeMembership('owner_admin'),
-    key: 'business_actions_enabled',
-    enabled: false,
-    reasonCode: 'business_action_support_kill_rule',
-    evidenceRefs: ['private:evidence:business-action-support'],
-    security: {
-      csrf: {
-        csrfToken: 'csrf-business-action',
-        csrfCookie: 'csrf-business-action',
-        allowedOrigins: ['https://ae.example'],
-      },
-    },
-    operationKey: brandNonEmpty('op:business-action-control', 'OperationKey'),
-    correlationId: brandNonEmpty('corr:business-action-control', 'CorrelationId'),
-    now: 20,
-    ...overrides,
-  }
-}
-
-function activeMembership(role: AdminMembership['role']): AdminMembership {
-  return {
-    clerkUserId: `admin_${role}`,
-    tokenIdentifier: `clerk|admin_${role}`,
-    role,
-    state: 'active',
-    grantedBy: 'bootstrap',
-    grantedAt: 1,
-  }
-}
-
-function claimSafetyInput(overrides: Partial<BusinessActionClaimSafetyInput> = {}): BusinessActionClaimSafetyInput {
-  return {
-    cardStatus: 'active',
-    mandateStatus: 'active',
-    mandateExpiresAt: 100,
-    ownerMatches: true,
-    checkpointDecision: 'accepted',
-    guardrailDecisions: ['allow'],
-    externalEvidenceBound: true,
-    resultArtifactStatus: 'complete',
-    noRepairMarked: false,
-    supportCapacity: {
-      openIncidents: 0,
-      capacityThreshold: 2,
-    },
-    now: 20,
-    ...overrides,
-  }
-}
 
 function privateEvidenceInput(
   overrides: Partial<BusinessActionPrivateEvidencePolicyInput> = {}

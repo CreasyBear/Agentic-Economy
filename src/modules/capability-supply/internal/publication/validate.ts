@@ -21,7 +21,7 @@ import {
  * whether it *would* be accepted — without admitting, writing to any store, or
  * requiring a `businessId`. It is side-effect-free and idempotent.
  *
- * Reference: .planning/research/2026-08-05-tiered-capability-admission-onboarding.md
+ * Authority: ADR-028 admission and ADR-029 publication/readiness boundaries.
  * §8.3(4) (pre-flight validate endpoint) + §7 (named per-rule refusals over the blanket
  * `schema_profile_unsupported`).
  */
@@ -47,7 +47,7 @@ export async function validateCapabilityPublication(
   source: CapabilityPublicationAdmissionSource,
   derefSchema?: SchemaDereferencer,
 ): Promise<CapabilityPublicationValidation> {
-  const { sourceRevision, ...serializedSource } = source
+  const { ...serializedSource } = source
   const importSource = decodeConvexPublicationSource(serializedSource)
   let normalized
   try {
@@ -149,5 +149,7 @@ export function publicationValidationFix(reason: CapabilityPublicationImportRefu
       return 'The declared payment execution path is not supported for this profile. Drop or re-specify the payment/execution metadata and re-validate.'
     case 'payment_required_invalid':
       return 'The x402 submission carries a malformed PaymentRequired (402 challenge) document. Supply a valid payment-requirements claim and re-validate.'
+    case 'bazaar_discovery_invalid':
+      return 'The x402 Bazaar discovery extension is malformed. Provide a valid Bazaar discovery object and re-validate.'
   }
 }

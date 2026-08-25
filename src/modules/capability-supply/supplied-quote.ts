@@ -1,21 +1,24 @@
-import type {
-  ActionInvocationOrigin,
-  ActionInvocationTracer,
-  ActionInvocationView,
-  InvocationActor,
-} from '@/modules/action-invocation'
 import type { ActionContext } from '@/modules/common/action'
 
 import { qualifySuppliedCandidate } from './internal/graph/qualify-candidate'
 import type { CapabilityGraphPorts } from './internal/graph/ports'
 import type {
   SuppliedCandidateQuoteInput,
-  SuppliedCandidateQuoteResult,
 } from './supplied-quote.actions'
 import { validateDevelopmentQuoteDisclosure } from './supplied-quote.actions'
 
-export type SuppliedQuotePreparation =
-  | Readonly<{ kind: 'prepared'; view: ActionInvocationView<SuppliedCandidateQuoteResult> }>
+export type SuppliedQuotePreparePort<Origin, Actor, View> = Readonly<{
+  prepare(input: Readonly<{
+    origin: Origin
+    actor: Actor
+    input: SuppliedCandidateQuoteInput
+    context: ActionContext
+    freshnessMs: number
+  }>): Promise<View>
+}>
+
+export type SuppliedQuotePreparation<View = unknown> =
+  | Readonly<{ kind: 'prepared'; view: View }>
   | Readonly<{
       kind: 'refused'
       code:
@@ -26,15 +29,15 @@ export type SuppliedQuotePreparation =
         | 'disclosure_invalid'
     }>
 
-export async function prepareSuppliedCandidateQuote(input: Readonly<{
-  tracer: ActionInvocationTracer<SuppliedCandidateQuoteInput, SuppliedCandidateQuoteResult>
+export async function prepareSuppliedCandidateQuote<Origin, Actor, View>(input: Readonly<{
+  tracer: SuppliedQuotePreparePort<Origin, Actor, View>
   qualificationPorts: CapabilityGraphPorts
   invocationInput: SuppliedCandidateQuoteInput
-  origin: ActionInvocationOrigin
-  actor: InvocationActor
+  origin: Origin
+  actor: Actor
   context: ActionContext
   now: () => number
-}>): Promise<SuppliedQuotePreparation> {
+}>): Promise<SuppliedQuotePreparation<View>> {
   const now = input.now()
   const qualification = await qualifySuppliedCandidate(input.qualificationPorts, {
     candidate: input.invocationInput.target,

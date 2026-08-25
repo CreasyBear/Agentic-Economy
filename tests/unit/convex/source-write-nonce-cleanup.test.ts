@@ -233,7 +233,7 @@ function nonce(id: string, expiresAt: number): Row {
     keyId: `key:${id}`,
     nonce: `nonce-value:${id}`,
     family: 'test-family',
-    scope: 'public_inquiry',
+    scope: 'billing',
     operationKey: `op:${id}`,
     correlationId: `corr:${id}`,
     bodyDigest: `digest:${id}`,

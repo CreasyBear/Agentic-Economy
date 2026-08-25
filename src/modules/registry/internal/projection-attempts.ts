@@ -1,4 +1,3 @@
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
 import { isPubliclyDiscoverable } from '@/modules/business/public'
 import type { PublicCatalogReadState } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -20,7 +19,7 @@ import type {
   SyncCatalogProjectionOptions,
   SyncCatalogProjectionResult,
 } from './projection-contracts'
-import type { PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
+import { getPublicBusinessCatalog, type PublicBusinessCatalogApiV2Dto } from './offering-api-projection'
 
 const sourceVersion = 'public-catalog:v1' as const
 const publicSurfaces = [
@@ -294,7 +293,7 @@ function readSourceCatalog(
   | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
   | { kind: 'hidden'; reason: 'not_public' | 'missing_context' | 'not_published' | 'no_published_offerings' } {
   const business = state.businesses.find((candidate) => candidate.businessId === businessId)
-  if (business === undefined || !isPubliclyDiscoverable(business, state.suppressionRules)) {
+  if (business === undefined || !isPubliclyDiscoverable(business)) {
     return { kind: 'hidden', reason: 'not_public' }
   }
 

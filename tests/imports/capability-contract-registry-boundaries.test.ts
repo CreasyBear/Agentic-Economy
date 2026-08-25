@@ -15,6 +15,7 @@ describe('capability contract registry boundaries', () => {
     expect(imports.every((value) => [
       '@/modules/capability-contract/public',
       '@/modules/common/stable-hash',
+      './internal/convex-schema',
       'convex/server',
       'convex/values',
     ].includes(value))).toBe(true)

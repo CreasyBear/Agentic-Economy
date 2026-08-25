@@ -3,7 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
-import { buildSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
 
 /**
  * Site-level agent entry point. `/{slug}/ucp` only helps an agent that already
@@ -29,9 +29,9 @@ export const Route = createFileRoute('/.well-known/ucp')({
 
 export function handleSiteDiscoveryManifestRequest(request: Request): Response {
   return discoveryJsonResponse(
-    buildSiteDiscoveryManifest({
+    projectCompactSiteDiscoveryManifest(buildSiteDiscoveryManifest({
       canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
       now: Date.now(),
-    })
+    }))
   )
 }

@@ -9,7 +9,7 @@ import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   type DynamicPublishedInvocationResult,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import schema from '../../../convex/schema'
 import { createInMemoryX402PaymentAttemptPort } from '../../helpers/x402-payment-attempt'
@@ -60,8 +60,11 @@ const durableTables = [
   'moneyPayouts',
   'moneyPayoutAllocations',
   'qualifiedUseReceipts',
-  'capabilityLaunchSupportRecords',
   'capabilityContractDocuments',
+  'capabilityCurrentOperations',
+  'capabilityCurrentOperationDetails',
+  'capabilityCurrentOperationReadControls',
+  'capabilityCurrentOperationMismatchExplanations',
   'capabilityOfferings',
   'capabilityOperationInvocations',
   'capabilityPublications',
@@ -72,35 +75,30 @@ const durableTables = [
   'registeredOperationMappings',
   'agentAccessGrants',
   'agentAccessPrincipals',
+  'agentAccessOAuthGrants',
+  'agentAccessOAuthClients',
   'operationKeys',
   'sourceWriteNonces',
+  'adminMemberships',
+  'adminMembershipAuditEvents',
+  'auditEvents',
   'registrySearchDocuments',
   'disputes',
-  'inquiryThreads',
-  'inquiryCustomerAccessGrants',
-  'inquiryMessages',
-  'inquiryNotifications',
-  'inquiryReadStates',
-  'inquiryAbuseBuckets',
-  'inquiryPrivacyTombstones',
-  'governedSendReceipts',
-  'governedSendIntegrityCommitments',
-  'governedSendReceiptKeys',
-  'governedSendErasureLineage',
-  'answerThreads',
-  'answerTurns',
-  'answerTurnReservations',
-  'answerToolCalls',
-  'answerThreadShares',
-  'harnessSessions',
-  'harnessSessionEntries',
+  'chatThreads',
+  'chatThreadShares',
   'actionInvocationControls',
   'actionInvocationAttempts',
   'actionInvocationHistory',
-  'externalRunEvidence',
-  'externalRunManifests',
-  'externalRunStarts',
-  'externalRunGateDecisions',
+  'marketActiveOperations',
+  'marketActiveSuppliers',
+  'marketAggregateBackfills',
+  'marketEvidenceFacts',
+  'marketExternalRegistryEntries',
+  'marketExternalRegistryGenerations',
+  'marketExternalRegistryState',
+  'marketExternalSnapshots',
+  'marketOperationCategories',
+  'marketOperationRatings',
 ] as const
 
 const requiredIndexes = {
@@ -139,35 +137,15 @@ const requiredIndexes = {
     'by_businessId_and_status',
   ],
   operationKeys: ['by_actor_operation_key', 'by_scope_key'],
+  adminMemberships: [
+    'by_clerkUserId_and_state',
+    'by_tokenIdentifier_and_state',
+    'by_state_and_role',
+  ],
+  adminMembershipAuditEvents: ['by_auditEventId'],
+  auditEvents: ['by_eventId'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
-  inquiryThreads: ['by_threadId', 'by_business_status', 'by_owner_updatedAt', 'by_offering_status'],
-  inquiryCustomerAccessGrants: ['by_accessId', 'by_thread_status'],
-  inquiryMessages: ['by_messageId', 'by_thread_createdAt'],
-  inquiryNotifications: ['by_notificationId', 'by_thread_status', 'by_message_recipient'],
-  inquiryReadStates: ['by_owner_thread'],
-  inquiryPrivacyTombstones: ['by_thread_status', 'by_thread_operationKey', 'by_business_createdAt'],
-  governedSendReceipts: ['by_operationKey', 'by_threadId_and_createdAt'],
-  governedSendIntegrityCommitments: ['by_operationKey', 'by_threadId', 'by_receiptRef'],
-  governedSendReceiptKeys: ['by_keyRef', 'by_receiptOperationKey'],
-  governedSendErasureLineage: ['by_erasureEventId', 'by_receiptOperationKey', 'by_thread_destroyedAt'],
-  answerThreads: ['by_threadId', 'by_session_updatedAt'],
-  answerTurns: ['by_turnId', 'by_thread_seq'],
-  answerTurnReservations: ['by_reservationKey', 'by_turnId', 'by_thread_seq'],
-  answerThreadShares: ['by_threadId', 'by_accessId', 'by_thread_status'],
-  answerToolCalls: ['by_toolCallId', 'by_turn_seq'],
-  harnessSessions: ['by_sessionId', 'by_ownerKey_updatedAt', 'by_lastRunId'],
-  harnessSessionEntries: [
-    'by_entryId',
-    'by_sessionId_seq',
-    'by_sessionId_entryId',
-    'by_sessionId_idempotencyKey',
-    'by_sessionId_parentEntryId',
-    'by_idempotencyKey',
-    'by_ownerKey_createdAt',
-    'by_runId_seq',
-    'by_turnId_seq',
-  ],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
@@ -190,8 +168,31 @@ const requiredIndexes = {
     'by_ownerId_and_lifecycle',
     'by_credentialId_and_lifecycle',
   ],
-  capabilityLaunchSupportRecords: ['by_supportRecordId'],
+  agentAccessOAuthGrants: [
+    'by_grantRef',
+    'by_deviceCodeHash',
+    'by_userCodeHash',
+    'by_authorizationCodeHash',
+    'by_clientId_and_status',
+    'by_status_and_expiresAt',
+  ],
+  agentAccessOAuthClients: ['by_clientId'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
+  capabilityCurrentOperations: [
+    'by_operationRef_and_active',
+    'by_publicationRef_and_publicationRevision',
+    'by_active_and_networkId',
+    'by_active_and_operationRef',
+  ],
+  capabilityCurrentOperationDetails: [
+    'by_operationRef_and_active',
+    'by_publicationRef_and_publicationRevision',
+  ],
+  capabilityCurrentOperationReadControls: ['by_controlRef'],
+  capabilityCurrentOperationMismatchExplanations: [
+    'by_operationRef_and_mismatchKind',
+    'by_expiresAt',
+  ],
   capabilityPublications: [
     'by_publicationRef_and_revision',
     'by_operationRef_and_disposition',
@@ -221,7 +222,6 @@ const requiredIndexes = {
     'by_connectionRef_and_authorityGeneration',
   ],
   registeredOperationMappings: ['by_networkId_and_mappingRef'],
-  externalRunGateDecisions: ['by_runId'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {
@@ -232,6 +232,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
+    expect(durableTables).toHaveLength(58)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
@@ -245,6 +246,78 @@ describe('Convex schema', () => {
         expect(tableIndexes[tableName]).toEqual(indexes)
       else expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+
+  it('accepts and indexes canonical durable admin authority records', async () => {
+    const backend = convexTest(schema, convexModules)
+    const result = await backend.run(async (ctx) => {
+      await ctx.db.insert('adminMemberships', {
+        clerkUserId: 'user_owner',
+        tokenIdentifier: 'clerk|user_owner',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'bootstrap:user_owner',
+        grantedAt: 1,
+        evidenceRef: 'evidence:bootstrap',
+      })
+      await ctx.db.insert('adminMembershipAuditEvents', {
+        auditEventId: 'audit:admin.membership_bootstrapped:user_owner',
+        eventType: 'membership_bootstrapped',
+        actorRef: 'user_owner',
+        targetRef: 'user_owner',
+        reasonCode: 'authorized_bootstrap',
+        evidenceRefs: ['evidence:bootstrap'],
+        operationKey: 'operation:bootstrap:user_owner',
+        correlationId: 'correlation:bootstrap:user_owner',
+        createdAt: 1,
+      })
+      await ctx.db.insert('auditEvents', {
+        eventId: 'audit:admin.membership_bootstrapped:user_owner',
+        eventType: 'admin.membership_bootstrapped',
+        actorKind: 'admin',
+        actorRef: 'user_owner',
+        targetType: 'admin_membership',
+        targetRef: 'user_owner',
+        idempotencyKey: 'operation:bootstrap:user_owner',
+        correlationId: 'correlation:bootstrap:user_owner',
+        reasonCode: 'authorized_bootstrap',
+        evidenceRefs: ['evidence:bootstrap'],
+        redactedPayloadJson: '{}',
+        payloadHash: 'hash:bootstrap:user_owner',
+        createdAt: 1,
+      })
+
+      const membership = await ctx.db
+        .query('adminMemberships')
+        .withIndex('by_tokenIdentifier_and_state', (query) =>
+          query.eq('tokenIdentifier', 'clerk|user_owner').eq('state', 'active')
+        )
+        .unique()
+      const membershipAudit = await ctx.db
+        .query('adminMembershipAuditEvents')
+        .withIndex('by_auditEventId', (query) =>
+          query.eq('auditEventId', 'audit:admin.membership_bootstrapped:user_owner')
+        )
+        .unique()
+      const audit = await ctx.db
+        .query('auditEvents')
+        .withIndex('by_eventId', (query) =>
+          query.eq('eventId', 'audit:admin.membership_bootstrapped:user_owner')
+        )
+        .unique()
+
+      return {
+        membershipRole: membership?.role,
+        membershipAuditType: membershipAudit?.eventType,
+        auditType: audit?.eventType,
+      }
+    })
+
+    expect(result).toEqual({
+      membershipRole: 'owner_admin',
+      membershipAuditType: 'membership_bootstrapped',
+      auditType: 'admin.membership_bootstrapped',
+    })
   })
   it('pins the new ledger and payout index field order', () => {
     const index = (tableName: string, indexDescriptor: string) =>
@@ -355,7 +428,6 @@ describe('Convex schema', () => {
         },
         publicStatus: 'published',
         trustTier: 'listed',
-        claimStatus: 'published',
         sourceHash: 'hash:business',
         createdAt: 1_784_764_800_000,
         updatedAt: 1_784_764_800_000,

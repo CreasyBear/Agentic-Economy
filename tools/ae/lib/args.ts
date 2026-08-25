@@ -6,7 +6,6 @@ export type CliOptions = {
   help: boolean
   allowWrite: boolean
   technical?: boolean
-  suburb?: string
   threadId?: string
   operationRef?: string
   candidateDigest?: string
@@ -22,6 +21,8 @@ export type CliOptions = {
   limit?: string | number
   cursor?: string
   filters?: string | Record<string, unknown>
+  input?: string
+  mcp?: boolean
 }
 
 export type ParsedArgs = {
@@ -31,9 +32,10 @@ export type ParsedArgs = {
   providedOptions: readonly string[]
 }
 
-const DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+const HOSTED_DEFAULT_BASE_URL = 'https://agentic-economy-phi.vercel.app'
+const LOCAL_DEV_BASE_URL = 'http://127.0.0.1:3024'
 export const INVALID_BASE_URL_PLACEHOLDER = '<invalid-origin>'
-const CLI_ENTRYPOINT = 'npm run -s ae --'
+const CLI_ENTRYPOINT = 'ae'
 
 export function safeOriginForDiagnostics(value: unknown): string {
   if (typeof value !== 'string') return INVALID_BASE_URL_PLACEHOLDER
@@ -48,6 +50,23 @@ export function safeOriginForDiagnostics(value: unknown): string {
   } catch {
     return INVALID_BASE_URL_PLACEHOLDER
   }
+}
+
+function isLoopbackHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+function defaultCliBaseUrl(): string {
+  const convexUrl = process.env.CONVEX_URL?.trim() || process.env.VITE_CONVEX_URL?.trim()
+  if (convexUrl !== undefined && convexUrl.length > 0 && isLoopbackHttpUrl(convexUrl)) {
+    return LOCAL_DEV_BASE_URL
+  }
+  return HOSTED_DEFAULT_BASE_URL
 }
 
 function parseBaseUrl(value: unknown): string {
@@ -79,7 +98,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       technical: { type: 'boolean' },
       'allow-write': { type: 'boolean' },
       apply: { type: 'boolean' },
-      suburb: { type: 'string' },
       'thread-id': { type: 'string' },
       'operation-ref': { type: 'string' },
       'candidate-digest': { type: 'string' },
@@ -94,6 +112,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       limit: { type: 'string' },
       cursor: { type: 'string' },
       filters: { type: 'string' },
+      input: { type: 'string' },
+      mcp: { type: 'boolean' },
     },
     allowPositionals: true,
     tokens: true,
@@ -109,7 +129,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   const configuredBaseUrl = process.env.AE_CLI_BASE_URL?.trim() || process.env.AE_CANONICAL_BASE_URL?.trim()
   const baseUrl = parseBaseUrl(
     parsed.values['base-url'] === undefined
-      ? configuredBaseUrl || DEFAULT_BASE_URL
+      ? configuredBaseUrl || defaultCliBaseUrl()
       : parsed.values['base-url'],
   )
   const options: CliOptions = {
@@ -119,7 +139,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     allowWrite: parsed.values['allow-write'] ?? false,
     technical: parsed.values.technical ?? false,
     apply: parsed.values.apply ?? false,
-    ...(parsed.values.suburb === undefined ? {} : { suburb: parsed.values.suburb }),
     ...(parsed.values['thread-id'] === undefined ? {} : { threadId: parsed.values['thread-id'] }),
     ...(parsed.values['operation-ref'] === undefined ? {} : { operationRef: parsed.values['operation-ref'] }),
     ...(parsed.values['candidate-digest'] === undefined ? {} : { candidateDigest: parsed.values['candidate-digest'] }),
@@ -134,6 +153,8 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     ...(parsed.values.limit === undefined ? {} : { limit: parsed.values.limit }),
     ...(parsed.values.cursor === undefined ? {} : { cursor: parsed.values.cursor }),
     ...(parsed.values.filters === undefined ? {} : { filters: parsed.values.filters }),
+    ...(parsed.values.input === undefined ? {} : { input: parsed.values.input }),
+    mcp: parsed.values.mcp ?? false,
   }
   const [command, ...positionals] = parsed.positionals
   return {
@@ -149,34 +170,16 @@ export function printUsage(): void {
 
 Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
 
-Canonical Operation commands (need a running server; default ${DEFAULT_BASE_URL}):
+Canonical Operation commands (need a running server; hosted default ${HOSTED_DEFAULT_BASE_URL}, or ${LOCAL_DEV_BASE_URL} when CONVEX_URL is loopback):
   ${CLI_ENTRYPOINT} manifest
   ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
   ${CLI_ENTRYPOINT} inspect <operation-ref>
   ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
   ${CLI_ENTRYPOINT} connect
-  ${CLI_ENTRYPOINT} invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]
+  ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
   ${CLI_ENTRYPOINT} status <invocation-ref>
   ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
-
-Demand commands:
-  ${CLI_ENTRYPOINT} demand ask "<question>" [--thread-id <id>]
-  ${CLI_ENTRYPOINT} demand ask --thread-id <id> --operation-ref <ref> --candidate-digest <digest> '<input-json>'
-  ${CLI_ENTRYPOINT} demand business <slug>
-  ${CLI_ENTRYPOINT} demand discover
-  ${CLI_ENTRYPOINT} demand enrich "<business name>" [--suburb X]
-  ${CLI_ENTRYPOINT} demand import <websiteUrl>
-  ${CLI_ENTRYPOINT} demand journey "<query>"
-  ${CLI_ENTRYPOINT} demand request create "<text>" | request get <ref> | request options <ref> | request confirm <ref> <optionRef>
-
-Advanced/operator commands:
-  ${CLI_ENTRYPOINT} advanced action <id> ['<json>'] [--allow-write]
-  ${CLI_ENTRYPOINT} advanced actions
-  ${CLI_ENTRYPOINT} advanced cancel <invocation-ref> --idempotency-key <key>
-  ${CLI_ENTRYPOINT} advanced doctor
-  ${CLI_ENTRYPOINT} advanced eval ...
-  ${CLI_ENTRYPOINT} advanced policy [test|refine|fidelity]
 
 Flags:
   --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
@@ -188,18 +191,8 @@ Flags:
   --cursor <cursor>  opaque search continuation cursor (search only)
   --filters '<json>' canonical search filters (search only)
   --technical        human compare output with operation identity and evidence metadata
-  --allow-write      permit a non read-only action or explicit Braintrust export
-  --idempotency-key <key>  stable replay identity for invoke/recovery (required; never generated)
-  --wait                   bounded invoke wait; timeout returns durable recovery detail
-  --thread-id <id>     conversational ask thread; plain queries load continuation state server-side
-  --operation-ref <ref> exact operation to select in automation mode (requires --thread-id and --candidate-digest)
-  --candidate-digest <digest> frozen candidate set digest in automation mode (requires --thread-id and --operation-ref)
-  --turn-id <id>     explicit finalized answer turn id (repeatable; max 25)
-  --manifest <path>  explicit JSON manifest with bounded turnIds
-  --project <name>   Braintrust project (env: AE_BRAINTRUST_PROJECT)
-  --dataset <name>   Braintrust dataset (env: AE_BRAINTRUST_DATASET)
-  --snapshot-name <name>
-  --update-snapshot  allow replacing an existing snapshot name
+  --idempotency-key <key>  optional stable retry identity; call generates one when omitted
+  --wait                   wait for a bounded call result; timeout preserves recovery detail
   --help
 `)
 }

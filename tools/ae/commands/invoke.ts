@@ -1,5 +1,9 @@
 import { isRecord } from '@/modules/common/is-record'
+import { randomUUID } from 'node:crypto'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { operationExecuteResultSchema } from '@/modules/capability-execution/operation-execute-mcp.actions'
 import {
   operationInvokeInputSchema,
   operationInvokeResultSchema,
@@ -8,16 +12,55 @@ import {
 import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
 
 import type { CliOptions } from '../lib/args'
+import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import {
   MAX_STATUS_WAIT_MS,
-  operationStatusPath,
   pendingDelay,
   readOperationStatus,
   requireAgentAccessKey,
   statusCommandFor,
   terminalResult,
 } from './status'
+
+type AnonymousKeylessResult = ReturnType<typeof operationExecuteResultSchema.parse>
+type InvokeCommandDependencies = Readonly<{
+  executeAnonymousKeyless?: (input: Readonly<{
+    baseUrl: string
+    operationRef: string
+    operationInput: Record<string, unknown>
+  }>) => Promise<AnonymousKeylessResult>
+}>
+
+async function executeAnonymousKeylessWithOfficialMcp(input: Readonly<{
+  baseUrl: string
+  operationRef: string
+  operationInput: Record<string, unknown>
+}>): Promise<AnonymousKeylessResult> {
+  const client = new Client({ name: '@agentic-economy/cli', version: '0.1.0' })
+  const transport = new StreamableHTTPClientTransport(new URL('/mcp', input.baseUrl))
+  try {
+    // SDK 1.30 exposes an exactOptionalPropertyTypes mismatch between its
+    // concrete Streamable HTTP transport and Transport interface; runtime
+    // identity is the official SDK implementation on both sides.
+    await client.connect(transport as Parameters<typeof client.connect>[0])
+    const response = await client.callTool({
+      name: 'ae_operation_execute',
+      arguments: { operationRef: input.operationRef, input: input.operationInput },
+    })
+    const structured = isRecord(response.structuredContent)
+      ? response.structuredContent.result
+      : undefined
+    const parsed = operationExecuteResultSchema.safeParse(structured)
+    if (parsed.success) return parsed.data
+    throw new CliFailure('The anonymous MCP executor returned an invalid result.', {
+      kind: 'UNAVAILABLE',
+      code: 'operation-execute-result-invalid',
+    })
+  } finally {
+    await client.close().catch(() => undefined)
+  }
+}
 
 function parseInvokeResult(value: unknown): OperationInvokeResult {
   const parsed = invokeCommandDescriptor.outputSchema.safeParse(value)
@@ -70,10 +113,7 @@ function waitTimeoutFailure(
 function resolveIdempotencyKey(options: CliOptions): string {
   const explicit = options.idempotencyKey?.trim()
   if (explicit !== undefined && explicit.length > 0) return explicit
-  throw new CliFailure('Invoke requires an explicit --idempotency-key so a restarted process can recover the same invocation.', {
-    kind: 'INVALID_ARGUMENT',
-    code: 'idempotency-key-required',
-  })
+  return randomUUID()
 }
 
 function invokeOutput(
@@ -84,7 +124,7 @@ function invokeOutput(
   const nextCommand = invocationRef === undefined
     ? undefined
     : result.kind === 'reconciliation_required'
-      ? `npm run -s ae -- recover ${invocationRef} '<evidence-json>' --idempotency-key ${idempotencyKey}`
+      ? `ae recover ${invocationRef} '<evidence-json>' --idempotency-key ${idempotencyKey}`
       : statusCommandFor(invocationRef)
   return {
     ...result,
@@ -133,20 +173,30 @@ async function waitForOperationResult(
 }
 
 /** Invoke a Market Operation through the canonical authenticated HTTP gateway. */
-export async function runInvokeCommand(args: readonly string[], options: CliOptions): Promise<void> {
+export async function runInvokeCommand(
+  args: readonly string[],
+  options: CliOptions,
+  dependencies: InvokeCommandDependencies = {},
+): Promise<void> {
   const operationRef = args[0]?.trim()
   if (
-    args.length !== 2
+    args.length !== 1
     || operationRef === undefined
     || operationRef.length === 0
   ) {
-    throw new CliFailure("Usage: npm run -s ae -- invoke <operation-ref> '<json>' --idempotency-key <key> [--wait]", {
+    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
       kind: 'INVALID_ARGUMENT',
-      code: 'invoke-usage',
+      code: 'call-usage',
     })
   }
 
-  const rawInput = args[1]!.trim()
+  const rawInput = options.input?.trim()
+  if (rawInput === undefined || rawInput.length === 0) {
+    throw new CliFailure("Usage: ae call <operation-ref> --input '<json>' [--wait]", {
+      kind: 'INVALID_ARGUMENT',
+      code: 'call-usage',
+    })
+  }
   let input: unknown
   try {
     input = JSON.parse(rawInput)
@@ -156,6 +206,51 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
   if (!isRecord(input)) {
     throw new CliFailure('Operation input must be a JSON object.', { kind: 'INVALID_ARGUMENT', code: 'invoke-input' })
   }
+  const credential = resolveAgentAccessCredential(options.baseUrl)
+  if (credential === undefined) {
+    const execute = dependencies.executeAnonymousKeyless ?? executeAnonymousKeylessWithOfficialMcp
+    const result = await execute({
+      baseUrl: options.baseUrl,
+      operationRef,
+      operationInput: input,
+    })
+    if (result.kind === 'refused' && (result.reason === 'operation_not_keyless' || result.reason === 'operation_not_executable')) {
+      throw new CliFailure('This capability cannot run anonymously from the CLI. Run ae connect, then repeat the same call.', {
+        kind: 'UNAUTHENTICATED',
+        code: 'agent_access_key_required',
+        detail: { operationRef, anonymousAttempt: result.reason, nextAction: 'ae connect' },
+      })
+    }
+    if (result.kind === 'refused') {
+      throw new CliFailure(`The capability refused the anonymous call: ${result.reason.replace(/_/gu, ' ')}.`, {
+        kind: result.reason === 'operation_not_found' ? 'NOT_FOUND' : 'FAILED_PRECONDITION',
+        code: result.reason,
+        detail: { operationRef },
+      })
+    }
+    if (result.kind === 'error') {
+      throw new CliFailure(result.reason, {
+        kind: 'UNAVAILABLE',
+        code: result.code,
+        retryable: result.retryable,
+        detail: { operationRef },
+      })
+    }
+    const rendered = { ...result, executionMode: 'anonymous_keyless_mcp' as const }
+    if (options.json) {
+      printJson(rendered)
+      return
+    }
+    heading(`Capability result — ${result.name}`)
+    table([
+      ['status', 'completed'],
+      ['access', 'anonymous keyless MCP'],
+      ['evidence hash', result.evidenceHash],
+    ])
+    line(JSON.stringify(result.output, undefined, 2))
+    return
+  }
+
   const idempotencyKey = resolveIdempotencyKey(options)
   const parsedInput = invokeCommandDescriptor.inputSchema.safeParse({ operationRef, input, idempotencyKey })
   if (!parsedInput.success) {
@@ -164,7 +259,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
       code: 'invoke-input',
     })
   }
-  if (!options.json) process.stderr.write(`Invocation identity: operationRef=${operationRef} idempotencyKey=<redacted>\n`)
+  if (!options.json) process.stderr.write(`Call prepared: operationRef=${operationRef}. A durable retry identity has been retained.\n`)
 
   const apiKey = requireAgentAccessKey('invoke', options)
 
@@ -213,7 +308,7 @@ export async function runInvokeCommand(args: readonly string[], options: CliOpti
   line(JSON.stringify(rendered, undefined, 2))
 }
 export const invokeCommandDescriptor = {
-  command: 'invoke',
+  command: 'call',
   actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
   path: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path,
   method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,

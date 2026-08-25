@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
+const commandsSource = readFileSync('convex/capabilitySupplyCommands.ts', 'utf8')
 const writerPorts = readFileSync('convex/capabilitySupplyWriterPorts.ts', 'utf8')
+const convexSupply = [convexHost, commandsSource].join('\n')
 const moduleRoots = {
   offering: 'src/modules/capability-supply/internal/offering',
   binding: 'src/modules/capability-supply/internal/binding',
@@ -14,16 +16,16 @@ const moduleRoots = {
 
 describe('capability-supply supply-writers thinness', () => {
   it('does not keep offering/binding/eligibility writer bodies in the Convex host', () => {
-    const offeringStart = convexHost.indexOf('export async function registerCapabilityOffering(')
-    const bindingStart = convexHost.indexOf('export async function registerCapabilityTransportBinding(')
-    const eligibilityStart = convexHost.indexOf('export async function setCapabilitySupplyEligibility(')
+    const offeringStart = commandsSource.indexOf('export async function registerCapabilityOffering(')
+    const bindingStart = commandsSource.indexOf('export async function registerCapabilityTransportBinding(')
+    const eligibilityStart = commandsSource.indexOf('export async function setCapabilitySupplyEligibility(')
     expect(offeringStart).toBeGreaterThanOrEqual(0)
     expect(bindingStart).toBeGreaterThanOrEqual(0)
     expect(eligibilityStart).toBeGreaterThanOrEqual(0)
 
-    const offeringBody = convexHost.slice(offeringStart, offeringStart + 400)
-    const bindingBody = convexHost.slice(bindingStart, bindingStart + 400)
-    const eligibilityBody = convexHost.slice(eligibilityStart, eligibilityStart + 400)
+    const offeringBody = commandsSource.slice(offeringStart, offeringStart + 400)
+    const bindingBody = commandsSource.slice(bindingStart, bindingStart + 400)
+    const eligibilityBody = commandsSource.slice(eligibilityStart, eligibilityStart + 400)
 
     expect(offeringBody).toContain('registerCapabilityOfferingWrite')
     expect(offeringBody).toContain('capabilitySupplyWriterPorts')
@@ -62,14 +64,14 @@ describe('capability-supply supply-writers thinness', () => {
   })
 
   it('leaves thin (db,…) writer and Command export arity in the host', () => {
-    expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
-    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityBindingCommand\s*\(/)
-    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibilityCommand\s*\(/)
-    expect(convexHost).toContain('runRegisterOfferingCommand(portsFor(db)')
-    expect(convexHost).toContain('capabilitySupplyWriterPorts(db)')
+    expect(convexSupply).toMatch(/export async function registerCapabilityOffering\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
+    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityOfferingCommand\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityBindingCommand\s*\(/)
+    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibilityCommand\s*\(/)
+    expect(convexSupply).toContain('runRegisterOfferingCommand(portsFor(db)')
+    expect(convexSupply).toContain('capabilitySupplyWriterPorts(db)')
   })
 
   it('keeps writer modules free of Convex runtime imports', () => {

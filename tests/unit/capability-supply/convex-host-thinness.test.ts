@@ -5,6 +5,15 @@ import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../../helpers/source-files'
 
 const convexHost = readFileSync('convex/capabilitySupply.ts', 'utf8')
+const convexSupply = [
+  convexHost,
+  readFileSync('convex/capabilitySupplyShared.ts', 'utf8'),
+  readFileSync('convex/capabilitySupplyPublish.ts', 'utf8'),
+  readFileSync('convex/capabilitySupplyProbes.ts', 'utf8'),
+  readFileSync('convex/capabilitySupplyGraph.ts', 'utf8'),
+  readFileSync('convex/capabilitySupplyLists.ts', 'utf8'),
+  readFileSync('convex/capabilitySupplyCommands.ts', 'utf8'),
+].join('\n')
 const internalRoot = 'src/modules/capability-supply/internal'
 const movedFolders = ['offering', 'binding', 'eligibility', 'quarantine', 'publication', 'shared', 'operation-ledger', 'graph'] as const
 
@@ -49,8 +58,8 @@ const retiredUnsignedLifecycleMutations = [
 describe('capability-supply convex host thinness', () => {
   it('does not redefine moved pure helpers in Convex', () => {
     for (const symbol of movedSymbols) {
-      expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
-      expect(convexHost).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
+      expect(convexSupply).not.toMatch(new RegExp(`(?:^|\\n)(?:async\\s+)?function\\s+${symbol}\\b`))
+      expect(convexSupply).not.toMatch(new RegExp(`(?:^|\\n)const\\s+${symbol}\\s*=`))
     }
   })
 
@@ -66,8 +75,8 @@ describe('capability-supply convex host thinness', () => {
   })
 
   it('imports moved behaviors from capability-supply public seam', () => {
-    expect(convexHost).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
-    expect(convexHost).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
+    expect(convexSupply).toMatch(/from\s+['"]@\/modules\/capability-supply\/public['"]/)
+    expect(convexSupply).not.toMatch(/from\s+['"]@\/modules\/capability-supply\/internal(?:\/[^'"]*)?['"]/)
     for (const symbol of [
       'publicationLifecycle',
       'bindingObservedRowDigest',
@@ -75,10 +84,10 @@ describe('capability-supply convex host thinness', () => {
       'registerCapabilityOfferingWrite',
       'queryCapabilityGraphFromModule',
     ]) {
-      expect(convexHost).toContain(symbol)
+      expect(convexSupply).toContain(symbol)
     }
-    expect(convexHost).not.toContain(['publishCapability', 'Command'].join(''))
-    expect(convexHost).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
+    expect(convexSupply).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(convexSupply).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
   })
 
   it('keeps deepened module files free of Convex runtime imports', () => {
@@ -94,41 +103,41 @@ describe('capability-supply convex host thinness', () => {
   })
 
   it('delegates eligible inventory reads via ports while keeping thin wrappers', () => {
-    expect(convexHost).toContain('eligibleSupplyPorts')
-    expect(convexHost).toContain('listIntegratedCapabilitySupplyFromModule')
-    expect(convexHost).toContain('getEligibleExactCapabilitySupplyFromModule')
-    expect(convexHost).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
-    expect(convexHost).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
-    expect(convexHost).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
-    expect(convexHost).not.toMatch(/reason: 'supply_integrity_failure' as const/)
-    expect(convexHost).not.toMatch(/bindings\.length > input\.limit/)
+    expect(convexSupply).toContain('eligibleSupplyPorts')
+    expect(convexSupply).toContain('listIntegratedCapabilitySupplyFromModule')
+    expect(convexSupply).toContain('getEligibleExactCapabilitySupplyFromModule')
+    expect(convexSupply).toMatch(/export async function listIntegratedCapabilitySupply\s*\(/)
+    expect(convexSupply).toMatch(/export async function getEligibleExactCapabilitySupply\s*\(/)
+    expect(convexSupply).not.toMatch(/reason: 'eligible_supply_limit_exceeded' as const/)
+    expect(convexSupply).not.toMatch(/reason: 'supply_integrity_failure' as const/)
+    expect(convexSupply).not.toMatch(/bindings\.length > input\.limit/)
   })
 
   it('keeps prepared publish and curated withdrawal thin while retiring owner bypass mutations', () => {
-    expect(convexHost).toContain('capabilitySupplyPublicationPorts')
-    expect(convexHost).toContain('publishPreparedCapabilityCommand')
-    expect(convexHost).not.toContain('refreshCapabilityCommand')
-    expect(convexHost).toContain('withdrawCapabilityCommand')
-    expect(convexHost).toMatch(/function publicationPorts\s*\(/)
+    expect(convexSupply).toContain('capabilitySupplyPublicationPorts')
+    expect(convexSupply).toContain('publishPreparedCapabilityCommand')
+    expect(convexSupply).not.toContain('refreshCapabilityCommand')
+    expect(convexSupply).toContain('withdrawCapabilityCommand')
+    expect(convexSupply).toMatch(/function publicationPorts\s*\(/)
     expect(convexHost).toMatch(/export const publishPreparedCapability\s*=/)
     expect(convexHost).not.toMatch(/export const refreshCapability\s*=/)
     expect(convexHost).not.toMatch(/export const withdrawCapability\s*=/)
-    expect(convexHost).not.toContain(['publishCapability', 'Command'].join(''))
-    expect(convexHost).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
-    expect(convexHost).not.toMatch(/encodeCapabilityContractDocumentJson/)
+    expect(convexSupply).not.toContain(['publishCapability', 'Command'].join(''))
+    expect(convexSupply).not.toContain(['CapabilityPublication', 'CommandImport'].join(''))
+    expect(convexSupply).not.toMatch(/encodeCapabilityContractDocumentJson/)
   })
 
   it('delegates raw writers via capabilitySupplyWriterPorts while keeping thin wrappers', () => {
-    expect(convexHost).toContain('capabilitySupplyWriterPorts')
-    expect(convexHost).toContain('registerCapabilityOfferingWrite')
-    expect(convexHost).toContain('registerCapabilityTransportBindingWrite')
-    expect(convexHost).toContain('setCapabilitySupplyEligibilityWrite')
-    expect(convexHost).toMatch(/export async function registerCapabilityOffering\s*\(/)
-    expect(convexHost).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
-    expect(convexHost).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
-    expect(convexHost).not.toMatch(/defineCapabilityOfferingRegistration/)
-    expect(convexHost).not.toMatch(/admitRegisteredTransport/)
-    expect(convexHost).not.toMatch(/desiredEligibility/)
+    expect(convexSupply).toContain('capabilitySupplyWriterPorts')
+    expect(convexSupply).toContain('registerCapabilityOfferingWrite')
+    expect(convexSupply).toContain('registerCapabilityTransportBindingWrite')
+    expect(convexSupply).toContain('setCapabilitySupplyEligibilityWrite')
+    expect(convexSupply).toMatch(/export async function registerCapabilityOffering\s*\(/)
+    expect(convexSupply).toMatch(/export async function registerCapabilityTransportBinding\s*\(/)
+    expect(convexSupply).toMatch(/export async function setCapabilitySupplyEligibility\s*\(/)
+    expect(convexSupply).not.toMatch(/defineCapabilityOfferingRegistration/)
+    expect(convexSupply).not.toMatch(/admitRegisteredTransport/)
+    expect(convexSupply).not.toMatch(/desiredEligibility/)
   })
 })
 

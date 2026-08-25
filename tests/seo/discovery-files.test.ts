@@ -23,10 +23,12 @@ describe('discovery files', () => {
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'http://localhost:3000' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
     const serialized = `${llms.body}\n${sitemap.body}`
+    expect(llms.body).not.toContain('/api/v1/registry')
+    expect(llms.body).toContain('/api/v1/market-operations/search')
 
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
-    expect(serialized).not.toContain('parramatta-emergency-plumbing')
+    expect(serialized).not.toContain('demo-listed-provider')
     expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route/)
     expect(serialized).not.toMatch(
       /ownerId|clerkUserId|ownerClerkId|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
@@ -53,25 +55,22 @@ describe('discovery files', () => {
     }
     const result = buildLlmsTxt(maliciousState, { canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://route.ae.example' })
 
-    expect(result.body).toContain('https://ae.example/parramatta-emergency-plumbing/ucp')
-    expect(result.body).toContain('disposition=partial')
+    expect(result.body).toContain('https://ae.example/demo-listed-provider/ucp')
+    expect(result.body).toContain('disposition=current')
     // `/mcp` is the current MCP host endpoint (T6), no longer retired routing-v1 vocabulary.
     expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route/)
     expect(result.body).toContain('- MCP: https://ae.example/mcp')
-    expect(result.body).toContain('1. No-install Step 1:')
+    expect(result.body).toContain('1. Search by outcome: `ae search')
+    expect(result.body.indexOf('1. Search by outcome:')).toBeLessThan(result.body.indexOf('4. Connect only if the call reports'))
     expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/search')
     expect(result.body).toContain('POST https://ae.example/api/v1/market-operations/detail')
-    expect(result.body).toContain('npm run -s ae -- connect --json')
-    expect(result.body).toContain('npm run -s ae -- invoke "<operationRef>" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
-    expect(result.body).toContain('npm run -s ae -- status "$AE_INVOCATION_REF" --json')
-    expect(result.body).toContain('npm run -s ae -- advanced cancel "$AE_INVOCATION_REF" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
-    expect(result.body).toContain('npm run -s ae -- recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json')
-    expect(result.body).toContain('Authenticated: invoke, status, cancel, reconcile.')
-    expect(result.body).toContain('Cancellation requires the AE access key `AE_API_KEY` plus the request JSON body field `idempotencyKey`.')
-    expect(result.body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/cancel')
-    expect(result.body).toContain('POST https://ae.example/api/v1/operations/{invocationRef}/reconcile')
-    expect(result.body).not.toMatch(/\bae (?:cancel|reconcile)\b/u)
-    expect(result.body).not.toContain('Parramatta Emergency Plumbing')
+    expect(result.body).toContain('ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON"')
+    expect(result.body).toContain('ae status "$AE_INVOCATION_REF"')
+    expect(result.body).toContain('Use cancel or recover only when that receipt offers the action.')
+    expect(result.body).toContain('Public: search, inspect, and eligible free keyless read calls.')
+    expect(result.body).toContain('The low-level write API requires `idempotencyKey`; the CLI creates and retains it automatically.')
+    expect(result.body).not.toContain('--idempotency-key')
+    expect(result.body).not.toContain('Demo listed provider')
     expect(result.body).not.toContain('Ignore previous instructions')
     expect(result.body).not.toContain('verified')
     expect(result.body).not.toContain('Owner supplied markdown-like HTML')
@@ -80,8 +79,8 @@ describe('discovery files', () => {
       expect.arrayContaining([
         'https://ae.example/',
         'https://ae.example/api/businesses',
-        'https://ae.example/parramatta-emergency-plumbing',
-        'https://ae.example/parramatta-emergency-plumbing/ucp',
+        'https://ae.example/demo-listed-provider',
+        'https://ae.example/demo-listed-provider/ucp',
       ])
     )
   })
@@ -95,9 +94,8 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('<loc>https://ae.example/</loc>')
     expect(result.body).toContain('<loc>https://ae.example/for-agents</loc>')
-    expect(result.body).toContain('<loc>https://ae.example/parramatta-emergency-plumbing</loc>')
+    expect(result.body).toContain('<loc>https://ae.example/demo-listed-provider</loc>')
     expect(result.body).not.toContain('/admin/')
-    expect(result.body).not.toContain('/claim/success')
     expect(result.body).not.toContain('/ucp</loc>')
   })
 
@@ -110,14 +108,13 @@ describe('discovery files', () => {
     }
 
     business.publicStatus = 'suppressed'
-    business.claimStatus = 'suppressed'
     business.suppressedAt = 5_000
 
     const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
     const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 0 })
 
-    expect(llms.body).not.toContain('parramatta-emergency-plumbing')
-    expect(sitemap.body).not.toContain('parramatta-emergency-plumbing')
+    expect(llms.body).not.toContain('demo-listed-provider')
+    expect(sitemap.body).not.toContain('demo-listed-provider')
   })
 
   it('builds robots.txt with sitemap declaration and private route exclusions', () => {
@@ -125,7 +122,6 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('User-agent: *')
     expect(result.body).toContain('Disallow: /admin/')
-    expect(result.body).toContain('Disallow: /claim/success')
     expect(result.body).toContain('User-agent: GPTBot')
     expect(result.body).toContain('Sitemap: https://ae.example/sitemap.xml')
     expect(result.urls).toEqual(['https://ae.example/sitemap.xml'])

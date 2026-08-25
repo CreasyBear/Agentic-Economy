@@ -24,7 +24,7 @@ describe('request correlation', () => {
   })
   it('adds the correlation to RFC 9457 responses', async () => {
     const response = await runWithRequestCorrelation(
-      new Request('https://ae.example/api/v1/operations/execute', {
+      new Request('https://ae.example/api/v1/operations/call', {
         headers: { 'x-ae-request-id': 'corr_problem_1' },
       }),
       ({ correlationId }) => withRequestCorrelationHeader(

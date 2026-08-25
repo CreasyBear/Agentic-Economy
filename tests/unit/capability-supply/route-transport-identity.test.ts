@@ -1,4 +1,6 @@
 import { encodePaymentResponseHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
+import type { PaymentRequired } from '@x402/core/types'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -26,6 +28,20 @@ const authorityCommon = {
 } as const
 
 function invocation(operationKeyDigest: string, adapterId: 'http-json:v1' | 'x402-fetch:v2'): RouteTransportInvocation {
+  const paymentRequired: PaymentRequired = {
+    x402Version: 2,
+    resource: { url: endpoint },
+    accepts: [{
+      scheme: 'exact',
+      network: 'eip155:8453',
+      amount: '10000',
+      asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      maxTimeoutSeconds: 60,
+      extra: { name: 'USDC', version: '2' },
+    }],
+  }
+  validatePaymentRequired(paymentRequired)
   const config = adapterId === 'http-json:v1'
     ? { method: 'POST' as const, requestTimeoutMs: 5_000 }
     : {
@@ -36,8 +52,9 @@ function invocation(operationKeyDigest: string, adapterId: 'http-json:v1' | 'x40
         currency: 'USD',
         routeAmountExponent: 2,
         assetAmountExponent: 6,
-        asset: '0xasset',
-        payTo: '0xrecipient',
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+        paymentRequiredJson: JSON.stringify(paymentRequired),
       }
   return {
     binding: {
@@ -92,24 +109,26 @@ describe('route transport durable identity binding', () => {
 
   it('binds x402 payment identifiers to the same per-attempt identity digest', async () => {
     const paymentIdentifiers: string[] = []
+    const signedSendCounts: number[] = []
     const run = async (operationKeyDigest: string) => {
-      const challenge = {
-        x402Version: 2 as const,
+      const challenge: PaymentRequired = {
+        x402Version: 2,
         resource: { url: endpoint },
         accepts: [{
           scheme: 'exact',
-          network: 'eip155:8453' as const,
+          network: 'eip155:8453',
           amount: '10000',
-          asset: '0xasset',
-          payTo: '0xrecipient',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+          payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
           maxTimeoutSeconds: 60,
-          extra: {},
+          extra: { name: 'USDC', version: '2' },
         }],
       }
-      const paymentRequired = Buffer.from(JSON.stringify(challenge)).toString('base64')
+      validatePaymentRequired(challenge)
       const send = vi.fn<RouteTransportFetch>()
-        .mockResolvedValueOnce(new Response(null, { status: 402, headers: { 'Payment-Required': paymentRequired } }))
-        .mockResolvedValueOnce(Response.json({ ok: true }, {
+        .mockImplementationOnce(async (_target, init) => {
+          expect(init?.headers?.['Payment-Signature']).toBe('signed-payment')
+          return Response.json({ ok: true }, {
           headers: {
             'Payment-Response': encodePaymentResponseHeader({
               success: true,
@@ -119,7 +138,8 @@ describe('route transport durable identity binding', () => {
               payer: 'test:identity-binding',
             }),
           },
-        }))
+          })
+        })
       const runtime: RouteTransportRuntime = {
         send,
         resolveCredential: () => undefined,
@@ -133,13 +153,17 @@ describe('route transport durable identity binding', () => {
         },
         readX402PaymentAuthorization: async () => 'signed-payment',
         readX402PaymentAuthorizationByDigest: async () => 'signed-payment',
+        markX402PaymentPossiblySubmitted: () => undefined,
         verifyX402Settlement: async () => true,
       }
-      return await invokePreparedRouteTransport(await prepare(invocation(operationKeyDigest, 'x402-fetch:v2')), runtime)
+      const observed = await invokePreparedRouteTransport(await prepare(invocation(operationKeyDigest, 'x402-fetch:v2')), runtime)
+      signedSendCounts.push(send.mock.calls.length)
+      return observed
     }
 
     await expect(run(operationDigestOne)).resolves.toMatchObject({ disposition: 'succeeded', releaseStarted: true })
     await expect(run(operationDigestTwo)).resolves.toMatchObject({ disposition: 'succeeded', releaseStarted: true })
     expect(paymentIdentifiers).toEqual([operationDigestOne, operationDigestTwo])
+    expect(signedSendCounts).toEqual([1, 1])
   })
 })

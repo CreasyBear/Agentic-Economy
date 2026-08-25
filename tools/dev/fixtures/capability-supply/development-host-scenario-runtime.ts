@@ -7,7 +7,6 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
-  encodeX402PaymentRequiredHeader,
   encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
 } from '@/modules/capability-supply/server'
@@ -47,12 +46,7 @@ export function developmentSuccessRuntime(
       },
     })
     if (init?.headers?.['Payment-Signature'] === undefined) {
-      return new Response('', {
-        status: 402,
-        headers: {
-          'payment-required': encodeX402PaymentRequiredHeader(developmentChallenge(endpoint, url)),
-        },
-      })
+      throw new Error('development_unsigned_x402_request_invariant')
     }
     effects.provider += 1
     observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
@@ -118,6 +112,7 @@ export function developmentSuccessRuntime(
         : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
     verifyX402Settlement: async () => true,
+    markX402PaymentPossiblySubmitted: () => undefined,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -175,22 +170,18 @@ export function developmentLostResponseRuntime(
   observer: DevelopmentTransportObserver = () => undefined,
 ): RouteTransportRuntime {
   const base = developmentSuccessRuntime(endpoint, effects, observer)
-  let sends = 0
   return {
     ...base,
     send: async (url, init) => {
-      sends += 1
-      if (sends === 2) {
-        observer({
-          kind: 'transport_request',
-          detail: { endpoint: String(url), method: init?.method ?? 'GET', paymentSignaturePresent: true },
-        })
-        effects.provider += 1
-        observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
-        observer({ kind: 'provider_response_lost', detail: { attempt: sends } })
-        throw new Error('lost_x402_response')
-      }
-      return await base.send(url, init)
+      if (init?.headers?.['Payment-Signature'] === undefined) return await base.send(url, init)
+      observer({
+        kind: 'transport_request',
+        detail: { endpoint: String(url), method: init?.method ?? 'GET', paymentSignaturePresent: true },
+      })
+      effects.provider += 1
+      observer({ kind: 'provider_release', detail: { endpoint: String(url), providerCalls: effects.provider } })
+      observer({ kind: 'provider_response_lost', detail: { attempt: 1 } })
+      throw new Error('lost_x402_response')
     },
   }
 }
@@ -200,16 +191,12 @@ export function developmentProviderTimeoutRuntime(
   effects: DevelopmentEffectCounts,
 ): RouteTransportRuntime {
   const base = developmentSuccessRuntime(endpoint, effects)
-  let sends = 0
   return {
     ...base,
     send: async (url, init) => {
-      sends += 1
-      if (sends === 2) {
-        effects.provider += 1
-        return await new Promise<never>(() => {})
-      }
-      return await base.send(url, init)
+      if (init?.headers?.['Payment-Signature'] === undefined) return await base.send(url, init)
+      effects.provider += 1
+      return await new Promise<never>(() => {})
     },
   }
 }
@@ -264,4 +251,3 @@ function developmentChallenge(endpoint: string, requestUrl?: string | URL): X402
     }],
   }
 }
-

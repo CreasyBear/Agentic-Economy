@@ -24,11 +24,14 @@ import {
   type OperationExecutableDescriptor,
   type OperationExecuteResult,
 } from '@/modules/capability-execution/operation-execute.functions'
-import { convexKeylessExecutableSource } from '@/modules/capability-execution/operation-execute.actions'
-import { CURATED_PROVIDER_PUBLICATIONS } from '@/modules/dev/public'
+import {
+  convexKeylessExecutableSource,
+  type KeylessExecutableSourcePort,
+} from '@/modules/capability-execution/operation-execute.actions'
+import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
 import {
   isPublicOperationRef,
-  normalizeCapabilityPublication,
+  type PublicOperationDescriptor,
 } from '@/modules/capability-supply/public'
 import {
   deriveKeylessDescriptors,
@@ -60,6 +63,17 @@ const FX = {
   },
   provenance: { publisher: 'ae_curated_external', sourceKind: 'openapi_http' },
 } as const satisfies OperationExecutableDescriptor
+
+function ineligibleSource(
+  authentication: PublicOperationDescriptor['authentication'],
+): KeylessExecutableSourcePort {
+  return {
+    list: async () => [],
+    search: async () => [],
+    read: async () => null,
+    readPublic: async () => ({ authentication }) as PublicOperationDescriptor,
+  }
+}
 
 type FetchFn = NonNullable<Parameters<typeof executeOperation>[1]['fetchImpl']>
 
@@ -481,155 +495,49 @@ describe('operation.execute executor (pure, DB-driven)', () => {
   })
 })
 
-describe('curated provider execution fixtures', () => {
-  it('accepts a representative Open-Meteo current-weather response and rejects malformed weather codes', async () => {
-    const publicationEntry = CURATED_PROVIDER_PUBLICATIONS.find(({ publication }) => (
-      publication.kind === 'openapi_http' && publication.contract.capabilityId === 'open-meteo.forecast'
-    ))
-    if (publicationEntry === undefined || publicationEntry.publication.kind !== 'openapi_http') {
-      throw new Error('curated_publication_missing:open-meteo.forecast')
-    }
-    const normalized = await normalizeCapabilityPublication(publicationEntry.publication)
-    if (normalized.kind !== 'normalized') throw new Error(`curated_publication_refused:${normalized.reason}`)
-    const document = JSON.parse(normalized.draft.documentJson) as {
-      inputSchema: Record<string, unknown>
-      outputSchema: Record<string, unknown>
-    }
-    const descriptor: OperationExecutableDescriptor = {
-      ...FX,
-      capabilityId: 'open-meteo.forecast',
-      name: 'Open-Meteo weather forecast',
-      endpointUrl: 'https://api.open-meteo.com/v1/forecast',
-      query: [
-        { inputPointer: '/latitude', parameter: 'latitude' },
-        { inputPointer: '/longitude', parameter: 'longitude' },
-        { inputPointer: '/current_weather', parameter: 'current_weather' },
-      ],
-      inputSchema: document.inputSchema,
-      outputSchema: document.outputSchema,
-    }
-    const response = {
-      latitude: 48.86,
-      longitude: 2.3599997,
-      generationtime_ms: 0.0869,
-      utc_offset_seconds: 0,
-      timezone: 'GMT',
-      timezone_abbreviation: 'GMT',
-      elevation: 40,
-      current_weather_units: {
-        time: 'iso8601',
-        interval: 'seconds',
-        temperature: '°C',
-        windspeed: 'km/h',
-        winddirection: '°',
-        is_day: '',
-        weathercode: 'wmo code',
-      },
-      current_weather: {
-        time: '2026-08-08T11:45',
-        interval: 900,
-        temperature: 27.8,
-        windspeed: 4.1,
-        winddirection: 38,
-        is_day: 1,
-        weathercode: 0,
-      },
-    }
-    const fetchResponse = () => Promise.resolve(new Response(JSON.stringify(response), {
-      status: 200, headers: { 'content-type': 'application/json' },
-    }))
-    const valid = await run(descriptor, { latitude: 48.857, longitude: 2.352, current_weather: true }, fetchResponse)
-    expect(valid.result.kind).toBe('ok')
-
-    const malformed = await run(descriptor, { latitude: 48.857, longitude: 2.352, current_weather: true }, () =>
-      Promise.resolve(new Response(JSON.stringify({
-        ...response,
-        current_weather: { ...response.current_weather, weathercode: '0' },
-      }), { status: 200, headers: { 'content-type': 'application/json' } })),
+describe('operation.execute public refusal explainability', () => {
+  it('distinguishes a known keyed Operation from an unknown reference', async () => {
+    const result = await executeKeylessOperation(
+      { operationRef: FX.operationRef, input: {} },
+      ineligibleSource({
+        kind: 'platform_credential',
+        scheme: 'api_key',
+        in: 'query',
+        name: 'api_key',
+      }),
+      { fetchImpl: vi.fn(), isPublicTarget: vi.fn() },
     )
-    expect(malformed.result).toMatchObject({ kind: 'error', code: 'response_invalid' })
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_keyless',
+    })
+  })
+
+  it('distinguishes a known ineligible keyless Operation from an unknown reference', async () => {
+    const result = await executeKeylessOperation(
+      { operationRef: FX.operationRef, input: {} },
+      ineligibleSource({ kind: 'keyless' }),
+      { fetchImpl: vi.fn(), isPublicTarget: vi.fn() },
+    )
+
+    expect(result).toEqual({
+      kind: 'refused',
+      operationRef: FX.operationRef,
+      reason: 'operation_not_executable',
+    })
   })
 })
-describe('canonical seed operation references', () => {
-  it('round-trips canonical refs through the seed source and rejects readable refs', async () => {
-    sourceMocks.callPublicSourceQuery.mockRejectedValue(new Error('convex unavailable'))
-    const descriptors = await deriveKeylessDescriptors()
-    expect(descriptors.length).toBeGreaterThan(0)
-    const capabilityIds = descriptors.map((descriptor) => descriptor.capabilityId)
-    expect(capabilityIds).toEqual(expect.arrayContaining([
-      'coingecko.simple-price',
-      'open-meteo.forecast',
-      'open-meteo.geocoding',
-    ]))
-    for (const canonicalCapabilityId of [
-      'coingecko.simple-price',
-      'open-meteo.forecast',
-      'wikipedia-rest.page-summary',
-    ]) {
-      expect(CURATED_PROVIDER_PUBLICATIONS.some(({ publication }) => (
-        publication.kind === 'openapi_http' && publication.contract.capabilityId === canonicalCapabilityId
-      ))).toBe(true)
-    }
 
-    const frankfurter = descriptors.filter((descriptor) => descriptor.capabilityId === 'frankfurter.single-rate')
-    expect(frankfurter).toHaveLength(1)
-    expect(frankfurter[0]).toMatchObject({
-      operationRef: expect.stringMatching(/^operation:v1:[0-9a-f]{64}$/),
-      capabilityId: 'frankfurter.single-rate',
-      query: [
-        { inputPointer: '/base', parameter: 'base', required: true, style: 'form', explode: true },
-        { inputPointer: '/quote', parameter: 'quotes', required: true, style: 'form', explode: true },
-      ],
-      inputSchema: {
-        properties: { base: expect.any(Object), quote: expect.any(Object) },
-        required: ['base', 'quote'],
-        additionalProperties: false,
-      },
-    })
-    expect((frankfurter[0]!.inputSchema.properties as Record<string, unknown>)).not.toHaveProperty('quotes')
+describe('keyless seed source after retired seed eviction', () => {
+  it('does not fabricate retired seed descriptors', async () => {
+    expect(await deriveKeylessDescriptors()).toEqual([])
+    expect(await seededKeylessSeeds()).toEqual([])
+    expect(await seededDescriptorFor(FX.operationRef)).toBeUndefined()
 
-    for (const excludedCapabilityId of [
-      'exa.search',
-      'exa.contents',
-      'openweathermap.current-weather',
-      'tavily.search',
-      'serpapi.google-search',
-      'coingecko.simple-price-demo',
-      'wikipedia-rest.page-summary',
-      'exa-search-x402',
-      'timezone-convert-x402',
-      'wolframalpha-query-x402',
-      'coinmarketcap-quotes-x402',
-      'flightaware-nearby-x402',
-      'bizintel-forex-rate-x402',
-      'tavily-search-x402',
-    ]) {
-      expect(capabilityIds).not.toContain(excludedCapabilityId)
-    }
-
-    for (const descriptor of descriptors) {
-      expect(isPublicOperationRef(descriptor.operationRef)).toBe(true)
-    }
-    const ipify = descriptors.find((descriptor) => descriptor.capabilityId === 'ipify.public-ip')
-    expect(ipify).toMatchObject({
-      fixedQuery: [{ parameter: 'format', value: 'json' }],
-      inputSchema: { properties: {}, required: [], additionalProperties: false },
-    })
-    expect(ipify).not.toHaveProperty('query')
-    const coingeckoSeed = (await seededKeylessSeeds())
-      .find(({ capabilityId }) => capabilityId === 'coingecko.simple-price')
-    expect(coingeckoSeed?.name).toBe('CoinGecko simple price')
-    expect(coingeckoSeed?.inputExamples).toContainEqual({
-      label: 'bitcoin price',
-      input: { ids: 'bitcoin', vs_currencies: 'usd' },
-    })
-
-    const descriptor = descriptors[0]!
-    await expect(seededDescriptorFor(descriptor.operationRef)).resolves.toEqual(descriptor)
-
-    const readableRef = `operation:v1:${descriptor.capabilityId}`
+    const readableRef = `operation:v1:${FX.capabilityId}`
     expect(isPublicOperationRef(readableRef)).toBe(false)
-    await expect(seededDescriptorFor(readableRef)).resolves.toBeUndefined()
     await expect(seedKeylessExecutableSource.read(readableRef)).resolves.toBeNull()
     sourceMocks.callPublicSourceQuery.mockClear()
     await expect(convexKeylessExecutableSource.read(readableRef)).resolves.toBeNull()
@@ -639,19 +547,13 @@ describe('canonical seed operation references', () => {
   it('accepts canonical DB identities and hides noncanonical DB rows', async () => {
     sourceMocks.callPublicSourceQuery.mockReset()
     sourceMocks.createConvexServerFunctionAssertion.mockClear()
-    const descriptors = await deriveKeylessDescriptors()
-    const descriptor = descriptors[0]!
+    const descriptor = FX
     const noncanonicalRef = `operation:v1:${descriptor.capabilityId}`
 
-    const {
-      inputSchema,
-      outputSchema,
-      ...wireDescriptor
-    } = descriptor
+    const { inputSchema, ...wireDescriptor } = descriptor
     sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({
       ...wireDescriptor,
       inputSchemaJson: JSON.stringify(inputSchema),
-      ...(outputSchema === undefined ? {} : { outputSchemaJson: JSON.stringify(outputSchema) }),
     })
     await expect(convexKeylessExecutableSource.read(descriptor.operationRef)).resolves.toEqual(descriptor)
     expect(sourceMocks.createConvexServerFunctionAssertion).toHaveBeenCalledWith({
@@ -663,7 +565,6 @@ describe('canonical seed operation references', () => {
     sourceMocks.callPublicSourceQuery.mockResolvedValueOnce({
       ...wireDescriptor,
       inputSchemaJson: JSON.stringify(inputSchema),
-      ...(outputSchema === undefined ? {} : { outputSchemaJson: JSON.stringify(outputSchema) }),
       operationRef: noncanonicalRef,
     })
     await expect(convexKeylessExecutableSource.read(descriptor.operationRef)).resolves.toBeNull()

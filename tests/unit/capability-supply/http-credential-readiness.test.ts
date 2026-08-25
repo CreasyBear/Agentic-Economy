@@ -191,7 +191,7 @@ describe('schema-conformant readiness', () => {
     publicationRef: 'publication:frankfurter:single-rate', revision: 1,
     bindingId: 'binding:frankfurter', capabilityId: 'frankfurter.single-rate',
     endpointUrl: 'https://api.frankfurter.app/latest', authority: { kind: 'keyless' as const }, adapterId: 'http-json:v1',
-    probeKind: 'openapi_http' as const, probeMethod: 'GET' as const, probeQuery: [],
+    probeMethod: 'GET' as const, probeQuery: [],
     transportConfigJson: JSON.stringify({
       method: 'GET', query: [
         { inputPointer: '/from', parameter: 'from' },

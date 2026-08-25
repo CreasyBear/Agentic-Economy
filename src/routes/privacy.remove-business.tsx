@@ -35,8 +35,8 @@ const openRemovalServer = createServerFn({ method: 'POST' })
 export const Route = createFileRoute('/privacy/remove-business')({
   head: () => ({
     meta: [
-      { title: 'Request removal or correction | Agentic Economy' },
-      { name: 'description', content: 'Request removal or correction for an Agentic Economy public service page.' },
+      { title: 'Supplier correction or removal | Agentic Economy' },
+      { name: 'description', content: 'Request a correction or removal for an Agentic Economy supplier profile or published Operation.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -44,30 +44,30 @@ export const Route = createFileRoute('/privacy/remove-business')({
 })
 
 const removalReasonOptions = [
-  { value: 'privacy_removal_requested', label: 'Remove page' },
-  { value: 'ownership_contested', label: 'Ownership issue' },
+  { value: 'privacy_removal_requested', label: 'Remove supplier profile' },
+  { value: 'ownership_contested', label: 'Supplier ownership issue' },
   { value: 'duplicate_or_impersonation', label: 'Duplicate or impersonation' },
-  { value: 'unsafe_or_inaccurate', label: 'Incorrect details' },
+  { value: 'unsafe_or_inaccurate', label: 'Incorrect Operation or supplier facts' },
 ] as const
 
 const correctionPaths = [
   {
     icon: FileWarningIcon,
     label: 'Details',
-    title: 'Fix page facts',
-    body: 'Wrong service, place, hours, or public wording.',
+    title: 'Fix published facts',
+    body: 'Wrong Operation, price, readiness, access, or supplier information.',
   },
   {
     icon: StoreIcon,
     label: 'Owner',
-    title: 'Sort ownership',
-    body: 'The page is yours, contested, or needs the right owner.',
+    title: 'Resolve supplier ownership',
+    body: 'The profile is yours, contested, or attached to the wrong supplier.',
   },
   {
     icon: CopyXIcon,
     label: 'Remove',
     title: 'Remove or merge',
-    body: 'Duplicate, impersonation, or page should come down.',
+    body: 'Duplicate, impersonation, or a supplier profile that should come down.',
   },
 ] as const
 
@@ -142,11 +142,11 @@ function RemoveBusinessRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow="Privacy"
-        title="Corrections"
-        description="Send the page slug, your email, and what should change."
+        title="Supplier corrections"
+        description="Send the supplier slug, your email, and the exact Operation or profile fact that should change."
       />
       <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
-        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-3">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
             <Card key={title} className="grid h-full gap-1.5 p-5">
               <div className="flex items-center justify-between gap-3">
@@ -178,7 +178,7 @@ function RemoveBusinessRoute() {
           )}
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="slug">Page slug</FieldLabel>
+              <FieldLabel htmlFor="slug">Supplier slug</FieldLabel>
               <Input
                 id="slug"
                 name="slug"
@@ -190,7 +190,7 @@ function RemoveBusinessRoute() {
                   setValue((current) => ({ ...current, slug: nextValue }))
                 }}
               />
-              <FieldDescription id={slugDescriptionId}>Shown in the page URL.</FieldDescription>
+              <FieldDescription id={slugDescriptionId}>Shown in the supplier profile URL.</FieldDescription>
             </Field>
             <Field {...(contactInvalid ? { 'data-invalid': true } : {})}>
               <FieldLabel htmlFor="contactEmail">Your email</FieldLabel>

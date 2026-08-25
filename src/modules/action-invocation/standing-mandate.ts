@@ -2,7 +2,9 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   addExactAmounts,
   compareExactAmounts,
+  sameExactScale,
   subtractExactAmounts,
+  sumExactAmounts,
   type ExactAmount,
 } from '@/modules/money/public'
 import { deepFreeze } from '@/modules/common/deep-freeze'
@@ -770,21 +772,6 @@ export function policyDecisionIntegrityValid(decision: StandingMandatePolicyDeci
   return digest === canonicalDigest(material as never)
 }
 
-function sameExactScale(left: ExactAmount, right: ExactAmount): boolean {
-  return left.currency === right.currency && left.exponent === right.exponent
-}
-
-function sumExactAmounts(amounts: readonly ExactAmount[], zeroReference: ExactAmount): ExactAmount | undefined {
-  let total: ExactAmount = { ...zeroReference, units: '0' }
-  for (const amount of amounts) {
-    if (!sameExactScale(total, amount)) return undefined
-    const next = addExactAmounts(total, amount)
-    if (next === undefined) return undefined
-    total = next
-  }
-  return total
-}
-
 function effectiveLossAmount(
   use: Pick<AuthorityUse, 'reservedLoss' | 'reservedSpend'>,
   offset: ExactAmount | undefined,
@@ -797,4 +784,3 @@ function effectiveLossAmount(
 function allowedActions(mandate: StandingMandate) {
   return mandate.scope.actions ?? [mandate.scope.action]
 }
-

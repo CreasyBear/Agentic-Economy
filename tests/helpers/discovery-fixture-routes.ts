@@ -2,17 +2,14 @@ import { resolveCanonicalBaseUrl } from '../../src/lib/server/canonical-url'
 import { problem } from '../../src/lib/server/problem'
 import { discoveryTextResponse, discoveryJsonResponse } from '../../src/lib/http/discovery-response'
 import {
+  buildOfferingDiscoveryManifest,
   buildLlmsTxt,
   buildSitemapXml,
-  regenerateDiscoveryManifest,
-  type DiscoveryManifestContract,
-  type ReadCatalogDiscoveryManifestInput,
+  type OfferingDiscoveryManifestContract,
   type DiscoverySourceState,
 } from '../../src/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from './discovery-fixture-source-state'
+import { getPublicBusinessCatalog, readCatalogHealth } from '../../src/modules/registry/public'
+import { createFixtureDiscoverySourceState } from './discovery-fixture-source-state'
 
 export function handleLlmsTxtRequest(request: Request): Response {
   const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
@@ -32,42 +29,31 @@ export function handleSitemapXmlRequest(request: Request): Response {
 }
 
 export function handleUcpManifestRequest(request: Request, slug: string, state: DiscoverySourceState): Response {
-  const input: ReadCatalogDiscoveryManifestInput = {
-    slug,
+  const business = state.businesses.find((candidate) => candidate.slug === slug)
+  const catalog = business === undefined
+    ? undefined
+    : getPublicBusinessCatalog(state, {
+        slug: business.slug,
+        indexStatus: readCatalogHealth(state, business.businessId).indexStatus,
+        discoveryStatus: 'available',
+      })
+  const result = buildOfferingDiscoveryManifest({
+    ...(catalog?.kind === 'available' ? { business: catalog.catalog } : {}),
     canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
-  }
-  const result = regenerateDiscoveryManifest(
-    state,
-    { slug: input.slug },
-    {
-      canonicalBaseUrl: input.canonicalBaseUrl,
-      now: input.now,
-      adapter: testOnlyDiscoveryManifestAdapter,
-    },
-  )
-  if (result.kind === 'error') {
-    return result.code === 'discovery_manifest_not_public'
-      ? problem({
-          status: 404,
-          kind: 'NOT_FOUND',
-          code: 'discovery_manifest_not_found',
-          detail: 'No public discovery manifest exists for this slug.',
-        })
-      : problem({
-          kind: 'UNAVAILABLE',
-          code: 'discovery_manifest_unavailable',
-          detail: 'The discovery manifest could not be generated.',
-          retryable: result.retryable,
-        })
-  }
+  })
+  if (result.kind === 'hidden') return problem({
+    status: 404,
+    kind: 'NOT_FOUND',
+    code: 'discovery_manifest_not_found',
+    detail: 'No public discovery manifest exists for this slug.',
+  })
   return discoveryJsonResponse(toPublicUcpManifest(result.manifest))
 }
 
-type PublicUcpManifest = Omit<DiscoveryManifestContract, 'businessId' | 'sourceHash'>
+type PublicUcpManifest = Omit<OfferingDiscoveryManifestContract, 'businessId'>
 
-function toPublicUcpManifest(manifest: DiscoveryManifestContract): PublicUcpManifest {
-  const { businessId: _businessId, sourceHash: _sourceHash, ...publicManifest } = manifest
+function toPublicUcpManifest(manifest: OfferingDiscoveryManifestContract): PublicUcpManifest {
+  const { businessId: _businessId, ...publicManifest } = manifest
   return publicManifest
 }
-

@@ -29,64 +29,6 @@ function post(body: unknown, path = '/api/v1/operations/call'): Request {
 }
 
 describe('operation.invoke HTTP adapter', () => {
-  it('keeps the invoke handler path-agnostic for call and execute URLs', async () => {
-    const result = {
-      kind: 'completed' as const,
-      invocationRef: 'invocation:dual',
-      operationRef,
-      output: { ok: true },
-      evidenceHash: 'evidence:dual',
-      usage: {
-        usageRef: 'usage:dual',
-        observedAt: 1_700_000_000_000,
-        chargeState: 'free_tier' as const,
-        priceDigest: 'price:dual',
-        amount: { currency: 'USD', units: '0', exponent: 2 },
-      },
-    }
-    const executor = service(result)
-    const body = { operationRef, input: {}, idempotencyKey: 'key-dual' }
-    const callResponse = await handleOperationInvokePost(post(body, '/api/v1/operations/call'), {
-      authenticate,
-      operationInvokeService: executor,
-    })
-    const executeResponse = await handleOperationInvokePost(post(body, '/api/v1/operations/execute'), {
-      authenticate,
-      operationInvokeService: executor,
-    })
-
-    expect(callResponse.status).toBe(200)
-    expect(executeResponse.status).toBe(200)
-    await expect(callResponse.json()).resolves.toEqual(await executeResponse.json())
-    expect(executor.invokeOperation).toHaveBeenCalledTimes(2)
-  })
-
-  it('rejects unauthenticated call exactly as execute with the same status and problem shape', async () => {
-    const executor = service({ kind: 'completed' })
-    const body = { operationRef, input: {}, idempotencyKey: 'key-unauth' }
-    const unauthenticated = async () => ({
-      isAuthenticated: false as const,
-      tokenType: null,
-      id: null,
-      subject: null,
-      scopes: null,
-    })
-    const callResponse = await handleOperationInvokePost(post(body, '/api/v1/operations/call'), {
-      authenticate: unauthenticated,
-      operationInvokeService: executor,
-    })
-    const executeResponse = await handleOperationInvokePost(post(body, '/api/v1/operations/execute'), {
-      authenticate: unauthenticated,
-      operationInvokeService: executor,
-    })
-
-    expect(callResponse.status).toBe(401)
-    expect(executeResponse.status).toBe(401)
-    expect(callResponse.headers.get('www-authenticate')).toBe(executeResponse.headers.get('www-authenticate'))
-    await expect(callResponse.json()).resolves.toEqual(await executeResponse.json())
-    expect(executor.invokeOperation).not.toHaveBeenCalled()
-  })
-
   it('returns a canonical bearer challenge for missing authentication', async () => {
     const executor = service({ kind: 'completed' })
     const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {

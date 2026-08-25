@@ -84,7 +84,7 @@ describe('owner offering replay fencing', () => {
       },
     })
 
-    expect(result).toEqual({ kind: 'revision_conflict', message: 'Reload the latest service before saving your changes.' })
+    expect(result).toEqual({ kind: 'revision_conflict', message: 'Reload the latest Operation before saving your changes.' })
     expect(sourceMocks.callSourceMutation).toHaveBeenCalledTimes(1)
     expect(sourceMocks.callSourceMutation.mock.calls[0]?.[1]).toMatchObject({ operationKey: 'owner-offering:request-a:revise' })
   })

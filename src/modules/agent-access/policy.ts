@@ -30,7 +30,7 @@ const positiveSafeInteger = z.number().int().safe().positive()
 const nonNegativeSafeInteger = z.number().int().safe().nonnegative()
 const money = exactAmountSchema
 const environment = z.enum(AGENT_ACCESS_ENVIRONMENT_VALUES)
-const authorityMode = z.enum(AGENT_ACCESS_AUTHORITY_MODE_VALUES)
+
 
 export const agentAccessBudgetPolicySchema = z.strictObject({
   budgetPolicyRef: identifier,
@@ -180,6 +180,9 @@ export function createAgentAccessGrant(input: AgentAccessGrantInput): AgentAcces
   const policy = agentAccessPolicySchema.safeParse(input.policy)
   if (!policy.success) return { kind: 'refused', code: 'grant_material_invalid' }
   if (policy.data.environment !== input.environment) return { kind: 'refused', code: 'grant_environment_mismatch' }
+  if (input.environment === 'production' && input.authorityMode === 'full_yolo') {
+    return { kind: 'refused', code: 'grant_material_invalid' }
+  }
   if (!Number.isSafeInteger(input.generation) || input.generation < 1 || !Number.isFinite(input.createdAt)
     || !Number.isFinite(input.updatedAt) || !Number.isFinite(input.expiresAt) || input.expiresAt <= input.createdAt) {
     return { kind: 'refused', code: 'grant_material_invalid' }
@@ -233,12 +236,14 @@ export function projectAgentAccessGrant(grant: AgentAccessGrant): AgentAccessGra
   }
 }
 
-export function defaultAgentAccessPolicy(input: Readonly<{
+export function buildAgentAccessPolicy(input: Readonly<{
   environment: AgentAccessEnvironment
   currency: string
   exponent: number
+  maximumSpendPerInvocation: ExactAmount
+  maximumDailySpend: ExactAmount
+  maximumMonthlySpend: ExactAmount
 }>): AgentAccessPolicy {
-  const zero: ExactAmount = { currency: input.currency, units: '0', exponent: input.exponent }
   const policyNamespace = `${input.environment}:${input.currency}:${input.exponent}`
   return {
     format: AGENT_ACCESS_POLICY_FORMAT,
@@ -249,9 +254,9 @@ export function defaultAgentAccessPolicy(input: Readonly<{
       generation: 1,
       currency: input.currency,
       exponent: input.exponent,
-      maximumSpendPerInvocation: zero,
-      maximumDailySpend: zero,
-      maximumMonthlySpend: zero,
+      maximumSpendPerInvocation: input.maximumSpendPerInvocation,
+      maximumDailySpend: input.maximumDailySpend,
+      maximumMonthlySpend: input.maximumMonthlySpend,
       maximumConcurrentInvocations: 1,
     },
     rate: {
@@ -278,6 +283,9 @@ export function evaluateAgentAccessOperation(input: Readonly<{
   const { grant, principal, operation, now } = input
   if (grant.lifecycle !== 'active') return { kind: 'refused', code: 'grant_not_active' }
   if (grant.expiresAt <= now) return { kind: 'refused', code: 'grant_expired' }
+  if (grant.environment === 'production' && grant.authorityMode === 'full_yolo') {
+    return { kind: 'refused', code: 'grant_material_invalid' }
+  }
   if (principal.principalId !== grant.principalId) return { kind: 'refused', code: 'grant_principal_mismatch' }
   if (principal.applicationRef !== grant.applicationRef) return { kind: 'refused', code: 'grant_application_mismatch' }
   if (principal.environment !== grant.environment) return { kind: 'refused', code: 'grant_environment_mismatch' }

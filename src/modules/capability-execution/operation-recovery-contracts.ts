@@ -1,7 +1,9 @@
 import { z } from 'zod'
+import type { JsonValue } from '@/modules/capability-contract/public'
 
 import type {
   OperationInvokeRefusalCode,
+  OperationInvokeReceipt,
   OperationInvokeResult,
   OperationInvokeUsageSummary,
   PublicReconciliationState,
@@ -39,12 +41,14 @@ export type OperationInvokeStatusResult =
       kind: 'found'
       invocationRef: string
       operationRef: string
+      previousInput?: Readonly<Record<string, JsonValue>>
       state: OperationInvokeStatusState
       usage?: OperationInvokeUsageSummary
       evidenceHash?: string
       attemptRef?: string
       effectGeneration?: number
       result?: OperationInvokeResult
+      receipt?: OperationInvokeReceipt
     }>
   | Readonly<{
       kind: 'refused'
@@ -52,6 +56,7 @@ export type OperationInvokeStatusResult =
       code: Extract<OperationInvokeRefusalCode, 'invocation_not_found' | 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'invocation_runtime_unavailable'>
       retryable: boolean
       nextAction?: string
+      receipt?: OperationInvokeReceipt
     }>
 export type OperationInvokeRecoveryResult =
   | OperationInvokeStatusResult
@@ -60,4 +65,5 @@ export type OperationInvokeRecoveryResult =
       invocationRef: string
       operationRef: string
       evidence: PublicReconciliationState
+      receipt?: OperationInvokeReceipt
     }>

@@ -177,7 +177,7 @@ export function AeSupplyEndpointConfigStep({
 
   async function submit() {
     if (!selectedConnectionIsAvailable()) {
-      const message = 'This provider connection is unavailable. Ask your AE administrator to reconnect it, then choose the refreshed connection.'
+      const message = 'This supplier connection is unavailable. Ask your AE administrator to reconnect it, then choose the refreshed connection.'
       setErrors({ authority: message })
       setAnnouncement(message)
       focusField('authority')
@@ -229,13 +229,13 @@ export function AeSupplyEndpointConfigStep({
   }
 
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader className="p-5 pb-0">
         <CardTitle>
-          <p className="block text-sm font-semibold text-muted-foreground">2 · CONNECT YOUR SERVICE</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">Tell AE where your service runs</h2>
+          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">02 · Connection</p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">Connect the Operation</h2>
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Choose the interface your service exposes. AE validates the source before any publication state changes.</p>
+        <p className="text-sm text-muted-foreground">Choose the interface this Operation exposes. AE validates the source before publication changes.</p>
       </CardHeader>
       <CardContent className="grid gap-5 p-5">
         <FieldGroup className="gap-4">
@@ -425,7 +425,7 @@ function McpFields({ value, disabled, errors, toolName, onToolNameChange, onChan
 
 function AgentPluginFields({ value, disabled, errors, toolName, onToolNameChange, onChange }: Readonly<{ value: EditableSource; disabled: boolean; errors: EndpointErrors; toolName: string; onToolNameChange: (value: string) => void; onChange: (patch: Readonly<Partial<EditableSource>>) => void }>) {
   return <>
-    <JsonField id="supply-agent-plugin-manifest" label="Agent Plugin manifest (JSON)" value={value.manifestJson} disabled={disabled} {...(errors.manifestJson === undefined ? {} : { error: errors.manifestJson })} description="Use one remote streamable HTTP MCP server. Local command, args, env, and legacy SSE entries are not accepted." onChange={(next) => onChange({ manifestJson: next })} />
+    <JsonField id="supply-agent-plugin-manifest" label="Agent Plugin manifest (JSON)" value={value.manifestJson} disabled={disabled} {...(errors.manifestJson === undefined ? {} : { error: errors.manifestJson })} description="Use one remote streamable HTTP MCP server. Local command, args, env, and SSE entries are not accepted." onChange={(next) => onChange({ manifestJson: next })} />
     <TextField id="supply-agent-plugin-server" label="Manifest MCP server / selector" value={value.serverName} disabled={disabled} {...(errors.serverName === undefined ? {} : { error: errors.serverName })} description="This must name one server in mcpServers." onChange={(next) => onChange({ serverName: next })} />
     <TextField id="supply-agent-plugin-tool-name" label="MCP tool name / selector" value={toolName} disabled={disabled} {...(errors.toolJson === undefined ? {} : { error: errors.toolJson })} description="This must match name in the tool definition JSON." onChange={onToolNameChange} />
     <JsonField id="supply-agent-plugin-tool" label="MCP tool definition (JSON)" value={value.toolJson} disabled={disabled} {...(errors.toolJson === undefined ? {} : { error: errors.toolJson })} description="Include name, inputSchema, and outputSchema. Do not include a key or token." onChange={(next) => onChange({ toolJson: next })} />
@@ -533,7 +533,7 @@ function authorityAdapterId(sourceKind: SupplySourceKind): string {
 }
 
 function buildEndpointValue(value: EditableSource, extras: PreflightExtras): Readonly<{ kind: 'accepted'; value: SupplyEndpointConfigValue } | { kind: 'refused'; field: EndpointField; errors: EndpointErrors; message: string }> {
-  if (value.sourceRevision.trim() === '') return invalid('sourceRevision', 'Enter a source revision before checking the service.')
+  if (value.sourceRevision.trim() === '') return invalid('sourceRevision', 'Enter a source revision before checking the Operation.')
   if (new TextEncoder().encode(value.documentJson + value.contractJson + value.commercialJson + value.manifestJson + value.toolJson + value.resourceJson).byteLength > MAX_SOURCE_BYTES) return invalid('sourceRevision', 'The source is too large. Keep the submitted material under 256 KiB.')
   const contract = parseObject(value.contractJson)
   if (contract === undefined) return invalid('contractJson', 'Enter valid contract JSON.')
@@ -545,7 +545,7 @@ function buildEndpointValue(value: EditableSource, extras: PreflightExtras): Rea
   if (evidenceRefs === undefined) return invalid('evidenceRefsJson', 'Enter evidence references as a JSON array of non-empty strings.')
   const requestTimeoutMs = Number(value.requestTimeoutMs)
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 100 || requestTimeoutMs > 120_000) return invalid('requestTimeoutMs', 'Use a whole-number timeout from 100 to 120,000 milliseconds.')
-  if (value.sourceKind === 'x402' && value.authority.kind === 'keyless') return invalid('authority', 'Choose an existing x402 provider connection before checking this service.')
+  if (value.sourceKind === 'x402' && value.authority.kind === 'keyless') return invalid('authority', 'Choose an existing x402 supplier connection before checking this Operation.')
   if (value.authority.kind === 'provider_connection' && (value.authority.connectionRef.trim() === '' || value.authority.providerRef.trim() === '' || /(env:|secret|token|password|key)/i.test(`${value.authority.connectionRef} ${value.authority.providerRef}`))) return invalid('authority', 'Choose an existing owner provider connection. Raw credentials and env locators are not accepted.')
   if (!isRecord(commercial.offering) || typeof commercial.bindingId !== 'string' || commercial.bindingId.trim() === '') return invalid('commercialJson', 'Commercial metadata must include an offering object and bindingId.')
   const commercialInput: CapabilityImporterCommercialInput = {

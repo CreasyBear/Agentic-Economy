@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoveryExamples,
@@ -50,25 +46,5 @@ describe('developer discovery SEO and AEO safety', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createFixtureDiscoverySourceState()
-  const business = state.businesses.at(0)
-
-  if (business === undefined) {
-    throw new Error('Expected default discovery source state to include a business.')
-  }
-
-  const generated = regenerateDiscoveryManifest(
-    state,
-    { businessId: business.businessId },
-    {
-      canonicalBaseUrl: 'https://agentic.test',
-      now: 3_000,
-      adapter: testOnlyDiscoveryManifestAdapter,
-    },
-  )
-  if (generated.kind !== 'ok') {
-    throw new Error(`Expected discovery manifest generation to succeed: ${generated.reason}`)
-  }
-
-  return state
+  return createFixtureDiscoverySourceState()
 }

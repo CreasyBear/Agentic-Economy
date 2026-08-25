@@ -1,18 +1,15 @@
 import {
   Activity,
   Bot,
+  Boxes,
   CircleHelp,
-  ClipboardList,
-  Contact,
-  CreditCard,
-  Inbox,
-  ListChecks,
-  LockKeyhole,
+  Gauge,
+  KeyRound,
+  SearchCode,
   ScrollText,
-  Search,
   Settings,
   Store,
-  Wrench,
+  UploadCloud,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -54,75 +51,75 @@ export type OperatorBreadcrumbItem = {
 
 const ownerNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'work',
-    label: 'Work',
+    id: 'marketplace',
+    label: 'Marketplace',
     items: [
-      { href: '/owner/status', label: 'Business page', icon: Activity, tier: 'core' },
-      { href: '/owner/offerings', label: 'Offerings', icon: Store, tier: 'core' },
-      { href: '/owner/supply', label: 'Supply', icon: Wrench, tier: 'core' },
-      { href: '/owner/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
+      { href: '/owner/status', label: 'Overview', icon: Gauge, tier: 'core' },
+      { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core' },
+      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
     ],
   },
   {
-    id: 'account',
-    label: 'Account',
+    id: 'manage',
+    label: 'Manage',
     items: [
+      { href: '/owner/supply', label: 'Publishing', icon: UploadCloud, tier: 'core' },
+      { href: '/agent-access', label: 'Access & usage', icon: KeyRound, tier: 'core' },
+      { href: '/activity', label: 'Activity', icon: Activity, tier: 'core' },
       { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
-      { href: '/agent-access', label: 'Assistant access', icon: Contact, tier: 'advanced' },
     ],
   },
 ] as const
 
 const adminNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'review',
-    label: 'Review',
+    id: 'marketplace',
+    label: 'Marketplace',
     items: [
-      { href: '/admin/claims', label: 'Claims', icon: ClipboardList, tier: 'core' },
-      { href: '/admin/audit-events', label: 'Activity log', icon: ScrollText, tier: 'advanced' },
-      { href: '/admin/index-health', label: 'Catalog health', icon: Activity, tier: 'advanced' },
-      { href: '/admin/search-gaps', label: 'Unmatched asks', icon: Search, tier: 'core' },
-      { href: '/admin/runs', label: 'Runs', icon: ListChecks, tier: 'advanced' },
+      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
     ],
   },
   {
-    id: 'operations',
-    label: 'Operations',
+    id: 'administration',
+    label: 'Administration',
     items: [
-      { href: '/admin/inquiries', label: 'Inquiries', icon: Inbox, tier: 'core' },
-      { href: '/admin/request-problems', label: 'Failed asks', icon: CircleHelp, tier: 'core' },
+      { href: '/admin/index-health', label: 'Marketplace health', icon: Activity, tier: 'core' },
+      { href: '/admin/audit-events', label: 'Activity', icon: ScrollText, tier: 'core' },
     ],
   },
 ] as const
 
 const developerNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'builder',
-    label: 'Builder',
-    items: [{ href: '/developers/discovery', label: 'Discovery', icon: ScrollText, tier: 'core' }],
+    id: 'marketplace',
+    label: 'Marketplace',
+    items: [
+      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
+      { href: '/developers/discovery', label: 'API discovery', icon: SearchCode, tier: 'core' },
+    ],
   },
 ] as const
-/** `/` is the only public browse and Ask entry point. */
+
 const publicCommandDestinations: readonly OperatorCommandDestination[] = [
-  { href: '/', label: 'Ask', icon: Search, tier: 'core', hint: 'Public' },
+  { href: '/', label: 'Agentic Economy home', icon: Gauge, tier: 'core', hint: 'Public' },
 ] as const
 
 const operatorUtilityItems: readonly OperatorUtilityItem[] = [
-  { href: '/', label: 'Ask', icon: Search },
-  { href: '/for-agents', label: 'For agents', icon: Bot },
-  { href: '/privacy/remove-business', label: 'Corrections', icon: CircleHelp },
+  { href: '/', label: 'Home', icon: Gauge },
+  { href: '/for-agents', label: 'Agent setup', icon: Bot },
+  { href: '/privacy/remove-business', label: 'Help & corrections', icon: CircleHelp },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {
   owner: '/owner/status',
-  admin: '/admin/claims',
+  admin: '/admin/index-health',
   developer: '/developers/discovery',
 }
 
 export const roleLabel: Record<OperatorRole, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  developer: 'Builder',
+  owner: 'Supplier workspace',
+  admin: 'Administration',
+  developer: 'Developer tools',
 }
 
 function showsAdvancedOperatorNav(): boolean {

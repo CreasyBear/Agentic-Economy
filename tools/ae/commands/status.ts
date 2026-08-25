@@ -6,6 +6,7 @@ import {
 } from '@/modules/capability-execution/operation-recovery.actions'
 import type { OperationInvokeStatusResult } from '@/modules/capability-execution/operation-recovery-contracts'
 import type { CliOptions } from '../lib/args'
+import { resolveAgentAccessCredential } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 
 export const MAX_STATUS_WAIT_MS = 60_000
@@ -27,10 +28,9 @@ export function operationStatusPath(invocationRef: string): string {
 
 const LOOPBACK_HOSTNAMES: Record<string, true> = { localhost: true, '127.0.0.1': true, '::1': true, '[::1]': true }
 
-function configuredApiKeyOrigin(options: CliOptions): string {
-  const rawOrigin = process.env.AE_API_KEY_ORIGIN?.trim()
-  if (rawOrigin === undefined || rawOrigin.length === 0) {
-    throw new CliFailure('Set AE_API_KEY_ORIGIN to the exact server origin used by AE_API_KEY.', {
+function configuredApiKeyOrigin(options: CliOptions, rawOrigin: string | undefined): string {
+  if (rawOrigin === undefined || rawOrigin.trim().length === 0) {
+    throw new CliFailure('Connect this agent to the selected Agentic Economy origin first.', {
       kind: 'INVALID_ARGUMENT',
       code: 'agent_access_key_origin_required',
     })
@@ -86,15 +86,15 @@ function configuredApiKeyOrigin(options: CliOptions): string {
 }
 
 export function requireAgentAccessKey(command: string, options: CliOptions): string {
-  const apiKey = process.env.AE_API_KEY?.trim()
-  if (apiKey === undefined || apiKey.length === 0) {
-    throw new CliFailure(`Set AE_API_KEY to read operation ${command}.`, {
+  const credential = resolveAgentAccessCredential(options.baseUrl)
+  if (credential === undefined) {
+    throw new CliFailure(`Run ae connect before operation ${command}.`, {
       kind: 'UNAUTHENTICATED',
       code: 'agent_access_key_required',
     })
   }
-  configuredApiKeyOrigin(options)
-  return apiKey
+  configuredApiKeyOrigin(options, credential.origin)
+  return credential.accessToken
 }
 
 function parseStatusResult(value: unknown): OperationInvokeStatusResult {
@@ -141,7 +141,7 @@ export function terminalResult(value: unknown): unknown | undefined {
 }
 
 export function statusCommandFor(invocationRef: string): string {
-  return `npm run -s ae -- status ${invocationRef}`
+  return `ae status ${invocationRef}`
 }
 
 export function statusTransportFailure(_invocationRef: string): CliFailure {
@@ -230,4 +230,3 @@ export async function runStatusCommand(args: readonly string[], options: CliOpti
   }
   renderStatusResult('Operation status', parsedRef.data.invocationRef, body, options)
 }
-

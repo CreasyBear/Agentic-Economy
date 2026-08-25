@@ -1,13 +1,16 @@
 import type { PublicOperationDescriptor } from '@/modules/capability-supply/public'
+import type { PublicOperationChoice } from '@/modules/registry/operation-choice-contracts'
 import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import { isRecord } from '@/modules/common/is-record'
 
-export function operationLabel(operation: PublicOperationDescriptor): string {
-  const provider = operation.business.name.trim()
-  const offering = operation.offering.label.trim()
+type OperationIdentity = PublicOperationDescriptor | PublicOperationChoice
+
+export function operationLabel(operation: OperationIdentity): string {
+  const provider = ('business' in operation ? operation.business.name : operation.supplier.name).trim()
+  const offering = ('offering' in operation ? operation.offering.label : operation.title).trim()
   return [provider, offering]
     .filter((value) => value.length > 0)
-    .join(' — ') || operation.operationId
+    .join(' — ') || operation.operationRef
 }
 
 export function formatOperationPrice(value: unknown): string {
@@ -26,6 +29,18 @@ export function formatOperationPrice(value: unknown): string {
   return JSON.stringify(value)
 }
 
+export function formatOperationTotalPrice(operation: OperationIdentity): string {
+  if (!('commercial' in operation)) return formatOperationPrice(operation.price)
+  const total = operation.commercial.priceBreakdown?.totalBuyerAuthorization
+  return total === undefined ? formatOperationPrice(operation.commercial.price) : formatCurrencyAmount(total)
+}
+
+export function formatOperationVerification(operation: OperationIdentity): string {
+  const observedAt = operation.availability.observedAt
+    ?? ('commercial' in operation ? operation.commercial.priceEvidence?.observedAt : undefined)
+  return observedAt === undefined ? 'not published' : new Date(observedAt).toISOString()
+}
+
 export function formatOperationAvailability(value: unknown): string {
   if (!isRecord(value)) return String(value)
   const posture =
@@ -40,13 +55,13 @@ export function formatOperationAvailability(value: unknown): string {
 }
 
 export function formatOperationAuthentication(
-  operation: PublicOperationDescriptor,
+  operation: OperationIdentity,
 ): string {
   return operation.authentication.kind.replace(/_/gu, ' ')
 }
 
 export function formatOperationInputs(
-  operation: PublicOperationDescriptor,
+  operation: OperationIdentity,
 ): string {
   const parameters = operation.parameters ?? []
   if (parameters.length === 0) return 'none'
@@ -57,7 +72,7 @@ export function formatOperationInputs(
 }
 
 export function formatOperationContinuations(
-  operation: PublicOperationDescriptor,
+  operation: OperationIdentity,
 ): string {
   const relations = [...new Set(
     operation.navigation.map((continuation) => continuation.relation),

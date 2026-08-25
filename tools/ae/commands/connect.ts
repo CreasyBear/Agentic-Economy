@@ -1,7 +1,9 @@
 import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST } from '@/modules/agent-access/contract'
 import { isRecord } from '@/modules/common/is-record'
+import { spawn } from 'node:child_process'
 
 import type { CliOptions } from '../lib/args'
+import { resolveAgentAccessCredential, storeConnection, storeMcpConnection } from '../lib/config'
 import { CliFailure, callJson, heading, line, printJson, requireOk, table } from '../lib/output'
 import { requireAgentAccessKey } from './status'
 
@@ -52,7 +54,7 @@ function positiveSeconds(value: unknown, field: string, fallback: number): numbe
   return value
 }
 function connectPending(details: ConnectDetails): JsonRecord {
-  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run npm run -s ae -- connect again if this wait expires.`
+  const nextAction = `Approve ${details.verificationUri} with user code ${details.userCode}, then run ae connect again if this wait expires.`
   return {
     kind: 'pending',
     clientId: details.clientId,
@@ -77,18 +79,24 @@ function printConnectResult(value: JsonRecord, options: CliOptions): void {
     ...((typeof value.userCode === 'string') ? [['user code', value.userCode] as const] : []),
     ...((typeof value.scope === 'string') ? [['scope', value.scope] as const] : []),
   ])
-  if (typeof value.access_token === 'string') {
-    line('Set these reusable credentials in the calling environment:')
-    line(`AE_API_KEY=${value.access_token}`)
-    line(`AE_API_KEY_ORIGIN=${apiKeyOrigin}`)
+  if (value.kind === 'connected') {
+    line('Your agent is connected. The origin-bound key is stored with user-only file permissions.')
+    line('Next: ae search "what you need", then ae inspect <operation> and ae call <operation> --input \'{...}\'.')
   } else if (typeof value.nextAction === 'string') {
     line(value.nextAction)
   }
   line(JSON.stringify(output, undefined, 2))
 }
 
-async function validateConfiguredKey(options: CliOptions): Promise<void> {
-  const key = requireAgentAccessKey('connect', options)
+function openVerificationUri(uri: string, options: CliOptions): void {
+  if (options.json || !process.stdout.isTTY || process.env.AE_DISABLE_BROWSER_OPEN === '1') return
+  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
+  const args = process.platform === 'win32' ? ['/c', 'start', '', uri] : [uri]
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+  child.unref()
+}
+
+async function validateAccessToken(options: CliOptions, key: string): Promise<void> {
   const path = `/api/v1/operations/${encodeURIComponent(CONNECT_VALIDATION_INVOCATION_REF)}`
   const outcome = await callJson(options.baseUrl, path, {
     method: 'GET',
@@ -114,20 +122,27 @@ async function validateConfiguredKey(options: CliOptions): Promise<void> {
     code: outcome.status >= 500 ? 'connect_validation_unavailable' : 'api_key_invalid',
   })
 }
+
+async function validateConfiguredKey(options: CliOptions): Promise<void> {
+  await validateAccessToken(options, requireAgentAccessKey('connect', options))
+}
 /** Register a public device client, obtain owner consent, and deliver one AE key. */
 export async function runConnectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   if (args.length > 0) {
-    throw new CliFailure('Usage: npm run -s ae -- connect', { kind: 'INVALID_ARGUMENT', code: 'connect-usage' })
+    throw new CliFailure('Usage: ae connect', { kind: 'INVALID_ARGUMENT', code: 'connect-usage' })
   }
 
-  const configuredKey = process.env.AE_API_KEY?.trim()
-  if (configuredKey !== undefined && configuredKey.length > 0) {
+  const configuredCredential = resolveAgentAccessCredential(options.baseUrl)
+  if (configuredCredential !== undefined) {
     await validateConfiguredKey(options)
     printConnectResult({
       kind: 'connected',
-      credential: 'AE_API_KEY',
-      source: 'validated_environment',
-      nextAction: `Keep AE_API_KEY_ORIGIN=${new URL(options.baseUrl).origin}; use npm run -s ae -- invoke <operation-ref> <json> --idempotency-key <key>.`,
+      credential: 'origin_bound_agent_key',
+      source: `validated_${configuredCredential.source}`,
+      nextAction: 'Run ae search "what you need".',
+      ...(options.mcp === true
+        ? { mcpConfigured: true, mcpConfigPath: storeMcpConnection({ baseUrl: options.baseUrl, accessToken: configuredCredential.accessToken }) }
+        : {}),
     }, options)
     return
   }
@@ -165,6 +180,7 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
     ])
     line('Approve the request, then this command will poll for the one-time credential.')
   }
+  openVerificationUri(details.verificationUri, options)
 
   const deadline = Math.min(Date.now() + MAX_CONNECT_WAIT_MS, Date.now() + details.expiresIn * 1_000)
   let delayMs = details.intervalMs
@@ -191,13 +207,28 @@ export async function runConnectCommand(args: readonly string[], options: CliOpt
         throw new CliFailure('OAuth token response was not a JSON object.', { kind: 'UNAVAILABLE', code: 'connect-response-invalid' })
       }
       const accessToken = textField(token.access_token, 'access_token')
+      await validateAccessToken(options, accessToken)
+      const storedAt = storeConnection({
+        baseUrl: options.baseUrl,
+        accessToken,
+        ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
+        ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
+      })
+      const mcpStoredAt = options.mcp === true
+        ? storeMcpConnection({ baseUrl: options.baseUrl, accessToken })
+        : undefined
       printConnectResult({
         kind: 'connected',
         clientId: details.clientId,
         verificationUri: details.verificationUri,
         userCode: details.userCode,
-        ...token,
-        access_token: accessToken,
+        ...(typeof token.token_type === 'string' ? { tokenType: token.token_type } : {}),
+        ...(typeof token.scope === 'string' ? { scope: token.scope } : {}),
+        credential: 'origin_bound_agent_key',
+        credentialStored: true,
+        configPath: storedAt,
+        ...(mcpStoredAt === undefined ? {} : { mcpConfigured: true, mcpConfigPath: mcpStoredAt }),
+        nextAction: 'Run ae search "what you need".',
       }, options)
       return
     }

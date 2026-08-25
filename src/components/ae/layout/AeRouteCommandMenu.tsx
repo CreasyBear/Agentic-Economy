@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { ArrowUpRightIcon, BotIcon, Building2Icon, FileQuestionIcon, HomeIcon, SearchIcon, StoreIcon } from 'lucide-react'
+import { ArrowUpRightIcon, SearchIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -179,32 +179,6 @@ export function AeRouteCommandMenu({
   )
 }
 
-function ownerCommandDestination(isSignedIn: boolean): AeCommandDestination {
-  if (isSignedIn) {
-    return {
-      id: 'owner',
-      label: 'For businesses',
-      href: '/owner/status',
-      group: 'Owner',
-      hint: 'Dashboard',
-      icon: Building2Icon,
-      keywords: ['owner', 'dashboard', 'business'],
-    }
-  }
-
-  return {
-    id: 'owner',
-    label: 'For businesses',
-    href: '/sign-in/$',
-    params: { _splat: '' },
-    search: { redirect: '/owner/status' },
-    group: 'Owner',
-    hint: 'Sign in',
-    icon: Building2Icon,
-    keywords: ['owner', 'sign in', 'business'],
-  }
-}
-
 function RouteCommandItemContent({ destination }: { destination: AeCommandDestination }) {
   const Icon = destination.icon ?? ArrowUpRightIcon
 
@@ -219,43 +193,3 @@ function RouteCommandItemContent({ destination }: { destination: AeCommandDestin
     </>
   )
 }
-
-
-const publicDestinations = [
-  {
-    id: 'ask',
-    label: 'Say what you need done',
-    href: '/',
-    group: 'Discovery',
-    hint: 'Home',
-    icon: HomeIcon,
-    keywords: ['question', 'search', 'answer'],
-  },
-  {
-    id: 'claim',
-    label: 'List or claim a business',
-    href: '/claim',
-    group: 'Owner',
-    hint: 'Owner',
-    icon: Building2Icon,
-    keywords: ['publish', 'owner', 'business'],
-  },
-  {
-    id: 'corrections',
-    label: 'Correct or remove a page',
-    href: '/privacy/remove-business',
-    group: 'Trust',
-    hint: 'Review',
-    icon: FileQuestionIcon,
-    keywords: ['remove', 'stale', 'wrong'],
-  },
-  {
-    id: 'for-agents',
-    label: 'Point an agent at AE',
-    href: '/for-agents',
-    group: 'Discovery',
-    hint: 'Agents',
-    icon: BotIcon,
-    keywords: ['assistant', 'mcp', 'llms.txt', 'api'],
-  },
-] satisfies readonly AeCommandDestination[]

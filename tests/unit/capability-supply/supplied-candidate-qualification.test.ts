@@ -299,7 +299,6 @@ function ports(overrides: Partial<CapabilityGraphPorts> = {}): CapabilityGraphPo
       businessId: candidate.businessId,
       trustTier: 'fixture_only',
       publicStatus: 'published',
-      claimStatus: 'published',
       suppressed: false,
       currentlyPublished: true,
     }),
@@ -527,7 +526,6 @@ describe('ADR-009 supplied-candidate qualification', () => {
       businessId: candidate.businessId,
       trustTier: 'fixture_only',
       publicStatus: 'published',
-      claimStatus: 'unpublished',
       suppressed: false,
       currentlyPublished: false,
     } as unknown as GraphPublishedBusiness

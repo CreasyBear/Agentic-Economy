@@ -1,8 +1,7 @@
 import {
   operationCompareInputSchema,
-  operationCompareOutputSchema,
-  type OperationCompareResult,
 } from '@/modules/capability-supply/public'
+import { operationChoiceCompareOutputSchema } from '@/modules/registry/operation-choice-contracts'
 import { isRecord } from '@/modules/common/is-record'
 import { OPERATION_MARKET_COMPARE_PATH } from '@/modules/registry/operation-entry'
 
@@ -69,7 +68,7 @@ export async function runCompareCommand(args: readonly string[], options: CliOpt
   printHumanComparison(result, parsedInput.data.operationRefs.length, options.technical === true)
 }
 
-type AvailableComparison = Extract<OperationCompareResult, { kind: 'ok' }>
+type AvailableComparison = Extract<ReturnType<typeof operationChoiceCompareOutputSchema.parse>, { kind: 'ok' }>
 
 function printHumanComparison(result: AvailableComparison, requestedCount: number, technical: boolean): void {
   heading(`Operation comparison (${requestedCount} exact references)`)
@@ -78,7 +77,7 @@ function printHumanComparison(result: AvailableComparison, requestedCount: numbe
   for (const [index, operation] of result.operations.entries()) {
     line(`    ${index + 1}. ${operationLabel(operation)}`)
     line(`       ${operation.summary}`)
-    line(`       price: ${formatOperationPrice(operation.commercial.price)}`)
+    line(`       price: ${formatOperationPrice(operation.price)}`)
     line(`       availability: ${formatOperationAvailability(operation.availability)}`)
   }
   if (result.facts.length > 0) {
@@ -100,7 +99,7 @@ function printTechnicalComparison(result: AvailableComparison): void {
   line(`    schema: ${result.schemaVersion}`)
   line(`    navigation: ${JSON.stringify(result.navigation)}`)
   for (const operation of result.operations) {
-    line(`    ${operation.operationRef} · operationId=${operation.operationId} · capability=${operation.contract.capabilityId}@v${operation.contract.version}`)
+    line(`    ${operation.operationRef} · capability=${operation.capabilityId}`)
   }
   for (const fact of result.facts) {
     for (const value of fact.values) {
@@ -139,6 +138,6 @@ export const compareCommandDescriptor = {
   actionId: 'registry.operations.compare',
   path: OPERATION_MARKET_COMPARE_PATH,
   inputSchema: operationCompareInputSchema,
-  outputSchema: operationCompareOutputSchema,
+  outputSchema: operationChoiceCompareOutputSchema,
   run: runCompareCommand,
 } as const

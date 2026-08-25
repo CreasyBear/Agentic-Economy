@@ -3,7 +3,6 @@ import { PostHog } from 'posthog-node'
 import { readObservabilityServerConfig } from '@/lib/observability/config'
 import { buildFunnelEventProperties, type FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
-import { MEASURED_BUSINESS_SERVICES_ACTION_ROUTES } from '@/modules/product-frontier/business-services-policy'
 
 let client: PostHog | undefined
 
@@ -55,42 +54,6 @@ export function captureServerEvent(
   } catch {
     // Diagnostics must never alter application behavior.
   }
-}
-
-type LegacyRegistrySurface = 'http' | 'mcp' | 'answer'
-
-const legacyRegistryActionRoutes = MEASURED_BUSINESS_SERVICES_ACTION_ROUTES
-
-function captureLegacyRegistryRequest(
-  routeFamily: 'businesses' | 'services',
-  routeKind: 'list' | 'search' | 'detail',
-  surface: LegacyRegistrySurface,
-): void {
-  captureServerEvent('ae-legacy-registry-api', 'legacy_registry_api_request', {
-    route_family: routeFamily,
-    route_kind: routeKind,
-    surface,
-    $process_person_profile: false,
-    $geoip_disable: true,
-  })
-}
-
-export function captureLegacyRegistryApiRequest(
-  routeFamily: 'businesses' | 'services',
-  routeKind: 'list' | 'search' | 'detail',
-): void {
-  captureLegacyRegistryRequest(routeFamily, routeKind, 'http')
-}
-
-export function captureLegacyRegistryActionRequest(
-  actionId: string,
-  surface: 'mcp' | 'answer',
-): void {
-  if (!Object.hasOwn(legacyRegistryActionRoutes, actionId)) {
-    return
-  }
-  const route = legacyRegistryActionRoutes[actionId as keyof typeof legacyRegistryActionRoutes]
-  captureLegacyRegistryRequest(route.routeFamily, route.routeKind, surface)
 }
 
 export async function flushPostHogServer(): Promise<void> {

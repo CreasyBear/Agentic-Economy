@@ -58,7 +58,6 @@ export type CapabilityGraphNode = Readonly<{
   trust: Readonly<{
     tier: string
     publicStatus: 'published'
-    claimStatus: 'published'
     suppressed: false
     currentlyPublished: true
   }>
@@ -210,7 +209,6 @@ function projectGraphNode(input: Readonly<{
     trust: {
       tier: business.trustTier,
       publicStatus: business.publicStatus,
-      claimStatus: business.claimStatus,
       suppressed: business.suppressed,
       currentlyPublished: business.currentlyPublished,
     },

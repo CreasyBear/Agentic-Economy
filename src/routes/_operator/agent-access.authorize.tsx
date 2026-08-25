@@ -21,12 +21,12 @@ const authorityOptions = [
   {
     value: 'approve_each',
     label: 'Ask each time',
-    description: 'Recommended. Paid or consequential work comes back to you first.',
+    description: 'Paid or consequential work comes back to you first.',
   },
   {
     value: 'bounded_mandate',
     label: 'Work within limits',
-    description: 'Set spend, effect, and data limits before the assistant works independently.',
+    description: 'Paid calls up to $1 each, $5 a day, $20 a month.',
   },
 ] as const
 
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/_operator/agent-access/authorize')({
   ...operatorRouteOptions,
   validateSearch: z.object({ user_code: z.string().trim().min(3).max(32).optional() }),
   head: () => ({ meta: [
-    { title: 'Review assistant access | Agentic Economy' },
+    { title: 'Review agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessAuthorizeRoute,
@@ -95,7 +95,13 @@ function AgentAccessAuthorizeRoute() {
         setGrantRef(details.grantRef)
         setClientName(details.clientName)
         setMode(details.mode)
-        setSelectedMode(details.mode === 'inspect_only' ? 'inspect_only' : 'approve_each')
+        setSelectedMode(
+          details.mode === 'inspect_only'
+            ? 'inspect_only'
+            : details.mode === 'bounded_mandate'
+              ? 'bounded_mandate'
+              : 'approve_each',
+        )
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.name === 'AbortError') return
@@ -128,15 +134,15 @@ function AgentAccessAuthorizeRoute() {
   const consentReady = grantRef !== undefined && clientName !== undefined && mode !== undefined
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Review assistant access" description="Choose what your assistant may ask AE to do, then approve or decline." currentPath="/agent-access">
-      <Card className="grid max-w-2xl gap-4 p-5">
+    <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
+      <Card className="grid max-w-2xl gap-4 p-5 shadow-none">
         {userCode === undefined ? (
-          <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your assistant.</AlertDescription></Alert>
+          <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your agent.</AlertDescription></Alert>
         ) : status !== 'error' && (consentLoading || !consentReady) ? (
-          <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the assistant name and exact permission before you decide.</AlertDescription></Alert>
+          <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the agent name and exact permission before you decide.</AlertDescription></Alert>
         ) : status === 'idle' ? (
           <>
-            <h2>{clientName === undefined ? 'Connect your assistant' : `Connect ${clientName}`}</h2>
+            <h2>{clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}</h2>
             <fieldset className="grid gap-3" disabled={pending}>
               <legend className="text-base font-semibold text-foreground">How much may this agent do without asking you?</legend>
               <RadioGroup
@@ -162,7 +168,7 @@ function AgentAccessAuthorizeRoute() {
                       <span className="grid gap-1">
                         <span className="font-medium text-foreground">{option.label}</span>
                         <span className="text-sm font-normal text-muted-foreground">
-                          {disabled ? 'Your assistant requested narrower access.' : option.description}
+                          {disabled ? 'This agent requested narrower access.' : option.description}
                         </span>
                       </span>
                     </Label>
@@ -171,8 +177,8 @@ function AgentAccessAuthorizeRoute() {
               </RadioGroup>
             </fieldset>
             <div className="grid gap-1 text-sm text-muted-foreground">
-              <p>Application: {clientName ?? 'Your assistant'} · Development · Standard rate limits</p>
-              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Assistant access.</p>
+              <p>Application: {clientName ?? 'Your agent'} · Development · Standard rate limits</p>
+              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Agent access.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
@@ -180,11 +186,11 @@ function AgentAccessAuthorizeRoute() {
             </div>
           </>
         ) : status === 'approved' ? (
-          <Alert><AlertTitle>Access approved — return to your assistant</AlertTitle><AlertDescription>AE delivers the consumer key to that assistant once. It can now finish setup; supplier credentials are never included.</AlertDescription></Alert>
+          <Alert><AlertTitle>Access approved — return to your agent</AlertTitle><AlertDescription>AE delivers the caller key to that agent once. It can now finish setup; supplier credentials are never included.</AlertDescription></Alert>
         ) : status === 'denied' ? (
-          <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your assistant can start a new request if you want to try again.</AlertDescription></Alert>
+          <Alert><AlertTitle>Access not approved</AlertTitle><AlertDescription>Your agent can start a new request if you want to try again.</AlertDescription></Alert>
         ) : (
-          <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your assistant.</AlertDescription></Alert>
+          <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
         )}
       </Card>
     </AeOperatorShell>

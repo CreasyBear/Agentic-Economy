@@ -1,0 +1,43 @@
+import { readFileSync } from 'node:fs'
+import { globSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+const operationProductEntrypoints = [
+  'packages/cli/dist/ae.js',
+  ...globSync('tools/ae/**/*.ts'),
+  'src/routes/mcp.ts',
+  'src/lib/server/mcp-api.ts',
+  ...globSync('src/routes/api.v1.market-operations*.ts'),
+  ...globSync('src/routes/api.v1.operations*.ts'),
+].sort()
+
+const legacyModuleImport = /modules\/(?:answer(?:-thread)?|external-run|harness)(?:\/|['"])/u
+const retiredRuntimeNoun = /CustomerRequest|Customer Request|WorkTree|Work Tree/u
+
+describe('Operation product legacy independence', () => {
+  it('keeps CLI, MCP, and Operation HTTP entrypoints independent of the legacy stack', () => {
+    expect(operationProductEntrypoints).toEqual(expect.arrayContaining([
+      'packages/cli/dist/ae.js',
+      'tools/ae/cli.ts',
+      'src/routes/mcp.ts',
+      'src/lib/server/mcp-api.ts',
+      'src/routes/api.v1.market-operations.search.ts',
+      'src/routes/api.v1.operations.call.ts',
+    ]))
+
+    expect(operationProductEntrypoints.filter((path) => (
+      legacyModuleImport.test(readFileSync(path, 'utf8'))
+    ))).toEqual([])
+  })
+
+  it('keeps current Call runtime and broad entry barrels free of retired product nouns', () => {
+    expect([
+      'src/modules/action-invocation/runtime.ts',
+      'src/modules/action-invocation/public.ts',
+      'src/modules/action-invocation/index.ts',
+    ].filter((path) => retiredRuntimeNoun.test(readFileSync(path, 'utf8')))).toEqual([])
+
+    expect(readFileSync('src/modules/action-invocation/compatibility.ts', 'utf8'))
+      .toContain('CustomerRequestCanonicalClaimMaterial')
+  })
+})

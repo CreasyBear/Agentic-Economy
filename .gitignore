@@ -17,39 +17,40 @@ outputs/
 .react-doctor/
 graphify-out/
 .tanstack/
-.promptfoo-home/
 
-# Generated dependency graph artifacts
-.planning/graphs/.last-build-snapshot.json
-.planning/graphs/graph.json
-.planning/graphs/graph.html
+# Local planning, agent memory, and development journals
+/.planning/
+/.agents/
+/.claude/
+/agent/
+/skills-lock.json
+/PAPERCUTS.md
+/CLAUDE.md
+/RULES.MD
+/DESIGN.md
+/INVESTMENT_THESIS.md
+/UBIQUITOUS_LANGUAGE.md
+/docs/
+/convex/README.md
+/tools/ae/README.md
+/eval/**/*.md
 
-# Agent skill vendor trees (install via skills-lock.json)
+# Agent skill vendor trees
 .cursor/skills/
-.agents/skills/*
-!.agents/skills/ae-*/
-!.agents/skills/ae-*/**
-!.agents/skills/submit-qualified-inquiry/
 .codex/skills/
-.claude/skills/
 
 # clerk configuration (can include secrets)
 /.clerk/
 .vercel
 .gstack/
 
-# gsd drift-check scratch artifacts and research response cache
+# gsd drift-check scratch artifacts
 /ae-phase4-founder-*.json.tsv
-.planning/research/.cache/
 
 eval/parity/results.tsv
-
-# knowledge-graph dumps are generated, never tracked
-.planning/graphs/
 
 # local ae CLI session state
 /.ae-cli/
 
 # Convex snapshot zips are secrets-bearing; never commit
 *.convex-export.zip
-.planning/evidence/*.zip

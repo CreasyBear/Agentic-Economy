@@ -129,6 +129,60 @@ describe('operation.invoke authority continuity', () => {
     }
   })
 
+  it('caps persisted authority expiry at the earliest authority, grant, and readiness bound', () => {
+    const { operation, operationRef, descriptor } = fixture()
+    const inputDigest = canonicalDigest({ symbol: 'BTC', convert: 'USD' })
+    const now = Date.now()
+    const cases = [
+      { authorityMs: 20_000, grantMs: 30_000, readinessMs: 40_000 },
+      { authorityMs: 40_000, grantMs: 20_000, readinessMs: 30_000 },
+      { authorityMs: 40_000, grantMs: 30_000, readinessMs: 20_000 },
+    ] as const
+
+    for (const [index, candidate] of cases.entries()) {
+      const persisted = buildOperationInvokeAuthority({
+        authority: {
+          kind: 'approved',
+          basis: { kind: 'approve_each', authorityRef: `authority:expiry-bound:${index}` },
+          expiresAt: new Date(now + candidate.authorityMs).toISOString(),
+        },
+        grant: { ...grant, expiresAt: now + candidate.grantMs },
+        operation: {
+          ...operation,
+          readiness: { ...operation.readiness, validUntil: now + candidate.readinessMs },
+        },
+        descriptor,
+        operationRef,
+        invocationRef: `operation-invocation:expiry-bound:${index}`,
+        inputDigest,
+        now,
+      })
+      expect(persisted?.expiresAt).toBe(new Date(now + Math.min(
+        candidate.authorityMs,
+        candidate.grantMs,
+        candidate.readinessMs,
+      )).toISOString())
+    }
+
+    expect(buildOperationInvokeAuthority({
+      authority: {
+        kind: 'approved',
+        basis: { kind: 'approve_each', authorityRef: 'authority:expiry-bound-now' },
+        expiresAt: new Date(now + 20_000).toISOString(),
+      },
+      grant: { ...grant, expiresAt: now + 30_000 },
+      operation: {
+        ...operation,
+        readiness: { ...operation.readiness, validUntil: now },
+      },
+      descriptor,
+      operationRef,
+      invocationRef: 'operation-invocation:expiry-bound-now',
+      inputDigest,
+      now,
+    })).toBeUndefined()
+  })
+
   it('maps full_yolo approval to the standing-mandate branch before dispatch', async () => {
     const { operation, operationRef, descriptor } = fixture()
     const fullYoloPrincipal: AgentAccessPrincipal = { ...principal, authorityMode: 'full_yolo' }

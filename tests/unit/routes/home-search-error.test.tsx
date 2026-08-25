@@ -17,7 +17,7 @@ function renderWithRouter(ui: ReactElement) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
     createRoute({ getParentRoute: () => rootRoute, path: '/' }),
-    createRoute({ getParentRoute: () => rootRoute, path: '/claim' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/for-providers' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/sign-in/$' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/for-agents' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/privacy' }),
@@ -33,13 +33,11 @@ describe('homepage search error', () => {
     renderWithRouter(<ErrorComponent />)
 
     const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('We couldn’t search right now')
-    expect(alert.textContent).toContain('We couldn’t search for businesses right now.')
-    expect(alert.textContent).toContain('Your request wasn’t the problem')
-    expect(alert.textContent).toContain('no business was contacted')
-    expect(screen.queryByText(/market is temporarily unavailable/i)).toBeNull()
+    expect(alert.textContent).toContain('Unable to load capabilities')
+    expect(alert.textContent).toContain('Check your connection and try again.')
+    expect(alert.textContent).toContain('No capability was called.')
 
-    const backToSearch = screen.getByRole('link', { name: 'Back to search' })
+    const backToSearch = screen.getByRole('link', { name: 'Try again' })
     expect(backToSearch.getAttribute('href')).toBe('/')
     expect(backToSearch.classList.contains('min-h-11')).toBe(true)
   })

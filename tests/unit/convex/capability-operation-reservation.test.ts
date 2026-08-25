@@ -80,6 +80,13 @@ class MemoryDb {
     this.seed(table, { ...row, _id: id })
     return id
   }
+  async get(id: string): Promise<Row | null> {
+    for (const rows of this.tables.values()) {
+      const row = rows.find((candidate) => candidate._id === id)
+      if (row !== undefined) return row
+    }
+    return null
+  }
   async delete(id: string): Promise<void> {
     for (const [table, rows] of this.tables) {
       const remaining = rows.filter((row) => row._id !== id)
@@ -88,7 +95,11 @@ class MemoryDb {
   }
 }
 
-type Handler = (ctx: { db: MemoryDb }, args: Record<string, unknown>) => Promise<unknown>
+type HandlerContext = {
+  db: MemoryDb
+  runMutation: (reference: unknown, args: Record<string, unknown>) => Promise<unknown>
+}
+type Handler = (ctx: HandlerContext, args: Record<string, unknown>) => Promise<unknown>
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 const abandonHandler = (abandon as unknown as { _handler: Handler })._handler
 
@@ -142,10 +153,10 @@ const abandonmentArgs = (overrides: Record<string, unknown> = {}): Record<string
   return reservation
 }
 
-function context(grantOverrides: Record<string, unknown> = {}): { db: MemoryDb } {
+function context(grantOverrides: Record<string, unknown> = {}): HandlerContext {
   const db = new MemoryDb()
   db.seed('agentAccessGrants', grant(grantOverrides))
-  return { db }
+  return { db, runMutation: async () => undefined }
 }
 
 let seedSequence = 0

@@ -1,26 +1,46 @@
-<!-- convex-ai-start -->
+# Agentic Economy project instructions
 
-This project uses [Convex](https://convex.dev) as its backend.
+## Read this first
 
-When working on Convex code, **always read
-`convex/_generated/ai/guidelines.md` first** for important guidelines on
-how to correctly use Convex APIs and patterns. The file contains rules that
-override what you may have learned about Convex from training data.
+Before product reasoning, planning, documentation, or implementation, read
+`PRODUCT.md`. It is the active product authority.
 
-Convex agent skills for common tasks can be installed by running
+Use this precedence when sources disagree:
+
+1. `PRODUCT.md`
+2. Current executable source and tests
+3. `README.md` for the public and operational introduction
+
+Git history, deleted planning ledgers, old gate files, generated codebase maps,
+research scripts, and archived diagrams are not product authority.
+
+## Product boundary
+
+Agentic Economy is a cross-harness market where agents discover, compare, and
+buy bounded outside services while pursuing work owned by their existing
+harness.
+
+The implemented market unit is the Operation. Preserve the single loop:
+
+capability gap -> search -> compare -> inspect -> controlled call -> usable
+result -> agent continues.
+
+Agentic Economy does not own the user's project, planning, memory, orchestration,
+or general-purpose agent runtime.
+
+Do not infer product capabilities from historical compatibility identifiers,
+deleted documents, negative regression tests, or old names in Git history. A
+concept absent from `PRODUCT.md` is out of scope until the charter deliberately
+adds it.
+
+Do not confuse the lower-authority external registry with the canonical market.
+Imported metadata becomes an Operation only after admission and publication.
+
+## Convex
+
+This project uses Convex as its backend. Before changing Convex code, read
+`convex/_generated/ai/guidelines.md`. Its project-specific API rules take
+precedence over general guidance.
+
+Convex agent skills for common tasks can be installed with
 `npx convex ai-files install`.
-
-<!-- convex-ai-end -->
-
-# Log papercuts
-
-Important! When you hit a small friction while working—a tool call that missed
-and had to be retried, a confusing or undocumented setup step, a flaky command,
-a stale cache, a misleading error, a non-obvious gotcha—log it to `PAPERCUTS.md`
-via `npm run papercut -- -m <model> "message"`. One or two sentences: what you
-were doing → what got in the way (a guess at the cause/fix is a bonus). Do this
-proactively, in the moment, even though none of these are blocking—logged
-together they show where the repo needs sanding down. This is distinct from
-`LOG.md` (what you accomplished) and from Linear issues (real bugs / tracked
-work).
-

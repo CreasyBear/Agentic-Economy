@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import {
   AGENT_ACCESS_OAUTH_CODE_CHALLENGE_METHODS,
   AGENT_ACCESS_OAUTH_GRANT_TYPES,
@@ -25,7 +25,6 @@ describe('OAuth metadata surfaces', () => {
       bearer_methods_supported: ['header'],
       scopes_supported: [
         'market_operations:invoke',
-        'customer_requests:create',
         'customer_requests:inspect_only',
         'customer_requests:approve_each',
         'customer_requests:bounded_mandate',
@@ -86,7 +85,9 @@ describe('OAuth metadata surfaces', () => {
     expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.response_types).toEqual([])
     expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.token_endpoint_auth_method)
       .toBe(AGENT_ACCESS_OAUTH_TOKEN_ENDPOINT_AUTH_METHODS[0])
-    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).toBe(MARKET_OPERATIONS_INVOKE_SCOPE)
+    expect(AGENT_ACCESS_OAUTH_DEVICE_CLIENT_REGISTRATION_REQUEST.scope).toBe(
+      `${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE}`,
+    )
     expect(AGENT_ACCESS_POLL_INTERVAL_SECONDS).toBe(5)
   })
 })

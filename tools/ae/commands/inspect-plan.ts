@@ -43,7 +43,10 @@ export async function runInspectPlanCommand(args: readonly string[], options: Cl
 
   const result = parsedResult.data
   if (result.kind === 'unavailable') {
-    throwOperationReadFailure({ reason: result.reason })
+    throwOperationReadFailure({
+      reason: result.reason,
+      ...(result.operationRef === undefined ? {} : { operationRef: result.operationRef }),
+    })
   }
   if (options.json) {
     printJson(result)

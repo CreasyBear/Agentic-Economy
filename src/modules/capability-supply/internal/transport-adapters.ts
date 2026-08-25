@@ -4,7 +4,10 @@ import {
   JSONRPCResponseSchema,
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import { NetworkSchemaV2 } from '@x402/core/schemas'
+import {
+  NetworkSchemaV2,
+  validatePaymentRequired,
+} from '@x402/core/schemas'
 import { z } from 'zod'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type {
@@ -234,6 +237,7 @@ const x402FetchConfiguration = z.strictObject({
   assetAmountExponent: z.number().int().min(0).max(18),
   asset: z.string().trim().min(1).max(200),
   payTo: z.string().trim().min(1).max(200),
+  paymentRequiredJson: z.string().min(2).max(MAX_ADAPTER_CONFIG_BYTES),
 }).refine((value) => NetworkSchemaV2.safeParse(value.network).success)
   .refine((value) => {
     const segments = value.network.split(':')
@@ -241,6 +245,12 @@ const x402FetchConfiguration = z.strictObject({
   })
   .refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
   .refine((value) => value.method === 'GET' ? (value.query?.length ?? 0) > 0 : value.query === undefined)
+  .superRefine((value, context) => {
+    const paymentRequired = parsePinnedX402PaymentRequiredJson(value.paymentRequiredJson)
+    if (paymentRequired === undefined) {
+      context.addIssue({ code: 'custom', path: ['paymentRequiredJson'], message: 'payment_required_invalid' })
+    }
+  })
 
 export type TransportAdmissionInput = Readonly<{
   adapterId: string
@@ -298,10 +308,10 @@ export function parseAdmittedTransportCatalogMetadata(
       : undefined
   }
   if (adapterId === 'x402-fetch:v2') {
-    const parsed = x402FetchConfiguration.safeParse(value)
-    return parsed.success
-      ? { method: parsed.data.method, queryInputPointers: parsed.data.query?.map(({ inputPointer }) => inputPointer) ?? [] }
-      : undefined
+    const parsed = parseX402FetchTransportConfiguration(value)
+    return parsed === undefined
+      ? undefined
+      : { method: parsed.method, queryInputPointers: parsed.query?.map(({ inputPointer }) => inputPointer) ?? [] }
   }
   return adapterId === 'mcp-jsonrpc:v1' && mcpJsonRpcConfiguration.safeParse(value).success
     ? { method: 'POST', queryInputPointers: [] }
@@ -330,7 +340,7 @@ export function parseMcpJsonRpcTransportConfiguration(
 
 export type X402FetchTransportConfiguration = Readonly<{
   method: 'GET' | 'POST'
-  query?: readonly HttpJsonQueryParameterMapping[]
+  query?: HttpJsonQueryParameterMapping[]
   requestTimeoutMs: number
   scheme: 'exact'
   network: string
@@ -339,13 +349,26 @@ export type X402FetchTransportConfiguration = Readonly<{
   assetAmountExponent: number
   asset: string
   payTo: string
+  paymentRequiredJson: string
 }>
 
 export function parseX402FetchTransportConfiguration(
   value: unknown,
 ): X402FetchTransportConfiguration | undefined {
   const parsed = x402FetchConfiguration.safeParse(value)
-  return parsed.success ? parsed.data as X402FetchTransportConfiguration : undefined
+  if (!parsed.success) return undefined
+  const { query: parsedQuery, ...withoutQuery } = parsed.data
+  const query = parsedQuery?.map((item) => ({
+    inputPointer: item.inputPointer,
+    parameter: item.parameter,
+    ...(item.required === undefined ? {} : { required: item.required }),
+    ...(item.style === undefined ? {} : { style: item.style }),
+    ...(item.explode === undefined ? {} : { explode: item.explode }),
+  }))
+  return {
+    ...withoutQuery,
+    ...(query === undefined ? {} : { query }),
+  }
 }
 
 export function readHttpJsonProbeConfiguration(
@@ -430,7 +453,7 @@ export type HttpJsonProbeConfiguration = Readonly<{
 function validAuthority(value: CapabilityTransportAuthority, allowKeyless: boolean): boolean {
   if (value.kind === 'keyless') return allowKeyless
   return /^connection:[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(value.connectionRef)
-    && /^provider:[A-Za-z0-9][A-Za-z0-9:_-]{0,199}$/.test(value.providerRef)
+    && /^provider:[A-Za-z0-9][A-Za-z0-9:_.-]{0,199}$/.test(value.providerRef)
 }
 
 export function admitRegisteredTransport(input: TransportAdmissionInput): TransportAdmissionResult {
@@ -447,9 +470,9 @@ export function parseAdmittedX402CatalogPayment(
 ): X402CatalogPayment | undefined {
   if (adapterId !== 'x402-fetch:v2') return undefined
   try {
-    const configuration = x402FetchConfiguration.safeParse(JSON.parse(configJson))
-    if (!configuration.success) return undefined
-    const { network, asset, currency, routeAmountExponent, assetAmountExponent } = configuration.data
+    const configuration = parseX402FetchTransportConfiguration(JSON.parse(configJson))
+    if (configuration === undefined) return undefined
+    const { network, asset, currency, routeAmountExponent, assetAmountExponent } = configuration
     return { network, asset, currency, routeAmountExponent, assetAmountExponent }
   } catch {
     return undefined
@@ -522,25 +545,38 @@ function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmis
     return { kind: 'refused', reason: 'adapter_config_too_large' }
   }
   const endpoint = validPublicHttpsEndpoint(input.endpointUrl)
-  const configuration = x402FetchConfiguration.safeParse(input.config)
+  const configuration = parseX402FetchTransportConfiguration(input.config)
   if (
     endpoint === undefined
     || !validAuthority(input.authority, false)
     || input.continuation.kind !== 'single_response'
     || input.cancellation.kind !== 'unsupported'
-    || !configuration.success
+    || configuration === undefined
   ) {
     return { kind: 'refused', reason: 'adapter_config_invalid' }
   }
-  const config = configuration.data as JsonValue
-  const configJson = stableStringify(config as StableHashValue)
+  const configJson = stableStringify(configuration)
   return {
     kind: 'admitted',
     transport: {
       adapterId: input.adapterId,
       configJson,
-      configDigest: canonicalDigest(config as StableHashValue),
+      configDigest: canonicalDigest(configuration),
     },
+  }
+}
+
+export function parsePinnedX402PaymentRequiredJson(
+  value: unknown,
+): ReturnType<typeof validatePaymentRequired> | undefined {
+  if (typeof value !== 'string' || encoder.encode(value).byteLength > MAX_ADAPTER_CONFIG_BYTES) {
+    return undefined
+  }
+  try {
+    const paymentRequired = validatePaymentRequired(JSON.parse(value))
+    return paymentRequired.x402Version === 2 ? paymentRequired : undefined
+  } catch {
+    return undefined
   }
 }
 

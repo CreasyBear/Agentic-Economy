@@ -1,16 +1,10 @@
 import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
-import type { SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
-import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
-import type { SupplyManagementService } from '@/modules/capability-supply/supply-actions'
-import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
-
-import type { JsonValue } from '@/modules/capability-contract/public'
 /**
  * Agent-native action contract for AE.
  *
  * One declaration fans out to every surface: the React UI, the HTTP API, the
- * agent JSON payload, and the internal answer-thread read-tool runner.
+ * agent JSON payload, and the chat tool runner.
  *
  * Each action carries a boundary-honest `summary` and an explicit `boundaries`
  * list so an external assistant knows both *when* to call it and *what it must
@@ -28,9 +22,13 @@ import type { JsonValue } from '@/modules/capability-contract/public'
  * bundler tree-shakes bare side-effect imports.
  */
 
-export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread' | 'cli' | 'mcp'
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'chat' | 'cli' | 'mcp'
 
-export type ActionSourceWriteRequest = SourceWriteAdmissionRequest
+export interface ActionContextComposition {}
+
+export type ActionSourceWriteRequest = NonNullable<
+  ActionContextComposition['sourceWriteRequest']
+>
 
 export type ActionTimingSink = {
   record: (
@@ -40,11 +38,9 @@ export type ActionTimingSink = {
   ) => void
 }
 
-export type ActionHarnessApprovalContext = {
-  authority?: 'owner' | 'admin'
-}
-
-export type ActionAgentAccessPrincipal = AgentAccessPrincipal
+export type ActionAgentAccessPrincipal = NonNullable<
+  ActionContextComposition['agentAccessPrincipal']
+>
 export type ActionCredentialAdmission = Readonly<{
   scope: string
   authority: 'descriptor_classified'
@@ -79,7 +75,7 @@ export type ActionModelRequestObservation = Readonly<{
   costUnavailableReason?: string
 }>
 
-export type ActionContext = {
+type ActionBaseContext = {
   /** Kernel-owned execution attribution; action callers must not supply it. */
   actionInvocationExecution?: Readonly<{
     invocationRef: string
@@ -92,20 +88,16 @@ export type ActionContext = {
    * the transport it arrived on.
    */
   caller?: ActionSurface
-  /** Admission context for writes; built from the calling surface's request. */
-  sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available at an HTTP boundary. */
   request?: Request
-  /** Internal timing sink used by answer turns; never exposed on human surfaces. */
+  /** Internal timing sink; never exposed on human surfaces. */
   timing?: ActionTimingSink
-  /** Private model-call accounting sink owned by the runtime harness. */
+  /** Private model-call accounting sink owned by the runtime. */
   onModelRequest?: (observation: ActionModelRequestObservation) => void
   /** Signed request identity for attribution/quota/audit only; never write authority. */
   agentIdentity?: ActionAgentIdentity
-  /** Harness-only approval authority for owner/admin-gated tools. */
-  harnessApproval?: ActionHarnessApprovalContext
   /** Explicitly labelled in-process adapter for Action Invocation development evals only. */
-  developmentOnlyInquirySubmitAdapter?: (
+  developmentOnlyDurableWriteAdapter?: (
     data: unknown,
   ) => Promise<ActionResult>
   developmentOnlySuppliedQuoteAdapter?: (
@@ -119,16 +111,11 @@ export type ActionContext = {
   developmentOnlySuppliedQuoteQualificationPorts?: unknown
   /** Fixed development clock paired with the supplied-quote source ports. */
   developmentOnlySuppliedQuoteNow?: () => number
-  /** Full server-derived agent-access principal; never caller-supplied authority. */
-  agentAccessPrincipal?: ActionAgentAccessPrincipal
   /** Correlation identity propagated by the transport into the application service. */
   correlationId?: string
-  /** One injected operation application service shared by HTTP and MCP adapters. */
-  operationInvokeService?: OperationInvokeService
-  /** One injected supply-management service shared by authenticated MCP and CLI adapters. */
-  supplyManagementService?: SupplyManagementService
 }
- 
+
+export type ActionContext = ActionBaseContext & ActionContextComposition
 
 
 export type ActionRunArgs<Input> = {
@@ -206,9 +193,17 @@ export type ActionInvocationContract = Readonly<{
 export type ActionInvocationPreparation = Readonly<{
   dataUse: Readonly<{
     fields: readonly string[]
-    limits: Readonly<Record<string, JsonValue>>
+    limits: Readonly<Record<string, ActionJsonValue>>
   }>
 }>
+
+type ActionJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly ActionJsonValue[]
+  | Readonly<{ [key: string]: ActionJsonValue }>
 
 export type ActionInvocationResultClassification = Readonly<{
   outcome: string

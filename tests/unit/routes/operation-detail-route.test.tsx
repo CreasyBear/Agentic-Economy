@@ -1,14 +1,15 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 import {
   PublicOperationRegistrySchemaVersion,
-  projectCapabilityOperation,
+  projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   type CapabilityOperationSourceRecord,
 } from '@/modules/capability-supply/public'
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
@@ -101,6 +102,13 @@ const sourceRecord = {
     summary: 'Structured invoice data.',
   },
   price: { kind: 'fixed', amount: { currency: 'USD', units: '125', exponent: 2 } },
+  priceBreakdown: {
+    providerQuotedAmount: { currency: 'USD', units: '100', exponent: 2 },
+    agenticEconomyFee: { currency: 'USD', units: '25', exponent: 2 },
+    totalBuyerAuthorization: { currency: 'USD', units: '125', exponent: 2 },
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  },
   priceEvidence: {
     sourceRef: 'pricing:invoice@4',
     priceDigest: 'digest:current-price',
@@ -122,6 +130,15 @@ const sourceRecord = {
   searchTerms: ['invoice', 'extract'],
   snapshotKey: 'snapshot:invoice:4',
 } as CapabilityOperationSourceRecord
+
+const projectCapabilityOperation = (
+  record: CapabilityOperationSourceRecord,
+  now: number,
+) => projectCapabilityOperationWithNavigation(
+  record,
+  now,
+  CURRENT_OPERATION_PROJECTION_NAVIGATION,
+)
 
 const operation = projectCapabilityOperation(sourceRecord, 2_000)
 
@@ -146,7 +163,16 @@ describe('/operations/$operationRef', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Invoice line-item extraction' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Ledger Labs' })[0]?.getAttribute('href')).toBe('/ledger-labs')
-    expect(screen.getByText('USD 1.25')).toBeTruthy()
+    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { level: 3, name: 'Example input' })).toBeTruthy()
+    expect(screen.getAllByText(/https:\/\/docs\.example\/invoice\.pdf/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { level: 3, name: 'Example output' })).toBeTruthy()
+    expect(screen.getByText(/No example output is published/)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 3, name: 'Exact price breakdown' })).toBeTruthy()
+    expect(screen.getByText('USD 1.00')).toBeTruthy()
+    expect(screen.getByText('USD 0.25')).toBeTruthy()
+    expect(screen.getByText('eip155:8453', { exact: false })).toBeTruthy()
+    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('Per accepted extraction')).toBeTruthy()
     expect(screen.getAllByText('documentUrl').length).toBeGreaterThan(0)
@@ -159,15 +185,21 @@ describe('/operations/$operationRef', () => {
     expect(screen.getByText('pricing:invoice@4')).toBeTruthy()
     expect(screen.getByText('evidence:pricing')).toBeTruthy()
 
-    const execution = screen.getByRole('complementary', { name: 'Use this exact Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke' })).toBeTruthy()
-    expect(within(execution).getByText(`npm run -s ae -- inspect '${operation.operationRef}' --json`)).toBeTruthy()
-    expect(within(execution).getByText(new RegExp(`invoke '${operation.operationRef}'`))).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect once' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Call capability' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '4. Open the receipt' })).toBeTruthy()
+    expect(within(execution).getByText(/ae inspect/)).toBeTruthy()
+    expect(within(execution).getAllByText(/ae connect/).length).toBeGreaterThan(0)
+    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
     expect(within(execution).getByText(/https:\/\/docs\.example\/invoice\.pdf/)).toBeTruthy()
     expect(within(execution).queryByText(/AE_INPUT_JSON/)).toBeNull()
-    expect(within(execution).getByText(/status "\$AE_INVOCATION_REF"/)).toBeTruthy()
-    expect(within(execution).getByText(/never receives, stores, or displays that secret/i)).toBeTruthy()
+    expect(within(execution).getByText(/ae status <invocation-ref>/)).toBeTruthy()
+    expect(within(execution).getByText(/stores and validates one origin-bound agent key/i)).toBeTruthy()
+    expect(within(execution).getByText(/generates a durable retry identity/i)).toBeTruthy()
+    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
+    expect(within(execution).queryByText(/Save it securely/i)).toBeNull()
+    expect(within(execution).queryByText(/ae_operation_invoke/)).toBeNull()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -186,9 +218,11 @@ describe('/operations/$operationRef', () => {
       operation: freeKeylessOperation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Run through direct-keyless MCP' })
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
     expect(within(execution).getByText('ae_operation_execute', { exact: false })).toBeTruthy()
     expect(within(execution).getByText(`operationRef=${freeKeylessOperation.operationRef}`, { exact: false })).toBeTruthy()
+    expect(within(execution).getByText(/input=\{"documentUrl":"https:\/\/docs\.example\/invoice\.pdf","includeTax":true\}/)).toBeTruthy()
+    expect(within(execution).queryByText(/JSON matching the published schema/)).toBeNull()
     expect(within(execution).queryByRole('heading', { level: 3, name: /Connect$/ })).toBeNull()
     expect(within(execution).queryByRole('heading', { level: 3, name: /Invoke$/ })).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- status/)).toBeNull()
@@ -210,10 +244,12 @@ describe('/operations/$operationRef', () => {
       operation: x402Operation,
     })
 
-    const execution = screen.getByRole('complementary', { name: 'Use this exact Operation' })
-    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '3. Invoke' })).toBeTruthy()
-    expect(within(execution).getByRole('heading', { level: 3, name: '4. Status' })).toBeTruthy()
+    const execution = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(execution).getByRole('heading', { level: 3, name: '2. Connect once' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '3. Call capability' })).toBeTruthy()
+    expect(within(execution).getByRole('heading', { level: 3, name: '4. Open the receipt' })).toBeTruthy()
+    expect(within(execution).getAllByText(/ae call/).length).toBeGreaterThan(0)
+    expect(within(execution).queryByText(/idempotencyKey=/)).toBeNull()
     expect(within(execution).queryByText(/ae_operation_execute/)).toBeNull()
     expect(within(execution).queryByText(/npm run -s ae -- recover/)).toBeNull()
   })
@@ -230,14 +266,14 @@ describe('/operations/$operationRef', () => {
 
     renderWithRouter({ kind: 'found', schemaVersion: PublicOperationRegistrySchemaVersion, operation: integratedOperation })
 
-    expect(screen.getByText('USD 1.25')).toBeTruthy()
+    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('Technical contract, schemas, digests, and references'))
     expect(screen.getByText('digest:current-price')).toBeTruthy()
     expect(screen.getByText('provider owned')).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: 'Setup required before invocation' })).toBeTruthy()
-    expect(screen.getByText(/AE reports setup required/i)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Search current Operations' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to Ask' })).toBeTruthy()
-    expect(screen.queryByRole('complementary', { name: 'Use this exact Operation' })).toBeNull()
+    const access = screen.getByRole('complementary', { name: 'Use this capability' })
+    expect(within(access).getByText(/Setup is required before invocation/i)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to market' })).toBeTruthy()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()
@@ -268,10 +304,10 @@ describe('/operations/$operationRef', () => {
     renderWithRouter(result)
 
     expect(screen.getByRole('heading', { level: 1, name: expectedTitle })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Search current Operations' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse current Operations' })).toBeTruthy()
     expect(screen.queryByText('USD 1.25')).toBeNull()
     expect(screen.queryByText('digest:current-price')).toBeNull()
-    expect(screen.queryByRole('complementary', { name: 'Use this exact Operation' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Use this capability' })).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- invoke/)).toBeNull()
     expect(screen.queryByText(/ae_operation_execute/)).toBeNull()
     expect(screen.queryByText(/npm run -s ae -- recover/)).toBeNull()

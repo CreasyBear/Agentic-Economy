@@ -4,7 +4,7 @@ import { validateAuditEvent } from '@/modules/common/audit-events'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { uniq } from 'es-toolkit/array'
 import { sanitizeText } from '@/modules/common/sanitize-text'
-import { assertCsrf } from './duplicates'
+import { assertCsrf } from './csrf'
 import type {
   DisputeEvidenceInput,
   DisputeEvidenceMediaType,

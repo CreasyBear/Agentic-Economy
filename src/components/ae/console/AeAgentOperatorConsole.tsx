@@ -10,25 +10,16 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-import type { AgentAccessKeyInventoryItem } from '@/modules/agent-access/agent-access'
-import type { AgentAccessOwnerGrantReadback } from '@/modules/agent-access/policy'
+import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
-import type { CreditAccountView, CreditActivityView, KeyUsageView } from '@/modules/money/public'
+import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
 
 import { formatTimestamp } from '@/lib/ui/format-time'
 import { formatCurrencyAmount } from '@/modules/money/public'
 import { AeCreditTopUpPanel, type CreditTopupPort, type CreditTopupTarget } from './AeCreditTopUpPanel'
 import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
 
-export type AgentOperatorKeyReadback = Readonly<{
-  key: AgentAccessKeyInventoryItem
-  grant?: AgentAccessOwnerGrantReadback
-  principalId: string
-  account?: CreditAccountView
-  activity: readonly CreditActivityView[]
-  usage?: KeyUsageView
-  dataState: 'source' | 'empty' | 'unavailable'
-}>
+export type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 
 export type AeAgentOperatorConsoleProps = Readonly<{
   items: readonly AgentOperatorKeyReadback[]
@@ -95,17 +86,17 @@ export function AeAgentOperatorConsole({
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       {accessUnavailable ? approvalsSection : (
         <>
-      <section aria-labelledby="credit-title" className="grid gap-4">
+      <section id="fund" aria-labelledby="credit-title" className="grid scroll-mt-6 gap-4">
         <div className="grid gap-1">
-          <h2 id="credit-title" className="text-2xl font-semibold tracking-tight text-foreground">Check your balance</h2>
-          <p className="block text-muted-foreground">Browsing is free. Paid calls use the credit assigned to each assistant.</p>
+          <h2 id="credit-title" className="text-lg font-semibold text-foreground">Balance</h2>
+          <p className="block text-sm text-muted-foreground">Browsing is free. Paid calls use the credit assigned to each agent.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Card className="border border-border bg-card">
+          <Card className="border border-border bg-card shadow-none">
             <CardContent className="grid gap-2">
               <p className="text-sm font-semibold text-muted-foreground">AVAILABLE CREDIT</p>
               <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatAmount(balance)}</p>
-              <p className="text-sm text-muted-foreground">{hasUnavailableData ? 'Some balance details are temporarily unavailable.' : 'Keep credit separate for each assistant.'}</p>
+              <p className="text-sm text-muted-foreground">{hasUnavailableData ? 'Some balance details are temporarily unavailable.' : 'Keep credit separate for each agent.'}</p>
             </CardContent>
           </Card>
           <AeCreditTopUpPanel
@@ -118,8 +109,8 @@ export function AeAgentOperatorConsole({
 
       <section aria-labelledby="ledger-title" className="grid gap-4">
         <div className="grid gap-1">
-          <h2 id="ledger-title" className="text-2xl font-semibold tracking-tight text-foreground">Review recent activity</h2>
-          <p className="block text-muted-foreground">See calls and credit changes for each assistant.</p>
+          <h2 id="ledger-title" className="text-lg font-semibold text-foreground">Recent activity</h2>
+          <p className="block text-sm text-muted-foreground">See calls and credit changes for each agent.</p>
         </div>
         {loading ? (
           <Card>
@@ -154,16 +145,16 @@ export function AeAgentOperatorConsole({
 
       {approvalsSection}
 
-      <section aria-labelledby="keys-title" className="grid gap-4">
+      <section id="revoke" aria-labelledby="keys-title" className="grid scroll-mt-6 gap-4">
         <div className="grid gap-1">
-          <h2 id="keys-title" className="text-2xl font-semibold tracking-tight text-foreground">Manage assistant access</h2>
-          <p className="block text-muted-foreground">Review what each assistant can do, its usage, and spend. Revoked or expired access stays visible.</p>
-          <p className="block text-sm text-muted-foreground">Consumer keys identify assistants. Supplier connections and credentials are managed separately and never appear here.</p>
+          <h2 id="keys-title" className="text-lg font-semibold text-foreground">Access keys</h2>
+          <p className="block text-sm text-muted-foreground">Review what each agent can do, its usage, and spend. Revoked or expired access stays visible.</p>
+          <p className="block text-sm text-muted-foreground">Caller keys identify agents. Supplier connections and credentials are managed separately and never appear here.</p>
         </div>
-        {loading ? <p className="text-muted-foreground">Loading assistant access…</p> : items.length === 0 ? (
+        {loading ? <p className="text-muted-foreground">Loading agent access…</p> : items.length === 0 ? (
           <Card className="border border-border bg-card">
             <CardContent>
-              <p className="text-muted-foreground">No assistant is connected yet. Start setup from your assistant and approve the request to create access you can revoke.</p>
+              <p className="text-muted-foreground">No agent is connected yet. Start setup from the agent and approve the request to create access you can revoke.</p>
             </CardContent>
           </Card>
         ) : items.map((item) => <KeyCard key={item.key.keyId} item={item} revoking={revokingKeyId === item.key.keyId} disabled={revokingKeyId !== undefined} onRevoke={onRevoke} />)}
@@ -171,12 +162,12 @@ export function AeAgentOperatorConsole({
 
       <section aria-labelledby="recovery-title" className="grid gap-4">
         <div className="grid gap-1">
-          <h2 id="recovery-title" className="text-2xl font-semibold tracking-tight text-foreground">Recover access safely</h2>
+          <h2 id="recovery-title" className="text-lg font-semibold text-foreground">Recovery</h2>
           <p className="block text-muted-foreground">The next step depends on what stopped the call.</p>
         </div>
         <ul className="m-0 grid list-none divide-y divide-border p-0">
           <RecoveryItem title="Lost, expired, or revoked agent key">
-            Start a new access request from the assistant. AE delivers the replacement consumer key to that assistant once; supplier credentials stay server-side.
+            Start a new access request from the agent. AE delivers the replacement caller key to that agent once; supplier credentials stay server-side.
           </RecoveryItem>
           <RecoveryItem title="Stale access grant">
             Revoke the affected access, then approve a new request so the key and current grant are issued together.
@@ -215,7 +206,7 @@ function WaitingApprovalsSection({
   return (
     <section aria-labelledby="operation-approvals-title" className="grid gap-4">
       <div className="grid gap-1">
-        <h2 id="operation-approvals-title" className="text-2xl font-semibold tracking-tight text-foreground">Waiting for your approval</h2>
+        <h2 id="operation-approvals-title" className="text-lg font-semibold text-foreground">Waiting for approval</h2>
         <p className="text-muted-foreground">Review the exact operation before allowing it to run once.</p>
       </div>
       {loading && approvals.length === 0 ? <p className="text-muted-foreground">Loading waiting approvals…</p> : null}
@@ -293,11 +284,12 @@ function consequenceLabel(consequence: PendingOperationApproval['authorityReques
   return 'Creates an external effect'
 }
 
-function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback; entry: CreditActivityView }>) {
+function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback; entry: AgentActivityView }>) {
   return (
     <li className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="grid gap-1">
-        <p className="font-semibold text-foreground">{activityLabel(entry)}</p>
+        <p className="font-semibold text-foreground">{entry.operation?.label ?? activityLabel(entry)}</p>
+        {entry.operation === undefined ? null : <p className="text-sm text-muted-foreground">{entry.operation.supplier} · {activityLabel(entry)}</p>}
         <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
         <Link
           to="/operations/invocations/$invocationRef"
@@ -319,7 +311,7 @@ function KeyCard({ item, revoking, disabled, onRevoke }: Readonly<{ item: AgentO
   const missingGrant = item.grant === undefined
   const status = item.key.revoked ? 'Revoked' : item.key.expired ? 'Expired' : missingGrant ? 'Needs attention' : 'Connected'
   const recovery = item.key.revoked || item.key.expired
-    ? 'To reconnect, start a new access request from the assistant.'
+    ? 'To reconnect, start a new access request from the agent.'
     : missingGrant
       ? 'This key does not have a current grant. Revoke it, then approve a new access request.'
       : usage?.states.includes('outcome_unknown')
@@ -386,7 +378,7 @@ function RecoveryItem({ title, children }: Readonly<{ title: string; children: s
   )
 }
 
-function activityLabel(entry: CreditActivityView): string {
+function activityLabel(entry: AgentActivityView): string {
   if (entry.chargeState === 'free_tier') return 'Free call'
   if (entry.chargeState === 'paid') return 'Paid call'
   if (entry.chargeState === 'refunded') return 'Refunded call'
@@ -394,7 +386,7 @@ function activityLabel(entry: CreditActivityView): string {
   return 'Call declined for insufficient credit'
 }
 
-function scopeLabel(mode: AgentAccessKeyInventoryItem['authorityMode']): string {
+function scopeLabel(mode: AgentOperatorKeyReadback['key']['authorityMode']): string {
   if (mode === 'inspect_only') return 'Browse only'
   if (mode === 'approve_each') return 'Ask each time'
   if (mode === 'bounded_mandate') return 'Work within limits'

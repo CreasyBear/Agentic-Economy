@@ -8,6 +8,42 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
+      confirm_chat_staging_smoke:
+        description: 'Confirm the deployed staging host is the exact source revision and the private owner browser session may be used for the chat smoke.'
+        required: true
+        default: false
+        type: boolean
+      confirm_current_operation_staging_observation:
+        description: 'Confirm the exact-revision staging projection observation may change only the current Operation read-mode flag on the dedicated development deployment.'
+        required: true
+        default: false
+        type: boolean
+      current_operation_staging_stage:
+        description: 'Start begins the shadow soak; complete verifies its exact artifact after 24 hours and cuts over; rollback immediately restores old.'
+        required: true
+        default: start
+        type: choice
+        options:
+          - start
+          - complete
+          - rollback
+      current_operation_staging_owner:
+        description: 'Required bounded release-owner identity recorded in the sanitized receipt.'
+        required: true
+        type: string
+      current_operation_staging_start_workflow_run_id:
+        description: 'Complete only: workflow run ID that produced the exact start artifact for this repository and source revision.'
+        required: false
+        type: string
+      confirm_current_operation_staging_cutover:
+        description: 'Complete only: explicitly confirm cutover to the new read path bound to the downloaded start receipt digest.'
+        required: true
+        default: false
+        type: boolean
+      current_operation_staging_rollback_reason:
+        description: 'Rollback only: required bounded operator reason.'
+        required: false
+        type: string
       confirm_live_gateway_spend:
         description: 'Type the run ID below and confirm the production-approved paid gateway smoke may move at most USD 6.00 total externally (top-up charge plus provider payout).'
         required: true
@@ -56,6 +92,9 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
+      - name: Install the source-proof Chromium browser
+        run: npm exec -- playwright install --with-deps chromium
+
       - name: Record exact source evidence identity
         run: |
           mkdir -p output/release
@@ -72,6 +111,15 @@ jobs:
       - name: Run focused provider and recovery conformance
         run: npm run test:conformance
 
+      - name: Run deterministic operation chat conformance
+        run: npm run test:chat:conformance
+
+      - name: Prove committed Convex source with an isolated anonymous local backend
+        run: npm run verify:convex-generated:anonymous
+
+      - name: Prove anonymous generation did not mutate the source checkout
+        run: git diff --exit-code -- convex/_generated
+
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
 
@@ -84,50 +132,21 @@ jobs:
             output/release/source-metadata.json
             output/release/unit-vitest.json
             output/release/integration-vitest.json
-            output/eval/answer-suite-report.json
+            output/release/chat-conformance-vitest.json
           if-no-files-found: error
           retention-days: 14
 
-  hosted-proof:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    name: Exact-revision production Request curated fixture smoke
+  chat-staging-proof:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_chat_staging_smoke == true
+    name: Opt-in exact-revision operation chat staging smoke
     needs: source-proof
-    outputs:
-      deployment_id: ${{ steps.deploy.outputs.deployment_id }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
+    timeout-minutes: 15
+    environment: staging
     env:
+      PLAYWRIGHT_BASE_URL: ${{ vars.AE_CHAT_STAGING_BASE_URL }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
-      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
-      AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      NODE_ENV: production
-      VERCEL_ENV: production
-      AE_CANONICAL_BASE_URL: https://agentic-economy-phi.vercel.app
-      AE_CANONICAL_HOST_ALLOWLIST: agentic-economy-phi.vercel.app
-      AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
-      AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
-      AE_CONVEX_SERVER_FUNCTION_TOKEN: ${{ secrets.AE_CONVEX_SERVER_FUNCTION_TOKEN }}
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}
-      AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}
-      AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
-      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      VITE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}
-      AE_SOURCE_WRITE_KEY_INQUIRY: ${{ secrets.AE_SOURCE_WRITE_KEY_INQUIRY }}
-      AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
-      AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
-      AE_SOURCE_WRITE_KEY_CLAIM: ${{ secrets.AE_SOURCE_WRITE_KEY_CLAIM }}
-      AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
-      AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
-      AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
 
@@ -139,135 +158,126 @@ jobs:
       - name: Pin the repository package manager
         run: npm install --global npm@11.5.1
 
-      - name: Frozen dependency install for independent readback
-        # Job env carries production secrets; skip lifecycle scripts so install
-        # cannot read them (react-doctor/build-pipeline-secret-boundary).
+      - name: Frozen dependency install without lifecycle scripts
         run: npm ci --ignore-scripts
-      - name: Refuse incomplete target production deployment manifest
-        run: npm run verify:deployment-manifest -- --environment production
 
+      - name: Install the staging browser
+        run: npm exec -- playwright install --with-deps chromium
 
-
-      - name: Record exact hosted evidence identity
+      - name: Write the private owner browser session
+        env:
+          AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON: ${{ secrets.AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON }}
         run: |
-          mkdir -p output/release
-          jq -n \
-            --arg repositorySha "${GITHUB_SHA}" \
-            --arg workflowRun "${GITHUB_RUN_ID}" \
-            --arg evidenceClass "hosted-request-curated-fixture-smoke" \
-            '{repositorySha: $repositorySha, workflowRun: $workflowRun, evidenceClass: $evidenceClass, sanitized: true}' \
-            > output/release/hosted-metadata.json
+          owner_storage_state="${RUNNER_TEMP}/ae-chat-owner-storage-state.json"
+          umask 077
+          printf '%s' "${AE_CHAT_STAGING_OWNER_STORAGE_STATE_JSON}" > "${owner_storage_state}"
+          chmod 600 "${owner_storage_state}"
+          echo "SMOKE_OWNER_STORAGE_STATE=${owner_storage_state}" >> "${GITHUB_ENV}"
 
+      - name: Run the exact-revision chat staging smoke
+        run: npm run smoke:chat:staging
 
-      - name: Refuse a checkout other than the triggering revision
-        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
-
-      # Convex 1.42 codegen still resolves and uses deployment credentials with --dry-run.
-      - name: Verify committed Convex generated source
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npm run check:convex-codegen
-
-      - name: Deploy the dual-compatible exact clean source revision
-        id: deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          deployment="$(npm exec -- tsx tools/release/deploy-customer-request-git-source.ts)"
-          echo "deployment_id=$(printf '%s' "${deployment}" | jq -r '.deploymentId')" >> "${GITHUB_OUTPUT}"
-
-      - name: Deploy the exact-revision Convex schema and functions
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
-      - name: Bind the exact triggering source revision in production Convex
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex env set AE_RELEASE_SOURCE_REVISION "${AE_RELEASE_SOURCE_REVISION}" --prod
-
-      - name: Refuse incomplete production execution configuration
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          for key in AE_ROUTE_CALL_SIGNING_SECRET AE_ROUTE_CALL_SIGNING_KEY_ID AE_SITE_URL; do
-            value="$(npx convex env get "${key}" --prod)"
-            if [ -z "${value}" ]; then
-              echo "Required production execution setting is missing: ${key}" >&2
-              exit 1
-            fi
-          done
-
-      - name: Seed curated supply and verify the Frankfurter readiness fixture
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          npx convex run curatedProviders:seed '{"runtimeEnvironment":"production"}' --prod
-          npx convex run curatedProviders:retireLegacyExaV1 '{}' --prod
-          npx convex run capabilitySupplyReadiness:probe \
-            '{"publicationRef":"offering:frankfurter-ecb-rates:single-rate:v1","expectedRevision":1}' \
-            --prod
-          for attempt in $(seq 1 30); do
-            graph="$(npx convex run capabilitySupply:queryCapabilityGraph '{"networkId":"ae:public","includeInactive":false,"limit":32}' --prod)"
-            ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
-              .publicationRef == "offering:frankfurter-ecb-rates:single-rate:v1"
-            )] | length')"
-            if [ "${ready}" -eq 1 ]; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo 'Curated Frankfurter readiness fixture did not become route-ready.' >&2
-          exit 1
-
-      - name: Verify curated Exa operation search fixture without provider credentials
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          result="$(npx convex run capabilitySupplyOperations:search \
-            '{"query":"Research the latest official guidance on AI agent payments and summarize the sources","limit":10}' \
-            --prod)"
-          printf '%s' "${result}" | jq -e '
-            .kind == "ok"
-            and ([.items[].contract.capabilityId] | index("exa.search") != null)
-            and ([.items[].contract.capabilityId] | index("exa.contents") != null)
-          '
-
-      - name: 'Record limitation: hosted supply checks cover curated fixtures only'
-        run: |
-          echo 'Limitation: this hosted job exercises only the seeded Frankfurter and Exa fixtures; it does not runtime-select arbitrary provider operations or establish generic provider readiness.'
-
-      - name: Verify exact deployed Request lifecycle against the Frankfurter fixture
-        env:
-          AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
-          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
-          AE_CUSTOMER_REQUEST_TEXT: Get the current ECB EUR to USD reference rate.
-          AE_CUSTOMER_REQUEST_FACTS_JSON: '{"base":"EUR","quote":"USD"}'
-          AE_CUSTOMER_REQUEST_FINISH: complete
-          AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '1'
-          AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Frankfurter — ECB rates"]'
-          AE_CUSTOMER_REQUEST_EXPECTED_RECIPIENTS_JSON: '[{"name":"Frankfurter — ECB rates","purposes":["retrieve_ecb_reference_rate"]}]'
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npm run test:release:hosted:request
-
-      - name: Upload sanitized hosted curated-fixture smoke evidence
+      - name: Upload only the sanitized chat staging result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ github.sha }}-${{ github.run_id }}-hosted-request-curated-fixture-smoke
-          path: |
-            output/release/hosted-metadata.json
-            output/release/playwright-deploy-smoke.json
+          name: release-${{ github.sha }}-${{ github.run_id }}-chat-staging-smoke
+          path: output/release/playwright-chat-staging-smoke.json
           if-no-files-found: error
           retention-days: 14
 
+  current-operation-staging-observation:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_current_operation_staging_observation == true && (inputs.current_operation_staging_stage != 'complete' || inputs.confirm_current_operation_staging_cutover == true)
+    name: Opt-in current Operation staging observation and cutover
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      AE_T8_STAGING_CONVEX_DEPLOYMENT: ${{ vars.AE_T8_STAGING_CONVEX_DEPLOYMENT }}
+      CONVEX_DEPLOY_KEY: ${{ secrets.AE_T8_STAGING_CONVEX_DEPLOY_KEY }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      AE_T8_RELEASE_OWNER: ${{ inputs.current_operation_staging_owner }}
+    steps:
+      - uses: actions/checkout@v6
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
 
+      - name: Pin the repository package manager
+        run: npm install --global npm@11.5.1
 
+      - name: Frozen dependency install without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Require the exact prior start workflow run for completion
+        if: inputs.current_operation_staging_stage == 'complete'
+        env:
+          START_WORKFLOW_RUN_ID: ${{ inputs.current_operation_staging_start_workflow_run_id }}
+        run: test -n "${START_WORKFLOW_RUN_ID}" && test "${START_WORKFLOW_RUN_ID}" -eq "${START_WORKFLOW_RUN_ID}" 2>/dev/null
+
+      - name: Download the exact revision-bound staging start receipt
+        if: inputs.current_operation_staging_stage == 'complete'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.current_operation_staging_start_workflow_run_id }}
+          name: release-${{ github.sha }}-${{ inputs.current_operation_staging_start_workflow_run_id }}-current-operation-staging-start
+          path: output/release/current-operation-staging-start-artifact
+
+      - name: Start the exact-revision shadow observation
+        if: inputs.current_operation_staging_stage == 'start'
+        run: |
+          npm run observe:current-operation:staging -- \
+            start \
+            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
+            --revision "${AE_RELEASE_SOURCE_REVISION}" \
+            --owner "${AE_T8_RELEASE_OWNER}" \
+            --receipt output/release/current-operation-staging-start.json
+
+      - name: Complete the exact baseline-bound staging cutover
+        if: inputs.current_operation_staging_stage == 'complete'
+        run: |
+          baseline='output/release/current-operation-staging-start-artifact/current-operation-staging-start.json'
+          baseline_digest="$(jq -er '.receiptDigest' "${baseline}")"
+          confirmation="cutover:${AE_T8_STAGING_CONVEX_DEPLOYMENT}:${AE_RELEASE_SOURCE_REVISION}:${AE_T8_RELEASE_OWNER}:${baseline_digest}"
+          npm run observe:current-operation:staging -- \
+            complete \
+            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
+            --revision "${AE_RELEASE_SOURCE_REVISION}" \
+            --owner "${AE_T8_RELEASE_OWNER}" \
+            --start-artifact "${baseline}" \
+            --confirm-cutover "${confirmation}" \
+            --receipt output/release/current-operation-staging-complete.json
+
+      - name: Restore the old read path without deleting projection rows
+        if: inputs.current_operation_staging_stage == 'rollback'
+        env:
+          ROLLBACK_REASON: ${{ inputs.current_operation_staging_rollback_reason }}
+        run: |
+          npm run observe:current-operation:staging -- \
+            rollback \
+            --deployment "${AE_T8_STAGING_CONVEX_DEPLOYMENT}" \
+            --revision "${AE_RELEASE_SOURCE_REVISION}" \
+            --owner "${AE_T8_RELEASE_OWNER}" \
+            --reason "${ROLLBACK_REASON}" \
+            --receipt output/release/current-operation-staging-rollback.json
+
+      - name: Upload only the sanitized staging observation receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_id }}-current-operation-staging-${{ inputs.current_operation_staging_stage }}
+          path: output/release/current-operation-staging-${{ inputs.current_operation_staging_stage }}.json
+          if-no-files-found: error
+          retention-days: 14
 
   live-gateway-proof:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_live_gateway_spend == true
     name: Opt-in production-approved exact-revision paid gateway smoke
-    needs: [source-proof, hosted-proof]
+    needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -285,13 +295,23 @@ jobs:
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.CLERK_JWT_ISSUER_DOMAIN }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      AE_X402_PAYMENT_CREDENTIAL_REF: ${{ secrets.AE_X402_PAYMENT_CREDENTIAL_REF }}
-      AE_X402_PAYMENT_PRIVATE_KEY: ${{ secrets.AE_X402_PAYMENT_PRIVATE_KEY }}
+      AE_LLM_MODEL: ${{ vars.AE_LLM_MODEL }}
+      AE_CHAT_PROXY_SECRET: ${{ secrets.AE_CHAT_PROXY_SECRET }}
+      CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+      CDP_API_KEY_SECRET: ${{ secrets.CDP_API_KEY_SECRET }}
+      CDP_WALLET_SECRET: ${{ secrets.CDP_WALLET_SECRET }}
+      AE_X402_CDP_ACCOUNT_NAME: ${{ secrets.AE_X402_CDP_ACCOUNT_NAME }}
+      AE_X402_CDP_EXPECTED_EVM_ADDRESS: ${{ secrets.AE_X402_CDP_EXPECTED_EVM_ADDRESS }}
+      AE_X402_CDP_ACCOUNT_POLICY_ID: ${{ secrets.AE_X402_CDP_ACCOUNT_POLICY_ID }}
+      AE_X402_CDP_PROJECT_POLICY_ID: ${{ secrets.AE_X402_CDP_PROJECT_POLICY_ID }}
+      AE_X402_CDP_CREDENTIAL_GENERATION: ${{ secrets.AE_X402_CDP_CREDENTIAL_GENERATION }}
+      AE_X402_CUSTODY_ENABLED: "true"
+      AE_X402_CUSTODY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_MAX_ATOMIC }}
+      AE_X402_CUSTODY_DAILY_MAX_ATOMIC: ${{ secrets.AE_X402_CUSTODY_DAILY_MAX_ATOMIC }}
       AE_X402_RPC_URLS_JSON: ${{ secrets.AE_X402_RPC_URLS_JSON }}
-      AE_SOURCE_WRITE_KEY_INQUIRY: ${{ secrets.AE_SOURCE_WRITE_KEY_INQUIRY }}
       AE_SOURCE_WRITE_KEY_BILLING: ${{ secrets.AE_SOURCE_WRITE_KEY_BILLING }}
       AE_SOURCE_WRITE_KEY_PROTECTED: ${{ secrets.AE_SOURCE_WRITE_KEY_PROTECTED }}
-      AE_SOURCE_WRITE_KEY_CLAIM: ${{ secrets.AE_SOURCE_WRITE_KEY_CLAIM }}
+      AE_SOURCE_WRITE_KEY_CATALOG: ${{ secrets.AE_SOURCE_WRITE_KEY_CATALOG }}
       AE_SOURCE_WRITE_KEY_OPERATOR: ${{ secrets.AE_SOURCE_WRITE_KEY_OPERATOR }}
       AE_SOURCE_WRITE_KEY_REPAIR: ${{ secrets.AE_SOURCE_WRITE_KEY_REPAIR }}
       AE_SOURCE_WRITE_KEY_SESSION: ${{ secrets.AE_SOURCE_WRITE_KEY_SESSION }}
@@ -307,7 +327,7 @@ jobs:
       AE_GATEWAY_SMOKE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_API_KEY }}
       AE_GATEWAY_SMOKE_RELEASE_API_KEY: ${{ secrets.AE_GATEWAY_SMOKE_RELEASE_API_KEY }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-      AE_RELEASE_DEPLOYMENT_ID: ${{ needs.hosted-proof.outputs.deployment_id }}
+      AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
       AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON: ${{ secrets.AE_GATEWAY_SMOKE_OWNER_OPENAPI_DOCUMENT_JSON }}
       AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH: ${{ vars.AE_GATEWAY_SMOKE_OWNER_OPENAPI_PATH }}
       AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD: ${{ vars.AE_GATEWAY_SMOKE_OWNER_OPENAPI_METHOD }}
@@ -385,10 +405,10 @@ jobs:
         env:
           AE_GATEWAY_SMOKE_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
-          AE_RELEASE_DEPLOYMENT_ID: ${{ needs.hosted-proof.outputs.deployment_id }}
+          AE_RELEASE_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_DEPLOYMENT_ID }}
           AE_RELEASE_CONVEX_DEPLOYMENT_ID: ${{ secrets.AE_RELEASE_CONVEX_DEPLOYMENT_ID }}
           AE_RELEASE_CONVEX_URL: ${{ secrets.AE_RELEASE_CONVEX_URL }}
-        run: npm run validate:release:hosted:gateway -- output/release/operation-gateway-smoke.json
+        run: npm run validate:release:gateway -- output/release/operation-gateway-smoke.json
 
       - name: Upload the validated strict opt-in paid gateway receipt
         if: inputs.live_gateway_stage == 'complete'

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const futureAuthorityCopy =
-  /book now|booking confirmed|pay now|payment required|protected action proposal|marketplace|request market|autonomous|agent handled|MCP tools available|OpenAPI action descriptor.*available|callable endpoint.*live|payment handler.*live|agent-callable/i
+  /book now|booking confirmed|pay now|payment required|protected action proposal|request market|autonomous|agent handled|MCP tools available|OpenAPI action descriptor.*available|callable endpoint.*live|payment handler.*live|agent-callable/i
 const privateFieldCopy =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|ownerId|clerk/i
 

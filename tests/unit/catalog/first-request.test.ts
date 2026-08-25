@@ -26,13 +26,13 @@ describe('service catalog validation', () => {
   it('excludes raw contact values from public first-request disclosure', () => {
     const result = validateServiceCatalogInput([
       {
-        name: 'Emergency pipe repair',
+        name: 'Listed offering',
         category: 'Emergency plumbing',
         summary: 'Burst pipe triage and repair.',
         serviceArea: 'Parramatta and nearby suburbs',
         hoursOrUnknown: 'Hours supplied by owner',
         firstRequest: {
-          mode: 'inquiry_available',
+          mode: 'quote_request_available',
           publicChannel: 'public_business_contact',
           publicDisclosure: 'Use the public business contact listed on the catalog.',
           rawContactValue: 'sam-owner@example.test',
@@ -45,7 +45,7 @@ describe('service catalog validation', () => {
       services: [
         {
           firstRequest: {
-            mode: 'inquiry_available',
+            mode: 'quote_request_available',
             publicChannel: 'public_business_contact',
             rawContactExcluded: true,
           },
@@ -59,7 +59,7 @@ describe('service catalog validation', () => {
     expect(
       validateServiceCatalogInput([
         {
-          name: 'Emergency pipe repair',
+          name: 'Listed offering',
           category: 'Emergency plumbing',
           summary: 'Burst pipe triage and repair.',
           serviceArea: 'Parramatta and nearby suburbs',

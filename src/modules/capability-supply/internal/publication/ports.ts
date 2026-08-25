@@ -7,6 +7,10 @@ import type {
   PublicOperationRef,
 } from '@/modules/capability-supply/public'
 import type { CapabilityConnectionAuthoritySnapshot } from '../binding/registration'
+import type {
+  RotateCapabilityTransportBindingAuthorityInput,
+  RotateCapabilityTransportBindingAuthorityResult,
+} from '../binding/write'
 import type { ProviderConnection } from '../../provider-connection'
 import type { OperationLedgerPorts } from '../operation-ledger'
 import type { CapabilityPublicationAuthorityMode } from './provenance'
@@ -112,6 +116,10 @@ export type PublicationCommandPorts = OperationLedgerPorts & Readonly<{
   insertPublication: (input: PublicationInsertInput) => Promise<void>
   patchPublicationSuperseded: (publicationId: string, updatedAt: number) => Promise<void>
   patchPublicationWithdrawn: (publicationId: string, updatedAt: number) => Promise<void>
+  rotateProviderConnectionBindingAuthority?: (
+    input: RotateCapabilityTransportBindingAuthorityInput,
+    updatedAt: number,
+  ) => Promise<RotateCapabilityTransportBindingAuthorityResult>
   loadProviderConnection?: (connectionRef: string) => Promise<ProviderConnection | null | undefined>
   registerContractDocument: (
     documentJson: string,

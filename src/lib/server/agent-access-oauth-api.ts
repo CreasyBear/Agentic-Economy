@@ -9,7 +9,6 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import {
   AGENT_ACCESS_AUTHORITY_MODE_VALUES,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
   MARKET_OPERATIONS_INVOKE_SCOPE,
   agentAuthorityModeForScopes,
   agentAuthorityScopeForMode,
@@ -39,20 +38,25 @@ import {
   type AgentAccessOAuthErrorCode,
   type AgentAccessOAuthGrant,
   type AgentAccessOAuthIssueKey,
+  type AgentAccessOAuthRequestedAccess,
   type AgentAccessOAuthStore,
   type AgentAccessOAuthTransition,
 } from '@/modules/agent-access/oauth-state'
 import {
-  AGENT_ACCESS_KEY_TTL_SECONDS,
+  AGENT_ACCESS_MAX_TTL_SECONDS,
+  AGENT_ACCESS_MIN_TTL_SECONDS,
   issueAgentAccessKey,
   type AgentAccessGrantRegistrationInput,
 } from '@/modules/agent-access/agent-access'
-import { defaultAgentAccessPolicy } from '@/modules/agent-access/policy'
+import { defaultSandboxAgentAccessPolicy } from '@/modules/agent-access/sandbox-policy'
+import { buildProductionAgentAccessPolicy, defaultProductionAgentAccessPolicy } from '@/modules/agent-access/production-policy'
+import { agentAccessPolicySchema, type AgentAccessPolicy } from '@/modules/agent-access/policy'
 import { registerAgentAccessGrant } from '@/modules/agent-access/policy.functions'
 import {
   createClerkAgentAccessKeyApi,
   registerAgentAccessPrincipal,
 } from '@/modules/agent-access/agent-access.functions'
+import { exactAmountSchema, formatExactAmount, type ExactAmount } from '@/modules/money/public'
 import { assertCsrf } from '@/modules/security/public'
 
 type OAuthApiOptions = Readonly<{
@@ -60,7 +64,16 @@ type OAuthApiOptions = Readonly<{
   now?: () => number
   canonicalBaseUrl?: string
   authenticateOwner?: () => Promise<{ isAuthenticated: boolean; userId: string | null }>
-  issueKey?: (input: Readonly<{ ownerId: string; name: string; idempotencyKey: string; scopes: readonly string[]; grantRef: string }>) => Promise<Readonly<{ keyId: string; secret?: string }>>
+  issueKey?: (input: Readonly<{
+    ownerId: string
+    name: string
+    idempotencyKey: string
+    scopes: readonly string[]
+    grantRef: string
+    authorityMode: AgentAccessAuthorityMode
+    requestedAccess: AgentAccessOAuthRequestedAccess
+    policy: AgentAccessPolicy
+  }>) => Promise<Readonly<{ keyId: string; secret?: string }>>
   getSecret?: (keyId: string) => Promise<{ secret: string }>
   rateLimit?: RateLimitAdmission
 }>
@@ -105,6 +118,23 @@ type OAuthJsonResult =
   | Readonly<{ kind: 'invalid' }>
   | Readonly<{ kind: 'too_large' }>
 
+type AuthorizationDetailsResult =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{ kind: 'ok'; requestedAccess: AgentAccessOAuthRequestedAccess }>
+
+const AUTHORIZATION_DETAILS_KEYS = new Set([
+  'type',
+  'environment',
+  'expires_in_seconds',
+  'maximum_spend_per_invocation',
+  'maximum_daily_spend',
+  'maximum_monthly_spend',
+  'maximum_concurrent_invocations',
+  'maximum_calls_per_minute',
+  'maximum_calls_per_hour',
+])
+
 export async function handleDeviceAuthorizationPost(request: Request, options: OAuthApiOptions = {}): Promise<Response> {
   const formResult = await readForm(request)
   if (formResult.kind === 'too_large') return oauthError('invalid_request', 413)
@@ -117,9 +147,14 @@ export async function handleDeviceAuthorizationPost(request: Request, options: O
   if (client === null) return oauthError('invalid_client', 401)
   const scopeText = form.get('scope')
   if (scopeText === null) return oauthError('invalid_scope', 400)
+  const authorizationDetails = parseAuthorizationDetails(form.get('authorization_details'))
+  if (authorizationDetails.kind === 'invalid') return oauthError('invalid_request', 400)
+  const requestedAccess = authorizationDetails.kind === 'ok' ? authorizationDetails.requestedAccess : undefined
+  if (requestedAccess !== undefined && normalizeRequestedScopes(scopeText)?.mode === 'full_yolo') return oauthError('invalid_request', 400)
   const result = await beginDeviceGrant(requireStore(options), {
     client,
     requestedScopes: scopeText.split(/\s+/u),
+    ...(requestedAccess === undefined ? {} : { requestedAccess }),
     now: currentNow(options),
   })
   if (result.kind !== 'ok') return oauthTransitionError(result)
@@ -170,7 +205,7 @@ export async function handleOAuthRegisterPost(request: Request, options: OAuthAp
   }
   const requestedScopes = normalizeRequestedScopes(typeof value.scope === 'string'
     ? value.scope
-    : `${MARKET_OPERATIONS_INVOKE_SCOPE} ${CUSTOMER_REQUEST_AGENT_SCOPE} ${agentAuthorityScopeForMode('inspect_only')}`)
+    : `${MARKET_OPERATIONS_INVOKE_SCOPE} ${agentAuthorityScopeForMode('inspect_only')}`)
   if (requestedScopes === undefined) return oauthError('invalid_scope', 400)
   const createdAt = currentNow(options)
   const client: AgentAccessOAuthClient = {
@@ -211,7 +246,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     if (result.kind !== 'ok') return oauthTransitionError(result)
     const mode = modeForGrant(result.value)
     if (mode === undefined) return oauthError('invalid_scope', 400)
-    return new Response(consentHtml({ grantRef: result.value.grantRef, clientName: result.value.displayName, mode, state: '' }), {
+    return new Response(consentHtml({ grantRef: result.value.grantRef, clientName: result.value.displayName, mode, state: '', requestedAccess: result.value.requestedAccess }), {
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     })
   }
@@ -231,6 +266,10 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (client === null || redirectUri === null || responseType !== AGENT_ACCESS_OAUTH_RESPONSE_TYPES[0] || state === null || challenge === null || challengeMethod === null || scopeText === null) {
     return oauthError('invalid_request', 400)
   }
+  const authorizationDetails = parseAuthorizationDetails(url.searchParams.get('authorization_details'))
+  if (authorizationDetails.kind === 'invalid') return oauthError('invalid_request', 400)
+  const requestedAccess = authorizationDetails.kind === 'ok' ? authorizationDetails.requestedAccess : undefined
+  if (requestedAccess !== undefined && normalizeRequestedScopes(scopeText)?.mode === 'full_yolo') return oauthError('invalid_request', 400)
   const limited = await oauthAdmissionResponse(request, options, `authorization:${clientId ?? 'missing'}`)
   if (limited !== undefined) return limited
   const owner = await ownerIdentity(options)
@@ -243,6 +282,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
     client,
     redirectUri,
     requestedScopes: scopeText.split(/\s+/u),
+    ...(requestedAccess === undefined ? {} : { requestedAccess }),
     codeChallenge: challenge,
     codeChallengeMethod: challengeMethod,
     ownerId: owner.userId,
@@ -251,7 +291,7 @@ export async function handleOAuthAuthorizeGet(request: Request, options: OAuthAp
   if (result.kind !== 'ok') return oauthTransitionError(result)
   const mode = modeForGrant(result.value.grant)
   if (mode === undefined) return oauthError('invalid_scope', 400)
-  return new Response(consentHtml({ grantRef: result.value.grant.grantRef, clientName: result.value.grant.displayName, mode, state }), {
+  return new Response(consentHtml({ grantRef: result.value.grant.grantRef, clientName: result.value.grant.displayName, mode, state, requestedAccess: result.value.grant.requestedAccess }), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   })
 }
@@ -381,7 +421,7 @@ async function deliverClaimedGrant(
       access_token: secret.secret,
       token_type: 'Bearer',
       scope: claimed.value.grant.requestedScopes.join(' '),
-      expires_in: AGENT_ACCESS_KEY_TTL_SECONDS,
+      expires_in: claimed.value.grant.requestedAccess.expiresInSeconds,
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
     await resetGrantDelivery(requireStore(options), { grantRef: claimed.value.grant.grantRef, claimToken: claimed.value.claimToken })
@@ -392,14 +432,41 @@ async function deliverClaimedGrant(
 async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, options: OAuthApiOptions): Promise<{ keyId: string }> {
   const issue: AgentAccessOAuthIssueKey = async ({ ownerId: inputOwnerId, grant: inputGrant }) => {
     const idempotencyKey = inputGrant.grantRef.replaceAll(':', '-')
+    const authorityMode = modeForGrant(inputGrant)
+    if (authorityMode === undefined || (inputGrant.requestedAccess.environment === 'production' && authorityMode === 'full_yolo')) {
+      throw new Error('invalid_requested_access')
+    }
+    const policy = deriveOAuthGrantPolicy(inputGrant.requestedAccess)
     if (options.issueKey !== undefined) {
-      return await options.issueKey({ ownerId: inputOwnerId, name: inputGrant.displayName, idempotencyKey, scopes: inputGrant.requestedScopes, grantRef: inputGrant.grantRef })
+      return await options.issueKey({
+        ownerId: inputOwnerId,
+        name: inputGrant.displayName,
+        idempotencyKey,
+        scopes: inputGrant.requestedScopes,
+        grantRef: inputGrant.grantRef,
+        authorityMode,
+        requestedAccess: inputGrant.requestedAccess,
+        policy,
+      })
     }
     const issued = await issueAgentAccessKey({
       ownerId: inputOwnerId,
       principal: { userId: inputOwnerId },
-      input: { name: inputGrant.displayName, idempotencyKey, scopes: inputGrant.requestedScopes, grantRef: inputGrant.grantRef },
-      policy: defaultAgentAccessPolicy({ environment: 'sandbox', currency: 'USD', exponent: 2 }),
+      input: {
+        name: inputGrant.displayName,
+        idempotencyKey,
+        scopes: inputGrant.requestedScopes,
+        grantRef: inputGrant.grantRef,
+        environment: inputGrant.requestedAccess.environment,
+        expiresInSeconds: inputGrant.requestedAccess.expiresInSeconds,
+        ...(inputGrant.requestedAccess.maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation: inputGrant.requestedAccess.maximumSpendPerInvocation }),
+        ...(inputGrant.requestedAccess.maximumDailySpend === undefined ? {} : { maximumDailySpend: inputGrant.requestedAccess.maximumDailySpend }),
+        ...(inputGrant.requestedAccess.maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend: inputGrant.requestedAccess.maximumMonthlySpend }),
+        ...(inputGrant.requestedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: inputGrant.requestedAccess.maximumConcurrentInvocations }),
+        ...(inputGrant.requestedAccess.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: inputGrant.requestedAccess.maximumCallsPerMinute }),
+        ...(inputGrant.requestedAccess.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: inputGrant.requestedAccess.maximumCallsPerHour }),
+      },
+      policy,
       returnSecret: false,
       api: createClerkAgentAccessKeyApi(clerkClient().apiKeys),
       registerPrincipal: registerAgentAccessPrincipal,
@@ -409,6 +476,61 @@ async function issueGrantKey(grant: AgentAccessOAuthGrant, ownerId: string, opti
     return { keyId: issued.keyId }
   }
   return await issue({ ownerId, grant })
+}
+
+function deriveOAuthGrantPolicy(requestedAccess: AgentAccessOAuthRequestedAccess): AgentAccessPolicy {
+  if (!Number.isSafeInteger(requestedAccess.expiresInSeconds)
+    || requestedAccess.expiresInSeconds < AGENT_ACCESS_MIN_TTL_SECONDS
+    || requestedAccess.expiresInSeconds > AGENT_ACCESS_MAX_TTL_SECONDS) {
+    throw new Error('invalid_requested_access')
+  }
+  const controls = [
+    requestedAccess.maximumConcurrentInvocations,
+    requestedAccess.maximumCallsPerMinute,
+    requestedAccess.maximumCallsPerHour,
+  ]
+  if (controls.some((value) => value !== undefined && (!Number.isSafeInteger(value) || value <= 0))) {
+    throw new Error('invalid_requested_access')
+  }
+  const amounts = [
+    requestedAccess.maximumSpendPerInvocation,
+    requestedAccess.maximumDailySpend,
+    requestedAccess.maximumMonthlySpend,
+  ]
+  const budgetCount = amounts.filter((amount) => amount !== undefined).length
+  if (requestedAccess.environment === 'sandbox') {
+    if (budgetCount !== 0 || controls.some((value) => value !== undefined)) throw new Error('invalid_requested_access')
+    return defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+  }
+  if (budgetCount !== 0 && budgetCount !== amounts.length) throw new Error('invalid_requested_access')
+  let base: AgentAccessPolicy
+  if (budgetCount === amounts.length) {
+    const [maximumSpendPerInvocation, maximumDailySpend, maximumMonthlySpend] = amounts
+    if (maximumSpendPerInvocation === undefined || maximumDailySpend === undefined || maximumMonthlySpend === undefined) {
+      throw new Error('invalid_requested_access')
+    }
+    base = buildProductionAgentAccessPolicy({
+      currency: maximumSpendPerInvocation.currency,
+      exponent: maximumSpendPerInvocation.exponent,
+      maximumSpendPerInvocation,
+      maximumDailySpend,
+      maximumMonthlySpend,
+    })
+  } else {
+    base = defaultProductionAgentAccessPolicy({ currency: 'USD', exponent: 2 })
+  }
+  return agentAccessPolicySchema.parse({
+    ...base,
+    budget: {
+      ...base.budget,
+      ...(requestedAccess.maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations: requestedAccess.maximumConcurrentInvocations }),
+    },
+    rate: {
+      ...base.rate,
+      ...(requestedAccess.maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute: requestedAccess.maximumCallsPerMinute }),
+      ...(requestedAccess.maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour: requestedAccess.maximumCallsPerHour }),
+    },
+  })
 }
 
 async function readClient(clientId: string | null, options: OAuthApiOptions): Promise<AgentAccessOAuthClient | null> {
@@ -470,6 +592,101 @@ async function readJson(request: Request): Promise<OAuthJsonResult> {
   }
 }
 
+function parseAuthorizationDetails(raw: string | null): AuthorizationDetailsResult {
+  if (raw === null) return { kind: 'absent' }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw) as unknown
+  } catch {
+    return { kind: 'invalid' }
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 1 || !isRecord(parsed[0])) return { kind: 'invalid' }
+  const detail = parsed[0]
+  if (Object.keys(detail).some((key) => !AUTHORIZATION_DETAILS_KEYS.has(key))) return { kind: 'invalid' }
+  if (detail.type !== 'agentic_economy_market_operations') return { kind: 'invalid' }
+  const environment = detail.environment
+  if (environment !== 'sandbox' && environment !== 'production') return { kind: 'invalid' }
+  const expiresInSeconds = detail.expires_in_seconds
+  if (!isSafeInteger(expiresInSeconds)
+    || expiresInSeconds < AGENT_ACCESS_MIN_TTL_SECONDS
+    || expiresInSeconds > AGENT_ACCESS_MAX_TTL_SECONDS) return { kind: 'invalid' }
+
+  const budgetValues = [
+    detail.maximum_spend_per_invocation,
+    detail.maximum_daily_spend,
+    detail.maximum_monthly_spend,
+  ]
+  const budgetKeys = [
+    'maximum_spend_per_invocation',
+    'maximum_daily_spend',
+    'maximum_monthly_spend',
+  ]
+  const budgetCount = budgetKeys.filter((key) => Object.prototype.hasOwnProperty.call(detail, key)).length
+  if (budgetCount !== 0 && budgetCount !== budgetKeys.length) return { kind: 'invalid' }
+
+  const rateKeys = [
+    'maximum_concurrent_invocations',
+    'maximum_calls_per_minute',
+    'maximum_calls_per_hour',
+  ] as const
+  const maximumConcurrentInvocations = optionalPositiveSafeInteger(detail.maximum_concurrent_invocations)
+  const maximumCallsPerMinute = optionalPositiveSafeInteger(detail.maximum_calls_per_minute)
+  const maximumCallsPerHour = optionalPositiveSafeInteger(detail.maximum_calls_per_hour)
+  if ((detail.maximum_concurrent_invocations !== undefined && maximumConcurrentInvocations === undefined)
+    || (detail.maximum_calls_per_minute !== undefined && maximumCallsPerMinute === undefined)
+    || (detail.maximum_calls_per_hour !== undefined && maximumCallsPerHour === undefined)) return { kind: 'invalid' }
+  if (environment === 'sandbox' && (budgetCount !== 0 || rateKeys.some((key) => Object.prototype.hasOwnProperty.call(detail, key)))) {
+    return { kind: 'invalid' }
+  }
+
+  let maximumSpendPerInvocation: ExactAmount | undefined
+  let maximumDailySpend: ExactAmount | undefined
+  let maximumMonthlySpend: ExactAmount | undefined
+  if (budgetCount === budgetKeys.length) {
+    const firstAmount = exactAmountSchema.safeParse(budgetValues[0])
+    const dailyAmount = exactAmountSchema.safeParse(budgetValues[1])
+    const monthlyAmount = exactAmountSchema.safeParse(budgetValues[2])
+    if (!firstAmount.success || !dailyAmount.success || !monthlyAmount.success) return { kind: 'invalid' }
+    maximumSpendPerInvocation = firstAmount.data
+    maximumDailySpend = dailyAmount.data
+    maximumMonthlySpend = monthlyAmount.data
+    try {
+      buildProductionAgentAccessPolicy({
+        currency: maximumSpendPerInvocation.currency,
+        exponent: maximumSpendPerInvocation.exponent,
+        maximumSpendPerInvocation,
+        maximumDailySpend,
+        maximumMonthlySpend,
+      })
+    } catch {
+      return { kind: 'invalid' }
+    }
+  }
+
+  return {
+    kind: 'ok',
+    requestedAccess: {
+      environment,
+      expiresInSeconds,
+      ...(maximumSpendPerInvocation === undefined ? {} : { maximumSpendPerInvocation }),
+      ...(maximumDailySpend === undefined ? {} : { maximumDailySpend }),
+      ...(maximumMonthlySpend === undefined ? {} : { maximumMonthlySpend }),
+      ...(maximumConcurrentInvocations === undefined ? {} : { maximumConcurrentInvocations }),
+      ...(maximumCallsPerMinute === undefined ? {} : { maximumCallsPerMinute }),
+      ...(maximumCallsPerHour === undefined ? {} : { maximumCallsPerHour }),
+    },
+  }
+}
+
+function isSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value)
+}
+
+function optionalPositiveSafeInteger(value: unknown): number | undefined {
+  if (value === undefined) return undefined
+  return isSafeInteger(value) && value > 0 ? value : undefined
+}
+
 function arrayOfStrings(value: unknown): string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value.map((item) => item.trim()).filter((item) => item.length > 0) : []
 }
@@ -488,20 +705,58 @@ function modeForGrant(grant: AgentAccessOAuthGrant): AgentAccessAuthorityMode | 
   return agentAuthorityModeForScopes(grant.requestedScopes, { allowCustomerDefault: true })
 }
 
-function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; state: string }>): string {
+function consentHtml(input: Readonly<{ grantRef: string; clientName: string; mode: AgentAccessAuthorityMode; state: string; requestedAccess: AgentAccessOAuthRequestedAccess }>): string {
   const escapedName = escapeHtml(input.clientName)
   const escapedGrantRef = escapeHtml(input.grantRef)
   const escapedState = escapeHtml(input.state)
   const scope = agentAuthorityScopeForMode(input.mode)
   const permission = consentPermissionCopy(input.mode)
-  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${input.mode}" data-environment="sandbox" data-expires-in-days="7"><h1>Connect ${escapedName} to AE</h1><p>Your assistant may ${permission.allowed}.</p><p>${permission.approval}</p><p>Environment: development. Access expires in seven days. You can revoke it at any time from your assistant access page.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${input.mode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
+  const environment = escapeHtml(input.requestedAccess.environment)
+  const authorityMode = escapeHtml(input.mode)
+  const expiry = String(input.requestedAccess.expiresInSeconds)
+  return `<main data-ae-consent data-grant-ref="${escapedGrantRef}" data-client-name="${escapedName}" data-authority-mode="${authorityMode}" data-environment="${environment}" data-expires-in-seconds="${expiry}"><h1>Connect ${escapedName} to Agentic Economy</h1><p>This agent may ${permission.allowed}.</p><p>${permission.approval}</p><p data-ae-access>Environment: ${environment}. Access expires in ${expiry} seconds. Authority mode: ${authorityMode}. ${consentAccessSummary(input.requestedAccess)}</p><p>You can revoke it at any time from the Access &amp; usage workspace.</p><details><summary>Technical details</summary><p data-ae-scope>Technical permission: ${escapeHtml(scope)}</p></details><form method="post" action="/oauth/authorize"><input type="hidden" name="grant_ref" value="${escapedGrantRef}"><input type="hidden" name="state" value="${escapedState}"><input type="hidden" name="authority_mode" value="${authorityMode}"><button name="decision" value="approve">Approve access</button><button name="decision" value="deny">Decline</button></form></main>`
 }
 
 function consentPermissionCopy(mode: AgentAccessAuthorityMode): Readonly<{ allowed: string; approval: string }> {
-  if (mode === 'inspect_only') return { allowed: 'browse and compare businesses', approval: 'Any work still waits for your approval.' }
+  if (mode === 'inspect_only') return { allowed: 'browse and compare Operations', approval: 'Any invocation still waits for your approval.' }
   if (mode === 'approve_each') return { allowed: 'bring each request to you', approval: 'You approve each request before it moves forward.' }
-  if (mode === 'bounded_mandate') return { allowed: 'work within the limits you set', approval: 'Anything outside those limits comes back to you for approval.' }
+  if (mode === 'bounded_mandate') return { allowed: 'work within the requested spend controls', approval: 'Paid calls proceed only within the requested controls.' }
   return { allowed: 'carry out approved work on your behalf', approval: 'AE still asks for your approval where required.' }
+}
+
+function consentAccessSummary(requestedAccess: AgentAccessOAuthRequestedAccess): string {
+  const controls: string[] = []
+  if (requestedAccess.maximumSpendPerInvocation !== undefined) {
+    controls.push(`Maximum spend per invocation: ${formatConsentAmount(requestedAccess.maximumSpendPerInvocation)}.`)
+  }
+  if (requestedAccess.maximumDailySpend !== undefined) {
+    controls.push(`Maximum daily spend: ${formatConsentAmount(requestedAccess.maximumDailySpend)}.`)
+  }
+  if (requestedAccess.maximumMonthlySpend !== undefined) {
+    controls.push(`Maximum monthly spend: ${formatConsentAmount(requestedAccess.maximumMonthlySpend)}.`)
+  }
+  if (requestedAccess.maximumConcurrentInvocations !== undefined) {
+    controls.push(`Maximum concurrent invocations: ${requestedAccess.maximumConcurrentInvocations}.`)
+  }
+  if (requestedAccess.maximumCallsPerMinute !== undefined) {
+    controls.push(`Maximum calls per minute: ${requestedAccess.maximumCallsPerMinute}.`)
+  }
+  if (requestedAccess.maximumCallsPerHour !== undefined) {
+    controls.push(`Maximum calls per hour: ${requestedAccess.maximumCallsPerHour}.`)
+  }
+  if (requestedAccess.environment === 'production'
+    && requestedAccess.maximumSpendPerInvocation === undefined
+    && requestedAccess.maximumDailySpend === undefined
+    && requestedAccess.maximumMonthlySpend === undefined) {
+    controls.push('Spending is disabled by the zero default.')
+  }
+  if (controls.length === 0) controls.push('No additional spend or rate controls were supplied.')
+  return controls.join(' ')
+}
+
+function formatConsentAmount(amount: ExactAmount): string {
+  const formatted = formatExactAmount(amount)
+  return `${escapeHtml(amount.currency)} ${escapeHtml(formatted ?? '—')}`
 }
 
 function escapeHtml(value: string): string {

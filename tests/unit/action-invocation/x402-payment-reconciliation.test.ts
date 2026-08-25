@@ -1,4 +1,4 @@
-import { encodePaymentRequiredHeader } from '@x402/core/http'
+import { validatePaymentRequired } from '@x402/core/schemas'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
@@ -10,20 +10,19 @@ import {
   validateX402PaymentReconciliationEvidence,
   type DynamicPublishedInvocationResult,
   type X402PaymentReconciliationEvidenceMaterial,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import type { ExactAmount } from '@/modules/money/public'
 import { createDevelopmentFileX402PaymentAttemptPort } from '../../../tools/dev/fixtures/action-invocation/development-file-x402-payment-attempt-port'
 import type { X402PaymentAttempt, X402PaymentAuthorizationEvent } from '@/modules/action-invocation/x402-payment-attempt'
-import { createDevelopmentDynamicPublishedSource } from '@/modules/action-invocation'
+import { createDevelopmentDynamicPublishedSource } from '@/modules/capability-execution/legacy-dynamic'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   invokePreparedRouteTransport,
   prepareRegisteredRouteTransportInvocation,
   type RouteTransportFetch,
   type RouteTransportInvocation,
-  type X402PaymentAuthorizationIdentity,
-  type X402PaymentSignatureRequest,
   type X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 
@@ -143,14 +142,13 @@ describe('x402 payment reconciliation evidence', () => {
     ['amount', { amount: '10001' }, 'payment_exceeds_step_ceiling'],
     ['network', { network: 'eip155:84532' }, 'payment_requirement_unsupported'],
     ['asset', { asset: '0x0000000000000000000000000000000000000003' }, 'payment_requirement_unsupported'],
-  ] as const)('refuses a challenge with the wrong %s before a second payment attempt', async (_label, override, failureCode) => {
+  ] as const)('refuses pinned terms with the wrong %s before payment submission', async (_label, override, failureCode) => {
     let sendCount = 0
     let prepareCount = 0
-    const route = routeInvocation()
-    const challenge = challengeHeader(override)
+    const route = routeInvocation(override)
     const send: RouteTransportFetch = async () => {
       sendCount += 1
-      return new Response(null, { status: 402, headers: { 'Payment-Required': challenge } })
+      return new Response(null, { status: 500 })
     }
     const runtime: X402RouteTransportRuntime = {
       send,
@@ -179,6 +177,7 @@ describe('x402 payment reconciliation evidence', () => {
           authorizationDigest: `sha256:${'c'.repeat(64)}`,
         }
       },
+      markX402PaymentPossiblySubmitted: () => undefined,
       readX402PaymentAuthorization: async () => 'signed',
       readX402PaymentAuthorizationByDigest: async () => 'signed',
     }
@@ -190,7 +189,7 @@ describe('x402 payment reconciliation evidence', () => {
       ? preparation.observation
       : await invokePreparedRouteTransport(preparation.prepared, runtime)
     expect(observed).toMatchObject({ disposition: 'refused', failureCode })
-    expect(sendCount).toBe(1)
+    expect(sendCount).toBe(0)
     expect(prepareCount).toBe(0)
   })
 })
@@ -205,7 +204,7 @@ type ChallengeRequirement = Readonly<{
   extra: Readonly<Record<string, unknown>>
 }>
 
-function routeInvocation(): RouteTransportInvocation {
+function routeInvocation(paymentRequiredOverride: Partial<ChallengeRequirement> = {}): RouteTransportInvocation {
   const config = {
     method: 'POST' as const,
     requestTimeoutMs: 5_000,
@@ -216,6 +215,7 @@ function routeInvocation(): RouteTransportInvocation {
     assetAmountExponent: 6,
     asset: '0x0000000000000000000000000000000000000001',
     payTo: '0x0000000000000000000000000000000000000002',
+    paymentRequiredJson: pinnedPaymentRequiredJson(paymentRequiredOverride),
   }
   return {
     binding: {
@@ -246,7 +246,7 @@ function routeInvocation(): RouteTransportInvocation {
   }
 }
 
-function challengeHeader(overrides: Partial<ChallengeRequirement> = {}): string {
+function pinnedPaymentRequiredJson(overrides: Partial<ChallengeRequirement> = {}): string {
   const requirement: ChallengeRequirement = {
     scheme: 'exact',
     network: 'eip155:8453',
@@ -257,11 +257,13 @@ function challengeHeader(overrides: Partial<ChallengeRequirement> = {}): string 
     extra: {},
     ...overrides,
   }
-  return encodePaymentRequiredHeader({
+  const paymentRequired = validatePaymentRequired({
     x402Version: 2,
     resource: { url: 'https://provider.example/paid' },
     accepts: [requirement],
   })
+  if (paymentRequired.x402Version !== 2) throw new Error('expected_x402_v2_payment_required')
+  return stableStringify(paymentRequired as StableHashValue)
 }
 
 function amount(currency: string, units: string, exponent: number): ExactAmount {

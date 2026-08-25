@@ -1,8 +1,10 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import { AlertTriangleIcon, CheckCircle2Icon, CircleIcon, Clock3Icon } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Badge } from '@/components/ui/badge'
@@ -25,9 +27,16 @@ import {
   reconcileOwnerInvocationServer,
 } from '@/modules/capability-execution/operation-recovery.functions'
 import type {
+  OperationInvokeReceipt,
   OperationInvokeResult,
   OperationInvokeUsageSummary,
 } from '@/modules/capability-execution/operation-invoke-contracts'
+import {
+  projectInvocationReceipt,
+  type InvocationIssueView,
+  type InvocationReceiptStageView,
+  type InvocationReceiptView,
+} from '@/modules/capability-execution/invocation-receipt-view'
 import type {
   OperationInvokeRecoveryResult,
   OperationInvokeStatusResult,
@@ -65,7 +74,7 @@ export const Route = createFileRoute('/operations/invocations/$invocationRef')({
       invocationRef: params.invocationRef,
     })),
   head: () => ({ meta: [
-    { title: 'Invocation status | Agentic Economy' },
+    { title: 'Invocation receipt | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   pendingComponent: InvocationStatusPending,
@@ -201,17 +210,18 @@ function StatusFound({
   result,
   actions,
 }: Readonly<{ result: FoundInvocationStatus; actions?: InvocationStatusPageActions }>) {
+  const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <article className="mx-auto grid w-full max-w-4xl gap-8 px-4 py-8 md:px-6 md:py-12">
+      <article id="receipt" className="mx-auto grid w-full max-w-5xl scroll-mt-6 gap-6 px-4 py-6 md:px-6 md:py-8">
         <header className="grid gap-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Current invocation</Badge>
-            <Badge variant="secondary">{machineLabel(result.state)}</Badge>
+            <Badge variant="outline">Receipt</Badge>
+            <Badge variant={receiptView.complete ? 'success' : receiptView.issue === undefined ? 'secondary' : 'warning'}>{receiptView.statusLabel}</Badge>
           </div>
           <div className="grid gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Invocation status</h1>
-            <p className="max-w-3xl text-muted-foreground">This owner-scoped record reports the current state exactly as stored. It does not infer completion.</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
+            <p className="max-w-3xl text-muted-foreground">{receiptView.statusDetail}</p>
           </div>
           <dl className="grid gap-3 sm:grid-cols-2">
             <Fact label="Invocation reference"><Ref value={result.invocationRef} /></Fact>
@@ -230,20 +240,228 @@ function StatusFound({
             {result.evidenceHash === undefined ? null : <Fact label="Evidence hash"><Ref value={result.evidenceHash} /></Fact>}
           </dl>
         </header>
+        <ReceiptTimeline stages={receiptView.stages} />
+        {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
         <InvocationRecoveryActions result={result} {...(actions === undefined ? {} : { actions })} />
 
-
-        {result.usage === undefined ? null : <UsageDetails usage={result.usage} />}
+        <ReceiptMoneyFacts view={receiptView} />
         {result.result === undefined ? (
           <section className="grid gap-2 border-t border-border pt-8" aria-labelledby="current-result-title">
-            <h2 id="current-result-title" className="text-2xl font-semibold tracking-tight text-foreground">Current result</h2>
+            <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
             <p className="text-muted-foreground">No canonical result is recorded yet. The state above remains authoritative.</p>
           </section>
         ) : <ResultDetails result={result.result} />}
+        {receiptView.complete ? (
+          <InvocationReuseActions
+            key={receiptView.operationRef ?? receiptView.invocationRef}
+            view={receiptView}
+          />
+        ) : null}
+        <MachineReadableReceipt view={receiptView} />
       </article>
     </AePublicShell>
   )
 }
+
+function ReceiptTimeline({ stages }: Readonly<{ stages: readonly InvocationReceiptStageView[] }>) {
+  return (
+    <section className="grid gap-3 border-t border-border pt-6" aria-labelledby="receipt-progress-title">
+      <div className="grid gap-1">
+        <h2 id="receipt-progress-title" className="text-xl font-semibold tracking-tight text-foreground">What happened</h2>
+        <p className="text-sm text-muted-foreground">Recorded progress for this exact call. A pending stage is not claimed as complete.</p>
+      </div>
+      <ol className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-2 lg:grid-cols-6">
+        {stages.map((stageView, index) => (
+          <li
+            key={stageView.id}
+            aria-current={stageView.state === 'current' ? 'step' : undefined}
+            className="grid min-w-0 content-start gap-2 border-b p-3 last:border-b-0 sm:border-r sm:[&:nth-child(even)]:border-r-0 lg:border-b-0 lg:[&:nth-child(even)]:border-r lg:last:border-r-0"
+          >
+            <div className="flex items-center gap-2">
+              <StageIcon state={stageView.state} />
+              <span className="text-sm font-semibold text-foreground">{index + 1}. {stageView.label}</span>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">{stageView.detail}</p>
+            <span className="sr-only">Stage state: {machineLabel(stageView.state)}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function StageIcon({ state }: Readonly<{ state: InvocationReceiptStageView['state'] }>) {
+  if (state === 'complete') return <CheckCircle2Icon aria-hidden="true" className="size-4 shrink-0 text-success" />
+  if (state === 'attention') return <AlertTriangleIcon aria-hidden="true" className="size-4 shrink-0 text-warning" />
+  if (state === 'current') return <Clock3Icon aria-hidden="true" className="size-4 shrink-0 text-brand" />
+  return <CircleIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+}
+
+function InvocationIssue({ issue }: Readonly<{ issue: InvocationIssueView }>) {
+  return (
+    <Alert variant="destructive" role="alert">
+      <AlertTriangleIcon aria-hidden="true" />
+      <AlertTitle>{issue.title}</AlertTitle>
+      <AlertDescription>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Fact label="What happened" value={issue.whatHappened} />
+          <Fact label="Did money move?" value={issue.moneyMovement} />
+          <Fact label="What happens automatically" value={issue.automaticNext} />
+          <Fact label="What you can do" value={issue.userNext} />
+          <Fact label="Reference kept"><Ref value={issue.retainedReference} /></Fact>
+        </dl>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function ReceiptMoneyFacts({ view }: Readonly<{ view: InvocationReceiptView }>) {
+  return (
+    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="receipt-money-title">
+      <div className="grid gap-1">
+        <h2 id="receipt-money-title" className="text-xl font-semibold tracking-tight text-foreground">Money before and after the call</h2>
+        <p className="text-sm text-muted-foreground">Authorization is the pre-call ceiling. Usage is the post-call recorded amount. Missing facts stay missing.</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="shadow-none">
+          <CardHeader>
+            <h3 className="font-semibold text-foreground">Before</h3>
+            <CardDescription>Quoted components and buyer authorization.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {view.receipt === undefined ? (
+              <p className="text-sm text-muted-foreground">No public pre-call money receipt is attached to this record.</p>
+            ) : <ReceiptAuthorizationFacts receipt={view.receipt} />}
+          </CardContent>
+        </Card>
+        <Card className="shadow-none">
+          <CardHeader>
+            <h3 className="font-semibold text-foreground">After</h3>
+            <CardDescription>Recorded settlement, refund, or uncertainty.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {view.usage === undefined && view.receipt === undefined ? (
+              <p className="text-sm text-muted-foreground">No post-call money fact is recorded yet.</p>
+            ) : <ReceiptSettlementFacts usage={view.usage} receipt={view.receipt} />}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  )
+}
+
+function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: OperationInvokeReceipt }>) {
+  return (
+    <dl className="grid gap-3 sm:grid-cols-2">
+      <Fact label="Provider quote" value={formatCurrencyAmount(receipt.providerQuotedAmount)} />
+      <Fact label="Agentic Economy fee" value={formatCurrencyAmount(receipt.agenticEconomyFee)} />
+      <Fact label="Buyer authorized up to" value={formatCurrencyAmount(receipt.totalBuyerAuthorization)} />
+      <Fact label="Price digest"><Ref value={receipt.priceDigest} /></Fact>
+    </dl>
+  )
+}
+
+function ReceiptSettlementFacts({
+  usage,
+  receipt,
+}: Readonly<{ usage: OperationInvokeUsageSummary | undefined; receipt: OperationInvokeReceipt | undefined }>) {
+  return (
+    <dl className="grid gap-3 sm:grid-cols-2">
+      {usage === undefined ? null : (
+        <>
+          <Fact label="Recorded outcome" value={machineLabel(usage.chargeState)} />
+          <Fact label="Exact amount" value={formatCurrencyAmount(usage.amount)} />
+          <Fact label="Observed"><time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time></Fact>
+          <Fact label="Usage reference"><Ref value={usage.usageRef} /></Fact>
+          {usage.transactionRef === undefined ? null : <Fact label="Transaction reference"><Ref value={usage.transactionRef} /></Fact>}
+          {usage.durationMs === undefined ? null : <Fact label="Duration" value={`${usage.durationMs} ms`} />}
+        </>
+      )}
+      {receipt === undefined ? null : (
+        <>
+          <Fact label="Receipt state" value={machineLabel(receipt.state)} />
+          <Fact label="Receipt reference"><Ref value={receipt.receiptRef} /></Fact>
+          <Fact label="Refund state" value={machineLabel(receipt.refundState ?? 'not recorded')} />
+          <Fact label="Loss state" value={machineLabel(receipt.lossState ?? 'not recorded')} />
+          {receipt.settlementTransactionHash === undefined ? null : <Fact label="Settlement transaction"><Ref value={receipt.settlementTransactionHash} /></Fact>}
+        </>
+      )}
+    </dl>
+  )
+}
+
+function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView }>) {
+  const operationRef = view.operationRef
+  if (operationRef === undefined) return null
+  const priorInputJson = view.previousInput === undefined ? undefined : JSON.stringify(view.previousInput)
+  const cliInput = priorInputJson === undefined
+    ? '"$AE_INPUT_JSON"'
+    : `'${priorInputJson.replaceAll("'", "'\\''")}'`
+  const apiInput = priorInputJson ?? '$AE_INPUT_JSON'
+  const cli = `ae call '${operationRef}' --input ${cliInput} --wait`
+  const api = `curl -sS '$ORIGIN/api/v1/operations/call' \\
+  -H "Authorization: Bearer $AE_API_KEY" \\
+  -H 'content-type: application/json' \\
+  --data "{\\"operationRef\\":\\"${operationRef}\\",\\"input\\":${apiInput.replaceAll('"', '\\"')},\\"idempotencyKey\\":\\"$AE_IDEMPOTENCY_KEY\\"}"`
+  const inputInstruction = priorInputJson === undefined ? 'fresh input' : `this prior input as a starting point: ${priorInputJson}`
+  const mcp = `Connect to $ORIGIN/mcp, initialize the session, list tools, then call ae_operation_invoke with operationRef=${operationRef}, ${inputInstruction}, and a new idempotencyKey.`
+  const prompt = `Use Agentic Economy to inspect ${operationRef}. Reconfirm current terms and ${inputInstruction}. Ask me for any required approval. Create a new idempotency key, invoke the Operation once, follow its invocation reference to a terminal result, and return the output with its receipt. Do not replay ${view.invocationRef} as a new call.`
+  return (
+    <section className="grid gap-4 border-t border-border pt-6" aria-labelledby="reuse-title">
+      <div className="grid gap-1">
+        <h2 id="reuse-title" className="text-xl font-semibold tracking-tight text-foreground">Use this capability again</h2>
+        <p className="text-sm text-muted-foreground">A new run needs fresh input and a new idempotency key. The completed receipt above never becomes the identity for another call.</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild className="min-h-11">
+          <Link to="/operations/$operationRef" params={{ operationRef }}>Run again</Link>
+        </Button>
+        <Button asChild variant="outline" className="min-h-11"><a href="#receipt">View receipt</a></Button>
+      </div>
+      {priorInputJson === undefined ? null : (
+        <Card className="shadow-none">
+          <CardHeader>
+            <h3 className="font-semibold text-foreground">Previous input</h3>
+            <CardDescription>Owner-visible input from this invocation. Reconfirm current terms before running it again.</CardDescription>
+          </CardHeader>
+          <CardContent><pre className="overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre></CardContent>
+        </Card>
+      )}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
+        <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
+        <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Operation." label="MCP setup instruction" code={mcp} />
+        <ReuseCopy title="Copy agent prompt" description="Hand the task to an agent without reusing this receipt identity." label="agent prompt" code={prompt} />
+      </div>
+    </section>
+  )
+}
+
+function ReuseCopy({ title, description, label, code }: Readonly<{ title: string; description: string; label: string; code: string }>) {
+  return (
+    <Card className="shadow-none">
+      <CardHeader>
+        <h3 className="font-semibold text-foreground">{title}</h3>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent><AeCopyCommand compact label={label} code={code} /></CardContent>
+    </Card>
+  )
+}
+
+function MachineReadableReceipt({ view }: Readonly<{ view: InvocationReceiptView }>) {
+  return (
+    <details className="rounded-lg border bg-card">
+      <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        Machine-readable receipt
+      </summary>
+      <div className="border-t p-4">
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
+      </div>
+    </details>
+  )
+}
+
 function InvocationRecoveryActions({
   result,
   actions,
@@ -270,12 +488,12 @@ function InvocationRecoveryActions({
   if (!canRefreshNow && !canCancelNow && !canReconcileNow && !hasReconciliationBlocker && actions?.feedback === undefined) return null
 
   return (
-    <section className="grid gap-3 border-t border-border pt-8" aria-labelledby="recovery-actions-title">
+    <section className="grid gap-3 border-t border-border pt-6" aria-labelledby="recovery-actions-title">
       <div className="grid gap-1">
-        <h2 id="recovery-actions-title" className="text-2xl font-semibold tracking-tight text-foreground">Recovery actions</h2>
-        <p className="text-sm text-muted-foreground">Actions are explicit and refresh this exact owner-scoped status record once.</p>
+        <h2 id="recovery-actions-title" className="text-xl font-semibold tracking-tight text-foreground">Resolve this invocation</h2>
+        <p className="text-sm text-muted-foreground">Use only the action supported by the recorded state. Each action refreshes this exact invocation.</p>
       </div>
-      <StatusFeedback feedback={actions?.feedback} />
+      <StatusFeedback feedback={actions?.feedback} invocationRef={result.invocationRef} />
       {hasReconciliationBlocker ? (
         <Alert>
           <AlertTitle>Reconciliation cannot be submitted</AlertTitle>
@@ -438,31 +656,11 @@ function recoveryRefusalMessage(code: string): string {
 }
 
 
-function UsageDetails({ usage }: Readonly<{ usage: OperationInvokeUsageSummary }>) {
-  return (
-    <section className="grid gap-5 border-t border-border pt-8" aria-labelledby="usage-title">
-      <div className="grid gap-1">
-        <h2 id="usage-title" className="text-2xl font-semibold tracking-tight text-foreground">Usage and charge</h2>
-        <p className="text-sm text-muted-foreground">Recorded usage facts for this exact invocation.</p>
-      </div>
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <Fact label="Charge state" value={machineLabel(usage.chargeState)} />
-        <Fact label="Exact amount" value={formatCurrencyAmount(usage.amount)} />
-        <Fact label="Usage reference"><Ref value={usage.usageRef} /></Fact>
-        <Fact label="Observed"><time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time></Fact>
-        <Fact label="Price digest"><Ref value={usage.priceDigest} /></Fact>
-        {usage.transactionRef === undefined ? null : <Fact label="Transaction reference"><Ref value={usage.transactionRef} /></Fact>}
-        {usage.durationMs === undefined ? null : <Fact label="Duration" value={`${usage.durationMs} ms`} />}
-      </dl>
-    </section>
-  )
-}
-
 function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-8" aria-labelledby="current-result-title">
+    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="current-result-title">
       <div className="grid gap-1">
-        <h2 id="current-result-title" className="text-2xl font-semibold tracking-tight text-foreground">Current result</h2>
+        <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
         <p className="text-sm text-muted-foreground">Canonical result facts as recorded, without changing the current state above.</p>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2">
@@ -525,21 +723,25 @@ function StatusRefused({
   actions?: InvocationStatusPageActions
 }>) {
   const canRetry = result.retryable && actions?.onRefresh !== undefined
+  const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <section className="mx-auto grid w-full max-w-3xl gap-6 px-4 py-16 md:px-6">
+      <section id="receipt" className="mx-auto grid w-full max-w-4xl scroll-mt-6 gap-6 px-4 py-10 md:px-6">
         <div className="grid gap-3">
-          <Badge variant="outline">Status refused</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Invocation status is unavailable</h1>
-          <p className="text-muted-foreground">AE cannot return a current owner-scoped record for this reference. No state or completion is claimed.</p>
+          <Badge variant="warning" className="w-fit">{receiptView.statusLabel}</Badge>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
+          <p className="text-muted-foreground">{receiptView.statusDetail}</p>
           <Ref value={result.invocationRef} />
           {result.code === 'invocation_not_found' ? (
             <StatusSignInAction invocationRef={result.invocationRef} />
           ) : canRetry && actions !== undefined ? (
             <RefreshStatusButton actions={actions} />
           ) : null}
-          <StatusFeedback feedback={actions?.feedback} />
+          <StatusFeedback feedback={actions?.feedback} invocationRef={result.invocationRef} />
         </div>
+        <ReceiptTimeline stages={receiptView.stages} />
+        {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
+        <ReceiptMoneyFacts view={receiptView} />
         <Card>
           <CardHeader>
             <h2 className="text-xl font-semibold text-foreground">Refusal</h2>
@@ -553,6 +755,7 @@ function StatusRefused({
             </dl>
           </CardContent>
         </Card>
+        <MachineReadableReceipt view={receiptView} />
       </section>
     </AePublicShell>
   )
@@ -565,15 +768,22 @@ function StatusUnavailable({
   result: Extract<InvocationStatusPageResult, { kind: 'source_unavailable' }>
   actions?: InvocationStatusPageActions
 }>) {
+  const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <section className="mx-auto grid w-full max-w-3xl gap-3 px-4 py-16 md:px-6" role="alert">
-        <Badge variant="outline">Source unavailable</Badge>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Current status is unavailable</h1>
-        <p className="text-muted-foreground">AE could not read the owner-scoped status source. No invocation state or completion is claimed.</p>
-        <Ref value={result.invocationRef} />
-        {actions?.onRefresh === undefined ? null : <RefreshStatusButton actions={actions} />}
-        <StatusFeedback feedback={actions?.feedback} />
+      <section id="receipt" className="mx-auto grid w-full max-w-4xl scroll-mt-6 gap-6 px-4 py-10 md:px-6">
+        <div className="grid gap-3">
+          <Badge variant="warning" className="w-fit">Receipt unavailable</Badge>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
+          <p className="text-muted-foreground">{receiptView.statusDetail}</p>
+          <Ref value={result.invocationRef} />
+          {actions?.onRefresh === undefined ? null : <RefreshStatusButton actions={actions} />}
+          <StatusFeedback feedback={actions?.feedback} invocationRef={result.invocationRef} />
+        </div>
+        <ReceiptTimeline stages={receiptView.stages} />
+        {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
+        <ReceiptMoneyFacts view={receiptView} />
+        <MachineReadableReceipt view={receiptView} />
       </section>
     </AePublicShell>
   )
@@ -593,11 +803,26 @@ function RefreshStatusButton({ actions }: Readonly<{ actions: InvocationStatusPa
   )
 }
 
-function StatusFeedback({ feedback }: Readonly<{ feedback?: InvocationStatusPageActions['feedback'] }>) {
+function StatusFeedback({
+  feedback,
+  invocationRef,
+}: Readonly<{ feedback?: InvocationStatusPageActions['feedback']; invocationRef: string }>) {
   if (feedback === undefined) return null
+  if (feedback.kind === 'error') {
+    return (
+      <InvocationIssue issue={{
+        title: 'The requested receipt action did not complete',
+        whatHappened: feedback.message,
+        moneyMovement: 'This failed action does not prove that money moved. The recorded before-and-after facts on this receipt remain authoritative.',
+        automaticNext: 'No replacement invocation was created automatically.',
+        userNext: 'Follow only the recovery action supported by the current receipt state, or reload this same receipt.',
+        retainedReference: invocationRef,
+      }} />
+    )
+  }
   return (
-    <Alert variant={feedback.kind === 'error' ? 'destructive' : 'default'} role="status">
-      <AlertTitle>{feedback.kind === 'error' ? 'Status not refreshed' : 'Status refreshed'}</AlertTitle>
+    <Alert role="status">
+      <AlertTitle>Status refreshed</AlertTitle>
       <AlertDescription>{feedback.message}</AlertDescription>
     </Alert>
   )
@@ -618,22 +843,16 @@ function InvocationStatusPending() {
   return (
     <AePublicShell>
       <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true" aria-live="polite">
-        <h1 className="sr-only">Invocation status</h1>
-        <p className="text-muted-foreground">Checking the exact current owner-scoped invocation status…</p>
+        <h1 className="sr-only">Invocation receipt</h1>
+        <p className="text-muted-foreground">Checking the exact current owner-scoped invocation receipt…</p>
       </section>
     </AePublicShell>
   )
 }
 
 function InvocationStatusError() {
-  return (
-    <AePublicShell>
-      <section className="mx-auto grid w-full max-w-3xl gap-3 px-4 py-16 md:px-6" role="alert">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">Current status is unavailable</h1>
-        <p className="text-muted-foreground">AE could not present the owner-scoped status. No invocation state or completion is claimed.</p>
-      </section>
-    </AePublicShell>
-  )
+  const { invocationRef } = Route.useParams()
+  return <StatusUnavailable result={{ kind: 'source_unavailable', invocationRef }} />
 }
 
 function Fact({ label, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {

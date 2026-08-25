@@ -16,7 +16,6 @@ export default defineConfig({
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx', 'convex/**/*.test.ts'],
     setupFiles: [
       './tests/setup/web-storage.ts',
-      './tests/setup/no-search-gap-writes.ts',
       './tests/setup/jsdom-platform.ts',
       './tests/setup/http-rate-limit.ts',
     ],

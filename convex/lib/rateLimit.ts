@@ -6,10 +6,9 @@ export const RATE_LIMIT_NAMES = [
   'public-read',
   'public-mutation',
   'oauth-issuance',
-  'answer-turn-submit',
-  'answer-follow-up-chips',
-  'answer-stream',
-  'inquiry-submit',
+  'chat-submit',
+  'chat-anonymous',
+  'chat-anonymous-edge',
   'dispute-open',
 ] as const
 
@@ -26,10 +25,9 @@ const limits: RateLimitDefinitions = {
   'public-read': { kind: 'token bucket', rate: 120, period: MINUTE, capacity: 120 },
   'public-mutation': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
   'oauth-issuance': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
-  'answer-turn-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'answer-follow-up-chips': { kind: 'token bucket', rate: 60, period: HOUR, capacity: 60 },
-  'answer-stream': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
-  'inquiry-submit': { kind: 'token bucket', rate: 5, period: MINUTE, capacity: 5 },
+  'chat-submit': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
+  'chat-anonymous': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
+  'chat-anonymous-edge': { kind: 'token bucket', rate: 30, period: HOUR, capacity: 30 },
   'dispute-open': { kind: 'token bucket', rate: 3, period: MINUTE, capacity: 3 },
 }
 

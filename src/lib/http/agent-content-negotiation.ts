@@ -35,12 +35,8 @@ const reservedPaths = [
   '/mcp',
 ] as const
 
-/**
- * `/{slug}/ucp` and `/{slug}/tools/{id}` already answer machines under a
- * business slug, so they are reserved by suffix rather than by prefix.
- */
+/** `/{slug}/ucp` answers machines under a business slug. */
 const reservedPathSuffixes = ['/ucp'] as const
-const reservedPathSegments = ['/tools/'] as const
 
 export type AgentPageNegotiation =
   | Readonly<{ kind: 'serve_html' }>
@@ -70,7 +66,6 @@ export function negotiateAgentPage(request: Request): AgentPageNegotiation {
   if (reservedPaths.some((reserved) => path === reserved)) return { kind: 'serve_html' }
   if (reservedPathPrefixes.some((prefix) => path.startsWith(prefix))) return { kind: 'serve_html' }
   if (reservedPathSuffixes.some((suffix) => path.endsWith(suffix))) return { kind: 'serve_html' }
-  if (reservedPathSegments.some((segment) => path.includes(segment))) return { kind: 'serve_html' }
   // A dotted final segment is an asset request, not a page.
   if (path.split('/').at(-1)?.includes('.') === true) return { kind: 'serve_html' }
 

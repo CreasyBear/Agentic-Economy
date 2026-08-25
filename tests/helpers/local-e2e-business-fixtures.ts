@@ -2,7 +2,7 @@ import type { OfferingPrice } from '../../src/modules/catalog/public'
 
 export type LocalE2eOfferingAccessPathFixture = Readonly<{
   kind: 'human_request'
-  channel: 'phone' | 'website' | 'ae_inquiry'
+  channel: 'phone' | 'website'
   disclosure: string
 }>
 
@@ -29,40 +29,55 @@ export type LocalE2eBusinessFixture = Readonly<{
   inquiryAdmission?: 'admitted'
 }>
 
-export const DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG = 'parramatta-emergency-plumbing'
+export const DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG = 'demo-listed-provider'
 
 export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
   {
-    requestedSlug: 'plumbing-demo',
-    businessName: 'Demo Plumbing',
-    category: 'Plumbing',
+    requestedSlug: DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG,
+    businessName: 'Demo listed provider',
+    category: 'Listed provider',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     offerings: [{
-      name: 'Diagnostic plumbing',
-      category: 'Plumbing',
-      summary: 'Diagnostic plumbing triage for first contact.',
+      name: 'Listed offering',
+      category: 'Listed provider',
+      summary: 'Published listing for first contact.',
+      serviceAreaSummary: 'Parramatta and nearby suburbs',
+      availabilitySummary: 'Hours unknown',
+      accessPaths: [],
+    }],
+  },
+  {
+    requestedSlug: 'demo-inquiry-provider',
+    businessName: 'Demo inquiry provider',
+    category: 'Inquiry provider',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    offerings: [{
+      name: 'Inquiry offering',
+      category: 'Inquiry provider',
+      summary: 'Inquiry offering for first contact.',
       serviceAreaSummary: 'Parramatta',
       availabilitySummary: 'Hours unknown',
       accessPaths: [{
         kind: 'human_request',
-        channel: 'ae_inquiry',
+        channel: 'website',
         disclosure: 'Use the inquiry form for a first contact.',
       }],
     }],
     responseTimeMinutes: 22,
   },
   {
-    requestedSlug: 'joondalup-rapid-plumbing',
-    businessName: 'Joondalup Rapid Plumbing',
-    category: 'Plumbing',
+    requestedSlug: 'joondalup-listed-provider',
+    businessName: 'Joondalup listed provider',
+    category: 'Listed provider',
     suburb: 'Joondalup',
     stateTerritory: 'WA',
     publishedPhone: '0412 345 678',
     offerings: [{
-      name: 'Emergency plumbing',
-      category: 'Plumbing',
-      summary: 'Burst pipe and blocked drain triage for urgent local plumbing issues.',
+      name: 'Listed offering',
+      category: 'Listed provider',
+      summary: 'Listed offering for urgent local first contact.',
       serviceAreaSummary: 'Joondalup and nearby suburbs',
       availabilitySummary: 'Mon–Fri 7am–5pm, Sat 8am–12pm',
       pricingSummary: 'Demo price — $180 call-out, quoted before work starts',
@@ -74,7 +89,7 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
         },
         {
           kind: 'human_request',
-          channel: 'ae_inquiry',
+          channel: 'website',
           disclosure: 'Use the inquiry form for a first contact.',
         },
       ],
@@ -83,16 +98,16 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
     inquiryAdmission: 'admitted',
   },
   {
-    requestedSlug: 'fremantle-coastal-electrical',
-    businessName: 'Fremantle Coastal Electrical',
-    category: 'Electrical repairs',
+    requestedSlug: 'fremantle-listed-provider',
+    businessName: 'Fremantle listed provider',
+    category: 'Listed provider',
     suburb: 'Fremantle',
     stateTerritory: 'WA',
     publishedPhone: '(08) 9430 1234',
     offerings: [{
-      name: 'Electrical fault repairs',
-      category: 'Electrical repairs',
-      summary: 'Electrical fault checks and repair coordination for homes and small businesses.',
+      name: 'Listed offering',
+      category: 'Listed provider',
+      summary: 'Listed offering for homes and small businesses.',
       serviceAreaSummary: 'Fremantle and nearby suburbs',
       availabilitySummary: 'Mon–Sat 8am–6pm',
       pricingSummary: 'Demo price — $140 first hour, then $95 per hour',
@@ -105,19 +120,19 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
     responseTimeMinutes: 25,
   },
   {
-    requestedSlug: 'adelaide-dental-clinic',
-    businessName: 'Adelaide Dental Clinic',
-    category: 'Dental clinic',
+    requestedSlug: 'adelaide-listed-provider',
+    businessName: 'Adelaide listed provider',
+    category: 'Listed provider',
     suburb: 'Adelaide',
     stateTerritory: 'SA',
     publishedPhone: '(08) 5550 1300',
     offerings: [{
-      name: 'General dental care',
-      category: 'Dental clinic',
-      summary: 'Dentist check-ups, tooth pain triage, and routine dental care information.',
+      name: 'Listed offering',
+      category: 'Listed provider',
+      summary: 'Listed offering for first contact in Adelaide.',
       serviceAreaSummary: 'Adelaide and nearby suburbs',
       availabilitySummary: 'Mon–Fri 8:30am–5pm',
-      pricingSummary: 'Demo price — $95 check-up and clean',
+      pricingSummary: 'Demo price — $95 first visit',
       accessPaths: [
         {
           kind: 'human_request',
@@ -126,7 +141,7 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
         },
         {
           kind: 'human_request',
-          channel: 'ae_inquiry',
+          channel: 'website',
           disclosure: 'Use the inquiry form for a first contact.',
         },
       ],
@@ -137,6 +152,5 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
 ]
 
 export const LOCAL_DEVELOPMENT_BUSINESS_FIXTURE_SLUGS = [
-  DEFAULT_LOCAL_REGISTRY_FIXTURE_SLUG,
   ...LOCAL_E2E_BUSINESS_FIXTURES.map((fixture) => fixture.requestedSlug),
 ] as const

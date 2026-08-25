@@ -13,29 +13,23 @@ import { constantTimeStringEqual } from '@/lib/server/constant-time'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 
 export const SourceWriteAdmissionScopeValues = [
-  'owner_claim',
   'catalog_publish',
   'removal_dispute',
-  'public_inquiry',
-  'owner_inquiry',
   'protected_action',
   'billing',
   'admin_operator',
   'discovery_repair',
   'notification_repair',
-  'harness_session',
   'agent_identity',
-  'answer_thread',
   'study',
 ] as const
 
 export type SourceWriteAdmissionScope = (typeof SourceWriteAdmissionScopeValues)[number]
 
 export const SourceWriteKeyFamilyValues = [
-  'inquiry',
   'billing',
   'protected',
-  'claim',
+  'catalog',
   'operator',
   'repair',
   'session',
@@ -134,20 +128,18 @@ const sourceWriteSignatureComponents: Component[] = [
 ]
 
 const familyEnvSuffix: Record<SourceWriteKeyFamily, string> = {
-  inquiry: 'INQUIRY',
   billing: 'BILLING',
   protected: 'PROTECTED',
-  claim: 'CLAIM',
+  catalog: 'CATALOG',
   operator: 'OPERATOR',
   repair: 'REPAIR',
   session: 'SESSION',
 }
 
 const defaultDerivedKeyId: Record<SourceWriteKeyFamily, string> = {
-  inquiry: 'dev-inquiry-v2',
   billing: 'dev-billing-v2',
   protected: 'dev-protected-v2',
-  claim: 'dev-claim-v2',
+  catalog: 'dev-catalog-v2',
   operator: 'dev-operator-v2',
   repair: 'dev-repair-v2',
   session: 'dev-session-v2',
@@ -155,25 +147,19 @@ const defaultDerivedKeyId: Record<SourceWriteKeyFamily, string> = {
 
 export function sourceWriteKeyFamilyForScope(scope: SourceWriteAdmissionScope): SourceWriteKeyFamily {
   switch (scope) {
-    case 'public_inquiry':
-    case 'owner_inquiry':
-      return 'inquiry'
     case 'billing':
       return 'billing'
     case 'protected_action':
       return 'protected'
-    case 'owner_claim':
     case 'catalog_publish':
     case 'removal_dispute':
-      return 'claim'
+      return 'catalog'
     case 'admin_operator':
       return 'operator'
     case 'discovery_repair':
     case 'notification_repair':
       return 'repair'
-    case 'harness_session':
     case 'agent_identity':
-    case 'answer_thread':
     case 'study':
       return 'session'
   }

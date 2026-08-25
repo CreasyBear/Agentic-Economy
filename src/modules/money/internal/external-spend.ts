@@ -30,8 +30,7 @@ export const EXTERNAL_SPEND_SUBMISSION_STATUSES = [
 ] as const
 export type ExternalSpendSubmissionStatus = (typeof EXTERNAL_SPEND_SUBMISSION_STATUSES)[number]
 
-export type ExternalSpendIdentity = Readonly<{
-  reservationRef: string
+export type ExternalSpendPaymentFacts = Readonly<{
   principalId: string
   credentialId: string
   grantRef: string
@@ -45,6 +44,13 @@ export type ExternalSpendIdentity = Readonly<{
   paymentIdentifier: string
   challengeDigest: string
   amount: ExactAmount
+  custodyRef?: string
+  custodyGeneration?: number
+  custodyDailyMaximum?: ExactAmount
+}>
+
+export type ExternalSpendIdentity = ExternalSpendPaymentFacts & Readonly<{
+  reservationRef: string
   idempotencyDigest: string
 }>
 
@@ -54,6 +60,8 @@ export type ExternalSpendReservation = ExternalSpendIdentity & Readonly<{
   budgetPolicyRef: string
   budgetDayStart: string
   budgetMonthStart: string
+  custodyBudgetPolicyRef?: string
+  custodyBudgetDayStart?: string
   submissionStatus?: ExternalSpendSubmissionStatus
   finalizationDigest?: string
   paymentResponseDigest?: string
@@ -75,13 +83,20 @@ export type ExternalSpendRefusalCode =
   | 'external_spend_identity_conflict'
   | 'external_spend_grant_invalid'
   | 'external_spend_budget_refused'
-  | 'external_spend_live_money_gate_open'
   | 'external_spend_payment_response_invalid'
   | 'external_spend_invalid_amount'
   | 'external_spend_not_found'
   | 'external_spend_state_conflict'
   | 'external_spend_reconciliation_required'
   | 'external_spend_already_reversed'
+  | 'external_spend_custody_policy_invalid'
+  | 'external_spend_custody_daily_limit_exceeded'
+
+type ExternalSpendHandlerRefusalCode = Exclude<
+  ExternalSpendRefusalCode,
+  | 'external_spend_custody_policy_invalid'
+  | 'external_spend_custody_daily_limit_exceeded'
+>
 
 export type ExternalSpendMutationResult =
   | Readonly<{
@@ -95,6 +110,65 @@ export type ExternalSpendMutationResult =
       code: ExternalSpendRefusalCode
       retryable: boolean
     }>
+
+export function mintExternalSpendIdentity(
+  facts: ExternalSpendPaymentFacts,
+): ExternalSpendIdentity {
+  const idempotencyDigest = canonicalDigest({
+    format: 'ae.money.external-spend-idempotency:v1',
+    ...facts,
+  } as StableHashValue)
+  return {
+    ...facts,
+    reservationRef: `external-spend:${idempotencyDigest}`,
+    idempotencyDigest,
+  }
+}
+
+export function externalSpendIdentityFromReservation(
+  reservation: Pick<ExternalSpendReservation, keyof ExternalSpendIdentity>,
+): ExternalSpendIdentity {
+  return {
+    reservationRef: reservation.reservationRef,
+    principalId: reservation.principalId,
+    credentialId: reservation.credentialId,
+    grantRef: reservation.grantRef,
+    grantGeneration: reservation.grantGeneration,
+    environment: reservation.environment,
+    invocationRef: reservation.invocationRef,
+    attemptRef: reservation.attemptRef,
+    effectGeneration: reservation.effectGeneration,
+    operationRef: reservation.operationRef,
+    providerRef: reservation.providerRef,
+    paymentIdentifier: reservation.paymentIdentifier,
+    challengeDigest: reservation.challengeDigest,
+    amount: reservation.amount,
+    ...(reservation.custodyRef === undefined
+      ? {}
+      : { custodyRef: reservation.custodyRef }),
+    ...(reservation.custodyGeneration === undefined
+      ? {}
+      : { custodyGeneration: reservation.custodyGeneration }),
+    ...(reservation.custodyDailyMaximum === undefined
+      ? {}
+      : { custodyDailyMaximum: reservation.custodyDailyMaximum }),
+    idempotencyDigest: reservation.idempotencyDigest,
+  }
+}
+
+export function externalSpendIdentityMatchingReservationRef(
+  facts: ExternalSpendPaymentFacts,
+  reservationRef: string,
+): ExternalSpendIdentity | undefined {
+  if (
+    !externalSpendPaymentFactsValid(facts)
+    || reservationRef.trim().length === 0
+  ) {
+    return undefined
+  }
+  const identity = mintExternalSpendIdentity(facts)
+  return identity.reservationRef === reservationRef ? identity : undefined
+}
 
 export function externalSpendIdentityDigest(identity: ExternalSpendIdentity): string {
   return canonicalDigest({
@@ -158,6 +232,12 @@ export function sameExternalSpendIdentity(
     && left.paymentIdentifier === right.paymentIdentifier
     && left.challengeDigest === right.challengeDigest
     && compareExactAmounts(left.amount, right.amount) === 0
+    && left.custodyRef === right.custodyRef
+    && left.custodyGeneration === right.custodyGeneration
+    && (left.custodyDailyMaximum === undefined
+      ? right.custodyDailyMaximum === undefined
+      : right.custodyDailyMaximum !== undefined
+        && compareExactAmounts(left.custodyDailyMaximum, right.custodyDailyMaximum) === 0)
     && left.idempotencyDigest === right.idempotencyDigest
 }
 
@@ -171,11 +251,10 @@ export function externalSpendStateForSettlement(
       : 'outcome_unknown'
 }
 
-export function externalSpendIdentityMaterialValid(
-  input: ExternalSpendIdentity,
+export function externalSpendPaymentFactsValid(
+  input: ExternalSpendPaymentFacts,
 ): boolean {
   return [
-    input.reservationRef,
     input.principalId,
     input.credentialId,
     input.grantRef,
@@ -185,18 +264,73 @@ export function externalSpendIdentityMaterialValid(
     input.providerRef,
     input.paymentIdentifier,
     input.challengeDigest,
-    input.idempotencyDigest,
   ].every((value) => value.trim().length > 0)
     && Number.isSafeInteger(input.grantGeneration)
     && input.grantGeneration > 0
     && Number.isSafeInteger(input.effectGeneration)
     && input.effectGeneration > 0
+    && (input.environment === 'sandbox' || input.environment === 'production')
     && exactAmountSchema.safeParse(input.amount).success
+    && externalSpendCustodyPolicyRefusal(input) === undefined
+}
+
+export function externalSpendCustodyPolicyRefusal(
+  input: ExternalSpendPaymentFacts,
+): Extract<
+  ExternalSpendRefusalCode,
+  | 'external_spend_custody_policy_invalid'
+  | 'external_spend_custody_daily_limit_exceeded'
+> | undefined {
+  const custodyFields = [
+    input.custodyRef,
+    input.custodyGeneration,
+    input.custodyDailyMaximum,
+  ]
+  const supplied = custodyFields.filter((value) => value !== undefined).length
+  if (supplied === 0) {
+    return undefined
+  }
+  if (supplied !== custodyFields.length || input.environment !== 'production') {
+    return 'external_spend_custody_policy_invalid'
+  }
+  const { custodyRef, custodyGeneration, custodyDailyMaximum } = input
+  if (
+    typeof custodyRef !== 'string'
+    || custodyRef.trim().length === 0
+    || typeof custodyGeneration !== 'number'
+    || !Number.isSafeInteger(custodyGeneration)
+    || custodyGeneration <= 0
+    || custodyDailyMaximum === undefined
+    || !exactAmountSchema.safeParse(input.amount).success
+    || !exactAmountSchema.safeParse(custodyDailyMaximum).success
+    || input.amount.currency !== custodyDailyMaximum.currency
+    || input.amount.exponent !== custodyDailyMaximum.exponent
+  ) {
+    return 'external_spend_custody_policy_invalid'
+  }
+  const comparison = compareExactAmounts(
+    input.amount,
+    custodyDailyMaximum,
+  )
+  if (comparison === undefined) {
+    return 'external_spend_custody_policy_invalid'
+  }
+  return comparison > 0
+    ? 'external_spend_custody_daily_limit_exceeded'
+    : undefined
+}
+
+export function externalSpendIdentityMaterialValid(
+  input: ExternalSpendIdentity,
+): boolean {
+  return externalSpendPaymentFactsValid(input)
+    && input.reservationRef.trim().length > 0
+    && input.idempotencyDigest.trim().length > 0
 }
 
 export type ExternalSpendPolicyRefusal = Readonly<{
   kind: 'refused'
-  code: ExternalSpendRefusalCode
+  code: ExternalSpendHandlerRefusalCode
 }>
 
 export type ExternalSpendFinalizationCommand = Readonly<{
@@ -222,7 +356,7 @@ export type ExternalSpendFinalizationDecision =
 export function externalSpendFinalizationCommandRefusal(
   identity: ExternalSpendIdentity,
   command: ExternalSpendFinalizationCommand,
-): ExternalSpendRefusalCode | undefined {
+): ExternalSpendHandlerRefusalCode | undefined {
   if (!externalSpendIdentityMaterialValid(identity)) {
     return 'external_spend_invalid_amount'
   }
@@ -318,7 +452,7 @@ export type ExternalSpendReconciliationDecision =
 export function externalSpendReconciliationCommandRefusal(
   identity: ExternalSpendIdentity,
   command: ExternalSpendReconciliationCommand,
-): ExternalSpendRefusalCode | undefined {
+): ExternalSpendHandlerRefusalCode | undefined {
   return (
     !externalSpendIdentityMaterialValid(identity)
     || command.paymentResponseDigest.trim().length === 0
@@ -371,7 +505,7 @@ export function externalSpendReversalCommandRefusal(
   identity: ExternalSpendIdentity,
   evidenceRef: string,
   evidenceDigest: string,
-): ExternalSpendRefusalCode | undefined {
+): ExternalSpendHandlerRefusalCode | undefined {
   return (
     !externalSpendIdentityMaterialValid(identity)
     || evidenceRef.trim().length === 0

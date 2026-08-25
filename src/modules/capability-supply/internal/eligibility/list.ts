@@ -137,7 +137,7 @@ function deriveAdmittedOperation(
   binding: Parameters<typeof eligibleBindingProjection>[0],
   contractRegisteredAt: number,
   contractDocumentJson: string,
-  now: number,
+  _now: number,
 ): AdmittedOperationRef | undefined {
   const contractRef = contractRefFromRow(binding)
   const operationId = capabilityOperationId(contractRef.capabilityId)

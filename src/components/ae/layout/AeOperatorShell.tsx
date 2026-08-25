@@ -186,7 +186,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
 
   const topNav = useMemo(
     () => (
-      <div className="flex min-h-14 items-center gap-3 px-4 md:px-6">
+      <div className="flex min-h-13 items-center gap-3 px-4 md:px-5">
         <OperatorSidebarToggle />
         {breadcrumbs.length === 0 ? null : (
           <div className="hidden min-w-0 flex-1 md:block">
@@ -215,21 +215,21 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             </a>
             {sidebar}
             <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
-              <header className="border-b border-border bg-card">
+              <header className="border-b border-border bg-background">
                 {topNav}
               </header>
               <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="min-h-0">
-                <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+                <div className="mx-auto flex w-full max-w-[80rem] flex-1 flex-col gap-5 px-4 py-5 md:px-6 md:py-6">
                   {breadcrumbs.length === 0 ? null : (
                     <div className="md:hidden">
                       <AeOperatorBreadcrumbs items={breadcrumbs} />
                     </div>
                   )}
 
-                  <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid gap-2">
-                    {eyebrow ? <p className="block text-sm font-medium text-muted-foreground">{eyebrow}</p> : null}
-                    <h1 id={titleId} className="text-3xl font-semibold tracking-tight text-balance text-foreground">{title}</h1>
-                    <p id={descriptionId} className="block text-pretty text-muted-foreground">{description}</p>
+                  <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid max-w-3xl gap-1.5">
+                    {eyebrow ? <p className="font-mono text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-muted-foreground">{eyebrow}</p> : null}
+                    <h1 id={titleId} className="text-2xl font-medium tracking-tight text-balance text-foreground">{title}</h1>
+                    <p id={descriptionId} className="text-sm leading-5 text-pretty text-muted-foreground">{description}</p>
                     {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
                   </section>
                   <Separator />

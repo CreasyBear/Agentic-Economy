@@ -63,7 +63,7 @@ describe('source-write RFC 9421 signing', () => {
     const admission = await createSourceWriteAdmission({
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       request,
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
@@ -80,7 +80,7 @@ describe('source-write RFC 9421 signing', () => {
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       now: ISSUED_AT,
       expected: {
-        scope: 'public_inquiry',
+        scope: 'billing',
         operationKey: command.operationKey,
         correlationId: command.correlationId,
         commandDigest: sourceWriteCommandDigest(command),
@@ -102,7 +102,7 @@ describe('source-write RFC 9421 signing', () => {
     const admission = await createSourceWriteAdmission({
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       request,
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
@@ -114,7 +114,7 @@ describe('source-write RFC 9421 signing', () => {
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       now: ISSUED_AT,
       expected: {
-        scope: 'public_inquiry',
+        scope: 'billing',
         operationKey: command.operationKey,
         correlationId: command.correlationId,
         commandDigest: sourceWriteCommandDigest(command),
@@ -129,7 +129,7 @@ describe('source-write RFC 9421 signing', () => {
     const admission = await createSourceWriteAdmission({
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       request,
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
@@ -141,7 +141,7 @@ describe('source-write RFC 9421 signing', () => {
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       now: ISSUED_AT,
       expected: {
-        scope: 'public_inquiry',
+        scope: 'billing',
         operationKey: command.operationKey,
         correlationId: command.correlationId,
         commandDigest: sourceWriteCommandDigest(command),
@@ -152,7 +152,7 @@ describe('source-write RFC 9421 signing', () => {
     const readAdmission = await createSourceWriteAdmission({
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       request: requestFor('GET', '', SOURCE_WRITE_NO_BODY_DIGEST),
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
@@ -164,13 +164,13 @@ describe('source-write RFC 9421 signing', () => {
       admission: readAdmission,
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       now: ISSUED_AT,
-      expected: { scope: 'public_inquiry', operationKey: command.operationKey, correlationId: command.correlationId },
+      expected: { scope: 'billing', operationKey: command.operationKey, correlationId: command.correlationId },
     })).resolves.toMatchObject({ kind: 'accepted' })
     await expect(verifySourceWriteAdmission({
       admission: { ...readAdmission, commandDigest: 'malformed' },
       env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
       now: ISSUED_AT,
-      expected: { scope: 'public_inquiry', operationKey: command.operationKey, correlationId: command.correlationId },
+      expected: { scope: 'billing', operationKey: command.operationKey, correlationId: command.correlationId },
     })).resolves.toEqual({ kind: 'rejected', reason: 'source_write_command_mismatch' })
   })
 
@@ -180,15 +180,15 @@ describe('source-write RFC 9421 signing', () => {
     await expect(createSourceWriteAdmission({
       env: { AE_SOURCE_WRITE_SECRET: 'too-short' },
       request,
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
     })).rejects.toMatchObject({ code: 'missing_source_write_secret' })
     await expect(createSourceWriteAdmission({
-      env: { AE_SOURCE_WRITE_KEY_INQUIRY: `unsafe/id:${SOURCE_WRITE_SECRET}` },
+      env: { AE_SOURCE_WRITE_KEY_BILLING: `unsafe/id:${SOURCE_WRITE_SECRET}` },
       request,
-      scope: 'public_inquiry',
+      scope: 'billing',
       operationKey: command.operationKey,
       correlationId: command.correlationId,
       commandDigest: sourceWriteCommandDigest(command),
@@ -204,7 +204,7 @@ describe('source-write RFC 9421 signing', () => {
       const admission = await createSourceWriteAdmission({
         env: { AE_SOURCE_WRITE_SECRET: SOURCE_WRITE_SECRET },
         request,
-        scope: 'public_inquiry',
+        scope: 'billing',
         operationKey: command.operationKey,
         correlationId: command.correlationId,
         commandDigest: sourceWriteCommandDigest(command),
@@ -212,7 +212,7 @@ describe('source-write RFC 9421 signing', () => {
         nonce: 'nonce-time',
       })
       const expected = {
-        scope: 'public_inquiry' as const,
+        scope: 'billing' as const,
         operationKey: command.operationKey,
         correlationId: command.correlationId,
         commandDigest: sourceWriteCommandDigest(command),
@@ -243,4 +243,3 @@ function requestFor(method: string, targetQuery: string, bodyDigest: string): So
     bodyDigest,
   }
 }
-

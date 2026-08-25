@@ -32,7 +32,7 @@ export type InMemoryTracerOptions<Input, Result extends ActionResult> = Readonly
     view: ActionInvocationView<Result>,
     effectGeneration: number,
   ) => DecisionRefusalCode | undefined | Promise<DecisionRefusalCode | undefined>
-  initialSnapshot?: InMemoryControlSnapshot<Input, Result>
+  initialSnapshot?: InMemoryControlSnapshot<Result>
   resolveSourceState?: (sourceRef: string) => Readonly<{
     input: Input
     context: ActionContext
@@ -83,7 +83,7 @@ export function createRecordStore<Input, Result extends ActionResult>(
 
 export function exportControlSnapshot<Input, Result extends ActionResult>(
   records: Map<string, StoredInvocation<Input, Result>>,
-): InMemoryControlSnapshot<Input, Result> {
+): InMemoryControlSnapshot<Result> {
   return {
     format: 'action-invocation-control:development:v1',
     records: [...records.values()].map(({ view, sourceRef, authorityBinding }) => {

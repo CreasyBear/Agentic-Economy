@@ -1,4 +1,5 @@
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { CURRENT_OPERATION_CALL_VIA } from '@/modules/capability-supply/operation-projection'
 
 const operationInvokeMedia = {
   request: 'application/json',
@@ -20,10 +21,8 @@ export const OPERATION_INVOKE_ROUTE_CONTRACT = {
     actionId: 'operation.invoke',
     contractVersion: 'operation.invoke:v1',
     method: 'POST',
-    path: '/api/v1/operations/call',
-    routerPath: '/api/v1/operations/call',
-    legacyPath: '/api/v1/operations/execute',
-    legacyRouterPath: '/api/v1/operations/execute',
+    path: CURRENT_OPERATION_CALL_VIA,
+    routerPath: CURRENT_OPERATION_CALL_VIA,
     requiredHeaders: ['Authorization', 'Content-Type'] as const,
   },
   status: {

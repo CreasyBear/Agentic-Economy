@@ -16,6 +16,7 @@ import {
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import { recover } from '../../../convex/capabilityOperationInvocationWorker'
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string }>
 
 type RecoveryRow = Readonly<{
   invocationRef: string
@@ -40,7 +41,7 @@ type RecoveryRow = Readonly<{
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:one',
-  ownerId: 'owner:one',
+  ownerId: 'clerk|user_123',
   credentialId: 'credential:one',
   applicationRef: 'application:one',
   environment: 'sandbox',
@@ -136,13 +137,22 @@ const readOwnerInvocationStatusHandler = handlerFor(readOwnerInvocationStatus)
 const cancelOwnerInvocationHandler = handlerFor(cancelOwnerInvocation)
 const reconcileOwnerInvocationHandler = handlerFor(reconcileOwnerInvocation)
 
-function ownerRecoveryContext(ownerId: string | null, workerResult: Record<string, unknown>, recoveryRow: RecoveryRow | null = row) {
+function ownerRecoveryContext(
+  identityOrOwnerId: AuthIdentity | string | null,
+  workerResult: Record<string, unknown>,
+  recoveryRow: RecoveryRow | null = row,
+) {
   const runAction = vi.fn(async (_reference: unknown, _args: unknown) => workerResult)
   const runQuery = vi.fn(async (reference: unknown) => {
     if (functionPath(reference) === 'capabilityOperationInvocations:readOwnerRecovery') return recoveryRow
     throw new Error(`unexpected_owner_query:${functionPath(reference)}`)
   })
-  const getUserIdentity = vi.fn(async () => ownerId === null ? null : { subject: ownerId })
+  const identity = identityOrOwnerId === null
+    ? null
+    : typeof identityOrOwnerId === 'string'
+      ? { subject: identityOrOwnerId, tokenIdentifier: identityOrOwnerId }
+      : identityOrOwnerId
+  const getUserIdentity = vi.fn(async () => identity)
   return { runAction, runQuery, auth: { getUserIdentity } }
 }
 
@@ -284,6 +294,7 @@ function workerRecoveryContext(
   })
   return { runQuery, runMutation }
 }
+const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: 'clerk|user_123' }
 function projectionContext(initialRow: RecoveryRow) {
   let currentRow: Record<string, unknown> = { ...initialRow, _id: 'invocation:one' }
   const query = {
@@ -354,16 +365,18 @@ describe('capability operation recovery Convex adapters', () => {
     }
   })
   it('allows the owning Clerk session to continue status and reconciliation after agent revocation', async () => {
-    const statusContext = ownerRecoveryContext(principal.ownerId, {
+    const ownerRow = { ...row, inputJson: JSON.stringify({ city: 'Perth', units: 'metric' }) }
+    const statusContext = ownerRecoveryContext(ownerIdentity, {
       kind: 'found',
       invocationRef,
       operationRef: row.operationRef,
       state: 'reconciliation_required',
       attemptRef: evidence.attemptRef,
-    })
+    }, ownerRow)
     await expect(readOwnerInvocationStatusHandler(statusContext, { invocationRef })).resolves.toMatchObject({
       kind: 'found',
       state: 'reconciliation_required',
+      previousInput: { city: 'Perth', units: 'metric' },
     })
     expect(statusContext.runAction).toHaveBeenCalledWith(expect.anything(), {
       invocationRef,
@@ -371,7 +384,7 @@ describe('capability operation recovery Convex adapters', () => {
       credentialId: principal.credentialId,
       mode: 'status',
     })
-    const cancelContext = ownerRecoveryContext(principal.ownerId, {
+    const cancelContext = ownerRecoveryContext(ownerIdentity, {
       kind: 'found',
       invocationRef,
       operationRef: row.operationRef,
@@ -390,7 +403,7 @@ describe('capability operation recovery Convex adapters', () => {
     })
 
 
-    const reconcileContext = ownerRecoveryContext(principal.ownerId, {
+    const reconcileContext = ownerRecoveryContext(ownerIdentity, {
       kind: 'found',
       invocationRef,
       operationRef: row.operationRef,
@@ -411,8 +424,12 @@ describe('capability operation recovery Convex adapters', () => {
   })
 
   it('returns not-found without recovery work for a foreign or unauthenticated Clerk session', async () => {
-    for (const ownerId of ['owner:other', null] as const) {
-      const context = ownerRecoveryContext(ownerId, {
+    for (const identity of [
+      { subject: 'user_123', tokenIdentifier: 'clerk|other' },
+      { subject: 'owner:other', tokenIdentifier: 'clerk|owner:other' },
+      null,
+    ] as const) {
+      const context = ownerRecoveryContext(identity, {
         kind: 'found',
         invocationRef,
         operationRef: row.operationRef,

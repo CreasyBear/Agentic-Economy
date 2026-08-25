@@ -6,17 +6,20 @@ const contractRoot = 'src/modules/capability-contract'
 
 describe('capability contract boundaries', () => {
   it('keeps the contract independent from routing, persistence, provider, and transport source', () => {
-    const imports = contractSources().flatMap((source) => (
-      [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((match) => match[1])
-    ))
+    const imports = [...new Set(contractSources().flatMap((source) => (
+      [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)]
+        .map((match) => match[1])
+        .filter((value): value is string => value !== undefined && !value.startsWith('.'))
+    )))].sort()
 
     expect(imports).toEqual([
+      '@/modules/common/bounded-json',
+      '@/modules/common/canonical-digest',
+      '@/modules/common/deep-freeze',
+      '@/modules/common/is-record',
+      '@/modules/common/stable-hash',
       '@cfworker/json-schema',
       'zod',
-      '@/modules/common/canonical-digest',
-      '@/modules/common/is-record',
-      '@/modules/common/deep-freeze',
-      '@/modules/common/stable-hash',
     ])
   })
 
@@ -32,13 +35,6 @@ describe('capability contract boundaries', () => {
     for (const source of contractSources()) expect(source).not.toMatch(forbiddenOwnership)
   })
 
-  it('keeps capability schema traversal and commitment materialization out of downstream decision modules', () => {
-    const forbiddenReimplementation = /(?:from\s+['"](?:ajv|@cfworker\/json-schema)|CapabilityContractDocument|resolvePointedSchema|materializeInputFacts|setJsonPointer|semantic\.dataUse)/
-
-    for (const root of ['src/modules/routing-kernel']) {
-      for (const source of sourcesUnder(root)) expect(source).not.toMatch(forbiddenReimplementation)
-    }
-  })
 })
 
 function contractSources(): string[] {

@@ -13,7 +13,6 @@ import type {
   SupplyFunnelStep,
   SupplyFunnelStepCompletion,
 } from '@/modules/capability-supply/supply-funnel.functions'
-import type { PreparedPublicationMaterial } from '@/modules/capability-supply/public'
 import {
   AeSupplyEndpointConfigStep,
   type SupplyAuthorityOption,
@@ -26,9 +25,10 @@ import {
 } from './AeSupplyEndpointConfigStep'
 
 const steps: readonly SupplyFunnelStep[] = ['describe', 'admission', 'readiness', 'test']
+const emptyAuthorityOptions: readonly SupplyAuthorityOption[] = []
 const stepLabels: Readonly<Record<SupplyFunnelStep, string>> = {
-  describe: 'Describe your service',
-  admission: 'Admit your API',
+  describe: 'Describe the Operation',
+  admission: 'Connect the API',
   readiness: 'Check that it works',
   test: 'Run a test',
 }
@@ -66,7 +66,7 @@ export function AeSupplyFunnel({
   initialOffering,
   initialSource,
   initialDocumentPreflight,
-  authorityOptions = [],
+  authorityOptions = emptyAuthorityOptions,
   callbacks,
 }: Readonly<{
   businessId: string
@@ -135,7 +135,7 @@ export function AeSupplyFunnel({
           onSave={async (value) => {
             const result = await callbacks.saveOffering(value)
             if (result.kind === 'saved') {
-              setFeedback({ message: 'Your service details are saved. Next, admit its API.', variant: 'default' })
+              setFeedback({ message: 'Operation details saved. Next, connect its API.', variant: 'default' })
               await reload()
             }
             return result
@@ -158,10 +158,10 @@ export function AeSupplyFunnel({
       ) : null}
       {currentStep === 'readiness' ? (
         <ActionStep
-          title="3 · CHECK YOUR SERVICE"
+          title="3 · CHECK READINESS"
           heading="Check that the admitted operation works"
           detail="AE will record a bounded readiness observation for the exact admitted endpoint and contract."
-          actionLabel="Check the service"
+          actionLabel="Check readiness"
           disabled={actionContext === undefined}
           onAction={async () => {
             if (actionContext === undefined) {
@@ -215,7 +215,7 @@ export function AeSupplyFunnel({
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
   const publication = offering.publication
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader className="p-5 pb-0">
         <CardTitle><h2 className="text-xl font-semibold text-foreground">Operation control</h2></CardTitle>
         <CardDescription><p>Canonical identifiers and states from the current owner readback. Credentials are never shown here.</p></CardDescription>
@@ -278,7 +278,7 @@ function MaintenanceActions({
     <Card>
       <CardHeader className="p-5 pb-0">
         <CardTitle><h2 className="text-lg font-semibold text-foreground">Publication maintenance</h2></CardTitle>
-        <CardDescription><p>Each action rechecks the current offering and publication revision before it changes anything.</p></CardDescription>
+        <CardDescription><p>Each action rechecks the current Operation and publication revision before it changes anything.</p></CardDescription>
       </CardHeader>
       <CardFooter className="flex flex-wrap gap-3 p-5 pt-0">
         {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
@@ -330,7 +330,7 @@ function ActionStep({ title, heading, detail, actionLabel, onAction, disabled = 
     }
   }
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader className="p-5 pb-0">
         <CardTitle>
           <p className="block text-sm font-semibold text-muted-foreground">{title}</p>
@@ -366,29 +366,12 @@ function maintenanceMessage(result: Exclude<OwnerSupplyCommandResult, { kind: 'r
   return `Publication revision ${result.revision} was scheduled for a fresh readiness check.`
 }
 
-function readinessWindow(offering: OwnerSupplyOfferingReadback): string {
-  const observedAt = offering.publication?.readiness.observedAt ?? offering.readiness.observedAt
-  const validUntil = offering.publication?.readiness.validUntil ?? offering.readiness.validUntil
-  if (observedAt === undefined && validUntil === undefined) return 'Unobserved'
-  const age = observedAt === undefined ? undefined : Math.max(0, Date.now() - observedAt)
-  const observed = age === undefined ? 'Unobserved' : `Observed ${formatAge(age)} ago`
-  return validUntil === undefined ? observed : `${observed}; valid until ${new Date(validUntil).toISOString()}`
-}
-
-function formatAge(milliseconds: number): string {
-  const minutes = Math.floor(milliseconds / 60_000)
-  if (minutes < 1) return 'less than a minute'
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`
-  const hours = Math.floor(minutes / 60)
-  return `${hours} hour${hours === 1 ? '' : 's'}`
-}
-
 function refusalMessage(refusal: SupplyFunnelRefusal | string): string {
   const fixes: Readonly<Record<string, string>> = {
     publication_missing: 'Admit the source before running this action.',
     publication_not_found: 'Reload the owner readback and choose the current offering.',
     publication_stale: 'Reload the current publication before trying again.',
-    revision_changed: 'This offering changed elsewhere. Reload to continue.',
+    revision_changed: 'This Operation changed elsewhere. Reload to continue.',
     catalog_offering_origin_changed: 'The catalog offering origin changed. Reload before trying again.',
     withdrawn: 'This publication is withdrawn. Republish it before running readiness or a test.',
     authority_stale: 'The provider authority changed. Recheck the current authority before trying again.',

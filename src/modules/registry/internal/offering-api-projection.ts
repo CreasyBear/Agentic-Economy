@@ -5,7 +5,9 @@ import type {
   OfferingPrice,
   PublicAccessPath,
 } from '@/modules/catalog/public'
-import { normalizeTrustTier, type BusinessContext } from '@/modules/business/public'
+import { buildOfferingSupplyProjection } from '@/modules/catalog/public'
+import type { GetPublicBusinessCatalogInput, PublicCatalogReadState } from '@/modules/catalog/public'
+import { isPubliclyDiscoverable, normalizeTrustTier, type BusinessContext } from '@/modules/business/public'
 
 // Stays v2 across the `price` addition: an optional field a consumer can ignore
 // is not worth forcing every pinned reader to re-pin for.
@@ -16,7 +18,7 @@ export type PublicOfferingAccessPathDto =
       accessPathRef: string
       offeringRevision: number
       kind: 'human_request'
-      channel: 'phone' | 'website' | 'ae_inquiry'
+      channel: 'phone' | 'website'
       disclosure: string
       url?: string
     }>
@@ -106,6 +108,30 @@ export type PublicBusinessCatalogV2DetailResult =
     }>
   | Readonly<{ kind: 'not_found'; code: 'business_not_found'; reason: string }>
 
+export function getPublicBusinessCatalog(
+  state: PublicCatalogReadState,
+  input: GetPublicBusinessCatalogInput,
+): { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto } | { kind: 'hidden'; reason: 'not_published' } {
+  const business = state.businesses.find((candidate) => candidate.slug === input.slug)
+  if (business === undefined || !isPubliclyDiscoverable(business)) {
+    return { kind: 'hidden', reason: 'not_published' }
+  }
+  const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+  if (context === undefined) return { kind: 'hidden', reason: 'not_published' }
+  const projection = buildOfferingSupplyProjection({
+    business,
+    context,
+    offerings: state.offerings.filter((offering) => offering.businessId === business.businessId),
+    revisions: state.revisions.filter((revision) => revision.businessId === business.businessId),
+    accessPaths: state.accessPaths.filter((path) => path.businessId === business.businessId),
+    indexStatus: input.indexStatus,
+    discoveryStatus: input.discoveryStatus,
+  })
+  return projection === undefined
+    ? { kind: 'hidden', reason: 'not_published' }
+    : { kind: 'available', catalog: projectBusinessSupplyToPublicApi(projection) }
+}
+
 /**
  * The only public registry projection for canonical Offering supply.
  * Source digests, lineage hashes, credentials, adapter configuration and
@@ -115,13 +141,7 @@ export function projectBusinessSupplyToPublicApi(
   projection: BusinessSupplyProjection,
   now = Date.now(),
 ): PublicBusinessCatalogApiV2Dto {
-  /**
-   * The legacy expansion cannot see the business profile, so it derives a
-   * `phone` channel from the service's public-contact flag alone. When the
-   * profile publishes no number there is nothing to dial, and a rendered
-   * "Call" affordance is a way to get started that does not exist. The v1
-   * adapter below already applies this rule; both projections owe the same one.
-   */
+  /** A phone access path is actionable only when the profile publishes a number. */
   const dialable = projection.business.businessContext.kind === 'local_human'
     && (projection.business.businessContext.publishedPhone ?? '').trim().length > 0
   const offerings = projection.offerings.map((item): PublicOfferingDto => {
@@ -178,7 +198,7 @@ export function projectBusinessSupplyToPublicApi(
  * The retained v1 service model requires a non-empty `hoursOrUnknown`, so
  * "this business has not published hours" could only ever be spelled as one of
  * a handful of sentinel strings. Passing those through as `availabilitySummary`
- * makes every consumer — the business page, the answer thread, an agent reading
+ * makes every consumer — the business page and an agent reading
  * /api/businesses — render a placeholder as a published fact. The public
  * boundary drops them instead: an unpublished fact is absent, never named.
  *

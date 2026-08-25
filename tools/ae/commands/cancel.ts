@@ -19,7 +19,7 @@ function cancelPath(invocationRef: string): string {
 export async function runCancelCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const invocationRef = args[0]?.trim()
   if (invocationRef === undefined || invocationRef.length === 0 || args.length > 1) {
-    throw new CliFailure('Usage: npm run -s ae -- advanced cancel <invocation-ref> --idempotency-key <key>', {
+    throw new CliFailure('Usage: npm run -s ae -- cancel <invocation-ref> --idempotency-key <key>', {
       kind: 'INVALID_ARGUMENT',
       code: 'cancel-usage',
     })
@@ -64,4 +64,3 @@ export async function runCancelCommand(args: readonly string[], options: CliOpti
   }
   renderStatusResult('Operation cancellation', parsedInput.data.invocationRef, parsedResult.data, options)
 }
-

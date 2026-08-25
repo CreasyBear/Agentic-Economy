@@ -4,7 +4,7 @@ import { createPublicSourceTransport, setPublicSourceTransportForTests } from '@
 import { isRecord } from '@/modules/common/is-record'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { matchingCsrf } from '@/modules/common/matching-csrf'
-import { readOwnerStatusThroughSource } from '@/modules/catalog/owner-claim.functions'
+import { readOwnerStatusThroughSource } from '@/lib/server/owner-status.functions'
 import {
   SOURCE_WRITE_NO_BODY_DIGEST,
   sourceWriteCommandDigest,
@@ -26,21 +26,12 @@ describe('source readback truth seams', () => {
     await withLocalSource(async () => withLocalBypass(async () => {
       const missing = await readOwnerStatusThroughSource('missing-local-slug')
       expect(missing).toEqual({ kind: 'not_found', reason: 'not_public' })
-      expect(JSON.stringify(missing)).not.toContain('Fremantle Coastal Electrical')
+      expect(JSON.stringify(missing)).not.toContain('Fremantle listed provider')
 
-      const configured = await readOwnerStatusThroughSource('fremantle-coastal-electrical')
+      const configured = await readOwnerStatusThroughSource('fremantle-listed-provider')
       expect(configured).toMatchObject({
         kind: 'available',
-        readback: { catalog: { name: 'Fremantle Coastal Electrical' } },
-      })
-      expect(configured.kind === 'available' ? configured.readback.admission : undefined).toEqual({
-        version: 'r1-target-admitted:v1',
-        admitted: false,
-        blockers: [
-          { kind: 'not_published', ownerLabel: 'Publish this business page' },
-          { kind: 'not_claimed', ownerLabel: 'Complete the business claim' },
-          { kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' },
-        ],
+        readback: { catalog: { name: 'Fremantle listed provider' } },
       })
 
       expect(configured.kind === 'available' ? configured.readback.projectionMode : undefined).toBe('public_source')
@@ -50,9 +41,9 @@ describe('source readback truth seams', () => {
 
   it('reports source unavailability instead of default owner readback when Convex config is missing', async () => {
     await withoutSourceConfig(async () => {
-      const result = await readOwnerStatusThroughSource('fremantle-coastal-electrical')
+      const result = await readOwnerStatusThroughSource('fremantle-listed-provider')
       expect(result).toEqual({ kind: 'unavailable', reason: 'source_unavailable', retryable: true })
-      expect(JSON.stringify(result)).not.toContain('Fremantle Coastal Electrical')
+      expect(JSON.stringify(result)).not.toContain('Fremantle listed provider')
     })
   })
 
@@ -62,15 +53,15 @@ describe('source readback truth seams', () => {
 
       const missing = await openRemovalDisputeThroughSource(removalInput({ slug: 'missing-local-slug' }), removalSourceWriteContext())
       expect(missing).toMatchObject({ kind: 'error', code: 'dispute_invalid_target', retryable: false })
-      expect(JSON.stringify(missing)).not.toContain('business:fremantle-coastal-electrical')
+      expect(JSON.stringify(missing)).not.toContain('business:fremantle-listed-provider')
       expect(removalMutationTargets).toEqual([])
 
       const recorded = await openRemovalDisputeThroughSource(
-        removalInput({ slug: 'fremantle-coastal-electrical' }),
+        removalInput({ slug: 'fremantle-listed-provider' }),
         removalSourceWriteContext(),
       )
-      expect(recorded).toMatchObject({ kind: 'ok', receipt: { targetRef: 'business:fremantle-coastal-electrical' } })
-      expect(removalMutationTargets).toEqual(['business:fremantle-coastal-electrical'])
+      expect(recorded).toMatchObject({ kind: 'ok', receipt: { targetRef: 'business:fremantle-listed-provider' } })
+      expect(removalMutationTargets).toEqual(['business:fremantle-listed-provider'])
     }))
   })
 })
@@ -79,7 +70,7 @@ function removalInput(
   overrides: Partial<Parameters<typeof openRemovalDisputeThroughSource>[0]> = {},
 ): Parameters<typeof openRemovalDisputeThroughSource>[0] {
   return {
-    slug: 'fremantle-coastal-electrical',
+    slug: 'fremantle-listed-provider',
     contactEmail: 'owner@example.test',
     reasonCode: 'privacy_removal_requested',
     evidenceSummary: 'The public facts are inaccurate and should be reviewed.',
@@ -246,4 +237,3 @@ function removalSourceWriteContext() {
     },
   }
 }
-

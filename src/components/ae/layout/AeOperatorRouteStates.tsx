@@ -19,8 +19,8 @@ export function OperatorRoutePending() {
   return (
     <AeOperatorShell
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-      title="Getting things ready"
-      description="Loading the latest details so you can continue."
+      title="Loading workspace"
+      description="Fetching the latest marketplace and account details."
       currentPath={pathname}
     >
       <div className="grid gap-3">
@@ -38,13 +38,13 @@ export function OperatorRouteError({ error: _error }: { error: unknown }) {
   return (
     <AeOperatorShell
       operatorRole={operatorRoleForPath(pathname) ?? 'owner'}
-      title="This page is unavailable"
-      description="We could not load the latest details. Try again."
+      title="Couldn’t load this page"
+      description="Try again. Your account and access settings are unchanged."
       currentPath={pathname}
     >
       <Alert variant="destructive">
-        <AlertTitle>Unable to load this page</AlertTitle>
-        <AlertDescription>The latest details could not be loaded. Refresh the page to try again.</AlertDescription>
+        <AlertTitle>Workspace unavailable</AlertTitle>
+        <AlertDescription>Refresh the page to try again. If the problem continues, return to your workspace home.</AlertDescription>
       </Alert>
     </AeOperatorShell>
   )
@@ -55,13 +55,13 @@ export function OperatorRouteNotFound() {
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const isAssistantAccessPath = pathname.startsWith('/agent-access/')
   const recoveryHref = isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole]
-  const recoveryLabel = isAssistantAccessPath ? 'Back to assistant access' : 'Back to operator home'
+  const recoveryLabel = isAssistantAccessPath ? 'Back to access & usage' : 'Back to workspace'
 
   return (
     <AeOperatorShell
       operatorRole={operatorRole}
       title="Page not found"
-      description="This operator page does not exist or may have moved."
+      description="This page may have moved, or your account may not have access."
       currentPath={pathname}
     >
       <Button asChild variant="secondary" className="min-h-11 w-fit">

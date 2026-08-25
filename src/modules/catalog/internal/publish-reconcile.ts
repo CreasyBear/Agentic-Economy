@@ -16,9 +16,7 @@ export type OfferingsReconcileResult =
   | Readonly<{ kind: 'error'; code: string; reason: string }>
 
 /**
- * Canonical offering-reconciliation core shared by both the Convex production
- * mutation (publishBusinessCatalogCommand -> persistPublishedOfferings) and the
- * deterministic model (applyPublishState).
+ * Canonical offering-reconciliation core for the deterministic publish model.
  *
  * Semantics are the PRODUCTION path's: return-code on error with a human
  * reason, immutable threading of the state (never mutates `source`), and a
@@ -92,9 +90,7 @@ export function reconcilePublishedOfferings(
 
     const humanChannel = service.firstRequest.publicChannel === 'public_business_contact'
       ? 'phone'
-      : service.firstRequest.publicChannel === 'ae_status_only'
-        ? 'ae_inquiry'
-        : undefined
+      : undefined
     const existingPaths = state.accessPaths.filter((path) => path.offeringRef === offering.offeringRef && path.status !== 'withdrawn')
     if (humanChannel !== undefined && service.firstRequest.mode !== 'not_available_yet') {
       const upserted = upsertAccessPathInState(state, {

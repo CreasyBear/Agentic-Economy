@@ -32,7 +32,7 @@ describe('owner offering editor is draft-first', () => {
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
     // Dirty the form without filling any of the previously required fields.
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
     fireEvent.click(screen.getByRole('button', { name: /Save draft/i }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -48,10 +48,10 @@ describe('owner offering editor is draft-first', () => {
       />,
     )
 
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
-    fireEvent.click(screen.getByRole('button', { name: /Publish service/i }))
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.click(screen.getByRole('button', { name: /Publish Operation/i }))
 
-    await waitFor(() => expect(screen.getAllByText(/Add a service name before publishing/i).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText(/Add an Operation name before publishing/i).length).toBeGreaterThan(0))
     expect(onSave).not.toHaveBeenCalled()
   })
 
@@ -69,7 +69,7 @@ describe('owner offering editor is draft-first', () => {
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} draftKey="business-1" />)
     await waitFor(() => expect(screen.getByDisplayValue('Burst pipe repair')).toBeDefined())
 
-    fireEvent.change(screen.getAllByLabelText(/Service area/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getAllByLabelText(/Coverage/i)[0] as HTMLElement, { target: { value: 'Adelaide' } })
     fireEvent.click(screen.getByRole('button', { name: /Save draft/i }))
     await waitFor(() => expect(readStoredOfferingDraft('business-1')).toBeUndefined())
   })
@@ -84,7 +84,7 @@ describe('owner offering editor is draft-first', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText('Instructions for customers'), {
+    fireEvent.change(screen.getByLabelText('Access instructions'), {
       target: { value: 'Call during business hours.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
@@ -99,7 +99,7 @@ describe('owner offering editor is draft-first', () => {
     if (localDraftKey === undefined) throw new Error('local access-path draft key missing')
 
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
-    fireEvent.change(screen.getByLabelText('Service area'), { target: { value: 'Adelaide' } })
+    fireEvent.change(screen.getByLabelText('Coverage'), { target: { value: 'Adelaide' } })
     view.rerender(
       <AeOwnerOfferingEditor
         initialValue={emptyOwnerOfferingEditorValue}
@@ -154,7 +154,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave.mock.calls[0]?.[0]?.price).toEqual({
       kind: 'fixed',
-      amount: { currency: 'AUD', units: '12950', exponent: 2 },
+      amount: { currency: 'USD', units: '12950', exponent: 2 },
       unit: 'call',
       taxTreatment: 'inclusive',
     })
@@ -172,7 +172,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     const value = onSave.mock.calls[0]?.[0]
     expect(value?.pricingSummary).toBe('Call-out fee waived for regulars.')
-    expect(value?.price).toEqual({ kind: 'from', amount: { currency: 'AUD', units: '9000', exponent: 2 }, taxTreatment: 'unstated' })
+    expect(value?.price).toEqual({ kind: 'from', amount: { currency: 'USD', units: '9000', exponent: 2 }, taxTreatment: 'unstated' })
   })
 
   it('reveals a second amount for a range and drops the group until both bounds exist', async () => {
@@ -196,8 +196,8 @@ describe('owner offering editor publishes a comparable price beside the note', (
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
     expect(onSave.mock.calls[1]?.[0]?.price).toEqual({
       kind: 'range',
-      minimum: { currency: 'AUD', units: '8000', exponent: 2 },
-      maximum: { currency: 'AUD', units: '15000', exponent: 2 },
+      minimum: { currency: 'USD', units: '8000', exponent: 2 },
+      maximum: { currency: 'USD', units: '15000', exponent: 2 },
       taxTreatment: 'unstated',
     })
   })
@@ -211,7 +211,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
-    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({ kind: 'quote_only', currency: 'AUD', taxTreatment: 'unstated' })
+    expect(onSave.mock.calls[0]?.[0]?.price).toEqual({ kind: 'quote_only', currency: 'USD', taxTreatment: 'unstated' })
   })
 
   it('restores the price group from a parked draft', async () => {
@@ -223,7 +223,7 @@ describe('owner offering editor publishes a comparable price beside the note', (
     choose('Price type', 'Fixed price')
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
     await waitFor(() => expect(readStoredOfferingDraft('business-price')?.price).toEqual({
-      kind: 'fixed', amount: { currency: 'AUD', units: '25000', exponent: 2 }, taxTreatment: 'unstated',
+      kind: 'fixed', amount: { currency: 'USD', units: '25000', exponent: 2 }, taxTreatment: 'unstated',
     }))
 
     first.unmount()
@@ -237,7 +237,7 @@ describe('owner offering editor publishes the external operation contract', () =
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
-    choose('Add a contact route', 'Assistant request')
+    choose('Add a contact route', 'Agent request')
     fireEvent.change(screen.getByLabelText('What this request does'), { target: { value: 'Run a quote query.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
     fireEvent.change(screen.getByLabelText('Request name'), { target: { value: 'Quote query API' } })
@@ -272,7 +272,7 @@ describe('owner offering editor publishes the external operation contract', () =
     const onSave = vi.fn(async (value: OwnerOfferingEditorValue) => saved(value))
     render(<AeOwnerOfferingEditor initialValue={emptyOwnerOfferingEditorValue} onSave={onSave} />)
 
-    choose('Add a contact route', 'Assistant request')
+    choose('Add a contact route', 'Agent request')
     fireEvent.change(screen.getByLabelText('What this request does'), { target: { value: 'Run a quote query.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
 
@@ -285,7 +285,7 @@ describe('owner offering editor publishes the external operation contract', () =
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave.mock.calls[0]?.[0]?.accessPaths[0]?.descriptor).toEqual({
       kind: 'external_operation',
-      name: 'Assistant request',
+      name: 'Agent request',
       summary: 'Run a quote query.',
       url: 'https://example.com/api/quote',
       provenance: 'business_declared',

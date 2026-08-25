@@ -17,13 +17,40 @@ export const exactAmountSchema = z.strictObject({
   exponent: z.number().int().min(0).max(18),
 })
 
-function readExactAmount(value: unknown): ExactAmount | undefined {
+export function readExactAmount(value: unknown): ExactAmount | undefined {
   try {
     const parsed = exactAmountSchema.safeParse(value)
     return parsed.success ? parsed.data : undefined
   } catch {
     return undefined
   }
+}
+
+export function amountFromParts(
+  currency: unknown,
+  units: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  return readExactAmount({ currency, units, exponent })
+}
+
+export function amountAtScale(
+  amount: unknown,
+  currency: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  const parsed = readExactAmount(amount)
+  if (parsed === undefined || typeof currency !== 'string' || parsed.currency !== currency) {
+    return undefined
+  }
+  return rescaleExactAmount(parsed, exponent)
+}
+
+export function zeroExactAmount(
+  currency: unknown,
+  exponent: unknown,
+): ExactAmount | undefined {
+  return amountFromParts(currency, '0', exponent)
 }
 
 function readExponent(value: unknown): number | undefined {
@@ -92,6 +119,31 @@ export function addExactAmounts(left: unknown, right: unknown): ExactAmount | un
   const aligned = alignExactAmounts(left, right)
   if (aligned === undefined) return undefined
   return { currency: aligned.left.currency, units: (BigInt(aligned.left.units) + BigInt(aligned.right.units)).toString(), exponent: aligned.left.exponent }
+}
+
+export function sameExactScale(left: unknown, right: unknown): boolean {
+  const parsedLeft = readExactAmount(left)
+  const parsedRight = readExactAmount(right)
+  return parsedLeft !== undefined
+    && parsedRight !== undefined
+    && parsedLeft.currency === parsedRight.currency
+    && parsedLeft.exponent === parsedRight.exponent
+}
+
+export function sumExactAmounts(
+  amounts: readonly unknown[],
+  zeroReference: unknown,
+): ExactAmount | undefined {
+  const reference = readExactAmount(zeroReference)
+  if (reference === undefined) return undefined
+  let total: ExactAmount = { ...reference, units: '0' }
+  for (const amount of amounts) {
+    if (!sameExactScale(total, amount)) return undefined
+    const next = addExactAmounts(total, amount)
+    if (next === undefined) return undefined
+    total = next
+  }
+  return total
 }
 
 export function subtractExactAmounts(left: unknown, right: unknown): ExactAmount | undefined {

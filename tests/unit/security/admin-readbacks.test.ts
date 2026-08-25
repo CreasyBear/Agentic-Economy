@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import { readAdminRouteShell } from '@/modules/security/public'
 import type { AdminMembership, AdminReadbackRow } from '@/modules/security/public'
-import { buildIndexHealthRows } from '@/modules/security/admin-readback.functions'
 
 describe('admin route readbacks', () => {
   it('denies missing membership with a 401 and returns no private rows', () => {
     const result = readAdminRouteShell({
       membership: undefined,
-      surface: 'claims_queue',
+      surface: 'audit_events',
       rows: [safeRow('private:evidence:raw-contact')],
       now: 10,
     })
@@ -65,50 +64,6 @@ describe('admin route readbacks', () => {
     })
   })
 
-  it('builds index health rows from registry source, projection, attempt, and repair readback', () => {
-    const rows = buildIndexHealthRows(5_000)
-
-    expect(rows.map((row) => row.rowId)).toEqual([
-      'row:index:source-catalog',
-      'row:index:latest-attempt',
-      'row:index:affected-surfaces',
-    ])
-    expect(rows.every((row) => row.rowState === 'indexed')).toBe(true)
-    expect(rows.every((row) => row.repairResult === 'succeeded')).toBe(true)
-    expect(rows.flatMap((row) => row.affectedPublicSurfaces ?? [])).toEqual(
-      expect.arrayContaining(['/api/businesses', '/api/businesses/search', '/api/businesses/{slug}']),
-    )
-    expect(rows.find((row) => row.rowId === 'row:index:latest-attempt')).toMatchObject({
-      readbackState: 'available',
-      repairAction: 'no_repair_available',
-    })
-    expect(JSON.stringify(rows)).not.toMatch(/rawContact|contactEmail|clerk|ownerId|admin/i)
-  })
-
-  it('keeps generated index health rows private when admin membership is missing', () => {
-    const rows = buildIndexHealthRows(5_000)
-    const denied = readAdminRouteShell({
-      membership: undefined,
-      surface: 'index_health',
-      rows,
-      now: 5_000,
-    })
-    const allowed = readAdminRouteShell({
-      membership: activeMembership('support'),
-      surface: 'index_health',
-      rows,
-      now: 5_000,
-    })
-
-    expect(denied).toMatchObject({ kind: 'denied', httpStatus: 401, rows: [] })
-    expect(JSON.stringify(denied)).not.toContain('registry:attempt')
-    expect(allowed).toMatchObject({
-      kind: 'allowed',
-      httpStatus: 200,
-      summary: { queued: 0, attention: 0, stale: 0, suppressed: 0 },
-    })
-    expect(allowed.kind === 'allowed' ? allowed.rows : []).toHaveLength(3)
-  })
 })
 
 function activeMembership(role: AdminMembership['role']): AdminMembership {
@@ -124,13 +79,13 @@ function activeMembership(role: AdminMembership['role']): AdminMembership {
 
 function safeRow(objectRef: string): AdminReadbackRow {
   return {
-    rowId: 'row:claim:1',
-    rowType: 'claim',
+    rowId: 'row:audit:1',
+    rowType: 'audit_event',
     objectRef,
-    rowState: 'pending_review',
-    surface: 'claims_queue',
+    rowState: 'guarded',
+    surface: 'audit_events',
     readbackState: 'guarded',
-    repairAction: 'review_claim',
+    repairAction: 'inspect_audit',
     updatedAt: 10,
   }
 }

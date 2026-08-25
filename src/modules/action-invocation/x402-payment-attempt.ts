@@ -1,8 +1,16 @@
-import type {
-  X402SettlementResponse,
-  X402SettlementStatus,
-} from '@/modules/capability-supply/route-transport-runtime'
 import type { ExactAmount } from '@/modules/money/public'
+
+/** Neutral persisted settlement facts; provider transport adapters populate them. */
+export type X402SettlementStatus = 'settled' | 'not_settled' | 'unknown'
+export type X402SettlementResponse = Readonly<{
+  success: boolean
+  transaction: string
+  network: string
+  amount?: string
+  payer?: string
+  errorReason?: string
+  errorMessage?: string
+}>
 
 export type X402PaymentAttemptState =
   | 'prepared'

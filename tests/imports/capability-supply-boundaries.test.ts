@@ -1,7 +1,5 @@
-import { globSync, readFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 
-import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { listTsFiles } from '../helpers/source-files'
 
@@ -9,6 +7,12 @@ const neutralSources = [
   'src/modules/capability-supply/public.ts',
   'src/modules/capability-supply/internal/convex-schema.ts',
   'convex/capabilitySupply.ts',
+  'convex/capabilitySupplyShared.ts',
+  'convex/capabilitySupplyPublish.ts',
+  'convex/capabilitySupplyProbes.ts',
+  'convex/capabilitySupplyGraph.ts',
+  'convex/capabilitySupplyLists.ts',
+  'convex/capabilitySupplyCommands.ts',
 ] as const
 
 const deepenedFolders = [
@@ -22,38 +26,23 @@ const deepenedFolders = [
 ] as const
 
 describe('capability supply boundaries', () => {
-  it('keeps Answer and Customer Request discovery behind market seams', () => {
-    const paths = [
-      ...listTsFiles('src/modules/answer'),
-      ...globSync(join('src/modules/answer', '**/*.tsx')).sort(),
-    ]
-    for (const path of paths) {
-      const sourceFile = ts.createSourceFile(
-        path,
-        readFileSync(path, 'utf8'),
-        ts.ScriptTarget.Latest,
-        false,
-        path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      )
-      const moduleSpecifiers = sourceFile.statements.flatMap((statement) =>
-        (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))
-          && statement.moduleSpecifier !== undefined
-          && ts.isStringLiteral(statement.moduleSpecifier)
-          ? [statement.moduleSpecifier.text]
-          : [],
-      )
-      for (const specifier of moduleSpecifiers) {
-        const normalizedTarget = (
-          specifier.startsWith('@/') || specifier.startsWith('~/') ? `src/${specifier.slice(2)}` :
-          specifier.startsWith('.') ? relative(process.cwd(), resolve(dirname(path), specifier)) :
-          specifier
-        )
-          .replaceAll('\\', '/')
-          .replace(/\.(?:ts|tsx|js|jsx)$/, '')
-        expect(normalizedTarget, path).not.toBe('src/modules/capability-supply')
-        expect(normalizedTarget, path).not.toMatch(/^src\/modules\/capability-supply\//)
-        expect(normalizedTarget, path).not.toBe('src/modules/registry/registry.functions')
-      }
+  it('keeps CDP native loading isolated from optional x402 SVM peers', () => {
+    const signer = readFileSync(
+      'src/modules/capability-supply/internal/cdp-x402-payment-signer.ts',
+      'utf8',
+    )
+    const convexConfiguration = JSON.parse(readFileSync('convex.json', 'utf8')) as {
+      node?: { externalPackages?: unknown }
+    }
+    const packageConfiguration = JSON.parse(readFileSync('package.json', 'utf8')) as Record<
+      string,
+      Record<string, unknown> | undefined
+    >
+
+    expect(signer).not.toContain('@coinbase/cdp-sdk/x402')
+    expect(convexConfiguration.node?.externalPackages).toEqual(['@coinbase/cdp-sdk'])
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      expect(packageConfiguration[field]?.['@x402/svm']).toBeUndefined()
     }
   })
 
@@ -76,12 +65,13 @@ describe('capability supply boundaries', () => {
     }
   })
 
-  it('forces sandbox identity, publication, and eligibility through shared production commands', () => {
+  it('keeps the development seed on current catalog commands and out of retired claim paths', () => {
     const seed = readFileSync('convex/devSeed.ts', 'utf8')
 
-    expect(seed).toContain('claimBusinessCommand')
-    expect(seed).toContain('publishBusinessCatalogCommand')
-    expect(seed).toContain('setCapabilitySupplyEligibilityCommand')
+    expect(seed).toContain('persistDevSeedCatalogState')
+    expect(seed).toContain('rebuildBusinessSupplyProjectionSnapshotCommand')
+    expect(seed).not.toContain('claimBusinessCommand')
+    expect(seed).not.toContain('publishBusinessCatalogCommand')
     expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessOfferings|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
 
@@ -101,6 +91,15 @@ describe('capability supply boundaries', () => {
     expect(readiness).not.toMatch(/ctx\.scheduler\.runAfter[\s\S]*internal\.capabilitySupplyReadiness\.probe/)
     expect(readiness).not.toContain('makeFunctionReference')
   })
+
+  it('keeps active detail parity on the bounded active-first index', () => {
+    const schema = readFileSync('src/modules/capability-supply/internal/convex-schema.ts', 'utf8')
+    const projection = readFileSync('convex/capabilitySupplyOperationProjection.ts', 'utf8')
+
+    expect(schema).toMatch(/capabilityCurrentOperationDetails:[\s\S]*\.index\('by_active_and_operationRef', \['active', 'operationRef'\]\)/)
+    expect(projection).toMatch(/query\('capabilityCurrentOperationDetails'\)[\s\S]*?\.withIndex\('by_active_and_operationRef', \(query\) => query\.eq\('active', true\)\)[\s\S]*?\.take\(258\)/)
+    expect(projection).not.toContain(".filter((query) => query.eq(query.field('active'), true))")
+  })
 })
 
 function sources(): string[] {
@@ -109,5 +108,3 @@ function sources(): string[] {
     ...deepenedFolders.flatMap((directory) => listTsFiles(directory).map((path) => readFileSync(path, 'utf8'))),
   ]
 }
-
-

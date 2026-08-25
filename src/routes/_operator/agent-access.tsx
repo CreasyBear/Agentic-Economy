@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
@@ -10,8 +10,9 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
-import { issueAgentAccessKeyServer, revokeAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
-import { readAgentAccessConsoleServer, type AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
+import { readAgentAccessConsoleServer } from '@/lib/server/agent-access-console.functions'
+import { revokeAgentAccessKeyServer } from '@/modules/agent-access/agent-access.functions'
+import type { AgentAccessConsoleReadback } from '@/modules/agent-access/agent-access-console'
 import {
   decideOperationApprovalServer,
   listPendingOperationApprovalsServer,
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/_operator/agent-access')({
   ...operatorRouteOptions,
   loader: () => readCanonicalBaseUrlServer(),
   head: () => ({ meta: [
-    { title: 'Assistant access | Agentic Economy' },
+    { title: 'Agent access | Agentic Economy' },
     { name: 'robots', content: 'noindex' },
   ] }),
   component: AgentAccessRoute,
@@ -40,7 +41,6 @@ function AgentAccessHome() {
   const readConsole = useServerFn(readAgentAccessConsoleServer)
   const localE2E = isLocalE2EAuthBypassEnabled()
   const revokeKey = useServerFn(revokeAgentAccessKeyServer)
-  const issueKey = useServerFn(issueAgentAccessKeyServer)
   const beginCreditTopup = useServerFn(beginCreditTopupServer)
   const readCreditPayment = useServerFn(readCreditPaymentServer)
   const creditTopupPort = useMemo<CreditTopupPort>(() => ({
@@ -51,11 +51,6 @@ function AgentAccessHome() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [revoking, setRevoking] = useState<string>()
-  const issuanceKey = useRef<string | undefined>(undefined)
-  const [issuing, setIssuing] = useState(false)
-  const [issueCompleted, setIssueCompleted] = useState(false)
-  const [issuedSecret, setIssuedSecret] = useState<string>()
-  const [issueError, setIssueError] = useState<string>()
   const readApprovals = useServerFn(listPendingOperationApprovalsServer)
   const decideApproval = useServerFn(decideOperationApprovalServer)
   const [approvals, setApprovals] = useState<readonly PendingOperationApproval[]>([])
@@ -70,7 +65,7 @@ function AgentAccessHome() {
       setItems(await readConsole())
       setError(undefined)
     } catch {
-      setError('Your assistant access and balance are temporarily unavailable.')
+      setError('Agent access and balance are temporarily unavailable.')
     } finally {
       setLoading(false)
     }
@@ -118,37 +113,6 @@ function AgentAccessHome() {
     }
   }
 
-  async function issueDefaultKey() {
-    if (localE2E || issuing || issueCompleted) return
-    issuanceKey.current ??= `owner-default-${crypto.randomUUID()}`
-    setIssuing(true)
-    setIssueError(undefined)
-    try {
-      const result = await issueKey({
-        data: {
-          name: 'Default assistant',
-          idempotencyKey: issuanceKey.current,
-          environment: 'sandbox',
-        },
-      })
-      if (result.kind === 'error') {
-        setIssueError(issueErrorCopy(result.code))
-        return
-      }
-      if (result.secret.length === 0) {
-        setIssueError('The key was issued, but its one-time secret could not be delivered. Revoke it and create a replacement.')
-        return
-      }
-      setIssuedSecret(result.secret)
-      setIssueCompleted(true)
-      await load()
-    } catch {
-      setIssueError('The agent access key could not be issued. Try again.')
-    } finally {
-      setIssuing(false)
-    }
-  }
-
   async function decidePendingApproval(invocationRef: string, operationRef: string, decision: 'approve' | 'deny') {
     if (localE2E || approvalDecision !== undefined) return
     setApprovalDecision({ invocationRef, decision })
@@ -172,31 +136,18 @@ function AgentAccessHome() {
       setApprovalDecision(undefined)
     }
   }
-  const hasActiveKey = items.some(({ key }) => !key.revoked && !key.expired)
-  const issueDisabledReason = loading
-    ? 'Loading current access before another key can be issued.'
-    : error !== undefined
-      ? 'Restore the access inventory before issuing a key.'
-      : hasActiveKey
-        ? 'An active agent access key already exists. Revoke it before creating a replacement.'
-        : issueCompleted
-          ? issuedSecret === undefined
-            ? 'Key issued. Its one-time secret is now hidden; revoke the key before creating a replacement.'
-            : 'Key issued. Save the one-time secret below before dismissing it.'
-          : undefined
-
   return (
     <AeOperatorShell
       operatorRole="owner"
-      title="Assistant access"
-      description="Connect and manage your AI: review permission, usage, credit, and access."
+      title="Agent access"
+      description="Connect an agent, review its permissions, and manage keys, usage, and credit."
       currentPath="/agent-access"
-      eyebrow="YOUR ASSISTANT"
+      eyebrow="ACCESS"
     >
       {localE2E ? (
         <div className="grid gap-3">
           <Alert>
-            <AlertTitle>Local preview — no assistant is connected</AlertTitle>
+            <AlertTitle>Local preview — no agent is connected</AlertTitle>
             <AlertDescription>
               <p>This browser journey does not sign in, create access, or authorize work. Browse the public demo to explore the customer experience.</p>
               <Button asChild variant="secondary" className="mt-2 min-h-11"><Link to="/">Browse public demo</Link></Button>
@@ -206,7 +157,7 @@ function AgentAccessHome() {
       ) : null}
       {error === undefined ? null : (
         <Alert variant="destructive">
-          <AlertTitle>Assistant access unavailable</AlertTitle>
+          <AlertTitle>Agent access unavailable</AlertTitle>
           <AlertDescription>
             <p>{error}</p>
             <Button type="button" variant="secondary" disabled={loading} onClick={() => void load()}>{loading ? 'Trying again…' : 'Try again'}</Button>
@@ -231,34 +182,14 @@ function AgentAccessHome() {
           void decidePendingApproval(invocationRef, operationRef, decision)
         }}
       />
-      <AeAssistantInstallFunnel
-        canonicalBaseUrl={canonicalBaseUrl}
-        {...(localE2E ? {} : {
-          onIssue: () => void issueDefaultKey(),
-          issuing,
-          issueDisabled: issueDisabledReason !== undefined,
-          ...(issueDisabledReason === undefined ? {} : { issueDisabledReason }),
-          ...(issuedSecret === undefined ? {} : {
-            issuedSecret,
-            onDismissIssuedSecret: () => setIssuedSecret(undefined),
-          }),
-          ...(issueError === undefined ? {} : { issueError }),
-        })}
-      />
+      <AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} />
     </AeOperatorShell>
   )
 }
 
-function issueErrorCopy(code: 'missing_auth' | 'invalid_input' | 'idempotency_conflict' | 'issuance_unavailable'): string {
-  if (code === 'missing_auth') return 'Sign in as the owner, then try again.'
-  if (code === 'idempotency_conflict') return 'This setup request changed while it was being issued. Reload the page and try again.'
-  if (code === 'invalid_input') return 'The default agent access request is invalid. Reload the page before trying again.'
-  return 'The agent access key could not be issued. Try again.'
-}
-
 function operationApprovalErrorCopy(code: 'authentication_required' | 'invocation_not_found' | 'authority_not_pending' | 'grant_not_current' | 'invocation_invalid'): string {
   if (code === 'authentication_required') return 'Sign in as the access owner, then try again.'
-  if (code === 'grant_not_current') return 'This assistant grant changed. Review current access before trying again.'
+  if (code === 'grant_not_current') return 'This agent grant changed. Review current access before trying again.'
   if (code === 'invocation_not_found') return 'This waiting operation is no longer available. Refresh the list.'
   if (code === 'authority_not_pending') return 'This operation no longer needs a decision. Refresh the list.'
   return 'This operation could not be verified. Refresh the list before deciding.'

@@ -15,12 +15,8 @@ const deployableGlobs = [
 
 const publicBarrels = [
   'src/modules/capability-supply/public.ts',
-  'src/modules/capability-execution/public.ts',
+  'src/modules/capability-execution/index.ts',
   'src/modules/registry/public.ts',
-  'src/modules/answer/public.ts',
-  'src/modules/answer-thread/public.ts',
-  'src/modules/work-tree/public.ts',
-  'src/modules/study/public.ts',
   'src/modules/money/public.ts',
 ] as const
 

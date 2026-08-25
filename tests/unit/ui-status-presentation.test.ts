@@ -11,7 +11,7 @@ import {
   statusPresentation,
 } from '@/lib/ui/status-presentation'
 
-const statusOfferingRef = brandNonEmpty('offering:status', 'OfferingRef')
+
 const statusAccessPathRef = brandNonEmpty('access:status', 'AccessPathRef')
 const websitePathDescriptor = {
   kind: 'human_request' as const,

@@ -1,5 +1,4 @@
 import type { OperationKey, SourceHash } from '@/modules/common/ids'
-import type { ModuleResult } from '@/modules/common/result'
 import type { ActorKind, OperationKeyRecord } from '@/modules/observability/public'
 
 export type OperationKeyInput = {
@@ -22,12 +21,19 @@ export type OperationKeyStore = {
   save(record: OperationKeyRecord): OperationKeyRecord
 }
 
-export type OperationKeyDecision = ModuleResult<
-  'operation_reserved' | 'operation_replayed' | 'operation_retryable',
-  'operation_key_conflict',
-  { record: OperationKeyRecord },
-  { existing: OperationKeyRecord; reason: 'same_key_different_request' }
->
+export type OperationKeyDecision =
+  | Readonly<{
+      kind: 'ok'
+      code: 'operation_reserved' | 'operation_replayed' | 'operation_retryable'
+      record: OperationKeyRecord
+    }>
+  | Readonly<{
+      kind: 'error'
+      code: 'operation_key_conflict'
+      retryable: boolean
+      existing: OperationKeyRecord
+      reason: 'same_key_different_request'
+    }>
 
 export function reserveOperationKey(
   store: OperationKeyStore,

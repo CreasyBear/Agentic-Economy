@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
-import { getPublicBusinessCatalog, type PublicCatalogReadState } from '@/modules/catalog/public'
+import type { PublicCatalogReadState } from '@/modules/catalog/public'
+import { getPublicBusinessCatalog } from '@/modules/registry/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 const businessId = brandNonEmpty('business:parramatta', 'BusinessId')
-const slug = brandNonEmpty('parramatta-emergency-plumbing', 'Slug')
-const offeringRef = brandNonEmpty('offering:parramatta-emergency-plumbing:pipe-repair', 'OfferingRef')
+const slug = brandNonEmpty('demo-listed-provider', 'Slug')
+const offeringRef = brandNonEmpty('offering:demo-listed-provider:pipe-repair', 'OfferingRef')
 const revisionSourceHash = canonicalDigest('offering-revision')
 
 const business = {
   businessId,
   ownerId: brandNonEmpty('owner:sam', 'OwnerId'),
   slug,
-  name: 'Parramatta Emergency Plumbing',
-  normalizedName: 'parramatta emergency plumbing',
-  category: 'Emergency plumbing',
+  name: 'Demo listed provider',
+  normalizedName: 'demo listed provider',
+  category: 'Listed provider',
   businessContext: {
     kind: 'local_human' as const,
     suburb: 'Parramatta',
@@ -24,7 +25,6 @@ const business = {
   },
   publicStatus: 'published' as const,
   trustTier: 'claimed' as const,
-  claimStatus: 'published' as const,
   sourceHash: canonicalDigest('business'),
   createdAt: 1,
   updatedAt: 2,
@@ -57,7 +57,7 @@ const revision = {
   offeringRef,
   businessId,
   revision: 1,
-  name: 'Emergency pipe repair',
+  name: 'Listed offering',
   category: 'Emergency plumbing',
   summary: 'Burst pipe triage and repair.',
   serviceAreaSummary: 'Parramatta and nearby suburbs',
@@ -75,7 +75,7 @@ const accessPath = {
   status: 'published' as const,
   descriptor: {
     kind: 'human_request' as const,
-    channel: 'ae_inquiry' as const,
+    channel: 'phone' as const,
     disclosure: 'Ask the business to begin a safe request.',
   },
   sourceHash: canonicalDigest('access-path'),
@@ -88,12 +88,9 @@ function readState(overrides: Partial<Pick<PublicCatalogReadState, 'offerings' |
     owners: [],
     businesses: [business],
     businessContexts: [context],
-    claims: [],
-    claimFingerprints: [],
     offerings: overrides.offerings ?? [offering],
     revisions: overrides.revisions ?? [revision],
     accessPaths: overrides.accessPaths ?? [accessPath],
-    suppressionRules: [],
   }
 }
 
@@ -117,7 +114,7 @@ describe('public catalog DTO', () => {
       kind: 'available',
       catalog: {
         schemaVersion: 'public-business-catalog-api:v2',
-        slug: 'parramatta-emergency-plumbing',
+        slug: 'demo-listed-provider',
         businessContext: {
           kind: 'local_human',
           stateTerritory: 'NSW',
@@ -128,9 +125,9 @@ describe('public catalog DTO', () => {
           {
             offeringRef,
             revision: 1,
-            name: 'Emergency pipe repair',
+            name: 'Listed offering',
             summary: 'Burst pipe triage and repair.',
-            accessPaths: [{ kind: 'human_request', channel: 'ae_inquiry' }],
+            accessPaths: [{ kind: 'human_request', channel: 'phone' }],
           },
         ],
       },

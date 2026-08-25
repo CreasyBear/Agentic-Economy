@@ -8,6 +8,7 @@ import {
   type PricingConfig,
   type PricingResolution,
 } from '@/modules/money/public'
+
 export type SupplyPricingRefusal = 'price_unavailable' | 'pricing_config_invalid' | 'currency_mismatch'
 
 export type PricingPreview = Readonly<{
@@ -19,12 +20,15 @@ export type PricingPreview = Readonly<{
   rakeBps: number
 }>
 
+export type PricingStepResult = Readonly<
+  | { kind: 'ready'; config: PricingConfig; preview: PricingPreview }
+  | { kind: 'refused'; reason: SupplyPricingRefusal }
+>
+
 export type PricingConfigPort = Readonly<{
   normalize: (input: unknown) => Readonly<{ kind: 'valid'; config: PricingConfig } | { kind: 'refused'; reason: SupplyPricingRefusal }>
   resolve: (input: Readonly<{ config: PricingConfig; freeCallsUsed: number; priceDigest?: string }>) => PricingStepResult
 }>
-
-type PricingStepResult = Readonly<{ kind: 'ready'; config: PricingConfig; preview: PricingPreview } | { kind: 'refused'; reason: SupplyPricingRefusal }>
 
 export const DEFAULT_RAKE_BPS = 1000
 export const defaultSupplyPricingConfig: PricingConfig = {
@@ -66,4 +70,17 @@ export const stubPricingConfigPort: PricingConfigPort = {
     if (input.config.paidAmount.units !== '0') return { kind: 'refused', reason: 'price_unavailable' }
     return realPricingConfigPort.resolve(input)
   },
+}
+
+export function resolveSupplyPricing(
+  config: unknown,
+  options?: Readonly<{ freeCallsUsed?: number; priceDigest?: string }>,
+): PricingStepResult {
+  const resolved = realPricingConfigPort.normalize(config)
+  if (resolved.kind === 'refused') return resolved
+  return realPricingConfigPort.resolve({
+    config: resolved.config,
+    freeCallsUsed: options?.freeCallsUsed ?? 0,
+    ...(options?.priceDigest === undefined ? {} : { priceDigest: options.priceDigest }),
+  })
 }

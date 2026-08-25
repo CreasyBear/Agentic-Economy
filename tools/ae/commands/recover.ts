@@ -83,7 +83,7 @@ export async function runRecoverCommand(args: readonly string[], options: CliOpt
   const rendered = {
     ...parsedResult.data,
     idempotencyKey: parsedInput.data.idempotencyKey,
-    nextCommand: `npm run -s ae -- status ${parsedInput.data.invocationRef}`,
+    nextCommand: `ae status ${parsedInput.data.invocationRef}`,
   }
   if (options.json) {
     printJson(rendered)

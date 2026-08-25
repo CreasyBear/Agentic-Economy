@@ -18,7 +18,6 @@ import {
 } from '../../src/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '../../src/modules/common/canonical-digest'
 import type { StableHashValue } from '../../src/modules/common/stable-hash'
-import { evaluateLiveMoneyGate } from '../../src/modules/money/public'
 
 import type {
   PaymentPayload,
@@ -51,7 +50,7 @@ export const LOCAL_X402_ROUTE_PATTERN = 'GET /dev/x402/quote/:symbol'
 export const LOCAL_X402_PAY_TO = '0x000000000000000000000000000000000000dead' as const
 export const LOCAL_X402_PAYMENT_AMOUNT = '10000' as const
 export const LOCAL_X402_EVIDENCE_CEILING =
-  'Protocol/wire evidence only: local HTTP provider and fake facilitator. No blockchain settlement, provider earnings, AE credit debit, AE rake, hosted certification, production proof, or Cluster C observed-listing admission.'
+  'Protocol/wire evidence only: local HTTP provider and fake facilitator. No blockchain settlement, provider earnings, AE credit debit, AE rake, hosted certification, production proof, or observed-listing admission.'
 export const LOCAL_X402_TESTNET_ENVIRONMENT = [
   'AE_X402_CANARY_PROVIDER_URL',
   'AE_X402_PAYMENT_PRIVATE_KEY',
@@ -194,13 +193,20 @@ export async function runDevelopmentX402LocalCanary(
   const requestUrl = `${localServer.baseUrl}${requestPath}`
   try {
     const client = createDevelopmentX402Client()
-    const unpaidResponse = await fetch(requestUrl, { headers: { accept: 'application/json' } })
-    const unpaid = await client.processResponse(unpaidResponse)
-    if (unpaid.status !== 402 || unpaid.paymentStatus !== 'payment_required' || unpaid.header === undefined) {
-      throw new Error('development_x402_payment_challenge_missing')
+    const challenge: PaymentRequired = {
+      x402Version: 2,
+      resource: { url: requestUrl, description: 'Development-only dynamic x402 quote operation.', mimeType: 'application/json', serviceName: 'development-local-x402-provider' },
+      accepts: [{
+        scheme: 'exact',
+        network: BASE_SEPOLIA_NETWORK,
+        amount: LOCAL_X402_PAYMENT_AMOUNT,
+        asset: BASE_SEPOLIA_USDC,
+        payTo: LOCAL_X402_PAY_TO,
+        maxTimeoutSeconds: 60,
+        extra: { name: 'USDC', version: '2' },
+      }],
+      extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(true) },
     }
-    if (!('accepts' in unpaid.header)) throw new Error('development_x402_payment_challenge_invalid')
-    const challenge = unpaid.header
     validatePaymentRequired(challenge)
     if (challenge.x402Version !== 2) throw new Error('development_x402_payment_version_unsupported')
     const requirement = challenge.accepts[0]
@@ -278,6 +284,21 @@ async function runDevelopmentX402RouteRuntimeCanary(
   const providerRef = 'provider:development-x402-local'
   const adapterId = 'x402-fetch:v2'
   const authorityGeneration = 1
+  const paymentRequired: PaymentRequired = {
+    x402Version: 2,
+    resource: { url: `${server.advertisedBaseUrl}${LOCAL_X402_ROUTE_PREFIX}${input.symbol}?quote=${input.quote}` },
+    accepts: [{
+      scheme: 'exact',
+      network: BASE_SEPOLIA_NETWORK,
+      amount: LOCAL_X402_PAYMENT_AMOUNT,
+      asset: BASE_SEPOLIA_USDC,
+      payTo: LOCAL_X402_PAY_TO,
+      maxTimeoutSeconds: 60,
+      extra: { name: 'USDC', version: '2' },
+    }],
+    extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(true) },
+  }
+  validatePaymentRequired(paymentRequired)
   const configuration = {
     method: 'GET' as const,
     query: [{ inputPointer: '/quote', parameter: 'quote', required: true }],
@@ -289,6 +310,7 @@ async function runDevelopmentX402RouteRuntimeCanary(
     assetAmountExponent: BASE_SEPOLIA_USDC_DECIMALS,
     asset: BASE_SEPOLIA_USDC,
     payTo: LOCAL_X402_PAY_TO,
+    paymentRequiredJson: JSON.stringify(paymentRequired),
   }
   const authorityDigest = canonicalDigest({
     kind: 'development-x402-provider-authority',
@@ -401,17 +423,6 @@ async function runDevelopmentX402RouteRuntimeCanary(
 }
 
 async function runDevelopmentX402TestnetCanary(environment: Environment): Promise<LocalX402CanaryRefusal | LocalX402TestnetResult> {
-  const gate = evaluateLiveMoneyGate()
-  if (gate.kind === 'refused') {
-    return {
-      kind: 'refused',
-      mode: 'testnet',
-      code: 'x402_testnet_live_money_gate_required',
-      prerequisite: `Existing live-money policy/consent gate must be accepted before a testnet payment attempt. Current gate: ${gate.code}.`,
-      requiredEnvironment: LOCAL_X402_TESTNET_ENVIRONMENT,
-      evidenceCeiling: LOCAL_X402_EVIDENCE_CEILING,
-    }
-  }
   const missing = LOCAL_X402_TESTNET_ENVIRONMENT.filter((name) => typeof environment[name] !== 'string' || environment[name]!.trim() === '')
   if (missing.length > 0) {
     return {

@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { brandNonEmpty } from '@/modules/common/ids'
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import { handleUcpManifestRequest } from '../helpers/discovery-fixture-routes'
 
 import { createDurablePublishedDiscoveryState } from '../fixtures/discovery-published-state'
@@ -29,28 +24,18 @@ describe('discovery route handlers', () => {
       suburb: 'Fremantle',
       idPrefix: 'discovery-route-test',
     })
-    const generated = regenerateDiscoveryManifest(
+    const response = handleUcpManifestRequest(
+      new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
+      'fremantle-heat-pump-repairs',
       state,
-      { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
-      {
-        canonicalBaseUrl: 'https://ae.example',
-        now: 0,
-        adapter: testOnlyDiscoveryManifestAdapter,
-      },
     )
-
-    if (generated.kind !== 'ok') {
-      throw new Error(`Expected non-default source manifest to generate: ${generated.reason}`)
-    }
-
-    const body = generated.manifest
+    const body = await response.json()
 
     expect(body).toMatchObject({
-      schemaVersion: 'ae-ucp-fallback:v1',
+      schemaVersion: 'ae-ucp:v2',
       businessCatalogSchemaVersion: 'public-business-catalog-api:v2',
       slug: 'fremantle-heat-pump-repairs',
       businessName: 'Fremantle Heat Pump Repairs',
-      pathKind: 'ae_hosted_fallback',
       disposition: 'current',
       offerings: [
         {
@@ -64,14 +49,14 @@ describe('discovery route handlers', () => {
       ],
     })
     expect(JSON.stringify(body)).not.toMatch(
-      /parramatta-emergency-plumbing|rawContact|ownerId|clerk|private:evidence|admin|sourceRefs|callable":true|paymentRequired":true/
+      /demo-listed-provider|rawContact|ownerId|clerk|private:evidence|admin|sourceRefs|callable":true|paymentRequired":true/
     )
   })
 
-  it('serves the explicit local AE-hosted UCP fallback manifest with route-safe headers', async () => {
+  it('serves the explicit local AE-hosted UCP manifest with route-safe headers', async () => {
     const response = handleUcpManifestRequest(
-      new Request('https://ae.example/parramatta-emergency-plumbing/ucp'),
-      'parramatta-emergency-plumbing',
+      new Request('https://ae.example/demo-listed-provider/ucp'),
+      'demo-listed-provider',
       createFixtureDiscoverySourceState(),
     )
     const body = await response.json()
@@ -82,15 +67,14 @@ describe('discovery route handlers', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
     expect(body).toMatchObject({
-      schemaVersion: 'ae-ucp-fallback:v1',
+      schemaVersion: 'ae-ucp:v2',
       businessCatalogSchemaVersion: 'public-business-catalog-api:v2',
-      slug: 'parramatta-emergency-plumbing',
-      manifestUrl: 'https://ae.example/parramatta-emergency-plumbing/ucp',
-      pathKind: 'ae_hosted_fallback',
+      slug: 'demo-listed-provider',
+      manifestUrl: 'https://ae.example/demo-listed-provider/ucp',
       disposition: 'current',
       offerings: [
         {
-          name: 'Emergency pipe repair',
+          name: 'Listed offering',
           accessPaths: [],
           support: expect.objectContaining({
             integrated: false,
@@ -119,4 +103,3 @@ describe('discovery route handlers', () => {
     })
   })
 })
-

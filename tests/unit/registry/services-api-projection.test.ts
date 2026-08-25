@@ -4,12 +4,45 @@ import type { OfferingPrice } from '@/modules/catalog/public'
 import type { CatalogOfferingOperationMapEntry } from '@/modules/capability-supply/public'
 import type {
   PublicBusinessCatalogApiV2Page,
+  PublicBusinessCatalogApiV2SearchPage,
   ServiceOperationMap,
 } from '@/modules/registry/public'
-import { projectPublicServicesPage } from '@/modules/registry/public'
-import { toConsumerSupplyOption } from '@/components/ae/plan/consumer-plan'
+import { projectPublicServicesPage, projectPublicServicesSearchPage } from '@/modules/registry/public'
 
 describe('agentic.market Service mapping', () => {
+  it('omits businesses without public offerings while preserving page and search cursors', () => {
+    const source = mappingPage()
+    const publishedBusiness = source.page[0]!
+    const emptyBusiness = {
+      ...publishedBusiness,
+      businessId: 'business-empty',
+      slug: 'empty-business',
+      name: 'Empty Business',
+      offerings: [],
+      accessSummary: { humanRequest: false, externalOperation: false, aeSupportedAction: false },
+    }
+    const page: PublicBusinessCatalogApiV2Page = {
+      ...source,
+      page: [emptyBusiness, publishedBusiness],
+    }
+    const projectedPage = projectPublicServicesPage(page)
+    expect(projectedPage.services.map(({ id }) => id)).toEqual(['api-exa-ai'])
+    expect(projectedPage.isDone).toBe(source.isDone)
+    expect(projectedPage.continueCursor).toBe(source.continueCursor)
+
+    const searchPage: PublicBusinessCatalogApiV2SearchPage = {
+      kind: 'ok',
+      schemaVersion: source.schemaVersion,
+      query: 'api',
+      items: [emptyBusiness, publishedBusiness],
+      pagination: { cursor: 'cursor-in', nextCursor: 'cursor-out', limit: 2, total: 2, hasMore: true },
+    }
+    const projectedSearch = projectPublicServicesSearchPage(searchPage)
+    expect(projectedSearch.services.map(({ id }) => id)).toEqual(['api-exa-ai'])
+    expect(projectedSearch.query).toBe('api')
+    expect(projectedSearch.pagination).toEqual(searchPage.pagination)
+  })
+
   it('mirrors the v2 Service/Endpoint core keys and nests AE-only data', () => {
     const result = projectPublicServicesPage(mappingPage())
 
@@ -489,17 +522,6 @@ describe('public services API projection', () => {
     expect(result.services[0]!.endpoints[1]).not.toHaveProperty('providerName')
     expect(result.services[0]!.endpoints[0]).not.toHaveProperty('summary')
     expect(result.services[0]!.endpoints[0]).not.toHaveProperty('offeringRef')
-  })
-
-  it('carries exact published availability and observation into the consumer supply adapter', () => {
-    const result = toConsumerSupplyOption(projectPublicServicesPage(page()).services[0]!)
-
-    expect(result).toMatchObject({
-      optionRef: 'acme-plumbing',
-      business: { slug: 'acme-plumbing', name: 'Acme Plumbing', location: 'Fremantle, WA' },
-      availability: { kind: 'published', summary: 'Weekdays by appointment' },
-      evidence: { source: 'business_published', observedAt: 1_700_000_000_000 },
-    })
   })
 
   it('passes source cursor state through', () => {

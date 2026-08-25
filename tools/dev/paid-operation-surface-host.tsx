@@ -9,11 +9,11 @@ import type {
   PaidOperationApplicationService,
   PaidOperationCommand,
   PaidOperationProjection,
-} from '../../src/modules/action-invocation/paid-operation-application-service'
+} from '../../src/modules/capability-execution/legacy-dynamic/paid-operation-application-service'
 import type {
   PaidOperationContinuation,
   StructuredPaidOperationProjection,
-} from '../../src/modules/action-invocation/paid-operation-semantics'
+} from '../../src/modules/capability-execution/legacy-dynamic/paid-operation-semantics'
 import type {
   ReconciliationEvidence,
   X402PaymentReconciliationEvidence,

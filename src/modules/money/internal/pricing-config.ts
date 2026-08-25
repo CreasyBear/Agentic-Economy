@@ -1,12 +1,27 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
+  addExactAmounts,
+  compareExactAmounts,
   exactAmountSchema,
-  pricingConfigSchema,
-} from './pricing-contract'
-import { multiplyExactAmountByBps, subtractExactAmounts } from './exact-amount'
+  multiplyExactAmountByBps,
+  subtractExactAmounts,
+} from './exact-amount'
+import { pricingConfigSchema } from './pricing-contract'
 import type { ExactAmount } from './exact-amount'
 import type { PricingConfig, PricingResolution, RakeConfig, RakeSplit } from '../public'
+
+export type ProviderFeeBreakdown = Readonly<{
+  providerAmount: ExactAmount
+  platformFee: ExactAmount
+  totalAmount: ExactAmount
+  feeBps: number
+}>
+
+type ProviderFeeBreakdownRefusal = Readonly<{
+  kind: 'refused'
+  code: 'rake_not_configured'
+}>
 
 export type NormalizePricingConfigResult =
   | Readonly<{ kind: 'valid'; config: PricingConfig }>
@@ -19,10 +34,61 @@ export type ResolveInvocationPriceInput = Readonly<{
   expectedCurrency?: string
 }>
 
+export function computeProviderFeeBreakdown(
+  providerAmount: unknown,
+  feeBps = 1_000,
+): ProviderFeeBreakdown | ProviderFeeBreakdownRefusal {
+  const parsedProvider = exactAmountSchema.safeParse(providerAmount)
+  if (
+    !parsedProvider.success
+    || !Number.isSafeInteger(feeBps)
+    || feeBps < 0
+    || feeBps > 10_000
+  ) return { kind: 'refused', code: 'rake_not_configured' }
+  const platformFee = multiplyExactAmountByBps(parsedProvider.data, feeBps, 'ceil')
+  const totalAmount = platformFee === undefined
+    ? undefined
+    : addExactAmounts(parsedProvider.data, platformFee)
+  if (platformFee === undefined || totalAmount === undefined) {
+    return { kind: 'refused', code: 'rake_not_configured' }
+  }
+  return {
+    providerAmount: parsedProvider.data,
+    platformFee,
+    totalAmount,
+    feeBps,
+  }
+}
+
 export function normalizePricingConfig(config: unknown): NormalizePricingConfigResult {
   try {
     const parsed = pricingConfigSchema.safeParse(config)
     if (!parsed.success) return { kind: 'invalid', code: 'pricing_config_invalid' }
+    const hasProviderAmount = parsed.data.providerAmount !== undefined
+    const hasPlatformFee = parsed.data.platformFee !== undefined
+    if (hasProviderAmount !== hasPlatformFee) {
+      return { kind: 'invalid', code: 'pricing_config_invalid' }
+    }
+    if (hasProviderAmount && hasPlatformFee) {
+      const providerAmount = parsed.data.providerAmount
+      const platformFee = parsed.data.platformFee
+      if (providerAmount === undefined || platformFee === undefined) {
+        return { kind: 'invalid', code: 'pricing_config_invalid' }
+      }
+      const breakdown = computeProviderFeeBreakdown(providerAmount)
+      if (
+        'kind' in breakdown
+        || providerAmount.currency !== parsed.data.paidAmount.currency
+        || providerAmount.exponent !== parsed.data.paidAmount.exponent
+        || platformFee.currency !== parsed.data.paidAmount.currency
+        || platformFee.exponent !== parsed.data.paidAmount.exponent
+        || breakdown.providerAmount.currency !== providerAmount.currency
+        || breakdown.providerAmount.exponent !== providerAmount.exponent
+        || compareExactAmounts(providerAmount, breakdown.providerAmount) !== 0
+        || compareExactAmounts(platformFee, breakdown.platformFee) !== 0
+        || compareExactAmounts(parsed.data.paidAmount, breakdown.totalAmount) !== 0
+      ) return { kind: 'invalid', code: 'pricing_config_invalid' }
+    }
     return { kind: 'valid', config: parsed.data }
   } catch {
     return { kind: 'invalid', code: 'pricing_config_invalid' }

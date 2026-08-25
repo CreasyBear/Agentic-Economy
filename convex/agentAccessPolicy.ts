@@ -140,9 +140,9 @@ export const listOwnerGrantReadbacks = query({
   returns: v.array(publicGrantReadback),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null || identity.subject.trim().length === 0) return []
+    if (identity === null || identity.tokenIdentifier.trim().length === 0) return []
     const rows = await ctx.db.query('agentAccessGrants')
-      .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', identity.subject))
+      .withIndex('by_ownerId_and_updatedAt', (grantQuery) => grantQuery.eq('ownerId', identity.tokenIdentifier))
       .order('desc')
       .take(64)
     return rows.map((row) => ({
@@ -187,6 +187,7 @@ export const upsertGrant = internalMutation({
   handler: async (ctx, args) => {
     const grant = args.grant
     if (grant.policy.environment !== grant.environment
+      || (grant.environment === 'production' && grant.authorityMode === 'full_yolo')
       || grant.policy.budget.budgetPolicyRef !== grant.budgetPolicyRef
       || grant.policy.rate.ratePolicyRef !== grant.ratePolicyRef
       || grant.generation < 1
@@ -267,7 +268,8 @@ export const readActiveGrant = internalQuery({
       && (args.grantRef === undefined || candidate.grantRef === args.grantRef)
       && (args.ownerId === undefined || candidate.ownerId === args.ownerId)
       && (args.generation === undefined || candidate.generation === args.generation))
-    if (row === undefined || row.expiresAt <= args.now) return null
+    if (row === undefined || row.expiresAt <= args.now
+      || (row.environment === 'production' && row.authorityMode === 'full_yolo')) return null
     const { _id, _creationTime, ...grant } = row
     return grant
   },

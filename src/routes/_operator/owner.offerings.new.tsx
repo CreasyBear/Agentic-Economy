@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_operator/owner/offerings/new')({
   ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): Readonly<{ next?: 'supply' }> => search.next === 'supply' ? { next: 'supply' } : {},
   loader: () => readOwnerOfferingSupplyServer(),
-  head: () => ({ meta: [{ title: 'Add an Offering | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: 'Add Operation | Agentic Economy' }, { name: 'robots', content: 'noindex' }] }),
   component: NewOwnerOfferingRoute,
 })
 
@@ -28,8 +28,8 @@ function NewOwnerOfferingRoute() {
   const seed = result.kind === 'available' ? readSeed(result) : undefined
 
   return (
-    <AeOperatorShell operatorRole="owner" title="Add an Offering" description="Start with what you provide. A contact path can be added now or later." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Offerings', href: '/owner/offerings' }, { label: 'Add' }]}>
-      {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Offering editor unavailable</AlertTitle><AlertDescription>Claimed owner access is required before an Offering can be saved.</AlertDescription></Alert> : (
+    <AeOperatorShell operatorRole="owner" title="Add Operation" description="Describe one tool, its price, and how an agent can call it." currentPath="/owner/offerings" breadcrumbs={[{ label: 'Operations', href: '/owner/offerings' }, { label: 'Add' }]}>
+      {result.kind !== 'available' ? <Alert variant="destructive"><AlertTitle>Operation editor unavailable</AlertTitle><AlertDescription>Supplier access is required before an Operation can be saved.</AlertDescription></Alert> : (
         <AeOwnerOfferingEditor
           initialValue={emptyOwnerOfferingEditorValue}
           draftKey={result.businessId}
@@ -50,11 +50,7 @@ function NewOwnerOfferingRoute() {
   )
 }
 
-/**
- * The claim's service facts are not reachable from this read, so the quick
- * start seeds the category from the owner's most recent Offering instead.
- * Seeding from the claim would need new source plumbing; recorded as follow-up.
- */
+/** Seeds the quick-start category from the supplier's most recent Operation. */
 function readSeed(
   result: Extract<OwnerOfferingSupplyReadResult, { kind: 'available' }>,
 ): Readonly<{ label: string; value: Partial<OwnerOfferingEditorValue> }> | undefined {

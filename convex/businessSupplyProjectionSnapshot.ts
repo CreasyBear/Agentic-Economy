@@ -16,7 +16,7 @@ import type {
 import type { BusinessContext } from '../src/modules/business/public'
 import { compareExactAmounts, exactAmountSchema } from '../src/modules/money/public'
 
-export type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry' | 'discovery'
+export type BusinessSupplyProjectionErrorPrefix = 'catalog' | 'registry'
 
 export type BusinessSupplyProjectionSnapshotEnvelope = Readonly<{
   businessId?: string
@@ -50,24 +50,19 @@ export function readBusinessSupplyProjectionSnapshot(
     ...(expectedSlug === undefined ? {} : { expectedSlug }),
     ...(envelope === undefined ? {} : { envelope }),
   }
-  const decoded = decodeProjectionValue(value, context)
-  const projection = errorPrefix === 'discovery'
-    ? readDiscoveryProjection(decoded, context)
-    : (() => {
-        const row = readRecord(decoded, `${errorPrefix}_projection_invalid`)
-        return {
-          business: readPersistedBusiness(row.business, context),
-          offerings: readArray(row.offerings, `${errorPrefix}_projection_offerings_invalid`)
-            .map((entry) => readPersistedOffering(entry, context)),
-          sourceRevision: readNumber(row.sourceRevision, `${errorPrefix}_projection_source_revision_invalid`),
-          sourceDigest: brandNonEmpty(
-            readString(row.sourceDigest, `${errorPrefix}_projection_source_digest_invalid`),
-            'SourceHash',
-          ),
-          observedAt: readNumber(row.observedAt, `${errorPrefix}_projection_observed_at_invalid`),
-          disposition: readDisposition(row.disposition, context),
-        }
-      })()
+  const row = readRecord(value, `${errorPrefix}_projection_invalid`)
+  const projection = {
+    business: readPersistedBusiness(row.business, context),
+    offerings: readArray(row.offerings, `${errorPrefix}_projection_offerings_invalid`)
+      .map((entry) => readPersistedOffering(entry, context)),
+    sourceRevision: readNumber(row.sourceRevision, `${errorPrefix}_projection_source_revision_invalid`),
+    sourceDigest: brandNonEmpty(
+      readString(row.sourceDigest, `${errorPrefix}_projection_source_digest_invalid`),
+      'SourceHash',
+    ),
+    observedAt: readNumber(row.observedAt, `${errorPrefix}_projection_observed_at_invalid`),
+    disposition: readDisposition(row.disposition, context),
+  }
   validateProjectionEnvelope(projection, context)
   return projection
 }
@@ -92,15 +87,6 @@ function validateProjectionEnvelope(
   }
   if (envelope.disposition !== undefined && projection.disposition !== envelope.disposition) {
     throw new Error(`${context.errorPrefix}_projection_envelope_disposition_mismatch`)
-  }
-}
-
-function decodeProjectionValue(value: unknown, context: DecoderContext): unknown {
-  if (typeof value !== 'string') return value
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    throw new Error(`${context.errorPrefix}_projection_json_invalid`)
   }
 }
 
@@ -336,22 +322,6 @@ function readDescriptor(value: unknown, context: DecoderContext): OfferingAccess
   throw new Error(descriptorError(context, 'kind'))
 }
 
-function readDiscoveryProjection(value: unknown, context: DecoderContext): BusinessSupplyProjection {
-  const row = readRecord(value, `${context.errorPrefix}_projection_invalid`)
-  return {
-    business: readPersistedBusiness(row.business, context),
-    offerings: readArray(row.offerings, `${context.errorPrefix}_projection_offerings_invalid`)
-      .map((entry) => readPersistedOffering(entry, context)),
-    sourceRevision: readNumber(row.sourceRevision, `${context.errorPrefix}_projection_source_revision_invalid`),
-    sourceDigest: brandNonEmpty(
-      readString(row.sourceDigest, `${context.errorPrefix}_projection_source_digest_invalid`),
-      'SourceHash',
-    ),
-    observedAt: readNumber(row.observedAt, `${context.errorPrefix}_projection_observed_at_invalid`),
-    disposition: readDisposition(row.disposition, context),
-  }
-}
-
 function readTrustTier(
   value: unknown,
   context: DecoderContext,
@@ -383,11 +353,7 @@ function descriptorError(context: DecoderContext, kind: 'record' | 'interface' |
       ? 'invalid_registry_interface_description'
       : 'invalid_registry_access_path_descriptor'
   }
-  return kind === 'record'
-    ? 'discovery_projection_descriptor_invalid'
-    : kind === 'interface'
-      ? 'discovery_projection_descriptor_interface_invalid'
-      : 'discovery_manifest_access_path_kind_invalid'
+  return 'invalid_registry_access_path_descriptor'
 }
 
 function descriptorFieldError(context: DecoderContext, field: string): string {
@@ -399,36 +365,23 @@ function descriptorFieldError(context: DecoderContext, field: string): string {
     const mapped = field === 'interfaceUrl' || field === 'interfaceFormat' ? field === 'interfaceUrl' ? 'url' : 'format' : field
     return `invalid_registry_${mapped}`
   }
-  const mapped = field === 'interfaceUrl'
-    ? 'interface_url'
-    : field === 'interfaceFormat'
-      ? 'interface_format'
-      : field
-  return `discovery_projection_descriptor_${mapped}_invalid`
+  return `invalid_registry_${field}`
 }
 
 function descriptorLiteralError(context: DecoderContext, field: string): string {
-  if (context.errorPrefix === 'discovery') {
-    return field === 'channel'
-      ? 'discovery_manifest_human_channel_invalid'
-      : field === 'provenance'
-        ? 'discovery_manifest_provenance_invalid'
-        : descriptorFieldError(context, field)
-  }
   return descriptorFieldError(context, field)
 }
 
 function priceFieldError(context: DecoderContext, field: string): string {
   if (context.errorPrefix === 'catalog') return `catalog_invalid_${field}`
   if (context.errorPrefix === 'registry') return `invalid_registry_${field}`
-  if (field === 'taxTreatment') return 'discovery_manifest_tax_treatment_invalid'
-  return `discovery_manifest_price_${field}_invalid`
+  return `invalid_registry_${field}`
 }
 
 function priceRangeError(context: DecoderContext): string {
   if (context.errorPrefix === 'catalog') return 'catalog_invalid_price_range'
   if (context.errorPrefix === 'registry') return 'invalid_registry_price_range'
-  return 'discovery_manifest_price_range_invalid'
+  return 'invalid_registry_price_range'
 }
 
 function readRecord(value: unknown, error: string): Record<string, unknown> {

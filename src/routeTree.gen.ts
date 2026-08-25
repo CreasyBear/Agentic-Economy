@@ -13,14 +13,13 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as MarketRouteImport } from './routes/market'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
-import { Route as HelpRouteImport } from './routes/help'
 import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as EngineRouteImport } from './routes/engine'
-import { Route as ClaimRouteImport } from './routes/claim'
-import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
 import { Route as SKILLDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as SlugRouteImport } from './routes/$slug'
@@ -36,108 +35,50 @@ import { Route as OauthTokenRouteImport } from './routes/oauth.token'
 import { Route as OauthRegisterRouteImport } from './routes/oauth.register'
 import { Route as OauthDevice_authorizationRouteImport } from './routes/oauth.device_authorization'
 import { Route as OauthAuthorizeRouteImport } from './routes/oauth.authorize'
-import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
-import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
-import { Route as ClaimFormRouteImport } from './routes/claim.form'
-import { Route as ApiRequestsRouteImport } from './routes/api.requests'
 import { Route as ApiReadyRouteImport } from './routes/api.ready'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as OperatorAgentAccessRouteImport } from './routes/_operator/agent-access'
+import { Route as OperatorActivityRouteImport } from './routes/_operator/activity'
 import { Route as DotwellKnownUcpRouteImport } from './routes/[.]well-known/ucp'
 import { Route as DotwellKnownOauthProtectedResourceRouteImport } from './routes/[.]well-known/oauth-protected-resource'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known/oauth-authorization-server'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
-import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as OperationsInvocationsInvocationRefRouteImport } from './routes/operations.invocations.$invocationRef'
 import { Route as ApiV1ServicesRouteImport } from './routes/api.v1.services'
-import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
 import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
+import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
+import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
-import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
-import { Route as ApiStorefrontEnrichRouteImport } from './routes/api.storefront.enrich'
-import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
-import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
-import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
-import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
-import { Route as ApiNotificationNovuDispatchRouteImport } from './routes/api.notification.novu-dispatch'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
+import { Route as ApiChatAnonymousRouteImport } from './routes/api.chat.anonymous'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
-import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
-import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.threads'
-import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.follow-up-chips'
-import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
 import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owner.supply'
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
-import { Route as OperatorOwnerInquiriesRouteImport } from './routes/_operator/owner.inquiries'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
-import { Route as OperatorAdminSearchGapsRouteImport } from './routes/_operator/admin.search-gaps'
-import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
-import { Route as OperatorAdminRequestProblemsRouteImport } from './routes/_operator/admin.request-problems'
-import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/admin.inquiries'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
-import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
-import { Route as SlugToolsToolIdRouteImport } from './routes/$slug.tools.$toolId'
-import { Route as ApiV1WorkTreeOperationRouteImport } from './routes/api.v1.work-tree.$operation'
 import { Route as ApiV1ServicesSearchRouteImport } from './routes/api.v1.services.search'
 import { Route as ApiV1ServicesServiceIdRouteImport } from './routes/api.v1.services.$serviceId'
-import { Route as ApiV1RequestsSchemaRouteImport } from './routes/api.v1.requests.schema'
-import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
-import { Route as ApiV1OperationsExecuteRouteImport } from './routes/api.v1.operations.execute'
 import { Route as ApiV1OperationsCallRouteImport } from './routes/api.v1.operations.call'
 import { Route as ApiV1OperationsInvocationRefRouteImport } from './routes/api.v1.operations.$invocationRef'
 import { Route as ApiV1MarketOperationsSearchRouteImport } from './routes/api.v1.market-operations.search'
 import { Route as ApiV1MarketOperationsInspectPlanRouteImport } from './routes/api.v1.market-operations.inspect-plan'
 import { Route as ApiV1MarketOperationsDetailRouteImport } from './routes/api.v1.market-operations.detail'
 import { Route as ApiV1MarketOperationsCompareRouteImport } from './routes/api.v1.market-operations.compare'
-import { Route as ApiRequestsRequestRefRunRouteImport } from './routes/api.requests.$requestRef.run'
-import { Route as ApiRequestsRequestRefRepeatPermissionsRouteImport } from './routes/api.requests.$requestRef.repeat-permissions'
-import { Route as ApiRequestsRequestRefProblemsRouteImport } from './routes/api.requests.$requestRef.problems'
-import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
-import { Route as ApiRequestsRequestRefMessagesRouteImport } from './routes/api.requests.$requestRef.messages'
-import { Route as ApiRequestsRequestRefFactsRouteImport } from './routes/api.requests.$requestRef.facts'
-import { Route as ApiRequestsRequestRefEvidenceRouteImport } from './routes/api.requests.$requestRef.evidence'
-import { Route as ApiRequestsRequestRefConfirmationRouteImport } from './routes/api.requests.$requestRef.confirmation'
-import { Route as ApiRequestsRequestRefCancellationRouteImport } from './routes/api.requests.$requestRef.cancellation'
-import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
-import { Route as ApiAnswerTurnStopRouteImport } from './routes/api.answer.turn.stop'
-import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerSupplyOfferingRefRouteImport } from './routes/_operator/owner.supply.$offeringRef'
-import { Route as OperatorOwnerRequestProblemsReportRefRouteImport } from './routes/_operator/owner.request-problems.$reportRef'
 import { Route as OperatorOwnerOfferingsNewRouteImport } from './routes/_operator/owner.offerings.new'
 import { Route as OperatorOwnerOfferingsOfferingRefRouteImport } from './routes/_operator/owner.offerings.$offeringRef'
-import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
-import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
-import { Route as SlugToolsToolIdPrepareRouteImport } from './routes/$slug.tools.$toolId.prepare'
-import { Route as ApiV1RequestsRequestRefRunRouteImport } from './routes/api.v1.requests.$requestRef.run'
-import { Route as ApiV1RequestsRequestRefRepeatPermissionsRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions'
-import { Route as ApiV1RequestsRequestRefProblemsRouteImport } from './routes/api.v1.requests.$requestRef.problems'
-import { Route as ApiV1RequestsRequestRefOptionsRouteImport } from './routes/api.v1.requests.$requestRef.options'
-import { Route as ApiV1RequestsRequestRefMessagesRouteImport } from './routes/api.v1.requests.$requestRef.messages'
-import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v1.requests.$requestRef.facts'
-import { Route as ApiV1RequestsRequestRefEvidenceRouteImport } from './routes/api.v1.requests.$requestRef.evidence'
-import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
-import { Route as ApiV1RequestsRequestRefCancellationRouteImport } from './routes/api.v1.requests.$requestRef.cancellation'
 import { Route as ApiV1OperationsInvocationRefReconcileRouteImport } from './routes/api.v1.operations.$invocationRef.reconcile'
 import { Route as ApiV1OperationsInvocationRefCancelRouteImport } from './routes/api.v1.operations.$invocationRef.cancel'
-import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef'
-import { Route as ApiAnswerThreadsThreadIdShareRouteImport } from './routes/api.answer.threads.$threadId.share'
-import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef'
-import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef.withdrawal'
-import { Route as ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport } from './routes/api.requests.$requestRef.repeat-permissions.$permissionRef.use'
-import { Route as ApiRequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.requests.$requestRef.problems.$reportRef.replies'
-import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef.withdrawal'
-import { Route as ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport } from './routes/api.v1.requests.$requestRef.repeat-permissions.$permissionRef.use'
-import { Route as ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport } from './routes/api.v1.requests.$requestRef.problems.$reportRef.replies'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -159,19 +100,24 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperationsRoute = OperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MarketRoute = MarketRouteImport.update({
+  id: '/market',
+  path: '/market',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HelpRoute = HelpRouteImport.update({
-  id: '/help',
-  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForProvidersRoute = ForProvidersRouteImport.update({
@@ -187,16 +133,6 @@ const ForAgentsRoute = ForAgentsRouteImport.update({
 const EngineRoute = EngineRouteImport.update({
   id: '/engine',
   path: '/engine',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClaimRoute = ClaimRouteImport.update({
-  id: '/claim',
-  path: '/claim',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OperatorRoute = OperatorRouteImport.update({
@@ -249,9 +185,9 @@ const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
   getParentRoute: () => PrivacyRoute,
 } as any)
 const OperationsOperationRefRoute = OperationsOperationRefRouteImport.update({
-  id: '/operations/$operationRef',
-  path: '/operations/$operationRef',
-  getParentRoute: () => rootRouteImport,
+  id: '/$operationRef',
+  path: '/$operationRef',
+  getParentRoute: () => OperationsRoute,
 } as any)
 const OauthTokenRoute = OauthTokenRouteImport.update({
   id: '/oauth/token',
@@ -272,26 +208,6 @@ const OauthDevice_authorizationRoute =
 const OauthAuthorizeRoute = OauthAuthorizeRouteImport.update({
   id: '/oauth/authorize',
   path: '/oauth/authorize',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IThreadIdRoute = IThreadIdRouteImport.update({
-  id: '/i/$threadId',
-  path: '/i/$threadId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
-  id: '/success',
-  path: '/success',
-  getParentRoute: () => ClaimRoute,
-} as any)
-const ClaimFormRoute = ClaimFormRouteImport.update({
-  id: '/form',
-  path: '/form',
-  getParentRoute: () => ClaimRoute,
-} as any)
-const ApiRequestsRoute = ApiRequestsRouteImport.update({
-  id: '/api/requests',
-  path: '/api/requests',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiReadyRoute = ApiReadyRouteImport.update({
@@ -317,6 +233,11 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
 const OperatorAgentAccessRoute = OperatorAgentAccessRouteImport.update({
   id: '/agent-access',
   path: '/agent-access',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorActivityRoute = OperatorActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
   getParentRoute: () => OperatorRoute,
 } as any)
 const DotwellKnownUcpRoute = DotwellKnownUcpRouteImport.update({
@@ -347,25 +268,15 @@ const SlugUcpRoute = SlugUcpRouteImport.update({
   path: '/ucp',
   getParentRoute: () => SlugRoute,
 } as any)
-const SlugInquiryRoute = SlugInquiryRouteImport.update({
-  id: '/inquiry',
-  path: '/inquiry',
-  getParentRoute: () => SlugRoute,
-} as any)
 const OperationsInvocationsInvocationRefRoute =
   OperationsInvocationsInvocationRefRouteImport.update({
-    id: '/operations/invocations/$invocationRef',
-    path: '/operations/invocations/$invocationRef',
-    getParentRoute: () => rootRouteImport,
+    id: '/invocations/$invocationRef',
+    path: '/invocations/$invocationRef',
+    getParentRoute: () => OperationsRoute,
   } as any)
 const ApiV1ServicesRoute = ApiV1ServicesRouteImport.update({
   id: '/api/v1/services',
   path: '/api/v1/services',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiV1RequestsRoute = ApiV1RequestsRouteImport.update({
-  id: '/api/v1/requests',
-  path: '/api/v1/requests',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
@@ -373,54 +284,25 @@ const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
   path: '/api/v1/release',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1RegistryRoute = ApiV1RegistryRouteImport.update({
+  id: '/api/v1/registry',
+  path: '/api/v1/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1MarketMetricsRoute = ApiV1MarketMetricsRouteImport.update({
+  id: '/api/v1/market-metrics',
+  path: '/api/v1/market-metrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
   id: '/api/stripe/webhook',
   path: '/api/stripe/webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiStorefrontImportDraftRoute =
-  ApiStorefrontImportDraftRouteImport.update({
-    id: '/api/storefront/import-draft',
-    path: '/api/storefront/import-draft',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiStorefrontEnrichRoute = ApiStorefrontEnrichRouteImport.update({
-  id: '/api/storefront/enrich',
-  path: '/api/storefront/enrich',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiRequestsRequestRefRoute = ApiRequestsRequestRefRouteImport.update({
-  id: '/$requestRef',
-  path: '/$requestRef',
-  getParentRoute: () => ApiRequestsRoute,
-} as any)
-const ApiObservabilityFunnelRoute = ApiObservabilityFunnelRouteImport.update({
-  id: '/api/observability/funnel',
-  path: '/api/observability/funnel',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiObservabilityClientErrorRoute =
   ApiObservabilityClientErrorRouteImport.update({
     id: '/api/observability/client-error',
     path: '/api/observability/client-error',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiNotificationResendWebhookRoute =
-  ApiNotificationResendWebhookRouteImport.update({
-    id: '/api/notification/resend-webhook',
-    path: '/api/notification/resend-webhook',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiNotificationResendDispatchRoute =
-  ApiNotificationResendDispatchRouteImport.update({
-    id: '/api/notification/resend-dispatch',
-    path: '/api/notification/resend-dispatch',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiNotificationNovuDispatchRoute =
-  ApiNotificationNovuDispatchRouteImport.update({
-    id: '/api/notification/novu-dispatch',
-    path: '/api/notification/novu-dispatch',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiDiscoverySchemaRoute = ApiDiscoverySchemaRouteImport.update({
@@ -433,6 +315,11 @@ const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   path: '/api/discovery/examples',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatAnonymousRoute = ApiChatAnonymousRouteImport.update({
+  id: '/api/chat/anonymous',
+  path: '/api/chat/anonymous',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -442,26 +329,6 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
-} as any)
-const ApiAnswerTurnRoute = ApiAnswerTurnRouteImport.update({
-  id: '/api/answer/turn',
-  path: '/api/answer/turn',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerThreadsRoute = ApiAnswerThreadsRouteImport.update({
-  id: '/api/answer/threads',
-  path: '/api/answer/threads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerFollowUpChipsRoute = ApiAnswerFollowUpChipsRouteImport.update({
-  id: '/api/answer/follow-up-chips',
-  path: '/api/answer/follow-up-chips',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerEvalStatusRoute = ApiAnswerEvalStatusRouteImport.update({
-  id: '/api/answer/eval-status',
-  path: '/api/answer/eval-status',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const OperatorOwnerSupplyRoute = OperatorOwnerSupplyRouteImport.update({
   id: '/owner/supply',
@@ -483,11 +350,6 @@ const OperatorOwnerOfferingsRoute = OperatorOwnerOfferingsRouteImport.update({
   path: '/owner/offerings',
   getParentRoute: () => OperatorRoute,
 } as any)
-const OperatorOwnerInquiriesRoute = OperatorOwnerInquiriesRouteImport.update({
-  id: '/owner/inquiries',
-  path: '/owner/inquiries',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorDevelopersDiscoveryRoute =
   OperatorDevelopersDiscoveryRouteImport.update({
     id: '/developers/discovery',
@@ -500,54 +362,18 @@ const OperatorAgentAccessAuthorizeRoute =
     path: '/authorize',
     getParentRoute: () => OperatorAgentAccessRoute,
   } as any)
-const OperatorAdminSearchGapsRoute = OperatorAdminSearchGapsRouteImport.update({
-  id: '/admin/search-gaps',
-  path: '/admin/search-gaps',
-  getParentRoute: () => OperatorRoute,
-} as any)
-const OperatorAdminRunsRoute = OperatorAdminRunsRouteImport.update({
-  id: '/admin/runs',
-  path: '/admin/runs',
-  getParentRoute: () => OperatorRoute,
-} as any)
-const OperatorAdminRequestProblemsRoute =
-  OperatorAdminRequestProblemsRouteImport.update({
-    id: '/admin/request-problems',
-    path: '/admin/request-problems',
-    getParentRoute: () => OperatorRoute,
-  } as any)
-const OperatorAdminInquiriesRoute = OperatorAdminInquiriesRouteImport.update({
-  id: '/admin/inquiries',
-  path: '/admin/inquiries',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorAdminIndexHealthRoute =
   OperatorAdminIndexHealthRouteImport.update({
     id: '/admin/index-health',
     path: '/admin/index-health',
     getParentRoute: () => OperatorRoute,
   } as any)
-const OperatorAdminClaimsRoute = OperatorAdminClaimsRouteImport.update({
-  id: '/admin/claims',
-  path: '/admin/claims',
-  getParentRoute: () => OperatorRoute,
-} as any)
 const OperatorAdminAuditEventsRoute =
   OperatorAdminAuditEventsRouteImport.update({
     id: '/admin/audit-events',
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
-const SlugToolsToolIdRoute = SlugToolsToolIdRouteImport.update({
-  id: '/tools/$toolId',
-  path: '/tools/$toolId',
-  getParentRoute: () => SlugRoute,
-} as any)
-const ApiV1WorkTreeOperationRoute = ApiV1WorkTreeOperationRouteImport.update({
-  id: '/api/v1/work-tree/$operation',
-  path: '/api/v1/work-tree/$operation',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiV1ServicesSearchRoute = ApiV1ServicesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -557,21 +383,6 @@ const ApiV1ServicesServiceIdRoute = ApiV1ServicesServiceIdRouteImport.update({
   id: '/$serviceId',
   path: '/$serviceId',
   getParentRoute: () => ApiV1ServicesRoute,
-} as any)
-const ApiV1RequestsSchemaRoute = ApiV1RequestsSchemaRouteImport.update({
-  id: '/schema',
-  path: '/schema',
-  getParentRoute: () => ApiV1RequestsRoute,
-} as any)
-const ApiV1RequestsRequestRefRoute = ApiV1RequestsRequestRefRouteImport.update({
-  id: '/$requestRef',
-  path: '/$requestRef',
-  getParentRoute: () => ApiV1RequestsRoute,
-} as any)
-const ApiV1OperationsExecuteRoute = ApiV1OperationsExecuteRouteImport.update({
-  id: '/api/v1/operations/execute',
-  path: '/api/v1/operations/execute',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1OperationsCallRoute = ApiV1OperationsCallRouteImport.update({
   id: '/api/v1/operations/call',
@@ -608,88 +419,11 @@ const ApiV1MarketOperationsCompareRoute =
     path: '/api/v1/market-operations/compare',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiRequestsRequestRefRunRoute =
-  ApiRequestsRequestRefRunRouteImport.update({
-    id: '/run',
-    path: '/run',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefRepeatPermissionsRoute =
-  ApiRequestsRequestRefRepeatPermissionsRouteImport.update({
-    id: '/repeat-permissions',
-    path: '/repeat-permissions',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefProblemsRoute =
-  ApiRequestsRequestRefProblemsRouteImport.update({
-    id: '/problems',
-    path: '/problems',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefOptionsRoute =
-  ApiRequestsRequestRefOptionsRouteImport.update({
-    id: '/options',
-    path: '/options',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefMessagesRoute =
-  ApiRequestsRequestRefMessagesRouteImport.update({
-    id: '/messages',
-    path: '/messages',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefFactsRoute =
-  ApiRequestsRequestRefFactsRouteImport.update({
-    id: '/facts',
-    path: '/facts',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefEvidenceRoute =
-  ApiRequestsRequestRefEvidenceRouteImport.update({
-    id: '/evidence',
-    path: '/evidence',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefConfirmationRoute =
-  ApiRequestsRequestRefConfirmationRouteImport.update({
-    id: '/confirmation',
-    path: '/confirmation',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefCancellationRoute =
-  ApiRequestsRequestRefCancellationRouteImport.update({
-    id: '/cancellation',
-    path: '/cancellation',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiRequestsRequestRefAuthorizationRoute =
-  ApiRequestsRequestRefAuthorizationRouteImport.update({
-    id: '/authorization',
-    path: '/authorization',
-    getParentRoute: () => ApiRequestsRequestRefRoute,
-  } as any)
-const ApiAnswerTurnStopRoute = ApiAnswerTurnStopRouteImport.update({
-  id: '/stop',
-  path: '/stop',
-  getParentRoute: () => ApiAnswerTurnRoute,
-} as any)
-const ApiAnswerThreadsThreadIdRoute =
-  ApiAnswerThreadsThreadIdRouteImport.update({
-    id: '/$threadId',
-    path: '/$threadId',
-    getParentRoute: () => ApiAnswerThreadsRoute,
-  } as any)
 const OperatorOwnerSupplyOfferingRefRoute =
   OperatorOwnerSupplyOfferingRefRouteImport.update({
     id: '/$offeringRef',
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerSupplyRoute,
-  } as any)
-const OperatorOwnerRequestProblemsReportRefRoute =
-  OperatorOwnerRequestProblemsReportRefRouteImport.update({
-    id: '/owner/request-problems/$reportRef',
-    path: '/owner/request-problems/$reportRef',
-    getParentRoute: () => OperatorRoute,
   } as any)
 const OperatorOwnerOfferingsNewRoute =
   OperatorOwnerOfferingsNewRouteImport.update({
@@ -703,76 +437,6 @@ const OperatorOwnerOfferingsOfferingRefRoute =
     path: '/$offeringRef',
     getParentRoute: () => OperatorOwnerOfferingsRoute,
   } as any)
-const OperatorOwnerInquiriesThreadIdRoute =
-  OperatorOwnerInquiriesThreadIdRouteImport.update({
-    id: '/$threadId',
-    path: '/$threadId',
-    getParentRoute: () => OperatorOwnerInquiriesRoute,
-  } as any)
-const OperatorAdminRunsTurnIdRoute = OperatorAdminRunsTurnIdRouteImport.update({
-  id: '/$turnId',
-  path: '/$turnId',
-  getParentRoute: () => OperatorAdminRunsRoute,
-} as any)
-const SlugToolsToolIdPrepareRoute = SlugToolsToolIdPrepareRouteImport.update({
-  id: '/prepare',
-  path: '/prepare',
-  getParentRoute: () => SlugToolsToolIdRoute,
-} as any)
-const ApiV1RequestsRequestRefRunRoute =
-  ApiV1RequestsRequestRefRunRouteImport.update({
-    id: '/run',
-    path: '/run',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefRepeatPermissionsRoute =
-  ApiV1RequestsRequestRefRepeatPermissionsRouteImport.update({
-    id: '/repeat-permissions',
-    path: '/repeat-permissions',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefProblemsRoute =
-  ApiV1RequestsRequestRefProblemsRouteImport.update({
-    id: '/problems',
-    path: '/problems',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefOptionsRoute =
-  ApiV1RequestsRequestRefOptionsRouteImport.update({
-    id: '/options',
-    path: '/options',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefMessagesRoute =
-  ApiV1RequestsRequestRefMessagesRouteImport.update({
-    id: '/messages',
-    path: '/messages',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefFactsRoute =
-  ApiV1RequestsRequestRefFactsRouteImport.update({
-    id: '/facts',
-    path: '/facts',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefEvidenceRoute =
-  ApiV1RequestsRequestRefEvidenceRouteImport.update({
-    id: '/evidence',
-    path: '/evidence',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefConfirmationRoute =
-  ApiV1RequestsRequestRefConfirmationRouteImport.update({
-    id: '/confirmation',
-    path: '/confirmation',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefCancellationRoute =
-  ApiV1RequestsRequestRefCancellationRouteImport.update({
-    id: '/cancellation',
-    path: '/cancellation',
-    getParentRoute: () => ApiV1RequestsRequestRefRoute,
-  } as any)
 const ApiV1OperationsInvocationRefReconcileRoute =
   ApiV1OperationsInvocationRefReconcileRouteImport.update({
     id: '/reconcile',
@@ -785,100 +449,33 @@ const ApiV1OperationsInvocationRefCancelRoute =
     path: '/cancel',
     getParentRoute: () => ApiV1OperationsInvocationRefRoute,
   } as any)
-const ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute =
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
-    id: '/$permissionRef',
-    path: '/$permissionRef',
-    getParentRoute: () => ApiRequestsRequestRefRepeatPermissionsRoute,
-  } as any)
-const ApiAnswerThreadsThreadIdShareRoute =
-  ApiAnswerThreadsThreadIdShareRouteImport.update({
-    id: '/share',
-    path: '/share',
-    getParentRoute: () => ApiAnswerThreadsThreadIdRoute,
-  } as any)
-const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute =
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport.update({
-    id: '/$permissionRef',
-    path: '/$permissionRef',
-    getParentRoute: () => ApiV1RequestsRequestRefRepeatPermissionsRoute,
-  } as any)
-const ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute =
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport.update(
-    {
-      id: '/withdrawal',
-      path: '/withdrawal',
-      getParentRoute: () =>
-        ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute,
-    } as any,
-  )
-const ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute =
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport.update({
-    id: '/use',
-    path: '/use',
-    getParentRoute: () =>
-      ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute,
-  } as any)
-const ApiRequestsRequestRefProblemsReportRefRepliesRoute =
-  ApiRequestsRequestRefProblemsReportRefRepliesRouteImport.update({
-    id: '/$reportRef/replies',
-    path: '/$reportRef/replies',
-    getParentRoute: () => ApiRequestsRequestRefProblemsRoute,
-  } as any)
-const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute =
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport.update(
-    {
-      id: '/withdrawal',
-      path: '/withdrawal',
-      getParentRoute: () =>
-        ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute,
-    } as any,
-  )
-const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute =
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport.update({
-    id: '/use',
-    path: '/use',
-    getParentRoute: () =>
-      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute,
-  } as any)
-const ApiV1RequestsRequestRefProblemsReportRefRepliesRoute =
-  ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport.update({
-    id: '/$reportRef/replies',
-    path: '/$reportRef/replies',
-    getParentRoute: () => ApiV1RequestsRequestRefProblemsRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
-  '/about': typeof AboutRoute
-  '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/operations': typeof OperationsRouteWithChildren
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
-  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/activity': typeof OperatorActivityRoute
   '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/api/requests': typeof ApiRequestsRouteWithChildren
-  '/claim/form': typeof ClaimFormRoute
-  '/claim/success': typeof ClaimSuccessRoute
-  '/i/$threadId': typeof IThreadIdRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
@@ -890,125 +487,66 @@ export interface FileRoutesByFullPath {
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
-  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
-  '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/admin/inquiries': typeof OperatorAdminInquiriesRoute
-  '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
-  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
-  '/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
-  '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
-  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
-  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
-  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
-  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
-  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
-  '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
-  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
-  '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
-  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
-  '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
-  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
-  '/api/requests/$requestRef/evidence': typeof ApiRequestsRequestRefEvidenceRoute
-  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
-  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
-  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
-  '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
-  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
-  '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
-  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
-  '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
-  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
-  '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
-  '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
-  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
-  '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
-  '/api/v1/requests/$requestRef/repeat-permissions': typeof ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
-  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
-  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
-  '/about': typeof AboutRoute
-  '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/operations': typeof OperationsRouteWithChildren
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
-  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/activity': typeof OperatorActivityRoute
   '/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/api/requests': typeof ApiRequestsRouteWithChildren
-  '/claim/form': typeof ClaimFormRoute
-  '/claim/success': typeof ClaimSuccessRoute
-  '/i/$threadId': typeof IThreadIdRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
@@ -1020,93 +558,39 @@ export interface FileRoutesByTo {
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
-  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
-  '/admin/claims': typeof OperatorAdminClaimsRoute
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/admin/inquiries': typeof OperatorAdminInquiriesRoute
-  '/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
-  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
-  '/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
-  '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
   '/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
-  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
-  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
-  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
-  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
-  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
-  '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
-  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
-  '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
-  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
-  '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
-  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
-  '/api/requests/$requestRef/evidence': typeof ApiRequestsRequestRefEvidenceRoute
-  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
-  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
-  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
-  '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
-  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
-  '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
-  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
-  '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
-  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
-  '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
-  '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
-  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
-  '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
-  '/api/v1/requests/$requestRef/repeat-permissions': typeof ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
-  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
-  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1114,33 +598,28 @@ export interface FileRoutesById {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/_operator': typeof OperatorRouteWithChildren
-  '/about': typeof AboutRoute
-  '/claim': typeof ClaimRouteWithChildren
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
-  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/market': typeof MarketRoute
   '/mcp': typeof McpRoute
+  '/operations': typeof OperationsRouteWithChildren
   '/privacy': typeof PrivacyRouteWithChildren
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
-  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceRoute
   '/.well-known/ucp': typeof DotwellKnownUcpRoute
+  '/_operator/activity': typeof OperatorActivityRoute
   '/_operator/agent-access': typeof OperatorAgentAccessRouteWithChildren
   '/api/$': typeof ApiSplatRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/health': typeof ApiHealthRoute
   '/api/ready': typeof ApiReadyRoute
-  '/api/requests': typeof ApiRequestsRouteWithChildren
-  '/claim/form': typeof ClaimFormRoute
-  '/claim/success': typeof ClaimSuccessRoute
-  '/i/$threadId': typeof IThreadIdRoute
   '/oauth/authorize': typeof OauthAuthorizeRoute
   '/oauth/device_authorization': typeof OauthDevice_authorizationRoute
   '/oauth/register': typeof OauthRegisterRoute
@@ -1152,93 +631,39 @@ export interface FileRoutesById {
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
   '/t/new': typeof TNewRoute
-  '/$slug/tools/$toolId': typeof SlugToolsToolIdRouteWithChildren
   '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
-  '/_operator/admin/claims': typeof OperatorAdminClaimsRoute
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
-  '/_operator/admin/inquiries': typeof OperatorAdminInquiriesRoute
-  '/_operator/admin/request-problems': typeof OperatorAdminRequestProblemsRoute
-  '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
-  '/_operator/admin/search-gaps': typeof OperatorAdminSearchGapsRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
-  '/_operator/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/_operator/owner/supply': typeof OperatorOwnerSupplyRouteWithChildren
-  '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
-  '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
-  '/api/answer/threads': typeof ApiAnswerThreadsRouteWithChildren
-  '/api/answer/turn': typeof ApiAnswerTurnRouteWithChildren
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/chat/anonymous': typeof ApiChatAnonymousRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
-  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
-  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
-  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
-  '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
-  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
-  '/api/storefront/enrich': typeof ApiStorefrontEnrichRoute
-  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
+  '/api/v1/registry': typeof ApiV1RegistryRoute
   '/api/v1/release': typeof ApiV1ReleaseRoute
-  '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/api/v1/services': typeof ApiV1ServicesRouteWithChildren
   '/operations/invocations/$invocationRef': typeof OperationsInvocationsInvocationRefRoute
-  '/$slug/tools/$toolId/prepare': typeof SlugToolsToolIdPrepareRoute
-  '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
-  '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/_operator/owner/offerings/$offeringRef': typeof OperatorOwnerOfferingsOfferingRefRoute
   '/_operator/owner/offerings/new': typeof OperatorOwnerOfferingsNewRoute
-  '/_operator/owner/request-problems/$reportRef': typeof OperatorOwnerRequestProblemsReportRefRoute
   '/_operator/owner/supply/$offeringRef': typeof OperatorOwnerSupplyOfferingRefRoute
-  '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRouteWithChildren
-  '/api/answer/turn/stop': typeof ApiAnswerTurnStopRoute
-  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
-  '/api/requests/$requestRef/cancellation': typeof ApiRequestsRequestRefCancellationRoute
-  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
-  '/api/requests/$requestRef/evidence': typeof ApiRequestsRequestRefEvidenceRoute
-  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
-  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
-  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
-  '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRouteWithChildren
-  '/api/requests/$requestRef/repeat-permissions': typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
   '/api/v1/market-operations/compare': typeof ApiV1MarketOperationsCompareRoute
   '/api/v1/market-operations/detail': typeof ApiV1MarketOperationsDetailRoute
   '/api/v1/market-operations/inspect-plan': typeof ApiV1MarketOperationsInspectPlanRoute
   '/api/v1/market-operations/search': typeof ApiV1MarketOperationsSearchRoute
   '/api/v1/operations/$invocationRef': typeof ApiV1OperationsInvocationRefRouteWithChildren
   '/api/v1/operations/call': typeof ApiV1OperationsCallRoute
-  '/api/v1/operations/execute': typeof ApiV1OperationsExecuteRoute
-  '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
-  '/api/v1/requests/schema': typeof ApiV1RequestsSchemaRoute
   '/api/v1/services/$serviceId': typeof ApiV1ServicesServiceIdRoute
   '/api/v1/services/search': typeof ApiV1ServicesSearchRoute
-  '/api/v1/work-tree/$operation': typeof ApiV1WorkTreeOperationRoute
-  '/api/answer/threads/$threadId/share': typeof ApiAnswerThreadsThreadIdShareRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
   '/api/v1/operations/$invocationRef/cancel': typeof ApiV1OperationsInvocationRefCancelRoute
   '/api/v1/operations/$invocationRef/reconcile': typeof ApiV1OperationsInvocationRefReconcileRoute
-  '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
-  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
-  '/api/v1/requests/$requestRef/evidence': typeof ApiV1RequestsRequestRefEvidenceRoute
-  '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
-  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
-  '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
-  '/api/v1/requests/$requestRef/problems': typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
-  '/api/v1/requests/$requestRef/repeat-permissions': typeof ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren
-  '/api/v1/requests/$requestRef/run': typeof ApiV1RequestsRequestRefRunRoute
-  '/api/requests/$requestRef/problems/$reportRef/replies': typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
-  '/api/v1/requests/$requestRef/problems/$reportRef/replies': typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1246,33 +671,28 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/SKILL.md'
-    | '/about'
-    | '/claim'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
+    | '/market'
     | '/mcp'
+    | '/operations'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
-    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/activity'
     | '/agent-access'
     | '/api/$'
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/api/requests'
-    | '/claim/form'
-    | '/claim/success'
-    | '/i/$threadId'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
@@ -1284,125 +704,66 @@ export interface FileRouteTypes {
     | '/sign-up/$'
     | '/t/$threadId'
     | '/t/new'
-    | '/$slug/tools/$toolId'
     | '/admin/audit-events'
-    | '/admin/claims'
     | '/admin/index-health'
-    | '/admin/inquiries'
-    | '/admin/request-problems'
-    | '/admin/runs'
-    | '/admin/search-gaps'
     | '/agent-access/authorize'
     | '/developers/discovery'
-    | '/owner/inquiries'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/follow-up-chips'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
-    | '/api/notification/novu-dispatch'
-    | '/api/notification/resend-dispatch'
-    | '/api/notification/resend-webhook'
     | '/api/observability/client-error'
-    | '/api/observability/funnel'
-    | '/api/requests/$requestRef'
-    | '/api/storefront/enrich'
-    | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
+    | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
-    | '/api/v1/requests'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/$slug/tools/$toolId/prepare'
-    | '/admin/runs/$turnId'
-    | '/owner/inquiries/$threadId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
-    | '/owner/request-problems/$reportRef'
     | '/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
-    | '/api/requests/$requestRef/authorization'
-    | '/api/requests/$requestRef/cancellation'
-    | '/api/requests/$requestRef/confirmation'
-    | '/api/requests/$requestRef/evidence'
-    | '/api/requests/$requestRef/facts'
-    | '/api/requests/$requestRef/messages'
-    | '/api/requests/$requestRef/options'
-    | '/api/requests/$requestRef/problems'
-    | '/api/requests/$requestRef/repeat-permissions'
-    | '/api/requests/$requestRef/run'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
-    | '/api/v1/operations/execute'
-    | '/api/v1/requests/$requestRef'
-    | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/v1/work-tree/$operation'
-    | '/api/answer/threads/$threadId/share'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
-    | '/api/v1/requests/$requestRef/cancellation'
-    | '/api/v1/requests/$requestRef/confirmation'
-    | '/api/v1/requests/$requestRef/evidence'
-    | '/api/v1/requests/$requestRef/facts'
-    | '/api/v1/requests/$requestRef/messages'
-    | '/api/v1/requests/$requestRef/options'
-    | '/api/v1/requests/$requestRef/problems'
-    | '/api/v1/requests/$requestRef/repeat-permissions'
-    | '/api/v1/requests/$requestRef/run'
-    | '/api/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
-    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/$slug'
     | '/SKILL.md'
-    | '/about'
-    | '/claim'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
+    | '/market'
     | '/mcp'
+    | '/operations'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
-    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/activity'
     | '/agent-access'
     | '/api/$'
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/api/requests'
-    | '/claim/form'
-    | '/claim/success'
-    | '/i/$threadId'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
@@ -1414,126 +775,67 @@ export interface FileRouteTypes {
     | '/sign-up/$'
     | '/t/$threadId'
     | '/t/new'
-    | '/$slug/tools/$toolId'
     | '/admin/audit-events'
-    | '/admin/claims'
     | '/admin/index-health'
-    | '/admin/inquiries'
-    | '/admin/request-problems'
-    | '/admin/runs'
-    | '/admin/search-gaps'
     | '/agent-access/authorize'
     | '/developers/discovery'
-    | '/owner/inquiries'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
     | '/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/follow-up-chips'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
-    | '/api/notification/novu-dispatch'
-    | '/api/notification/resend-dispatch'
-    | '/api/notification/resend-webhook'
     | '/api/observability/client-error'
-    | '/api/observability/funnel'
-    | '/api/requests/$requestRef'
-    | '/api/storefront/enrich'
-    | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
+    | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
-    | '/api/v1/requests'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/$slug/tools/$toolId/prepare'
-    | '/admin/runs/$turnId'
-    | '/owner/inquiries/$threadId'
     | '/owner/offerings/$offeringRef'
     | '/owner/offerings/new'
-    | '/owner/request-problems/$reportRef'
     | '/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
-    | '/api/requests/$requestRef/authorization'
-    | '/api/requests/$requestRef/cancellation'
-    | '/api/requests/$requestRef/confirmation'
-    | '/api/requests/$requestRef/evidence'
-    | '/api/requests/$requestRef/facts'
-    | '/api/requests/$requestRef/messages'
-    | '/api/requests/$requestRef/options'
-    | '/api/requests/$requestRef/problems'
-    | '/api/requests/$requestRef/repeat-permissions'
-    | '/api/requests/$requestRef/run'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
-    | '/api/v1/operations/execute'
-    | '/api/v1/requests/$requestRef'
-    | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/v1/work-tree/$operation'
-    | '/api/answer/threads/$threadId/share'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
-    | '/api/v1/requests/$requestRef/cancellation'
-    | '/api/v1/requests/$requestRef/confirmation'
-    | '/api/v1/requests/$requestRef/evidence'
-    | '/api/v1/requests/$requestRef/facts'
-    | '/api/v1/requests/$requestRef/messages'
-    | '/api/v1/requests/$requestRef/options'
-    | '/api/v1/requests/$requestRef/problems'
-    | '/api/v1/requests/$requestRef/repeat-permissions'
-    | '/api/v1/requests/$requestRef/run'
-    | '/api/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
-    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   id:
     | '__root__'
     | '/'
     | '/$slug'
     | '/SKILL.md'
     | '/_operator'
-    | '/about'
-    | '/claim'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
-    | '/help'
     | '/llms.txt'
+    | '/market'
     | '/mcp'
+    | '/operations'
     | '/privacy'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
-    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
     | '/.well-known/ucp'
+    | '/_operator/activity'
     | '/_operator/agent-access'
     | '/api/$'
     | '/api/businesses'
     | '/api/health'
     | '/api/ready'
-    | '/api/requests'
-    | '/claim/form'
-    | '/claim/success'
-    | '/i/$threadId'
     | '/oauth/authorize'
     | '/oauth/device_authorization'
     | '/oauth/register'
@@ -1545,93 +847,39 @@ export interface FileRouteTypes {
     | '/sign-up/$'
     | '/t/$threadId'
     | '/t/new'
-    | '/$slug/tools/$toolId'
     | '/_operator/admin/audit-events'
-    | '/_operator/admin/claims'
     | '/_operator/admin/index-health'
-    | '/_operator/admin/inquiries'
-    | '/_operator/admin/request-problems'
-    | '/_operator/admin/runs'
-    | '/_operator/admin/search-gaps'
     | '/_operator/agent-access/authorize'
     | '/_operator/developers/discovery'
-    | '/_operator/owner/inquiries'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
     | '/_operator/owner/supply'
-    | '/api/answer/eval-status'
-    | '/api/answer/follow-up-chips'
-    | '/api/answer/threads'
-    | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/chat/anonymous'
     | '/api/discovery/examples'
     | '/api/discovery/schema'
-    | '/api/notification/novu-dispatch'
-    | '/api/notification/resend-dispatch'
-    | '/api/notification/resend-webhook'
     | '/api/observability/client-error'
-    | '/api/observability/funnel'
-    | '/api/requests/$requestRef'
-    | '/api/storefront/enrich'
-    | '/api/storefront/import-draft'
     | '/api/stripe/webhook'
+    | '/api/v1/market-metrics'
+    | '/api/v1/registry'
     | '/api/v1/release'
-    | '/api/v1/requests'
     | '/api/v1/services'
     | '/operations/invocations/$invocationRef'
-    | '/$slug/tools/$toolId/prepare'
-    | '/_operator/admin/runs/$turnId'
-    | '/_operator/owner/inquiries/$threadId'
     | '/_operator/owner/offerings/$offeringRef'
     | '/_operator/owner/offerings/new'
-    | '/_operator/owner/request-problems/$reportRef'
     | '/_operator/owner/supply/$offeringRef'
-    | '/api/answer/threads/$threadId'
-    | '/api/answer/turn/stop'
-    | '/api/requests/$requestRef/authorization'
-    | '/api/requests/$requestRef/cancellation'
-    | '/api/requests/$requestRef/confirmation'
-    | '/api/requests/$requestRef/evidence'
-    | '/api/requests/$requestRef/facts'
-    | '/api/requests/$requestRef/messages'
-    | '/api/requests/$requestRef/options'
-    | '/api/requests/$requestRef/problems'
-    | '/api/requests/$requestRef/repeat-permissions'
-    | '/api/requests/$requestRef/run'
     | '/api/v1/market-operations/compare'
     | '/api/v1/market-operations/detail'
     | '/api/v1/market-operations/inspect-plan'
     | '/api/v1/market-operations/search'
     | '/api/v1/operations/$invocationRef'
     | '/api/v1/operations/call'
-    | '/api/v1/operations/execute'
-    | '/api/v1/requests/$requestRef'
-    | '/api/v1/requests/schema'
     | '/api/v1/services/$serviceId'
     | '/api/v1/services/search'
-    | '/api/v1/work-tree/$operation'
-    | '/api/answer/threads/$threadId/share'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef'
     | '/api/v1/operations/$invocationRef/cancel'
     | '/api/v1/operations/$invocationRef/reconcile'
-    | '/api/v1/requests/$requestRef/cancellation'
-    | '/api/v1/requests/$requestRef/confirmation'
-    | '/api/v1/requests/$requestRef/evidence'
-    | '/api/v1/requests/$requestRef/facts'
-    | '/api/v1/requests/$requestRef/messages'
-    | '/api/v1/requests/$requestRef/options'
-    | '/api/v1/requests/$requestRef/problems'
-    | '/api/v1/requests/$requestRef/repeat-permissions'
-    | '/api/v1/requests/$requestRef/run'
-    | '/api/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
-    | '/api/v1/requests/$requestRef/problems/$reportRef/replies'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-    | '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1639,14 +887,13 @@ export interface RootRouteChildren {
   SlugRoute: typeof SlugRouteWithChildren
   SKILLDotmdRoute: typeof SKILLDotmdRoute
   OperatorRoute: typeof OperatorRouteWithChildren
-  AboutRoute: typeof AboutRoute
-  ClaimRoute: typeof ClaimRouteWithChildren
   EngineRoute: typeof EngineRoute
   ForAgentsRoute: typeof ForAgentsRoute
   ForProvidersRoute: typeof ForProvidersRoute
-  HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  MarketRoute: typeof MarketRoute
   McpRoute: typeof McpRoute
+  OperationsRoute: typeof OperationsRouteWithChildren
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -1659,44 +906,30 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiHealthRoute: typeof ApiHealthRoute
   ApiReadyRoute: typeof ApiReadyRoute
-  ApiRequestsRoute: typeof ApiRequestsRouteWithChildren
-  IThreadIdRoute: typeof IThreadIdRoute
   OauthAuthorizeRoute: typeof OauthAuthorizeRoute
   OauthDevice_authorizationRoute: typeof OauthDevice_authorizationRoute
   OauthRegisterRoute: typeof OauthRegisterRoute
   OauthTokenRoute: typeof OauthTokenRoute
-  OperationsOperationRefRoute: typeof OperationsOperationRefRoute
   SShareTokenRoute: typeof SShareTokenRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
   TNewRoute: typeof TNewRoute
-  ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
-  ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
-  ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
-  ApiAnswerTurnRoute: typeof ApiAnswerTurnRouteWithChildren
+  ApiChatAnonymousRoute: typeof ApiChatAnonymousRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
-  ApiNotificationNovuDispatchRoute: typeof ApiNotificationNovuDispatchRoute
-  ApiNotificationResendDispatchRoute: typeof ApiNotificationResendDispatchRoute
-  ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
-  ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
-  ApiStorefrontEnrichRoute: typeof ApiStorefrontEnrichRoute
-  ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
+  ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
+  ApiV1RegistryRoute: typeof ApiV1RegistryRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
-  ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
   ApiV1ServicesRoute: typeof ApiV1ServicesRouteWithChildren
-  OperationsInvocationsInvocationRefRoute: typeof OperationsInvocationsInvocationRefRoute
   ApiV1MarketOperationsCompareRoute: typeof ApiV1MarketOperationsCompareRoute
   ApiV1MarketOperationsDetailRoute: typeof ApiV1MarketOperationsDetailRoute
   ApiV1MarketOperationsInspectPlanRoute: typeof ApiV1MarketOperationsInspectPlanRoute
   ApiV1MarketOperationsSearchRoute: typeof ApiV1MarketOperationsSearchRoute
   ApiV1OperationsInvocationRefRoute: typeof ApiV1OperationsInvocationRefRouteWithChildren
   ApiV1OperationsCallRoute: typeof ApiV1OperationsCallRoute
-  ApiV1OperationsExecuteRoute: typeof ApiV1OperationsExecuteRoute
-  ApiV1WorkTreeOperationRoute: typeof ApiV1WorkTreeOperationRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1729,6 +962,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/operations': {
+      id: '/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof OperationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mcp': {
       id: '/mcp'
       path: '/mcp'
@@ -1736,18 +976,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/market': {
+      id: '/market'
+      path: '/market'
+      fullPath: '/market'
+      preLoaderRoute: typeof MarketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/llms.txt': {
       id: '/llms.txt'
       path: '/llms.txt'
       fullPath: '/llms.txt'
       preLoaderRoute: typeof LlmsDottxtRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/help': {
-      id: '/help'
-      path: '/help'
-      fullPath: '/help'
-      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/for-providers': {
@@ -1769,20 +1009,6 @@ declare module '@tanstack/react-router' {
       path: '/engine'
       fullPath: '/engine'
       preLoaderRoute: typeof EngineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/claim': {
-      id: '/claim'
-      path: '/claim'
-      fullPath: '/claim'
-      preLoaderRoute: typeof ClaimRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_operator': {
@@ -1857,10 +1083,10 @@ declare module '@tanstack/react-router' {
     }
     '/operations/$operationRef': {
       id: '/operations/$operationRef'
-      path: '/operations/$operationRef'
+      path: '/$operationRef'
       fullPath: '/operations/$operationRef'
       preLoaderRoute: typeof OperationsOperationRefRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof OperationsRoute
     }
     '/oauth/token': {
       id: '/oauth/token'
@@ -1888,34 +1114,6 @@ declare module '@tanstack/react-router' {
       path: '/oauth/authorize'
       fullPath: '/oauth/authorize'
       preLoaderRoute: typeof OauthAuthorizeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/i/$threadId': {
-      id: '/i/$threadId'
-      path: '/i/$threadId'
-      fullPath: '/i/$threadId'
-      preLoaderRoute: typeof IThreadIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/claim/success': {
-      id: '/claim/success'
-      path: '/success'
-      fullPath: '/claim/success'
-      preLoaderRoute: typeof ClaimSuccessRouteImport
-      parentRoute: typeof ClaimRoute
-    }
-    '/claim/form': {
-      id: '/claim/form'
-      path: '/form'
-      fullPath: '/claim/form'
-      preLoaderRoute: typeof ClaimFormRouteImport
-      parentRoute: typeof ClaimRoute
-    }
-    '/api/requests': {
-      id: '/api/requests'
-      path: '/api/requests'
-      fullPath: '/api/requests'
-      preLoaderRoute: typeof ApiRequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ready': {
@@ -1953,6 +1151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAgentAccessRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/activity': {
+      id: '/_operator/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof OperatorActivityRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/.well-known/ucp': {
       id: '/.well-known/ucp'
       path: '/.well-known/ucp'
@@ -1988,32 +1193,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugUcpRouteImport
       parentRoute: typeof SlugRoute
     }
-    '/$slug/inquiry': {
-      id: '/$slug/inquiry'
-      path: '/inquiry'
-      fullPath: '/$slug/inquiry'
-      preLoaderRoute: typeof SlugInquiryRouteImport
-      parentRoute: typeof SlugRoute
-    }
     '/operations/invocations/$invocationRef': {
       id: '/operations/invocations/$invocationRef'
-      path: '/operations/invocations/$invocationRef'
+      path: '/invocations/$invocationRef'
       fullPath: '/operations/invocations/$invocationRef'
       preLoaderRoute: typeof OperationsInvocationsInvocationRefRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof OperationsRoute
     }
     '/api/v1/services': {
       id: '/api/v1/services'
       path: '/api/v1/services'
       fullPath: '/api/v1/services'
       preLoaderRoute: typeof ApiV1ServicesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/v1/requests': {
-      id: '/api/v1/requests'
-      path: '/api/v1/requests'
-      fullPath: '/api/v1/requests'
-      preLoaderRoute: typeof ApiV1RequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/release': {
@@ -2023,6 +1214,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ReleaseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/registry': {
+      id: '/api/v1/registry'
+      path: '/api/v1/registry'
+      fullPath: '/api/v1/registry'
+      preLoaderRoute: typeof ApiV1RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/market-metrics': {
+      id: '/api/v1/market-metrics'
+      path: '/api/v1/market-metrics'
+      fullPath: '/api/v1/market-metrics'
+      preLoaderRoute: typeof ApiV1MarketMetricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/stripe/webhook': {
       id: '/api/stripe/webhook'
       path: '/api/stripe/webhook'
@@ -2030,60 +1235,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/storefront/import-draft': {
-      id: '/api/storefront/import-draft'
-      path: '/api/storefront/import-draft'
-      fullPath: '/api/storefront/import-draft'
-      preLoaderRoute: typeof ApiStorefrontImportDraftRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/storefront/enrich': {
-      id: '/api/storefront/enrich'
-      path: '/api/storefront/enrich'
-      fullPath: '/api/storefront/enrich'
-      preLoaderRoute: typeof ApiStorefrontEnrichRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/requests/$requestRef': {
-      id: '/api/requests/$requestRef'
-      path: '/$requestRef'
-      fullPath: '/api/requests/$requestRef'
-      preLoaderRoute: typeof ApiRequestsRequestRefRouteImport
-      parentRoute: typeof ApiRequestsRoute
-    }
-    '/api/observability/funnel': {
-      id: '/api/observability/funnel'
-      path: '/api/observability/funnel'
-      fullPath: '/api/observability/funnel'
-      preLoaderRoute: typeof ApiObservabilityFunnelRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/observability/client-error': {
       id: '/api/observability/client-error'
       path: '/api/observability/client-error'
       fullPath: '/api/observability/client-error'
       preLoaderRoute: typeof ApiObservabilityClientErrorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/notification/resend-webhook': {
-      id: '/api/notification/resend-webhook'
-      path: '/api/notification/resend-webhook'
-      fullPath: '/api/notification/resend-webhook'
-      preLoaderRoute: typeof ApiNotificationResendWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/notification/resend-dispatch': {
-      id: '/api/notification/resend-dispatch'
-      path: '/api/notification/resend-dispatch'
-      fullPath: '/api/notification/resend-dispatch'
-      preLoaderRoute: typeof ApiNotificationResendDispatchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/notification/novu-dispatch': {
-      id: '/api/notification/novu-dispatch'
-      path: '/api/notification/novu-dispatch'
-      fullPath: '/api/notification/novu-dispatch'
-      preLoaderRoute: typeof ApiNotificationNovuDispatchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/discovery/schema': {
@@ -2100,6 +1256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat/anonymous': {
+      id: '/api/chat/anonymous'
+      path: '/api/chat/anonymous'
+      fullPath: '/api/chat/anonymous'
+      preLoaderRoute: typeof ApiChatAnonymousRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/businesses/search': {
       id: '/api/businesses/search'
       path: '/search'
@@ -2113,34 +1276,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/businesses/$slug'
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
-    }
-    '/api/answer/turn': {
-      id: '/api/answer/turn'
-      path: '/api/answer/turn'
-      fullPath: '/api/answer/turn'
-      preLoaderRoute: typeof ApiAnswerTurnRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer/threads': {
-      id: '/api/answer/threads'
-      path: '/api/answer/threads'
-      fullPath: '/api/answer/threads'
-      preLoaderRoute: typeof ApiAnswerThreadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer/follow-up-chips': {
-      id: '/api/answer/follow-up-chips'
-      path: '/api/answer/follow-up-chips'
-      fullPath: '/api/answer/follow-up-chips'
-      preLoaderRoute: typeof ApiAnswerFollowUpChipsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer/eval-status': {
-      id: '/api/answer/eval-status'
-      path: '/api/answer/eval-status'
-      fullPath: '/api/answer/eval-status'
-      preLoaderRoute: typeof ApiAnswerEvalStatusRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_operator/owner/supply': {
       id: '/_operator/owner/supply'
@@ -2170,13 +1305,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOfferingsRouteImport
       parentRoute: typeof OperatorRoute
     }
-    '/_operator/owner/inquiries': {
-      id: '/_operator/owner/inquiries'
-      path: '/owner/inquiries'
-      fullPath: '/owner/inquiries'
-      preLoaderRoute: typeof OperatorOwnerInquiriesRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/developers/discovery': {
       id: '/_operator/developers/discovery'
       path: '/developers/discovery'
@@ -2191,46 +1319,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAgentAccessAuthorizeRouteImport
       parentRoute: typeof OperatorAgentAccessRoute
     }
-    '/_operator/admin/search-gaps': {
-      id: '/_operator/admin/search-gaps'
-      path: '/admin/search-gaps'
-      fullPath: '/admin/search-gaps'
-      preLoaderRoute: typeof OperatorAdminSearchGapsRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/admin/runs': {
-      id: '/_operator/admin/runs'
-      path: '/admin/runs'
-      fullPath: '/admin/runs'
-      preLoaderRoute: typeof OperatorAdminRunsRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/admin/request-problems': {
-      id: '/_operator/admin/request-problems'
-      path: '/admin/request-problems'
-      fullPath: '/admin/request-problems'
-      preLoaderRoute: typeof OperatorAdminRequestProblemsRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/admin/inquiries': {
-      id: '/_operator/admin/inquiries'
-      path: '/admin/inquiries'
-      fullPath: '/admin/inquiries'
-      preLoaderRoute: typeof OperatorAdminInquiriesRouteImport
-      parentRoute: typeof OperatorRoute
-    }
     '/_operator/admin/index-health': {
       id: '/_operator/admin/index-health'
       path: '/admin/index-health'
       fullPath: '/admin/index-health'
       preLoaderRoute: typeof OperatorAdminIndexHealthRouteImport
-      parentRoute: typeof OperatorRoute
-    }
-    '/_operator/admin/claims': {
-      id: '/_operator/admin/claims'
-      path: '/admin/claims'
-      fullPath: '/admin/claims'
-      preLoaderRoute: typeof OperatorAdminClaimsRouteImport
       parentRoute: typeof OperatorRoute
     }
     '/_operator/admin/audit-events': {
@@ -2239,20 +1332,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/audit-events'
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
-    }
-    '/$slug/tools/$toolId': {
-      id: '/$slug/tools/$toolId'
-      path: '/tools/$toolId'
-      fullPath: '/$slug/tools/$toolId'
-      preLoaderRoute: typeof SlugToolsToolIdRouteImport
-      parentRoute: typeof SlugRoute
-    }
-    '/api/v1/work-tree/$operation': {
-      id: '/api/v1/work-tree/$operation'
-      path: '/api/v1/work-tree/$operation'
-      fullPath: '/api/v1/work-tree/$operation'
-      preLoaderRoute: typeof ApiV1WorkTreeOperationRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/v1/services/search': {
       id: '/api/v1/services/search'
@@ -2267,27 +1346,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/services/$serviceId'
       preLoaderRoute: typeof ApiV1ServicesServiceIdRouteImport
       parentRoute: typeof ApiV1ServicesRoute
-    }
-    '/api/v1/requests/schema': {
-      id: '/api/v1/requests/schema'
-      path: '/schema'
-      fullPath: '/api/v1/requests/schema'
-      preLoaderRoute: typeof ApiV1RequestsSchemaRouteImport
-      parentRoute: typeof ApiV1RequestsRoute
-    }
-    '/api/v1/requests/$requestRef': {
-      id: '/api/v1/requests/$requestRef'
-      path: '/$requestRef'
-      fullPath: '/api/v1/requests/$requestRef'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRouteImport
-      parentRoute: typeof ApiV1RequestsRoute
-    }
-    '/api/v1/operations/execute': {
-      id: '/api/v1/operations/execute'
-      path: '/api/v1/operations/execute'
-      fullPath: '/api/v1/operations/execute'
-      preLoaderRoute: typeof ApiV1OperationsExecuteRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/v1/operations/call': {
       id: '/api/v1/operations/call'
@@ -2331,103 +1389,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1MarketOperationsCompareRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/requests/$requestRef/run': {
-      id: '/api/requests/$requestRef/run'
-      path: '/run'
-      fullPath: '/api/requests/$requestRef/run'
-      preLoaderRoute: typeof ApiRequestsRequestRefRunRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/repeat-permissions': {
-      id: '/api/requests/$requestRef/repeat-permissions'
-      path: '/repeat-permissions'
-      fullPath: '/api/requests/$requestRef/repeat-permissions'
-      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/problems': {
-      id: '/api/requests/$requestRef/problems'
-      path: '/problems'
-      fullPath: '/api/requests/$requestRef/problems'
-      preLoaderRoute: typeof ApiRequestsRequestRefProblemsRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/options': {
-      id: '/api/requests/$requestRef/options'
-      path: '/options'
-      fullPath: '/api/requests/$requestRef/options'
-      preLoaderRoute: typeof ApiRequestsRequestRefOptionsRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/messages': {
-      id: '/api/requests/$requestRef/messages'
-      path: '/messages'
-      fullPath: '/api/requests/$requestRef/messages'
-      preLoaderRoute: typeof ApiRequestsRequestRefMessagesRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/facts': {
-      id: '/api/requests/$requestRef/facts'
-      path: '/facts'
-      fullPath: '/api/requests/$requestRef/facts'
-      preLoaderRoute: typeof ApiRequestsRequestRefFactsRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/evidence': {
-      id: '/api/requests/$requestRef/evidence'
-      path: '/evidence'
-      fullPath: '/api/requests/$requestRef/evidence'
-      preLoaderRoute: typeof ApiRequestsRequestRefEvidenceRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/confirmation': {
-      id: '/api/requests/$requestRef/confirmation'
-      path: '/confirmation'
-      fullPath: '/api/requests/$requestRef/confirmation'
-      preLoaderRoute: typeof ApiRequestsRequestRefConfirmationRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/cancellation': {
-      id: '/api/requests/$requestRef/cancellation'
-      path: '/cancellation'
-      fullPath: '/api/requests/$requestRef/cancellation'
-      preLoaderRoute: typeof ApiRequestsRequestRefCancellationRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/requests/$requestRef/authorization': {
-      id: '/api/requests/$requestRef/authorization'
-      path: '/authorization'
-      fullPath: '/api/requests/$requestRef/authorization'
-      preLoaderRoute: typeof ApiRequestsRequestRefAuthorizationRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRoute
-    }
-    '/api/answer/turn/stop': {
-      id: '/api/answer/turn/stop'
-      path: '/stop'
-      fullPath: '/api/answer/turn/stop'
-      preLoaderRoute: typeof ApiAnswerTurnStopRouteImport
-      parentRoute: typeof ApiAnswerTurnRoute
-    }
-    '/api/answer/threads/$threadId': {
-      id: '/api/answer/threads/$threadId'
-      path: '/$threadId'
-      fullPath: '/api/answer/threads/$threadId'
-      preLoaderRoute: typeof ApiAnswerThreadsThreadIdRouteImport
-      parentRoute: typeof ApiAnswerThreadsRoute
-    }
     '/_operator/owner/supply/$offeringRef': {
       id: '/_operator/owner/supply/$offeringRef'
       path: '/$offeringRef'
       fullPath: '/owner/supply/$offeringRef'
       preLoaderRoute: typeof OperatorOwnerSupplyOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerSupplyRoute
-    }
-    '/_operator/owner/request-problems/$reportRef': {
-      id: '/_operator/owner/request-problems/$reportRef'
-      path: '/owner/request-problems/$reportRef'
-      fullPath: '/owner/request-problems/$reportRef'
-      preLoaderRoute: typeof OperatorOwnerRequestProblemsReportRefRouteImport
-      parentRoute: typeof OperatorRoute
     }
     '/_operator/owner/offerings/new': {
       id: '/_operator/owner/offerings/new'
@@ -2443,90 +1410,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOfferingsOfferingRefRouteImport
       parentRoute: typeof OperatorOwnerOfferingsRoute
     }
-    '/_operator/owner/inquiries/$threadId': {
-      id: '/_operator/owner/inquiries/$threadId'
-      path: '/$threadId'
-      fullPath: '/owner/inquiries/$threadId'
-      preLoaderRoute: typeof OperatorOwnerInquiriesThreadIdRouteImport
-      parentRoute: typeof OperatorOwnerInquiriesRoute
-    }
-    '/_operator/admin/runs/$turnId': {
-      id: '/_operator/admin/runs/$turnId'
-      path: '/$turnId'
-      fullPath: '/admin/runs/$turnId'
-      preLoaderRoute: typeof OperatorAdminRunsTurnIdRouteImport
-      parentRoute: typeof OperatorAdminRunsRoute
-    }
-    '/$slug/tools/$toolId/prepare': {
-      id: '/$slug/tools/$toolId/prepare'
-      path: '/prepare'
-      fullPath: '/$slug/tools/$toolId/prepare'
-      preLoaderRoute: typeof SlugToolsToolIdPrepareRouteImport
-      parentRoute: typeof SlugToolsToolIdRoute
-    }
-    '/api/v1/requests/$requestRef/run': {
-      id: '/api/v1/requests/$requestRef/run'
-      path: '/run'
-      fullPath: '/api/v1/requests/$requestRef/run'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRunRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/repeat-permissions': {
-      id: '/api/v1/requests/$requestRef/repeat-permissions'
-      path: '/repeat-permissions'
-      fullPath: '/api/v1/requests/$requestRef/repeat-permissions'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/problems': {
-      id: '/api/v1/requests/$requestRef/problems'
-      path: '/problems'
-      fullPath: '/api/v1/requests/$requestRef/problems'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefProblemsRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/options': {
-      id: '/api/v1/requests/$requestRef/options'
-      path: '/options'
-      fullPath: '/api/v1/requests/$requestRef/options'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefOptionsRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/messages': {
-      id: '/api/v1/requests/$requestRef/messages'
-      path: '/messages'
-      fullPath: '/api/v1/requests/$requestRef/messages'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefMessagesRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/facts': {
-      id: '/api/v1/requests/$requestRef/facts'
-      path: '/facts'
-      fullPath: '/api/v1/requests/$requestRef/facts'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefFactsRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/evidence': {
-      id: '/api/v1/requests/$requestRef/evidence'
-      path: '/evidence'
-      fullPath: '/api/v1/requests/$requestRef/evidence'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefEvidenceRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/confirmation': {
-      id: '/api/v1/requests/$requestRef/confirmation'
-      path: '/confirmation'
-      fullPath: '/api/v1/requests/$requestRef/confirmation'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefConfirmationRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
-    '/api/v1/requests/$requestRef/cancellation': {
-      id: '/api/v1/requests/$requestRef/cancellation'
-      path: '/cancellation'
-      fullPath: '/api/v1/requests/$requestRef/cancellation'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefCancellationRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRoute
-    }
     '/api/v1/operations/$invocationRef/reconcile': {
       id: '/api/v1/operations/$invocationRef/reconcile'
       path: '/reconcile'
@@ -2541,94 +1424,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1OperationsInvocationRefCancelRouteImport
       parentRoute: typeof ApiV1OperationsInvocationRefRoute
     }
-    '/api/requests/$requestRef/repeat-permissions/$permissionRef': {
-      id: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
-      path: '/$permissionRef'
-      fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef'
-      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsRoute
-    }
-    '/api/answer/threads/$threadId/share': {
-      id: '/api/answer/threads/$threadId/share'
-      path: '/share'
-      fullPath: '/api/answer/threads/$threadId/share'
-      preLoaderRoute: typeof ApiAnswerThreadsThreadIdShareRouteImport
-      parentRoute: typeof ApiAnswerThreadsThreadIdRoute
-    }
-    '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef': {
-      id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
-      path: '/$permissionRef'
-      fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsRoute
-    }
-    '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': {
-      id: '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-      path: '/withdrawal'
-      fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute
-    }
-    '/api/requests/$requestRef/repeat-permissions/$permissionRef/use': {
-      id: '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      path: '/use'
-      fullPath: '/api/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      preLoaderRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport
-      parentRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute
-    }
-    '/api/requests/$requestRef/problems/$reportRef/replies': {
-      id: '/api/requests/$requestRef/problems/$reportRef/replies'
-      path: '/$reportRef/replies'
-      fullPath: '/api/requests/$requestRef/problems/$reportRef/replies'
-      preLoaderRoute: typeof ApiRequestsRequestRefProblemsReportRefRepliesRouteImport
-      parentRoute: typeof ApiRequestsRequestRefProblemsRoute
-    }
-    '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal': {
-      id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-      path: '/withdrawal'
-      fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/withdrawal'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute
-    }
-    '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use': {
-      id: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      path: '/use'
-      fullPath: '/api/v1/requests/$requestRef/repeat-permissions/$permissionRef/use'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute
-    }
-    '/api/v1/requests/$requestRef/problems/$reportRef/replies': {
-      id: '/api/v1/requests/$requestRef/problems/$reportRef/replies'
-      path: '/$reportRef/replies'
-      fullPath: '/api/v1/requests/$requestRef/problems/$reportRef/replies'
-      preLoaderRoute: typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRouteImport
-      parentRoute: typeof ApiV1RequestsRequestRefProblemsRoute
-    }
   }
 }
 
-interface SlugToolsToolIdRouteChildren {
-  SlugToolsToolIdPrepareRoute: typeof SlugToolsToolIdPrepareRoute
-}
-
-const SlugToolsToolIdRouteChildren: SlugToolsToolIdRouteChildren = {
-  SlugToolsToolIdPrepareRoute: SlugToolsToolIdPrepareRoute,
-}
-
-const SlugToolsToolIdRouteWithChildren = SlugToolsToolIdRoute._addFileChildren(
-  SlugToolsToolIdRouteChildren,
-)
-
 interface SlugRouteChildren {
-  SlugInquiryRoute: typeof SlugInquiryRoute
   SlugUcpRoute: typeof SlugUcpRoute
-  SlugToolsToolIdRoute: typeof SlugToolsToolIdRouteWithChildren
 }
 
 const SlugRouteChildren: SlugRouteChildren = {
-  SlugInquiryRoute: SlugInquiryRoute,
   SlugUcpRoute: SlugUcpRoute,
-  SlugToolsToolIdRoute: SlugToolsToolIdRouteWithChildren,
 }
 
 const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
@@ -2643,31 +1447,6 @@ const OperatorAgentAccessRouteChildren: OperatorAgentAccessRouteChildren = {
 
 const OperatorAgentAccessRouteWithChildren =
   OperatorAgentAccessRoute._addFileChildren(OperatorAgentAccessRouteChildren)
-
-interface OperatorAdminRunsRouteChildren {
-  OperatorAdminRunsTurnIdRoute: typeof OperatorAdminRunsTurnIdRoute
-}
-
-const OperatorAdminRunsRouteChildren: OperatorAdminRunsRouteChildren = {
-  OperatorAdminRunsTurnIdRoute: OperatorAdminRunsTurnIdRoute,
-}
-
-const OperatorAdminRunsRouteWithChildren =
-  OperatorAdminRunsRoute._addFileChildren(OperatorAdminRunsRouteChildren)
-
-interface OperatorOwnerInquiriesRouteChildren {
-  OperatorOwnerInquiriesThreadIdRoute: typeof OperatorOwnerInquiriesThreadIdRoute
-}
-
-const OperatorOwnerInquiriesRouteChildren: OperatorOwnerInquiriesRouteChildren =
-  {
-    OperatorOwnerInquiriesThreadIdRoute: OperatorOwnerInquiriesThreadIdRoute,
-  }
-
-const OperatorOwnerInquiriesRouteWithChildren =
-  OperatorOwnerInquiriesRoute._addFileChildren(
-    OperatorOwnerInquiriesRouteChildren,
-  )
 
 interface OperatorOwnerOfferingsRouteChildren {
   OperatorOwnerOfferingsOfferingRefRoute: typeof OperatorOwnerOfferingsOfferingRefRoute
@@ -2698,57 +1477,47 @@ const OperatorOwnerSupplyRouteWithChildren =
   OperatorOwnerSupplyRoute._addFileChildren(OperatorOwnerSupplyRouteChildren)
 
 interface OperatorRouteChildren {
+  OperatorActivityRoute: typeof OperatorActivityRoute
   OperatorAgentAccessRoute: typeof OperatorAgentAccessRouteWithChildren
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
-  OperatorAdminClaimsRoute: typeof OperatorAdminClaimsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
-  OperatorAdminInquiriesRoute: typeof OperatorAdminInquiriesRoute
-  OperatorAdminRequestProblemsRoute: typeof OperatorAdminRequestProblemsRoute
-  OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
-  OperatorAdminSearchGapsRoute: typeof OperatorAdminSearchGapsRoute
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
-  OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
   OperatorOwnerSupplyRoute: typeof OperatorOwnerSupplyRouteWithChildren
-  OperatorOwnerRequestProblemsReportRefRoute: typeof OperatorOwnerRequestProblemsReportRefRoute
 }
 
 const OperatorRouteChildren: OperatorRouteChildren = {
+  OperatorActivityRoute: OperatorActivityRoute,
   OperatorAgentAccessRoute: OperatorAgentAccessRouteWithChildren,
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
-  OperatorAdminClaimsRoute: OperatorAdminClaimsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
-  OperatorAdminInquiriesRoute: OperatorAdminInquiriesRoute,
-  OperatorAdminRequestProblemsRoute: OperatorAdminRequestProblemsRoute,
-  OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
-  OperatorAdminSearchGapsRoute: OperatorAdminSearchGapsRoute,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
-  OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
   OperatorOwnerSupplyRoute: OperatorOwnerSupplyRouteWithChildren,
-  OperatorOwnerRequestProblemsReportRefRoute:
-    OperatorOwnerRequestProblemsReportRefRoute,
 }
 
 const OperatorRouteWithChildren = OperatorRoute._addFileChildren(
   OperatorRouteChildren,
 )
 
-interface ClaimRouteChildren {
-  ClaimFormRoute: typeof ClaimFormRoute
-  ClaimSuccessRoute: typeof ClaimSuccessRoute
+interface OperationsRouteChildren {
+  OperationsOperationRefRoute: typeof OperationsOperationRefRoute
+  OperationsInvocationsInvocationRefRoute: typeof OperationsInvocationsInvocationRefRoute
 }
 
-const ClaimRouteChildren: ClaimRouteChildren = {
-  ClaimFormRoute: ClaimFormRoute,
-  ClaimSuccessRoute: ClaimSuccessRoute,
+const OperationsRouteChildren: OperationsRouteChildren = {
+  OperationsOperationRefRoute: OperationsOperationRefRoute,
+  OperationsInvocationsInvocationRefRoute:
+    OperationsInvocationsInvocationRefRoute,
 }
 
-const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
+const OperationsRouteWithChildren = OperationsRoute._addFileChildren(
+  OperationsRouteChildren,
+)
 
 interface PrivacyRouteChildren {
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
@@ -2773,235 +1542,6 @@ const ApiBusinessesRouteChildren: ApiBusinessesRouteChildren = {
 
 const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
-)
-
-interface ApiRequestsRequestRefProblemsRouteChildren {
-  ApiRequestsRequestRefProblemsReportRefRepliesRoute: typeof ApiRequestsRequestRefProblemsReportRefRepliesRoute
-}
-
-const ApiRequestsRequestRefProblemsRouteChildren: ApiRequestsRequestRefProblemsRouteChildren =
-  {
-    ApiRequestsRequestRefProblemsReportRefRepliesRoute:
-      ApiRequestsRequestRefProblemsReportRefRepliesRoute,
-  }
-
-const ApiRequestsRequestRefProblemsRouteWithChildren =
-  ApiRequestsRequestRefProblemsRoute._addFileChildren(
-    ApiRequestsRequestRefProblemsRouteChildren,
-  )
-
-interface ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren {
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
-}
-
-const ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren: ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren =
-  {
-    ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
-      ApiRequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
-    ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute:
-      ApiRequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute,
-  }
-
-const ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren =
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute._addFileChildren(
-    ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteChildren,
-  )
-
-interface ApiRequestsRequestRefRepeatPermissionsRouteChildren {
-  ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute: typeof ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
-}
-
-const ApiRequestsRequestRefRepeatPermissionsRouteChildren: ApiRequestsRequestRefRepeatPermissionsRouteChildren =
-  {
-    ApiRequestsRequestRefRepeatPermissionsPermissionRefRoute:
-      ApiRequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren,
-  }
-
-const ApiRequestsRequestRefRepeatPermissionsRouteWithChildren =
-  ApiRequestsRequestRefRepeatPermissionsRoute._addFileChildren(
-    ApiRequestsRequestRefRepeatPermissionsRouteChildren,
-  )
-
-interface ApiRequestsRequestRefRouteChildren {
-  ApiRequestsRequestRefAuthorizationRoute: typeof ApiRequestsRequestRefAuthorizationRoute
-  ApiRequestsRequestRefCancellationRoute: typeof ApiRequestsRequestRefCancellationRoute
-  ApiRequestsRequestRefConfirmationRoute: typeof ApiRequestsRequestRefConfirmationRoute
-  ApiRequestsRequestRefEvidenceRoute: typeof ApiRequestsRequestRefEvidenceRoute
-  ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
-  ApiRequestsRequestRefMessagesRoute: typeof ApiRequestsRequestRefMessagesRoute
-  ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
-  ApiRequestsRequestRefProblemsRoute: typeof ApiRequestsRequestRefProblemsRouteWithChildren
-  ApiRequestsRequestRefRepeatPermissionsRoute: typeof ApiRequestsRequestRefRepeatPermissionsRouteWithChildren
-  ApiRequestsRequestRefRunRoute: typeof ApiRequestsRequestRefRunRoute
-}
-
-const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
-  ApiRequestsRequestRefAuthorizationRoute:
-    ApiRequestsRequestRefAuthorizationRoute,
-  ApiRequestsRequestRefCancellationRoute:
-    ApiRequestsRequestRefCancellationRoute,
-  ApiRequestsRequestRefConfirmationRoute:
-    ApiRequestsRequestRefConfirmationRoute,
-  ApiRequestsRequestRefEvidenceRoute: ApiRequestsRequestRefEvidenceRoute,
-  ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
-  ApiRequestsRequestRefMessagesRoute: ApiRequestsRequestRefMessagesRoute,
-  ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
-  ApiRequestsRequestRefProblemsRoute:
-    ApiRequestsRequestRefProblemsRouteWithChildren,
-  ApiRequestsRequestRefRepeatPermissionsRoute:
-    ApiRequestsRequestRefRepeatPermissionsRouteWithChildren,
-  ApiRequestsRequestRefRunRoute: ApiRequestsRequestRefRunRoute,
-}
-
-const ApiRequestsRequestRefRouteWithChildren =
-  ApiRequestsRequestRefRoute._addFileChildren(
-    ApiRequestsRequestRefRouteChildren,
-  )
-
-interface ApiRequestsRouteChildren {
-  ApiRequestsRequestRefRoute: typeof ApiRequestsRequestRefRouteWithChildren
-}
-
-const ApiRequestsRouteChildren: ApiRequestsRouteChildren = {
-  ApiRequestsRequestRefRoute: ApiRequestsRequestRefRouteWithChildren,
-}
-
-const ApiRequestsRouteWithChildren = ApiRequestsRoute._addFileChildren(
-  ApiRequestsRouteChildren,
-)
-
-interface ApiAnswerThreadsThreadIdRouteChildren {
-  ApiAnswerThreadsThreadIdShareRoute: typeof ApiAnswerThreadsThreadIdShareRoute
-}
-
-const ApiAnswerThreadsThreadIdRouteChildren: ApiAnswerThreadsThreadIdRouteChildren =
-  {
-    ApiAnswerThreadsThreadIdShareRoute: ApiAnswerThreadsThreadIdShareRoute,
-  }
-
-const ApiAnswerThreadsThreadIdRouteWithChildren =
-  ApiAnswerThreadsThreadIdRoute._addFileChildren(
-    ApiAnswerThreadsThreadIdRouteChildren,
-  )
-
-interface ApiAnswerThreadsRouteChildren {
-  ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRouteWithChildren
-}
-
-const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
-  ApiAnswerThreadsThreadIdRoute: ApiAnswerThreadsThreadIdRouteWithChildren,
-}
-
-const ApiAnswerThreadsRouteWithChildren =
-  ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
-
-interface ApiAnswerTurnRouteChildren {
-  ApiAnswerTurnStopRoute: typeof ApiAnswerTurnStopRoute
-}
-
-const ApiAnswerTurnRouteChildren: ApiAnswerTurnRouteChildren = {
-  ApiAnswerTurnStopRoute: ApiAnswerTurnStopRoute,
-}
-
-const ApiAnswerTurnRouteWithChildren = ApiAnswerTurnRoute._addFileChildren(
-  ApiAnswerTurnRouteChildren,
-)
-
-interface ApiV1RequestsRequestRefProblemsRouteChildren {
-  ApiV1RequestsRequestRefProblemsReportRefRepliesRoute: typeof ApiV1RequestsRequestRefProblemsReportRefRepliesRoute
-}
-
-const ApiV1RequestsRequestRefProblemsRouteChildren: ApiV1RequestsRequestRefProblemsRouteChildren =
-  {
-    ApiV1RequestsRequestRefProblemsReportRefRepliesRoute:
-      ApiV1RequestsRequestRefProblemsReportRefRepliesRoute,
-  }
-
-const ApiV1RequestsRequestRefProblemsRouteWithChildren =
-  ApiV1RequestsRequestRefProblemsRoute._addFileChildren(
-    ApiV1RequestsRequestRefProblemsRouteChildren,
-  )
-
-interface ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren {
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute
-}
-
-const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren: ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren =
-  {
-    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute:
-      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefUseRoute,
-    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute:
-      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefWithdrawalRoute,
-  }
-
-const ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren =
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute._addFileChildren(
-    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteChildren,
-  )
-
-interface ApiV1RequestsRequestRefRepeatPermissionsRouteChildren {
-  ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren
-}
-
-const ApiV1RequestsRequestRefRepeatPermissionsRouteChildren: ApiV1RequestsRequestRefRepeatPermissionsRouteChildren =
-  {
-    ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRoute:
-      ApiV1RequestsRequestRefRepeatPermissionsPermissionRefRouteWithChildren,
-  }
-
-const ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren =
-  ApiV1RequestsRequestRefRepeatPermissionsRoute._addFileChildren(
-    ApiV1RequestsRequestRefRepeatPermissionsRouteChildren,
-  )
-
-interface ApiV1RequestsRequestRefRouteChildren {
-  ApiV1RequestsRequestRefCancellationRoute: typeof ApiV1RequestsRequestRefCancellationRoute
-  ApiV1RequestsRequestRefConfirmationRoute: typeof ApiV1RequestsRequestRefConfirmationRoute
-  ApiV1RequestsRequestRefEvidenceRoute: typeof ApiV1RequestsRequestRefEvidenceRoute
-  ApiV1RequestsRequestRefFactsRoute: typeof ApiV1RequestsRequestRefFactsRoute
-  ApiV1RequestsRequestRefMessagesRoute: typeof ApiV1RequestsRequestRefMessagesRoute
-  ApiV1RequestsRequestRefOptionsRoute: typeof ApiV1RequestsRequestRefOptionsRoute
-  ApiV1RequestsRequestRefProblemsRoute: typeof ApiV1RequestsRequestRefProblemsRouteWithChildren
-  ApiV1RequestsRequestRefRepeatPermissionsRoute: typeof ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren
-  ApiV1RequestsRequestRefRunRoute: typeof ApiV1RequestsRequestRefRunRoute
-}
-
-const ApiV1RequestsRequestRefRouteChildren: ApiV1RequestsRequestRefRouteChildren =
-  {
-    ApiV1RequestsRequestRefCancellationRoute:
-      ApiV1RequestsRequestRefCancellationRoute,
-    ApiV1RequestsRequestRefConfirmationRoute:
-      ApiV1RequestsRequestRefConfirmationRoute,
-    ApiV1RequestsRequestRefEvidenceRoute: ApiV1RequestsRequestRefEvidenceRoute,
-    ApiV1RequestsRequestRefFactsRoute: ApiV1RequestsRequestRefFactsRoute,
-    ApiV1RequestsRequestRefMessagesRoute: ApiV1RequestsRequestRefMessagesRoute,
-    ApiV1RequestsRequestRefOptionsRoute: ApiV1RequestsRequestRefOptionsRoute,
-    ApiV1RequestsRequestRefProblemsRoute:
-      ApiV1RequestsRequestRefProblemsRouteWithChildren,
-    ApiV1RequestsRequestRefRepeatPermissionsRoute:
-      ApiV1RequestsRequestRefRepeatPermissionsRouteWithChildren,
-    ApiV1RequestsRequestRefRunRoute: ApiV1RequestsRequestRefRunRoute,
-  }
-
-const ApiV1RequestsRequestRefRouteWithChildren =
-  ApiV1RequestsRequestRefRoute._addFileChildren(
-    ApiV1RequestsRequestRefRouteChildren,
-  )
-
-interface ApiV1RequestsRouteChildren {
-  ApiV1RequestsRequestRefRoute: typeof ApiV1RequestsRequestRefRouteWithChildren
-  ApiV1RequestsSchemaRoute: typeof ApiV1RequestsSchemaRoute
-}
-
-const ApiV1RequestsRouteChildren: ApiV1RequestsRouteChildren = {
-  ApiV1RequestsRequestRefRoute: ApiV1RequestsRequestRefRouteWithChildren,
-  ApiV1RequestsSchemaRoute: ApiV1RequestsSchemaRoute,
-}
-
-const ApiV1RequestsRouteWithChildren = ApiV1RequestsRoute._addFileChildren(
-  ApiV1RequestsRouteChildren,
 )
 
 interface ApiV1ServicesRouteChildren {
@@ -3041,14 +1581,13 @@ const rootRouteChildren: RootRouteChildren = {
   SlugRoute: SlugRouteWithChildren,
   SKILLDotmdRoute: SKILLDotmdRoute,
   OperatorRoute: OperatorRouteWithChildren,
-  AboutRoute: AboutRoute,
-  ClaimRoute: ClaimRouteWithChildren,
   EngineRoute: EngineRoute,
   ForAgentsRoute: ForAgentsRoute,
   ForProvidersRoute: ForProvidersRoute,
-  HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  MarketRoute: MarketRoute,
   McpRoute: McpRoute,
+  OperationsRoute: OperationsRouteWithChildren,
   PrivacyRoute: PrivacyRouteWithChildren,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
@@ -3064,37 +1603,24 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiHealthRoute: ApiHealthRoute,
   ApiReadyRoute: ApiReadyRoute,
-  ApiRequestsRoute: ApiRequestsRouteWithChildren,
-  IThreadIdRoute: IThreadIdRoute,
   OauthAuthorizeRoute: OauthAuthorizeRoute,
   OauthDevice_authorizationRoute: OauthDevice_authorizationRoute,
   OauthRegisterRoute: OauthRegisterRoute,
   OauthTokenRoute: OauthTokenRoute,
-  OperationsOperationRefRoute: OperationsOperationRefRoute,
   SShareTokenRoute: SShareTokenRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
   TNewRoute: TNewRoute,
-  ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
-  ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
-  ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
-  ApiAnswerTurnRoute: ApiAnswerTurnRouteWithChildren,
+  ApiChatAnonymousRoute: ApiChatAnonymousRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
-  ApiNotificationNovuDispatchRoute: ApiNotificationNovuDispatchRoute,
-  ApiNotificationResendDispatchRoute: ApiNotificationResendDispatchRoute,
-  ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
-  ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
-  ApiStorefrontEnrichRoute: ApiStorefrontEnrichRoute,
-  ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
+  ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,
+  ApiV1RegistryRoute: ApiV1RegistryRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
-  ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
   ApiV1ServicesRoute: ApiV1ServicesRouteWithChildren,
-  OperationsInvocationsInvocationRefRoute:
-    OperationsInvocationsInvocationRefRoute,
   ApiV1MarketOperationsCompareRoute: ApiV1MarketOperationsCompareRoute,
   ApiV1MarketOperationsDetailRoute: ApiV1MarketOperationsDetailRoute,
   ApiV1MarketOperationsInspectPlanRoute: ApiV1MarketOperationsInspectPlanRoute,
@@ -3102,8 +1628,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1OperationsInvocationRefRoute:
     ApiV1OperationsInvocationRefRouteWithChildren,
   ApiV1OperationsCallRoute: ApiV1OperationsCallRoute,
-  ApiV1OperationsExecuteRoute: ApiV1OperationsExecuteRoute,
-  ApiV1WorkTreeOperationRoute: ApiV1WorkTreeOperationRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

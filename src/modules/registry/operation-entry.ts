@@ -58,16 +58,18 @@ export const OPERATION_MARKET_ACTION_ENTRIES: readonly OperationMarketActionEntr
   operationMarketActionEntry('inspect_plan', OPERATION_MARKET_INSPECT_PLAN_PATH, registryOperationsInspectPlanContract),
 ])
 
-export function operationMarketNavigation(relation: OperationMarketRelation): PublicOperationNavigationRelation {
+export function operationMarketNavigation<Relation extends OperationMarketRelation>(
+  relation: Relation,
+): PublicOperationNavigationRelation & Readonly<{ relation: Relation }> {
   const entry = OPERATION_MARKET_ACTION_ENTRIES.find((candidate) => candidate.relation === relation)
   if (entry === undefined) throw new Error('operation_market_action_entry_missing')
   return {
-    relation: entry.relation,
     pathTemplate: entry.pathTemplate,
     method: entry.method,
     actionId: entry.actionId,
     authentication: entry.authentication,
     ...(entry.inputSchema === undefined ? {} : { inputSchema: entry.inputSchema }),
     surfaces: entry.surfaces,
+    relation,
   }
 }

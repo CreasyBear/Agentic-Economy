@@ -9,6 +9,7 @@ import {
   authorizePaidCharge,
   createInMemoryMoneyQueryPort,
   createLedgerState,
+  projectProviderEarnings,
   type ExactAmount,
   type MoneyAccount,
   type MoneyLedgerEntry,
@@ -84,6 +85,30 @@ describe('money query projections', () => {
       grossAccrual: amount('USD', '0', 2),
       truncated: false,
     })
+    expect(
+      projectProviderEarnings({
+        businessId: 'business-1',
+        currency: 'USD',
+        accounts,
+        entries: [],
+        transactions: [],
+        evidence: 'labelled_local_dev',
+      }),
+    ).toMatchObject({
+      kind: 'ok',
+      grossAccrual: amount('USD', '0', 2),
+      truncated: false,
+    })
+    expect(
+      projectProviderEarnings({
+        businessId: 'missing',
+        currency: 'USD',
+        accounts,
+        entries: [],
+        transactions: [],
+        evidence: 'labelled_local_dev',
+      }),
+    ).toEqual({ kind: 'refused', code: 'payout_not_ready' })
   })
 
   it('nets held-funded provider and rake refunds in earnings', async () => {

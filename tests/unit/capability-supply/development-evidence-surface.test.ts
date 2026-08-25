@@ -76,9 +76,9 @@ describe('Action Invocation development evidence surface', () => {
       gitRevision: revision,
       checksum: written.checksum,
       reconstructed: {
-        durableControlRecords: 1,
-        attributableAttempts: 1,
-        compositionNodes: 1,
+        durableControlRecords: scenario.durable.controls.length,
+        attributableAttempts: scenario.durable.attempts.length,
+        compositionNodes: scenario.composition.nodes.length,
       },
     })
   })

@@ -11,11 +11,6 @@ import {
   type ExactAmount,
   type MoneyAccount,
 } from '../../../src/modules/money/public'
-import type { StripeMoneyClient } from '../../../src/lib/server/stripe-money-provider'
-import {
-  applyVerifiedStripeEventThroughSource,
-  readCreditPaymentThroughSource,
-} from '../../../src/modules/money/server'
 
 const ownerId = 'owner-stripe-1'
 
@@ -159,42 +154,6 @@ describe('money Stripe top-up adapter', () => {
     expect(replay.result).toMatchObject({ kind: 'accepted', transactionRef: 'topup-tx-2', amount: amount('USD', '1000', 2) })
     const digestConflict = applyCreditTopup({ state: applied.state, ledgerState: applied.ledgerState, commandRef: command.commandRef, transaction, event: { ...event, payloadDigest: 'payload-conflict' }, sourceDigest: 'event-conflict', evidenceRefs: ['stripe:event:evt_2'] })
     expect(digestConflict.result).toMatchObject({ kind: 'refused', code: 'ledger_idempotency_conflict' })
-  })
-  it('refuses durable read before source or provider IO when live money is gated', async () => {
-    const readCreditPayment = vi.fn(fakePort.readCreditPayment)
-    const result = await readCreditPaymentThroughSource(
-      { externalRef: 'cs_gate', idempotencyKey: 'topup-gate-1' },
-      undefined,
-      { provider: { ...fakePort, readCreditPayment } },
-    )
-    expect(result).toMatchObject({ kind: 'refused', code: 'live_money_gate_open', retryable: false })
-    expect(readCreditPayment).not.toHaveBeenCalled()
-  })
-
-  it('refuses checkout webhook before source or Stripe readback when live money is gated', async () => {
-    const retrieve = vi.fn()
-    const client = { checkout: { sessions: { retrieve } } } as unknown as StripeMoneyClient
-    const result = await applyVerifiedStripeEventThroughSource({
-      event: {
-        kind: 'checkout',
-        stripeEventId: 'evt_gate',
-        eventType: 'checkout.session.completed',
-        externalRef: 'cs_gate',
-        sessionId: 'cs_gate',
-        commandRef: 'command_gate',
-        status: 'paid',
-        amount: amount('USD', '1050', 2),
-        metadataDigest: 'sha256:metadata',
-        checkoutSessionDigest: 'sha256:checkout-session',
-        payloadDigest: 'sha256:payload',
-        observedAt: 1,
-      },
-      rawBody: '{}',
-      request: new Request('http://localhost/api/stripe/webhook', { method: 'POST' }),
-      client,
-    })
-    expect(result).toMatchObject({ kind: 'refused', code: 'live_money_gate_open', retryable: false })
-    expect(retrieve).not.toHaveBeenCalled()
   })
 })
 

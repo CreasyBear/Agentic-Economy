@@ -10,13 +10,20 @@ import {
   type ActionToolContract,
   defineAction,
 } from '@/modules/actions'
-import { ANSWER_READ_TOOL_IDS } from '@/modules/answer-thread/tooling'
+
+const CHAT_TOOL_IDS = [
+  'registry.operations.search',
+  'registry.operations.detail',
+  'registry.operations.compare',
+  'registry.operations.inspectPlan',
+  'operation.execute',
+] as const
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
 describe('action tool contract', () => {
   it('projects model descriptors from the canonical schema hash', () => {
-    const contracts = ANSWER_READ_TOOL_IDS.map((actionId) => {
+    const contracts = CHAT_TOOL_IDS.map((actionId) => {
       const action = findAction(actionId)
       expect(action).toBeDefined()
       return actionToToolContract(action!)
@@ -31,7 +38,7 @@ describe('action tool contract', () => {
       expect(modelProjection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
     }
 
-    expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual(ANSWER_READ_TOOL_IDS)
+    expect(descriptors.map((projection) => projection.descriptor.function.name)).toEqual(CHAT_TOOL_IDS)
     expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })
 
@@ -84,7 +91,7 @@ describe('action tool contract', () => {
         class: 'observation', reversible: true, recipientKind: 'none',
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       invocationContract: {
         version: 'registry.search:v1',
         consequenceClass: 'read_only',
@@ -183,7 +190,7 @@ describe('action tool contract', () => {
         class: 'observation', reversible: true, recipientKind: 'none',
         dataClasses: [], spendExposure: 'none', approval: 'none',
       },
-      surfaces: ['answerThread'],
+      surfaces: ['chat'],
       invocationContract: {
         version: 'registry.search:v1',
         consequenceClass: 'read_only',

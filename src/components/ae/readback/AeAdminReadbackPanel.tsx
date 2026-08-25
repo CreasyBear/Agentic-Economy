@@ -12,13 +12,11 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
 
 const surfaceLabels = {
-  claims_queue: 'Claims queue',
   audit_events: 'Activity log',
   index_health: 'Catalog health',
 } satisfies Record<AdminReadbackSurface, string>
 
 const rowStateLabels = {
-  pending_review: 'Pending review',
   no_source_rows: 'No source rows',
   guarded: 'Guarded',
   queued: 'Queued',
@@ -29,7 +27,6 @@ const rowStateLabels = {
 } satisfies Record<AdminReadbackRow['rowState'], string>
 
 const repairLabels = {
-  review_claim: 'Review claim',
   inspect_audit: 'Inspect audit',
   regenerate_projection: 'Regenerate projection',
   source_auth_required: 'Source auth required',

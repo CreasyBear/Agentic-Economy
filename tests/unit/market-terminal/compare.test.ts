@@ -4,6 +4,8 @@ import { runCompareCommand } from '../../../tools/ae/commands/compare'
 import type { CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { projectOperationCompareChoices } from '@/modules/registry/operation-choice-contracts'
+import { operationCompareOutputSchema } from '@/modules/capability-supply/public'
 
 const options: CliOptions = {
   baseUrl: 'https://market.example',
@@ -71,7 +73,7 @@ const operation = {
   navigation: [],
 } as const
 
-const humanResult = {
+const humanResult = projectOperationCompareChoices(operationCompareOutputSchema.parse({
   kind: 'ok' as const,
   schemaVersion: 'registry-operations:v1' as const,
   operations: [operation],
@@ -98,7 +100,7 @@ const humanResult = {
     },
   ],
   navigation: [],
-}
+}))
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -118,7 +120,7 @@ describe('anonymous Operation compare CLI', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await runCompareCommand(refs, options)
+    await runCompareCommand(refs, { ...options, technical: true })
 
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('https://market.example/api/v1/market-operations/compare')
@@ -166,7 +168,7 @@ describe('anonymous Operation compare CLI', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await runCompareCommand([refs[0]!], options)
+    await runCompareCommand([refs[0]!], { ...options, technical: true })
 
     expect(JSON.parse(output.join(''))).toEqual(result)
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ operationRefs: [refs[0]] })

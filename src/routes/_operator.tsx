@@ -16,8 +16,8 @@ function OperatorLayoutRoute() {
   return (
     <AeOperatorShell
       operatorRole={operatorRole}
-      title="Operator workspace"
-      description="Loading the latest operator view."
+      title="Workspace"
+      description="Loading your latest marketplace activity."
       currentPath={pathname}
     >
       <Outlet />

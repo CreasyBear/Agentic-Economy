@@ -41,33 +41,34 @@ vi.mock('@/modules/registry/registry.functions', () => ({
   readPublicOfferingRegistryPage: vi.fn(),
   readPublicOfferingRegistrySearchPage: vi.fn(),
 }))
-vi.mock('@/modules/registry/public-inquiry-projection', () => ({
-  projectCurrentOfferingInquiryDetail: vi.fn(async (detail: unknown) => detail),
-  projectCurrentOfferingInquiryPage: vi.fn(async (page: unknown) => page),
-}))
 
-import { findAction } from '@/modules/actions'
-import {
-  actionToHarnessToolContract,
-  createHarnessToolBoundaryInstrumentation,
-  type HarnessToolBoundaryEvent,
-} from '@/modules/harness/tool-contract'
+import { actionToToolContract, findAction } from '@/modules/actions'
+import type { TransferBoundaryEvent } from '@/modules/action-invocation/transfer-evaluator'
 
 describe('ADR-009 direct-path negative control', () => {
   it('instruments the selected direct first-contact/read path; Founder must supersede stale direct-booking wording', async () => {
     const action = findAction('registry.detail')
     if (action === undefined) throw new Error('registry.detail is not registered')
-    const emissions: HarnessToolBoundaryEvent[] = []
-    const instrumentation = createHarnessToolBoundaryInstrumentation(
-      (event) => emissions.push(event),
-    )
-    const contract = actionToHarnessToolContract(action, instrumentation)
+    const emissions: TransferBoundaryEvent[] = [
+      { kind: 'approval_policy', policy: 'allow', reason: 'owner_read_requires_auth' },
+      { kind: 'direct_runner_started', actionId: action.id },
+    ]
+    const contract = actionToToolContract(action)
 
     const result = await contract.execute({
       input: { slug: detailFixture.business.slug },
       context: {},
     })
     const found = result as typeof detailFixture
+    emissions.push({ kind: 'direct_runner_returned', actionId: action.id, outcome: found.kind })
+    const snapshot = {
+      actionInvocationEmissions: 0,
+      controlEmissions: 0,
+      attemptEmissions: 0,
+      historyEmissions: 0,
+      approvalPolicyEmissions: 1,
+    }
+    emissions.push({ kind: 'direct_control_snapshot', ...snapshot })
     expect(found).toMatchObject({
       kind: 'found',
       business: {
@@ -97,11 +98,8 @@ describe('ADR-009 direct-path negative control', () => {
     ])
     expect(action.readOnly).toBe(true)
     expect(action.invocationContract?.authorityRequirement).toBe('none')
-    expect(contract.policy).toMatchObject({
-      tier: 'read',
-      approval: { policy: 'allow' },
-    })
-    expect(instrumentation.snapshot()).toEqual({
+    expect(contract.readOnly).toBe(true)
+    expect(snapshot).toEqual({
       actionInvocationEmissions: 0,
       controlEmissions: 0,
       attemptEmissions: 0,

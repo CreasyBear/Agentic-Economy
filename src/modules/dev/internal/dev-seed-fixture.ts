@@ -1,14 +1,12 @@
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
-import type { BusinessMutationActor, BusinessSourceState } from '@/modules/business/public'
+import type { BusinessContextRecord, BusinessRecord, BusinessSourceState } from '@/modules/business/public'
 import {
   createEmptyCatalogSourceState,
-  publishBusinessCatalog,
+  reconcilePublishedOfferings,
+  validateServiceCatalogInput,
   type ServiceCatalogInput,
 } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { matchingCsrf } from '@/modules/common/matching-csrf'
-import type { CapabilityLaunchSupportRecord } from '@/modules/inquiries/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 import {
   DEV_SEED_BUSINESS_FIXTURES,
@@ -30,7 +28,6 @@ export type DevSeedCatalogState = BusinessSourceState & RegistrySourceState
 export type DevSeedCatalogBundle = {
   ownerClerkUserId: string
   state: DevSeedCatalogState
-  supportRecord: CapabilityLaunchSupportRecord
   seededSlugs: readonly string[]
 }
 
@@ -40,17 +37,10 @@ export const DEV_SEED_OWNER_CLERK_USER_ID = 'dev-seed-owner-session'
  * The email hash is what makes the owner a *resolvable recipient*. Without it
  * `toResolvableOwnerRecipient` yields nothing, every seeded business fails
  * admission on `recipient_unresolvable`, and no business can accept a first
- * contact — so the whole inquiry path, human and agent, is unreachable in
+ * contact, so no unverified contact path is exposed in
  * development. Hashed the same way `convex/authz.ts` hashes a real identity.
  */
 export const DEV_SEED_OWNER_EMAIL = 'dev-seed-owner@agentic.market' as const
-
-const devSeedActor: BusinessMutationActor = {
-  kind: 'authenticated_owner',
-  clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
-  displayName: 'Dev Seed Owner',
-  emailHash: canonicalDigest({ email: DEV_SEED_OWNER_EMAIL }),
-}
 
 const devSeedNow = 1_777_100_000_000
 
@@ -59,15 +49,28 @@ export function buildDevSeedCatalogState(
   fixtures: readonly DevSeedBusinessFixture[] = DEV_SEED_BUSINESS_FIXTURES
 ): DevSeedCatalogBundle {
   let state: DevSeedCatalogState = {
-    ...createEmptyBusinessSourceState(),
+    owners: [],
+    businesses: [],
+    businessContexts: [],
     ...createEmptyCatalogSourceState(),
     operationKeys: [],
     auditEvents: [],
     registryProjectionItems: [],
     registryProjectionAttempts: [],
-    discoveryManifestAttempts: [],
     indexStatus: [],
-    suppressionRules: [],
+  }
+
+  const ownerId = brandNonEmpty(`owner:${DEV_SEED_OWNER_CLERK_USER_ID}`, 'OwnerId')
+  state = {
+    ...state,
+    owners: [{
+      ownerId,
+      clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
+      displayName: 'Dev Seed Owner',
+      emailHash: canonicalDigest({ email: DEV_SEED_OWNER_EMAIL }),
+      createdAt: devSeedNow,
+      updatedAt: devSeedNow,
+    }],
   }
 
   for (const [index, fixture] of fixtures.entries()) {
@@ -75,23 +78,9 @@ export function buildDevSeedCatalogState(
     state = seedBusinessFixture(state, fixture, now)
   }
 
-  const primaryBusiness = state.businesses.find((business) => business.slug === fixtures[0]?.requestedSlug)
-  if (primaryBusiness === undefined) {
-    throw new Error('Dev seed fixture did not produce a primary business.')
-  }
-
-  const owner = state.owners.find((candidate) => candidate.clerkUserId === DEV_SEED_OWNER_CLERK_USER_ID)
-  if (owner === undefined) {
-    throw new Error('Dev seed fixture did not produce the seed owner.')
-  }
-
   return {
     ownerClerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
     state,
-    supportRecord: createHumanInquirySupportRecord({
-      primaryOwnerRef: owner.ownerId,
-      now: devSeedNow + fixtures.length * 1_000,
-    }),
     seededSlugs: fixtures.map((fixture) => fixture.requestedSlug),
   }
 }
@@ -101,64 +90,80 @@ function seedBusinessFixture(
   fixture: DevSeedBusinessFixture,
   now: number
 ): DevSeedCatalogState {
-  const claim = claimBusiness(state, {
-    actor: devSeedActor,
-    facts: {
-      name: fixture.businessName,
-      category: fixture.category,
-      businessContext: fixture.stateTerritory === 'External'
-        ? {
-          kind: 'programmable_provider',
-          website: sourceWebsite(fixture.sourceLabel),
-          providerIdentifier: fixture.businessName,
-        }
-        : {
-          kind: 'local_human',
-          suburb: fixture.suburb,
-          stateTerritory: fixture.stateTerritory,
-          ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
-        },
-      requestedSlug: fixture.requestedSlug,
-      ownerMessage: fixture.ownerMessage,
-      sourceRefs: [
-        {
-          label: fixture.sourceLabel,
-          evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
-          sourceHash: canonicalDigest(`dev-seed:${fixture.requestedSlug}`),
-        },
-      ],
-      ...(fixture.photoUrl === undefined || fixture.photoUrl.length === 0
-        ? {}
-        : { photos: [{ url: fixture.photoUrl, alt: `${fixture.businessName} photo` }] }),
-      ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
-    },
-    security: {
-      csrf: matchingCsrf(`claim:${fixture.requestedSlug}`),
-    },
-    operationKey: operationKey(`claim:${fixture.requestedSlug}`),
-    correlationId: correlationId(`claim:${fixture.requestedSlug}`),
-    now,
-  })
+  const owner = state.owners[0]
+  if (owner === undefined) throw new Error('Dev seed owner is required.')
 
-  if (claim.kind === 'error') {
-    throw new Error(`Dev seed claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
+  const businessId = brandNonEmpty(`business:${fixture.requestedSlug}`, 'BusinessId')
+  const slug = brandNonEmpty(fixture.requestedSlug, 'Slug')
+  const businessContext = fixture.stateTerritory === 'External'
+    ? {
+        kind: 'programmable_provider' as const,
+        website: sourceWebsite(fixture.sourceLabel),
+        providerIdentifier: fixture.businessName,
+      }
+    : {
+        kind: 'local_human' as const,
+        suburb: fixture.suburb,
+        stateTerritory: fixture.stateTerritory,
+        ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+      }
+  const sourceHash = canonicalDigest({ fixture, businessContext })
+  const business: BusinessRecord = {
+    businessId,
+    ownerId: owner.ownerId,
+    slug,
+    name: fixture.businessName,
+    normalizedName: fixture.businessName.trim().toLowerCase().replace(/\s+/gu, ' '),
+    category: fixture.category,
+    businessContext,
+    publicStatus: 'published',
+    trustTier: 'claimed',
+    sourceHash,
+    createdAt: now,
+    updatedAt: now + 500,
   }
+  const context: BusinessContextRecord = {
+    businessId,
+    category: fixture.category,
+    businessContext,
+    ownerMessage: fixture.ownerMessage,
+    sourceRefs: [{
+      label: fixture.sourceLabel,
+      evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
+      sourceHash,
+    }],
+    sourceHash,
+    approvedAt: now,
+    ...(fixture.photoUrl === undefined || fixture.photoUrl.length === 0
+      ? {}
+      : { photos: [{ url: fixture.photoUrl, alt: `${fixture.businessName} photo` }] }),
+    ...(fixture.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: fixture.responseTimeMinutes }),
+  }
+  const services = validateServiceCatalogInput(fixture.offerings.map(toServiceCatalogInput))
+  if (services.kind === 'invalid') throw new Error(`Invalid dev seed offering: ${services.reason}`)
 
-  const published = publishBusinessCatalog(state, {
-    actor: devSeedActor,
-    claimId: claim.claim.claimId,
-    services: fixture.offerings.map(toServiceCatalogInput),
-    security: { csrf: matchingCsrf(`publish:${fixture.requestedSlug}`) },
+  const reconciled = reconcilePublishedOfferings({
+    offerings: state.offerings,
+    revisions: state.revisions,
+    accessPaths: state.accessPaths,
+    operations: [],
+  }, {
+    businessId,
+    authority: { actorRef: owner.ownerId, ownerRef: owner.ownerId, businessOwnerRef: owner.ownerId },
+    services: services.services,
     operationKey: operationKey(`publish:${fixture.requestedSlug}`),
-    correlationId: correlationId(`publish:${fixture.requestedSlug}`),
     now: now + 500,
   })
+  if (reconciled.kind === 'error') throw new Error(`Dev seed publish failed: ${reconciled.reason}`)
 
-  if (published.kind === 'error') {
-    throw new Error(`Dev seed publish failed for ${fixture.requestedSlug}: ${published.reason}`)
+  return {
+    ...state,
+    businesses: [...state.businesses, business],
+    businessContexts: [...state.businessContexts, context],
+    offerings: [...reconciled.state.offerings],
+    revisions: [...reconciled.state.revisions],
+    accessPaths: [...reconciled.state.accessPaths],
   }
-
-  return state
 }
 
 function sourceWebsite(sourceLabel: string): string {
@@ -168,51 +173,6 @@ function sourceWebsite(sourceLabel: string): string {
   website.search = ''
   website.hash = ''
   return website.href
-}
-
-function createHumanInquirySupportRecord(input: {
-  primaryOwnerRef: string
-  now: number
-}): CapabilityLaunchSupportRecord {
-  return {
-    capability: 'human_inquiry_owner_inbox',
-    primaryOwnerRef: input.primaryOwnerRef,
-    primaryAdminOperatorRef: 'admin:dev-seed-primary',
-    backupOwnerRef: 'owner:dev-seed-backup',
-    backupAdminOperatorRef: 'admin:dev-seed-backup',
-    supportedStage: 'manual_support',
-    supportedChannels: ['public_inquiry', 'owner_inbox', 'email_notification', 'provider_readback', 'operator_readback'],
-    capacityThreshold: {
-      maxOpenThreads: 25,
-      maxFailedNotifications: 10,
-    },
-    backlogAgeThresholdMs: 7 * 24 * 60 * 60 * 1_000,
-    phaseIncidentCounts: {
-      retryExhausted: 0,
-      noRepair: 0,
-      unresolvedDeliveryFailures: 0,
-      abuseBlocked: 0,
-      privacyDeletes: 0,
-    },
-    supportEscalationPath: 'Dev seed operator readback queue, then founder support.',
-    claimDisablePath: 'Set inquiries_enabled false or remove inquiry_available from the published service capability.',
-    perChannelKillRules: [
-      {
-        channel: 'public_claim',
-        trigger: 'Support capacity, backlog age, retry-exhausted, or no-repair threshold is exceeded.',
-        action: 'Suppress public inquiry availability and keep existing owner readbacks available.',
-      },
-      {
-        channel: 'email_notification',
-        trigger: 'Provider verification or dispatch credentials fail.',
-        action: 'Hold delivery in source state and do not claim provider delivery.',
-      },
-    ],
-    evidenceRefs: ['convex/devSeed.ts', 'src/modules/dev/internal/dev-seed-fixture.ts'],
-    sourceHash: canonicalDigest({ supportRecord: 'human_inquiry_owner_inbox', stage: 'dev-seed' }),
-    correlationId: brandNonEmpty('correlation:dev-seed-support-record', 'CorrelationId'),
-    lastReviewedAt: input.now,
-  }
 }
 
 function toServiceCatalogInput(offering: DevSeedOfferingFixture): ServiceCatalogInput {
@@ -241,8 +201,4 @@ function toServiceCatalogInput(offering: DevSeedOfferingFixture): ServiceCatalog
 
 function operationKey(value: string) {
   return brandNonEmpty(`op:dev-seed:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string) {
-  return brandNonEmpty(`corr:dev-seed:${value}`, 'CorrelationId')
 }

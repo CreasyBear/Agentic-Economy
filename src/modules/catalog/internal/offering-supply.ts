@@ -15,7 +15,7 @@ export type BusinessOfferingStatus = (typeof BusinessOfferingStatusValues)[numbe
 export const OfferingAccessPathStatusValues = ['draft', 'published', 'withdrawn'] as const
 export type OfferingAccessPathStatus = (typeof OfferingAccessPathStatusValues)[number]
 
-export const HumanRequestChannelValues = ['phone', 'website', 'ae_inquiry'] as const
+export const HumanRequestChannelValues = ['phone', 'website'] as const
 export type HumanRequestChannel = (typeof HumanRequestChannelValues)[number]
 
 export const ExternalOperationProvenanceValues = ['business_declared', 'publicly_observed'] as const
@@ -58,7 +58,7 @@ export type HumanRequestAccessPathDescriptor = Readonly<{
   kind: 'human_request'
   channel: HumanRequestChannel
   disclosure: string
-  /** Website is an explicit public target; phone and AE inquiry resolve source-owned business routes. */
+  /** Website is an explicit public target; phone resolves a source-owned business route. */
   url?: string
 }>
 

@@ -6,7 +6,7 @@ import {
   createDevelopmentDynamicPublishedSource,
   createDynamicPublishedActionInvocationAdapter,
   type DynamicPublishedInvocationResult,
-} from '../../../src/modules/action-invocation'
+} from '../../../src/modules/capability-execution/legacy-dynamic'
 import type { RouteTransportRuntime } from '../../../src/modules/capability-supply/route-transport-runtime'
 import {
   buildDevelopmentPublishedOperationEvidence,

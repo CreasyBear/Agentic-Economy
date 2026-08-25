@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   decideExternalSpendFinalization,
   decideExternalSpendReconciliation,
   decideExternalSpendReversal,
+  externalSpendCustodyPolicyRefusal,
   externalSpendFinalizationDigest,
   externalSpendIdentityDigest,
+  externalSpendIdentityFromReservation,
+  externalSpendIdentityMatchingReservationRef,
+  externalSpendPaymentFactsValid,
+  mintExternalSpendIdentity,
+  sameExternalSpendIdentity,
   type ExternalSpendIdentity,
+  type ExternalSpendPaymentFacts,
   type ExternalSpendReservation,
 } from '@/modules/money/internal/external-spend'
 
-const identity: ExternalSpendIdentity = {
-  reservationRef: 'external-spend:test',
+const facts: ExternalSpendPaymentFacts = {
   principalId: 'principal:test',
   credentialId: 'credential:test',
   grantRef: 'grant:test',
@@ -25,7 +33,14 @@ const identity: ExternalSpendIdentity = {
   paymentIdentifier: 'payment:test',
   challengeDigest: 'sha256:challenge',
   amount: { currency: 'USD', units: '100', exponent: 2 },
-  idempotencyDigest: 'sha256:idempotency',
+}
+const identity: ExternalSpendIdentity = mintExternalSpendIdentity(facts)
+const productionCustodyFacts: ExternalSpendPaymentFacts = {
+  ...facts,
+  environment: 'production',
+  custodyRef: 'custody:wallet:primary',
+  custodyGeneration: 7,
+  custodyDailyMaximum: { currency: 'USD', units: '250', exponent: 2 },
 }
 
 function reservation(
@@ -47,6 +62,109 @@ function reservation(
 }
 
 describe('external spend policy', () => {
+  it('mints reservationRef from money idempotency material and rejects the retired x402 worker hash', () => {
+    const minted = mintExternalSpendIdentity(facts)
+    const retiredDigest = canonicalDigest({
+      format: 'ae.x402.external-spend-identity:v1',
+      ...facts,
+    } as StableHashValue)
+    const identityWithoutRef = canonicalDigest({
+      format: 'ae.money.external-spend-identity:v1',
+      ...facts,
+      idempotencyDigest: minted.idempotencyDigest,
+    } as StableHashValue)
+
+    expect(minted.reservationRef).toBe(`external-spend:${minted.idempotencyDigest}`)
+    expect(minted.reservationRef).not.toBe(`external-spend:${retiredDigest}`)
+    expect(minted.idempotencyDigest).not.toBe(retiredDigest)
+    expect(externalSpendIdentityDigest(minted)).not.toBe(identityWithoutRef)
+    expect(externalSpendIdentityMatchingReservationRef(facts, minted.reservationRef)).toEqual(minted)
+    expect(
+      externalSpendIdentityMatchingReservationRef(facts, `external-spend:${retiredDigest}`),
+    ).toBeUndefined()
+  })
+
+  it('accepts complete production custody facts and projects them into identity', () => {
+    expect(externalSpendPaymentFactsValid(productionCustodyFacts)).toBe(true)
+    expect(externalSpendCustodyPolicyRefusal(productionCustodyFacts)).toBeUndefined()
+
+    const custodyIdentity = mintExternalSpendIdentity(productionCustodyFacts)
+    expect(externalSpendIdentityFromReservation(custodyIdentity)).toEqual(custodyIdentity)
+    expect(custodyIdentity).toMatchObject({
+      custodyRef: productionCustodyFacts.custodyRef,
+      custodyGeneration: productionCustodyFacts.custodyGeneration,
+      custodyDailyMaximum: productionCustodyFacts.custodyDailyMaximum,
+    })
+  })
+
+  it.each([
+    ['partial custody facts', { custodyRef: undefined }, 'external_spend_custody_policy_invalid'],
+    ['blank custody ref', { custodyRef: ' ' }, 'external_spend_custody_policy_invalid'],
+    ['nonpositive generation', { custodyGeneration: 0 }, 'external_spend_custody_policy_invalid'],
+    [
+      'unsafe generation',
+      { custodyGeneration: Number.MAX_SAFE_INTEGER + 1 },
+      'external_spend_custody_policy_invalid',
+    ],
+    ['sandbox custody facts', { environment: 'sandbox' }, 'external_spend_custody_policy_invalid'],
+    [
+      'currency mismatch',
+      { custodyDailyMaximum: { currency: 'EUR', units: '250', exponent: 2 } },
+      'external_spend_custody_policy_invalid',
+    ],
+    [
+      'exponent mismatch',
+      { custodyDailyMaximum: { currency: 'USD', units: '250', exponent: 3 } },
+      'external_spend_custody_policy_invalid',
+    ],
+  ] as const)('%s is invalid', (_label, override, expectedCode) => {
+    const invalidFacts = {
+      ...productionCustodyFacts,
+      ...override,
+    } as ExternalSpendPaymentFacts
+
+    expect(externalSpendPaymentFactsValid(invalidFacts)).toBe(false)
+    expect(externalSpendCustodyPolicyRefusal(invalidFacts)).toBe(expectedCode)
+  })
+
+  it('rejects a spend above its production custody daily maximum', () => {
+    const overCap = {
+      ...productionCustodyFacts,
+      amount: { currency: 'USD', units: '251', exponent: 2 },
+    }
+
+    expect(externalSpendPaymentFactsValid(overCap)).toBe(false)
+    expect(externalSpendCustodyPolicyRefusal(overCap)).toBe(
+      'external_spend_custody_daily_limit_exceeded',
+    )
+  })
+
+  it('binds custody ref, generation, and cap changes into identity matching', () => {
+    const original = mintExternalSpendIdentity(productionCustodyFacts)
+    const variants = [
+      { custodyRef: 'custody:wallet:other' },
+      { custodyGeneration: 8 },
+      { custodyDailyMaximum: { currency: 'USD', units: '251', exponent: 2 } },
+    ] as const
+
+    for (const variant of variants) {
+      const changed = mintExternalSpendIdentity({
+        ...productionCustodyFacts,
+        ...variant,
+      })
+      expect(changed.idempotencyDigest).not.toBe(original.idempotencyDigest)
+      expect(sameExternalSpendIdentity(original, changed)).toBe(false)
+    }
+  })
+
+  it('preserves identities when custody facts are omitted', () => {
+    const legacy = mintExternalSpendIdentity({ ...facts })
+
+    expect(legacy).toEqual(identity)
+    expect(externalSpendPaymentFactsValid(facts)).toBe(true)
+    expect(externalSpendCustodyPolicyRefusal(facts)).toBeUndefined()
+  })
+
   it('rejects invalid submission/settlement combinations', () => {
     expect(decideExternalSpendFinalization({
       identity,

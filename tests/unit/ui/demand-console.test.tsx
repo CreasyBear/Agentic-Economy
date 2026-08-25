@@ -6,7 +6,8 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeAgentOperatorConsole, type AgentOperatorKeyReadback } from '@/components/ae/console/AeAgentOperatorConsole'
+import { AeAgentOperatorConsole } from '@/components/ae/console/AeAgentOperatorConsole'
+import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
 import { AeCreditTopUpPanel, type CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import type { CreditPaymentSession } from '@/modules/money/public'
@@ -31,7 +32,7 @@ const keyReadback: AgentOperatorKeyReadback = {
     applicationRef: 'agentic-economy',
     environment: 'sandbox',
     authorityMode: 'inspect_only',
-    scopes: ['customer_requests:create', 'customer_requests:inspect_only'],
+    scopes: ['market_operations:invoke', 'customer_requests:inspect_only'],
     revoked: false,
     expired: false,
   },
@@ -82,69 +83,37 @@ afterEach(() => {
 })
 
 describe('assistant access components', () => {
-  it('shows the ordered anonymous-to-authenticated Operation path', async () => {
+  it('shows the one-command activation and call path', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     render(<AeAssistantInstallFunnel canonicalBaseUrl="https://ae.example/" />)
 
-    expect(screen.getByRole('heading', { name: 'From a job to a durable result' })).toBeTruthy()
-    expect(screen.getByText(/POST https:\/\/ae\.example\/api\/v1\/market-operations\/search/u)).toBeTruthy()
-    expect(screen.getByText(/POST https:\/\/ae\.example\/api\/v1\/market-operations\/detail/u)).toBeTruthy()
-    expect(screen.getByText(/npm run -s ae -- compare/u)).toBeTruthy()
-    expect(screen.getByText(/npm run -s ae -- connect --json/u)).toBeTruthy()
-    expect(screen.getByText(/npm run -s ae -- recover/u)).toBeTruthy()
-    expect(screen.getByText(/does not contain provider credentials or silently approve/iu)).toBeTruthy()
-    const directKeylessLane = screen.getByRole('heading', { name: /direct-keyless MCP lane/i }).closest('li')
-    expect(directKeylessLane?.textContent).toContain('No caller key')
-    expect(directKeylessLane?.textContent).toContain('neither requires nor issues an AE caller key')
-    expect(directKeylessLane?.textContent).toContain('ae_operation_execute')
+    expect(screen.getByRole('heading', { name: 'Connect once. Call any listed capability.' })).toBeTruthy()
+    expect(screen.getByText(/npx @agentic-economy\/cli connect --base-url "https:\/\/ae\.example" --mcp/u)).toBeTruthy()
+    expect(screen.getByText(/ae search "weather forecast"/u)).toBeTruthy()
+    expect(screen.getByText(/ae inspect "\$AE_OPERATION_REF"/u)).toBeTruthy()
+    expect(screen.getByText(/ae call "\$AE_OPERATION_REF" --input "\$AE_INPUT_JSON"/u)).toBeTruthy()
+    expect(screen.getByText(/AE creates and retains the retry identity/iu)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Create agent access key' })).toBeNull()
-    expect(screen.queryByText(/\bae (?:feeds|run|study)\b/iu)).toBeNull()
-    expect(screen.queryByText(/\bae (?:cancel|reconcile)\b/iu)).toBeNull()
+    expect(screen.queryByText(/AE_API_KEY=/u)).toBeNull()
 
-    const copyButton = screen.getByRole('button', { name: 'Copy Invoke with a stable key command' })
+    const copyButton = screen.getByRole('button', { name: 'Copy Call command' })
     fireEvent.click(copyButton)
 
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('--idempotency-key "$AE_IDEMPOTENCY_KEY"'))
-    const status = await screen.findByText('Invoke with a stable key command copied.')
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('--input "$AE_INPUT_JSON"'))
+    const status = await screen.findByText('Call command copied.')
     expect(status.getAttribute('role')).toBe('status')
   })
 
-  it('issues a fresh origin-bound caller artifact once and exposes only the one-time save controls', async () => {
+  it('copies setup without exposing or asking users to manage the key', async () => {
     const writeText = vi.fn(async () => undefined)
-    const onIssue = vi.fn()
-    const onDismissIssuedSecret = vi.fn()
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-    render(
-      <AeAssistantInstallFunnel
-        canonicalBaseUrl="https://AE.Example:443/"
-        onIssue={onIssue}
-        issuing={false}
-        issueDisabled={false}
-        issuedSecret="ae_secret_once"
-        onDismissIssuedSecret={onDismissIssuedSecret}
-      />,
-    )
+    render(<AeAssistantInstallFunnel canonicalBaseUrl="https://AE.Example:443/" />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create agent access key' }))
-    expect(onIssue).toHaveBeenCalledOnce()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Copy agent access key command' }))
-    expect(writeText).toHaveBeenCalledWith([
-      "export AE_API_KEY='ae_secret_once'",
-      "export AE_API_KEY_ORIGIN='https://ae.example'",
-    ].join('\n'))
-
-    const download = screen.getByRole('link', { name: 'Download agent-access.json' })
-    const encodedJson = download.getAttribute('href')?.split(',', 2)[1]
-    const artifact = encodedJson === undefined ? undefined : JSON.parse(decodeURIComponent(encodedJson)) as unknown
-    expect(artifact).toEqual({
-      AE_API_KEY: 'ae_secret_once',
-      AE_API_KEY_ORIGIN: 'https://ae.example',
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'I saved it — hide key' }))
-    expect(onDismissIssuedSecret).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Connect command' }))
+    expect(writeText).toHaveBeenCalledWith('npx @agentic-economy/cli connect --base-url "https://AE.Example:443" --mcp')
+    expect(screen.queryByText(/ae_secret/u)).toBeNull()
+    expect(screen.queryByRole('link', { name: /agent-access\.json/u })).toBeNull()
   })
 
   it('starts a bound Checkout Session and keeps the transient secret out of persistence and copy', async () => {
@@ -301,7 +270,7 @@ describe('assistant access components', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: 'Waiting for your approval' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Waiting for approval' })).toBeTruthy()
     expect(screen.getByText('market.email.send:v1')).toBeTruthy()
     expect(screen.getByText('Sends a communication')).toBeTruthy()
     expect(screen.getByText('USD 1.25')).toBeTruthy()

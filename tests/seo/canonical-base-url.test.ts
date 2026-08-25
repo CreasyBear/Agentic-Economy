@@ -4,7 +4,7 @@ import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 import { handleUcpManifestRequest, handleLlmsTxtRequest, handleSitemapXmlRequest } from '../helpers/discovery-fixture-routes'
 import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
-import { getDefaultPublicOwnerStatusReadback } from '../helpers/owner-default-claim'
+import { getDefaultPublicBusinessStatusReadback } from '../helpers/public-business-fixture'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 
@@ -108,11 +108,11 @@ describe('canonical base URL route outputs', () => {
         const serialized = await readSerializedPublicOutputs('https://untrusted.agentic.test')
 
         expect(serialized).toContain('https://canonical.agentic.test/')
-        expect(serialized).toContain('<loc>https://canonical.agentic.test/parramatta-emergency-plumbing</loc>')
+        expect(serialized).toContain('<loc>https://canonical.agentic.test/demo-listed-provider</loc>')
         expect(serialized).toContain('Sitemap: https://canonical.agentic.test/sitemap.xml')
-        expect(serialized).toContain('https://canonical.agentic.test/parramatta-emergency-plumbing/ucp')
+        expect(serialized).toContain('https://canonical.agentic.test/demo-listed-provider/ucp')
         expect(serialized).toContain('https://canonical.agentic.test/api/businesses')
-        expect(serialized).toContain('https://canonical.agentic.test/parramatta-emergency-plumbing')
+        expect(serialized).toContain('https://canonical.agentic.test/demo-listed-provider')
         expect(serialized).not.toContain('https://untrusted.agentic.test')
         expect(serialized).not.toContain('https://ae.example')
       }
@@ -124,9 +124,9 @@ describe('canonical base URL route outputs', () => {
       const serialized = await readSerializedPublicOutputs('https://public.agentic.test')
 
       expect(serialized).toContain('https://public.agentic.test/')
-      expect(serialized).toContain('<loc>https://public.agentic.test/parramatta-emergency-plumbing</loc>')
+      expect(serialized).toContain('<loc>https://public.agentic.test/demo-listed-provider</loc>')
       expect(serialized).toContain('Sitemap: https://public.agentic.test/sitemap.xml')
-      expect(serialized).toContain('https://public.agentic.test/parramatta-emergency-plumbing/ucp')
+      expect(serialized).toContain('https://public.agentic.test/demo-listed-provider/ucp')
       expect(serialized).toContain('https://public.agentic.test/api/businesses')
       expect(serialized).not.toContain('https://ae.example')
     })
@@ -144,7 +144,7 @@ describe('canonical base URL route outputs', () => {
 
 async function readSerializedPublicOutputs(origin: string): Promise<string> {
   const state = createFixtureDiscoverySourceState()
-  const catalog = getDefaultPublicOwnerStatusReadback().catalog
+  const catalog = getDefaultPublicBusinessStatusReadback().catalog
 
   const llms = handleLlmsTxtRequest(new Request(`${origin}/llms.txt`))
   const sitemap = handleSitemapXmlRequest(new Request(`${origin}/sitemap.xml`))

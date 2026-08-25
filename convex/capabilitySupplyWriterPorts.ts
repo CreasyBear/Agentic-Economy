@@ -23,7 +23,6 @@ export function capabilitySupplyWriterPorts(
       const business = await db.get(businessId as Id<'businesses'>)
       return business !== null
         && business.publicStatus === 'published'
-        && business.claimStatus === 'published'
         && business.suppressedAt === undefined
         ? { businessId: String(business._id) }
         : null
@@ -183,5 +182,4 @@ export function capabilitySupplyWriterPorts(
     },
   }
 }
-
 

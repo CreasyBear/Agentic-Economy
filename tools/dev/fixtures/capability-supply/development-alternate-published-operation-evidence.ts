@@ -1,5 +1,7 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
+import { validatePaymentRequired } from '@x402/core/schemas'
 import {
   createDevelopmentProviderConnectionAuthority,
 } from './development-published-operation-evidence'
@@ -145,6 +147,19 @@ export function buildDevelopmentAlternatePublishedOperationEvidence() {
     assetAmountExponent: 6,
     asset: expectedPayment.asset,
     payTo: expectedPayment.payTo,
+    paymentRequiredJson: stableStringify(validatePaymentRequired({
+      x402Version: 2,
+      resource: { url: endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: expectedPayment.network,
+        amount: '10000',
+        asset: expectedPayment.asset,
+        payTo: expectedPayment.payTo,
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }) as StableHashValue),
   } as const
   const binding = defineCapabilityTransportBindingRegistration({
     bindingId: 'mock:binding:alternate-btc-usd-spot',

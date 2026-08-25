@@ -5,7 +5,7 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import type {
   PaidOperationPresentationBlock,
   PaidOperationResultDelivery,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 
 const isoTimestamp = z.iso.datetime({ offset: true })
 const finitePositivePrice = z.number().finite().positive()

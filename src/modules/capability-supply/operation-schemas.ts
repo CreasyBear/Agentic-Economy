@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { exactAmountSchema } from '@/modules/money/public'
-import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { CURRENT_OPERATION_CALL_VIA } from './internal/operation-projection-types'
 
 import type {
   InspectPlanInput,
@@ -23,17 +23,17 @@ const inputExample = z.strictObject({
   input: z.record(z.string(), jsonValueSchema),
 })
 
-const navigation = z.strictObject({
+export const publicOperationNavigationSchema = z.strictObject({
   relation: z.enum(['search', 'detail', 'compare', 'inspect_plan', 'execute', 'invoke', 'authenticate', 'create_customer_request', 'review_route', 'read_status', 'reconcile', 'cancel']),
   pathTemplate: z.string().optional(),
   method: z.enum(['GET', 'POST']),
   actionId: z.string(),
   authentication: z.enum(['none', 'required']),
   inputSchema: publicSchema.optional(),
-  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'answerThread', 'cli', 'mcp'])).optional(),
+  surfaces: z.array(z.enum(['ui', 'http', 'agentJson', 'chat', 'cli', 'mcp'])).optional(),
   precondition: z.string().optional(),
 })
-const price = z.discriminatedUnion('kind', [
+export const publicOperationPriceSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('fixed'),
     amount: exactAmountSchema.describe('Exact executable price: currency, integer units, and decimal exponent'),
@@ -75,7 +75,7 @@ const catalogPrice = z.strictObject({
   maxAmount: z.string().optional().describe('Decimal catalog merchandising maximum'),
   currency: z.string().describe('Currency code for the decimal catalog price'),
 })
-const availability = z.strictObject({
+export const publicOperationAvailabilitySchema = z.strictObject({
   posture: z.enum(['integrated', 'routeable', 'unavailable']),
   observedAt: z.number().optional(), validUntil: z.number().optional(),
   reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']).optional(),
@@ -104,7 +104,7 @@ const priceEvidence = z.strictObject({
 })
 const descriptor = z.strictObject({
   operationRef, operationId: z.string(),
-  callVia: z.literal(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.path),
+  callVia: z.literal(CURRENT_OPERATION_CALL_VIA),
   paymentLane: z.literal('brokered'),
   contract: z.strictObject({
     capabilityId: z.string(), version: z.number().int().positive(), inputJsonSchema: publicSchema, outputJsonSchema: publicSchema,
@@ -114,20 +114,20 @@ const descriptor = z.strictObject({
   business: z.strictObject({ businessId: z.string(), slug: z.string(), name: z.string() }),
   offering: z.strictObject({ offeringRef: z.string(), revision: z.number().int().positive(), label: z.string(), summary: z.string() }),
   summary: z.string(),
-  commercial: z.strictObject({ price, priceEvidence: priceEvidence.optional(), materialTerms: z.array(materialTerm), relationship }),
+  commercial: z.strictObject({ price: publicOperationPriceSchema, priceEvidence: priceEvidence.optional(), materialTerms: z.array(materialTerm), relationship }),
   dataUse: z.array(dataUse), effects: z.array(effect), evidence: z.array(evidence),
-  cancellation, recovery, authentication: publicOperationAuthenticationSchema, transport, provenance, availability, navigation: z.array(navigation),
+  cancellation, recovery, authentication: publicOperationAuthenticationSchema, transport, provenance, availability: publicOperationAvailabilitySchema, navigation: z.array(publicOperationNavigationSchema),
   parameters: z.array(publicOperationParameterSchema).optional(), catalogPrice: catalogPrice.optional(),
 })
-const searchFilters = z.strictObject({
+export const operationSearchFiltersSchema = z.strictObject({
   networkId: z.string().max(200).optional(), location: z.string().max(200).optional(),
   effects: z.array(z.enum(['data_release', 'financial_exposure', 'external_state_change'])).max(3).optional(),
   dataUse: z.array(z.enum(['public', 'personal', 'sensitive', 'credential'])).max(4).optional(),
   availability: z.array(z.enum(['integrated', 'routeable', 'unavailable'])).max(3).optional(),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(), maximumPrice: exactAmountSchema.optional(),
 })
-const comparisonValue = z.union([z.string(), price, z.array(effect), z.array(dataUse), availability, provenance, recovery])
-const comparisonFact = z.strictObject({
+const comparisonValue = z.union([z.string(), publicOperationPriceSchema, z.array(effect), z.array(dataUse), publicOperationAvailabilitySchema, provenance, recovery])
+export const operationComparisonFactSchema = z.strictObject({
   field: z.enum(['summary', 'price', 'effects', 'dataUse', 'availability', 'provenance', 'recovery']),
   values: z.array(z.strictObject({
     operationRef, value: comparisonValue,
@@ -142,30 +142,31 @@ const maximumCost = z.union([
   }),
   z.strictObject({ kind: z.literal('requires_preparation') }),
 ])
-const ranking = z.strictObject({ operationRef, rank: z.number().int().positive(), score: z.number().nonnegative() })
+export const operationSearchRankingSchema = z.strictObject({ operationRef, rank: z.number().int().positive(), score: z.number().nonnegative() })
+export const operationSearchPaginationSchema = z.strictObject({ limit: z.number().int(), nextCursor: z.string().optional(), hasMore: z.boolean() })
 
 export const operationSearchInputSchema: z.ZodType<OperationSearchInput> = z.strictObject({
   query: z.string().max(200), limit: z.number().int().min(1).max(20).optional(), cursor: z.string().max(512).optional(),
-  filters: searchFilters.optional(),
+  filters: operationSearchFiltersSchema.optional(),
 }) as z.ZodType<OperationSearchInput>
 export const operationSearchOutputSchema: z.ZodType<OperationSearchResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), query: z.string(), items: z.array(descriptor), matchedCount: z.number().int().nonnegative(), ranking: z.array(ranking), pagination: z.strictObject({ limit: z.number().int(), nextCursor: z.string().optional(), hasMore: z.boolean() }), navigation: z.array(navigation) }),
-  z.strictObject({ kind: z.literal('no_candidates'), schemaVersion: z.literal('registry-operations:v1'), query: z.string(), appliedFilters: searchFilters, matchedCount: z.number().int().nonnegative(), ranking: z.array(ranking), navigation: z.array(navigation) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'source_unavailable', 'source_capacity_exceeded']), navigation: z.array(navigation) }),
+  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), query: z.string(), items: z.array(descriptor), matchedCount: z.number().int().nonnegative(), ranking: z.array(operationSearchRankingSchema), pagination: operationSearchPaginationSchema, navigation: z.array(publicOperationNavigationSchema) }),
+  z.strictObject({ kind: z.literal('no_candidates'), schemaVersion: z.literal('registry-operations:v1'), query: z.string(), appliedFilters: operationSearchFiltersSchema, matchedCount: z.number().int().nonnegative(), ranking: z.array(operationSearchRankingSchema), navigation: z.array(publicOperationNavigationSchema) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'source_unavailable', 'source_capacity_exceeded']), navigation: z.array(publicOperationNavigationSchema) }),
 ]) as z.ZodType<OperationSearchResult>
 export const operationDetailInputSchema: z.ZodType<OperationDetailInput> = z.strictObject({ operationRef }) as z.ZodType<OperationDetailInput>
 export const operationDetailOutputSchema: z.ZodType<OperationDetailResult> = z.union([
   z.strictObject({ kind: z.literal('found'), schemaVersion: z.literal('registry-operations:v1'), operation: descriptor }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), operationRef: z.string(), reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']), navigation: z.array(navigation) }),
-  z.strictObject({ kind: z.literal('not_found'), schemaVersion: z.literal('registry-operations:v1'), operationRef: z.string(), navigation: z.array(navigation) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), operationRef: z.string(), reason: z.enum(['setup_required', 'temporarily_unavailable', 'readiness_expired', 'publisher_withdrew', 'under_review', 'updated_terms_require_review', 'not_supported_by_ae']), navigation: z.array(publicOperationNavigationSchema) }),
+  z.strictObject({ kind: z.literal('not_found'), schemaVersion: z.literal('registry-operations:v1'), operationRef: z.string(), navigation: z.array(publicOperationNavigationSchema) }),
 ]) as z.ZodType<OperationDetailResult>
 export const operationCompareInputSchema: z.ZodType<OperationCompareInput> = z.strictObject({ operationRefs: z.array(operationRef).min(1).max(4) }) as z.ZodType<OperationCompareInput>
 export const operationCompareOutputSchema: z.ZodType<OperationCompareResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), operations: z.array(descriptor), facts: z.array(comparisonFact), navigation: z.array(navigation) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable']), navigation: z.array(navigation) }),
+  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), operations: z.array(descriptor), facts: z.array(operationComparisonFactSchema), navigation: z.array(publicOperationNavigationSchema) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable']), navigation: z.array(publicOperationNavigationSchema) }),
 ]) as z.ZodType<OperationCompareResult>
 export const operationInspectPlanInputSchema: z.ZodType<InspectPlanInput> = z.strictObject({ operationRefs: z.array(operationRef).min(1).max(4), mappingRefs: z.array(mappingRef).max(32).optional(), expiresInMs: z.number().int().min(1_000).max(86_400_000).optional() }) as z.ZodType<InspectPlanInput>
 export const operationInspectPlanOutputSchema: z.ZodType<InspectPlanResult> = z.union([
-  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), inspectPlanRef: z.string(), operationRefs: z.array(operationRef), mappingRefs: z.array(mappingRef), summary: z.strictObject({ maximumCost, dataUse: z.array(dataUse), effects: z.array(effect), expiry: z.number() }), navigation: z.array(navigation) }),
-  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable', 'mapping_unavailable', 'mapping_incompatible', 'mapping_cycle']), navigation: z.array(navigation) }),
+  z.strictObject({ kind: z.literal('ok'), schemaVersion: z.literal('registry-operations:v1'), inspectPlanRef: z.string(), operationRefs: z.array(operationRef), mappingRefs: z.array(mappingRef), summary: z.strictObject({ maximumCost, dataUse: z.array(dataUse), effects: z.array(effect), expiry: z.number() }), navigation: z.array(publicOperationNavigationSchema) }),
+  z.strictObject({ kind: z.literal('unavailable'), schemaVersion: z.literal('registry-operations:v1'), reason: z.enum(['query_invalid', 'operation_not_found', 'operation_unavailable', 'mapping_unavailable', 'mapping_incompatible', 'mapping_cycle']), operationRef: z.string().optional(), navigation: z.array(publicOperationNavigationSchema) }),
 ]) as z.ZodType<InspectPlanResult>

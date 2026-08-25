@@ -12,7 +12,7 @@ import {
   type DynamicPublishedInvocationResult,
   type InvocationActor,
   type DynamicPublishedSnapshotAnchors,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import type {
   RouteTransportFetch,
@@ -28,6 +28,7 @@ import {
   encodeX402PaymentResponseHeader,
   type X402PaymentRequired,
 } from '@/modules/capability-supply/server'
+import { validatePaymentRequired } from '@x402/core/schemas'
 
 import {
   buildDevelopmentPublishedOperationEvidence,
@@ -251,7 +252,7 @@ export async function buildDevelopmentDynamicInvocationEvidence(): Promise<Devel
           origin,
           'dynamic:authority:1',
           1,
-          canonicalDigest(developmentChallenge(fixture.operation.binding.endpointUrl)),
+          pinnedPaymentRequiredDigest(fixture.operation.transport.configJson),
           {
             ownerInvocationRef: prepared.invocationRef,
             status: 'completed',
@@ -635,16 +636,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
     ...material,
     fixture: projectDevelopmentPublishedOperationEvidence(packet.fixture),
   }
-  const recomputedSource = canonicalDigest({
-    operation: packet.fixture.operation,
-    descriptor: {
-      id: packet.fixture.descriptor.id,
-      version: packet.fixture.descriptor.version,
-      target: packet.fixture.descriptor.target,
-      inputSchema: packet.fixture.descriptor.inputSchema,
-      outputSchema: packet.fixture.descriptor.outputSchema,
-    },
-  })
+
   const separatelyResumed = packet.cases.every((entry, index) => {
     const expectedOrigin = developmentOrigins[index]
     if (expectedOrigin === undefined) return false
@@ -662,7 +654,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
       expectedOrigin,
       'dynamic:authority:1',
       1,
-      canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
+      pinnedPaymentRequiredDigest(rebuiltOperation.transport.configJson),
       {
         ownerInvocationRef: entry.invocationRef,
         status: 'completed',
@@ -740,7 +732,7 @@ export function verifyDevelopmentDynamicInvocationEvidence(
           developmentOriginAt(1),
           `semantic:authority:${index + 1}`,
           1,
-          canonicalDigest(developmentChallenge(rebuiltOperation.binding.endpointUrl)),
+          pinnedPaymentRequiredDigest(rebuiltOperation.transport.configJson),
           {
             ownerInvocationRef: semanticFirst.invocationRef,
             status: 'completed',
@@ -965,6 +957,7 @@ function successRuntime(endpoint: string, effects: { payment: number; provider: 
         : { kind: 'unavailable' as const, reason: 'stale_generation' as const },
     x402PaymentSigningAvailable: () => true,
     verifyX402Settlement: async () => true,
+    markX402PaymentPossiblySubmitted: () => undefined,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         paymentIdentifier: request.paymentIdentifier,
@@ -1007,6 +1000,16 @@ function developmentChallenge(endpoint: string): X402PaymentRequired {
   }
 }
 
+function pinnedPaymentRequiredDigest(configJson: string): string {
+  const config = JSON.parse(configJson) as Readonly<{ paymentRequiredJson?: string }>
+  if (typeof config.paymentRequiredJson !== 'string') {
+    throw new Error('dynamic_published_payment_required_missing')
+  }
+  return canonicalDigest(
+    validatePaymentRequired(JSON.parse(config.paymentRequiredJson)) as StableHashValue,
+  )
+}
+
 function lostResponseRuntime(
   endpoint: string,
   effects: { payment: number; provider: number },
@@ -1017,7 +1020,7 @@ function lostResponseRuntime(
     ...base,
     send: async (url, init) => {
       calls += 1
-      if (calls === 2) {
+      if (calls === 1) {
         effects.provider += 1
         throw new Error('lost_x402_response')
       }

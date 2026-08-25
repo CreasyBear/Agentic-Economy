@@ -40,7 +40,7 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <Link to="/owner/supply">Reload services</Link>
+            <Link to="/owner/supply">Reload Operations</Link>
           </Button>
         </CardFooter>
       </Card>
@@ -50,14 +50,14 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
     return (
       <Card>
         <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-2xl font-semibold text-foreground">Claim your provider identity to publish</h2></CardTitle>
+          <CardTitle><h2 className="text-2xl font-semibold text-foreground">No supplier identity is available</h2></CardTitle>
         </CardHeader>
         <CardContent className="p-5">
-          <p className="text-muted-foreground">A programmable-provider claim connects each admitted operation to the right owner.</p>
+          <p className="text-muted-foreground">Review the supplier requirements before publishing Operations.</p>
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <Link to="/claim/form" search={{ source: 'supply' }}>Claim provider identity</Link>
+            <Link to="/for-providers">Review supplier setup</Link>
           </Button>
         </CardFooter>
       </Card>
@@ -68,10 +68,10 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
       <div className="grid gap-4">
         <Alert>
           <AlertTitle>Operations need repair</AlertTitle>
-          <AlertDescription>The owner readback reached its bounded limit before every operation could be joined. Reload services to try again.</AlertDescription>
+          <AlertDescription>The owner readback reached its bounded limit before every Operation could be joined. Reload Operations to try again.</AlertDescription>
         </Alert>
         <Button asChild variant="secondary" className="min-h-11 justify-self-start">
-          <Link to="/owner/supply">Reload services</Link>
+          <Link to="/owner/supply">Reload Operations</Link>
         </Button>
       </div>
     )
@@ -79,22 +79,22 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
   const { liquidity } = readback
   const isProductionLiquidity = liquidity.environment === 'production'
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-6">
       <header className="grid gap-2">
-        <p className="block text-sm font-semibold text-muted-foreground">OPERATION CONTROL</p>
-        <h2 className="text-2xl font-semibold text-foreground">Publish and control your operations</h2>
-        <p className="block text-muted-foreground">Create an Offering, admit its source, observe readiness, test it, and control its publication. Every fact below comes from the current owner readback.</p>
+        <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Supplier operations</p>
+        <h2 className="text-xl font-semibold text-foreground">Publish and control Operations</h2>
+        <p className="block text-sm text-muted-foreground">Create an Operation, connect its source, check readiness, test it, and control publication. Every fact below comes from the current owner readback.</p>
       </header>
-      <Card>
+      <Card className="shadow-none">
         <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-lg font-semibold text-foreground">Your operations</h2></CardTitle>
+          <CardTitle><h2 className="text-lg font-semibold text-foreground">Operations</h2></CardTitle>
         </CardHeader>
         <CardContent className="p-5">
           {readback.offerings.length === 0 ? (
             <Empty className="border border-dashed">
               <EmptyHeader>
-                <EmptyTitle>No operations yet.</EmptyTitle>
-                <EmptyDescription>Create an Offering, then admit its operation source.</EmptyDescription>
+                <EmptyTitle>No Operations yet</EmptyTitle>
+                <EmptyDescription>Create an Operation, then connect its source.</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -105,12 +105,12 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
         </CardContent>
         <CardFooter className="p-5 pt-0">
           <Button asChild variant="default" className="min-h-11">
-            <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Create an Offering</Link>
+            <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Create Operation</Link>
           </Button>
         </CardFooter>
       </Card>
       <OwnerProviderConnections businessId={readback.businessId} connections={connections} />
-      <Card>
+      <Card className="shadow-none">
         <CardHeader className="p-5 pb-0">
           <CardTitle><h2 className="text-lg font-semibold text-foreground">Operational usage{isProductionLiquidity ? '' : ` · ${liquidity.environment}`}</h2></CardTitle>
         </CardHeader>
@@ -164,7 +164,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
 
   async function refresh() {
     await router.invalidate()
-    setNotice({ kind: 'status', text: 'Provider connections updated.' })
+    setNotice({ kind: 'status', text: 'Supplier connections updated.' })
   }
 
   async function submitConnection(event: FormEvent<HTMLFormElement>) {
@@ -187,7 +187,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
       setResourceUrl('')
       await refresh()
     } catch {
-      setNotice({ kind: 'error', text: 'The provider connection could not be saved. Try again.' })
+      setNotice({ kind: 'error', text: 'The supplier connection could not be saved. Try again.' })
     } finally {
       setBusy(undefined)
     }
@@ -216,7 +216,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
       }
       await refresh()
     } catch {
-      setNotice({ kind: 'error', text: 'The provider connection could not be updated. Try again.' })
+        setNotice({ kind: 'error', text: 'The supplier connection could not be updated. Try again.' })
     } finally {
       setBusy(undefined)
     }
@@ -247,7 +247,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
   return (
     <Card>
       <CardHeader className="grid gap-2 p-5 pb-0">
-        <CardTitle><h2 className="text-lg font-semibold text-foreground">Provider connections</h2></CardTitle>
+        <CardTitle><h2 className="text-lg font-semibold text-foreground">Supplier connections</h2></CardTitle>
         <p className="text-sm text-muted-foreground">Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority.</p>
       </CardHeader>
       <CardContent className="grid gap-5 p-5">
@@ -305,7 +305,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
                     <div><dt className="font-medium">Connection</dt><dd className="m-0 break-all">{connection.connectionRef}</dd></div>
                     <div><dt className="font-medium">Authority generation</dt><dd className="m-0">{connection.authorityGeneration}</dd></div>
                     <div><dt className="font-medium">Adapter</dt><dd className="m-0">{connection.adapterId}</dd></div>
-                    <div><dt className="font-medium">Last updated</dt><dd className="m-0">{new Date(connection.updatedAt).toLocaleString()}</dd></div>
+                    <div><dt className="font-medium">Last updated</dt><dd className="m-0">{new Date(connection.updatedAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</dd></div>
                   </dl>
                 </details>
               </li>
@@ -331,7 +331,7 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
             <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
           </div>
           <Button type="submit" className="min-h-11 justify-self-start" disabled={busy !== undefined}>
-            {busy === 'new' ? 'Connecting…' : 'Connect provider'}
+            {busy === 'new' ? 'Connecting…' : 'Connect supplier'}
           </Button>
         </form>
         <p
@@ -400,7 +400,7 @@ export function AeOwnerOperationFacts({
   ].filter((value): value is string => value !== undefined).join(' · ')
 
   const facts = [
-    { label: 'Offering', value: `${offering.offeringRef} · revision ${offering.revision}` },
+    { label: 'Operation', value: `${offering.offeringRef} · revision ${offering.revision}` },
     { label: 'Operation ref', value: publication?.operationRef ?? 'Not published' },
     { label: 'Publication', value: publication === undefined ? 'Not published' : `${publication.publicationRef} · revision ${publication.publicationRevision}` },
     { label: 'Binding ID', value: binding?.bindingId ?? 'Not published' },

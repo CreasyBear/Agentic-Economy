@@ -1,11 +1,11 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
+  BracesIcon,
+  CreditCardIcon,
   GitCompareIcon,
-  MessageSquareIcon,
-  PencilIcon,
+  RefreshCcwIcon,
   SearchIcon,
-  SendIcon,
   StoreIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/terms')({
     meta: [
       { title: 'Terms | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
-      { name: 'description', content: 'Plain-language terms for using Agentic Economy to find, compare, and contact businesses.' },
+      { name: 'description', content: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.' },
     ],
   }),
   component: TermsRoute,
@@ -28,36 +28,36 @@ export const Route = createFileRoute('/terms')({
 const canDoItems = [
   {
     icon: SearchIcon,
-    title: 'Ask for a service',
-    body: 'Describe the job and place in normal language.',
+    title: 'Find an Operation',
+    body: 'Search the catalogue by capability, category, supplier, or task.',
   },
   {
     icon: GitCompareIcon,
-    title: 'Compare businesses',
-    body: 'Read services, areas, update notes, and how to reach them.',
+    title: 'Compare exact offers',
+    body: 'Review price, readiness, access, evidence, and measured facts where they exist.',
   },
   {
-    icon: SendIcon,
-    title: 'Start contact',
-    body: 'Send a qualified inquiry when the business page offers it.',
+    icon: BracesIcon,
+    title: 'Call through one boundary',
+    body: 'Inspect the exact contract and approve its access and spend requirements before invoking.',
   },
 ] as const
 
 const termsItems = [
   {
     icon: StoreIcon,
-    title: 'The business confirms the job',
-    body: 'Timing, quote, scope, materials, and availability come from the business reply.',
+    title: 'The exact Operation sets the terms',
+    body: 'Its current contract, supplier, price, readiness, inputs, and access requirements govern the call.',
   },
   {
-    icon: MessageSquareIcon,
-    title: 'No booking from a message',
-    body: 'It is a first-contact request. The business may accept, decline, ask questions, or not reply.',
+    icon: CreditCardIcon,
+    title: 'Payment is not proof of delivery',
+    body: 'A charge records payment activity. Completion and Qualified Use require their own named evidence.',
   },
   {
-    icon: PencilIcon,
-    title: 'Page details can be fixed',
-    body: 'Owners can claim a page. Anyone can request a correction when something looks wrong.',
+    icon: RefreshCcwIcon,
+    title: 'Replay cannot create a second call or charge',
+    body: 'A repeated idempotent request returns the recorded invocation outcome. Uncertain releases follow the recovery and reconciliation rules shown on the Operation.',
   },
 ] as const
 
@@ -66,7 +66,7 @@ function TermsRoute() {
     <AePublicShell>
       <AePageHeader
         title="Terms"
-        description="Use AE to find and contact businesses. The business confirms the work."
+        description="Use Agentic Economy to find, inspect, pay for, and call published Operations."
       />
       <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4">
@@ -88,8 +88,8 @@ function TermsRoute() {
         </section>
 
         <section className="flex flex-wrap gap-3 border-t border-border pt-8">
-          <Button asChild variant="default" className="min-h-11"><Link to="/">Ask a question</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/privacy/remove-business">Fix a page <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Button asChild variant="default" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse catalog</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/for-providers">Publish an Operation <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
     </AePublicShell>

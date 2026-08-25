@@ -20,6 +20,7 @@ const repoRoot = process.cwd()
 
 async function main() {
   const registry = await loadRegistry()
+  const operationRouteDescriptors = registry.listOperationRouteDescriptors()
   const routeFiles = await collectSourceFiles(path.join(repoRoot, 'src/routes'))
   const componentFiles = await collectSourceFiles(path.join(repoRoot, 'src/components'))
   const moduleFiles = await collectSourceFiles(path.join(repoRoot, 'src/modules'))
@@ -37,12 +38,26 @@ async function main() {
 
   for (const action of registry.listActions()) {
     const exportName = findExportName(moduleFiles, sources, action.id)
-    const referencedIn = [...routeFiles, ...componentFiles, ...serverLibFiles].filter((file) =>
-      mentionsAction(sources.get(file) ?? '', action.id, exportName),
-    )
+    const operationRouteDescriptor = operationRouteDescriptors.find(({ actionId }) => actionId === action.id)
+    const nativeRouteEvidence = operationRouteDescriptor === undefined
+      ? []
+      : routeFiles.filter((file) => sources.get(file)?.includes(operationRouteDescriptor.routerPath) ?? false)
+    const mcpRouteEvidence = action.surfaces.includes('mcp')
+      ? routeFiles.filter((file) => sources.get(file)?.includes('handleMcpRequest') ?? false)
+      : []
+    const referencedIn = [...new Set([
+      ...[...routeFiles, ...componentFiles, ...serverLibFiles].filter((file) =>
+        mentionsAction(sources.get(file) ?? '', action.id, exportName),
+      ),
+      ...nativeRouteEvidence,
+      ...mcpRouteEvidence,
+    ])]
 
     if (action.surfaces.includes('http')) {
-      const httpEvidence = apiRouteFiles.filter((file) => mentionsAction(sources.get(file) ?? '', action.id, exportName))
+      const httpEvidence = [
+        ...apiRouteFiles.filter((file) => mentionsAction(sources.get(file) ?? '', action.id, exportName)),
+        ...nativeRouteEvidence,
+      ]
       if (httpEvidence.length === 0) {
         missingAdapter.push({ id: action.id, surface: 'http' })
       }
@@ -96,6 +111,13 @@ function findExportName(moduleFiles, sources, actionId) {
   for (const file of moduleFiles) {
     const match = pattern.exec(sources.get(file) ?? '')
     if (match?.[1] !== undefined) return match[1]
+  }
+  const candidate = actionId.split('.').reduce((name, segment, index) => (
+    `${name}${index === 0 ? segment : `${segment[0]?.toUpperCase() ?? ''}${segment.slice(1)}`}`
+  ), '') + 'Action'
+  const declaration = new RegExp(`export const ${candidate}\\s*=\\s*defineAction\\b`, 'u')
+  for (const file of moduleFiles) {
+    if (declaration.test(sources.get(file) ?? '')) return candidate
   }
   return undefined
 }

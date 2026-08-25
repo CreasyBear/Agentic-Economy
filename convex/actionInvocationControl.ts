@@ -11,15 +11,12 @@ import {
   type SourceWriteAdmission,
 } from '../src/modules/security/source-write-admission'
 import {
-  actionInvocationOriginValue,
   attemptTransitionValue,
   attemptReleaseValue,
   authorityBindingValue,
   durableControlProjectionValue,
   durableAttemptOutcomeValue,
   invocationActorValue,
-  invocationControlValue,
-  invocationFreshnessValue,
 } from '../src/modules/action-invocation/public'
 
 const exactAmountValue = v.object({

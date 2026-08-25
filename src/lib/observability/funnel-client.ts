@@ -6,14 +6,12 @@ import {
 import type { FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { captureClientFunnelEventOnClient } from '@/lib/observability/capture-client-events'
 import type { FunnelEventType } from '@/modules/observability/public'
-import { shouldDropPublicFunnelSourceSync } from '@/modules/observability/source-sync-gate'
 import { isTelemetryAllowedForCurrentRoute, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 export type EmitFunnelEventInput = {
   eventType: FunnelEventType
   stage?: FunnelCaptureInput['stage']
   businessId?: string
-  claimId?: string
   consentFlag?: boolean
   payload?: Record<string, string | number | boolean | null>
   correlationPrefix?: string
@@ -48,7 +46,6 @@ export async function emitFunnelEvent(input: EmitFunnelEventInput): Promise<void
     ...(attribution.utmSource === undefined ? {} : { utmSource: attribution.utmSource }),
     ...(attribution.utmCampaign === undefined ? {} : { utmCampaign: attribution.utmCampaign }),
     ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
-    ...(input.claimId === undefined ? {} : { claimId: input.claimId }),
     ...(input.payload === undefined ? {} : {
       payload: sanitizeTelemetryValue(input.payload) as Record<string, string | number | boolean | null>,
     }),
@@ -56,33 +53,6 @@ export async function emitFunnelEvent(input: EmitFunnelEventInput): Promise<void
 
   captureClientFunnelEventOnClient(captureInput)
 
-  if (shouldDropPublicFunnelSourceSync(captureInput.eventType)) {
-    return
-  }
-
-  try {
-    await fetch('/api/observability/funnel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        eventType: captureInput.eventType,
-        source: captureInput.source,
-        stage: captureInput.stage,
-        pseudonymousSessionId: captureInput.pseudonymousSessionId,
-        correlationId: captureInput.correlationId,
-        consentFlag: captureInput.consentFlag,
-        businessId: captureInput.businessId,
-        ...(captureInput.referrer === undefined ? {} : { referrer: captureInput.referrer }),
-        ...(captureInput.utmSource === undefined ? {} : { utmSource: captureInput.utmSource }),
-        ...(captureInput.utmCampaign === undefined ? {} : { utmCampaign: captureInput.utmCampaign }),
-        ...(captureInput.claimId === undefined ? {} : { claimId: captureInput.claimId }),
-        ...(captureInput.payload === undefined ? {} : { payload: captureInput.payload }),
-      }),
-      keepalive: true,
-    })
-  } catch {
-    // Activation sync must not block user flows.
-  }
 }
 
 export function emitFunnelEventOnce(input: EmitFunnelEventInput): void {

@@ -8,7 +8,7 @@ import { describeActionForAgent, findAction } from '@/modules/actions'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { canonicalDigest, schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
-import { buildSiteDiscoveryManifest } from '@/modules/discovery/public'
+import { buildSiteDiscoveryManifest, projectCompactSiteDiscoveryManifest } from '@/modules/discovery/public'
 
 /**
  * `/.well-known/ucp` is the only document a cold agent reads before it knows
@@ -62,12 +62,21 @@ function collectAdvertisedUrls(value: unknown, into: Set<string>): void {
 const manifest = buildSiteDiscoveryManifest({ canonicalBaseUrl: `${origin}/`, now: 1_700_000_000_000 })
 
 describe('Site discovery manifest', () => {
+  it('keeps the cold handshake compact and links to schemas instead of embedding them', () => {
+    const compact = projectCompactSiteDiscoveryManifest(manifest)
+    const serialized = JSON.stringify(compact)
+
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(64 * 1024)
+    expect(serialized).not.toContain('inputJsonSchema')
+    expect(serialized).not.toContain('outputJsonSchema')
+    expect(compact.fullSchemas).toBe(`${origin}/api/discovery/schema`)
+    expect(compact.operationGateway.access.anonymous.cli).toContain('ae call')
+  })
+
   it('resolves the route-file scan it depends on', () => {
     // Guards the helper itself: a broken scan would make every path "missing".
     expect(routePaths.has('/.well-known/http-message-signatures-directory')).toBe(true)
     expect(routePaths.has('/$slug/ucp')).toBe(true)
-    expect(routePaths.has('/$slug/tools/$toolId')).toBe(true)
-    expect(routePaths.has('/$slug/tools/$toolId/prepare')).toBe(true)
     expect(routePaths.has('/llms.txt')).toBe(true)
     expect(routePaths.has('/agent-access')).toBe(true)
     expect(routePaths.has('/')).toBe(true)
@@ -99,9 +108,6 @@ describe('Site discovery manifest', () => {
     expect(pathsByKind.get('catalog_list')).toEqual(['/api/businesses'])
     expect(pathsByKind.get('catalog_search')).toEqual(['/api/businesses/search?q='])
     expect(pathsByKind.get('business_manifest')).toEqual(['/{slug}/ucp'])
-    expect(pathsByKind.get('customer_request_submit')).toEqual(['/api/v1/requests'])
-    expect(pathsByKind.get('answer_turn')).toEqual(['/api/answer/turn'])
-    expect(pathsByKind.get('customer_request_schema')).toEqual(['/api/v1/requests/schema'])
     expect(pathsByKind.get('operation_read')).toEqual([
       '/api/v1/market-operations/search',
       '/api/v1/market-operations/detail',
@@ -113,34 +119,19 @@ describe('Site discovery manifest', () => {
       '/api/discovery/examples',
     ])
     expect(manifest.businessManifestUrlTemplate).toBe(`${origin}/{slug}/ucp`)
+    expect(manifest).not.toHaveProperty('businessTools')
     expect(pathsByKind.get('site_entry_point')).toEqual(['/.well-known/ucp'])
+    expect(JSON.stringify(manifest)).not.toMatch(/\/api\/answer|answer_turn|\/api\/chat\/anonymous/u)
   })
 
   it('states the authentication each endpoint actually enforces', () => {
-    const submit = manifest.endpoints.find((endpoint) => endpoint.kind === 'customer_request_submit')
-    const answerTurn = manifest.endpoints.find((endpoint) => endpoint.kind === 'answer_turn')
     const operationInvoke = manifest.endpoints.find((endpoint) => endpoint.kind === 'operation_invoke')
     const operationReads = manifest.endpoints.filter((endpoint) => endpoint.kind === 'operation_read')
     const directKeylessAction = findAction('operation.execute')
     if (directKeylessAction === undefined) throw new Error('operation.execute action missing')
     const directKeylessDescriptor = describeActionForAgent(directKeylessAction)
 
-    // An agent that reads this as an open GET would fail its first real call.
-    expect(submit).toMatchObject({
-      method: 'POST',
-      authentication: 'clerk_api_key',
-      requiredScope: 'customer_requests:create',
-    })
-    expect(manifest.customerRequest.requiredScope).toBe('customer_requests:create')
-    expect(answerTurn).toMatchObject({
-      method: 'POST',
-      authentication: 'none',
-      mediaType: 'text/event-stream',
-      requiredHeaders: {
-        'Content-Type': 'application/json',
-        'X-AE-Turn-Key': expect.stringContaining('not a credential'),
-      },
-    })
+    expect(manifest).not.toHaveProperty('customerRequest')
     expect(operationInvoke).toMatchObject({
       method: 'POST',
       path: '/api/v1/operations/call',
@@ -318,7 +309,7 @@ describe('Site discovery manifest', () => {
   })
 
   it('carries the listing boundary and claims no capability AE withholds', () => {
-    expect(manifest.boundary).toContain('never select or invoke an Operation')
+    expect(manifest.boundary).toContain('Only independently callable Operations appear')
     expect(manifest.unsupportedCapabilities.map((capability) => capability.label)).toContain(
       'Commercial or owner-action authority'
     )

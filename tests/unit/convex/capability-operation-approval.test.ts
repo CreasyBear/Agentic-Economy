@@ -21,7 +21,10 @@ import {
   reserve,
 } from '../../../convex/capabilityOperationInvocations'
 import { buildDevelopmentPublishedOperationEvidence } from '../../../tools/dev/fixtures/capability-supply/development-published-operation-evidence'
-import { materializeRuntimePublishedOperation } from '@/modules/capability-supply/public'
+import {
+  createPublicOperationRef,
+  materializeRuntimePublishedOperation,
+} from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 
@@ -111,23 +114,38 @@ class MemoryDb {
     this.seed(table, { ...row, _id: id })
     return id
   }
+
+  async get(id: string): Promise<Row | null> {
+    for (const rows of this.tables.values()) {
+      const row = rows.find((candidate) => candidate._id === id)
+      if (row !== undefined) return row
+    }
+    return null
+  }
 }
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string }>
 const approvalHandler = (decideOperationApproval as unknown as { _handler: Handler })._handler
 const listHandler = (listPendingOperationApprovals as unknown as { _handler: Handler })._handler
 const invokeHandler = (invoke as unknown as { _handler: Handler })._handler
 const reserveHandler = (reserve as unknown as { _handler: Handler })._handler
 
 const evidence = buildDevelopmentPublishedOperationEvidence()
-const operationRef = `operation:v1:${canonicalDigest({ fixture: 'approval' }).slice(7)}`
-const operation = { ...evidence.operation, operationId: operationRef }
+const operation = evidence.operation
+const operationRef = createPublicOperationRef({
+  operationId: operation.operationId,
+  publicationRef: operation.identity.publicationRef,
+  publicationRevision: operation.identity.publicationRevision,
+  contractRef: operation.contract.ref,
+})
 const descriptor = materializeRuntimePublishedOperation(operation)
 mocks.readCurrentPublishedOperation.mockResolvedValue(operation)
 const input = { symbol: 'BTC', convert: 'USD' }
 const now = operation.readiness.observedAt + 1_000
 const grantExpiresAt = now + 60_000
-const owner = 'owner:approval'
+const owner = 'clerk|user_123'
+const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: owner }
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:approval',
   ownerId: owner,
@@ -217,7 +235,7 @@ function invocation(overrides: Record<string, unknown> = {}): Row {
 }
 
 function context(options: Readonly<{
-  identity?: string | null
+  identity?: AuthIdentity | string | null
   invocation?: Row
   grant?: Row
   includeOperation?: boolean
@@ -225,11 +243,15 @@ function context(options: Readonly<{
   const db = new MemoryDb()
   if (options.grant !== undefined) db.seed('agentAccessGrants', options.grant)
   if (options.invocation !== undefined) db.seed('capabilityOperationInvocations', options.invocation)
-  const identity = options.identity === undefined ? owner : options.identity
+  const identity = options.identity === undefined
+    ? ownerIdentity
+    : typeof options.identity === 'string'
+      ? { subject: options.identity, tokenIdentifier: options.identity }
+      : options.identity
   const runQuery = vi.fn(async () => options.includeOperation === false ? null : { operationJson: JSON.stringify(operation) })
   return {
     db,
-    auth: { getUserIdentity: async () => identity === null ? null : { subject: identity, tokenIdentifier: `token:${identity}` } },
+    auth: { getUserIdentity: async () => identity },
     runQuery,
     runMutation: vi.fn(async () => ({ ok: true as const })),
   }
@@ -296,7 +318,7 @@ describe('capability operation approval Convex handlers', () => {
         invocationRef: row.invocationRef,
         operationRef,
         acceptedBasis: { kind: 'approve_each' },
-        reference: expect.not.stringContaining(owner),
+        reference: `owner-approval:${canonicalDigest({ invocationRef: row.invocationRef, ownerId: row.ownerId }).slice(7)}`,
       },
     })
   })
@@ -304,7 +326,7 @@ describe('capability operation approval Convex handlers', () => {
   it('does not enumerate a cross-owner invocation', async () => {
     mocks.enqueueAction.mockClear()
     const row = invocation()
-    const ctx = context({ identity: 'owner:other', invocation: row, grant: grant() })
+    const ctx = context({ identity: { subject: 'user_123', tokenIdentifier: 'clerk|other' }, invocation: row, grant: grant() })
 
     await expect(approvalHandler(ctx, { invocationRef: row.invocationRef, decision: 'approve' })).resolves.toEqual({
       kind: 'refused',

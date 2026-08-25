@@ -14,7 +14,6 @@ const TRANSIENT_CACHE_PATHS = [
   '.vinxi',
   '.tanstack',
   '.cache',
-  '.promptfoo-home',
 ]
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 const HEADLESS_FLAG = /(?:^|\s)--headless(?:[=\s]|$)/i

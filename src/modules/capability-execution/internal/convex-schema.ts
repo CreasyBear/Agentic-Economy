@@ -1,7 +1,9 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
-import { acceptedAuthorityValue } from '@/modules/action-invocation/public'
-import type { CanonicalClaimAuthority } from '@/modules/action-invocation/canonical-claim'
+import {
+  acceptedAuthorityValue,
+  type CanonicalClaimAuthority,
+} from '@/modules/action-invocation/runtime'
 
 export type OperationInvokePersistedAuthority = CanonicalClaimAuthority & Readonly<{
   format: 'operation-invoke-authority:v1'
@@ -53,6 +55,25 @@ export const usageValue = v.object({
   transactionRef: v.optional(v.string()),
   durationMs: v.optional(v.number()),
 })
+export const operationInvokeReceiptValue = v.object({
+  receiptRef: v.string(),
+  state: v.union(v.literal('settled'), v.literal('refunded'), v.literal('reconciliation_required')),
+  network: v.literal('eip155:8453'),
+  asset: v.literal('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
+  providerQuotedAmount: exactAmountValue,
+  agenticEconomyFee: exactAmountValue,
+  totalBuyerAuthorization: exactAmountValue,
+  priceDigest: v.string(),
+  transactionRef: v.optional(v.string()),
+  settlementTransactionHash: v.optional(v.string()),
+  paymentIdentifier: v.optional(v.string()),
+  accountingTransactionRefs: v.optional(v.array(v.string())),
+  refundState: v.optional(v.union(v.literal('released'), v.literal('not_applicable'), v.literal('unknown'))),
+  lossState: v.optional(v.union(v.literal('none'), v.literal('provider_output_invalid'), v.literal('unknown'))),
+  externalSettlementRef: v.optional(v.string()),
+  evidenceHash: v.string(),
+  issuedAt: v.string(),
+})
 const authorityRequestValue = v.object({
   kind: v.union(v.literal('approve_each'), v.literal('bounded_mandate')),
   operationRef: v.string(),
@@ -98,11 +119,12 @@ export const operationResultValue = v.union(
     output: jsonValue,
     evidenceHash: v.string(),
     usage: usageValue,
+    receipt: v.optional(operationInvokeReceiptValue),
   }),
   v.object({ kind: v.literal('pending'), invocationRef: v.string(), operationRef: v.string(), retryAfterMs: v.number() }),
   v.object({ kind: v.literal('needs_authority'), invocationRef: v.string(), operationRef: v.string(), authorityRequest: authorityRequestValue }),
-  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue }),
-  v.object({ kind: v.literal('refused'), operationRef: v.optional(v.string()), code: v.string(), retryable: v.boolean(), nextAction: v.optional(v.string()) }),
+  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue, receipt: v.optional(operationInvokeReceiptValue) }),
+  v.object({ kind: v.literal('refused'), operationRef: v.optional(v.string()), code: v.string(), retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(operationInvokeReceiptValue) }),
 )
 
 const statusState = v.union(
@@ -114,20 +136,37 @@ const statusState = v.union(
 export const statusResultValue = v.union(
   v.object({
     kind: v.literal('found'), invocationRef: v.string(), operationRef: v.string(), state: statusState,
+    previousInput: v.optional(jsonObject),
     usage: v.optional(usageValue), evidenceHash: v.optional(v.string()), attemptRef: v.optional(v.string()),
-    effectGeneration: v.optional(v.number()), result: v.optional(operationResultValue),
+    effectGeneration: v.optional(v.number()), result: v.optional(operationResultValue), receipt: v.optional(operationInvokeReceiptValue),
   }),
   v.object({
     kind: v.literal('refused'), invocationRef: v.string(),
     code: v.union(v.literal('invocation_not_found'), v.literal('grant_not_found'), v.literal('grant_revoked'), v.literal('grant_expired'), v.literal('grant_generation_stale'), v.literal('environment_mismatch'), v.literal('invocation_runtime_unavailable')),
-    retryable: v.boolean(), nextAction: v.optional(v.string()),
+    retryable: v.boolean(), nextAction: v.optional(v.string()), receipt: v.optional(operationInvokeReceiptValue),
   }),
 )
 
 export const recoveryResultValue = v.union(
   statusResultValue,
-  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue }),
+  v.object({ kind: v.literal('reconciliation_required'), invocationRef: v.string(), operationRef: v.string(), evidence: reconciliationValue, receipt: v.optional(operationInvokeReceiptValue) }),
 )
+
+export const invocationReconciliationValue = v.object({
+  attemptCount: v.number(),
+  nextAttemptAt: v.number(),
+  leaseOwner: v.optional(v.string()),
+  leaseExpiresAt: v.optional(v.number()),
+  disposition: v.union(v.literal('automatic'), v.literal('manual_review')),
+  reason: v.union(
+    v.literal('unknown_settlement'),
+    v.literal('pending_accounting'),
+    v.literal('refund_pending'),
+    v.literal('custody_cap'),
+    v.literal('recovery_failed'),
+    v.literal('authorization_expired'),
+  ),
+})
 
 
 export const capabilityOperationInvocationTables = {
@@ -162,6 +201,7 @@ export const capabilityOperationInvocationTables = {
     usage: v.optional(usageValue),
     evidenceHash: v.optional(v.string()),
     attemptRef: v.optional(v.string()),
+    reconciliation: v.optional(invocationReconciliationValue),
     updatedAt: v.number(),
     createdAt: v.number(),
   })
@@ -172,4 +212,5 @@ export const capabilityOperationInvocationTables = {
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
     .index('by_principalId_and_invocationRef', ['principalId', 'invocationRef'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
+    .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
 } as const

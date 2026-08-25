@@ -68,20 +68,6 @@ type OwnerSupplyOffering = Readonly<{
   sourceKind?: string
   testCompleted?: boolean
 }>
-type OwnerSupplyFunnelCandidate = Readonly<{
-  offeringRef: string
-  revision: number
-  sourceHash?: string
-  publicationRef?: string
-  operationRef?: string
-  stepStates: Readonly<{ test: string }>
-  publication?: Readonly<{
-    publicationRevision: number
-    authorityMode: string
-    source: Readonly<{ kind: string }>
-  }>
-}>
-
 async function ownerSupplyOffering(
   ctx: ActionCtx,
   businessId: Id<'businesses'>,
@@ -258,4 +244,3 @@ export const runOwnerSupplyTest = action({
     }
   },
 })
-

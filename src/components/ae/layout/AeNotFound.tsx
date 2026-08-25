@@ -23,7 +23,7 @@ export function AeNotFound() {
               </a>
             </Button>
             <Button asChild variant="secondary" className="min-h-11">
-              <a href="/claim">
+              <a href="/for-providers">
                 <StoreIcon data-icon="inline-start" aria-hidden="true" />
                 List your business
               </a>

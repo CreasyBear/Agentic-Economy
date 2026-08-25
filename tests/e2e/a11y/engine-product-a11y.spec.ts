@@ -1,44 +1,64 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
-test.describe('engine product accessibility', () => {
-  test('the engine entry resolves to the canonical Request home', async ({ page }) => {
-    await page.goto('/engine')
+test.describe('market product accessibility', () => {
+  test('the retired engine entry resolves to the catalogue-first home', async ({ page }) => {
+    await gotoSettled(page, '/engine')
     await expect(page).toHaveURL('/')
-    await expect(page.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'APIs your agent can discover and call.' })).toBeVisible()
   })
 
-  test('home skip link and primary engine path are keyboard reachable', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+  test('home skip link and primary market search are keyboard reachable', async ({ page }) => {
+    await gotoSettled(page, '/')
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
     await skip.press('Enter')
-    // The skip link targets `#main-content` (the `<main>`), not the outer shell
-    // wrapper. Verified in-browser: Tab -> "Skip to content" -> Enter focuses
-    // `<main id="main-content" tabindex="-1">`.
     await expect(page.locator('#main-content')).toBeFocused()
-    await expect(page.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeVisible()
-    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
+    await expect(page.getByRole('search', { name: 'Ask Agentic Economy' })).toBeVisible()
+    await expect(page.getByRole('searchbox', { name: 'Describe what you need' })).toBeVisible()
+    const compact = (page.viewportSize()?.width ?? 1280) < 768
+    if (compact) {
+      const menu = page.getByRole('button', { name: 'Open public menu' })
+      await menu.focus()
+      await expect(menu).toBeFocused()
+      await menu.press('Enter')
+    }
+    const primary = page.getByRole('navigation', {
+      name: compact ? 'Public navigation' : 'Primary',
+    })
+    await expect(primary.getByRole('link', { name: 'Discover' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Connections' })).toBeVisible()
+    await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
   })
 
-  test('request entry is open, labelled, and keyboard reachable without an upfront budget', async ({ page }) => {
-    await page.goto('/engine')
-    await expect(page.getByRole('heading', { level: 1, name: 'What do you need to make happen?' })).toBeVisible()
-    await page.waitForLoadState('networkidle')
-    await page.getByLabel('What are you looking for?').fill('Fremantle')
-    await expect(page.getByLabel('What are you looking for?')).toHaveValue('Fremantle')
-    await expect(page.getByLabel('Maximum spend (AUD)')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Find options' }).focus()
-    await expect(page.getByRole('button', { name: 'Find options' })).toBeFocused()
+  test('popular searches are labelled, keyboard reachable, and continue into the market', async ({ page }) => {
+    await gotoSettled(page, '/')
+    const popular = page.getByRole('navigation', { name: 'Popular searches' })
+    const popularLink = popular.getByRole('link').first()
+    await expect(popular).toBeVisible()
+    await popularLink.focus()
+    await expect(popularLink).toBeFocused()
+    await popularLink.press('Enter')
+    await page.waitForURL((url) => (
+      url.pathname === '/market'
+      && url.searchParams.get('window') === '30d'
+      && (url.searchParams.get('query')?.length ?? 0) > 0
+    ), { timeout: 15_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Find the right tool for the job.' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Search tools' })).toBeVisible()
   })
 
-  test('workbench contains wide data without widening the mobile viewport', async ({ page }) => {
-    await page.goto('/engine')
+  test('catalogue and controls do not widen the viewport', async ({ page }) => {
+    await gotoSettled(page, '/market?window=30d')
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
-    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
-    await expect(page.getByText(/No budget or full specification required/)).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Available tools' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Search tools' })).toBeVisible()
   })
 })
+
+async function gotoSettled(page: Page, path: string) {
+  await page.goto(path, { waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'networkidle' })
+}

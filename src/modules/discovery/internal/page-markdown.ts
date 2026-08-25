@@ -1,23 +1,18 @@
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import type { BusinessContext } from '@/modules/business/public'
-import { ANSWER_THREAD_AGENT_ENTRYPOINT } from '@/modules/answer-thread/agent-entry'
 import { formatOfferingPrice } from '@/modules/catalog/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { DiscoveryListingBoundaryLine } from './discovery-files'
 import {
-  OperationMarketAnonymousBoundaryLine,
-  OperationMarketIdempotencyLine,
   OperationMarketInvokeScopeLine,
 } from './offering-discovery-file'
-import { safePublicText } from './ucp-manifest'
+import { safePublicText } from './manifest-projection'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { operationRouteExamples } from './operation-contract'
 import {
-  OPERATION_MARKET_COMPARE_PATH,
   OPERATION_MARKET_DETAIL_PATH,
-  OPERATION_MARKET_INSPECT_PLAN_PATH,
   OPERATION_MARKET_SEARCH_PATH,
 } from '@/modules/registry/operation-entry'
 
@@ -43,34 +38,27 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
   const invoke = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
   const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
   const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
-  const cli = 'npm run -s ae --'
+  const cli = 'ae'
   return [
-    '# Agentic Economy — Operation market loop',
+    '# Agentic Economy — capability market',
     '',
-    '1. No-install Step 1: read the raw machine handshake.',
-    `   \`curl -fsSL ${base}/.well-known/ucp\``,
-    '2. Search a job anonymously with the repo-local CLI or the public POST route.',
-    `   \`${cli} search "<job>" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
-    `3. Inspect one exact result with \`${cli} inspect "$AE_OPERATION_REF" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`; read its inputs, terms, price, effects, availability, and evidence.`,
-    `4. Optionally compare exact candidates with \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a bounded composition with \`${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
-    '5. After exact detail, choose the qualified direct-keyless MCP lane only when that current Operation advertises the anonymous execute continuation; no caller key is needed for that lane.',
-    `6. Otherwise run \`${cli} connect --json\` and complete the OAuth device flow.`,
-    `7. Invoke with \`${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${invoke.route.method} ${base}${invoke.route.path}\`).`,
-    `8. Read \`${cli} status "$AE_INVOCATION_REF" --json\` (\`${status.route.method} ${base}${status.route.path}\`).`,
-    `9. Recover uncertain work with \`${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json\` (\`${reconcile.route.method} ${base}${reconcile.route.path}\`).`,
+    `1. Search by outcome: \`${cli} search "<job>" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`.`,
+    `2. Inspect one result: \`${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json\` or \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read exact inputs, total price, authentication, readiness, provider, and last verification.`,
+    `3. Call it: \`${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait\`. The compiled CLI uses the official MCP client for eligible free keyless reads.`,
+    `4. Connect only when the call reports \`agent_access_key_required\`: \`npx @agentic-economy/cli connect --base-url "${base}" --mcp\`, then repeat the same call through \`${invoke.route.method} ${base}${invoke.route.path}\`.`,
+    `5. Keep the receipt: \`${cli} status "$AE_INVOCATION_REF" --base-url "${base}" --json\` (\`${status.route.method} ${base}${status.route.path}\`). If the receipt explicitly requires reconciliation, use \`${cli} recover\` against \`${reconcile.route.method} ${base}${reconcile.route.path}\`.`,
     '',
-    OperationMarketAnonymousBoundaryLine,
-    'The controlled invoke, status, and recovery path requires one owner-approved AE caller key; qualified direct-keyless MCP execution does not.',
+    'Search, inspection, and eligible free keyless read calls are public. Other calls use one owner-approved AE key stored by connect.',
     `Connect uses \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and \`${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`.`,
     'The key identifies the caller; it never contains provider credentials or silently grants payment or consequential authority.',
     OperationMarketInvokeScopeLine,
-    OperationMarketIdempotencyLine,
+    'The low-level API requires an `idempotencyKey` in write request bodies; the CLI creates and retains it automatically.',
     '',
     '## Boundary',
     '',
-    DiscoveryListingBoundaryLine,
+    'Provider and publication records are supporting metadata. Only independently callable Operations appear as capabilities.',
     'Never infer fulfilment, payment, deployment, or a receipt from discovery, a caller key, or a pending invocation.',
-    'Business reads are business-only: `/api/businesses`, `registry.search`, and `registry.detail` describe published businesses and offering portfolios. They do not select an admitted Market Operation. An Agent Service means one admitted Market Operation.',
+    'An Operation is the callable unit. Provider and publication records do not select or execute work.',
     '',
     '## Problem responses and retry rules',
     '',
@@ -83,7 +71,7 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     '',
     `- \`${base}/llms.txt\` — the public Operation index`,
     `- \`${base}/SKILL.md\` — the full Operation procedure`,
-    `- \`${base}/.well-known/ucp\` — the raw no-install machine handshake`,
+    `- \`${base}/.well-known/ucp\` — the raw machine contract`,
     `- \`${base}/for-agents\` — the machine guide when requested as markdown`,
     '',
   ].join('\n')
@@ -91,41 +79,34 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
 
 export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): string {
   const base = trimTrailingSlashes(options.canonicalBaseUrl)
-  const cli = 'npm run -s ae --'
+  const cli = 'ae'
   const invoke = operationRouteExamples().find(({ route }) => route.actionId === OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId)
   if (invoke === undefined) throw new Error('Operation invoke route is not registered')
   return [
     '# Agentic Economy — machine guide',
     '',
-    '## Step 1 — no install',
+    '## One-command activation',
     '',
-    `Read the raw machine handshake first: \`curl -fsSL ${base}/.well-known/ucp\`.`,
-    'It is the canonical source for current routes, action IDs, POST inputJsonSchema values, and schema-valid examples. Do not infer a request body from prose.',
-    OperationMarketAnonymousBoundaryLine,
-    OperationMarketInvokeScopeLine,
+    `Run \`ae call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}"\` after public search and inspect. Eligible free keyless reads execute immediately through the official MCP client. If the CLI returns \`agent_access_key_required\`, run \`npx @agentic-economy/cli connect --base-url "${base}" --mcp\` once and repeat the same call.`,
+    'No account or funding is required for an eligible anonymous call. Browser approval stores one origin-bound key only when the selected capability requires it.',
     '',
     '## MCP lifecycle',
     '',
-    `Use the installed Streamable HTTP MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`: connect to \`${base}/mcp\`, complete \`initialize\` then \`notifications/initialized\`, call \`tools/list\` before \`tools/call\`, and close the transport when finished.`,
+    `Use the installed official MCP SDK with protocol \`${MCP_LATEST_PROTOCOL_VERSION}\` at \`${base}/mcp\`. Client connect performs initialization. This server is stateless and may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`, then close the client transport. Malformed JSON-RPC requests return protocol errors; valid tool calls with invalid tool arguments return \`isError\` tool results.`,
     '',
-    '## Step 2 — use the repo-local CLI',
+    '## Search, inspect, call, receipt',
     '',
-    `The executable entrypoint in this repository is \`${cli}\`; no bare \`ae\` command is assumed.`,
+    `The canonical executable is \`${cli}\`.`,
     '',
     '```sh',
-    `${cli} search "extract line items from a supplier invoice" --json`,
-    `${cli} inspect "$AE_OPERATION_REF" --json`,
-    `${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
-    `${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json`,
-    `${cli} connect --json`,
-    `export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"`,
-    `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
-    `${cli} status "$AE_INVOCATION_REF" --json`,
-    `${cli} recover "$AE_INVOCATION_REF" "$AE_EVIDENCE_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    `${cli} search "weather forecast" --base-url "${base}" --json`,
+    `${cli} inspect "$AE_OPERATION_REF" --base-url "${base}" --json`,
+    `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --base-url "${base}" --wait`,
+    `${cli} status "$AE_INVOCATION_REF" --base-url "${base}" --json`,
     '```',
     '',
     `POST body example (action-derived): \`${JSON.stringify(invoke.example.http.body)}\`.`,
-    OperationMarketIdempotencyLine,
+    'The low-level POST body carries `idempotencyKey`; the CLI creates and retains it automatically.',
     '',
     '## Problem responses and retry rules',
     '',
@@ -133,9 +114,9 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     '- Retry only when `retryable: true`, respecting `Retry-After`, and preserve the same operation, input, and idempotency key.',
     '- On an unknown outcome, read status and then recover; never create a second invocation to guess.',
     '',
-    '## Advanced only',
+    '## Safe recovery',
     '',
-    `Cancellation is an advanced operator action: use \`${cli} advanced cancel\` only when the manifest and current status direct you there. Use the root \`${cli} recover\` command for reconciliation.`,
+    `Use \`${cli} cancel\` only when the current receipt offers cancellation. Use \`${cli} recover\` only when that receipt requires reconciliation.`,
     '',
   ].join('\n')
 }
@@ -167,7 +148,7 @@ export function buildCatalogMarkdown(
     '',
     DiscoveryListingBoundaryLine,
     '',
-    `Start a request with \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
+    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -205,7 +186,7 @@ export function buildBusinessMarkdown(
         ])),
     DiscoveryListingBoundaryLine,
     '',
-    `To act on this, start at \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn.`,
+    `Find callable Operations in the catalogue at \`${base}/market\`, through \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`, with MCP at \`${base}/mcp\`, or with \`ae search "<job>" --base-url "${base}" --json\`.`,
     '',
   ].join('\n')
 }
@@ -224,7 +205,11 @@ export function buildUnknownPageMarkdown(
     `- \`GET ${base}/llms.txt\` — the public surface index`,
     `- \`GET ${base}/SKILL.md\` — the full assistant procedure`,
     `- \`GET ${base}/api/businesses\` — every published business`,
-    `- \`${ANSWER_THREAD_AGENT_ENTRYPOINT.method} ${base}${ANSWER_THREAD_AGENT_ENTRYPOINT.path}\` — ask for an outcome, no key needed; send a fresh opaque \`X-AE-Turn-Key\` for every turn`,
+    `- \`GET ${base}/market\` — browse the Operation catalogue`,
+    `- \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\` — search callable Operations`,
+    `- \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\` — inspect one Operation`,
+    `- \`${base}/mcp\` — use the Operation MCP surface`,
+    `- \`ae search "<job>" --base-url "${base}" --json\` — use the Operation CLI`,
     '',
   ].join('\n')
 }
@@ -267,4 +252,3 @@ function businessContextLabel(context: BusinessContext): string {
     ? `${context.suburb}, ${context.stateTerritory}`
     : `${context.providerIdentifier} (${context.website})`
 }
-

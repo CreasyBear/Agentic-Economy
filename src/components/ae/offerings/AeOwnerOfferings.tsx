@@ -14,7 +14,6 @@ import {
   CircleDashedIcon,
   FilePenLineIcon,
   Link2Icon,
-  StoreIcon,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -23,6 +22,7 @@ import {
   OfferingPriceTaxTreatmentValues,
   OfferingPriceUnitValues,
   SUPPORTED_OFFERING_CURRENCIES,
+  DEFAULT_OFFERING_PRICE_CURRENCY,
   isSupportedOfferingCurrency,
   normalizeOfferingPrice,
 } from '@/modules/catalog/public'
@@ -42,7 +42,7 @@ import type {
   PublicOfferingSupplyProjection,
 } from '@/modules/catalog/public'
 import type { OfferingRef } from '@/modules/common/ids'
-import { clearStoredOfferingDraft, emptyOwnerOfferingEditorValue, publishGateRefusal, readStoredOfferingDraft, writeStoredOfferingDraft } from './AeOwnerOfferings.exports'
+import { clearStoredOfferingDraft, publishGateRefusal, readStoredOfferingDraft, writeStoredOfferingDraft } from './AeOwnerOfferings.exports'
 
 export type OwnerOfferingSummary = Readonly<{
   offering: BusinessOfferingProjection
@@ -108,7 +108,7 @@ export function AeOwnerOfferingsList({
   onRetryProjection,
 }: {
   offerings: readonly OwnerOfferingSummary[]
-  projectionState?: 'current' | 'projection_pending' | 'migration_mismatch'
+  projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
 }) {
   const publishedCount = offerings.filter((item) => item.status === 'published').length
@@ -116,60 +116,46 @@ export function AeOwnerOfferingsList({
   const supportedCount = offerings.filter((item) => item.support?.routeable === true).length
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-5">
       {projectionState === 'current' ? null : (
-        <Alert variant={projectionState === 'migration_mismatch' ? 'destructive' : 'default'}>
-          <AlertTitle>{projectionState === 'projection_pending' ? 'Your public page is still updating' : 'Your public page has not changed'}</AlertTitle>
+        <Alert>
+          <AlertTitle>Your public page is still updating</AlertTitle>
           <AlertDescription>
-            <p>{projectionState === 'projection_pending'
-              ? 'Your changes are saved. People still see the last safe page until this update finishes.'
-              : 'We found a difference while updating. People still see the earlier page.'}</p>
+            <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
               <Button type="button" variant="secondary" onClick={onRetryProjection}>Try publishing again</Button>
             )}
           </AlertDescription>
         </Alert>
       )}
-      <Card className="overflow-hidden border border-border bg-card p-5">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)] lg:items-center">
-          <div className="grid gap-3">
-            <div className="flex size-11 items-center justify-center rounded-lg bg-brand text-on-brand">
-              <StoreIcon className="size-5" aria-hidden="true" />
-            </div>
-            <div className="grid gap-1">
-              <p className="block text-sm font-semibold text-muted-foreground">YOUR BUSINESS PAGE</p>
-              <h2 className="text-xl font-semibold text-foreground">{offerings.length === 0 ? 'Show people what you do' : 'Your services at a glance'}</h2>
-              <p className="block max-w-2xl text-muted-foreground">
-                Each service explains one useful job your business provides. Publish the facts first, then add the easiest ways for customers to start.
-              </p>
-            </div>
-          </div>
-          <dl className="grid grid-cols-3 gap-2" aria-label="Service summary">
-            <OwnerSummaryStat value={publishedCount} label="Published" />
-            <OwnerSummaryStat value={reachableCount} label="Contact paths" />
-            <OwnerSummaryStat value={supportedCount} label="Assistant actions" />
-          </dl>
-        </div>
-      </Card>
-      {offerings.length === 0 ? (
-        <Card className="grid gap-5 border border-dashed border-ring bg-muted/30 p-6 md:grid-cols-[auto_1fr_auto] md:items-center">
-          <div className="flex size-12 items-center justify-center rounded-full border border-border bg-card">
-            <FilePenLineIcon className="size-5 text-brand" aria-hidden="true" />
-          </div>
+      <section className="grid gap-4 border-y border-border py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" aria-labelledby="operation-inventory-title">
           <div className="grid gap-1">
-            <h2 className="text-xl font-semibold text-foreground">Add your first service</h2>
+            <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Supplier inventory</p>
+            <h2 id="operation-inventory-title" className="text-lg font-semibold text-foreground">{offerings.length === 0 ? 'Publish your first Operation' : 'Operation inventory'}</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">Each Operation is one exact tool agents can inspect and call.</p>
+          </div>
+          <dl className="grid grid-cols-3 gap-2" aria-label="Operation summary">
+            <OwnerSummaryStat value={publishedCount} label="Published" />
+            <OwnerSummaryStat value={reachableCount} label="Access routes" />
+            <OwnerSummaryStat value={supportedCount} label="Ready now" />
+          </dl>
+      </section>
+      {offerings.length === 0 ? (
+        <Card className="grid gap-4 border-dashed p-5 shadow-none md:grid-cols-[1fr_auto] md:items-center">
+          <div className="grid gap-1">
+            <h2 className="text-base font-semibold text-foreground">No Operations yet</h2>
             <p className="block max-w-2xl text-muted-foreground">
-              Start with one clear service people can ask for. Add a phone number or website next.
+              Describe one exact tool, then add its price and access route.
             </p>
           </div>
           <Button asChild variant="default">
-            <a href="/owner/offerings/new">Add a service</a>
+            <a href="/owner/offerings/new">Add Operation</a>
           </Button>
         </Card>
       ) : (
-        <div className="grid gap-3">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           {offerings.map((item) => (
-            <Card key={item.offering.offeringRef} className="group grid gap-4 border border-border p-5 transition-[border-color,box-shadow,transform] duration-base ease-standard motion-reduce:transition-none sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center hover:border-ring hover:shadow-med">
+            <div key={item.offering.offeringRef} className="group grid gap-4 border-b border-border p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="grid min-w-0 gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold text-foreground">{item.offering.name}</h2>
@@ -177,26 +163,26 @@ export function AeOwnerOfferingsList({
                 </div>
                 <p className="line-clamp-2 text-muted-foreground">{item.offering.summary}</p>
                 <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-muted px-3">
+                  <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs">
                     <Link2Icon className="size-3.5" aria-hidden="true" />
-                    {item.accessPathCount === 0 ? 'Add a way to begin' : `${item.accessPathCount} ${item.accessPathCount === 1 ? 'way' : 'ways'} to begin`}
+                    {item.accessPathCount === 0 ? 'No access route' : `${item.accessPathCount} access ${item.accessPathCount === 1 ? 'route' : 'routes'}`}
                   </span>
                   {item.support?.routeable === true ? (
-                    <span className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-ring bg-muted px-3 font-medium text-foreground">
-                      <BotIcon className="size-3.5" aria-hidden="true" /> AE action available
+                    <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs font-medium text-foreground">
+                      <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
                     </span>
                   ) : null}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:flex">
                 <Button asChild variant="secondary" size="sm" className="min-h-11">
-                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}?preview=true`}>Preview</a>
+                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}?preview=true`}>Inspect</a>
                 </Button>
                 <Button asChild variant="default" size="sm" className="min-h-11">
                   <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}>Edit</a>
                 </Button>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
@@ -303,17 +289,17 @@ export function AeOwnerOfferingEditor({
     <form className="grid gap-6" onSubmit={(event) => void submit(event)} noValidate>
       {result === undefined ? null : (
         <Alert variant={result.kind === 'invalid' || result.kind === 'refused' ? 'destructive' : 'default'}>
-          <AlertTitle>{result.kind === 'saved' ? 'Service saved' : result.kind === 'revision_conflict' ? 'This service changed elsewhere' : 'Service needs attention'}</AlertTitle>
+          <AlertTitle>{result.kind === 'saved' ? 'Operation saved' : result.kind === 'revision_conflict' ? 'This Operation changed elsewhere' : 'Operation needs attention'}</AlertTitle>
           <AlertDescription>{result.message}</AlertDescription>
         </Alert>
       )}
       <span id={liveRegionId} className="sr-only" role="status" aria-live="polite">
-        {pending ? 'Saving service' : result?.message ?? ''}
+        {pending ? 'Saving Operation' : result?.message ?? ''}
       </span>
-      <ol className="grid list-none gap-2 p-0 sm:grid-cols-3" aria-label="Service setup">
-        <EditorStep icon={<FilePenLineIcon aria-hidden="true" />} label="Describe it" detail="What customers recognise" active />
-        <EditorStep icon={<Link2Icon aria-hidden="true" />} label="Add ways to begin" detail="Phone, website, or assistant" active={value.accessPaths.length > 0} />
-        <EditorStep icon={value.status === 'published' ? <CheckCircle2Icon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />} label="Publish" detail={value.status === 'published' ? 'Visible on your page' : 'Choose when it goes live'} active={value.status === 'published'} />
+      <ol className="grid list-none gap-2 p-0 sm:grid-cols-3" aria-label="Operation setup">
+        <EditorStep icon={<FilePenLineIcon aria-hidden="true" />} label="Describe" detail="Job, outcome, and price" active />
+        <EditorStep icon={<Link2Icon aria-hidden="true" />} label="Connect" detail="Add an access route" active={value.accessPaths.length > 0} />
+        <EditorStep icon={value.status === 'published' ? <CheckCircle2Icon aria-hidden="true" /> : <CircleDashedIcon aria-hidden="true" />} label="Publish" detail={value.status === 'published' ? 'Visible in the market' : 'Choose when it goes live'} active={value.status === 'published'} />
       </ol>
       {seed === undefined ? null : (
         <div className="flex flex-wrap items-center gap-3">
@@ -323,26 +309,26 @@ export function AeOwnerOfferingEditor({
           <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
         </div>
       )}
-      <Card className="grid gap-5 p-5">
+      <Card className="grid gap-5 p-5 shadow-none">
         <div className="grid gap-1">
-          <p className="block text-sm font-semibold text-muted-foreground">1 · THE SERVICE</p>
-          <h2 className="text-xl font-semibold text-foreground">Service details</h2>
-          <p className="block max-w-2xl text-muted-foreground">Describe the job customers ask you to do—not your internal team or process.</p>
+          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">01 · Operation</p>
+          <h2 className="text-lg font-semibold text-foreground">Public details</h2>
+          <p className="block max-w-2xl text-muted-foreground">Describe the exact tool and outcome agents can inspect before calling it.</p>
         </div>
         <FieldGroup className="gap-4">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextAreaInput label="Summary" value={value.summary} onChange={(summary) => update({ summary })} disabled={editorDisabled} inputRef={summaryFieldRef} {...(invalidField === 'summary' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
-          <TextInput label="Service area" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
+          <TextInput label="Coverage" value={value.serviceAreaSummary} onChange={(serviceAreaSummary) => update({ serviceAreaSummary })} disabled={editorDisabled} optional />
           <TextInput label="Availability" value={value.availabilitySummary} onChange={(availabilitySummary) => update({ availabilitySummary })} disabled={editorDisabled} optional />
           <TextInput label="Pricing" value={value.pricingSummary} onChange={(pricingSummary) => update({ pricingSummary })} disabled={editorDisabled} optional />
           <div className="grid gap-4 rounded-lg border border-border p-4">
             <div className="grid gap-1">
-              <p className="font-semibold text-foreground">Price customers can compare</p>
-              <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so people and assistants can compare it. Your note is never read to fill this in, and this never rewrites your note.</p>
+              <p className="font-semibold text-foreground">Comparable price</p>
+              <p className="block text-sm text-muted-foreground">Optional, and separate from the note above. Choose a supported currency so agents can compare exact amounts. Your note is never used to infer this value.</p>
             </div>
             <Field label="Currency" inputID="offering-price-currency" description="Choose the currency for this exact amount.">
-              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : 'AUD' })}>
+              <Select value={priceDraft.currency} disabled={editorDisabled} onValueChange={(chosen) => updatePrice({ currency: isSupportedOfferingCurrency(chosen) ? chosen : DEFAULT_OFFERING_PRICE_CURRENCY })}>
                 <SelectTrigger id="offering-price-currency" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   {SUPPORTED_OFFERING_CURRENCIES.map((currency) => <SelectItem key={currency} value={currency}>{currency}</SelectItem>)}
@@ -398,7 +384,7 @@ export function AeOwnerOfferingEditor({
               </>
             )}
           </div>
-          <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired services are removed from the public page.">
+          <Field label="Public state" inputID="offering-status" description="Draft stays private. Paused and retired Operations are removed from the market.">
             <Select value={value.status} disabled={editorDisabled} onValueChange={(status) => update({ status: toStatus(status) })}>
               <SelectTrigger id="offering-status" className="min-h-11 w-full"><SelectValue placeholder="Choose one" /></SelectTrigger>
               <SelectContent><SelectGroup>
@@ -416,10 +402,10 @@ export function AeOwnerOfferingEditor({
 
       <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-canvas/95 py-4 backdrop-blur sm:flex-row sm:justify-end">
         <Button asChild variant="secondary" className="min-h-11">
-          <a href="/owner/offerings">Back to services</a>
+          <a href="/owner/offerings">Back to Operations</a>
         </Button>
         <Button type="submit" variant="default" disabled={pending || !dirty} aria-busy={pending} className="min-h-11">
-          {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish service' : 'Save draft'}
+          {retryingPartialSave ? 'Retry save' : value.status === 'published' ? 'Publish Operation' : 'Save draft'}
         </Button>
       </div>
     </form>
@@ -427,7 +413,7 @@ export function AeOwnerOfferingEditor({
 }
 
 function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly OwnerAccessPathEditorValue[]; disabled: boolean; onChange: (paths: readonly OwnerAccessPathEditorValue[]) => void }) {
-  const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'ae_inquiry' | 'external_operation'>('phone')
+  const [selectedKind, setSelectedKind] = useState<'phone' | 'website' | 'external_operation'>('phone')
   const [technicalExpanded, setTechnicalExpanded] = useState(false)
   const [draftDetail, setDraftDetail] = useState('')
   const [endpoint, setEndpoint] = useState(emptyOwnerEndpointDraft)
@@ -438,8 +424,8 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
     <Card className="grid gap-5 p-5">
       <div className="grid gap-1">
         <p className="block text-sm font-semibold text-muted-foreground">2 · WAYS TO BEGIN</p>
-        <h2 className="text-xl font-semibold text-foreground">How customers can start</h2>
-        <p className="block max-w-2xl text-muted-foreground">Give customers and assistants a clear next move. Each option stands on its own.</p>
+        <h2 className="text-lg font-semibold text-foreground">Access routes</h2>
+        <p className="block max-w-2xl text-muted-foreground">Give agents a clear route to call the Operation. Each route stands on its own.</p>
       </div>
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
         <ul className="m-0 grid list-none gap-2 p-0">
@@ -461,12 +447,11 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
             <SelectContent><SelectGroup>
               <SelectItem value="phone">Call</SelectItem>
               <SelectItem value="website">Website</SelectItem>
-              <SelectItem value="ae_inquiry">Send a message</SelectItem>
-              <SelectItem value="external_operation">Assistant request</SelectItem>
+              <SelectItem value="external_operation">Agent request</SelectItem>
             </SelectGroup></SelectContent>
           </Select>
         </Field>
-        <TextAreaInput label={selectedKind === 'external_operation' ? 'What this request does' : 'Instructions for customers'} value={draftDetail} onChange={setDraftDetail} disabled={disabled} />
+        <TextAreaInput label={selectedKind === 'external_operation' ? 'What this request does' : 'Access instructions'} value={draftDetail} onChange={setDraftDetail} disabled={disabled} />
         {selectedKind === 'website' ? (
           <TextInput
             label="Website URL"
@@ -487,7 +472,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
             </CollapsibleTrigger>
             <CollapsibleContent>
               <FieldGroup className="gap-4">
-                <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an assistant should call this. Left blank, it publishes as “Assistant request”." />
+                <TextInput label="Request name" value={endpoint.name} onChange={(name) => setEndpoint((current) => ({ ...current, name }))} disabled={disabled} description="What an agent should call this. Left blank, it publishes as “Agent request”." />
                 <TextInput label="Request URL" value={endpoint.url} onChange={(url) => setEndpoint((current) => ({ ...current, url }))} disabled={disabled} inputMode="url" />
                 <Field label="Method" inputID="access-path-method" description="Optional">
                   <Select value={endpoint.method === '' ? unsetOptionValue : endpoint.method} disabled={disabled} onValueChange={(chosen) => setEndpoint((current) => ({ ...current, method: ownerEndpointMethods.find((method) => method === chosen) ?? '' }))}>
@@ -689,8 +674,8 @@ function TextAreaInput({
 
 function statusLabel(status: BusinessOfferingStatus) { return status[0]?.toUpperCase() + status.slice(1) }
 function toStatus(value: string): BusinessOfferingStatus { return ['draft', 'published', 'paused', 'retired'].includes(value) ? value as BusinessOfferingStatus : 'draft' }
-function toAccessKind(value: string): 'phone' | 'website' | 'ae_inquiry' | 'external_operation' { return ['phone', 'website', 'ae_inquiry', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'ae_inquiry' | 'external_operation' : 'phone' }
-function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : descriptor.channel === 'website' ? 'Website' : 'Send a message' }
+function toAccessKind(value: string): 'phone' | 'website' | 'external_operation' { return ['phone', 'website', 'external_operation'].includes(value) ? value as 'phone' | 'website' | 'external_operation' : 'phone' }
+function pathLabel(descriptor: OfferingAccessPathDescriptor) { return descriptor.kind === 'external_operation' ? descriptor.name : descriptor.channel === 'phone' ? 'Call' : 'Website' }
 
 function isHttpsUrl(value: string): boolean {
   try {
@@ -730,7 +715,7 @@ type OwnerEndpointDraft = Readonly<{
 /** The one select value that means "the owner has not chosen". */
 const unsetOptionValue = 'none'
 
-const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: 'AUD', amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
+const emptyOwnerOfferingPriceDraft: OwnerOfferingPriceDraft = { kind: '', currency: DEFAULT_OFFERING_PRICE_CURRENCY, amount: '', maximumAmount: '', unit: '', taxTreatment: 'unstated' }
 const emptyOwnerEndpointDraft: OwnerEndpointDraft = { name: '', url: '', method: '', documentationUrl: '', interfaceFormat: '', interfaceUrl: '', authenticationSummary: '', pricingSummary: '' }
 
 const ownerEndpointMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
@@ -742,7 +727,7 @@ function toOwnerPriceDraft(price: OfferingPrice | undefined): OwnerOfferingPrice
   const maximumAmount = price.kind === 'range' ? price.maximum : undefined
   return {
     kind: price.kind,
-    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? 'AUD',
+    currency: price.kind === 'quote_only' ? price.currency : amount?.currency ?? DEFAULT_OFFERING_PRICE_CURRENCY,
     amount: amount === undefined ? '' : formatExactAmount(amount) ?? '',
     maximumAmount: maximumAmount === undefined ? '' : formatExactAmount(maximumAmount) ?? '',
     unit: price.unit ?? '',
@@ -787,7 +772,7 @@ function externalOperationDescriptor(draft: OwnerEndpointDraft, summary: string)
   const pricingSummary = draft.pricingSummary.trim()
   return {
     kind: 'external_operation',
-    name: name.length === 0 ? 'Assistant request' : name,
+    name: name.length === 0 ? 'Agent request' : name,
     summary,
     url: draft.url.trim(),
     ...(draft.method === '' ? {} : { method: draft.method }),

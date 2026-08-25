@@ -33,6 +33,7 @@ export const operationInvokeRefusalCodeValues = [
   'authority_required',
   'authority_denied',
   'provider_refused',
+  'provider_output_invalid',
   'pre_release_failed',
   'outcome_unknown',
   'payment_lane_not_brokered',
@@ -109,6 +110,55 @@ export type OperationInvokeUsageSummary = Readonly<{
   durationMs?: number
 }>
 
+export const operationInvokeReceiptStateValues = [
+  'settled',
+  'refunded',
+  'reconciliation_required',
+] as const
+export const operationInvokeReceiptStateSchema = z.enum(operationInvokeReceiptStateValues)
+
+export const operationInvokeReceiptAsset = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+
+export type OperationInvokeReceipt = Readonly<{
+  receiptRef: string
+  state: (typeof operationInvokeReceiptStateValues)[number]
+  network: 'eip155:8453'
+  asset: typeof operationInvokeReceiptAsset
+  providerQuotedAmount: ExactAmount
+  agenticEconomyFee: ExactAmount
+  totalBuyerAuthorization: ExactAmount
+  priceDigest: string
+  transactionRef?: string
+  settlementTransactionHash?: string
+  paymentIdentifier?: string
+  accountingTransactionRefs?: string[]
+  refundState?: 'released' | 'not_applicable' | 'unknown'
+  lossState?: 'none' | 'provider_output_invalid' | 'unknown'
+  externalSettlementRef?: string
+  evidenceHash: string
+  issuedAt: string
+}>
+
+export const operationInvokeReceiptSchema: z.ZodType<OperationInvokeReceipt> = z.strictObject({
+  receiptRef: z.string().min(1),
+  state: operationInvokeReceiptStateSchema,
+  network: z.literal('eip155:8453'),
+  asset: z.literal(operationInvokeReceiptAsset),
+  providerQuotedAmount: exactAmountSchema,
+  agenticEconomyFee: exactAmountSchema,
+  totalBuyerAuthorization: exactAmountSchema,
+  priceDigest: z.string().min(1),
+  transactionRef: z.string().min(1).exactOptional(),
+  settlementTransactionHash: z.string().min(1).exactOptional(),
+  paymentIdentifier: z.string().min(1).exactOptional(),
+  accountingTransactionRefs: z.array(z.string().min(1)).min(1).exactOptional(),
+  refundState: z.enum(['released', 'not_applicable', 'unknown']).exactOptional(),
+  lossState: z.enum(['none', 'provider_output_invalid', 'unknown']).exactOptional(),
+  externalSettlementRef: z.string().min(1).exactOptional(),
+  evidenceHash: z.string().min(1),
+  issuedAt: z.string().min(1),
+})
+
 export const operationInvokeUsageSchema: z.ZodType<OperationInvokeUsageSummary> = z.strictObject({
   usageRef: z.string().min(1),
   observedAt: z.number().int().nonnegative(),
@@ -134,6 +184,7 @@ export const operationInvokeResultSchema: z.ZodType<OperationInvokeResult> = z.d
     output: jsonValueSchema,
     evidenceHash: z.string(),
     usage: operationInvokeUsageSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal(operationInvokeResultKindValues[1]),
@@ -152,6 +203,7 @@ export const operationInvokeResultSchema: z.ZodType<OperationInvokeResult> = z.d
     invocationRef: z.string(),
     operationRef: z.string(),
     evidence: reconciliationStateSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal(operationInvokeResultKindValues[4]),
@@ -159,6 +211,7 @@ export const operationInvokeResultSchema: z.ZodType<OperationInvokeResult> = z.d
     code: operationInvokeRefusalCodeSchema,
     retryable: z.boolean(),
     nextAction: z.string().exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
 ])
 
@@ -172,6 +225,7 @@ export type OperationInvokeResult =
       output: JsonValue
       evidenceHash: string
       usage: OperationInvokeUsageSummary
+      receipt?: OperationInvokeReceipt
     }>
   | Readonly<{
       kind: 'pending'
@@ -190,6 +244,7 @@ export type OperationInvokeResult =
       invocationRef: string
       operationRef: string
       evidence: PublicReconciliationState
+      receipt?: OperationInvokeReceipt
     }>
   | Readonly<{
       kind: 'refused'
@@ -197,6 +252,7 @@ export type OperationInvokeResult =
       code: OperationInvokeRefusalCode
       retryable: boolean
       nextAction?: string
+      receipt?: OperationInvokeReceipt
     }>
 
 export const operationEnvironmentMismatchNextAction =

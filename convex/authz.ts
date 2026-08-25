@@ -1,12 +1,11 @@
 import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
 
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import type { BusinessMutationActor } from '../src/modules/business/public'
+import type { BusinessActor } from '../src/modules/business/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AdminAction, AdminAuthorityMutationResult, AdminAuthorityResult, AdminMembership } from '../src/modules/security/public'
-import type { DataModel } from './_generated/dataModel'
+import type { DataModel, Doc } from './_generated/dataModel'
 import type { QueryCtx } from './_generated/server'
-type IgnoredBrowserAuthorityPayload = Readonly<Record<string, unknown>>
 type AdminIdentityLookup = Pick<UserIdentity, 'tokenIdentifier'>
 
 type AuthzCtx = {
@@ -14,13 +13,9 @@ type AuthzCtx = {
   auth: QueryCtx['auth']
 }
 
-
-
-
 export async function resolveBusinessActor(
   ctx: Pick<AuthzCtx, 'auth'>,
-  _ignoredPayload?: IgnoredBrowserAuthorityPayload
-): Promise<BusinessMutationActor> {
+): Promise<BusinessActor> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
     return {
@@ -53,16 +48,37 @@ export async function readCurrentActiveAdminMembership(
 }
 
 export async function readActiveAdminMembership(
-  _db: GenericDatabaseReader<DataModel>,
+  db: GenericDatabaseReader<DataModel>,
   identity: AdminIdentityLookup,
 ): Promise<AdminMembership | undefined> {
   if (typeof identity.tokenIdentifier !== 'string' || identity.tokenIdentifier.length === 0) {
     return undefined
   }
-  return undefined
+
+  const row = await db
+    .query('adminMemberships')
+    .withIndex('by_tokenIdentifier_and_state', (query) =>
+      query.eq('tokenIdentifier', identity.tokenIdentifier).eq('state', 'active')
+    )
+    .unique()
+  return row === null ? undefined : adminMembershipFromDoc(row)
 }
 
-export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor {
+function adminMembershipFromDoc(membership: Doc<'adminMemberships'>): AdminMembership {
+  return {
+    clerkUserId: membership.clerkUserId,
+    tokenIdentifier: membership.tokenIdentifier,
+    role: membership.role,
+    state: membership.state,
+    grantedBy: membership.grantedBy,
+    grantedAt: membership.grantedAt,
+    ...(membership.revokedBy === undefined ? {} : { revokedBy: membership.revokedBy }),
+    ...(membership.revokedAt === undefined ? {} : { revokedAt: membership.revokedAt }),
+    ...(membership.evidenceRef === undefined ? {} : { evidenceRef: membership.evidenceRef }),
+  }
+}
+
+export function actorFromIdentity(identity: UserIdentity): BusinessActor {
   const displayName = optionalIdentityText(identity.name ?? identity.preferredUsername)
   const emailHash = identity.email === undefined ? undefined : canonicalDigest({ email: identity.email.toLowerCase() })
   return {

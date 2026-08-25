@@ -314,7 +314,7 @@ describe('catalogue support derivation', () => {
     await expect(derive(100)).resolves.toMatchObject({ 'offering:1': { integrated: true, routeable: false } })
   })
 
-  it('marks the prior snapshot pending when a current Offering revision is missing', async () => {
+  it('refuses the canonical public-business boundary when a current Offering revision is missing', async () => {
     const backend = convexTest(schema, modules)
     const { businessId } = await publishedBusinessOwner(backend, 'missing-offering-revision')
     await backend.run(async (ctx) => {
@@ -325,7 +325,7 @@ describe('catalogue support derivation', () => {
 
     await expect(backend.run((ctx) => rebuildBusinessSupplyProjectionSnapshotCommand({
       db: ctx.db, sourceDb: ctx.db, businessId, support: {}, now: 10,
-    }))).resolves.toEqual({ kind: 'error', code: 'offering_revision_missing' })
+    }))).resolves.toEqual({ kind: 'error', code: 'business_not_public' })
     const snapshot = await backend.run(async () => null)
     expect(snapshot).toBeNull()
   })

@@ -1,8 +1,6 @@
-import { getPublicBusinessCatalog } from '@/modules/catalog/public'
-import { readCatalogHealth, type PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
+import { getPublicBusinessCatalog, readCatalogHealth, type PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import type { BuildDiscoveryFileOptions, DiscoveryFileBuildResult, DiscoverySourceState } from '@/modules/discovery/public'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
-import { readDiscoveryHealth } from './manifest-attempts'
 import {
   buildOfferingLlmsTxt,
   buildOfferingLlmsUrlsFromSlugs,
@@ -17,10 +15,9 @@ export {
   DiscoveryPublicSurfacePaths,
 }
 
-const staticSitemapPaths = ['/', '/claim', '/for-agents', '/privacy/remove-business'] as const
+const staticSitemapPaths = ['/', '/for-agents', '/for-providers', '/privacy/remove-business'] as const
 const robotDisallowPaths = [
   '/admin/',
-  '/claim/success',
   '/owner/',
   '/private/',
   '/disputes/',
@@ -126,11 +123,10 @@ function readEligibleCatalogs(state: DiscoverySourceState): readonly PublicBusin
         return undefined
       }
 
-      const discoveryHealth = readDiscoveryHealth(state, business.businessId)
       const result = getPublicBusinessCatalog(state, {
         slug: business.slug,
         indexStatus: registryHealth.indexStatus,
-        discoveryStatus: discoveryHealth.discoveryStatus,
+        discoveryStatus: 'available',
       })
 
       return result.kind === 'available' ? result.catalog : undefined
@@ -147,4 +143,3 @@ function escapeXml(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;')
 }
-

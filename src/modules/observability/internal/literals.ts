@@ -1,101 +1,55 @@
 export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_retryable', 'failed_terminal'] as const
 
-export { ActorKindValues, AuditEventTypeValues, AuditTargetTypeValues } from '@/modules/common/audit-events'
+import {
+  ActorKindValues,
+  AuditEventTypeValues as StoredAuditEventTypeValues,
+  AuditTargetTypeValues as StoredAuditTargetTypeValues,
+} from '@/modules/common/audit-events'
 
-export const OperatorControlKeyValues = [
-  'claims_enabled',
-  'publish_enabled',
-  'registry_enabled',
-  'discovery_enabled',
-  'public_copy_safe_mode',
-  'inquiries_enabled',
-  'inquiry_owner_replies_enabled',
-  'notification_dispatch_enabled',
-  'notification_webhooks_enabled',
-  'developer_discovery_publish_enabled',
-  'discovery_api_keys_enabled',
-  'protected_actions_enabled',
-  'protected_action_attempts_enabled',
-  'paid_activation_enabled',
-  'billing_webhooks_enabled',
-  'billing_reconciliation_enabled',
-  'business_actions_enabled',
-  'business_action_attempts_enabled',
-  'offering_authoring_enabled',
-  'offering_public_projection_enabled',
-] as const
+export { ActorKindValues }
+
+type StoredAuditEventType = (typeof StoredAuditEventTypeValues)[number]
+type StoredAuditTargetType = (typeof StoredAuditTargetTypeValues)[number]
+export type CurrentAuditEventType = Exclude<StoredAuditEventType, `business_action.${string}`>
+export type CurrentAuditTargetType = Exclude<StoredAuditTargetType, `business_action_${string}`>
+
+function requireNonEmpty<T extends string>(values: readonly T[]): readonly [T, ...T[]] {
+  const [first, ...rest] = values
+  if (first === undefined) {
+    throw new Error('Expected at least one current audit value')
+  }
+  return [first, ...rest]
+}
+
+export const AuditEventTypeValues = requireNonEmpty(
+  StoredAuditEventTypeValues.filter(
+    (value): value is CurrentAuditEventType => !value.startsWith('business_action.'),
+  ),
+)
+
+export const AuditTargetTypeValues = requireNonEmpty(
+  StoredAuditTargetTypeValues.filter(
+    (value): value is CurrentAuditTargetType => !value.startsWith('business_action_'),
+  ),
+)
 
 export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
 
 export const InvalidationIntentStatusValues = ['queued', 'applied'] as const
-export const WAVE_1_JOURNEY_EVENT_NAMES = [
-  'listing_viewed',
-  'listing_trust_fact_opened',
-  'direct_call_selected',
-  'shortlist_started',
-  'shortlist_ready',
-  'shortlist_reopened',
-  'export_preview_opened',
-  'shortlist_exported',
-  'business_opened',
-  'urgent_call_route_shown',
-  'journey_abandoned',
-] as const
-
-export const WAVE_2_DORMANT_JOURNEY_EVENT_NAMES = [
-  'record_reopened',
-  'record_exported',
-  'record_shared',
-  'record_cited',
-  'dispute_opened',
-  'replay_materially_resolved',
-  'admitted_r1_send',
-] as const
-
-export const JOURNEY_EVENT_NAMES = [
-  ...WAVE_1_JOURNEY_EVENT_NAMES,
-  ...WAVE_2_DORMANT_JOURNEY_EVENT_NAMES,
-] as const
-
-
 export const FunnelEventTypeValues = [
   'visitor_attributed',
-  'claim_cta_clicked',
-  'claim_started',
   'auth_started',
   'auth_completed',
   'owner_interest_submitted',
-  'claim_submitted',
-  'slug_conflict',
-  'duplicate_suspected',
   'publish_succeeded',
   'service_added',
   'capability_status_viewed',
   'publish_failed',
   'owner_status_viewed',
   'share_url_copied',
-  'answer_query_started',
-  'answer_clarification_requested',
-  'answer_registry_searched',
-  'answer_follow_up_submitted',
-  'answer_provider_selected',
   'registry_search',
   'service_registry_result_clicked',
   'ucp_manifest_fetched',
-  ...JOURNEY_EVENT_NAMES,
-  'suppression_applied',
-  'inquiry_available_seen',
-  'inquiry_attempted',
-  'inquiry_started',
-  'inquiry_submitted',
-  'inquiry_rejected',
-  'owner_inbox_viewed',
-  'owner_inquiry_read',
-  'owner_inquiry_replied',
-  'inquiry_closed',
-  'notification_queued',
-  'notification_delivered',
-  'notification_failed',
   'developer_docs_viewed',
   'schema_downloaded',
   'example_fixture_downloaded',
@@ -114,14 +68,6 @@ export const FunnelEventTypeValues = [
   'refund_or_dispute_recorded',
   'billing_reconciliation_failed',
   'billing_reconciliation_repaired',
-  'business_action_card_viewed',
-  'business_action_request_started',
-  'business_action_checkpoint_recorded',
-  'business_action_guardrail_allowed',
-  'business_action_guardrail_blocked',
-  'business_action_evidence_ingested',
-  'business_action_receipt_viewed',
-  'business_action_proof_gap_recorded',
 ] as const
 
-export const ActivationStageValues = ['visitor', 'claim_started', 'published', 'activated', 'blocked'] as const
+export const ActivationStageValues = ['visitor', 'published', 'activated', 'blocked'] as const

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createAgentAccessGrant,
-  defaultAgentAccessPolicy,
   evaluateAgentAccessOperation,
   type AgentAccessGrant,
   type AgentAccessGrantInput,
 } from '../../src/modules/agent-access/policy'
+import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
 
 function grantInput(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccessGrantInput {
   return {
@@ -18,7 +18,7 @@ function grantInput(overrides: Partial<AgentAccessGrantInput> = {}): AgentAccess
     environment: 'sandbox',
     operationAccess: 'all_admitted',
     authorityMode: 'approve_each',
-    policy: defaultAgentAccessPolicy({ environment: 'sandbox', currency: 'USD', exponent: 2 }),
+    policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     lifecycle: 'active',
     generation: 1,
     createdAt: 1,
@@ -38,7 +38,7 @@ describe('agent access grant policy', () => {
   it('rejects a grant whose policy environment differs from the grant', () => {
     const result = createAgentAccessGrant(grantInput({
       environment: 'production',
-      policy: defaultAgentAccessPolicy({ environment: 'sandbox', currency: 'USD', exponent: 2 }),
+      policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
     }))
     expect(result).toEqual({ kind: 'refused', code: 'grant_environment_mismatch' })
   })

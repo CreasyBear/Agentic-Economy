@@ -2,21 +2,12 @@ import type { GenericDatabaseWriter } from 'convex/server'
 import type { DataModel, Id } from './_generated/dataModel'
 import type { BusinessRecord } from '../src/modules/business/public'
 import type { DevSeedCatalogBundle } from '../src/modules/dev/public'
-import type { CapabilityLaunchSupportRecord } from '../src/modules/inquiries/public'
 export type DevSeedPersistResult = {
   seededSlugs: readonly string[]
   ownerClerkUserId: string
   ownerId: Id<'owners'>
-  supportRecordId: string
   businessIdsBySlug: Record<string, Id<'businesses'>>
 }
-
-const DEV_SEED_SUPPORT_RECORD_ID = 'support:dev-seed:human-inquiry-owner-inbox'
-const RETIRED_DEV_SEED_SLUGS = [
-  'ae-sandbox-paid-activation',
-  'agentic-economy-r10-readback',
-  'agentic-economy-r10-smoke',
-] as const
 
 export async function persistDevSeedCatalogState(
   db: GenericDatabaseWriter<DataModel>,
@@ -47,38 +38,15 @@ export async function persistDevSeedCatalogState(
 
   const primarySlug = bundle.seededSlugs[0]
   const primaryBusinessId = primarySlug === undefined ? undefined : businessIdsBySlug[primarySlug]
-  if (primaryBusinessId === undefined) {
+  if (bundle.seededSlugs.length > 0 && primaryBusinessId === undefined) {
     throw new Error('Dev seed primary business id was not resolved.')
   }
-
-  await upsertHumanInquirySupportRecord(db, primaryBusinessId, ownerId, bundle.supportRecord)
-  await suppressRetiredDevSeedBusinesses(db)
 
   return {
     seededSlugs: bundle.seededSlugs,
     ownerClerkUserId: bundle.ownerClerkUserId,
     ownerId,
-    supportRecordId: DEV_SEED_SUPPORT_RECORD_ID,
     businessIdsBySlug,
-  }
-}
-
-async function suppressRetiredDevSeedBusinesses(db: GenericDatabaseWriter<DataModel>): Promise<void> {
-  const now = Date.now()
-  for (const slug of RETIRED_DEV_SEED_SLUGS) {
-    const existing = await db
-      .query('businesses')
-      .withIndex('by_slug', (query) => query.eq('slug', slug))
-      .unique()
-    if (existing === null) {
-      continue
-    }
-
-    await db.patch(existing._id, {
-      publicStatus: 'suppressed',
-      suppressedAt: now,
-      updatedAt: now,
-    })
   }
 }
 
@@ -122,7 +90,6 @@ async function upsertBusiness(
     businessContext: business.businessContext,
     publicStatus: business.publicStatus,
     trustTier: business.trustTier,
-    claimStatus: business.claimStatus,
     sourceHash: business.sourceHash,
     updatedAt: business.updatedAt,
     ...(business.suppressedAt === undefined ? {} : { suppressedAt: business.suppressedAt }),
@@ -165,7 +132,6 @@ async function upsertBusinessOffering(
 
   await db.patch(existing._id, patch)
 }
-
 async function upsertBusinessOfferingRevision(
   db: GenericDatabaseWriter<DataModel>,
   businessId: Id<'businesses'>,
@@ -228,50 +194,6 @@ async function upsertOfferingAccessPath(
 
   if (existing === null) {
     await db.insert('offeringAccessPaths', { ...patch, createdAt: accessPath.createdAt })
-    return
-  }
-
-  await db.patch(existing._id, patch)
-}
-async function upsertHumanInquirySupportRecord(
-  db: GenericDatabaseWriter<DataModel>,
-  businessId: Id<'businesses'>,
-  ownerId: Id<'owners'>,
-  record: CapabilityLaunchSupportRecord,
-): Promise<void> {
-  const existing = await db
-    .query('capabilityLaunchSupportRecords')
-    .withIndex('by_supportRecordId', (query) => query.eq('supportRecordId', DEV_SEED_SUPPORT_RECORD_ID))
-    .unique()
-  const now = record.lastReviewedAt
-  const patch = {
-    supportRecordId: DEV_SEED_SUPPORT_RECORD_ID,
-    businessId,
-    capability: record.capability,
-    status: 'open',
-    reason: 'phase2_human_inquiry_support_ready',
-    evidenceRefs: record.evidenceRefs,
-    primaryOwnerRef: ownerId,
-    primaryAdminOperatorRef: record.primaryAdminOperatorRef,
-    backupOwnerRef: record.backupOwnerRef,
-    backupAdminOperatorRef: record.backupAdminOperatorRef,
-    supportedStage: record.supportedStage,
-    supportedChannels: [...record.supportedChannels],
-    capacityThresholdJson: JSON.stringify(record.capacityThreshold),
-    backlogAgeThresholdMs: record.backlogAgeThresholdMs,
-    phaseIncidentCountsJson: JSON.stringify(record.phaseIncidentCounts),
-    supportEscalationPath: record.supportEscalationPath,
-    claimDisablePath: record.claimDisablePath,
-    perChannelKillRulesJson: JSON.stringify(record.perChannelKillRules),
-    sourceHash: record.sourceHash,
-    correlationId: record.correlationId,
-    lastReviewedAt: record.lastReviewedAt,
-    operatorNextAction: 'watch owner inbox and notification delivery readback',
-    updatedAt: now,
-  }
-
-  if (existing === null) {
-    await db.insert('capabilityLaunchSupportRecords', { ...patch, createdAt: now })
     return
   }
 

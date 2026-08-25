@@ -1,11 +1,11 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
+import { HOME } from '@/content/brand-copy'
 import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 
 const routeState = vi.hoisted(() => {
@@ -13,7 +13,7 @@ const routeState = vi.hoisted(() => {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: undefined as string | undefined },
     // Supply facets are derived from published listings by the route loader.
-    loaderData: { coldStart: { facets: [], businessCount: 0, stateCount: 0 } },
+    loaderData: { kind: 'ok' as const, operations: [], matchedCount: 0 },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -48,7 +48,7 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
 import '@/routes/index'
 
 
-describe('plan-first home', () => {
+describe('catalogue-first home', () => {
   beforeEach(() => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `home-${++sequence}` })
@@ -61,71 +61,65 @@ describe('plan-first home', () => {
     routeState.navigate.mockClear()
   })
 
-  it('renders only the ask box before a query and performs no network work', () => {
+  it('renders a direct job prompt before a query and performs no network work', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     renderHomeRoute()
 
-    expect(screen.getByRole('searchbox', { name: 'What do you need done?' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy()
+    expect(screen.getByRole('searchbox', { name: 'Describe what you need' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask Agentic Economy' })).toBeTruthy()
     expect(screen.queryByText('Expand the network for this ask')).toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('leads with relief, invites the problem, and keeps human copy free of implementation terms', () => {
+  it('leads with the tool market and offers literal popular searches', () => {
     renderHomeRoute()
 
     expect(screen.getByRole('heading', { name: HOME.heroHeading })).toBeTruthy()
     expect(screen.getByText(HOME.heroSubhead)).toBeTruthy()
-    const examples = screen.getByRole('navigation', { name: 'Example asks' })
+    const examples = screen.getByRole('navigation', { name: 'Popular searches' })
     const exampleLinks = Array.from(examples.querySelectorAll('a'))
     expect(exampleLinks.length).toBe(HOME.exampleAsks.length)
-    expect(screen.getByRole('link', { name: 'Show me a random cat photo' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Search the web for the latest on electric cars' })).toBeNull()
-    // The router serialises `search` with URLSearchParams (spaces as `+`), not encodeURIComponent.
-    // The value is pinned to the real copy; only the encoding is derived, since encoding is the
-    // router's job and this test is about the home page passing the ask through to the link.
-    const firstAsk = HOME.exampleAsks[0]!
+    expect(screen.getByRole('link', { name: HOME.exampleAsks[0] })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Show me a random cat photo' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Finance & crypto' })).toBeNull()
+    const firstAsk = HOME.exampleAsks[0]
     expect(exampleLinks.map((link) => link.getAttribute('href')))
-      .toContain(`/t/new?${new URLSearchParams({ q: firstAsk }).toString()}`)
-    expect(screen.getByRole('link', { name: 'For agents' }).getAttribute('href')).toBe('/for-agents')
-    expect(screen.getAllByRole('link', { name: 'For suppliers' }).some((link) => link.getAttribute('href') === '/claim?source=supply')).toBe(true)
+      .toContain(`/market?${new URLSearchParams({ window: '30d', query: firstAsk }).toString()}`)
     expect(document.body.textContent?.match(/\b(?:MCP|operator|keyless|device flow|readback|published services)\b/i)).toBeNull()
   })
 
-  it('uses semantic door headings and touch-sized category links', () => {
+  it('uses touch-sized popular-search links', () => {
     renderHomeRoute()
 
-    expect(screen.getByRole('heading', { level: 2, name: AGENT_DOOR.heading })).toBeTruthy()
-    expect(screen.getByRole('heading', { level: 2, name: BUSINESS_DOOR.heading })).toBeTruthy()
-    const categories = screen.getByRole('navigation', { name: 'Browse by category' })
+    const categories = screen.getByRole('navigation', { name: 'Popular searches' })
     for (const link of categories.querySelectorAll('a')) {
       expect(link.classList.contains('min-h-11')).toBe(true)
     }
   })
 
-  it.each(['', '   '])('keeps an empty ask on home and announces the required message', (query) => {
+  it.each(['', '   '])('keeps an empty search on home and announces the required message', (query) => {
     renderHomeRoute()
 
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' })
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' })
     fireEvent.change(searchbox, { target: { value: query } })
     fireEvent.submit(screen.getByRole('search'))
 
     expect(routeState.navigate).not.toHaveBeenCalled()
-    const message = screen.getByText('Enter what you need done before asking.')
+    const message = screen.getByText('Describe the outcome you need.')
     expect(message.getAttribute('aria-live')).toBe('polite')
     expect(searchbox.getAttribute('aria-invalid')).toBe('true')
 
     fireEvent.change(searchbox, { target: { value: 'Find a local electrician' } })
-    expect(screen.queryByText('Enter what you need done before asking.')).toBeNull()
+    expect(screen.queryByText('Describe the outcome you need.')).toBeNull()
     expect(searchbox.getAttribute('aria-invalid')).toBeNull()
   })
 
   it('keeps example asks available while a query is present', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    expect(screen.getByRole('navigation', { name: 'Example asks' })).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Popular searches' })).toBeTruthy()
   })
 
   it('keeps the ask label stable while editing a submitted query', () => {
@@ -134,7 +128,7 @@ describe('plan-first home', () => {
 
     renderHomeRoute('Find a printer for 200 cards by Friday')
 
-    const composer = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
+    const composer = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(composer.value).toBe('Find a printer for 200 cards by Friday')
     fireEvent.change(composer, { target: { value: 'Find a local printer for Monday' } })
     expect(composer.value).toBe('Find a local printer for Monday')
@@ -142,23 +136,23 @@ describe('plan-first home', () => {
   })
 
 
-  it('keeps the first step focused on the ask without extra setup fields', () => {
+  it('keeps the first step focused on the job without extra setup fields', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
     renderHomeRoute('Replace a leaking kitchen tap')
 
     const form = screen.getByRole('search').closest('form')
-    if (form === null) throw new Error('The ask box must be a form.')
+    if (form === null) throw new Error('The market search must be a form.')
     expect(form).toBeTruthy()
     expect(screen.queryByLabelText(/timing|budget|maximum spend/i)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask Agentic Economy' })).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('keeps a submitted query in the ask box without speculative result copy', () => {
     renderHomeRoute('Moon dentist in Adelaide')
 
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(searchbox.value).toBe('Moon dentist in Adelaide')
     expect(screen.queryByRole('heading', { name: 'Expand the network for this ask' })).toBeNull()
     expect(document.body.textContent?.match(/available now|guaranteed availability/gi)).toBeNull()
@@ -170,11 +164,11 @@ describe('plan-first home', () => {
     renderHomeRoute()
 
     const query = 'q'.repeat(length)
-    const searchbox = screen.getByRole('searchbox', { name: 'What do you need done?' }) as HTMLInputElement
+    const searchbox = screen.getByRole('searchbox', { name: 'Describe what you need' }) as HTMLInputElement
     expect(searchbox.maxLength).toBe(-1)
     fireEvent.change(searchbox, { target: { value: query } })
     expect(searchbox.value).toBe(query)
-    expect(screen.getByText(`${length} / ${QUERY_MAX_LENGTH} characters`)).toBeTruthy()
+    expect(screen.getByText(`${length}/${QUERY_MAX_LENGTH}`)).toBeTruthy()
 
     const form = screen.getByRole('search')
     fireEvent.submit(form)

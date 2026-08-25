@@ -44,11 +44,13 @@ export async function executeKeylessOperation(
         ? {}
         : { signal: operationExecuteDeps.signal }),
     }, expectedExecutionBindingDigest)
-    if (!isRetryableExecutionFailure(result)) return result
+    if (!isRetryableExecutionFailure(result)) {
+      return reclassifyKnownIneligibleOperation(result, input.operationRef, source)
+    }
     operationExecuteDeps?.signal?.throwIfAborted()
     await new Promise<void>((resolve) => setTimeout(resolve, EXECUTION_RETRY_BACKOFF_MS))
     operationExecuteDeps?.signal?.throwIfAborted()
-    return await executeOperation(input, {
+    const retryResult = await executeOperation(input, {
       readDescriptor: (operationRef) => source.read(operationRef),
       isPublicTarget,
       fetchImpl,
@@ -56,8 +58,34 @@ export async function executeKeylessOperation(
         ? {}
         : { signal: operationExecuteDeps.signal }),
     }, expectedExecutionBindingDigest)
+    return reclassifyKnownIneligibleOperation(retryResult, input.operationRef, source)
   } finally {
     if (dispatcher !== undefined) await dispatcher.close().catch(() => undefined)
   }
 }
 
+async function reclassifyKnownIneligibleOperation(
+  result: OperationExecuteResult,
+  operationRef: string,
+  source: KeylessExecutableSourcePort,
+): Promise<OperationExecuteResult> {
+  if (
+    result.kind !== 'refused'
+    || result.reason !== 'operation_not_found'
+    || source.readPublic === undefined
+  ) return result
+
+  try {
+    const publicOperation = await source.readPublic(operationRef)
+    if (publicOperation === null) return result
+    return {
+      kind: 'refused',
+      operationRef,
+      reason: publicOperation.authentication.kind === 'keyless'
+        ? 'operation_not_executable'
+        : 'operation_not_keyless',
+    }
+  } catch {
+    return result
+  }
+}

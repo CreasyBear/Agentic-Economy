@@ -31,7 +31,7 @@ describe('market-terminal authenticated operation invocation', () => {
 
     await expect(runInvokeCommand(['operation:v1:test'], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'invoke-usage',
+      code: 'call-usage',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -42,7 +42,7 @@ describe('market-terminal authenticated operation invocation', () => {
 
     await expect(runInvokeCommand(['operation:v1:test', '{}', 'extra'], options)).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
-      code: 'invoke-usage',
+      code: 'call-usage',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -51,26 +51,56 @@ describe('market-terminal authenticated operation invocation', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:test', '{'], options)).rejects.toMatchObject({
+    await expect(runInvokeCommand(['operation:v1:test'], { ...options, input: '{' })).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'invoke-input',
     } satisfies Partial<CliFailure>)
-    await expect(runInvokeCommand(['operation:v1:test', '[]'], options)).rejects.toMatchObject({
+    await expect(runInvokeCommand(['operation:v1:test'], { ...options, input: '[]' })).rejects.toMatchObject({
       kind: 'INVALID_ARGUMENT',
       code: 'invoke-input',
     } satisfies Partial<CliFailure>)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('requires an explicit idempotency key before requiring the application key', async () => {
+  it('runs an eligible free keyless call through the anonymous MCP boundary without a connection', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await expect(runInvokeCommand(['operation:v1:test', '{}'], options)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'idempotency-key-required',
-    } satisfies Partial<CliFailure>)
+    await runInvokeCommand(
+      ['operation:v1:test'],
+      { ...options, input: '{"city":"Perth"}' },
+      { executeAnonymousKeyless: async () => ({
+        kind: 'ok',
+        operationRef: 'operation:v1:test',
+        capabilityId: 'weather.forecast',
+        name: 'Weather forecast',
+        output: { temperature: 24 },
+        evidenceHash: 'sha256:evidence',
+      }) },
+    )
+
+    expect(JSON.parse(write.mock.calls.flat().join(''))).toMatchObject({
+      kind: 'ok',
+      executionMode: 'anonymous_keyless_mcp',
+      evidenceHash: 'sha256:evidence',
+    })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('names connection as the next action when anonymous execution is not eligible', async () => {
+    await expect(runInvokeCommand(
+      ['operation:v1:test'],
+      { ...options, input: '{}' },
+      { executeAnonymousKeyless: async () => ({
+        kind: 'refused',
+        operationRef: 'operation:v1:test',
+        reason: 'operation_not_keyless',
+      }) },
+    )).rejects.toMatchObject({
+      kind: 'UNAUTHENTICATED',
+      code: 'agent_access_key_required',
+    } satisfies Partial<CliFailure>)
   })
 
   it('projects only operation input and command identity onto the canonical HTTP service', async () => {
@@ -94,8 +124,8 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runInvokeCommand(
-      ['operation:v1:test', '{"query":"hello"}'],
-      { ...options, idempotencyKey: 'idem-cli-one' },
+      ['operation:v1:test'],
+      { ...options, input: '{"query":"hello"}', idempotencyKey: 'idem-cli-one' },
     )
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -146,8 +176,8 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await runInvokeCommand(
-      ['operation:v1:test', '{"query":"hello"}'],
-      { ...options, idempotencyKey: 'idem-cli-one', wait: true },
+      ['operation:v1:test'],
+      { ...options, input: '{"query":"hello"}', idempotencyKey: 'idem-cli-one', wait: true },
     )
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -183,8 +213,8 @@ describe('market-terminal authenticated operation invocation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(runInvokeCommand(
-      ['operation:v1:test', '{}'],
-      { ...options, idempotencyKey: 'idem-cli-wait-503', wait: true },
+      ['operation:v1:test'],
+      { ...options, input: '{}', idempotencyKey: 'idem-cli-wait-503', wait: true },
     )).rejects.toMatchObject({
       kind: 'UNAVAILABLE',
       code: 'provider_unavailable',

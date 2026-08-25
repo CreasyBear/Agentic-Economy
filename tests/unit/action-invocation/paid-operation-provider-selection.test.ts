@@ -51,7 +51,7 @@ describe('explicit paid-operation provider selection', () => {
         })
       }
       expect(selected.paymentAttempt?.providerEndpoint)
-        .toMatch(new RegExp(`^${selected.operation.binding.endpointUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?`))
+        .toBe(selected.operation.binding.endpointUrl)
       expect(selected.operation.identity.payment.kind).toBe('x402')
       if (selected.operation.identity.payment.kind === 'x402') {
         expect(selected.paymentAttempt?.payTo).toBe(selected.operation.identity.payment.payTo)

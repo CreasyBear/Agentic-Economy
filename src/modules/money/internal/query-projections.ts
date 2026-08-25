@@ -7,7 +7,10 @@ import type {
   ExactAmount,
   KeyUsageQuery,
   KeyUsageView,
+  MoneyAccount,
+  MoneyLedgerEntry,
   MoneyQueryPort,
+  MoneyTransaction,
   PayoutStatusQuery,
   PayoutStatusView,
   ProviderEarningsQuery,
@@ -15,8 +18,419 @@ import type {
   TopupState,
 } from '../public'
 import { addExactAmounts, compareExactAmounts, subtractExactAmounts } from './exact-amount'
-import { accountRefForRake, usageSummaryKey } from './ledger'
+import { accountRefForRake, sameEvidenceRefs, usageSummaryKey } from './ledger'
 import type { LedgerState } from './ledger'
+
+export type ProviderEarningsProjectionResult =
+  | Readonly<{ kind: 'ok' } & ProviderEarningsView>
+  | Readonly<{
+      kind: 'refused'
+      code:
+        | 'payout_not_ready'
+        | 'payout_reconciliation_required'
+        | 'currency_mismatch'
+    }>
+
+export function projectProviderEarnings(input: Readonly<{
+  businessId: string
+  currency: string
+  accounts: readonly MoneyAccount[]
+  entries: readonly MoneyLedgerEntry[]
+  transactions: readonly MoneyTransaction[]
+  evidence: ProviderEarningsView['evidence']
+}>): ProviderEarningsProjectionResult {
+  const provider = input.accounts.find(
+    (item) =>
+      item.accountKind === 'provider_earnings' &&
+      item.businessId === input.businessId &&
+      item.balance.currency === input.currency,
+  )
+  if (provider === undefined)
+    return { kind: 'refused', code: 'payout_not_ready' }
+  const transactions = new Map(
+    input.transactions.map((transaction) => [
+      transaction.transactionRef,
+      transaction,
+    ]),
+  )
+  const providerCredits = sumMatchingEntries(input.entries, provider.balance, (entry) =>
+    entry.accountRef === provider.accountRef &&
+    entry.businessId === input.businessId &&
+    entry.entryType === 'payout_accrual' &&
+    entry.direction === 'credit' &&
+    entry.reversalOf === undefined &&
+    entry.invocationRef !== undefined &&
+    entry.amount.currency === input.currency &&
+    isSettledCharge(transactions, entry.transactionRef),
+  )
+  const rakeCredits = sumMatchingEntries(input.entries, provider.balance, (entry) =>
+    entry.accountRef === accountRefForRake(input.currency) &&
+    entry.businessId === input.businessId &&
+    entry.entryType === 'rake' &&
+    entry.direction === 'credit' &&
+    entry.reversalOf === undefined &&
+    entry.amount.currency === input.currency &&
+    isSettledCharge(transactions, entry.transactionRef),
+  )
+  const providerRefunds = sumMatchingEntries(input.entries, provider.balance, (entry) =>
+    entry.accountRef === provider.accountRef &&
+    entry.businessId === input.businessId &&
+    entry.entryType === 'refund' &&
+    entry.direction === 'debit' &&
+    entry.reversalOf !== undefined &&
+    entry.amount.currency === input.currency &&
+    isSettledCharge(transactions, entry.reversalOf),
+  )
+  const rakeRefunds = sumMatchingEntries(input.entries, provider.balance, (entry) =>
+    entry.accountRef === accountRefForRake(input.currency) &&
+    entry.businessId === input.businessId &&
+    entry.entryType === 'refund' &&
+    entry.direction === 'debit' &&
+    entry.reversalOf !== undefined &&
+    entry.amount.currency === input.currency &&
+    isSettledCharge(transactions, entry.reversalOf),
+  )
+  const payout = projectPayoutPaidOut({
+    businessId: input.businessId,
+    currency: input.currency,
+    provider,
+    entries: input.entries,
+    transactions,
+  })
+  if (payout.kind === 'refused') return payout
+  const providerNet = subtractExactAmounts(providerCredits, providerRefunds)
+  const rake = subtractExactAmounts(rakeCredits, rakeRefunds)
+  if (
+    providerCredits === undefined ||
+    providerRefunds === undefined ||
+    rakeCredits === undefined ||
+    rakeRefunds === undefined ||
+    providerNet === undefined ||
+    rake === undefined
+  )
+    return { kind: 'refused', code: 'currency_mismatch' }
+  const grossAccrual = addExactAmounts(providerNet, rake)
+  const providerNetPlusRecovery = addExactAmounts(
+    providerNet,
+    provider.recoveryDue,
+  )
+  if (grossAccrual === undefined || providerNetPlusRecovery === undefined)
+    return { kind: 'refused', code: 'currency_mismatch' }
+  const balanceComparison = compareExactAmounts(
+    providerNetPlusRecovery,
+    provider.balance,
+  )
+  if (balanceComparison === undefined)
+    return { kind: 'refused', code: 'currency_mismatch' }
+  return {
+    kind: 'ok',
+    businessId: input.businessId,
+    grossAccrual,
+    rake,
+    providerNet,
+    paidOut: payout.paidOut,
+    held: provider.balance,
+    recoveryDue: provider.recoveryDue,
+    truncated: false,
+    evidence: input.evidence,
+  }
+}
+
+function isSettledCharge(
+  transactions: ReadonlyMap<string, MoneyTransaction>,
+  transactionRef: string,
+): boolean {
+  const transaction = transactions.get(transactionRef)
+  if (transaction === undefined || transaction.kind !== 'charge') return false
+  if (
+    transaction.settledAt !== undefined ||
+    transaction.budgetState === 'settled'
+  )
+    return true
+  return transaction.budgetState === undefined && transaction.state === 'applied'
+}
+
+function sumMatchingEntries(
+  entries: readonly MoneyLedgerEntry[],
+  zero: ExactAmount,
+  predicate: (entry: MoneyLedgerEntry) => boolean,
+): ExactAmount | undefined {
+  const template = { currency: zero.currency, units: '0', exponent: zero.exponent }
+  let total: ExactAmount | undefined = template
+  for (const entry of entries) {
+    if (!predicate(entry)) continue
+    total = total === undefined ? undefined : addExactAmounts(total, entry.amount)
+  }
+  return total
+}
+
+function payoutAmountConflicts(
+  transaction: MoneyTransaction,
+  entry: MoneyLedgerEntry,
+): boolean {
+  if (transaction.amount === undefined) return false
+  return compareExactAmounts(transaction.amount, entry.amount) !== 0
+}
+
+function projectPayoutPaidOut(input: Readonly<{
+  businessId: string
+  currency: string
+  provider: MoneyAccount
+  entries: readonly MoneyLedgerEntry[]
+  transactions: ReadonlyMap<string, MoneyTransaction>
+}>):
+  | Readonly<{ kind: 'ok'; paidOut: ExactAmount }>
+  | Readonly<{
+      kind: 'refused'
+      code: 'payout_reconciliation_required' | 'currency_mismatch'
+    }> {
+  const { businessId, currency, provider, entries, transactions } = input
+  const payoutTransactions = new Map(
+    [...transactions.values()]
+      .filter((transaction) => transaction.kind === 'payout_accrual')
+      .map((transaction) => [transaction.transactionRef, transaction]),
+  )
+  const payoutOriginalTransactions = [...payoutTransactions.values()].filter(
+    (transaction) =>
+      transaction.principalId === `business:${businessId}` &&
+      transaction.currency === currency &&
+      transaction.exponent === provider.balance.exponent &&
+      transaction.reversalOf === undefined &&
+      (transaction.state === 'applied' || transaction.state === 'reversed'),
+  )
+  const payoutOriginalRefs = new Set(
+    payoutOriginalTransactions.map((transaction) => transaction.transactionRef),
+  )
+  const payoutReversalEntries = entries.filter(
+    (entry) =>
+      entry.accountRef === provider.accountRef &&
+      entry.businessId === businessId &&
+      entry.entryType === 'payout_accrual' &&
+      entry.direction === 'credit' &&
+      entry.reversalOf !== undefined &&
+      entry.amount.currency === currency,
+  )
+  const payoutDebitRows = entries.filter(
+    (entry) =>
+      entry.accountRef === provider.accountRef &&
+      entry.businessId === businessId &&
+      entry.entryType === 'payout_accrual' &&
+      entry.direction === 'debit' &&
+      entry.amount.currency === currency,
+  )
+  let invalidPayoutComposition = false
+  for (const entry of payoutDebitRows) {
+    const transaction = transactions.get(entry.transactionRef)
+    const providerCredits = entries.filter(
+      (candidate) =>
+        candidate.transactionRef === entry.transactionRef &&
+        candidate.accountRef === provider.accountRef &&
+        candidate.entryType === 'payout_accrual' &&
+        candidate.direction === 'credit' &&
+        candidate.businessId === businessId &&
+        candidate.amount.currency === currency &&
+        candidate.amount.exponent === provider.balance.exponent,
+    )
+    const providerCredit = providerCredits[0]
+    const isCanonicalRecoveryDebit =
+      transaction?.kind === 'charge' &&
+      providerCredits.length === 1 &&
+      providerCredit !== undefined &&
+      entry.amount.currency === providerCredit.amount.currency &&
+      entry.amount.exponent === providerCredit.amount.exponent &&
+      entry.entryRef === `${transaction.transactionRef}:provider-recovery` &&
+      transaction.transactionRef === entry.transactionRef &&
+      transaction.idempotencyKey === entry.idempotencyKey &&
+      transaction.currency === currency &&
+      transaction.exponent === provider.balance.exponent &&
+      providerCredit.entryRef === `${transaction.transactionRef}:provider` &&
+      providerCredit.transactionRef === transaction.transactionRef &&
+      providerCredit.idempotencyKey === transaction.idempotencyKey &&
+      providerCredit.createdAt === transaction.createdAt &&
+      entry.businessId === providerCredit.businessId &&
+      entry.invocationRef !== undefined &&
+      entry.invocationRef.length > 0 &&
+      entry.invocationRef === providerCredit.invocationRef &&
+      entry.attemptRef !== undefined &&
+      entry.attemptRef.length > 0 &&
+      entry.attemptRef === providerCredit.attemptRef &&
+      entry.principalId === undefined &&
+      entry.reversalOf === undefined &&
+      entry.sourceDigest === providerCredit.sourceDigest &&
+      sameEvidenceRefs(entry.evidenceRefs, providerCredit.evidenceRefs) &&
+      compareExactAmounts(entry.amount, providerCredit.amount) !== 1
+    if (isCanonicalRecoveryDebit) continue
+    if (
+      transaction === undefined ||
+      transaction.kind !== 'payout_accrual' ||
+      transaction.transactionRef !== entry.transactionRef ||
+      transaction.idempotencyKey !== entry.idempotencyKey ||
+      transaction.principalId !== `business:${businessId}` ||
+      transaction.currency !== currency ||
+      transaction.exponent !== provider.balance.exponent ||
+      payoutAmountConflicts(transaction, entry) ||
+      transaction.reversalOf !== undefined ||
+      entry.reversalOf !== undefined ||
+      ((transaction.state === 'applied' ||
+        transaction.state === 'reversed') &&
+        !payoutOriginalRefs.has(transaction.transactionRef))
+    )
+      invalidPayoutComposition = true
+  }
+  const payoutOriginalAmounts: ExactAmount[] = []
+  const payoutReversalAmounts: ExactAmount[] = []
+  for (const original of payoutOriginalTransactions) {
+    const originalRows = entries.filter(
+      (entry) =>
+        entry.transactionRef === original.transactionRef &&
+        entry.entryType === 'payout_accrual',
+    )
+    const debitRows = originalRows.filter(
+      (entry) =>
+        entry.accountRef === provider.accountRef &&
+        entry.businessId === businessId &&
+        entry.direction === 'debit' &&
+        entry.reversalOf === undefined &&
+        entry.idempotencyKey === original.idempotencyKey &&
+        entry.amount.currency === currency &&
+        entry.amount.exponent === provider.balance.exponent &&
+        !payoutAmountConflicts(original, entry),
+    )
+    const originalAmount = debitRows[0]?.amount
+    if (
+      originalRows.length !== 1 ||
+      debitRows.length !== 1 ||
+      originalAmount === undefined
+    ) {
+      invalidPayoutComposition = true
+      continue
+    }
+    payoutOriginalAmounts.push(originalAmount)
+    const linkedReversals = [...transactions.values()].filter(
+      (transaction) =>
+        transaction.kind === 'payout_accrual' &&
+        transaction.reversalOf === original.transactionRef,
+    )
+    if (original.state === 'applied') {
+      if (
+        linkedReversals.length !== 0 ||
+        entries.some((entry) => entry.reversalOf === original.transactionRef)
+      )
+        invalidPayoutComposition = true
+      continue
+    }
+    const reversal = linkedReversals[0]
+    const expectedReversalRef = canonicalDigest({
+      format: 'money-payout-reversal-transaction:v1',
+      reservationTransactionRef: original.transactionRef,
+    })
+    const expectedReversalIdempotencyKey = canonicalDigest({
+      format: 'money-payout-reversal-idempotency:v1',
+      reservationTransactionRef: original.transactionRef,
+    })
+    const reversalRows =
+      reversal === undefined
+        ? []
+        : entries.filter(
+            (entry) =>
+              entry.transactionRef === reversal.transactionRef &&
+              entry.entryType === 'payout_accrual',
+          )
+    const exactReversalRows =
+      reversal === undefined
+        ? []
+        : reversalRows.filter(
+            (entry) =>
+              entry.accountRef === provider.accountRef &&
+              entry.businessId === businessId &&
+              entry.direction === 'credit' &&
+              entry.reversalOf === original.transactionRef &&
+              entry.idempotencyKey === reversal.idempotencyKey &&
+              entry.amount.currency === currency &&
+              entry.amount.exponent === provider.balance.exponent &&
+              compareExactAmounts(entry.amount, originalAmount) === 0 &&
+              !payoutAmountConflicts(reversal, entry),
+          )
+    const exactReversal = exactReversalRows[0]
+    if (
+      linkedReversals.length !== 1 ||
+      reversal === undefined ||
+      reversal.transactionRef !== expectedReversalRef ||
+      reversal.idempotencyKey !== expectedReversalIdempotencyKey ||
+      reversal.kind !== 'payout_accrual' ||
+      reversal.state !== 'reversed' ||
+      reversal.reversalOf !== original.transactionRef ||
+      reversal.principalId !== `business:${businessId}` ||
+      reversal.currency !== currency ||
+      reversal.exponent !== provider.balance.exponent ||
+      (reversal.amount !== undefined &&
+        compareExactAmounts(reversal.amount, originalAmount) !== 0) ||
+      reversalRows.length !== 1 ||
+      exactReversal === undefined ||
+      exactReversalRows.length !== 1
+    ) {
+      invalidPayoutComposition = true
+      continue
+    }
+    payoutReversalAmounts.push(exactReversal.amount)
+  }
+  invalidPayoutComposition ||= payoutReversalEntries.some((entry) => {
+    const reversal = payoutTransactions.get(entry.transactionRef)
+    const original =
+      entry.reversalOf === undefined
+        ? undefined
+        : payoutTransactions.get(entry.reversalOf)
+    if (
+      reversal === undefined ||
+      original === undefined ||
+      !payoutOriginalRefs.has(original.transactionRef) ||
+      original.kind !== 'payout_accrual' ||
+      original.principalId !== `business:${businessId}` ||
+      original.reversalOf !== undefined ||
+      original.state !== 'reversed' ||
+      original.currency !== currency ||
+      original.exponent !== provider.balance.exponent ||
+      reversal.transactionRef !==
+        canonicalDigest({
+          format: 'money-payout-reversal-transaction:v1',
+          reservationTransactionRef: original.transactionRef,
+        }) ||
+      reversal.kind !== 'payout_accrual' ||
+      reversal.state !== 'reversed' ||
+      reversal.reversalOf !== original.transactionRef ||
+      reversal.principalId !== `business:${businessId}` ||
+      reversal.currency !== currency ||
+      reversal.exponent !== provider.balance.exponent ||
+      (original.amount !== undefined &&
+        (payoutAmountConflicts(original, entry) ||
+          (reversal.amount !== undefined &&
+            compareExactAmounts(reversal.amount, original.amount) !== 0)))
+    )
+      return true
+    return false
+  })
+  const zero = {
+    currency: provider.balance.currency,
+    units: '0',
+    exponent: provider.balance.exponent,
+  }
+  const payoutDebits = payoutOriginalAmounts.reduce<ExactAmount | undefined>(
+    (sum, value) =>
+      sum === undefined ? undefined : addExactAmounts(sum, value),
+    zero,
+  )
+  const payoutReversals = payoutReversalAmounts.reduce<ExactAmount | undefined>(
+    (sum, value) =>
+      sum === undefined ? undefined : addExactAmounts(sum, value),
+    zero,
+  )
+  const paidOut = subtractExactAmounts(payoutDebits, payoutReversals)
+  if (invalidPayoutComposition)
+    return { kind: 'refused', code: 'payout_reconciliation_required' }
+  if (payoutDebits === undefined || payoutReversals === undefined || paidOut === undefined)
+    return { kind: 'refused', code: 'currency_mismatch' }
+  return { kind: 'ok', paidOut }
+}
 
 export function createInMemoryMoneyQueryPort(input: Readonly<{
   ledger: LedgerState
@@ -70,318 +484,25 @@ export function createInMemoryMoneyQueryPort(input: Readonly<{
       return { credentialId: query.credentialId, callCount: 0, paidCallCount: 0, freeCallCount: 0, grossSpend: { currency: query.currency, units: '0', exponent: template.exponent }, states: [] }
     },
     readProviderEarnings: async (query: ProviderEarningsQuery): Promise<ProviderEarningsView> => {
-      const provider = [...input.ledger.accounts.values()].find((item) => item.accountKind === 'provider_earnings' && item.businessId === query.businessId && item.balance.currency === query.currency)
-      if (provider === undefined) throw new Error('payout_not_ready')
-      const providerCreditEntries = input.ledger.entries.filter((entry) => entry.accountRef === provider.accountRef && entry.businessId === query.businessId && entry.entryType === 'payout_accrual' && entry.direction === 'credit' && entry.reversalOf === undefined && entry.amount.currency === query.currency)
-      const providerRefundEntries = input.ledger.entries.filter((entry) => entry.accountRef === provider.accountRef && entry.businessId === query.businessId && entry.entryType === 'refund' && entry.direction === 'debit' && entry.reversalOf !== undefined && entry.amount.currency === query.currency)
-      const rakeCreditEntries = input.ledger.entries.filter((entry) => entry.accountRef === accountRefForRake(query.currency) && entry.businessId === query.businessId && entry.entryType === 'rake' && entry.direction === 'credit' && entry.reversalOf === undefined && entry.amount.currency === query.currency)
-      const rakeRefundEntries = input.ledger.entries.filter((entry) => entry.accountRef === accountRefForRake(query.currency) && entry.businessId === query.businessId && entry.entryType === 'refund' && entry.direction === 'debit' && entry.reversalOf !== undefined && entry.amount.currency === query.currency)
-      const transactions = new Map(
-        input.ledger.transactions.map((transaction) => [
-          transaction.transactionRef,
-          transaction,
-        ]),
-      )
-      const payoutTransactions = new Map(
-        [...transactions.values()]
-          .filter((transaction) => transaction.kind === 'payout_accrual')
-          .map((transaction) => [transaction.transactionRef, transaction]),
-      )
-      const payoutOriginalTransactions = [...payoutTransactions.values()].filter(
-        (transaction) =>
-          transaction.principalId === `business:${query.businessId}` &&
-          transaction.currency === query.currency &&
-          transaction.exponent === provider.balance.exponent &&
-          transaction.reversalOf === undefined &&
-          (transaction.state === 'applied' || transaction.state === 'reversed'),
-      )
-      const payoutOriginalRefs = new Set(
-        payoutOriginalTransactions.map((transaction) => transaction.transactionRef),
-      )
-      const payoutReversalEntries = input.ledger.entries.filter(
-        (entry) =>
-          entry.accountRef === provider.accountRef &&
-          entry.businessId === query.businessId &&
-          entry.entryType === 'payout_accrual' &&
-          entry.direction === 'credit' &&
-          entry.reversalOf !== undefined &&
-          entry.amount.currency === query.currency,
-      )
-      const payoutOriginalAmounts: ExactAmount[] = []
-      const payoutReversalAmounts: ExactAmount[] = []
-      const payoutDebitRows = input.ledger.entries.filter(
-        (entry) =>
-          entry.accountRef === provider.accountRef &&
-          entry.businessId === query.businessId &&
-          entry.entryType === 'payout_accrual' &&
-          entry.direction === 'debit' &&
-          entry.amount.currency === query.currency,
-      )
-      let invalidPayoutComposition = false
-      for (const entry of payoutDebitRows) {
-        const transaction = transactions.get(entry.transactionRef)
-        const providerCredits = input.ledger.entries.filter(
-          (candidate) =>
-            candidate.transactionRef === entry.transactionRef &&
-            candidate.accountRef === provider.accountRef &&
-            candidate.entryType === 'payout_accrual' &&
-            candidate.direction === 'credit' &&
-            candidate.businessId === query.businessId &&
-            candidate.amount.currency === query.currency &&
-            candidate.amount.exponent === provider.balance.exponent,
-        )
-        const providerCredit = providerCredits[0]
-        const isCanonicalRecoveryDebit =
-          transaction?.kind === 'charge' &&
-          providerCredits.length === 1 &&
-          providerCredit !== undefined &&
-          entry.amount.currency === providerCredit.amount.currency &&
-          entry.amount.exponent === providerCredit.amount.exponent &&
-          entry.entryRef === `${transaction.transactionRef}:provider-recovery` &&
-          transaction.transactionRef === entry.transactionRef &&
-          transaction.idempotencyKey === entry.idempotencyKey &&
-          transaction.currency === query.currency &&
-          transaction.exponent === provider.balance.exponent &&
-          providerCredit.entryRef === `${transaction.transactionRef}:provider` &&
-          providerCredit.transactionRef === transaction.transactionRef &&
-          providerCredit.idempotencyKey === transaction.idempotencyKey &&
-          providerCredit.createdAt === transaction.createdAt &&
-          entry.businessId === providerCredit.businessId &&
-          entry.invocationRef !== undefined &&
-          entry.invocationRef.length > 0 &&
-          entry.invocationRef === providerCredit.invocationRef &&
-          entry.attemptRef !== undefined &&
-          entry.attemptRef.length > 0 &&
-          entry.attemptRef === providerCredit.attemptRef &&
-          entry.principalId === undefined &&
-          entry.reversalOf === undefined &&
-          entry.sourceDigest === providerCredit.sourceDigest &&
-          entry.evidenceRefs.length === providerCredit.evidenceRefs.length &&
-          entry.evidenceRefs.every(
-            (ref, index) => ref === providerCredit.evidenceRefs[index],
-          ) &&
-          compareExactAmounts(entry.amount, providerCredit.amount) !== 1
-        if (isCanonicalRecoveryDebit) continue
-        if (
-          transaction === undefined ||
-          transaction.kind !== 'payout_accrual' ||
-          transaction.transactionRef !== entry.transactionRef ||
-          transaction.idempotencyKey !== entry.idempotencyKey ||
-          transaction.principalId !== `business:${query.businessId}` ||
-          transaction.currency !== query.currency ||
-          transaction.exponent !== provider.balance.exponent ||
-          transaction.reversalOf !== undefined ||
-          entry.reversalOf !== undefined ||
-          ((transaction.state === 'applied' ||
-            transaction.state === 'reversed') &&
-            !payoutOriginalRefs.has(transaction.transactionRef))
-        )
-          invalidPayoutComposition = true
-      }
-      for (const original of payoutOriginalTransactions) {
-        const originalRows = input.ledger.entries.filter(
-          (entry) =>
-            entry.transactionRef === original.transactionRef &&
-            entry.entryType === 'payout_accrual',
-        )
-        const debitRows = originalRows.filter(
-          (entry) =>
-            entry.accountRef === provider.accountRef &&
-            entry.businessId === query.businessId &&
-            entry.direction === 'debit' &&
-            entry.reversalOf === undefined &&
-            entry.idempotencyKey === original.idempotencyKey &&
-            entry.amount.currency === query.currency &&
-            entry.amount.exponent === provider.balance.exponent,
-        )
-        const originalAmount = debitRows[0]?.amount
-        if (
-          originalRows.length !== 1 ||
-          debitRows.length !== 1 ||
-          originalAmount === undefined
-        ) {
-          invalidPayoutComposition = true
-          continue
-        }
-        payoutOriginalAmounts.push(originalAmount)
-        const linkedReversals = input.ledger.transactions.filter(
-          (transaction) =>
-            transaction.kind === 'payout_accrual' &&
-            transaction.reversalOf === original.transactionRef,
-        )
-        if (original.state === 'applied') {
-          if (
-            linkedReversals.length !== 0 ||
-            input.ledger.entries.some(
-              (entry) => entry.reversalOf === original.transactionRef,
-            )
-          )
-            invalidPayoutComposition = true
-          continue
-        }
-        const reversal = linkedReversals[0]
-        const expectedReversalRef = canonicalDigest({
-          format: 'money-payout-reversal-transaction:v1',
-          reservationTransactionRef: original.transactionRef,
-        })
-        const expectedReversalIdempotencyKey = canonicalDigest({
-          format: 'money-payout-reversal-idempotency:v1',
-          reservationTransactionRef: original.transactionRef,
-        })
-        const reversalRows =
-          reversal === undefined
-            ? []
-            : input.ledger.entries.filter(
-                (entry) =>
-                  entry.transactionRef === reversal.transactionRef &&
-                  entry.entryType === 'payout_accrual',
-              )
-        const exactReversalRows =
-          reversal === undefined
-            ? []
-            : reversalRows.filter(
-                (entry) =>
-                  entry.accountRef === provider.accountRef &&
-                  entry.businessId === query.businessId &&
-                  entry.direction === 'credit' &&
-                  entry.reversalOf === original.transactionRef &&
-                  entry.idempotencyKey === reversal.idempotencyKey &&
-                  entry.amount.currency === query.currency &&
-                  entry.amount.exponent === provider.balance.exponent &&
-                  compareExactAmounts(entry.amount, originalAmount) === 0,
-              )
-        const exactReversal = exactReversalRows[0]
-        if (
-          linkedReversals.length !== 1 ||
-          reversal === undefined ||
-          reversal.transactionRef !== expectedReversalRef ||
-          reversal.idempotencyKey !== expectedReversalIdempotencyKey ||
-          reversal.kind !== 'payout_accrual' ||
-          reversal.state !== 'reversed' ||
-          reversal.reversalOf !== original.transactionRef ||
-          reversal.principalId !== `business:${query.businessId}` ||
-          reversal.currency !== query.currency ||
-          reversal.exponent !== provider.balance.exponent ||
-          reversalRows.length !== 1 ||
-          exactReversal === undefined ||
-          exactReversalRows.length !== 1
-        ) {
-          invalidPayoutComposition = true
-          continue
-        }
-        payoutReversalAmounts.push(exactReversal.amount)
-      }
-      invalidPayoutComposition ||= payoutReversalEntries.some((entry) => {
-        const reversal = payoutTransactions.get(entry.transactionRef)
-        const original =
-          entry.reversalOf === undefined
-            ? undefined
-            : payoutTransactions.get(entry.reversalOf)
-        if (
-          reversal === undefined ||
-          original === undefined ||
-          !payoutOriginalRefs.has(original.transactionRef) ||
-          original.kind !== 'payout_accrual' ||
-          original.principalId !== `business:${query.businessId}` ||
-          original.reversalOf !== undefined ||
-          original.state !== 'reversed' ||
-          original.currency !== query.currency ||
-          original.exponent !== provider.balance.exponent ||
-          reversal.transactionRef !==
-            canonicalDigest({
-              format: 'money-payout-reversal-transaction:v1',
-              reservationTransactionRef: original.transactionRef,
-            }) ||
-          reversal.kind !== 'payout_accrual' ||
-          reversal.state !== 'reversed' ||
-          reversal.reversalOf !== original.transactionRef ||
-          reversal.principalId !== `business:${query.businessId}` ||
-          reversal.currency !== query.currency ||
-          reversal.exponent !== provider.balance.exponent
-        )
-          return true
-        return false
-      })
-      const payoutDebits = payoutOriginalAmounts.reduce<ExactAmount | undefined>(
-        (sum, value) =>
-          sum === undefined ? undefined : addExactAmounts(sum, value),
-        { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent },
-      )
-      const payoutReversals = payoutReversalAmounts.reduce<ExactAmount | undefined>(
-        (sum, value) =>
-          sum === undefined ? undefined : addExactAmounts(sum, value),
-        { currency: provider.balance.currency, units: '0', exponent: provider.balance.exponent },
-      )
-      const zero = {
-        currency: provider.balance.currency,
-        units: '0',
-        exponent: provider.balance.exponent,
-      }
-      const providerCredits = providerCreditEntries.reduce<
-        ExactAmount | undefined
-      >(
-        (sum, entry) =>
-          sum === undefined ? undefined : addExactAmounts(sum, entry.amount),
-        zero,
-      )
-      const providerRefunds = providerRefundEntries.reduce<
-        ExactAmount | undefined
-      >(
-        (sum, entry) =>
-          sum === undefined ? undefined : addExactAmounts(sum, entry.amount),
-        zero,
-      )
-      const rakeCredits = rakeCreditEntries.reduce<ExactAmount | undefined>(
-        (sum, entry) =>
-          sum === undefined ? undefined : addExactAmounts(sum, entry.amount),
-        zero,
-      )
-      const rakeRefunds = rakeRefundEntries.reduce<ExactAmount | undefined>(
-        (sum, entry) =>
-          sum === undefined ? undefined : addExactAmounts(sum, entry.amount),
-        zero,
-      )
-      const providerNet = subtractExactAmounts(providerCredits, providerRefunds)
-      const rake = subtractExactAmounts(rakeCredits, rakeRefunds)
-      if (
-        providerCredits === undefined ||
-        providerRefunds === undefined ||
-        rakeCredits === undefined ||
-        rakeRefunds === undefined ||
-        providerNet === undefined ||
-        rake === undefined ||
-        payoutDebits === undefined ||
-        payoutReversals === undefined ||
-        invalidPayoutComposition
-      )
-        throw new Error('currency_mismatch')
-      const grossAccrual = addExactAmounts(providerNet, rake)
-      const providerNetPlusRecovery = addExactAmounts(
-        providerNet,
-        provider.recoveryDue,
-      )
-      if (
-        grossAccrual === undefined ||
-        providerNetPlusRecovery === undefined
-      )
-        throw new Error('currency_mismatch')
-      const balanceComparison = compareExactAmounts(
-        providerNetPlusRecovery,
-        provider.balance,
-      )
-      if (balanceComparison === undefined) throw new Error('currency_mismatch')
-      const paidOut = subtractExactAmounts(payoutDebits, payoutReversals)
-      if (paidOut === undefined) throw new Error('currency_mismatch')
-      return {
+      const projected = projectProviderEarnings({
         businessId: query.businessId,
-        grossAccrual,
-        rake,
-        providerNet,
-        paidOut,
-        held: provider.balance,
-        recoveryDue: provider.recoveryDue,
-        truncated: false,
+        currency: query.currency,
+        accounts: [...input.ledger.accounts.values()],
+        entries: input.ledger.entries,
+        transactions: input.ledger.transactions,
         evidence: 'labelled_local_dev',
+      })
+      if (projected.kind === 'ok') return projected
+      switch (projected.code) {
+        case 'payout_not_ready':
+          throw new Error('payout_not_ready')
+        case 'payout_reconciliation_required':
+        case 'currency_mismatch':
+          throw new Error('currency_mismatch')
+        default: {
+          const _exhaustive: never = projected.code
+          throw new Error(_exhaustive)
+        }
       }
     },
     readPayoutStatus: async (query: PayoutStatusQuery): Promise<PayoutStatusView> => {

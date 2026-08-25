@@ -53,6 +53,7 @@ type AgentPrincipalWrite = Readonly<{
 }>
 
 async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrincipalWrite): Promise<{ kind: 'recorded' } | { kind: 'conflict' }> {
+  if (args.environment === 'production' && args.authorityMode === 'full_yolo') return { kind: 'conflict' as const }
   const existing = await ctx.db.query('agentAccessPrincipals')
     .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
   const scopes = uniqueSorted(args.scopes)
@@ -105,6 +106,7 @@ export async function verifySupplyAgentPrincipal(
   requireMandate = false,
 ): Promise<AgentSupplyPrincipalAdmission> {
   if (!principal.scopes.includes(MARKET_SUPPLY_MANAGE_SCOPE)
+    || (principal.environment === 'production' && principal.authorityMode === 'full_yolo')
     || (requireMandate && principal.authorityMode !== 'bounded_mandate' && principal.authorityMode !== 'full_yolo')) {
     return { kind: 'refused', reason: 'authorization_denied' }
   }
@@ -161,12 +163,12 @@ export const registerAgentPrincipal = mutation({
   ),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null || identity.subject.trim().length === 0) {
+    if (identity === null || identity.tokenIdentifier.trim().length === 0) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
     return await writeAgentPrincipal(ctx, {
       ...args,
-      ownerId: identity.subject,
+      ownerId: identity.tokenIdentifier,
       ownerTokenIdentifier: identity.tokenIdentifier,
     })
   },
@@ -200,6 +202,7 @@ export const resolveAgentPrincipal = mutation({
     if (admitted.kind === 'rejected') {
       throw new Error(`agent_access_principal_source_write_rejected:${admitted.reason}`)
     }
+    if (args.environment === 'production' && args.authorityMode === 'full_yolo') return null
     const principal = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
     if (principal === null
@@ -257,7 +260,7 @@ export const getAgentPrincipal = internalQuery({
   handler: async (ctx, args) => {
     const row = await ctx.db.query('agentAccessPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
-    return row === null ? null : {
+    return row === null || (row.environment === 'production' && row.authorityMode === 'full_yolo') ? null : {
       principalId: row.principalId,
       ownerId: row.ownerId,
       ...(row.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: row.ownerTokenIdentifier }),
@@ -271,22 +274,5 @@ export const getAgentPrincipal = internalQuery({
       lifecycle: row.lifecycle,
       ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
     }
-  },
-})
-
-export const listStandingCredentials = internalQuery({
-  args: { ownerId: v.string() },
-  returns: v.array(v.object({
-    credentialId: v.string(),
-    lastSeenAt: v.number(),
-  })),
-  handler: async (ctx, args) => {
-    const rows = await ctx.db.query('agentAccessPrincipals')
-      .withIndex('by_ownerId_and_lastSeenAt', (query) => query.eq('ownerId', args.ownerId))
-      .order('desc')
-      .take(64)
-    return rows
-      .filter((row) => row.scopes.includes('customer_requests:standing_authority'))
-      .map((row) => ({ credentialId: row.credentialId, lastSeenAt: row.lastSeenAt }))
   },
 })

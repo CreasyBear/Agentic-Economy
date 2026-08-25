@@ -1,20 +1,9 @@
 import type {
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
-  PublishedInquiryTargetResolution,
 } from './internal/search'
-import type {
-  ServiceEndpointDto,
-  ServiceOfferingDto,
-} from './internal/service-projection'
 import {
-  IndexStatusValues,
-  IndexTargetTypeValues,
-  RegistryProjectionKindValues,
   RegistryProjectionSourceVersion as RegistryProjectionSourceVersionValue,
-  RegistryProjectionStatusValues,
-  RegistryRepairActionValues,
-  RegistryRepairResultValues,
   RegistrySearchDocumentSourceVersion as RegistrySearchDocumentSourceVersionValue,
   type IndexStatus,
   type IndexTargetType,
@@ -81,6 +70,7 @@ export type {
 } from '@/modules/capability-supply/public'
 export {
   PublicBusinessCatalogApiSchemaVersion,
+  getPublicBusinessCatalog,
   projectBusinessSupplyToPublicApi,
 } from './internal/offering-api-projection'
 export type {
@@ -154,21 +144,11 @@ export type {
 export type {
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
-  PublishedInquiryTargetResolution,
 }
 export {
-  canonicalTradeToken,
-  TRADE_CANONICAL_TOKENS,
-  TRADE_WORDS,
-  type TradeVocabularyEntry,
-} from './internal/trade-vocabulary'
-
-export {
-  createDefaultRegistrySourceState,
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
   getPublicBusinessOfferingSupplyBySlug,
-  resolvePublishedInquiryTarget,
 } from './internal/search'
 export {
   buildRegistrySearchDocumentsForCatalog,

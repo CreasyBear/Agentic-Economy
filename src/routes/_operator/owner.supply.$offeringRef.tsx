@@ -73,7 +73,7 @@ export const Route = createFileRoute("/_operator/owner/supply/$offeringRef")({
   },
   head: () => ({
     meta: [
-      { title: "Get your service ready | Agentic Economy" },
+      { title: "Prepare Operation | Agentic Economy" },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -97,16 +97,16 @@ function OwnerSupplyDetailRoute() {
     return (
       <AeOperatorShell
         operatorRole="owner"
-        title="Get your service ready"
-        description="We could not load this service completely."
+        title="Prepare Operation"
+        description="We could not load this Operation completely."
         currentPath="/owner/supply"
       >
         <div className="grid gap-3">
           <Alert>
-            <AlertTitle>Service readback needs repair</AlertTitle>
+            <AlertTitle>Operation readback needs repair</AlertTitle>
             <AlertDescription>
               The owner readback reached its bounded limit before this operation
-              could be joined. Return to services and reload.
+              could be joined. Return to Operations and reload.
             </AlertDescription>
           </Alert>
           <Button
@@ -114,7 +114,7 @@ function OwnerSupplyDetailRoute() {
             variant="secondary"
             className="min-h-11 justify-self-start"
           >
-            <Link to="/owner/supply">Return to your services</Link>
+            <Link to="/owner/supply">Return to Operations</Link>
           </Button>
         </div>
       </AeOperatorShell>
@@ -131,15 +131,15 @@ function OwnerSupplyDetailRoute() {
     return (
       <AeOperatorShell
         operatorRole="owner"
-        title="Get your service ready"
-        description="We could not load this service. Return to your services and try again."
+        title="Prepare Operation"
+        description="We could not load this Operation. Return to Operations and try again."
         currentPath="/owner/supply"
       >
         <div className="grid gap-3">
           <Alert>
-            <AlertTitle>Service unavailable</AlertTitle>
+            <AlertTitle>Operation unavailable</AlertTitle>
             <AlertDescription>
-              We could not load this service. Return to your services and try
+              We could not load this Operation. Return to Operations and try
               again.
             </AlertDescription>
           </Alert>
@@ -148,7 +148,7 @@ function OwnerSupplyDetailRoute() {
             variant="secondary"
             className="min-h-11 justify-self-start"
           >
-            <Link to="/owner/supply">Return to your services</Link>
+            <Link to="/owner/supply">Return to Operations</Link>
           </Button>
         </div>
       </AeOperatorShell>
@@ -180,7 +180,7 @@ function OwnerSupplyDetailRoute() {
     <AeOperatorShell
       operatorRole="owner"
       title={durableOffering.name}
-      description="Describe your service, admit its API, check readiness, and run a contract test."
+      description="Describe the Operation, connect its API, check readiness, and run a contract test."
       currentPath="/owner/supply"
     >
       <AeSupplyFunnel
@@ -299,7 +299,7 @@ function ownerAdmissionCompletion(
     message:
       result.kind === "replayed"
         ? "The existing publication was admitted again."
-        : "The API source was admitted and linked to this catalog offering.",
+        : "The API source was admitted and linked to this Operation.",
   };
 }
 
@@ -316,7 +316,7 @@ function preflightFix(reason: string): string {
       return "Use a non-empty source revision with the supported length and characters.";
     case "pricing_config_invalid":
     case "price_unavailable":
-      return "Make the durable paid amount match the offering price exactly.";
+      return "Make the durable paid amount match the Operation price exactly.";
     case "contract_invalid":
     case "schema_missing":
       return "Provide complete request and response JSON schemas with output evidence.";
@@ -351,7 +351,7 @@ function preflightFix(reason: string): string {
     case "target_not_public":
       return "Use one public HTTPS endpoint without private or local addressing.";
     case "commercial_metadata_inconsistent":
-      return "Correct the offering, binding, authority, timeout, and evidence metadata.";
+      return "Correct the Operation, binding, authority, timeout, and evidence metadata.";
     case "payment_required_invalid":
       return "Provide a valid x402 PaymentRequired challenge and exact payment metadata.";
     default:

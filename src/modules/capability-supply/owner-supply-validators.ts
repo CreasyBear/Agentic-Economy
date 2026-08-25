@@ -17,7 +17,7 @@ export function isOwnerSupplyRecord(value: unknown): value is Record<string, unk
 export const ownerSupplyAccessPathDescriptorValue = v.union(
   v.object({
     kind: v.literal('human_request'),
-    channel: v.union(v.literal('phone'), v.literal('website'), v.literal('ae_inquiry')),
+    channel: v.union(v.literal('phone'), v.literal('website')),
     disclosure: v.string(),
     url: v.optional(v.string()),
   }),
@@ -66,7 +66,7 @@ export function ownerSupplyStringArray(value: unknown, label: string): string[] 
 export function ownerSupplyAccessPathDescriptor(value: unknown): OwnerSupplyAccessPathDescriptor {
   if (!isOwnerSupplyRecord(value)) throw new Error('Invalid owner supply access path descriptor')
   if (value.kind === 'human_request') {
-    const channel = ownerSupplyLiteral(value.channel, ['phone', 'website', 'ae_inquiry'] as const, 'access channel')
+    const channel = ownerSupplyLiteral(value.channel, ['phone', 'website'] as const, 'access channel')
     const disclosure = typeof value.disclosure === 'string' ? value.disclosure : (() => { throw new Error('Invalid owner supply disclosure') })()
     const url = ownerSupplyOptionalString(value.url, 'access URL')
     return { kind: 'human_request', channel, disclosure, ...(url === undefined ? {} : { url }) }

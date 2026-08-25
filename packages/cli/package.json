@@ -1,0 +1,26 @@
+{
+  "name": "@agentic-economy/cli",
+  "version": "0.1.0",
+  "description": "Compiled Agentic Economy catalogue, invocation, and receipt client.",
+  "type": "module",
+  "exports": {},
+  "bin": {
+    "ae": "dist/ae.js"
+  },
+  "files": [
+    "dist/ae.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-cli.mjs",
+    "prepack": "npm run build",
+    "test": "node ../../scripts/test-cli-package.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "UNLICENSED"
+}

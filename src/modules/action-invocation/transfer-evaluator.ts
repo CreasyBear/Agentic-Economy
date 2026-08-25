@@ -1,8 +1,20 @@
-import type { HarnessToolBoundaryEvent } from '@/modules/harness/tool-contract'
-
 export type TransferArm = 'direct_read' | 'direct_consequential' | 'controlled'
 export type TransferBoundaryEvent =
-  | HarnessToolBoundaryEvent
+  | Readonly<{ kind: 'approval_policy'; policy: 'allow' | 'deny' | 'prompt'; reason: string }>
+  | Readonly<{ kind: 'direct_runner_started'; actionId: string }>
+  | Readonly<{ kind: 'direct_runner_returned'; actionId: string; outcome: string }>
+  | Readonly<{ kind: 'action_invocation'; invocationRef: string }>
+  | Readonly<{ kind: 'control'; invocationRef: string }>
+  | Readonly<{ kind: 'attempt'; invocationRef: string; attemptRef: string }>
+  | Readonly<{ kind: 'history'; invocationRef: string; commandId: string }>
+  | Readonly<{
+      kind: 'direct_control_snapshot'
+      actionInvocationEmissions: number
+      controlEmissions: number
+      attemptEmissions: number
+      historyEmissions: number
+      approvalPolicyEmissions: number
+    }>
   | Readonly<{ kind: 'effect_call'; actionId: string }>
   | Readonly<{ kind: 'provider_release'; actionId: string }>
   | Readonly<{ kind: 'authority_decision'; invocationRef: string }>

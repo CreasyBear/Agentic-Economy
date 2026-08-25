@@ -24,10 +24,10 @@ export type DeploymentValidationResult = Readonly<{
   readinessProbes: typeof DEPLOYMENT_MANIFEST.readinessProbes
 }>
 
-type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'answer-mode' | 'credential-ref'; target?: string }>
+type FieldRule = Readonly<{ name: string; kind: 'url' | 'host-list' | 'boolean' | 'credential-ref'; target?: string }>
 type RequirementGroup = Readonly<{ scope: string; code: string; names: readonly string[]; mode: 'all' | 'one-of'; trigger?: readonly string[] }>
 
-export const SOURCE_WRITE_FAMILIES = ['inquiry', 'billing', 'protected', 'claim', 'operator', 'repair', 'session'] as const
+export const SOURCE_WRITE_FAMILIES = ['billing', 'protected', 'catalog', 'operator', 'repair', 'session'] as const
 const sourceWriteNames = SOURCE_WRITE_FAMILIES.map((family) => `AE_SOURCE_WRITE_KEY_${family.toUpperCase()}`)
 const sourceWriteDerivedNames = SOURCE_WRITE_FAMILIES.flatMap((family) => {
   const suffix = family.toUpperCase()
@@ -40,11 +40,12 @@ const sourceWriteDerivedNames = SOURCE_WRITE_FAMILIES.flatMap((family) => {
 const forbiddenProductionNames = Object.freeze([
   'AE_SOURCE_WRITE_SECRET',
   'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E',
-  'AE_ANSWER_EVAL_REGISTRY_SEED',
   'AE_DEV_WBA_SMOKE_ENABLED',
   'AE_DEV_WBA_SMOKE_SECRET',
   'AE_DEV_WBA_SIGNATURE_AGENT',
   'AE_LOCAL_DEV_VITE_ARGS',
+  'AE_X402_PAYMENT_CREDENTIAL_REF',
+  'AE_X402_PAYMENT_PRIVATE_KEY',
   'CONVEX_SELF_HOSTED_ADMIN_KEY',
   'AE_API_KEY',
 ])
@@ -54,9 +55,10 @@ const requiredProduction: readonly RequirementGroup[] = [
   { scope: 'convex', code: 'convex_source_required', names: ['CONVEX_URL', 'VITE_CONVEX_URL'], mode: 'one-of' },
   { scope: 'convex-auth', code: 'server_function_auth_required', names: ['AE_CONVEX_SERVER_FUNCTION_TOKEN'], mode: 'all' },
   { scope: 'clerk', code: 'required_configuration_missing', names: ['VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'CLERK_JWT_ISSUER_DOMAIN'], mode: 'all' },
-  { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY'], mode: 'all' },
+  { scope: 'model-gateway', code: 'required_configuration_missing', names: ['OPENROUTER_API_KEY', 'AE_LLM_MODEL'], mode: 'all' },
+  { scope: 'chat-proxy', code: 'required_configuration_missing', names: ['AE_CHAT_PROXY_SECRET'], mode: 'all' },
   { scope: 'source-write', code: 'source_write_family_required', names: sourceWriteNames, mode: 'all' },
-  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
+  { scope: 'x402-payment', code: 'x402_payment_custody_required', names: ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CDP_EXPECTED_EVM_ADDRESS', 'AE_X402_CDP_ACCOUNT_POLICY_ID', 'AE_X402_CDP_PROJECT_POLICY_ID', 'AE_X402_CDP_CREDENTIAL_GENERATION', 'AE_X402_CUSTODY_ENABLED', 'AE_X402_CUSTODY_MAX_ATOMIC', 'AE_X402_CUSTODY_DAILY_MAX_ATOMIC', 'AE_X402_RPC_URLS_JSON'], mode: 'all' },
   { scope: 'stripe-money', code: 'stripe_configuration_required', names: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY'], mode: 'all' },
 ]
 
@@ -86,42 +88,12 @@ const liveGatewaySmokeNames = [
 
 const conditional: readonly RequirementGroup[] = [
   {
-    scope: 'notifications:resend', code: 'notification_provider_configuration_incomplete',
-    names: ['RESEND_API_KEY', 'RESEND_FROM', 'RESEND_WEBHOOK_SECRET', 'AE_NOTIFICATION_OUTBOX_SECRET'],
-    mode: 'all', trigger: ['RESEND_API_KEY', 'RESEND_FROM', 'RESEND_WEBHOOK_SECRET'],
-  },
-  {
-    scope: 'notifications:novu', code: 'notification_provider_configuration_incomplete',
-    names: ['NOVU_SECRET_KEY', 'NOVU_WORKFLOW_INQUIRY_OWNER', 'AE_NOTIFICATION_OUTBOX_SECRET'],
-    mode: 'all', trigger: ['NOVU_SECRET_KEY', 'NOVU_WORKFLOW_INQUIRY_OWNER', 'NOVU_WORKFLOW_INQUIRY_CUSTOMER'],
-  },
-  {
-    scope: 'sandbox', code: 'sandbox_provider_configuration_incomplete', names: ['AE_SANDBOX_PROVIDER_KEY'], mode: 'all',
-    trigger: ['AE_SANDBOX_PROVIDER_KEY', 'AE_SANDBOX_PROVIDER_ORIGIN', 'AE_SANDBOX_ROUTE_RESOLVER_ORIGIN', 'AE_SANDBOX_ROUTE_QUOTER_ORIGIN', 'AE_SANDBOX_WORKFLOW_ORIGIN'],
-  },
-  {
     scope: 'routing', code: 'route_signing_pair_incomplete', names: ['AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID'], mode: 'all',
     trigger: ['AE_ROUTE_CALL_SIGNING_SECRET', 'AE_ROUTE_CALL_SIGNING_KEY_ID'],
   },
   {
-    scope: 'security:answer-share', code: 'secret_key_id_without_secret', names: ['AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID'], mode: 'all',
-    trigger: ['AE_ANSWER_THREAD_SHARE_SECRET', 'AE_ANSWER_THREAD_SHARE_KEY_ID'],
-  },
-  {
-    scope: 'security:inquiry-access', code: 'secret_key_id_without_secret', names: ['AE_INQUIRY_ACCESS_SECRET', 'AE_INQUIRY_ACCESS_KEY_ID'], mode: 'all',
-    trigger: ['AE_INQUIRY_ACCESS_SECRET', 'AE_INQUIRY_ACCESS_KEY_ID'],
-  },
-  {
-    scope: 'security:governed-send', code: 'secret_key_id_without_secret', names: ['AE_GOVERNED_SEND_INTEGRITY_SECRET', 'AE_GOVERNED_SEND_INTEGRITY_KEY_ID'], mode: 'all',
-    trigger: ['AE_GOVERNED_SEND_INTEGRITY_SECRET', 'AE_GOVERNED_SEND_INTEGRITY_KEY_ID', 'AE_GOVERNED_SEND_INTEGRITY_VERIFICATION_KEYS'],
-  },
-  {
-    scope: 'security:receipt', code: 'secret_key_id_without_secret', names: ['AE_INQUIRY_RECEIPT_KEK', 'AE_INQUIRY_RECEIPT_KEK_ID'], mode: 'all',
-    trigger: ['AE_INQUIRY_RECEIPT_KEK', 'AE_INQUIRY_RECEIPT_KEK_ID'],
-  },
-  {
-    scope: 'security:journey', code: 'journey_signing_key_required', names: ['AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY'], mode: 'all',
-    trigger: ['AE_CUSTOMER_REQUEST_JOURNEY_SIGNING_KEY', 'AE_CUSTOMER_REQUEST_JOURNEY_PREVIOUS_PUBLIC_KEYS'],
+    scope: 'security:chat-share', code: 'secret_key_id_without_secret', names: ['AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID'], mode: 'all',
+    trigger: ['AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID'],
   },
   {
     scope: 'observability:build', code: 'sentry_build_configuration_partial', names: ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT'], mode: 'all',
@@ -137,14 +109,12 @@ const conditional: readonly RequirementGroup[] = [
 ]
 
 const optionalNames = Object.freeze([
-  'AE_ANSWER_EVAL_PASSED', 'AE_LLM_MODEL', 'AE_LLM_MODELS', 'VITE_AE_ANSWER_MODE', 'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
-  'AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC', 'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
-  'AE_SITE_URL', 'SITE_URL', 'VITE_GOOGLE_MAPS_API_KEY', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
+  'AE_CSP_REPORT_ONLY', 'AE_COOKIE_SECURE',
+  'AE_DISABLE_OBSERVABILITY', 'VITE_AE_DISABLE_OBSERVABILITY', 'AE_ROUTING_PUBLIC_BASE_URL',
+  'AE_SITE_URL', 'SITE_URL', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_SENTRY_ENVIRONMENT',
   'SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_POSTHOG_KEY', 'POSTHOG_KEY', 'VITE_POSTHOG_HOST', 'POSTHOG_HOST',
-  'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL', 'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
-  'AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS',
+  'VITE_POSTHOG_APP_URL', 'POSTHOG_APP_URL',   'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', 'AE_WBA_DIRECTORY_PUBLIC_JWK_JSON',
   'AE_CLI_BASE_URL',
-  'AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID', 'AE_CUSTOMER_REQUEST_CLERK_SUBJECT',
 ])
 
 const fieldRules: readonly FieldRule[] = [
@@ -153,31 +123,30 @@ const fieldRules: readonly FieldRule[] = [
   { name: 'AE_GATEWAY_SMOKE_BASE_URL', kind: 'url' }, { name: 'AE_RELEASE_CONVEX_URL', kind: 'url' },
   { name: 'AE_GATEWAY_SMOKE_CONFIRM_LIVE_SPEND', kind: 'boolean' },
   { name: 'AE_OPENROUTER_API_BASE_URL', kind: 'url' }, { name: 'SITE_URL', kind: 'url' }, { name: 'AE_SITE_URL', kind: 'url' },
-  { name: 'AE_X402_PAYMENT_CREDENTIAL_REF', kind: 'credential-ref', target: 'AE_X402_PAYMENT_PRIVATE_KEY' },
-  { name: 'AE_ROUTING_PUBLIC_BASE_URL', kind: 'url' }, { name: 'AE_SANDBOX_PROVIDER_ORIGIN', kind: 'url' },
-  { name: 'AE_SANDBOX_ROUTE_RESOLVER_ORIGIN', kind: 'url' }, { name: 'AE_SANDBOX_ROUTE_QUOTER_ORIGIN', kind: 'url' },
-  { name: 'AE_SANDBOX_WORKFLOW_ORIGIN', kind: 'url' }, { name: 'VITE_POSTHOG_HOST', kind: 'url' }, { name: 'POSTHOG_HOST', kind: 'url' },
-  { name: 'VITE_POSTHOG_APP_URL', kind: 'url' }, { name: 'POSTHOG_APP_URL', kind: 'url' }, { name: 'RESEND_API_BASE_URL', kind: 'url' },
-  { name: 'NOVU_API_BASE_URL', kind: 'url' }, { name: 'AUTUMN_API_BASE_URL', kind: 'url' }, { name: 'AUTUMN_PORTAL_RETURN_BASE_URL', kind: 'url' },
+  { name: 'AE_X402_CUSTODY_ENABLED', kind: 'boolean' },
+  { name: 'AE_ROUTING_PUBLIC_BASE_URL', kind: 'url' }, { name: 'VITE_POSTHOG_HOST', kind: 'url' }, { name: 'POSTHOG_HOST', kind: 'url' },
+  { name: 'VITE_POSTHOG_APP_URL', kind: 'url' }, { name: 'POSTHOG_APP_URL', kind: 'url' },
+  { name: 'AUTUMN_API_BASE_URL', kind: 'url' }, { name: 'AUTUMN_PORTAL_RETURN_BASE_URL', kind: 'url' },
   { name: 'AE_WBA_SIGNATURE_AGENT_ALLOWLIST', kind: 'host-list' },
-  { name: 'VITE_AE_ANSWER_MODE', kind: 'answer-mode' }, { name: 'AE_CSP_REPORT_ONLY', kind: 'boolean' },
-  { name: 'AE_COOKIE_SECURE', kind: 'boolean' }, { name: 'AE_DISABLE_PUBLIC_FUNNEL_SOURCE_SYNC', kind: 'boolean' },
+  { name: 'AE_CSP_REPORT_ONLY', kind: 'boolean' },
+  { name: 'AE_COOKIE_SECURE', kind: 'boolean' },
   { name: 'AE_DISABLE_OBSERVABILITY', kind: 'boolean' }, { name: 'VITE_AE_DISABLE_OBSERVABILITY', kind: 'boolean' },
   { name: 'VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', kind: 'boolean' }, { name: 'VITE_AE_OPERATOR_ADVANCED_NAV', kind: 'boolean' },
   { name: 'AE_DEV_WBA_SMOKE_ENABLED', kind: 'boolean' },
 ]
 
 const knownNames = Object.freeze([
-  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY', 'AE_LLM_MODEL', 'AE_LLM_MODELS',
-  'AE_ANSWER_EVAL_PASSED', 'AE_SOURCE_WRITE_SECRET', 'AE_NOTIFICATION_OUTBOX_SECRET', 'AE_SANDBOX_PROVIDER_KEY',
-  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_PRIVATE_KEY', 'AE_ANSWER_THREAD_SHARE_KEY_ID', 'AE_INQUIRY_ACCESS_KEY_ID',
-  'AE_GOVERNED_SEND_INTEGRITY_KEY_ID', 'AE_INQUIRY_RECEIPT_KEK_ID', 'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
+  'OPENROUTER_API_KEY', 'AE_CONVEX_SERVER_FUNCTION_TOKEN', 'VITE_CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY',
+  'AE_CHAT_PROXY_SECRET', 'AE_CHAT_SHARE_SECRET', 'AE_CHAT_SHARE_KEY_ID',
+  'AE_SOURCE_WRITE_SECRET',
+  'AE_ROUTE_CALL_SIGNING_KEY_ID', 'AE_X402_PAYMENT_CREDENTIAL_REF', 'AE_X402_PAYMENT_PRIVATE_KEY',
+  'CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET', 'AE_X402_CDP_ACCOUNT_NAME', 'AE_X402_CUSTODY_MAX_ATOMIC',
+  'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT',
   'SENTRY_ENVIRONMENT', 'VITE_SENTRY_ENVIRONMENT', 'SENTRY_RELEASE', 'VITE_SENTRY_DSN', 'SENTRY_DSN', 'VITE_POSTHOG_KEY',
-  'POSTHOG_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
+  'POSTHOG_KEY', 'VERCEL_ENV', 'VERCEL_DEPLOYMENT_ID', 'VERCEL_URL', 'AE_RELEASE_DEPLOYMENT_ID', 'AE_GATEWAY_SMOKE_RELEASE_API_KEY',
   'AE_DEV_WBA_SMOKE_SECRET', 'AE_DEV_WBA_SIGNATURE_AGENT', 'AE_LOCAL_DEV_VITE_ARGS', 'AE_KERNEL_PROOF_MANIFEST_JSON',
-  'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL', 'AE_BRAINTRUST_PROJECT', 'AE_BRAINTRUST_DATASET',
+  'AE_KERNEL_PROOF_MANIFEST_PATH', 'AE_CLI_BASE_URL',
   'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'VITE_STRIPE_PUBLISHABLE_KEY',
-  'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET', 'NOVU_SECRET_KEY', 'NOVU_WORKFLOW_INQUIRY_OWNER', 'NOVU_WORKFLOW_INQUIRY_CUSTOMER',
 ])
 
 export const DEPLOYMENT_MANIFEST = Object.freeze({
@@ -189,11 +158,40 @@ export const DEPLOYMENT_MANIFEST = Object.freeze({
   }),
   resources: Object.freeze([
     Object.freeze({ id: 'web-server', kind: 'vercel-node-runtime', declaration: 'nitro.vercel.entryFormat=node' }),
-    Object.freeze({ id: 'convex-components', kind: 'convex-component-set', components: Object.freeze(['workflow', 'workpool', 'rate-limiter', 'aggregate:ownerActivationByStage']) }),
+    Object.freeze({
+      id: 'convex-components',
+      kind: 'convex-component-set',
+      components: Object.freeze([
+        'workpool',
+        'rate-limiter',
+        'agent',
+        'aggregate:ownerActivationByStage',
+        'aggregate:marketEvidence',
+        'aggregate:marketOperationEvidence',
+        'aggregate:marketOperationRatings',
+        'aggregate:marketActiveOperations',
+        'aggregate:marketActiveSuppliers',
+      ]),
+    }),
     Object.freeze({ id: 'agent-access', kind: 'clerk-api-key-agent-access', declaration: 'Clerk-issued bearer key; AE-owned principal, grant, policy, and revocation readback.' }),
     Object.freeze({ id: 'durable-invocation-workpool', kind: 'convex-workpool', components: Object.freeze(['workpool', 'operation-invocation-worker', 'operation-recovery-worker']) }),
     Object.freeze({ id: 'operation-gateway', kind: 'authenticated-action-gateway', action: `${OPERATION_INVOKE_ACTION_ID}:v1`, httpPath: OPERATION_INVOKE_HTTP_PATH, mcpPath: '/mcp' }),
-    Object.freeze({ id: 'convex-scheduled-jobs', kind: 'convex-cron-set', jobs: Object.freeze(['refresh capability supply readiness', 'cleanup expired inquiry abuse buckets', 'cleanup expired source write nonces', 'cleanup expired OAuth grants']) }),
+    Object.freeze({
+      id: 'convex-scheduled-jobs',
+      kind: 'convex-cron-set',
+      jobs: Object.freeze([
+        'cleanup expired agent access oauth grants',
+        'cleanup expired source write nonces',
+        'continue market aggregate backfill',
+        'reconcile due facilitator invocations',
+        'refresh Agentic Economy API registry',
+        'refresh Agentic Market snapshots',
+        'refresh capability supply readiness',
+        'refresh current market presence',
+        'refresh facilitator discovery',
+        'run daily supplier settlement',
+      ]),
+    }),
   ]),
   readinessProbes: Object.freeze([
     Object.freeze({ id: 'liveness', method: Object.freeze(['GET', 'HEAD']), path: '/api/health', dependencies: Object.freeze([]) }),
@@ -230,6 +228,7 @@ export function validateDeploymentManifest(environment: DeploymentEnvironmentInp
   if (production) validateProductionClerkCredentials(environment, add)
   if (production) validateSourceWriteAuthority(environment, add)
   for (const rule of fieldRules) validateField(environment, rule, production, add)
+  validateX402Custody(environment, add)
   validateX402RpcUrls(environment, add)
 
   const convex = present(environment, 'CONVEX_URL')
@@ -359,14 +358,30 @@ function validateX402RpcUrls(
       || Array.isArray(parsed)
       || Object.keys(parsed).length === 0
       || Object.keys(parsed).length > 32
-      || Object.entries(parsed).some(([network, url]) =>
+      || Object.entries(parsed).some(([network, urls]) =>
         !/^eip155:[1-9]\d*$/u.test(network)
-        || typeof url !== 'string'
-        || !validUrl(url, true)
+        || !Array.isArray(urls)
+        || urls.length < 1
+        || urls.length > 2
+        || urls.some((url) => typeof url !== 'string' || !validUrl(url, true))
+        || new Set(urls).size !== urls.length
       )
     ) throw new Error('invalid')
   } catch {
     add('malformed', 'x402_rpc_urls_invalid', ['AE_X402_RPC_URLS_JSON'], 'x402-payment')
+  }
+}
+function validateX402Custody(
+  environment: DeploymentEnvironmentInput,
+  add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void,
+): void {
+  const enabled = present(environment, 'AE_X402_CUSTODY_ENABLED')
+  if (enabled !== undefined && enabled !== 'true') {
+    add('malformed', 'x402_custody_not_enabled', ['AE_X402_CUSTODY_ENABLED'], 'x402-payment')
+  }
+  const maxAtomic = present(environment, 'AE_X402_CUSTODY_MAX_ATOMIC')
+  if (maxAtomic !== undefined && !/^[1-9]\d*$/u.test(maxAtomic)) {
+    add('malformed', 'x402_custody_cap_invalid', ['AE_X402_CUSTODY_MAX_ATOMIC'], 'x402-payment')
   }
 }
 function validateField(environment: DeploymentEnvironmentInput, rule: FieldRule, production: boolean, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): void {
@@ -380,7 +395,7 @@ function isMalformed(rule: FieldRule, value: string, production: boolean): boole
   if (rule.kind === 'url') return !validUrl(value, production)
   if (rule.kind === 'host-list') return !value.split(',').every((entry) => validHost(entry.trim()))
   if (rule.kind === 'boolean') return value !== 'true' && value !== 'false' && !(rule.name === 'AE_CSP_REPORT_ONLY' && ['0', '1'].includes(value))
-  return rule.kind === 'answer-mode' && value !== 'structured'
+  return false
 }
 function validUrl(value: string, production: boolean): boolean {
   try {
@@ -407,7 +422,6 @@ function present(environment: DeploymentEnvironmentInput, name: string): string 
 function isSecretDeploymentName(name: string): boolean {
   if (
     name === 'VITE_CLERK_PUBLISHABLE_KEY'
-    || name === 'VITE_GOOGLE_MAPS_API_KEY'
     || name === 'VITE_SENTRY_DSN'
     || name === 'VITE_POSTHOG_KEY'
     || name === 'VITE_STRIPE_PUBLISHABLE_KEY'
@@ -418,6 +432,7 @@ function isSecretDeploymentName(name: string): boolean {
     || name.startsWith('AE_SOURCE_WRITE_PREVIOUS_KEYS_')
     || name.includes('TOKEN')
     || name.includes('PASSWORD')
+    || name.includes('SECRET')
     || name.includes('API_KEY')
     || name.endsWith('_KEY')
     || name.endsWith('_KEK')
@@ -428,7 +443,7 @@ function isKnown(name: string): boolean {
     || requiredProduction.some((group) => group.names.includes(name))
     || conditional.some((group) => group.names.includes(name))
     || optionalNames.includes(name)
-    || /^AE_SOURCE_WRITE_(?:KEY|PREVIOUS_KEYS|DERIVED_KEY_ID|PREVIOUS_DERIVED_KEY_IDS)_(?:INQUIRY|BILLING|PROTECTED|CLAIM|OPERATOR|REPAIR|SESSION)$/u.test(name)
+    || /^AE_SOURCE_WRITE_(?:KEY|PREVIOUS_KEYS|DERIVED_KEY_ID|PREVIOUS_DERIVED_KEY_IDS)_(?:BILLING|PROTECTED|CATALOG|OPERATOR|REPAIR|SESSION)$/u.test(name)
 }
 function resolveEnvironment(environment: DeploymentEnvironmentInput, requested: DeploymentEnvironment | undefined, add: (kind: DeploymentFindingKind, code: string, names: readonly string[], scope: string) => void): DeploymentEnvironment {
   const raw = present(environment, 'NODE_ENV')

@@ -1,245 +1,358 @@
-import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
-import { type FormEvent, useState } from 'react'
-import { z } from 'zod'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Field, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-
-import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { ServicesError, ServicesLoading } from '@/components/ae/home/HomeRouteStates'
-import { RootWorkTreeLoop } from '@/components/ae/home/RootWorkTreeLoop'
-import { QUERY_MAX_LENGTH } from '@/lib/query-length'
 import {
-  readRootWorkTreeServer,
-  type RootWorkTreeReadback,
-} from '@/modules/work-tree/human-root.functions'
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
+import { ArrowRightIcon, SearchIcon } from "lucide-react";
+import { type FormEvent, useState } from "react";
 
-const rootSearchSchema = z.object({
-  q: z.string().optional().catch(undefined),
-  project: z.string().max(200).optional().catch(undefined),
-})
+import { AePublicShell } from "@/components/ae/layout/AePublicShell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item";
+import { HOME } from "@/content/brand-copy";
+import { QUERY_MAX_LENGTH } from "@/lib/query-length";
+import { formatUtcTimestamp } from "@/lib/ui/format-time";
+import {
+  readHomeCapabilities,
+  validateRootSearch,
+  type HomeCapabilityRead,
+} from "@/modules/market/home-catalogue";
+import type { OperationCardViewModel } from "@/modules/market/operation-view-model";
 
-/** Fixed browse chips that map to preset asks the engine already resolves. */
-const CATEGORY_CHIPS: readonly { label: string; query: string }[] = [
-  { label: 'Finance & crypto', query: 'crypto price' },
-  { label: 'Search & research', query: 'search the web' },
-  { label: 'Geo & maps', query: 'geocode' },
-  { label: 'Reference', query: 'wikipedia' },
-]
-
-
-export type RootSearchParams = {
-  q?: string | undefined
-  project?: string | undefined
-}
-
-export type RootRouteReadback =
-  | Readonly<{ kind: 'work-tree'; readback: RootWorkTreeReadback }>
-
-export type RootRouteDeps = Readonly<{
-  readWorkTree: (projectId: string) => Promise<RootWorkTreeReadback>
-}>
-
-export const defaultRootRouteDeps: RootRouteDeps = {
-  readWorkTree: (projectId) => readRootWorkTreeServer({ data: { projectId } }),
-}
-
-
-/** Root route readback: explicit project references read the source-backed tree. */
-export async function loadRootRoute(
-  search: RootSearchParams,
-  deps: RootRouteDeps = defaultRootRouteDeps,
-): Promise<RootRouteReadback | undefined> {
-  const projectId = search.project?.trim() ?? ''
-  if (projectId.length === 0) return undefined
-  return { kind: 'work-tree', readback: await deps.readWorkTree(projectId) }
-}
-
-export function validateRootSearch(search: Record<string, unknown>): RootSearchParams {
-  const parsed = rootSearchSchema.parse(search)
-  const query = parsed.q?.trim() ?? ''
-  const project = parsed.project?.trim() ?? ''
-  return {
-    ...(query.length === 0 ? {} : { q: query }),
-    ...(project.length === 0 ? {} : { project }),
-  }
-}
-
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute("/")({
   validateSearch: validateRootSearch,
-  loaderDeps: ({ search }) => ({ project: search.project }),
   beforeLoad: ({ search }) => {
-    if (search.project === undefined && search.q !== undefined) {
-      throw redirect({ to: '/t/new', search: { q: search.q } })
+    if (search.q !== undefined) {
+      throw redirect({ to: "/t/new", search: { q: search.q } });
     }
   },
-  loader: ({ deps }) => loadRootRoute(deps),
-  pendingComponent: ServicesLoading,
-  errorComponent: ServicesError,
+  loader: readHomeCapabilities,
+  pendingComponent: HomePending,
+  errorComponent: HomeError,
   head: () => ({
     meta: [
       { title: HOME.metaTitle },
-      { name: 'description', content: HOME.metaDescription },
+      { name: "description", content: HOME.metaDescription },
     ],
   }),
   component: ServicesRoute,
-})
-
+});
 
 function ServicesRoute() {
-  const { q, project } = Route.useSearch()
-  const data = Route.useLoaderData()
-  const navigate = useNavigate()
-  const hasAnswer = project !== undefined
-  const [queryValue, setQueryValue] = useState(q ?? '')
-  const [queryError, setQueryError] = useState<'required' | 'too-long' | undefined>()
-  const queryTooLong = queryValue.length > QUERY_MAX_LENGTH
+  const { q } = Route.useSearch();
+  const read = Route.useLoaderData();
+  const navigate = useNavigate();
+  const [queryValue, setQueryValue] = useState(q ?? "");
+  const [queryError, setQueryError] = useState<
+    "required" | "too-long" | undefined
+  >();
+  const queryTooLong = queryValue.length > QUERY_MAX_LENGTH;
 
   function handleAskSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const rawQuery = String(formData.get('q') ?? '')
-    setQueryValue(rawQuery)
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const rawQuery = String(formData.get("q") ?? "");
+    setQueryValue(rawQuery);
     if (rawQuery.length > QUERY_MAX_LENGTH) {
-      setQueryError('too-long')
-      return
+      setQueryError("too-long");
+      return;
     }
-    const query = rawQuery.trim()
+    const query = rawQuery.trim();
     if (query.length === 0) {
-      setQueryError('required')
-      return
+      setQueryError("required");
+      return;
     }
-    setQueryError(undefined)
-    void navigate({ to: '/t/new', search: { q: query } })
+    setQueryError(undefined);
+    void navigate({ to: "/t/new", search: { q: query } });
   }
 
   return (
     <AePublicShell>
-      <div className="grid w-full gap-10 px-4 py-14 sm:px-6 md:py-20">
-        <section className="mx-auto grid w-full max-w-3xl justify-items-center gap-7 text-center">
-          <h1
-            className={hasAnswer
-              ? 'max-w-3xl text-4xl leading-tight tracking-tight md:text-5xl'
-              : 'max-w-4xl text-4xl leading-tight tracking-tight md:text-6xl'}
-          >
-            {HOME.heroHeading}
-          </h1>
-          <p className="max-w-2xl text-lg text-muted-foreground">
-            {HOME.heroSubhead}
-          </p>
+      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 sm:py-10">
+        <section className="grid max-w-4xl gap-5">
+          <div className="grid gap-3">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Agent capability market
+            </p>
+            <h1 className="max-w-3xl font-display text-4xl font-medium leading-[1.08] tracking-[-0.035em] sm:text-5xl">
+              {HOME.heroHeading}
+            </h1>
+            <p className="max-w-2xl text-base leading-7 text-muted-foreground">
+              {HOME.heroSubhead}
+            </p>
+          </div>
 
-          <Card className="w-full border-0 bg-card p-6 shadow-med">
-            <form key={q ?? ''} role="search" aria-label="Ask a question or describe what you need done" onSubmit={handleAskSubmit} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-              <Field className="gap-2 text-left">
-                <div className="flex items-center justify-between gap-3">
-                  <FieldLabel htmlFor="service-search" className="text-sm font-semibold text-foreground">
-                    What do you need done?
-                  </FieldLabel>
-                  <span
-                    id="service-search-count"
-                    className="font-mono text-xs tabular-nums text-muted-foreground"
-                    aria-live="polite"
-                  >
-                    {queryValue.length} / {QUERY_MAX_LENGTH} characters
-                  </span>
-                </div>
+          <form
+            key={q ?? ""}
+            role="search"
+            aria-label="Ask Agentic Economy"
+            onSubmit={handleAskSubmit}
+            className="grid gap-2"
+          >
+            <FieldLabel htmlFor="service-search" className="sr-only">
+              Describe what you need
+            </FieldLabel>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="relative rounded-md transition-[box-shadow] duration-base ease-standard focus-within:shadow-float">
+                <SearchIcon
+                  aria-hidden="true"
+                  className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                />
                 <Input
                   id="service-search"
                   name="q"
                   type="search"
                   value={queryValue}
                   required
-                  placeholder="e.g. Get a quote for solar installation, or the current price of bitcoin"
+                  placeholder="What do you need your agent to do?"
                   autoComplete="off"
                   aria-describedby="service-search-hint service-search-count"
-                  aria-invalid={queryError !== undefined || queryTooLong ? 'true' : undefined}
+                  aria-invalid={
+                    queryError !== undefined || queryTooLong ? "true" : undefined
+                  }
                   onChange={(event) => {
-                    setQueryValue(event.currentTarget.value)
-                    setQueryError(undefined)
+                    setQueryValue(event.currentTarget.value);
+                    setQueryError(undefined);
                   }}
                   onInvalid={(event) => {
-                    event.preventDefault()
-                    setQueryError(event.currentTarget.validity.valueMissing ? 'required' : 'too-long')
+                    event.preventDefault();
+                    setQueryError(
+                      event.currentTarget.validity.valueMissing
+                        ? "required"
+                        : "too-long",
+                    );
                   }}
-                  className="h-14 border-border bg-card px-4 py-3 text-base text-foreground max-sm:h-14 md:text-base"
+                  className="h-12 bg-card pl-10 text-base shadow-soft"
                 />
-                <p
-                  id="service-search-hint"
-                  className="text-sm leading-snug text-muted-foreground"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  {queryError === 'required'
-                    ? 'Enter what you need done before asking.'
-                    : queryError === 'too-long' || queryTooLong
-                      ? `Keep your question to ${QUERY_MAX_LENGTH} characters or fewer before asking.`
-                      : `Up to ${QUERY_MAX_LENGTH} characters.`}
-                </p>
-              </Field>
-              <Button type="submit" variant="secondary" size="lg" className="min-h-14 w-full sm:w-auto">Ask</Button>
-            </form>
-          </Card>
-
-          {hasAnswer ? null : (
-            <nav aria-label="Browse by category" className="flex flex-wrap justify-center gap-2.5">
-              {CATEGORY_CHIPS.map((chip) => (
-                <Link
-                  key={chip.label}
-                  to="/t/new"
-                  search={{ q: chip.query }}
-                  className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
-                >
-                  {chip.label}
-                </Link>
-              ))}
-            </nav>
-          )}
-
-          {hasAnswer ? null : (
-            <nav aria-label="Example asks" className="flex flex-wrap justify-center gap-x-5 gap-y-1.5">
-              {HOME.exampleAsks.map((ask) => (
-                <Link
-                  key={ask}
-                  to="/t/new"
-                  search={{ q: ask }}
-                  className="inline-flex min-h-11 items-center px-1 text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                >
-                  {ask}
-                </Link>
-              ))}
-            </nav>
-          )}
-
-          {hasAnswer ? null : (
-            <div className="grid w-full gap-3 text-left sm:grid-cols-2">
-              {[AGENT_DOOR, BUSINESS_DOOR].map((door) => (
-                <Card key={door.href} className="grid gap-1 border border-border bg-card p-5">
-                  <h2 className="block font-semibold text-foreground">{door.heading}</h2>
-                  <p className="block text-sm text-muted-foreground">
-                    {door.body}
-                  </p>
-                  {door.href === '/claim?source=supply' ? (
-                    <Link to="/claim" search={{ source: 'supply' }} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
-                      {door.cta}
-                    </Link>
-                  ) : (
-                    <Link to={door.href} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 justify-self-start">
-                      {door.cta}
-                    </Link>
-                  )}
-                </Card>
-              ))}
+              </div>
+              <Button type="submit" size="lg" className="min-h-12 px-6">
+                Ask Agentic Economy
+              </Button>
             </div>
-          )}
+            <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+              <p
+                id="service-search-hint"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {queryError === "required"
+                  ? "Describe the outcome you need."
+                  : queryError === "too-long" || queryTooLong
+                    ? `Keep your search to ${QUERY_MAX_LENGTH} characters or fewer.`
+                    : "We’ll preserve the job, find viable capabilities, and ask before calling."}
+              </p>
+              <span
+                id="service-search-count"
+                className="shrink-0 font-mono tabular-nums"
+                aria-live="polite"
+              >
+                {queryValue.length}/{QUERY_MAX_LENGTH}
+              </span>
+            </div>
+          </form>
 
-          {data?.kind === 'work-tree' ? (
-            <RootWorkTreeLoop readback={data.readback} />
-          ) : null}
+          <nav
+            aria-label="Popular searches"
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+          >
+            <span className="text-muted-foreground">Popular:</span>
+            {HOME.exampleAsks.map((query) => (
+              <Link
+                key={query}
+                to="/market"
+                search={{ window: "30d", query }}
+                className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline"
+              >
+                {query}
+              </Link>
+            ))}
+          </nav>
         </section>
+
+        <HomeCapabilityResults read={read} />
       </div>
     </AePublicShell>
-  )
+  );
 }
 
+export function HomeCapabilityResults({
+  read,
+}: Readonly<{ read: HomeCapabilityRead }>) {
+  return (
+    <section aria-labelledby="home-capabilities" className="grid gap-4">
+      <div className="flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid gap-1">
+          <h2 id="home-capabilities" className="text-2xl font-semibold tracking-tight">
+            Capabilities ready to use
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Current Agentic Economy capabilities with exact access and price facts.
+          </p>
+        </div>
+        <Button asChild variant="outline" className="min-h-11 self-start sm:self-auto">
+          <Link
+            to="/market"
+            search={{ window: "30d" }}
+          >
+            Discover all capabilities
+            <ArrowRightIcon aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
+
+      {read.kind === "unavailable" ? (
+        <Card className="p-5 shadow-none" role="status">
+          <h3 className="font-semibold">Capabilities are temporarily unavailable</h3>
+          <p className="text-sm text-muted-foreground">
+            Open Discover to search the callable catalogue, or try again shortly.
+          </p>
+        </Card>
+      ) : read.operations.length === 0 ? (
+        <Card className="p-5 shadow-none" role="status">
+          <h3 className="font-semibold">No capabilities are ready right now</h3>
+          <p className="text-sm text-muted-foreground">
+            Browse all capabilities, including those that require setup.
+          </p>
+        </Card>
+      ) : (
+        <div className="overflow-hidden rounded-lg border bg-card">
+          <p className="border-b bg-muted/25 px-4 py-2 text-xs text-muted-foreground sm:px-5">
+            Showing {read.operations.length.toLocaleString()} of {read.matchedCount.toLocaleString()} ready capabilities
+          </p>
+          <ItemGroup>
+            {read.operations.map((operation) => (
+              <HomeCapabilityRow
+                key={operation.operationRef}
+                operation={operation}
+              />
+            ))}
+          </ItemGroup>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HomeCapabilityRow({
+  operation,
+}: Readonly<{ operation: OperationCardViewModel }>) {
+  return (
+    <li className="border-b last:border-b-0">
+      <Item
+        size="sm"
+        className="rounded-none px-4 py-4 hover:bg-muted/35 sm:px-5 lg:flex-nowrap"
+      >
+        <ItemContent className="min-w-0 basis-full lg:basis-auto">
+          <ItemTitle className="max-w-full gap-2">
+            <h3 className="min-w-0 truncate text-sm font-medium">
+              <Link
+                to="/operations/$operationRef"
+                params={{ operationRef: operation.operationRef }}
+                className="underline-offset-4 hover:underline"
+              >
+              {operation.title}
+              </Link>
+            </h3>
+            <Badge variant="success">Ready now</Badge>
+          </ItemTitle>
+          <p className="text-xs font-medium text-muted-foreground">
+            {operation.supplierName}
+          </p>
+          <ItemDescription className="max-w-2xl text-pretty">
+            {operation.summary}
+          </ItemDescription>
+        </ItemContent>
+
+        <dl className="grid w-full grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 lg:w-auto lg:min-w-[31rem]">
+          <HomeFact label="Total price" value={operation.price} mono />
+          <HomeFact label="Authentication" value={operation.authentication} />
+          <HomeFact
+            label="Last verified"
+            value={
+              operation.lastVerifiedAt === undefined
+                ? "Not reported"
+                : `${formatUtcTimestamp(operation.lastVerifiedAt)} UTC`
+            }
+          />
+          <HomeFact label="Call" value={operation.callLabel} />
+        </dl>
+
+        <ItemActions className="ml-auto w-full justify-end lg:w-auto">
+          <Button asChild size="sm" className="min-h-11">
+            <Link
+              to="/operations/$operationRef"
+              params={{ operationRef: operation.operationRef }}
+              aria-label={`Use ${operation.title}`}
+            >
+              Use capability
+              <ArrowRightIcon aria-hidden="true" />
+            </Link>
+          </Button>
+        </ItemActions>
+      </Item>
+    </li>
+  );
+}
+
+function HomeFact({
+  label,
+  value,
+  mono = false,
+}: Readonly<{ label: string; value: string; mono?: boolean }>) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd
+        className={`${mono ? "font-mono" : ""} mt-0.5 text-xs font-medium tabular-nums`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function HomePending() {
+  return (
+    <AePublicShell>
+      <section
+        className="mx-auto grid min-h-[50vh] w-full max-w-6xl content-center px-4 py-12 sm:px-6"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <p role="status" className="text-muted-foreground">
+          Loading current capabilities…
+        </p>
+      </section>
+    </AePublicShell>
+  );
+}
+
+function HomeError() {
+  return (
+    <AePublicShell>
+      <section role="alert" className="mx-auto grid min-h-[50vh] w-full max-w-3xl content-center gap-3 px-4 py-12 sm:px-6">
+        <h1 className="text-2xl font-semibold">Unable to load capabilities</h1>
+        <p className="text-muted-foreground">
+          Check your connection and try again. No capability was called.
+        </p>
+        <Button asChild className="min-h-11 justify-self-start">
+          <Link to="/">Try again</Link>
+        </Button>
+      </section>
+    </AePublicShell>
+  );
+}

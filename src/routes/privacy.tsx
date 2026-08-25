@@ -1,8 +1,10 @@
 import { Outlet, Link, createFileRoute, useLocation } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
+  BracesIcon,
+  CreditCardIcon,
   EyeOffIcon,
-  MessageSquareIcon,
+  KeyRoundIcon,
   ReceiptTextIcon,
   SearchIcon,
   StoreIcon,
@@ -19,7 +21,7 @@ export const Route = createFileRoute('/privacy')({
     meta: [
       { title: 'Privacy | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
-      { name: 'description', content: 'What Agentic Economy shares when you ask, compare, or contact a business.' },
+      { name: 'description', content: 'What Agentic Economy handles when you browse, call, pay for, or publish Operations.' },
     ],
   }),
   component: PrivacyRoute,
@@ -27,46 +29,53 @@ export const Route = createFileRoute('/privacy')({
 
 const detailCards = [
   {
-    icon: MessageSquareIcon,
-    label: 'Contact',
-    title: 'Sent to the business',
-    body: 'Your name, contact detail, and job note go to the business you chose.',
+    icon: BracesIcon,
+    label: 'Call',
+    title: 'Inputs go to the selected supplier',
+    body: 'Only the inputs required by the exact Operation are released through its published call path.',
   },
   {
     icon: ReceiptTextIcon,
-    label: 'Copy',
-    title: 'Kept for follow-up',
-    body: 'AE keeps the sent message and delivery state so you can see what was sent.',
+    label: 'Record',
+    title: 'Execution facts support recovery',
+    body: 'AE records invocation identity, status, usage, settlement, and named evidence needed for replay and recovery.',
   },
   {
     icon: EyeOffIcon,
     label: 'Public page',
-    title: 'Not shown to visitors',
-    body: 'Your contact details do not appear on public service pages.',
+    title: 'Private call data stays off market pages',
+    body: 'Public catalogue and metrics pages do not expose credentials, raw inputs, outputs, or wallet counterparties.',
   },
 ] as const
 
 const moments = [
   {
-    value: 'contact',
-    label: 'Contact',
-    icon: MessageSquareIcon,
-    title: 'When you contact a business',
-    points: ['You pick the business.', 'AE sends your message and contact details to that business.', 'The business replies outside AE or through the owner tools when available.'],
+    value: 'call',
+    label: 'Call',
+    icon: KeyRoundIcon,
+    title: 'When an agent calls an Operation',
+    points: ['The exact Operation defines its inputs, supplier, price, and access requirements.', 'AE checks identity, authority, and available spend before a controlled call.', 'The supplier receives only the data released for that Operation.'],
   },
   {
-    value: 'ask',
-    label: 'Ask',
+    value: 'browse',
+    label: 'Browse',
     icon: SearchIcon,
-    title: 'When you ask AE a question',
-    points: ['AE uses a browser session marker to keep your answer available.', 'That marker is not your name or contact details.', 'You can clear it by ending your browser session.'],
+    title: 'When you browse the catalogue',
+    points: ['Search and filter choices are used to return matching Operations.', 'Supplier pages show published catalogue facts and their freshness.', 'Ratings, latency, popularity, or readiness are shown only when the market has a named source for them.'],
   },
   {
-    value: 'pages',
-    label: 'Pages',
+    value: 'money',
+    label: 'Money',
+    icon: CreditCardIcon,
+    title: 'When a metered call may cost money',
+    points: ['The exact price and currency are presented before the call.', 'AE may reserve funds before contacting the supplier.', 'The observed cost is settled, or the reservation is released; uncertain outcomes enter reconciliation.'],
+  },
+  {
+    value: 'publish',
+    label: 'Publish',
     icon: StoreIcon,
-    title: 'When you read a business page',
-    points: ['Page details come from the business or public information.', 'Pages can show where details came from and when they changed.', 'Timing, quote, and availability still come from the business reply.'],
+    title: 'When a supplier publishes',
+    points: ['Supplier identity, Operation contracts, prices, readiness, and access facts become catalogue data.', 'Credentials and internal adapter configuration are not part of the public projection.', 'Suppliers can request a correction or removal through the process below.'],
   },
 ] as const
 
@@ -81,7 +90,7 @@ function PrivacyRoute() {
     <AePublicShell>
       <AePageHeader
         title="Privacy"
-        description="What is shared when you ask, compare, or contact a business."
+        description="What the market handles when you browse, call, pay for, or publish Operations."
       />
       <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4">
@@ -98,7 +107,7 @@ function PrivacyRoute() {
 
         <section className="border-t border-border pt-8">
           <div className="grid gap-3">
-            <Tabs defaultValue="contact">
+            <Tabs defaultValue="call">
               <TabsList aria-label="Privacy moments" className="min-h-11 w-full">
                 {moments.map(({ value, label }) => (
                   <TabsTrigger key={value} value={value} className="min-h-11 flex-1">{label}</TabsTrigger>
@@ -125,13 +134,13 @@ function PrivacyRoute() {
         <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <h2 className="text-3xl font-semibold text-foreground">
-              Need a page fixed?
+              Need a supplier profile fixed?
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Send the page slug and what should change.
+              Send the supplier slug and what should change.
             </p>
           </div>
-          <Button asChild variant="secondary"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/privacy/remove-business">Open corrections <ArrowRightIcon aria-hidden="true" /></Link></Button>
         </section>
       </div>
     </AePublicShell>

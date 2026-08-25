@@ -1,8 +1,10 @@
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { jsonValueSchema } from '@/modules/capability-contract/public'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
+  operationInvokeReceiptSchema,
   operationInvokeResultSchema,
   operationInvokeUsageSchema,
 } from './operation-invoke-contracts'
@@ -12,7 +14,7 @@ import {
   type OperationInvokeRecoveryResult,
   type OperationInvokeStatusResult,
 } from './operation-recovery-contracts'
-import type { ReconciliationEvidence } from '@/modules/action-invocation/reconciliation-evidence'
+import type { ReconciliationEvidence } from '@/modules/action-invocation/runtime'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from './operation-invoke-entry'
 
 const boundedText = (maximum: number) => z.string().trim().min(1).max(maximum)
@@ -22,12 +24,14 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     kind: z.literal('found'),
     invocationRef: boundedText(300),
     operationRef: boundedText(300),
+    previousInput: z.record(z.string(), jsonValueSchema).exactOptional(),
     state: operationInvokeStatusStateSchema,
     usage: operationInvokeUsageSchema.exactOptional(),
     evidenceHash: boundedText(300).exactOptional(),
     attemptRef: boundedText(300).exactOptional(),
     effectGeneration: z.number().int().positive().exactOptional(),
     result: operationInvokeResultSchema.exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
   z.strictObject({
     kind: z.literal('refused'),
@@ -35,6 +39,7 @@ export const operationInvokeStatusResultSchema: z.ZodType<OperationInvokeStatusR
     code: operationInvokeStatusRefusalCodeSchema,
     retryable: z.boolean(),
     nextAction: boundedText(300).exactOptional(),
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
 ])
 
@@ -53,6 +58,7 @@ export const operationInvokeRecoveryResultSchema: z.ZodType<OperationInvokeRecov
     invocationRef: boundedText(300),
     operationRef: boundedText(300),
     evidence: publicReconciliationStateSchema,
+    receipt: operationInvokeReceiptSchema.exactOptional(),
   }),
 ])
 

@@ -13,22 +13,22 @@ describe('registry search documents', () => {
     const docs = buildRegistrySearchDocumentsForCatalog(
       catalog({
         offerings: [
-          offering({ offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair', name: 'Emergency pipe repair' }),
-          offering({ offeringRef: 'offering:parramatta-emergency-plumbing:blocked-drain', name: 'Blocked drain repair' }),
+          offering({ offeringRef: 'offering:demo-listed-provider:listed-offering', name: 'Listed offering' }),
+          offering({ offeringRef: 'offering:demo-listed-provider:blocked-drain', name: 'Blocked drain repair' }),
         ],
       }),
     )
 
     expect(docs).toHaveLength(2)
     expect(docs[0]).toMatchObject({
-      offeringRef: 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
+      offeringRef: 'offering:demo-listed-provider:listed-offering',
+      name: 'Listed offering',
+      category: 'Listed provider',
       serviceAreaSummary: 'Parramatta and nearby suburbs',
     })
     expect(docs.map((doc) => doc.documentId)).toEqual([
-      'parramatta-emergency-plumbing__emergency-pipe-repair',
-      'parramatta-emergency-plumbing__blocked-drain',
+      'demo-listed-provider__listed-offering',
+      'demo-listed-provider__blocked-drain',
     ])
     expect(docs.every((doc) => /^[A-Za-z0-9_-]+$/.test(doc.documentId))).toBe(true)
   })
@@ -41,12 +41,12 @@ describe('registry search documents', () => {
 
     expect(
       documentMatchesRegistryQuery(parramatta, {
-        query: 'Emergency plumber Parramatta',
+        query: 'listed offering Parramatta',
       }),
     ).toBe(true)
     expect(
       documentMatchesRegistryQuery(parramatta, {
-        query: 'Emergency plumber Brunswick',
+        query: 'listed offering Brunswick',
       }),
     ).toBe(false)
   })
@@ -68,8 +68,8 @@ describe('registry search documents', () => {
     const [parramatta] = buildRegistrySearchDocumentsForCatalog(catalog())
     const [perth] = buildRegistrySearchDocumentsForCatalog(
       catalog({
-        slug: 'perth-emergency-plumbing',
-        name: 'Perth Emergency Plumbing',
+        slug: 'perth-listed-provider',
+        name: 'Perth listed provider',
         businessContext: {
           kind: 'local_human',
           suburb: 'Perth',
@@ -83,7 +83,7 @@ describe('registry search documents', () => {
     }
 
     const input = {
-      query: 'emergency plumber',
+      query: 'listed offering',
       mode: 'near_me' as const,
       location: 'Perth, WA',
     }
@@ -95,7 +95,7 @@ describe('registry search documents', () => {
   it('resolves location from explicit context before query text', () => {
     expect(
       resolveRegistrySearchLocation({
-        query: 'emergency plumber',
+        query: 'listed offering',
         mode: 'near_me',
         location: 'Perth, WA',
       }),
@@ -115,16 +115,16 @@ function catalog(
   const { serviceAreaSummary = 'Parramatta and nearby suburbs', ...catalogOverrides } = overrides
   return {
     schemaVersion: 'public-business-catalog-api:v2',
-    businessId: 'business:parramatta-emergency-plumbing',
-    slug: 'parramatta-emergency-plumbing',
-    name: 'Parramatta Emergency Plumbing',
-    category: 'Emergency plumbing',
+    businessId: 'business:demo-listed-provider',
+    slug: 'demo-listed-provider',
+    name: 'Demo listed provider',
+    category: 'Listed provider',
     businessContext: {
       kind: 'local_human',
       suburb: 'Parramatta',
       stateTerritory: 'NSW',
     },
-    publicUrl: '/parramatta-emergency-plumbing',
+    publicUrl: '/demo-listed-provider',
     trustTier: 'claimed',
     observedAt: 1_000,
     disposition: 'current',
@@ -139,7 +139,7 @@ function offering(
   overrides: Partial<PublicBusinessCatalogApiV2Dto['offerings'][number]> = {},
 ): PublicBusinessCatalogApiV2Dto['offerings'][number] {
   const offeringRef = brandNonEmpty(
-    overrides.offeringRef ?? 'offering:parramatta-emergency-plumbing:emergency-pipe-repair',
+    overrides.offeringRef ?? 'offering:demo-listed-provider:listed-offering',
     'OfferingRef',
   )
   const accessPathRef = brandNonEmpty(
@@ -148,16 +148,16 @@ function offering(
   )
   const descriptor = {
     kind: 'human_request' as const,
-    channel: 'ae_inquiry' as const,
+    channel: 'website' as const,
     disclosure: 'Send a qualified inquiry for owner review.',
   }
 
   return {
     offeringRef,
     revision: 1,
-    name: 'Emergency pipe repair',
-    category: 'Emergency plumbing',
-    summary: 'Emergency plumbing help for urgent pipe repairs.',
+    name: 'Listed offering',
+    category: 'Listed provider',
+    summary: 'Published listing for first contact.',
     serviceAreaSummary: 'Parramatta and nearby suburbs',
     accessPaths: [{
       accessPathRef,

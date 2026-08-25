@@ -33,9 +33,7 @@ describe('AE partial workflow entry', () => {
   })
 
   it('binds confirmation to an AE request revision and generated route', () => {
-    const confirm = findAction('customerRequest.confirm')
-    expect(confirm).toBeDefined()
-    expect(confirm?.summary).toContain('Retired Customer Request surface')
+    expect(findAction('customerRequest.confirm')).toBeUndefined()
 
     expect(results.find(({ caseId }) => caseId === 'external-proposal-commitment')).toMatchObject({
       disposition: 'not_addressable',
@@ -44,10 +42,8 @@ describe('AE partial workflow entry', () => {
   })
 
   it('cannot inspect or recover an external commitment through Request actions', () => {
-    const inspect = findAction('customerRequest.inspectEvidence')
-    const cancel = findAction('customerRequest.cancel')
-    expect(inspect).toBeDefined()
-    expect(cancel).toBeDefined()
+    expect(findAction('customerRequest.inspectEvidence')).toBeUndefined()
+    expect(findAction('customerRequest.cancel')).toBeUndefined()
 
     expect(results.find(({ caseId }) => caseId === 'external-commitment-inspection')?.disposition)
       .toBe('not_addressable')

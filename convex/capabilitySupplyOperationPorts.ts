@@ -2,10 +2,12 @@ import type {
   OperationLedgerPorts,
   OperationKeyRecord,
 } from '@/modules/capability-supply/public'
+import type { AuditEventContract, RedactedPayload } from '../src/modules/observability/public'
 
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx } from './_generated/server'
 import { toCapabilityBindingRow, toCapabilityOfferingRow } from './capabilitySupplyRowMappers'
+import { persistAuditEvent } from './securityShared'
 
 export function capabilitySupplyOperationPorts(
   db: MutationCtx['db'],
@@ -50,8 +52,47 @@ export function capabilitySupplyOperationPorts(
       })
     },
 
-    findAuditByEventId: async () => null,
-    insertAudit: async () => undefined,
+    findAuditByEventId: async (eventId) => {
+      const existing = await db.query('auditEvents')
+        .withIndex('by_eventId', (query) => query.eq('eventId', eventId)).unique()
+      if (existing === null) return null
+      return {
+        eventId: existing.eventId,
+        eventType: existing.eventType,
+        actorKind: existing.actorKind,
+        actorRef: existing.actorRef,
+        targetType: existing.targetType,
+        targetRef: existing.targetRef,
+        ...(existing.beforeState === undefined ? {} : { beforeState: existing.beforeState }),
+        ...(existing.afterState === undefined ? {} : { afterState: existing.afterState }),
+        idempotencyKey: existing.idempotencyKey,
+        correlationId: existing.correlationId,
+        ...(existing.reasonCode === undefined ? {} : { reasonCode: existing.reasonCode }),
+        evidenceRefs: existing.evidenceRefs,
+        redactedPayloadJson: existing.redactedPayloadJson,
+        payloadHash: existing.payloadHash,
+        createdAt: existing.createdAt,
+      }
+    },
+    insertAudit: async (row) => {
+      await persistAuditEvent(db, {
+        eventId: row.eventId as AuditEventContract['eventId'],
+        eventType: row.eventType as AuditEventContract['eventType'],
+        actorKind: row.actorKind as AuditEventContract['actorKind'],
+        actorRef: row.actorRef,
+        targetType: row.targetType as AuditEventContract['targetType'],
+        targetRef: row.targetRef,
+        beforeState: row.beforeState,
+        afterState: row.afterState,
+        idempotencyKey: row.idempotencyKey as AuditEventContract['idempotencyKey'],
+        correlationId: row.correlationId as AuditEventContract['correlationId'],
+        reasonCode: row.reasonCode,
+        evidenceRefs: [...row.evidenceRefs],
+        redactedPayload: JSON.parse(row.redactedPayloadJson) as RedactedPayload,
+        payloadHash: row.payloadHash as AuditEventContract['payloadHash'],
+        createdAt: row.createdAt,
+      })
+    },
 
     registerOffering: writers.registerOffering,
     registerBinding: writers.registerBinding,
@@ -110,4 +151,3 @@ function toOperationKeyRecord(doc: Doc<'operationKeys'>): OperationKeyRecord {
     effectRefs: doc.effectRefs,
   }
 }
-

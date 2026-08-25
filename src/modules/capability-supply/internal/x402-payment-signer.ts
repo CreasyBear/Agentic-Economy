@@ -8,6 +8,7 @@ import {
 } from '@x402/core/http'
 import { validatePaymentRequired, type PaymentRequired as X402SchemaPaymentRequired } from '@x402/core/schemas'
 import type { PaymentRequired, SettleResponse } from '@x402/core/types'
+import { isEIP3009Payload, type ExactEvmPayloadV2 } from '@x402/evm'
 import { ExactEvmScheme } from '@x402/evm/exact/client'
 import { appendPaymentIdentifierToExtensions, extractPaymentIdentifier, isPaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -138,7 +139,8 @@ export function validateX402PaymentRequired(value: unknown): X402ValidatedPaymen
 
 const privateKeyPattern = /^0x[0-9a-fA-F]{64}$/
 
-export async function createEvmX402PaymentSignature(
+/** Sandbox/development-only raw private-key signer. Production uses CDP custody. */
+export async function createSandboxEvmX402PaymentSignature(
   request: X402PaymentSignatureRequest,
 ): Promise<string | undefined> {
   if (!privateKeyPattern.test(request.credential)) return undefined
@@ -202,6 +204,64 @@ export function readX402PaymentPayer(
     return undefined
   }
   return undefined
+}
+
+export type X402PaymentPayerAndNonce = Readonly<{
+  payer: string
+  nonce: string
+}>
+
+/**
+ * Reads the payer and authorization nonce from an exact EIP-3009 payment
+ * header. Permit2 and structurally incomplete payment payloads are not an
+ * authorization identity for settlement verification.
+ */
+export function readX402PaymentPayerAndNonce(
+  paymentSignature: string,
+): X402PaymentPayerAndNonce | undefined {
+  if (!boundedString(paymentSignature, 1_048_576)) return undefined
+  try {
+    const decoded = decodePaymentSignatureHeader(paymentSignature)
+    if (
+      decoded.x402Version !== 2
+      || !isRecord(decoded.payload)
+      || decoded.accepted.scheme !== 'exact'
+      || !isEIP3009Payload(decoded.payload as ExactEvmPayloadV2)
+    ) return undefined
+    const authorization = decoded.payload.authorization
+    if (
+      !isRecord(authorization)
+      || !isEvmAddress(authorization.from)
+      || !isEip3009Nonce(authorization.nonce)
+      || !isEvmAddress(authorization.to)
+      || !decimalAtomicAmount(authorization.value)
+      || !decimalAtomicAmount(authorization.validAfter)
+      || !decimalAtomicAmount(authorization.validBefore)
+      || !isSignature(decoded.payload.signature)
+    ) return undefined
+    return {
+      payer: authorization.from.toLowerCase(),
+      nonce: authorization.nonce.toLowerCase(),
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function isEvmAddress(value: unknown): value is string {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value)
+}
+
+function decimalAtomicAmount(value: unknown): value is string {
+  return typeof value === 'string' && /^(?:0|[1-9]\d{0,77})$/.test(value)
+}
+
+function isEip3009Nonce(value: unknown): value is string {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value)
+}
+
+function isSignature(value: unknown): value is string {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]{130}$/.test(value)
 }
 
 function paymentIdentifier(operationKeyDigest: string): string {

@@ -1,4 +1,3 @@
-import { convexTest } from 'convex-test'
 import { describe, expect, it, vi } from 'vitest'
 
 import { executeKeylessOperation } from '@/modules/capability-execution/operation-execute.server'
@@ -7,10 +6,9 @@ import type { CapabilityTransportAuthority } from '@/modules/capability-supply/p
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
-import schema from '../../convex/schema'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
 import {
-  convexModules as modules,
+  convexTestWithMarketComponents,
   ownerAdmin,
   prepareCapabilityPublicationMutation,
   publishedBusinessOwner,
@@ -71,7 +69,7 @@ async function publishKeyless(
   )
   if ('reason' in published) throw new Error(`publication_refused:${published.reason}`)
 
-  const observer = await ownerAdmin(backend, `user_capability_operations_observer_${suffix}`)
+  await ownerAdmin(backend, `user_capability_operations_observer_${suffix}`)
   const hashes = await backend.run(async (ctx) => {
     const offering = await ctx.db.query('capabilityOfferings')
       .withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId))
@@ -245,7 +243,7 @@ function sourceFor(backend: ConvexFixtureBackend): KeylessExecutableSourcePort {
 
 describe('keyless operation projection', () => {
   it('excludes effectful POST from listing and read, so direct execution cannot fetch it', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     for (const [suffix, effectClass] of [
       ['effectful-post-state', 'external_state_change'],
       ['effectful-post-financial', 'financial_exposure'],
@@ -274,7 +272,7 @@ describe('keyless operation projection', () => {
   })
 
   it('keeps data-release-only POST executable', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const published = await publishKeyless(backend, 'data-post', {
       method: 'POST', effectClass: 'data_release', priceUnits: '0',
     })
@@ -296,7 +294,7 @@ describe('keyless operation projection', () => {
     expect(providerFetch).toHaveBeenCalledTimes(1)
   })
   it('omits a current keyless publication when its stored operation ref drifts', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const published = await publishKeyless(backend, 'operation-ref-drift', {
       method: 'POST',
       effectClass: 'data_release',
@@ -320,7 +318,7 @@ describe('keyless operation projection', () => {
   })
 
   it('excludes a paid keyless operation from direct list, read, and execution', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const published = await publishKeyless(backend, 'paid-keyless', {
       method: 'POST', effectClass: 'data_release', priceUnits: '0',
     })
@@ -352,7 +350,7 @@ describe('keyless operation projection', () => {
   })
 
   it('projects admitted path parameter braces without decoding reserved path bytes', async () => {
-    const backend = convexTest(schema, modules)
+    const backend = convexTestWithMarketComponents()
     const published = await publishKeyless(backend, 'path-template', {
       method: 'GET',
       effectClass: 'data_release',

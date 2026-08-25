@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import {
   evaluateDiscoveryProjectionGate,
@@ -20,7 +16,7 @@ describe('developer discovery support matrix', () => {
 
     expect(readback.supportMatrix.map((row) => row.surface)).toEqual([
       'public_json_routes',
-      'ae_hosted_ucp_fallback',
+      'ae_hosted_ucp',
       'llms_txt',
       'sitemap',
       'robots',
@@ -79,27 +75,7 @@ describe('developer discovery support matrix', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createFixtureDiscoverySourceState()
-  const business = state.businesses.at(0)
-
-  if (business === undefined) {
-    throw new Error('Expected default discovery source state to include a business.')
-  }
-
-  const generated = regenerateDiscoveryManifest(
-    state,
-    { businessId: business.businessId },
-    {
-      canonicalBaseUrl: 'https://agentic.test',
-      now: 3_000,
-      adapter: testOnlyDiscoveryManifestAdapter,
-    },
-  )
-  if (generated.kind !== 'ok') {
-    throw new Error(`Expected discovery manifest generation to succeed: ${generated.reason}`)
-  }
-
-  return state
+  return createFixtureDiscoverySourceState()
 }
 
 function hasCompleteSupportRow(row: {

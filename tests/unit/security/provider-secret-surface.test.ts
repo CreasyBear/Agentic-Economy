@@ -4,8 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { findFiles } from '@/lib/ui/contract-scans'
 
-const providerSecretEnvNamePattern =
-  /\b(?:CLERK_SECRET_KEY|RESEND_WEBHOOK_SECRET|NOVU_SECRET_KEY|AE_NOTIFICATION_OUTBOX_SECRET)\b/
+const providerSecretEnvNamePattern = /\bCLERK_SECRET_KEY\b/
 
 const operatorRawPrivateMarkerPattern =
   /\b(?:privatePayloadRef|rawPayload|rawBody|rawContact|contactEmail|providerPayload|webhookSecret|secretKey|cardNumber|customerEmail)\b|customer@example\.test|private-endpoint:\/\//i

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { regenerateDiscoveryManifest } from '@/modules/discovery/public'
-import {
-  createFixtureDiscoverySourceState,
-  testOnlyDiscoveryManifestAdapter,
-} from '../helpers/discovery-fixture-source-state'
+import { createFixtureDiscoverySourceState } from '../helpers/discovery-fixture-source-state'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
 import type {
   DeveloperDiscoveryExamplesArtifact,
@@ -27,15 +23,7 @@ describe('developer discovery route handlers', () => {
   it('serves schema and examples with public headers and read-only payloads', async () => {
     const state = availableDiscoveryState()
     const request = new Request('https://ae.example/api/discovery/schema')
-    const schemaResponse = await handleDeveloperDiscoverySchemaRequest(request, state, {
-      now: 7_000,
-      p2InquiryAvailability: {
-        state: 'not_shipped',
-        publicReason: 'Phase 2 public inquiry status is not shipped in this environment.',
-        source: 'phase2-public-status-contract',
-        lastVerifiedAt: 6_900,
-      },
-    })
+    const schemaResponse = await handleDeveloperDiscoverySchemaRequest(request, state, { now: 7_000 })
     const examplesResponse = await handleDeveloperDiscoveryExamplesRequest(
       new Request('https://ae.example/api/discovery/examples'),
       state,
@@ -56,17 +44,11 @@ describe('developer discovery route handlers', () => {
     expect(schema).toMatchObject({
       kind: 'public_catalog_schema',
       state: 'available',
-      p2InquiryAvailability: {
-        state: 'not_shipped',
-        publicReason: 'Phase 2 public inquiry status is not shipped in this environment.',
-        source: 'phase2-public-status-contract',
-        lastVerifiedAt: 6_900,
-      },
     })
     expect(examples).toMatchObject({
       kind: 'public_catalog_examples',
       state: 'available',
-      examples: [expect.objectContaining({ slug: 'parramatta-emergency-plumbing' })],
+      examples: [expect.objectContaining({ slug: 'demo-listed-provider' })],
     })
     expect(serialized).not.toMatch(privateOrAuthorityPattern)
   })
@@ -76,15 +58,7 @@ describe('developer discovery route handlers', () => {
 
     expect(readback).toMatchObject({
       schemaVersion: 'developer-discovery:v1',
-      p2InquiryAvailability: {
-        state: 'unavailable',
-        source: 'phase2-public-status-contract',
-      },
-      publicationControls: {
-        discoveryApiKeysEnabled: false,
-      },
     })
-    expect(Object.keys(readback.p2InquiryAvailability).sort()).toEqual(['lastVerifiedAt', 'publicReason', 'source', 'state'])
     expect(JSON.stringify(readback)).not.toMatch(privateOrAuthorityPattern)
   }, 15_000)
 
@@ -94,7 +68,7 @@ describe('developer discovery route handlers', () => {
       paginationOpts: { cursor: null, numItems: 20 },
     })
     const search = searchPublicBusinessOfferingSupply(state, {
-      query: 'emergency plumber parramatta',
+      query: 'listed offering parramatta',
     })
     const firstListedBusiness = list.page.at(0)
 
@@ -141,25 +115,5 @@ describe('developer discovery route handlers', () => {
 })
 
 function availableDiscoveryState(): DiscoverySourceState {
-  const state = createFixtureDiscoverySourceState()
-  const business = state.businesses.at(0)
-
-  if (business === undefined) {
-    throw new Error('Expected default discovery source state to include a business.')
-  }
-
-  const generated = regenerateDiscoveryManifest(
-    state,
-    { businessId: business.businessId },
-    {
-      canonicalBaseUrl: 'https://agentic.test',
-      now: 3_000,
-      adapter: testOnlyDiscoveryManifestAdapter,
-    },
-  )
-  if (generated.kind !== 'ok') {
-    throw new Error(`Expected discovery manifest generation to succeed: ${generated.reason}`)
-  }
-
-  return state
+  return createFixtureDiscoverySourceState()
 }

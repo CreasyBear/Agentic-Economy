@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { findAction } from '@/modules/actions'
+import { CURRENT_OPERATION_PROJECTION_NAVIGATION } from '@/modules/actions/contract'
 
 import {
   compareCapabilityOperations,
@@ -11,13 +12,15 @@ import {
   operationDetailInputSchema,
   operationDetailOutputSchema,
   operationSearchInputSchema,
-  projectCapabilityOperation,
+  projectCapabilityOperation as projectCapabilityOperationWithNavigation,
   serializeOperationCompareResult,
   serializeOperationDescriptor,
   type CapabilityOperationSourceRecord,
+  type OperationProjectionNavigationContract,
   type OperationCompareResult,
 } from '@/modules/capability-supply/public'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { normalizePricingConfig, pricingConfigDigest } from '@/modules/money/public'
 import { registryOperationsDetailAction, registryOperationsSearchAction } from '@/modules/registry/operations.actions'
 
 const operationRecord: CapabilityOperationSourceRecord = {
@@ -87,13 +90,21 @@ const freeKeylessRecord: CapabilityOperationSourceRecord = {
   authentication: { kind: 'keyless' },
   answerExecutable: true,
 }
+const projectCapabilityOperation = (
+  record: CapabilityOperationSourceRecord,
+  now: number,
+) => projectCapabilityOperationWithNavigation(
+  record,
+  now,
+  CURRENT_OPERATION_PROJECTION_NAVIGATION,
+)
 
 describe('public operation read contract', () => {
   it('shares canonical input schemas with registry actions', () => {
     expect(registryOperationsSearchAction.schema).toBe(operationSearchInputSchema)
     expect(registryOperationsDetailAction.schema).toBe(operationDetailInputSchema)
     expect(registryOperationsDetailAction.outputSchema).toBe(operationDetailOutputSchema)
-    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['answerThread', 'mcp']))
+    expect(registryOperationsDetailAction.surfaces).toEqual(expect.arrayContaining(['chat', 'mcp']))
   })
   it('emits only navigation entries backed by registered actions', async () => {
     const projected = [
@@ -102,6 +113,7 @@ describe('public operation read contract', () => {
       projectCapabilityOperation({ ...operationRecord, routeable: false, integrated: false }, 2_000),
     ]
     const plan = await inspectCapabilityOperationPlan({
+      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
       listCurrent: async () => ({ operations: [operationRecord], snapshotKey: 'snapshot:projection' }),
       loadCurrent: async () => operationRecord,
     }, { operationRefs: [projected[0]!.operationRef] }, 2_000)
@@ -136,6 +148,61 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'registry.operations.detail',
     })
+  })
+  it('refuses an injected invoke path that drifts from the descriptor callVia contract', () => {
+    const drifted = {
+      ...CURRENT_OPERATION_PROJECTION_NAVIGATION,
+      invoke: {
+        ...CURRENT_OPERATION_PROJECTION_NAVIGATION.invoke,
+        pathTemplate: '/api/v1/operations/other',
+      },
+    } as unknown as OperationProjectionNavigationContract
+    expect(() => projectCapabilityOperationWithNavigation(operationRecord, 2_000, drifted))
+      .toThrowError('operation_projection_call_via_mismatch')
+  })
+  it('carries an additive Base USDC price breakdown through projection and wire roundtrip', () => {
+    const operation = projectCapabilityOperation({
+      ...operationRecord,
+      price: { kind: 'fixed', amount: { currency: 'USD', units: '1100', exponent: 2 } },
+      priceBreakdown: {
+        providerQuotedAmount: { currency: 'USD', units: '1000', exponent: 2 },
+        agenticEconomyFee: { currency: 'USD', units: '100', exponent: 2 },
+        totalBuyerAuthorization: { currency: 'USD', units: '1100', exponent: 2 },
+        network: 'eip155:8453',
+        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      },
+    }, 2_000)
+    const wire = serializeOperationDescriptor(operation)
+    expect(wire.commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
+    expect(deserializeOperationDescriptor(wire).commercial.priceBreakdown).toEqual(operation.commercial.priceBreakdown)
+  })
+  it('preserves backward absence and pinned fee rounding cases', () => {
+    expect(serializeOperationDescriptor(projectCapabilityOperation(operationRecord, 2_000)).commercial).not.toHaveProperty('priceBreakdown')
+    const cases = [
+      { provider: '1000', fee: '100', total: '1100' },
+      { provider: '1', fee: '1', total: '2' },
+      { provider: '0', fee: '0', total: '0' },
+      { provider: '9223372036854775807', fee: '922337203685477581', total: '10145709240540253388' },
+    ] as const
+    for (const value of cases) {
+      const config = {
+        version: 'pricing:v2' as const,
+        unit: 'call' as const,
+        providerAmount: { currency: 'USD', units: value.provider, exponent: 2 },
+        platformFee: { currency: 'USD', units: value.fee, exponent: 2 },
+        paidAmount: { currency: 'USD', units: value.total, exponent: 2 },
+      }
+      expect(normalizePricingConfig(config).kind).toBe('valid')
+      expect(pricingConfigDigest(config)).not.toBe('invalid')
+    }
+    const corrupted = {
+      version: 'pricing:v2' as const,
+      unit: 'call' as const,
+      providerAmount: { currency: 'USD', units: '1000', exponent: 2 },
+      platformFee: { currency: 'USD', units: '99', exponent: 2 },
+      paidAmount: { currency: 'USD', units: '1099', exponent: 2 },
+    }
+    expect(normalizePricingConfig(corrupted)).toEqual({ kind: 'invalid', code: 'pricing_config_invalid' })
   })
   it('requires a fixed exact zero price for anonymous keyless eligibility', () => {
     const base = {
@@ -178,7 +245,7 @@ describe('public operation read contract', () => {
       method: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.method,
       actionId: OPERATION_INVOKE_ROUTE_CONTRACT.invoke.actionId,
       authentication: 'required',
-      surfaces: ['answerThread', 'http', 'cli', 'mcp'],
+      surfaces: ['http', 'cli', 'mcp'],
     })
     expect(operation.navigation.some(({ relation }) => relation === 'execute')).toBe(false)
 
@@ -199,9 +266,11 @@ describe('public operation read contract', () => {
       method: 'POST',
       actionId: 'operation.execute',
       authentication: 'none',
-      surfaces: ['answerThread', 'mcp'],
+      surfaces: ['chat', 'mcp'],
       precondition: 'free_keyless_read_only',
     })
+    expect(CURRENT_OPERATION_PROJECTION_NAVIGATION.execute).toEqual(execute)
+    expect(new Set(execute?.surfaces)).toEqual(new Set(findAction('operation.execute')?.surfaces))
     const roundTripped = deserializeOperationDescriptor(serializeOperationDescriptor(free))
     expect(roundTripped.navigation).toEqual(free.navigation)
     expect(roundTripped.callVia).toBe(free.callVia)
@@ -264,6 +333,7 @@ describe('public operation read contract', () => {
   it('compares populated data-use through the canonical wire schema and rejects object recipients', async () => {
     const operation = projectCapabilityOperation(populatedDataUseRecord, 2_000)
     const result = await compareCapabilityOperations({
+      navigation: CURRENT_OPERATION_PROJECTION_NAVIGATION,
       listCurrent: async () => ({ operations: [populatedDataUseRecord], snapshotKey: 'snapshot:compare' }),
       loadCurrent: async (operationRef) => operationRef === operation.operationRef ? populatedDataUseRecord : null,
     }, { operationRefs: [operation.operationRef] }, 2_000)

@@ -1,14 +1,14 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeSupplyLanding } from '@/components/ae/supply/AeSupplyLanding'
-import { loadSupplyLandingReadbackServer } from '@/modules/capability-supply/supply-funnel.functions'
+import { loadSupplyLandingReadbackServer } from '@/lib/server/supply-landing.functions'
 
 export const Route = createFileRoute('/for-providers')({
   loader: () => loadSupplyLandingReadbackServer(),
   head: () => ({
     meta: [
-      { title: 'Get your service in front of AI assistants | Agentic Economy' },
-      { name: 'description', content: 'Publish what you do once, set the terms assistants can review, test it, go live, and prepare for paid work when agents bring you work after payment support is enabled.' },
+      { title: 'List your API or service | Agentic Economy' },
+      { name: 'description', content: 'Publish the capability, price and access terms agents need to discover, compare and call your tool.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),

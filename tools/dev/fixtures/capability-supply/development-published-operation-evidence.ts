@@ -1,5 +1,6 @@
 import { defineCapabilityContract } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   createProviderConnection,
   issueProviderConnectionLease,
@@ -358,6 +359,21 @@ export function buildDevelopmentPublishedOperationEvidence() {
     assetAmountExponent: 6,
     asset: '0xmock-usdc',
     payTo: '0xmock-provider-recipient',
+    paymentRequiredJson: stableStringify({
+      x402Version: 2,
+      resource: {
+        url: `https://provider.example${endpointPath}`,
+      },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '10000',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider-recipient',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    } as StableHashValue),
   } as const
   const binding = defineCapabilityTransportBindingRegistration({
     bindingId: 'mock:binding:crypto-quotes',

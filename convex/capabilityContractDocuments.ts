@@ -7,11 +7,12 @@ import {
 } from '@/modules/capability-contract-registry/public'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { stableStringify } from '@/modules/common/stable-hash'
-import type { StableHashValue } from '@/modules/common/stable-hash'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { validateAuditEvent } from '@/modules/observability/public'
 
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
+import { persistAuditEvent } from './securityShared'
 
 const capabilityContractRefValue = v.object({
   capabilityId: v.string(),
@@ -285,7 +286,7 @@ function invalidContractResult(error: unknown) {
 }
 
 async function ensureRegistrationAudit(
-  _db: MutationCtx['db'],
+  db: MutationCtx['db'],
   input: Readonly<{
     ref: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
     actorRef: string
@@ -296,6 +297,43 @@ async function ensureRegistrationAudit(
     registeredAt: number
   }>,
 ): Promise<string> {
-  return input.operationKey
-}
+  const targetRef = `${input.ref.capabilityId}@${input.ref.version}#${input.ref.contractDigest}`
+  const redactedPayload = {
+    capabilityId: input.ref.capabilityId,
+    version: input.ref.version,
+    contractDigest: input.ref.contractDigest,
+  }
+  const validation = validateAuditEvent({
+    eventId: brandNonEmpty(
+      `audit:capability_contract:${canonicalDigest({
+        targetType: 'capability_contract',
+        targetRef,
+        actorKind: 'admin',
+        actorRef: input.actorRef,
+        operationKey: input.operationKey,
+      })}`,
+      'AuditEventId',
+    ),
+    eventType: 'capability_contract.registered',
+    actorKind: 'admin',
+    actorRef: input.actorRef,
+    targetType: 'capability_contract',
+    targetRef,
+    beforeState: 'unregistered',
+    afterState: 'active',
+    idempotencyKey: brandNonEmpty(input.operationKey, 'OperationKey'),
+    correlationId: brandNonEmpty(input.correlationId, 'CorrelationId'),
+    reasonCode: input.reasonCode,
+    evidenceRefs: input.evidenceRefs,
+    redactedPayload,
+    payloadHash: canonicalDigest(redactedPayload),
+    createdAt: input.registeredAt,
+  })
 
+  if (!validation.valid) {
+    throw new Error('capability_contract_audit_invalid')
+  }
+
+  await persistAuditEvent(db, validation.event)
+  return validation.event.eventId
+}

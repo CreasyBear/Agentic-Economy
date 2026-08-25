@@ -1,8 +1,6 @@
 import type { AgentAccessPrincipal } from '@/modules/agent-access/agent-access'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import {
-  isPublicOperationRef,
-  materializeRuntimePublishedOperation,
   type PublishedOperation,
   type RuntimePublishedOperationDescriptor,
 } from '@/modules/capability-supply/public'
@@ -14,160 +12,69 @@ import type {
 } from './operation-execute.functions'
 import type {
   ActionInvocationView,
-  StandingMandateAuthorityBasis,
   InvocationActor,
-} from '@/modules/action-invocation/contracts'
-import type { DynamicPublishedInvocationResult } from '@/modules/action-invocation/dynamic-published-contract'
-import type { DynamicPublishedActionInvocationAdapter } from '@/modules/action-invocation/dynamic-published-adapter'
+} from '@/modules/action-invocation/runtime'
+import type { DynamicPublishedInvocationResult } from './legacy-dynamic/dynamic-published-contract'
+import type { DynamicPublishedActionInvocationAdapter } from './legacy-dynamic/dynamic-published-adapter'
 import {
   createInvocationApplication,
   type DevelopmentHostSourceCommands,
-} from '@/modules/action-invocation/application-service'
+} from './legacy-dynamic/application-service'
 import type { OperationInvokePersistedAuthority } from './internal/convex-schema'
 import {
-  operationEnvironmentMismatchNextAction,
-  operationInvokeInputSchema,
-  isPrincipalEnvironmentCompatibleWithOperation,
-  type OperationInvokeInput,
   type OperationInvokeRefusalCode,
   type OperationInvokeResult,
   type OperationInvokeUsageSummary,
-  type PublicAuthorityRequest,
-  type PublicReconciliationState,
 } from './operation-invoke-contracts'
 import type {
   OperationInvokeRecoveryResult,
   OperationInvokeStatusResult,
 } from './operation-recovery-contracts'
+import {
+  admitOperationInvoke,
+  reserveOperationInvoke,
+  type OperationInvokeAdmitted,
+  type OperationInvokeApprovedAuthority,
+  type OperationInvokeAuthorityDecision,
+  type OperationInvokeCurrentOperationReader,
+  type OperationInvokeGrant,
+  type OperationInvokeIdempotencyPort,
+  type OperationInvokePolicyReader,
+  type OperationInvokeRequest,
+  type OperationInvokeReserved,
+} from './operation-invoke-admit'
+import {
+  bindOperationInvokeRecovery,
+  type OperationInvokeRecoveryPort,
+  type OperationInvokeRecoveryRequest,
+} from './operation-invoke-recover'
 
-export type OperationInvokeRequest = Readonly<{
-  input: OperationInvokeInput
-  principal: AgentAccessPrincipal
-  correlationId: string
-}>
+export {
+  canonicalOperationInvocationRef,
+} from './operation-invoke-admit'
+export type {
+  OperationInvokeApprovedAuthority,
+  OperationInvokeAuthorityDecision,
+  OperationInvokeCurrentOperation,
+  OperationInvokeCurrentOperationReader,
+  OperationInvokeGrant,
+  OperationInvokeGrantDecision,
+  OperationInvokeIdempotencyAbandonment,
+  OperationInvokeIdempotencyAbandonmentResult,
+  OperationInvokeIdempotencyPort,
+  OperationInvokeIdempotencyReservation,
+  OperationInvokePolicyReader,
+  OperationInvokePortRefusal,
+  OperationInvokeRequest,
+} from './operation-invoke-admit'
+export type {
+  OperationInvokeRecoveryPort,
+  OperationInvokeRecoveryRequest,
+} from './operation-invoke-recover'
 
 export type OperationInvokeKeylessExecutor = (
   input: OperationExecuteInput & Readonly<{ correlationId?: string }>
 ) => Promise<OperationExecuteResult>
-
-export type OperationInvokeGrant = Readonly<{
-  grantRef: string
-  principalId: string
-  ownerId: string
-  applicationRef: string
-  credentialId: string
-  environment: AgentAccessPrincipal['environment']
-  generation: number
-  policyDigest: string
-  expiresAt: number
-  lifecycle: 'active'
-  operationAccess: 'all_admitted'
-}>
-
-export type OperationInvokeGrantDecision =
-  | Readonly<{ kind: 'granted'; grant: OperationInvokeGrant }>
-  | Readonly<{
-      kind: 'refused'
-      code: Extract<OperationInvokeRefusalCode, 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited' | 'budget_exceeded'>
-      retryable: boolean
-      nextAction?: string
-    }>
-
-export type OperationInvokeAuthorityDecision =
-  | Readonly<{
-      kind: 'approved'
-      basis: Readonly<{ kind: 'approve_each'; authorityRef: string }> | StandingMandateAuthorityBasis
-      expiresAt: string
-    }>
-  | Readonly<{
-      kind: 'needs_authority'
-      authorityRequest: PublicAuthorityRequest
-    }>
-  | Readonly<{
-      kind: 'refused'
-      code: Extract<OperationInvokeRefusalCode, 'authority_reader_unavailable' | 'authority_required' | 'budget_exceeded' | 'rate_limited' | 'concurrency_limited'>
-      retryable: boolean
-      nextAction?: string
-    }>
-
-export type OperationInvokeCurrentOperation = Readonly<{
-  operation: PublishedOperation
-  operationRef?: string
-  descriptor?: RuntimePublishedOperationDescriptor
-}>
-
-export type OperationInvokeCurrentOperationReader = (input: Readonly<{
-  operationRef: string
-  principal: AgentAccessPrincipal
-  correlationId: string
-  now: number
-}>) => Promise<OperationInvokeCurrentOperation | undefined>
-
-export type OperationInvokePolicyReader = Readonly<{
-  readGrant(input: Readonly<{
-    principal: AgentAccessPrincipal
-    operationRef: string
-    correlationId: string
-  }>): Promise<OperationInvokeGrantDecision>
-  evaluateAuthority(input: Readonly<{
-    principal: AgentAccessPrincipal
-    grant: OperationInvokeGrant
-    operation: PublishedOperation
-    descriptor: RuntimePublishedOperationDescriptor
-    input: Record<string, unknown>
-    operationRef: string
-    invocationRef: string
-    idempotencyKey: string
-    correlationId: string
-  }>): Promise<OperationInvokeAuthorityDecision>
-}>
-
-export type OperationInvokeIdempotencyReservation = Readonly<{
-  principalId: string
-  credentialId: string
-  applicationRef: string
-  grantRef: string
-  grantGeneration: number
-  policyDigest: string
-  grantExpiresAt: number
-  environment: AgentAccessPrincipal['environment']
-  operationRef: string
-  idempotencyKey: string
-  inputDigest: string
-  requestDigest: string
-  invocationRef: string
-}>
-
-export type OperationInvokePortRefusal = Readonly<{
-  kind: 'refused'
-  code: Extract<OperationInvokeRefusalCode, 'grant_not_found' | 'grant_revoked' | 'grant_expired' | 'grant_generation_stale' | 'environment_mismatch' | 'rate_limited' | 'concurrency_limited'>
-  retryable: boolean
-  nextAction?: string
-}>
-
-export type OperationInvokeIdempotencyAbandonment = OperationInvokeIdempotencyReservation & Readonly<{
-  ownerId: string
-}>
-
-export type OperationInvokeIdempotencyAbandonmentResult =
-  | Readonly<{ kind: 'abandoned' }>
-  | Readonly<{ kind: 'not_found' }>
-  | Readonly<{ kind: 'dispatch_started' }>
-
-export type OperationInvokeIdempotencyPort = Readonly<{
-  reserve(input: OperationInvokeIdempotencyReservation): Promise<
-    | Readonly<{ kind: 'reserved'; reservation: OperationInvokeIdempotencyReservation }>
-    | Readonly<{ kind: 'replayed'; reservation: OperationInvokeIdempotencyReservation }>
-    | Readonly<{ kind: 'conflict' }>
-    | OperationInvokePortRefusal
-  >
-  abandon(input: OperationInvokeIdempotencyAbandonment): Promise<OperationInvokeIdempotencyAbandonmentResult>
-  readReplay?(input: Readonly<{
-    invocationRef: string
-    principal: AgentAccessPrincipal
-    correlationId: string
-  }>): Promise<OperationInvokeResult | undefined>
-}>
 
 export type OperationInvokeAdapterFactory = (input: Readonly<{
   operation: PublishedOperation
@@ -207,19 +114,6 @@ export type OperationInvokeDispatchPort = (input: Readonly<{
   correlationId: string
 }>) => Promise<OperationInvokeDispatchResult>
 
-export type OperationInvokeApprovedAuthority = Extract<OperationInvokeAuthorityDecision, { kind: 'approved' }>
-
-export type OperationInvokeRecoveryRequest = Readonly<{
-  invocationRef: string
-  principal: AgentAccessPrincipal
-  correlationId: string
-}>
-
-export type OperationInvokeRecoveryPort = Readonly<{
-  read(input: OperationInvokeRecoveryRequest): Promise<OperationInvokeStatusResult>
-  cancel(input: OperationInvokeRecoveryRequest & Readonly<{ idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
-  reconcile(input: OperationInvokeRecoveryRequest & Readonly<{ evidence: Record<string, unknown>; idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
-}>
 export type OperationInvokeRuntime = Readonly<{
   currentOperation?: OperationInvokeCurrentOperationReader
   policy: OperationInvokePolicyReader
@@ -244,15 +138,16 @@ export type OperationInvokeContinuation =
   | Readonly<{ kind: 'reconciled'; view: ActionInvocationView<DynamicPublishedInvocationResult> }>
   | Readonly<{ kind: 'refused'; code: string; view?: ActionInvocationView<DynamicPublishedInvocationResult> }>
 
+export type OperationInvokeExecutor = Readonly<{
+  invokeOperation(input: OperationInvokeRequest): Promise<OperationInvokeResult>
+}>
+
 export type OperationInvokeService = OperationInvokeExecutor & Readonly<{
   readInvocationStatus(input: OperationInvokeRecoveryRequest): Promise<OperationInvokeStatusResult>
   cancelInvocation(input: OperationInvokeRecoveryRequest & Readonly<{ idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
   reconcileInvocation(input: OperationInvokeRecoveryRequest & Readonly<{ evidence: Record<string, unknown>; idempotencyKey: string }>): Promise<OperationInvokeRecoveryResult>
 }>
 
-export type OperationInvokeExecutor = Readonly<{
-  invokeOperation(input: OperationInvokeRequest): Promise<OperationInvokeResult>
-}>
 export function createOperationInvokeApplication(
   runtime: OperationInvokeRuntime,
 ): OperationInvokeService {
@@ -263,523 +158,230 @@ export function createOperationInvokeApplication(
   const invokeOperation = async (
     request: OperationInvokeRequest,
   ): Promise<OperationInvokeResult> => {
-    const parsedInput = operationInvokeInputSchema.safeParse(request.input)
-    if (!parsedInput.success || !isPublicOperationRef(parsedInput.data.operationRef)) {
-      return { kind: 'refused', code: 'operation_ref_invalid', retryable: false }
-    }
-    const command = parsedInput.data
-    let inputDigest: string
-    let requestDigest: string
+    const admitted = await admitOperationInvoke({
+      request,
+      policy: runtime.policy,
+      currentOperation: runtime.currentOperation,
+      executeKeylessAvailable: runtime.executeKeyless !== undefined,
+      now,
+    })
+    if (admitted.kind === 'refused') return admitted.result
+    const reserved = await reserveOperationInvoke({
+      request,
+      admitted,
+      idempotency: runtime.idempotency,
+    })
+    if (reserved.kind === 'terminal') return reserved.result
+    return await invokeReservedOperation({
+      runtime,
+      request,
+      admitted,
+      reserved,
+      now,
+      freshnessMs,
+      retryAfterMs,
+    })
+  }
+
+  return Object.freeze({
+    invokeOperation,
+    ...bindOperationInvokeRecovery({ recovery: runtime.recovery }),
+  })
+}
+
+async function invokeReservedOperation(input: Readonly<{
+  runtime: OperationInvokeRuntime
+  request: OperationInvokeRequest
+  admitted: OperationInvokeAdmitted
+  reserved: OperationInvokeReserved
+  now: () => number
+  freshnessMs: number
+  retryAfterMs: number
+}>): Promise<OperationInvokeResult> {
+  const { runtime, request, admitted, reserved, now, freshnessMs, retryAfterMs } = input
+  const { command, grant, hasCurrentOperationReader, current, descriptor, preflightRefusal, inputDigest } = admitted
+  const { reservation, reservationMayBeAbandoned } = reserved
+
+  const refuseBeforeDispatch = async (
+    refusal: Extract<OperationInvokeResult, { kind: 'refused' }>,
+  ): Promise<OperationInvokeResult> => {
+    if (!reservationMayBeAbandoned) return refusal
     try {
-      inputDigest = canonicalDigest(command.input)
-      requestDigest = canonicalDigest({
+      const abandoned = await runtime.idempotency.abandon({
+        ...reservation,
+        ownerId: request.principal.ownerId,
+      })
+      if (abandoned.kind === 'abandoned') return refusal
+      if (abandoned.kind === 'dispatch_started') return reconciliationRequiredAfterDispatch()
+    } catch {
+      // A failed cleanup must remain visible as runtime unavailability.
+    }
+    return {
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+      nextAction: 'Retry after the invocation store is available.',
+    }
+  }
+  const reconciliationRequiredAfterDispatch = (
+    view?: ActionInvocationView<DynamicPublishedInvocationResult>,
+  ): OperationInvokeResult => {
+    const defaultAttemptRef = `operation-attempt:${reservation.invocationRef}:1`
+    const viewAttemptRef = view !== undefined
+      && (view.control.state === 'leased' || view.control.state === 'reconciliation_required')
+      ? view.control.attemptRef
+      : undefined
+    const attemptRef = viewAttemptRef ?? view?.attempts.at(-1)?.attemptRef ?? defaultAttemptRef
+    const attempt = view?.attempts.find(({ attemptRef: candidate }) => candidate === attemptRef)
+    const effectGeneration = attempt?.effectGeneration
+      ?? (view !== undefined && view.control.state === 'leased' ? view.control.effectGeneration : 1)
+    const requiredAt = attempt !== undefined
+      && (attempt.outcome.state === 'uncertain' || attempt.outcome.state === 'timed_out')
+      ? attempt.outcome.reconciliationRequiredAt
+      : new Date(now()).toISOString()
+    return {
+      kind: 'reconciliation_required',
+      invocationRef: reservation.invocationRef,
+      operationRef: command.operationRef,
+      evidence: {
+        attemptRef,
+        effectGeneration,
+        requiredAt,
+        retry: 'reconcile_before_retry',
+        evidenceSource: `operation:${command.operationRef}`,
+      },
+    }
+  }
+
+  if (preflightRefusal !== undefined) {
+    return await refuseBeforeDispatch(preflightRefusal)
+  }
+  if (runtime.currentOperation === undefined && runtime.executeKeyless !== undefined) {
+    try {
+      const result = await runtime.executeKeyless({
         operationRef: command.operationRef,
         input: command.input,
-      })
-    } catch {
-      return {
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'input_invalid',
-        retryable: false,
-      }
-    }
-
-    let grantDecision: OperationInvokeGrantDecision
-    try {
-      grantDecision = await runtime.policy.readGrant({
-        principal: request.principal,
-        operationRef: command.operationRef,
         correlationId: request.correlationId,
       })
-    } catch {
-      return {
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'grant_not_found',
-        retryable: true,
-        nextAction: 'Refresh the agent grant and retry.',
-      }
-    }
-    if (grantDecision.kind === 'refused') {
-      return {
-        operationRef: command.operationRef,
-        kind: 'refused',
-        code: grantDecision.code,
-        retryable: grantDecision.retryable,
-        ...(grantDecision.nextAction === undefined ? {} : { nextAction: grantDecision.nextAction }),
-      }
-    }
-    const grant = grantDecision.grant
-    const invocationRef = canonicalOperationInvocationRef({
-      principalId: request.principal.principalId,
-      credentialId: request.principal.credentialId,
-      applicationRef: request.principal.applicationRef,
-      grantGeneration: grant.generation,
-      environment: request.principal.environment,
-      operationRef: command.operationRef,
-      idempotencyKey: command.idempotencyKey,
-    })
-    const hasCurrentOperationReader = runtime.currentOperation !== undefined
-    let current: OperationInvokeCurrentOperation | undefined
-    let descriptor: RuntimePublishedOperationDescriptor | undefined
-    let preflightRefusal: Extract<OperationInvokeResult, { kind: 'refused' }> | undefined
-    if (hasCurrentOperationReader) {
-      try {
-        current = await runtime.currentOperation!({
-          operationRef: command.operationRef,
-          principal: request.principal,
-          correlationId: request.correlationId,
-          now: now(),
-        })
-      } catch (error) {
-        const unsupported = error instanceof Error && error.message === 'operation_unsupported'
-        preflightRefusal = {
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: unsupported ? 'operation_unsupported' : 'source_unavailable',
-          retryable: !unsupported,
-        }
-      }
-      if (preflightRefusal === undefined && (current === undefined
-        || (current.operationRef !== undefined && current.operationRef !== command.operationRef))) {
-        preflightRefusal = {
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: 'operation_not_current',
-          retryable: false,
-        }
-      }
-      if (preflightRefusal === undefined && current !== undefined) {
-        try {
-          descriptor = current.descriptor ?? materializeRuntimePublishedOperation(current.operation)
-        } catch {
-          preflightRefusal = {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'operation_unsupported',
-            retryable: false,
-          }
-        }
-      }
-      if (preflightRefusal === undefined && current !== undefined && descriptor !== undefined) {
-        let inputValid = false
-        try {
-          inputValid = descriptor.validateInput(command.input)
-        } catch {
-          preflightRefusal = {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'operation_unsupported',
-            retryable: false,
-          }
-        }
-        if (preflightRefusal === undefined && (
-          descriptor.target.publicationRef !== current.operation.identity.publicationRef
-          || descriptor.target.publicationRevision !== current.operation.identity.publicationRevision
-          || descriptor.target.contractDigest !== current.operation.identity.contractDigest
-          || descriptor.target.transportConfigDigest !== current.operation.identity.transportConfigDigest
-          || !inputValid
-        )) {
-          preflightRefusal = {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: inputValid ? 'operation_not_current' : 'input_invalid',
-            retryable: false,
-          }
-        }
-        if (preflightRefusal === undefined && !isPrincipalEnvironmentCompatibleWithOperation(request.principal.environment, current.operation)) {
-          preflightRefusal = {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'environment_mismatch',
-            retryable: false,
-            nextAction: operationEnvironmentMismatchNextAction,
-          }
-        }
-      }
-    } else if (runtime.executeKeyless === undefined) {
-      preflightRefusal = {
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
-        retryable: true,
-      }
-    }
-    // Keep preflight before new reservation work, but reserve to resolve an existing idempotent replay.
-    let reservationMayBeAbandoned = false
-    let reservation: OperationInvokeIdempotencyReservation
-    try {
-      const reserved = await runtime.idempotency.reserve({
-        principalId: request.principal.principalId,
-        credentialId: request.principal.credentialId,
-        applicationRef: request.principal.applicationRef,
-        grantRef: grant.grantRef,
-        grantGeneration: grant.generation,
-        policyDigest: grant.policyDigest,
-        grantExpiresAt: grant.expiresAt,
-        environment: request.principal.environment,
-        operationRef: command.operationRef,
-        idempotencyKey: command.idempotencyKey,
-        inputDigest,
-        requestDigest,
-        invocationRef,
-      })
-      if (reserved.kind === 'conflict') {
-        return {
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: 'idempotency_conflict',
-          retryable: false,
-          nextAction: 'Use a new idempotency key for changed input.',
-        }
-      }
-      if (reserved.kind === 'refused') {
-        return {
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: reserved.code,
-          retryable: reserved.retryable,
-          ...(reserved.nextAction === undefined ? {} : { nextAction: reserved.nextAction }),
-        }
-      }
-      reservation = reserved.reservation
-      if (reserved.kind === 'reserved') reservationMayBeAbandoned = true
-      if (reserved.kind === 'replayed') {
-        const readReplay = runtime.idempotency.readReplay
-        if (readReplay === undefined) {
-          return {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'invocation_runtime_unavailable',
-            retryable: true,
-            nextAction: 'Retry after the invocation store is available.',
-          }
-        }
-        let replay: OperationInvokeResult | undefined
-        try {
-          replay = await readReplay({
-            invocationRef: reservation.invocationRef,
-            principal: request.principal,
-            correlationId: request.correlationId,
-          })
-        } catch {
-          return {
-            kind: 'refused',
-            operationRef: command.operationRef,
-            code: 'invocation_runtime_unavailable',
-            retryable: true,
-            nextAction: 'Retry after the invocation store is available.',
-          }
-        }
-        if (replay !== undefined) return replay
-        reservationMayBeAbandoned = true
-      }
-    } catch {
-      return {
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
-        retryable: true,
-        nextAction: 'Retry after the invocation store is available.',
-      }
-    }
-    const refuseBeforeDispatch = async (
-      refusal: Extract<OperationInvokeResult, { kind: 'refused' }>,
-    ): Promise<OperationInvokeResult> => {
-      if (!reservationMayBeAbandoned) return refusal
-      try {
-        const abandoned = await runtime.idempotency.abandon({
-          ...reservation,
-          ownerId: request.principal.ownerId,
-        })
-        if (abandoned.kind === 'abandoned') return refusal
-        if (abandoned.kind === 'dispatch_started') return reconciliationRequiredAfterDispatch()
-      } catch {
-        // A failed cleanup must remain visible as runtime unavailability.
-      }
-      return {
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
-        retryable: true,
-        nextAction: 'Retry after the invocation store is available.',
-      }
-    }
-    const reconciliationRequiredAfterDispatch = (
-      view?: ActionInvocationView<DynamicPublishedInvocationResult>,
-    ): OperationInvokeResult => {
-      const fallbackAttemptRef = `operation-attempt:${reservation.invocationRef}:1`
-      const viewAttemptRef = view !== undefined
-        && (view.control.state === 'leased' || view.control.state === 'reconciliation_required')
-        ? view.control.attemptRef
-        : undefined
-      const attemptRef = viewAttemptRef ?? view?.attempts.at(-1)?.attemptRef ?? fallbackAttemptRef
-      const attempt = view?.attempts.find(({ attemptRef: candidate }) => candidate === attemptRef)
-      const effectGeneration = attempt?.effectGeneration
-        ?? (view !== undefined && view.control.state === 'leased' ? view.control.effectGeneration : 1)
-      const requiredAt = attempt !== undefined
-        && (attempt.outcome.state === 'uncertain' || attempt.outcome.state === 'timed_out')
-        ? attempt.outcome.reconciliationRequiredAt
-        : new Date(now()).toISOString()
-      return {
-        kind: 'reconciliation_required',
-        invocationRef: reservation.invocationRef,
-        operationRef: command.operationRef,
-        evidence: {
-          attemptRef,
-          effectGeneration,
-          requiredAt,
-          retry: 'reconcile_before_retry',
-          evidenceSource: `operation:${command.operationRef}`,
-        },
-      }
-    }
-
-    if (preflightRefusal !== undefined) {
-      return await refuseBeforeDispatch(preflightRefusal)
-    }
-    if (runtime.currentOperation === undefined && runtime.executeKeyless !== undefined) {
-      try {
-        const result = await runtime.executeKeyless({
-          operationRef: command.operationRef,
-          input: command.input,
-          correlationId: request.correlationId,
-        })
-        if (result.kind === 'ok') {
-          if (runtime.keylessUsage === undefined) {
-            return await refuseBeforeDispatch({
-              kind: 'refused',
-              operationRef: command.operationRef,
-              code: 'operation_unsupported',
-              retryable: false,
-            })
-          }
-          const output = result.output as JsonValue
-          try {
-            canonicalDigest(output)
-          } catch {
-            return await refuseBeforeDispatch({
-              kind: 'refused',
-              operationRef: command.operationRef,
-              code: 'result_invalid',
-              retryable: false,
-            })
-          }
-          return {
-            kind: 'completed',
-            invocationRef: reservation.invocationRef,
-            operationRef: command.operationRef,
-            output,
-            evidenceHash: result.evidenceHash,
-            usage: runtime.keylessUsage,
-          }
-        }
-        if (result.kind === 'refused') {
+      if (result.kind === 'ok') {
+        if (runtime.keylessUsage === undefined) {
           return await refuseBeforeDispatch({
             kind: 'refused',
             operationRef: command.operationRef,
-            code: result.reason === 'input_invalid' ? 'input_invalid' : 'provider_refused',
+            code: 'operation_unsupported',
             retryable: false,
           })
         }
-        return await refuseBeforeDispatch({
-          kind: 'refused',
+        const output = result.output as JsonValue
+        try {
+          canonicalDigest(output)
+        } catch {
+          return await refuseBeforeDispatch({
+            kind: 'refused',
+            operationRef: command.operationRef,
+            code: 'result_invalid',
+            retryable: false,
+          })
+        }
+        return {
+          kind: 'completed',
+          invocationRef: reservation.invocationRef,
           operationRef: command.operationRef,
-          code: result.code === 'source_unavailable' ? 'source_unavailable' : 'provider_refused',
-          retryable: result.retryable,
-        })
-      } catch {
-        return await refuseBeforeDispatch({
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: 'provider_refused',
-          retryable: true,
-        })
+          output,
+          evidenceHash: result.evidenceHash,
+          usage: runtime.keylessUsage,
+        }
       }
-    }
-
-    if (!hasCurrentOperationReader || current === undefined || descriptor === undefined) {
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
-        retryable: true,
-      })
-    }
-
-
-    let authority: OperationInvokeAuthorityDecision
-    try {
-      authority = await runtime.policy.evaluateAuthority({
-        principal: request.principal,
-        grant,
-        operation: current.operation,
-        descriptor,
-        input: command.input,
-        operationRef: command.operationRef,
-        invocationRef: reservation.invocationRef,
-        idempotencyKey: command.idempotencyKey,
-        correlationId: request.correlationId,
-      })
-    } catch {
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: 'authority_reader_unavailable',
-        retryable: true,
-      })
-    }
-    authority = normalizeOperationInvokeAuthority({
-      authority,
-      principal: request.principal,
-      grant,
-      invocationRef: reservation.invocationRef,
-    })
-    if (authority.kind === 'needs_authority') {
-      return {
-        kind: 'needs_authority',
-        invocationRef: reservation.invocationRef,
-        operationRef: command.operationRef,
-        authorityRequest: authority.authorityRequest,
-      }
-    }
-    if (authority.kind === 'refused') {
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code: authority.code,
-        retryable: authority.retryable,
-        ...(authority.nextAction === undefined ? {} : { nextAction: authority.nextAction }),
-      })
-    }
-    if (runtime.dispatch !== undefined) {
-      const persistedAuthority = buildOperationInvokeAuthority({
-        authority,
-        grant,
-        operation: current.operation,
-        descriptor,
-        operationRef: command.operationRef,
-        invocationRef: reservation.invocationRef,
-        inputDigest,
-        now: now(),
-      })
-      if (persistedAuthority === undefined) {
+      if (result.kind === 'refused') {
         return await refuseBeforeDispatch({
           kind: 'refused',
           operationRef: command.operationRef,
-          code: 'authority_required',
+          code: result.reason === 'input_invalid' ? 'input_invalid' : 'provider_refused',
           retryable: false,
         })
       }
-      let dispatched: OperationInvokeDispatchResult
-      try {
-        dispatched = await runtime.dispatch({
-          operation: current.operation,
-          descriptor,
-          principal: request.principal,
-          grant,
-          authority: persistedAuthority,
-          invocationRef: reservation.invocationRef,
-          idempotencyKey: command.idempotencyKey,
-          input: command.input,
-          correlationId: request.correlationId,
-        })
-      } catch {
-        return await refuseBeforeDispatch({
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: 'invocation_runtime_unavailable',
-          retryable: true,
-        })
-      }
-      if (dispatched.kind === 'outcome_unknown') return reconciliationRequiredAfterDispatch()
-      if (dispatched.kind === 'refused') {
-        return await refuseBeforeDispatch({
-          kind: 'refused',
-          operationRef: command.operationRef,
-          code: dispatched.code,
-          retryable: dispatched.retryable,
-          ...(dispatched.nextAction === undefined ? {} : { nextAction: dispatched.nextAction }),
-        })
-      }
-      return {
-        kind: 'pending',
-        invocationRef: reservation.invocationRef,
-        operationRef: command.operationRef,
-        retryAfterMs: dispatched.retryAfterMs ?? retryAfterMs,
-      }
-    }
-
-    if (runtime.createAdapter === undefined || runtime.sourceCommands === undefined) {
       return await refuseBeforeDispatch({
         kind: 'refused',
         operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
-        retryable: true,
-      })
-    }
-
-    let adapter: DynamicPublishedActionInvocationAdapter
-    try {
-      adapter = await runtime.createAdapter({
-        operation: current.operation,
-        descriptor,
-        principal: request.principal,
-        grant,
-        actor: {
-          callerRef: request.principal.credentialId,
-          principalRef: request.principal.principalId,
-        },
-        origin: {
-          kind: 'standalone',
-          callerRef: request.principal.credentialId,
-          principalRef: request.principal.principalId,
-        },
-        invocationRef: reservation.invocationRef,
-        idempotencyKey: command.idempotencyKey,
-        correlationId: request.correlationId,
+        code: result.code === 'source_unavailable' ? 'source_unavailable' : 'provider_refused',
+        retryable: result.retryable,
       })
     } catch {
       return await refuseBeforeDispatch({
         kind: 'refused',
         operationRef: command.operationRef,
-        code: 'invocation_runtime_unavailable',
+        code: 'provider_refused',
         retryable: true,
       })
     }
+  }
 
-    const actor: InvocationActor = {
-      callerRef: request.principal.credentialId,
-      principalRef: request.principal.principalId,
+  if (!hasCurrentOperationReader || current === undefined || descriptor === undefined) {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+    })
+  }
+
+  let authority: OperationInvokeAuthorityDecision
+  try {
+    authority = await runtime.policy.evaluateAuthority({
+      principal: request.principal,
+      grant,
+      operation: current.operation,
+      descriptor,
+      input: command.input,
+      operationRef: command.operationRef,
+      invocationRef: reservation.invocationRef,
+      idempotencyKey: command.idempotencyKey,
+      correlationId: request.correlationId,
+    })
+  } catch {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'authority_reader_unavailable',
+      retryable: true,
+    })
+  }
+  authority = normalizeOperationInvokeAuthority({
+    authority,
+    principal: request.principal,
+    grant,
+    invocationRef: reservation.invocationRef,
+  })
+  if (authority.kind === 'needs_authority') {
+    return {
+      kind: 'needs_authority',
+      invocationRef: reservation.invocationRef,
+      operationRef: command.operationRef,
+      authorityRequest: authority.authorityRequest,
     }
-    const host = createInvocationApplication({
-      adapter,
-      sourceCommands: runtime.sourceCommands,
-    }).bindStandalone({ actor })
-    let prepared: ActionInvocationView<DynamicPublishedInvocationResult>
-    try {
-      prepared = await host.prepare(
-        command.input,
-        freshnessMs,
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : ''
-      const code: OperationInvokeRefusalCode = message.includes('input_invalid')
-        ? 'input_invalid'
-        : message.includes('not_current')
-          ? 'operation_not_current'
-          : message.includes('price_not_fixed')
-            ? 'operation_unsupported'
-            : 'invocation_runtime_unavailable'
-      return await refuseBeforeDispatch({
-        kind: 'refused',
-        operationRef: command.operationRef,
-        code,
-        retryable: code === 'invocation_runtime_unavailable',
-      })
-    }
-    if (prepared.authority === undefined) {
+  }
+  if (authority.kind === 'refused') {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: authority.code,
+      retryable: authority.retryable,
+      ...(authority.nextAction === undefined ? {} : { nextAction: authority.nextAction }),
+    })
+  }
+  if (runtime.dispatch !== undefined) {
+    const persistedAuthority = buildOperationInvokeAuthority({
+      authority,
+      grant,
+      operation: current.operation,
+      descriptor,
+      operationRef: command.operationRef,
+      invocationRef: reservation.invocationRef,
+      inputDigest,
+      now: now(),
+    })
+    if (persistedAuthority === undefined) {
       return await refuseBeforeDispatch({
         kind: 'refused',
         operationRef: command.operationRef,
@@ -787,46 +389,20 @@ export function createOperationInvokeApplication(
         retryable: false,
       })
     }
-
-    let continuation: OperationInvokeContinuation
-    let continuationStarted = false
-    const continueInvocation = async (): Promise<OperationInvokeContinuation> => {
-      continuationStarted = true
-      return await host.continue(prepared.invocationRef)
-    }
+    let dispatched: OperationInvokeDispatchResult
     try {
-      if (authority.basis.kind === 'standing_mandate_use') {
-        const authorized = await adapter.authorizeStandingMandateUse({
-          invocationRef: prepared.invocationRef,
-          expectedInvocationVersion: prepared.invocationVersion,
-          authorityRef: prepared.authority.reference,
-          actor,
-          origin: {
-            kind: 'standalone',
-            callerRef: actor.callerRef,
-            principalRef: actor.principalRef,
-          },
-          basis: authority.basis,
-        })
-        continuation = authorized.kind === 'refused'
-          ? authorized
-          : await continueInvocation()
-      } else {
-        const decided = await host.decide(prepared.invocationRef, true)
-        continuation = decided.kind === 'refused'
-          ? decided
-          : await continueInvocation()
-      }
+      dispatched = await runtime.dispatch({
+        operation: current.operation,
+        descriptor,
+        principal: request.principal,
+        grant,
+        authority: persistedAuthority,
+        invocationRef: reservation.invocationRef,
+        idempotencyKey: command.idempotencyKey,
+        input: command.input,
+        correlationId: request.correlationId,
+      })
     } catch {
-      if (continuationStarted) {
-        let view: ActionInvocationView<DynamicPublishedInvocationResult> | undefined
-        try {
-          view = host.inspect(prepared.invocationRef)
-        } catch {
-          view = undefined
-        }
-        return reconciliationRequiredAfterDispatch(view)
-      }
       return await refuseBeforeDispatch({
         kind: 'refused',
         operationRef: command.operationRef,
@@ -834,72 +410,185 @@ export function createOperationInvokeApplication(
         retryable: true,
       })
     }
-    if (continuation.kind === 'refused') {
-      const code = continuation.code === 'reconcile_before_retry'
-        ? 'reconciliation_required'
-        : continuation.code === 'pre_execute_preparation_failed'
-          ? 'pre_release_failed'
-          : continuation.code === 'invocation_not_found'
-            ? 'invocation_not_found'
-            : 'provider_refused'
-      const refusal: Extract<OperationInvokeResult, { kind: 'refused' }> = {
+    if (dispatched.kind === 'outcome_unknown') return reconciliationRequiredAfterDispatch()
+    if (dispatched.kind === 'refused') {
+      return await refuseBeforeDispatch({
         kind: 'refused',
         operationRef: command.operationRef,
-        code,
-        retryable: code === 'pre_release_failed',
-        ...(code === 'reconciliation_required'
-          ? { nextAction: 'Reconcile the invocation before retrying.' }
-          : {}),
-      }
-      const workStarted = continuation.view?.control.state === 'leased'
-        || continuation.view?.control.state === 'in_progress'
-        || continuation.view?.control.state === 'reconciliation_required'
-        || continuation.view?.control.state === 'terminal'
-      return workStarted ? refusal : await refuseBeforeDispatch(refusal)
+        code: dispatched.code,
+        retryable: dispatched.retryable,
+        ...(dispatched.nextAction === undefined ? {} : { nextAction: dispatched.nextAction }),
+      })
     }
-    const projected = projectDynamicInvocation({
+    return {
+      kind: 'pending',
+      invocationRef: reservation.invocationRef,
       operationRef: command.operationRef,
-      invocationRef: prepared.invocationRef,
-      view: continuation.view,
-      now: now(),
-      retryAfterMs,
-    })
-    if (projected.kind === 'refused') {
-      const workStarted = continuation.view.control.state === 'leased'
-        || continuation.view.control.state === 'in_progress'
-        || continuation.view.control.state === 'reconciliation_required'
-        || continuation.view.control.state === 'terminal'
-      return workStarted ? projected : await refuseBeforeDispatch(projected)
+      retryAfterMs: dispatched.retryAfterMs ?? retryAfterMs,
     }
-    return projected
   }
 
-  const unavailableRecovery = (invocationRef: string): OperationInvokeStatusResult => ({
-    kind: 'refused',
-    invocationRef,
-    code: 'invocation_runtime_unavailable',
-    retryable: true,
-    nextAction: 'Retry after the invocation store is available.',
-  })
+  if (runtime.createAdapter === undefined || runtime.sourceCommands === undefined) {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+    })
+  }
 
-  return Object.freeze({
-    invokeOperation,
-    readInvocationStatus: async (input) => (
-      runtime.recovery === undefined
-        ? unavailableRecovery(input.invocationRef)
-        : await runtime.recovery.read(input)
-    ),
-    cancelInvocation: async (input) => (
-      runtime.recovery === undefined
-        ? unavailableRecovery(input.invocationRef)
-        : await runtime.recovery.cancel(input)
-    ),
-    reconcileInvocation: async (input) => (
-      runtime.recovery === undefined
-        ? unavailableRecovery(input.invocationRef)
-        : await runtime.recovery.reconcile(input)
-    ),
+  let adapter: DynamicPublishedActionInvocationAdapter
+  try {
+    adapter = await runtime.createAdapter({
+      operation: current.operation,
+      descriptor,
+      principal: request.principal,
+      grant,
+      actor: {
+        callerRef: request.principal.credentialId,
+        principalRef: request.principal.principalId,
+      },
+      origin: {
+        kind: 'standalone',
+        callerRef: request.principal.credentialId,
+        principalRef: request.principal.principalId,
+      },
+      invocationRef: reservation.invocationRef,
+      idempotencyKey: command.idempotencyKey,
+      correlationId: request.correlationId,
+    })
+  } catch {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+    })
+  }
+
+  const actor: InvocationActor = {
+    callerRef: request.principal.credentialId,
+    principalRef: request.principal.principalId,
+  }
+  const host = createInvocationApplication({
+    adapter,
+    sourceCommands: runtime.sourceCommands,
+  }).bindStandalone({ actor })
+  let prepared: ActionInvocationView<DynamicPublishedInvocationResult>
+  try {
+    prepared = await host.prepare(
+      command.input,
+      freshnessMs,
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    const code: OperationInvokeRefusalCode = message.includes('input_invalid')
+      ? 'input_invalid'
+      : message.includes('not_current')
+        ? 'operation_not_current'
+        : message.includes('price_not_fixed')
+          ? 'operation_unsupported'
+          : 'invocation_runtime_unavailable'
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code,
+      retryable: code === 'invocation_runtime_unavailable',
+    })
+  }
+  if (prepared.authority === undefined) {
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'authority_required',
+      retryable: false,
+    })
+  }
+
+  let continuation: OperationInvokeContinuation
+  let continuationStarted = false
+  const continueInvocation = async (): Promise<OperationInvokeContinuation> => {
+    continuationStarted = true
+    return await host.continue(prepared.invocationRef)
+  }
+  try {
+    if (authority.basis.kind === 'standing_mandate_use') {
+      const authorized = await adapter.authorizeStandingMandateUse({
+        invocationRef: prepared.invocationRef,
+        expectedInvocationVersion: prepared.invocationVersion,
+        authorityRef: prepared.authority.reference,
+        actor,
+        origin: {
+          kind: 'standalone',
+          callerRef: actor.callerRef,
+          principalRef: actor.principalRef,
+        },
+        basis: authority.basis,
+      })
+      continuation = authorized.kind === 'refused'
+        ? authorized
+        : await continueInvocation()
+    } else {
+      const decided = await host.decide(prepared.invocationRef, true)
+      continuation = decided.kind === 'refused'
+        ? decided
+        : await continueInvocation()
+    }
+  } catch {
+    if (continuationStarted) {
+      let view: ActionInvocationView<DynamicPublishedInvocationResult> | undefined
+      try {
+        view = host.inspect(prepared.invocationRef)
+      } catch {
+        view = undefined
+      }
+      return reconciliationRequiredAfterDispatch(view)
+    }
+    return await refuseBeforeDispatch({
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code: 'invocation_runtime_unavailable',
+      retryable: true,
+    })
+  }
+  if (continuation.kind === 'refused') {
+    const code = continuation.code === 'reconcile_before_retry'
+      ? 'reconciliation_required'
+      : continuation.code === 'pre_execute_preparation_failed'
+        ? 'pre_release_failed'
+        : continuation.code === 'invocation_not_found'
+          ? 'invocation_not_found'
+          : 'provider_refused'
+    const refusal: Extract<OperationInvokeResult, { kind: 'refused' }> = {
+      kind: 'refused',
+      operationRef: command.operationRef,
+      code,
+      retryable: code === 'pre_release_failed',
+      ...(code === 'reconciliation_required'
+        ? { nextAction: 'Reconcile the invocation before retrying.' }
+        : {}),
+    }
+    const workStarted = continuation.view?.control.state === 'leased'
+      || continuation.view?.control.state === 'in_progress'
+      || continuation.view?.control.state === 'reconciliation_required'
+      || continuation.view?.control.state === 'terminal'
+    return workStarted ? refusal : await refuseBeforeDispatch(refusal)
+  }
+  const projected = projectDynamicInvocation({
+    operationRef: command.operationRef,
+    invocationRef: prepared.invocationRef,
+    view: continuation.view,
+    now: now(),
+    retryAfterMs,
   })
+  if (projected.kind === 'refused') {
+    const workStarted = continuation.view.control.state === 'leased'
+      || continuation.view.control.state === 'in_progress'
+      || continuation.view.control.state === 'reconciliation_required'
+      || continuation.view.control.state === 'terminal'
+    return workStarted ? projected : await refuseBeforeDispatch(projected)
+  }
+  return projected
 }
 
 function projectDynamicInvocation(input: Readonly<{
@@ -998,6 +687,7 @@ function projectDynamicInvocation(input: Readonly<{
     retryAfterMs: input.retryAfterMs,
   }
 }
+
 function normalizeOperationInvokeAuthority(input: Readonly<{
   authority: OperationInvokeAuthorityDecision
   principal: AgentAccessPrincipal
@@ -1036,13 +726,15 @@ export function buildOperationInvokeAuthority(input: Readonly<{
   if (input.descriptor.price.kind !== 'fixed') return undefined
   const authorityExpiresAt = Date.parse(input.authority.expiresAt)
   const grantExpiresAt = input.grant.expiresAt
+  const readinessExpiresAt = input.operation.readiness.validUntil
+  const effectiveExpiresAt = Math.min(authorityExpiresAt, grantExpiresAt, readinessExpiresAt)
   if (
     !Number.isFinite(authorityExpiresAt)
     || !Number.isFinite(grantExpiresAt)
-    || authorityExpiresAt <= input.now
-    || grantExpiresAt <= input.now
+    || !Number.isFinite(readinessExpiresAt)
+    || !Number.isFinite(effectiveExpiresAt)
+    || effectiveExpiresAt <= input.now
   ) return undefined
-  const effectiveExpiresAt = Math.min(authorityExpiresAt, grantExpiresAt)
   const expiresAt = effectiveExpiresAt === authorityExpiresAt
     ? input.authority.expiresAt
     : new Date(effectiveExpiresAt).toISOString()
@@ -1073,24 +765,11 @@ export function buildOperationInvokeAuthority(input: Readonly<{
   }
 }
 
-
 export async function executeOperationInvoke(
   input: OperationInvokeRequest,
   executor: OperationInvokeExecutor,
 ): Promise<OperationInvokeResult> {
   return await executor.invokeOperation(input)
-}
-
-export function canonicalOperationInvocationRef(input: Readonly<{
-  principalId: string
-  credentialId: string
-  applicationRef: string
-  grantGeneration: number
-  environment: AgentAccessPrincipal['environment']
-  operationRef: string
-  idempotencyKey: string
-}>): string {
-  return `operation-invocation:v1:${canonicalDigest(input).slice(7)}`
 }
 
 export type OperationInvokeInternalResult = Readonly<{

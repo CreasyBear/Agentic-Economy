@@ -278,10 +278,10 @@ export interface ActionInvocationTracer<Input, Result extends ActionResult> {
     evidence: ReconciliationEvidence
   }>): Promise<InvocationDecision<Result>>
   inspect(invocationRef: string): ActionInvocationView<Result> | undefined
-  exportSnapshot(): InMemoryControlSnapshot<Input, Result>
+  exportSnapshot(): InMemoryControlSnapshot<Result>
 }
 
-export type InMemoryControlSnapshot<Input, Result extends ActionResult> = Readonly<{
+export type InMemoryControlSnapshot<Result extends ActionResult> = Readonly<{
   format: 'action-invocation-control:development:v1'
   records: readonly Readonly<{
     sourceRef: string

@@ -56,6 +56,7 @@ function renderRouteComponent(result: InvocationStatusPageResult) {
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   readStatusMock.mockReset()
   cancelMock.mockReset()
   reconcileMock.mockReset()
@@ -110,7 +111,7 @@ describe('/operations/invocations/$invocationRef', () => {
       },
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Invocation status' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Invocation receipt' })).toBeTruthy()
     expect(screen.getAllByText(invocationRef).length).toBeGreaterThan(0)
     const operationLink = screen.getByRole('link', { name: operationRef })
     expect(operationLink.getAttribute('href')).toBe(`/operations/${encodeURIComponent(operationRef)}`)
@@ -120,6 +121,59 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.getByText('3')).toBeTruthy()
     expect(screen.getByText('sha256:top-level-evidence')).toBeTruthy()
     expect(screen.getByText(/"temperature": 24/)).toBeTruthy()
+  })
+
+  it('presents a completed receipt as six recorded stages with money facts and reuse actions', () => {
+    renderWithRouter({
+      kind: 'found',
+      invocationRef,
+      operationRef,
+      state: 'terminal',
+      previousInput: { city: 'Perth', units: 'metric' },
+      result: {
+        kind: 'completed',
+        invocationRef,
+        operationRef,
+        output: { rows: 3 },
+        evidenceHash: 'sha256:completed',
+        usage: {
+          usageRef: 'usage:receipt',
+          observedAt: Date.UTC(2026, 7, 23),
+          chargeState: 'paid',
+          amount: { currency: 'USD', units: '125', exponent: 2 },
+          priceDigest: 'sha256:price',
+          transactionRef: 'transaction:settled',
+        },
+        receipt: {
+          receiptRef: 'receipt:public',
+          state: 'settled',
+          network: 'eip155:8453',
+          asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+          providerQuotedAmount: { currency: 'USD', units: '100', exponent: 2 },
+          agenticEconomyFee: { currency: 'USD', units: '25', exponent: 2 },
+          totalBuyerAuthorization: { currency: 'USD', units: '125', exponent: 2 },
+          priceDigest: 'sha256:price',
+          transactionRef: 'transaction:settled',
+          evidenceHash: 'sha256:completed',
+          issuedAt: '2026-08-23T12:00:00.000Z',
+        },
+      },
+    })
+
+    for (const stage of ['Authorized', 'Reserved', 'Submitted', 'Settled', 'Validated', 'Complete']) {
+      expect(screen.getByText(new RegExp(`\\d\\. ${stage}`))).toBeTruthy()
+    }
+    expect(screen.getByRole('heading', { name: 'Money before and after the call' })).toBeTruthy()
+    expect(screen.getByText('Provider quote')).toBeTruthy()
+    expect(screen.getAllByText('USD 1.25').length).toBeGreaterThan(0)
+    expect(screen.getByRole('link', { name: 'Run again' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Save capability|Capability saved/ })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Copy as CLI' })).toBeTruthy()
+    expect(screen.getAllByText(/\{"city":"Perth","units":"metric"\}/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Copy as API request' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Add to MCP' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Copy agent prompt' })).toBeTruthy()
+    expect(screen.getByText(/ae.public-invocation-receipt:v1/)).toBeTruthy()
   })
 
   it('keeps a found pending result distinct from completion', () => {
@@ -143,6 +197,11 @@ describe('/operations/invocations/$invocationRef', () => {
     expect(screen.getAllByText('Reconciliation required').length).toBeGreaterThan(0)
     expect(screen.getByText('No canonical result is recorded yet. The state above remains authoritative.')).toBeTruthy()
     expect(screen.queryByText('Completed')).toBeNull()
+    expect(screen.getAllByText('What happened').length).toBeGreaterThan(0)
+    expect(screen.getByText('Did money move?')).toBeTruthy()
+    expect(screen.getByText('What happens automatically')).toBeTruthy()
+    expect(screen.getByText('What you can do')).toBeTruthy()
+    expect(screen.getByText('Reference kept')).toBeTruthy()
   })
 
   it('submits explicit owner reconciliation evidence only when canonical binding facts exist', () => {
@@ -269,8 +328,8 @@ describe('/operations/invocations/$invocationRef', () => {
       nextAction: 'Check the exact reference while signed in.',
     })
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Invocation status is unavailable' })).toBeTruthy()
-    expect(screen.getByText(/No state or completion is claimed/i)).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Invocation receipt' })).toBeTruthy()
+    expect(screen.getAllByText(/No current execution state is claimed/i).length).toBeGreaterThan(0)
     const signInLink = screen.getByRole('link', { name: 'Sign in to view current status' })
     const signInUrl = new URL(signInLink.getAttribute('href') ?? '', 'https://agentic-economy.test')
     expect(signInUrl.pathname).toMatch(/^\/sign-in\/?$/)
@@ -280,7 +339,7 @@ describe('/operations/invocations/$invocationRef', () => {
   it.each([
     {
       result: { kind: 'source_unavailable' as const, invocationRef },
-      heading: 'Current status is unavailable',
+      heading: 'Invocation receipt',
     },
     {
       result: {
@@ -290,7 +349,7 @@ describe('/operations/invocations/$invocationRef', () => {
         retryable: true,
         nextAction: 'Retry the owner-scoped status read.',
       },
-      heading: 'Invocation status is unavailable',
+      heading: 'Invocation receipt',
     },
   ])('offers refresh rather than sign-in for retryable $result.kind status unavailability', ({ result, heading }) => {
     const onRefresh = vi.fn()

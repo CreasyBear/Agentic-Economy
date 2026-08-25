@@ -3,8 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AeOfferingSupplyList } from '@/components/ae/offerings/AeOfferingSupplyList'
-import { offeringApiDtoToSupplyView } from '@/components/ae/offerings/offering-presentation'
 import {
   AeOwnerOfferingEditor,
   AeOwnerOfferingsList,
@@ -18,48 +16,12 @@ import type { PublicOfferingSupplyProjection } from '@/modules/catalog/public'
 afterEach(cleanup)
 
 describe('Offering market surfaces', () => {
-  it('keeps a profile useful when no services are published', () => {
-    render(<AeOfferingSupplyList offerings={[]} />)
-    expect(screen.getByRole('heading', { name: 'Services and prices' })).toBeTruthy()
-    expect(screen.getByText('No services are published yet')).toBeTruthy()
-  })
-
-  it('separates declared request source from earned assistant support', () => {
-    render(<AeOfferingSupplyList offerings={[projectionFixture()]} />)
-
-    expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
-    expect(screen.getByText('How to start this service')).toBeTruthy()
-    expect(screen.getByText('Quotes this published service through the demo provider.')).toBeTruthy()
-    expect(screen.getByText('Published by the business')).toBeTruthy()
-    expect(screen.getByText('AUD 42.00 per item incl. tax')).toBeTruthy()
-    expect(screen.getByText('An AI assistant can start this service')).toBeTruthy()
-    expect(screen.queryByText(/verified/i)).toBeNull()
-    expect(screen.queryByText('POST')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'More page information' }))
-    expect(screen.getByText('POST')).toBeTruthy()
-    expect(screen.getByText('https://example.com/api/query')).toBeTruthy()
-  })
-
-  it('adapts the safe v2 API without restoring internal support vocabulary', () => {
-    const view = offeringApiDtoToSupplyView(v2BusinessFixture())
-    render(<AeOfferingSupplyList {...view} />)
-    expect(screen.getByRole('link', { name: 'Website' }).getAttribute('href')).toBe('https://example.com/start')
-    expect(screen.queryByText(/routeable|binding|capability/i)).toBeNull()
-  })
-
-  it('shows last-safe public facts when projection freshness degrades', () => {
-    render(<AeOfferingSupplyList offerings={[projectionFixture()]} disposition="stale" observedAt={1_900_000_000_000} />)
-    expect(screen.getByText('These are the last safely listed details')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Blockchain data query' })).toBeTruthy()
-  })
-
   it('teaches the owner the first useful action without requiring a contact route', () => {
     render(<AeOwnerOfferingsList offerings={[]} />)
-    expect(screen.getByRole('heading', { name: 'Show people what you do' })).toBeTruthy()
-    expect(screen.getByLabelText('Service summary').textContent).toContain('Published')
-    expect(screen.getByRole('heading', { name: 'Add your first service' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Add a service' }).getAttribute('href')).toBe('/owner/offerings/new')
+    expect(screen.getByRole('heading', { name: 'Publish your first Operation' })).toBeTruthy()
+    expect(screen.getByLabelText('Operation summary').textContent).toContain('Published')
+    expect(screen.getByRole('heading', { name: 'No Operations yet' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Add Operation' }).getAttribute('href')).toBe('/owner/offerings/new')
   })
 
   it('renders compact owner service rows and an explicit page-update recovery', () => {
@@ -74,12 +36,12 @@ describe('Offering market surfaces', () => {
     const onSave = vi.fn(() => new Promise((resolve) => { resolveSave = resolve }))
     render(<AeOwnerOfferingEditor initialValue={{ ...emptyOwnerOfferingEditorValue, name: 'Data query', category: 'Data', summary: 'Query indexed data.' }} onSave={onSave as never} />)
 
-    expect(screen.getByLabelText('Service setup').textContent).toContain('Describe it')
-    expect(screen.getByLabelText('Service setup').textContent).toContain('Add ways to begin')
-    expect(screen.getByLabelText('Service setup').textContent).toContain('Publish')
+    expect(screen.getByLabelText('Operation setup').textContent).toContain('Describe')
+    expect(screen.getByLabelText('Operation setup').textContent).toContain('Connect')
+    expect(screen.getByLabelText('Operation setup').textContent).toContain('Publish')
     expect(screen.queryByLabelText('Request URL')).toBeNull()
     fireEvent.click(screen.getByRole('combobox', { name: 'Add a contact route' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Assistant request' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Agent request' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add request details' }))
     expect(screen.getByLabelText('Request URL')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Data query updated' } })
@@ -88,7 +50,7 @@ describe('Offering market surfaces', () => {
     fireEvent.click(save)
     expect(onSave).toHaveBeenCalledTimes(1)
     resolveSave?.({ kind: 'saved', value: { ...emptyOwnerOfferingEditorValue, name: 'Data query updated', category: 'Data', summary: 'Query indexed data.' }, message: 'Saved.' })
-    await waitFor(() => expect(screen.getByText('Service saved')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Operation saved')).toBeTruthy())
   })
 
   it('requires an HTTPS website address and retains it in the human access descriptor', () => {
@@ -97,7 +59,7 @@ describe('Offering market surfaces', () => {
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Add a contact route' }))
     fireEvent.click(screen.getByRole('option', { name: 'Website' }))
-    fireEvent.change(screen.getByLabelText('Instructions for customers'), { target: { value: 'Start your request online.' } })
+    fireEvent.change(screen.getByLabelText('Access instructions'), { target: { value: 'Start your request online.' } })
     fireEvent.change(screen.getByLabelText('Website URL'), { target: { value: 'javascript:alert(1)' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add this way' }))
 
@@ -171,39 +133,3 @@ function projectionFixture(): PublicOfferingSupplyProjection {
     support: { integrated: true, routeable: true, reasons: [], observedAt: 1_900_000_000_000 },
   }
 }
-
-function v2BusinessFixture() {
-  return {
-    schemaVersion: 'public-business-catalog-api:v2' as const,
-    businessId: 'business:v2',
-    slug: 'v2-business',
-    name: 'V2 Business',
-    category: 'Data',
-    businessContext: { kind: 'local_human' as const, suburb: 'Perth', stateTerritory: 'WA' },
-    publicUrl: '/v2-business',
-    trustTier: 'claimed' as const,
-    photos: [],
-    observedAt: 1,
-    disposition: 'current' as const,
-    offerings: [{
-      offeringRef: 'offering:v2',
-      revision: 1,
-      name: 'Data lookup',
-      category: 'Data',
-      summary: 'Look up public data.',
-      accessPaths: [{
-        accessPathRef: 'access:v2:web',
-        offeringRevision: 1,
-        offeringSourceHash: canonicalDigest('offering-surfaces:v2'),
-        sourceHash: canonicalDigest('offering-surfaces:access:v2:web'),
-        kind: 'human_request' as const,
-        channel: 'website' as const,
-        disclosure: 'Start on the business website.',
-        url: 'https://example.com/start',
-      }],
-      support: { integrated: false, aeSupportedAction: false },
-    }],
-    accessSummary: { humanRequest: true, externalOperation: false, aeSupportedAction: false },
-  }
-}
-

@@ -1,7 +1,6 @@
 import type { BusinessId, CorrelationId, OfferingRef, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
 import type { BusinessContext, PublicStatus, TrustTier } from '@/modules/business/public'
 import type { FirstRequestMode, PublicCatalogReadState } from '@/modules/catalog/public'
-import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
 import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
 import type {
   IndexStatus,
@@ -104,7 +103,6 @@ export type RegistrySourceState = PublicCatalogReadState & {
   registryProjectionItems: RegistryProjectionItemContract[]
   registryProjectionAttempts: RegistryProjectionAttemptContract[]
   registrySearchDocuments?: RegistrySearchDocumentContract[]
-  discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
   indexStatus: IndexStatusContract[]
   auditEvents: AuditEventContract[]
 }

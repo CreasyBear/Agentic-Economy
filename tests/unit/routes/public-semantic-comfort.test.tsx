@@ -6,7 +6,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { AGENT_DOOR, BUSINESS_DOOR, HOME } from '@/content/brand-copy'
+import { HOME } from '@/content/brand-copy'
 
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
@@ -20,7 +20,9 @@ vi.mock('@tanstack/react-router', () => ({
       ...options,
       options,
       useSearch: () => ({}),
-      useLoaderData: () => undefined,
+      useLoaderData: () => path === '/'
+        ? { kind: 'ok', operations: [], matchedCount: 0 }
+        : undefined,
       useNavigate: () => vi.fn(),
     }
   },
@@ -44,7 +46,6 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
 import '@/routes/index'
 import '@/routes/privacy'
 import '@/routes/terms'
-import { AeWorkDisclosure } from '@/components/ae/chat/AeWorkDisclosure'
 
 afterEach(cleanup)
 
@@ -55,8 +56,8 @@ describe('public semantic comfort', () => {
     const headings = screen.getAllByRole('heading')
     expect(headings.map((heading) => heading.tagName)).toEqual(['H1', 'H2', 'H3', 'H3', 'H3'])
     expect(screen.getByRole('heading', { level: 2, name: 'What these terms mean in practice' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Ask a question' }).classList.contains('min-h-11')).toBe(true)
-    expect(screen.getByRole('link', { name: /Fix a page/ }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: 'Browse catalog' }).classList.contains('min-h-11')).toBe(true)
+    expect(screen.getByRole('link', { name: /Publish an Operation/ }).classList.contains('min-h-11')).toBe(true)
   })
 
   it('gives every privacy tab a comfortable standalone target', () => {
@@ -73,35 +74,20 @@ describe('public semantic comfort', () => {
   it('gives homepage example asks a comfortable standalone target', () => {
     renderRoute('/')
 
-    const examples = screen.getByRole('navigation', { name: 'Example asks' })
+    const examples = screen.getByRole('navigation', { name: 'Popular searches' })
     const links = within(examples).getAllByRole('link')
     expect(links).toHaveLength(HOME.exampleAsks.length)
     for (const link of links) expect(link.classList.contains('min-h-11')).toBe(true)
   })
 
-  it('gives the home agent and supplier links comfortable standalone targets', () => {
+  it('gives the home catalogue action a comfortable standalone target', () => {
     renderRoute('/')
 
-    for (const door of [AGENT_DOOR, BUSINESS_DOOR]) {
-      const link = screen.getByRole('link', { name: door.cta })
-      expect(link.classList.contains('min-h-11')).toBe(true)
-      expect(link.classList.contains('inline-flex')).toBe(true)
-    }
+    const link = screen.getByRole('link', { name: 'Discover all capabilities' })
+    expect(link.classList.contains('min-h-11')).toBe(true)
+    expect(link.classList.contains('inline-flex')).toBe(true)
   })
 
-  it('renders the thinking thread as a list and keeps the provenance trigger a comfortable native button', () => {
-    render(
-      <AeWorkDisclosure
-        isStreaming
-        workSteps={[]}
-        thinkingSteps={['Searching for matches']}
-        thinkingLabel="Searching for matches"
-      />,
-    )
-
-    expect(screen.getByRole('list', { name: 'Answer thinking' })).toBeTruthy()
-    expect(screen.getByText('Searching for matches')).toBeTruthy()
-  })
 })
 
 function renderRoute(path: '/' | '/privacy' | '/terms') {

@@ -38,9 +38,20 @@ function productionReadinessEnvironment(): Record<string, string> {
     CLERK_SECRET_KEY: 'sk_live_example',
     CLERK_JWT_ISSUER_DOMAIN: 'https://clerk.example',
     OPENROUTER_API_KEY: 'openrouter-example',
-    AE_X402_PAYMENT_CREDENTIAL_REF: 'env:AE_X402_PAYMENT_PRIVATE_KEY',
-    AE_X402_PAYMENT_PRIVATE_KEY: 'test-only-x402-payer-placeholder',
-    AE_X402_RPC_URLS_JSON: '{"eip155:8453":"https://base.example/rpc"}',
+    AE_LLM_MODEL: 'test/provider-model',
+    AE_CHAT_PROXY_SECRET: 'test-chat-proxy-value-long-enough-for-production-shape',
+    CDP_API_KEY_ID: 'cdp-key-id',
+    CDP_API_KEY_SECRET: 'cdp-key-secret',
+    CDP_WALLET_SECRET: 'cdp-wallet-secret',
+    AE_X402_CDP_ACCOUNT_NAME: 'agentic-economy-x402',
+    AE_X402_CDP_EXPECTED_EVM_ADDRESS: '0x0000000000000000000000000000000000000001',
+    AE_X402_CDP_ACCOUNT_POLICY_ID: '11111111-1111-4111-8111-111111111111',
+    AE_X402_CDP_PROJECT_POLICY_ID: '22222222-2222-4222-8222-222222222222',
+    AE_X402_CDP_CREDENTIAL_GENERATION: '7',
+    AE_X402_CUSTODY_ENABLED: 'true',
+    AE_X402_CUSTODY_MAX_ATOMIC: '100000000',
+    AE_X402_CUSTODY_DAILY_MAX_ATOMIC: '100000000',
+    AE_X402_RPC_URLS_JSON: '{"eip155:8453":["https://base.example/rpc"]}',
     STRIPE_SECRET_KEY: 'test-only-stripe-secret',
     STRIPE_WEBHOOK_SECRET: 'test-only-stripe-webhook-secret',
     VITE_STRIPE_PUBLISHABLE_KEY: 'pk_test_example',
@@ -100,7 +111,8 @@ describe('operational diagnostics routes', () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain('convex.example')
     expect(JSON.stringify(result.diagnostics)).not.toContain('source-write-secret')
     expect(JSON.stringify(result.diagnostics)).not.toContain('test-only-x402-payer-placeholder')
-    expect(JSON.stringify(result.diagnostics)).not.toContain('env:AE_X402_PAYMENT_PRIVATE_KEY')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-key-secret')
+    expect(JSON.stringify(result.diagnostics)).not.toContain('cdp-wallet-secret')
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
 

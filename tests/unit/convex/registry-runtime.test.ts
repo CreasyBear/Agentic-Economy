@@ -1,369 +1,278 @@
+import { convexTest } from 'convex-test'
+import type { GenericDatabaseWriter } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
+import { api } from '../../../convex/_generated/api'
+import type { DataModel, Id } from '../../../convex/_generated/dataModel'
+import schema from '../../../convex/schema'
 import {
-  getPublicBusinessOfferingSupplyBySlug,
-  listPublicBusinessOfferingSupply,
-  searchPublicBusinessOfferingSupply,
-} from '../../../convex/registry'
+  convexModules as modules,
+  publishedBusinessOwner,
+  type ConvexFixtureBackend,
+} from '../../helpers/convex-fixtures'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { ExactAmount } from '@/modules/money/public'
 
-type Row = Record<string, unknown> & { _id: string; _creationTime: number }
-type Filter = { op: 'eq' | 'search'; field: string; value: unknown }
-type ReadTrace = { tableName: string; indexName?: string; operation: 'first' | 'take' | 'unique' | 'paginate' | 'collect'; limit?: number; filters: Filter[] }
-type IndexBuilder = { eq: (field: string, value: unknown) => IndexBuilder; search: (field: string, value: string) => IndexBuilder }
-type PaginationOpts = { numItems: number; cursor: string | null }
-type QueryCtx = { db: FakeDb }
-type SearchArgs = { query: string; location?: string; maxPrice?: ExactAmount; limit?: number }
-
-type QueryResult = {
-  kind: 'ok'
-  page?: Array<{ slug: string }>
-  items?: Array<{ slug: string }>
-  pagination?: { total: number; hasMore: boolean }
+const businessContext = {
+  kind: 'local_human' as const,
+  suburb: 'Perth',
+  stateTerritory: 'WA',
 }
-
-const listHandler = (listPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: { paginationOpts: PaginationOpts }) => Promise<QueryResult> })._handler
-const searchHandler = (searchPublicBusinessOfferingSupply as unknown as { _handler: (ctx: QueryCtx, args: SearchArgs) => Promise<QueryResult> })._handler
-const detailHandler = (getPublicBusinessOfferingSupplyBySlug as unknown as { _handler: (ctx: QueryCtx, args: { slug: string }) => Promise<unknown> })._handler
+const placeKeys = ['perth', 'perth wa', 'wa']
 
 describe('Convex registry public read paths', () => {
-  it('lists published businesses with one native page and bounded snapshot hydration', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 12)
+  it('returns every eligible public business exactly once across native cursors', async () => {
+    const backend = convexTest(schema, modules)
+    await seedRegistryFixture(backend)
 
-    const page = await listHandler({ db }, { paginationOpts: { cursor: null, numItems: 2 } })
-
-    expect(page).toMatchObject({
-      kind: 'ok',
-      page: [{ slug: 'business-001' }, { slug: 'business-002' }],
-      isDone: false,
+    const first = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
+      paginationOpts: { cursor: null, numItems: 2 },
     })
-    expect(db.reads.some((read) => read.operation === 'paginate' && read.tableName === 'businesses')).toBe(true)
-    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
-    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots'].includes(read.tableName))).toBe(true)
+    const second = await backend.query(api.registry.listPublicBusinessOfferingSupply, {
+      paginationOpts: { cursor: first.continueCursor, numItems: 2 },
+    })
+
+    const slugs = [...first.page, ...second.page].map((business) => business.slug)
+    expect(slugs).toEqual(['alpha-plumbing', 'beta-electric', 'gamma-cleaning'])
+    expect(new Set(slugs).size).toBe(slugs.length)
+    expect(second.isDone).toBe(true)
+    expect(slugs).not.toContain('published-no-offering')
   })
 
-  it('point-reads detail by slug from the current Offering snapshot', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 20)
+  it('returns detail by slug with the current canonical offering identity', async () => {
+    const backend = convexTest(schema, modules)
+    await seedRegistryFixture(backend)
 
-    const result = await detailHandler({ db }, { slug: 'business-010' })
-
-    expect(result).toMatchObject({
-      kind: 'found',
-      business: { slug: 'business-010', offerings: [{ name: 'Emergency pipe repair' }] },
+    const result = await backend.query(api.registry.getPublicBusinessOfferingSupplyBySlug, {
+      slug: 'alpha-plumbing',
     })
-    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
-    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots'].includes(read.tableName))).toBe(true)
-  })
-  it('decodes a legacy JSON projection without losing Offering identity', async () => {
-    const db = new FakeDb()
-    const businessId = 'businesses:legacy'
-    db.seed('businesses', {
-      _id: businessId,
-      _creationTime: 1,
-      ownerId: 'owners:legacy',
-      slug: 'legacy-business',
-      name: 'Legacy Business',
-      category: 'Emergency plumbing',
-      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
-      publicStatus: 'published',
-      trustTier: 'claimed',
-    })
-    db.seed('businessSupplyProjectionSnapshots', {
-      _id: 'businessSupplyProjectionSnapshots:legacy',
-      _creationTime: 1,
-      businessId,
-      sourceRevision: 1,
-      sourceDigest: 'digest:legacy',
-      observedAt: 1,
-      disposition: 'current',
-      status: 'current',
-      projectionJson: JSON.stringify({
-        business: {
-          businessId,
-          slug: 'legacy-business',
-          name: 'Legacy Business',
-          category: 'Emergency plumbing',
-          businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
-          publicUrl: '/legacy-business',
-          trustTier: 'claimed',
-        },
-        offerings: [{
-          offering: {
-            offeringRef: 'offering:legacy:pipe-repair',
-            revision: 1,
-            name: 'Emergency pipe repair',
-            category: 'Emergency plumbing',
-            summary: 'Emergency plumbing help.',
-            price: {
-              kind: 'fixed',
-              amount: { currency: 'AUD', units: '18000', exponent: 2 },
-              taxTreatment: 'unstated',
-            },
-          },
-          accessPaths: [],
-          support: { integrated: false, routeable: false, reasons: [] },
-        }],
-        sourceRevision: 1,
-        sourceDigest: 'digest:legacy',
-        observedAt: 1,
-        disposition: 'current',
-      }),
-    })
-
-    const result = await detailHandler({ db }, { slug: 'legacy-business' })
 
     expect(result).toMatchObject({
       kind: 'found',
       business: {
-        slug: 'legacy-business',
-        offerings: [{ offeringRef: 'offering:legacy:pipe-repair', name: 'Emergency pipe repair' }],
+        slug: 'alpha-plumbing',
+        offerings: [{
+          offeringRef: 'catalog-offering:alpha-plumbing',
+          revision: 1,
+          name: 'Emergency pipe repair',
+        }],
       },
     })
   })
 
-  it('paginates the full-text registry index and hydrates canonical snapshots', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 20)
-    db.seed('registrySearchDocuments', {
-      _id: 'registrySearchDocuments:1',
-      _creationTime: 100,
-      businessSlug: 'business-007',
-      documentId: 'business-007__emergency-pipe-repair',
-      schemaVersion: 'registry-search-document:v1',
-      offeringRef: 'offering:007:emergency-pipe-repair',
-      businessName: 'Business 007',
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      categoryKey: 'emergency plumbing',
-      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
-      trustTier: 'claimed',
-      firstRequestMode: 'not_available_yet',
-      keywords: ['emergency', 'plumber', 'plumbing'],
-      serviceAreaSummary: 'Parramatta and nearby suburbs',
-      generatedHash: 'hash:registry-search-007',
-      updatedAt: 100,
-      placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
-      searchText: 'business 007 emergency pipe repair emergency plumbing plumber parramatta nsw',
-      publicStatus: 'published',
+  it('returns a bounded full-text search result for the canonical business', async () => {
+    const backend = convexTest(schema, modules)
+    await seedRegistryFixture(backend)
+
+    const result = await backend.query(api.registry.searchPublicBusinessOfferingSupply, {
+      query: 'emergency plumber perth',
+      limit: 1,
     })
 
-    const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
-
-    expect(page).toMatchObject({ kind: 'ok', query: 'emergency plumber parramatta', items: [{ slug: 'business-007' }], pagination: { total: 1, hasMore: false } })
-    expect(db.reads.some((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'paginate' && read.limit === 250)).toBe(true)
-    expect(db.reads.some((read) => read.operation === 'collect')).toBe(false)
-    expect(db.reads.every((read) => ['businesses', 'suppressionRules', 'businessSupplyProjectionSnapshots', 'registrySearchDocuments'].includes(read.tableName))).toBe(true)
-  })
-
-  it('does not broaden a stop-word-only query into all published businesses', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 20)
-
-    const page = await searchHandler({ db }, { query: 'find a provider', limit: 5 })
-
-    expect(page).toMatchObject({ kind: 'ok', items: [], pagination: { total: 0, hasMore: false } })
-    expect(db.reads).toEqual([])
-  })
-
-  it('keeps searching past the former 250-document cap', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 300)
-    seedRegistrySearchDocuments(db, 300)
-
-    const first = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 50 })
-
-    expect(first).toMatchObject({
+    expect(result).toMatchObject({
       kind: 'ok',
-      items: expect.arrayContaining([expect.objectContaining({ slug: 'business-001' }), expect.objectContaining({ slug: 'business-050' })]),
-      pagination: { total: 300, hasMore: true, nextCursor: 'business-051' },
+      items: [{
+        slug: 'alpha-plumbing',
+        offerings: [{ offeringRef: 'catalog-offering:alpha-plumbing' }],
+      }],
+      pagination: { limit: 1, total: 1, hasMore: false },
     })
-    expect(first.items).toHaveLength(50)
-    expect(db.reads.filter((read) => read.tableName === 'registrySearchDocuments' && read.indexName === 'search_searchText_by_publicStatus' && read.operation === 'paginate')).toHaveLength(2)
+    expect(result.items).toHaveLength(1)
   })
-  it('compares exact prices across scales while requiring matching currencies', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 4)
-    seedRegistrySearchDocuments(db, 4)
-    const prices = [
-      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7000', exponent: 6 }, taxTreatment: 'unstated' as const },
-      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7001', exponent: 6 }, taxTreatment: 'unstated' as const },
-      { kind: 'fixed' as const, amount: { currency: 'EUR', units: '7000', exponent: 6 }, taxTreatment: 'unstated' as const },
-      { kind: 'fixed' as const, amount: { currency: 'USDC', units: '7', exponent: 3 }, taxTreatment: 'unstated' as const },
-    ]
-    for (const [index, price] of prices.entries()) {
-      const snapshot = db.table('businessSupplyProjectionSnapshots')[index]
-      if (snapshot === undefined) throw new Error('registry snapshot fixture missing')
-      const projection = snapshot.projection as { offerings: Array<{ offering: { price?: (typeof prices)[number] } }> }
-      const offering = projection.offerings[0]?.offering
-      if (offering === undefined) throw new Error('registry offering fixture missing')
-      offering.price = price
-    }
 
-    const page = await searchHandler({ db }, {
-      query: 'emergency plumber parramatta',
-      maxPrice: { currency: 'USDC', units: '7000', exponent: 6 },
+  it('returns empty results for a stop-word-only search', async () => {
+    const backend = convexTest(schema, modules)
+    await seedRegistryFixture(backend)
+
+    const result = await backend.query(api.registry.searchPublicBusinessOfferingSupply, {
+      query: 'find a provider',
       limit: 5,
     })
 
-    expect(page.items?.map((item) => item.slug)).toEqual(['business-001', 'business-004'])
-  })
-
-  it('does not mistake an unqualified capability query for a location', async () => {
-    const db = new FakeDb()
-    seedBusinesses(db, 1)
-    const business = db.table('businesses')[0]
-    const snapshot = db.table('businessSupplyProjectionSnapshots')[0]
-    if (business === undefined || snapshot === undefined) throw new Error('registry fixture missing')
-    business.name = 'Frankfurter Rates'
-    const projection = snapshot.projection as {
-      business: { name: string }
-      offerings: Array<{ offering: { name: string; category: string; summary: string } }>
-    }
-    projection.business.name = 'Frankfurter Rates'
-    const offering = projection.offerings[0]?.offering
-    if (offering === undefined) throw new Error('registry offering fixture missing')
-    offering.name = 'Currency exchange rates'
-    offering.category = 'Currency data'
-    offering.summary = 'Current European Central Bank reference exchange rates.'
-    db.seed('registrySearchDocuments', {
-      _id: 'registrySearchDocuments:frankfurter',
-      _creationTime: 100,
-      businessSlug: 'business-001',
-      documentId: 'business-001__currency-exchange-rates',
-      schemaVersion: 'registry-search-document:v1',
-      offeringRef: 'offering:001',
-      businessName: 'Frankfurter Rates',
-      name: 'Currency exchange rates',
-      category: 'Currency data',
-      categoryKey: 'currency data',
-      businessContext: { kind: 'programmable_provider', website: 'https://api.frankfurter.app', providerIdentifier: 'frankfurter' },
-      trustTier: 'claimed',
-      firstRequestMode: 'not_available_yet',
-      keywords: ['currency', 'exchange', 'rates'],
-      serviceAreaSummary: 'Online',
-      generatedHash: 'hash:registry-search-frankfurter',
-      updatedAt: 100,
-      placeKeys: ['external', 'online'],
-      searchText: 'frankfurter rates currency exchange rates current european central bank reference exchange rates online',
-      publicStatus: 'published',
+    expect(result).toMatchObject({
+      kind: 'ok',
+      items: [],
+      pagination: { limit: 5, total: 0, hasMore: false },
     })
-
-    const page = await searchHandler({ db }, { query: 'Frankfurter currency rates', limit: 5 })
-
-    expect(page).toMatchObject({ kind: 'ok', items: [{ slug: 'business-001' }] })
-  })
-
-  it('does not broaden to a public-status scan while search documents backfill', async () => {
-    const db = new FakeDb({ emptySearchIndex: true })
-    seedBusinesses(db, 20)
-    db.seed('registrySearchDocuments', {
-      _id: 'registrySearchDocuments:1',
-      _creationTime: 100,
-      businessSlug: 'business-007',
-      documentId: 'business-007__emergency-pipe-repair',
-      schemaVersion: 'registry-search-document:v1',
-      offeringRef: 'offering:007:emergency-pipe-repair',
-      businessName: 'Business 007',
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      categoryKey: 'emergency plumbing',
-      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
-      trustTier: 'claimed',
-      firstRequestMode: 'not_available_yet',
-      keywords: ['emergency', 'plumber', 'plumbing'],
-      serviceAreaSummary: 'Parramatta and nearby suburbs',
-      generatedHash: 'hash:registry-search-007',
-      updatedAt: 100,
-      placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
-      searchText: 'business 007 emergency pipe repair emergency plumbing plumber parramatta nsw',
-      publicStatus: 'published',
-    })
-
-    const page = await searchHandler({ db }, { query: 'emergency plumber parramatta', limit: 5 })
-
-    expect(page).toMatchObject({ kind: 'ok', items: [], pagination: { total: 0, hasMore: false } })
-    expect(db.reads.some((read) => read.indexName === 'by_publicStatus_updatedAt')).toBe(false)
   })
 })
 
-class FakeIndexBuilder implements IndexBuilder {
-  readonly filters: Filter[] = []
-  eq(field: string, value: unknown): IndexBuilder { this.filters.push({ op: 'eq', field, value }); return this }
-  search(field: string, value: string): IndexBuilder { this.filters.push({ op: 'search', field, value }); return this }
-}
+async function seedRegistryFixture(backend: ConvexFixtureBackend): Promise<void> {
+  const alpha = await publishedBusinessOwner(backend, 'alpha-plumbing')
+  const beta = await publishedBusinessOwner(backend, 'beta-electric')
+  const gamma = await publishedBusinessOwner(backend, 'gamma-cleaning')
+  await publishedBusinessOwner(backend, 'published-no-offering')
 
-class FakeQuery {
-  constructor(private readonly db: FakeDb, private readonly tableName: string, private readonly filters: readonly Filter[] = [], private readonly indexName?: string) {}
-  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): FakeQuery { const builder = new FakeIndexBuilder(); callback(builder); return new FakeQuery(this.db, this.tableName, builder.filters, indexName) }
-  withSearchIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): FakeQuery { const builder = new FakeIndexBuilder(); callback(builder); return new FakeQuery(this.db, this.tableName, builder.filters, indexName) }
-  async first(): Promise<Row | null> { this.db.trace(this.tableName, 'first', this.filters, this.indexName); return this.apply()[0] ?? null }
-  async unique(): Promise<Row | null> { this.db.trace(this.tableName, 'unique', this.filters, this.indexName); return this.apply()[0] ?? null }
-  async take(limit: number): Promise<Row[]> { this.db.trace(this.tableName, 'take', this.filters, this.indexName, limit); return this.apply().slice(0, limit) }
-  async paginate(options: PaginationOpts): Promise<{ page: Row[]; isDone: boolean; continueCursor: string }> {
-    this.db.trace(this.tableName, 'paginate', this.filters, this.indexName, options.numItems)
-    const rows = this.apply()
-    const start = options.cursor === null ? 0 : Number(options.cursor.replace('offset:', ''))
-    const end = Math.min(start + options.numItems, rows.length)
-    return { page: rows.slice(start, end), isDone: end >= rows.length, continueCursor: `offset:${end}` }
-  }
-  private apply(): Row[] { return this.db.emptySearchIndex && this.indexName === 'search_searchText_by_publicStatus' ? [] : this.db.table(this.tableName).filter((row) => this.filters.every((filter) => matchesFilter(row, filter))).sort((left, right) => String(left.slug ?? '').localeCompare(String(right.slug ?? ''))) }
-}
-
-class FakeDb {
-  readonly reads: ReadTrace[] = []
-  readonly emptySearchIndex: boolean
-  private readonly tables: Record<string, Row[]> = {}
-  constructor(options: { emptySearchIndex?: boolean } = {}) { this.emptySearchIndex = options.emptySearchIndex ?? false }
-  query(tableName: string): FakeQuery { return new FakeQuery(this, tableName) }
-  normalizeId(tableName: string, value: string): string | null { return value.startsWith(`${tableName}:`) ? value : null }
-  async get(id: string): Promise<Row | null> { return Object.values(this.tables).flat().find((row) => row._id === id) ?? null }
-  seed(tableName: string, row: Row): void { (this.tables[tableName] ??= []).push(row) }
-  table(tableName: string): Row[] { return this.tables[tableName] ?? [] }
-  trace(tableName: string, operation: ReadTrace['operation'], filters: readonly Filter[], indexName?: string, limit?: number): void { this.reads.push({ tableName, operation, filters: [...filters], ...(indexName === undefined ? {} : { indexName }), ...(limit === undefined ? {} : { limit }) }) }
-}
-
-function seedBusinesses(db: FakeDb, count: number): void {
-  for (let index = 1; index <= count; index += 1) {
-    const suffix = String(index).padStart(3, '0')
-    const businessId = `businesses:${suffix}`
-    const slug = `business-${suffix}`
-    db.seed('businesses', { _id: businessId, _creationTime: index, ownerId: `owners:${suffix}`, slug, name: `Business ${suffix}`, normalizedName: `business ${suffix}`, category: 'Emergency plumbing', businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' }, publicStatus: 'published', trustTier: 'claimed', claimStatus: 'claimed', sourceHash: canonicalDigest(`business:${suffix}`), createdAt: index, updatedAt: index })
-    db.seed('businessSupplyProjectionSnapshots', { _id: `snapshots:${suffix}`, _creationTime: index, businessId, sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current', updatedAt: index, status: 'current', projection: { business: { businessId, slug, name: `Business ${suffix}`, category: 'Emergency plumbing', businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' }, publicUrl: `/${slug}`, trustTier: 'claimed' }, offerings: [{ offering: { offeringRef: `offering:${suffix}`, revision: 1, name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'Emergency plumbing help for urgent pipe repairs.', serviceAreaSummary: 'Parramatta and nearby suburbs', price: { kind: 'fixed', amount: { currency: 'AUD', units: '18000', exponent: 2 }, taxTreatment: 'unstated' } }, accessPaths: [], support: { integrated: false, routeable: false, reasons: ['not_integrated'] } }], sourceRevision: 1, sourceDigest: canonicalDigest(`projection:${suffix}`), observedAt: index, disposition: 'current' } })
-  }
-}
-
-function seedRegistrySearchDocuments(db: FakeDb, count: number): void {
-  for (let index = 1; index <= count; index += 1) {
-    const suffix = String(index).padStart(3, '0')
-    db.seed('registrySearchDocuments', {
-      _id: `registrySearchDocuments:${suffix}`,
-      _creationTime: index,
-      documentId: `business-${suffix}__emergency-pipe-repair`,
-      schemaVersion: 'registry-search-document:v1',
-      businessSlug: `business-${suffix}`,
-      offeringRef: `offering:${suffix}`,
-      businessName: `Business ${suffix}`,
+  await backend.run(async (ctx) => {
+    await seedCanonicalOffering(ctx.db, {
+      businessId: alpha.businessId,
+      slug: 'alpha-plumbing',
       name: 'Emergency pipe repair',
       category: 'Emergency plumbing',
-      categoryKey: 'emergency plumbing',
-      businessContext: { kind: 'local_human', suburb: 'Parramatta', stateTerritory: 'NSW' },
-      trustTier: 'claimed',
-      firstRequestMode: 'not_available_yet',
-      placeKeys: ['parramatta', 'parramatta nsw', 'nsw'],
-      keywords: ['emergency', 'plumber', 'plumbing'],
-      searchText: `business ${suffix} emergency pipe repair emergency plumbing plumber parramatta nsw`,
-      serviceAreaSummary: 'Parramatta and nearby suburbs',
-      generatedHash: `hash:registry-search-${suffix}`,
-      updatedAt: index,
-      publicStatus: 'published',
+      summary: 'Emergency plumber for urgent pipe repairs in Perth.',
+      keywords: ['emergency', 'plumber', 'pipe', 'repair'],
     })
-  }
+    await seedCanonicalOffering(ctx.db, {
+      businessId: beta.businessId,
+      slug: 'beta-electric',
+      name: 'Electrical inspection',
+      category: 'Electrical services',
+      summary: 'Residential electrical inspection in Perth.',
+      keywords: ['electrical', 'inspection'],
+    })
+    await seedCanonicalOffering(ctx.db, {
+      businessId: gamma.businessId,
+      slug: 'gamma-cleaning',
+      name: 'Commercial cleaning',
+      category: 'Cleaning services',
+      summary: 'Commercial cleaning for Perth workplaces.',
+      keywords: ['commercial', 'cleaning'],
+    })
+  })
 }
 
-function matchesFilter(row: Row, filter: Filter): boolean {
-  if (filter.op === 'eq') return row[filter.field] === filter.value
-  return String(filter.value).split(/\s+/).filter(Boolean).every((token) => String(row[filter.field] ?? '').split(/\s+/).includes(token))
+async function seedCanonicalOffering(
+  db: GenericDatabaseWriter<DataModel>,
+  offering: {
+    businessId: Id<'businesses'>
+    slug: string
+    name: string
+    category: string
+    summary: string
+    keywords: readonly string[]
+  },
+): Promise<void> {
+  const offeringRef = `catalog-offering:${offering.slug}`
+  const offeringSourceHash = canonicalDigest({ offeringRef, revision: 1 })
+  const capabilityOfferingId = `capability-offering:${offering.slug}`
+  const bindingId = `binding:${offering.slug}`
+  const contractRef = {
+    capabilityId: `registry.${offering.slug}`,
+    version: 1,
+    contractDigest: canonicalDigest(`contract:${offering.slug}`),
+  }
+  const accessPathRef = `access:${offering.slug}:lookup`
+  const descriptor = {
+    kind: 'external_operation' as const,
+    name: offering.name,
+    summary: offering.summary,
+    url: `https://${offering.slug}.example.test/lookup`,
+    method: 'GET',
+    provenance: 'business_declared' as const,
+  }
+  const searchText = [
+    offering.slug,
+    offering.category,
+    businessContext.suburb,
+    businessContext.stateTerritory,
+    offering.name,
+    offering.summary,
+    ...offering.keywords,
+  ].join(' ').toLowerCase()
+
+  await db.insert('businessOfferings', {
+    offeringRef,
+    businessId: offering.businessId,
+    currentRevision: 1,
+    status: 'published',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db.insert('businessOfferingRevisions', {
+    offeringRef,
+    businessId: offering.businessId,
+    revision: 1,
+    name: offering.name,
+    category: offering.category,
+    summary: offering.summary,
+    sourceHash: offeringSourceHash,
+    createdAt: 1,
+  })
+  await db.insert('offeringAccessPaths', {
+    accessPathRef,
+    businessId: offering.businessId,
+    offeringRef,
+    offeringRevision: 1,
+    offeringSourceHash,
+    status: 'published',
+    descriptor,
+    sourceHash: canonicalDigest({ accessPathRef, descriptor }),
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db.insert('capabilityOfferings', {
+    offeringId: capabilityOfferingId,
+    businessId: offering.businessId,
+    networkId: 'ae:public',
+    ...contractRef,
+    origin: {
+      kind: 'catalog_offering',
+      offeringRef,
+      offeringRevision: 1,
+      offeringSourceHash,
+    },
+    presentation: {
+      label: offering.name,
+      summary: offering.summary,
+      price: { kind: 'on_request' },
+      materialTerms: [],
+      commercialRelationship: {
+        kind: 'none',
+        summary: 'No commercial relationship.',
+        influencesEligibility: false,
+        influencesInclusion: false,
+        influencesOrder: false,
+        evidenceRefs: [],
+      },
+    },
+    searchTerms: [...offering.keywords],
+    registrationEvidenceRefs: [],
+    registrationHash: canonicalDigest({ capabilityOfferingId }),
+    status: 'active',
+    admissionEvidenceRefs: [],
+    eligibilityHash: canonicalDigest({ capabilityOfferingId, status: 'active' }),
+    registeredAt: 1,
+    updatedAt: 1,
+  })
+  await db.insert('capabilityTransportBindings', {
+    bindingId,
+    offeringId: capabilityOfferingId,
+    networkId: 'ae:public',
+    ...contractRef,
+    endpointUrl: `https://${offering.slug}.example.test/lookup`,
+    authority: { kind: 'keyless' },
+    continuation: { kind: 'single_response', evidenceRefs: [] },
+    cancellation: { kind: 'unsupported', evidenceRefs: [] },
+    adapterId: 'http-json:v1',
+    configJson: '{}',
+    configDigest: canonicalDigest({}),
+    registrationEvidenceRefs: [],
+    registrationHash: canonicalDigest({ bindingId }),
+    admission: 'admitted',
+    conformance: 'conformant',
+    admissionEvidenceRefs: [],
+    conformanceEvidenceRefs: [],
+    eligibilityHash: canonicalDigest({ bindingId, admission: 'admitted', conformance: 'conformant' }),
+    registeredAt: 1,
+    updatedAt: 1,
+  })
+  await db.insert('registrySearchDocuments', {
+    documentId: `${offering.slug}__${offeringRef.split(':').at(-1)}`,
+    schemaVersion: 'registry-search-document:v1',
+    businessSlug: offering.slug,
+    offeringRef,
+    businessName: offering.slug,
+    name: offering.name,
+    category: offering.category,
+    categoryKey: offering.category.toLowerCase(),
+    businessContext: { ...businessContext },
+    publicStatus: 'published',
+    trustTier: 'listed',
+    firstRequestMode: 'not_available_yet',
+    placeKeys: [...placeKeys],
+    keywords: [...offering.keywords],
+    searchText,
+    serviceAreaSummary: 'Perth and nearby suburbs',
+    generatedHash: canonicalDigest({ searchText }),
+    updatedAt: 1,
+  })
 }

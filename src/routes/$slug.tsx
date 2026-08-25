@@ -1,17 +1,12 @@
-import { Outlet, Link, createFileRoute, notFound, useLocation, type NotFoundRouteProps } from '@tanstack/react-router'
+import { Outlet, Link, createFileRoute, notFound, useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
+import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import type { PublicBusinessPageNotFoundReason } from '@/modules/catalog/public'
-import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/modules/catalog/public-route.functions'
-import {
-  buildPublicInquiryAffordance,
-  projectPublicInquiryAvailability,
-} from '@/modules/inquiries/route-readbacks'
+import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { serializeJsonLd } from '@/modules/seo/public'
 
 type ProviderListingSearch = {
@@ -45,8 +40,8 @@ export const Route = createFileRoute('/$slug')({
     if (loaderData?.kind === 'unavailable') {
       return {
         meta: [
-          { title: 'Business page unavailable | Agentic Economy' },
-          { name: 'description', content: 'The public business source is unavailable right now. Try again in a moment.' },
+          { title: 'Supplier unavailable | Agentic Economy' },
+          { name: 'description', content: 'The supplier catalogue source is unavailable right now. Try again in a moment.' },
           { name: 'robots', content: 'noindex' },
         ],
       }
@@ -63,8 +58,8 @@ export const Route = createFileRoute('/$slug')({
 
     return {
       meta: [
-        { title: loaderData.seo.title },
-        { name: 'description', content: loaderData.seo.description },
+        { title: `${loaderData.page.catalog.name} Operations | Agentic Economy` },
+        { name: 'description', content: `Browse published Operations, prices, readiness, and access paths from ${loaderData.page.catalog.name}.` },
         { name: 'robots', content: loaderData.seo.indexDirective },
       ],
       links: [{ rel: 'canonical', href: loaderData.seo.canonicalUrl }],
@@ -86,105 +81,22 @@ export const Route = createFileRoute('/$slug')({
 function ProviderListingPending() {
   return (
     <AePublicShell>
-      <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10" aria-busy="true" aria-label="Loading listing">
-        <nav aria-label="Return to your previous view">
-          <Skeleton className="h-9 w-40" />
-        </nav>
-
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-          <div className="grid gap-8">
-            <Card className="overflow-hidden p-6" aria-label="Loading listing header">
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-row flex-wrap items-center gap-2">
-                  <Skeleton className="h-6 w-6" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Skeleton className="h-16 w-[82%]" />
-                  <Skeleton className="h-7 w-[44%]" />
-                </div>
-                <div className="flex flex-row flex-wrap items-center gap-3">
-                  <Skeleton className="h-7 w-32" />
-                  <Skeleton className="h-7 w-40" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <Skeleton className="h-12 w-[70%]" />
-              </div>
-            </Card>
-
-            <Card className="grid gap-4 p-5" aria-label="Loading listing photos">
-              <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                <Skeleton className="h-52 w-full" />
-                <Skeleton className="h-52 w-full" />
-                <Skeleton className="h-52 w-full" />
-              </div>
-            </Card>
-
-            <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
-              <Card className="p-5" aria-label="Loading reach-out steps">
-                <div className="flex flex-col gap-3">
-                  <Skeleton className="h-6 w-56" />
-                  {Array.from({ length: 3 }, (_, index) => (
-                    <div key={index} className="flex flex-row items-start gap-3">
-                      <Skeleton className="h-4 w-4" />
-                      <div className="flex flex-col gap-1">
-                        <Skeleton className="h-4 w-44" />
-                        <Skeleton className="h-3 w-52" />
-                        <Skeleton className="h-4 w-full" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              <Card className="p-5" aria-label="Loading source dates">
-                <div className="flex flex-col gap-3">
-                  <Skeleton className="h-6 w-36" />
-                  <Skeleton className="h-9 w-60" />
-                  <Skeleton className="h-9 w-56" />
-                </div>
-              </Card>
-            </div>
-
-            <Card className="grid gap-6 p-6" aria-label="Loading listing details">
-              <div className="flex flex-col gap-1">
-                <Skeleton className="h-6 w-40" />
-                <Skeleton className="h-4 w-72" />
-              </div>
-              {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="flex flex-col gap-3">
-                  <Skeleton className="h-3 w-36" />
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-20 w-full" />
-                  </div>
-                </div>
-              ))}
-            </Card>
+      <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8" aria-busy="true" aria-label="Loading supplier">
+        <Skeleton className="h-11 w-36" />
+        <header className="grid gap-4 border-b border-border pb-6">
+          <Skeleton className="h-5 w-20" />
+          <Skeleton className="h-10 w-72 max-w-full" />
+          <Skeleton className="h-5 w-full max-w-xl" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-10 w-full" />)}
           </div>
-
-          <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Loading actions for this business">
-            <Card className="p-5">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <Skeleton className="h-6 w-52" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-                <Skeleton className="h-11 w-full" />
-                <Skeleton className="h-14 w-full" />
-              </div>
-            </Card>
-
-            <Card className="bg-card p-5" aria-label="Loading assistant details">
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-6 w-36" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-9 w-48" />
-              </div>
-            </Card>
-
-            <Skeleton className="h-4 w-44" />
-          </aside>
+        </header>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="overflow-hidden rounded-card border border-border bg-card">
+            <Skeleton className="h-16 w-full rounded-none" />
+            {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-32 w-full rounded-none border-t border-border" />)}
+          </div>
+          <Skeleton className="h-72 w-full" />
         </div>
       </article>
     </AePublicShell>
@@ -198,13 +110,13 @@ function ProviderListingError() {
       <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
-            <h1 className="text-lg font-medium tracking-tight">This listing didn't load</h1>
-            <EmptyDescription>Try the page again, or return to Ask to search again.</EmptyDescription>
+            <h1 className="text-lg font-medium tracking-tight">This supplier didn’t load</h1>
+            <EmptyDescription>Try again, or return to the catalogue.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+              <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
             </div>
           </EmptyContent>
         </Empty>
@@ -221,59 +133,16 @@ export function PublicBusinessUnavailable() {
       <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
         <Empty className="border border-border bg-card p-5">
           <EmptyHeader>
-            <h1 className="text-lg font-medium tracking-tight">Business page temporarily unavailable</h1>
-            <EmptyDescription>The public business source is unavailable right now. Try again in a moment.</EmptyDescription>
+            <h1 className="text-lg font-medium tracking-tight">Supplier temporarily unavailable</h1>
+            <EmptyDescription>The supplier catalogue source is unavailable right now. Try again in a moment.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+              <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
             </div>
           </EmptyContent>
         </Empty>
-      </section>
-    </AePublicShell>
-  )
-}
-
-export function PublicBusinessNotFound({ data }: NotFoundRouteProps) {
-  // `data` crosses the router's not-found boundary untyped, and a bare notFound()
-  // raised anywhere under /$slug carries none: default to the claim we can defend.
-  const reason: PublicBusinessPageNotFoundReason =
-    typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'not_public'
-      ? 'not_public'
-      : 'no_such_business'
-
-  return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-        {reason === 'not_public' ? (
-          <Empty className="border border-border bg-card p-5">
-            <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">Business page unavailable</h1>
-              <EmptyDescription>This page is not visible right now. The business may need to claim or review it.</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/claim">Claim your business page</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-              </div>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <Empty className="border border-border bg-card p-5">
-            <EmptyHeader>
-              <h1 className="text-lg font-medium tracking-tight">No business page at this address</h1>
-              <EmptyDescription>Nothing is published here. Check the address, or return to Ask.</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-                <Button asChild variant="default" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
-                <Button asChild variant="secondary" className="min-h-11"><Link to="/">Ask a question</Link></Button>
-              </div>
-            </EmptyContent>
-          </Empty>
-        )}
       </section>
     </AePublicShell>
   )
@@ -293,16 +162,14 @@ function PublicBusinessRoute() {
     return <PublicBusinessUnavailable />
   }
 
-  const { page, admission, supply } = routeData
-  const catalog = projectPublicInquiryAvailability(page.catalog, admission)
-  const inquiryAffordance = buildPublicInquiryAffordance(catalog, undefined, admission)
+  const { page, supply } = routeData
+  const catalog = page.catalog
   const agentJsonUrl = `/api/businesses/${catalog.slug}`
 
   return (
     <AePublicShell>
       <AeProviderListingPage
         catalog={catalog}
-        inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
         {...(supply === undefined ? {} : { supply })}
         {...(from === undefined ? {} : { backFrom: from })}

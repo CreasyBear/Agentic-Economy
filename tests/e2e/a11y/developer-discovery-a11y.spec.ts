@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 test.describe('developer discovery accessibility', () => {
   test('download links, status panels, and compact layout stay keyboard reachable', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto('/developers/discovery')
+    await gotoSettled(page, '/developers/discovery')
 
     await expect(page.getByRole('heading', { name: /read-only public catalog files/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /download schema json/i })).toBeVisible()
@@ -30,4 +30,9 @@ test.describe('developer discovery accessibility', () => {
 async function expectNoHorizontalOverflow(page: Page) {
   const hasNoOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
   expect(hasNoOverflow).toBe(true)
+}
+
+async function gotoSettled(page: Page, path: string) {
+  await page.goto(path, { waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'networkidle' })
 }

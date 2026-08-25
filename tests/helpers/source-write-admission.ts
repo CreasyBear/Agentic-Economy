@@ -11,28 +11,24 @@ export const testSourceWriteSecret = 'test-source-write-secret-material-32'
 
 export function installTestSourceWriteSecret(): void {
   for (const name of [
-    'AE_SOURCE_WRITE_KEY_INQUIRY',
-    'AE_SOURCE_WRITE_PREVIOUS_KEYS_INQUIRY',
     'AE_SOURCE_WRITE_KEY_BILLING',
     'AE_SOURCE_WRITE_PREVIOUS_KEYS_BILLING',
     'AE_SOURCE_WRITE_KEY_PROTECTED',
     'AE_SOURCE_WRITE_PREVIOUS_KEYS_PROTECTED',
-    'AE_SOURCE_WRITE_KEY_CLAIM',
-    'AE_SOURCE_WRITE_PREVIOUS_KEYS_CLAIM',
+    'AE_SOURCE_WRITE_KEY_CATALOG',
+    'AE_SOURCE_WRITE_PREVIOUS_KEYS_CATALOG',
     'AE_SOURCE_WRITE_KEY_OPERATOR',
     'AE_SOURCE_WRITE_PREVIOUS_KEYS_OPERATOR',
     'AE_SOURCE_WRITE_KEY_REPAIR',
     'AE_SOURCE_WRITE_PREVIOUS_KEYS_REPAIR',
     'AE_SOURCE_WRITE_KEY_SESSION',
     'AE_SOURCE_WRITE_PREVIOUS_KEYS_SESSION',
-    'AE_SOURCE_WRITE_DERIVED_KEY_ID_INQUIRY',
-    'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_INQUIRY',
     'AE_SOURCE_WRITE_DERIVED_KEY_ID_BILLING',
     'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_BILLING',
     'AE_SOURCE_WRITE_DERIVED_KEY_ID_PROTECTED',
     'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_PROTECTED',
-    'AE_SOURCE_WRITE_DERIVED_KEY_ID_CLAIM',
-    'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_CLAIM',
+    'AE_SOURCE_WRITE_DERIVED_KEY_ID_CATALOG',
+    'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_CATALOG',
     'AE_SOURCE_WRITE_DERIVED_KEY_ID_OPERATOR',
     'AE_SOURCE_WRITE_PREVIOUS_DERIVED_KEY_IDS_OPERATOR',
     'AE_SOURCE_WRITE_DERIVED_KEY_ID_REPAIR',
@@ -81,6 +77,35 @@ export async function withSourceWrite<T extends { operationKey: string; correlat
       operationKey: args.operationKey,
       correlationId: args.correlationId,
       commandDigest: sourceWriteCommandDigest(args),
+      request: sourceWriteRequest,
+      now: new Date().getTime(),
+      env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },
+    }),
+  }
+}
+
+/**
+ * Sign an internal admission command while returning the narrower public
+ * action arguments. Recovery actions intentionally add their fixed empty
+ * operation/input material before invoking the admission mutation.
+ */
+export async function withSourceWriteCommand<
+  T extends { operationKey: string; correlationId: string },
+>(
+  scope: SourceWriteAdmissionScope,
+  args: T,
+  command: object,
+): Promise<T & { sourceWriteRequest: SourceWriteAdmissionRequest; sourceWrite: SourceWriteAdmission }> {
+  installTestSourceWriteSecret()
+  const sourceWriteRequest = sourceWriteRequestFor(command)
+  return {
+    ...args,
+    sourceWriteRequest,
+    sourceWrite: await createSourceWriteAdmission({
+      scope,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest: sourceWriteCommandDigest(command),
       request: sourceWriteRequest,
       now: new Date().getTime(),
       env: { AE_SOURCE_WRITE_SECRET: testSourceWriteSecret },

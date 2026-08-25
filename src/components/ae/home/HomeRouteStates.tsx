@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 
-import { MagicOrb } from '@/components/ae/magic/MagicOrb'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -10,7 +9,7 @@ export function ServicesLoading() {
     <AePublicShell>
       <div className="mx-auto grid w-full max-w-4xl gap-4 px-4 py-12 sm:px-6 lg:py-16" aria-busy="true">
         <Card className="grid w-full justify-items-center gap-5 border border-border bg-card p-8 text-center">
-          <MagicOrb intent="engage" size={64} />
+          <span className="ae-loading-orb" aria-hidden="true" />
           <p role="status" className="text-muted-foreground">Finding businesses and comparing options…</p>
         </Card>
       </div>

@@ -11,7 +11,8 @@ import {
   formatOperationAvailability,
   formatOperationContinuations,
   formatOperationInputs,
-  formatOperationPrice,
+  formatOperationTotalPrice,
+  formatOperationVerification,
   operationLabel,
 } from '../lib/operation-format'
 import { throwOperationReadFailure } from '../lib/operation-read-failure'
@@ -19,7 +20,7 @@ import { throwOperationReadFailure } from '../lib/operation-read-failure'
 export async function runInspectCommand(args: readonly string[], options: CliOptions): Promise<void> {
   const operationRef = args[0]?.trim()
   if (operationRef === undefined || operationRef.length === 0 || args.length > 1) {
-    throw new CliFailure('Usage: npm run -s ae -- inspect <operation-ref>', {
+    throw new CliFailure('Usage: ae inspect <operation-ref>', {
       kind: 'INVALID_ARGUMENT',
       code: 'inspect-usage',
     })
@@ -64,8 +65,9 @@ export async function runInspectCommand(args: readonly string[], options: CliOpt
   line('')
   line(`  provider: ${operation.business.name}`)
   line(`  availability: ${formatOperationAvailability(operation.availability)}`)
-  line(`  price: ${formatOperationPrice(operation.commercial.price)}`)
+  line(`  total price: ${formatOperationTotalPrice(operation)}`)
   line(`  authentication: ${formatOperationAuthentication(operation)}`)
+  line(`  last verified: ${formatOperationVerification(operation)}`)
   line(`  inputs: ${formatOperationInputs(operation)}`)
   line(
     `  effects: ${operation.effects.length === 0

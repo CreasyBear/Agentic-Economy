@@ -6,7 +6,7 @@ import {
   type PaidOperationContinuation,
   type PaidOperationProjection,
   type PaidOperationSemantics,
-} from '../../../src/modules/action-invocation'
+} from '../../../src/modules/capability-execution/legacy-dynamic'
 import type { PaidOperationSurfaceRef } from '../paid-operation-surface-host'
 
 export const PAID_OPERATION_BROWSER_STATES = [

@@ -37,40 +37,4 @@ export type BuildPublicBusinessSeoInput = {
 }
 export { buildPublicBusinessSeo } from './internal/public-business-seo'
 
-export type PublicThreadSeoContract = {
-  threadId: string
-  title: string
-  description: string
-  canonicalUrl: string
-  indexDirective: SeoIndexDirective
-  ogType: 'article' | 'website'
-}
-
-export type BuildPublicThreadSeoOptions = {
-  canonicalBaseUrl?: string
-}
-
-export type BuildPublicThreadSeoInput = {
-  threadId: string
-  title: string
-  firstTurnOneLine?: string
-  options?: BuildPublicThreadSeoOptions
-}
-
-export { buildPublicThreadSeo } from './internal/public-thread-seo'
-
-export type PublicSharedThreadSeoContract = Omit<PublicThreadSeoContract, 'threadId'> & {
-  shareToken: string
-}
-
-export type BuildSharedThreadSeoInput = {
-  threadId: string
-  shareToken: string
-  title: string
-  firstTurnOneLine?: string
-  options?: BuildPublicThreadSeoOptions
-}
-
-export { buildSharedThreadSeo } from './internal/public-thread-seo'
-
 export type { JsonLdObject }

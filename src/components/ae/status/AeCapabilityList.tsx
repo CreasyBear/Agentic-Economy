@@ -6,14 +6,14 @@ type AeCapabilityListProps = {
   catalog: PublicBusinessCatalogApiV2Dto
 }
 
-/** One Offering card per published Offering. */
+/** One Operation row per published Operation. */
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
   if (catalog.offerings.length === 0) {
     return (
       <Empty className="border border-border bg-card p-5">
         <EmptyHeader>
-          <EmptyTitle>No published Offerings yet</EmptyTitle>
-          <EmptyDescription>Add an Offering to show customers what your business provides.</EmptyDescription>
+          <EmptyTitle>No published Operations yet</EmptyTitle>
+          <EmptyDescription>Add an Operation so agents can inspect the tool and its price.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )

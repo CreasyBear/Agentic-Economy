@@ -1,6 +1,6 @@
-import { access, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { afterAll, describe, expect, it } from 'vitest'
@@ -18,15 +18,9 @@ async function tempPath(name: string) {
 }
 
 afterAll(async () => {
-  const trash = join(
-    homedir(),
-    '.Trash',
-    `phase3b-evidence-test-${process.pid}-${Date.now()}`,
+  await Promise.all(
+    artifacts.map((artifact) => rm(artifact, { force: true, recursive: true })),
   )
-  await rename(artifacts[0]!, trash)
-  for (let index = 1; index < artifacts.length; index += 1) {
-    await rename(artifacts[index]!, `${trash}-${index}`)
-  }
 })
 
 describe('Phase 3B provider conformance evidence', () => {
@@ -97,8 +91,7 @@ describe('Phase 3B provider conformance evidence', () => {
       await expect(writePhase3bProviderConformanceEvidence(path, revision))
         .rejects.toThrow('evidence_checkout_dirty')
     } finally {
-      const trash = await mkdtemp(join(homedir(), '.Trash', 'phase3b-evidence-dirty-test-'))
-      await rename(marker, join(trash, basename(marker)))
+      await rm(marker, { force: true })
     }
     await expect(access(marker)).rejects.toThrow()
   })

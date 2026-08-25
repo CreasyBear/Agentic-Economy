@@ -11,13 +11,13 @@ import {
   projectAgentAccessKey,
   revokeAgentAccessKey,
 } from '../../src/modules/agent-access/agent-access'
-import { CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
-import { defaultAgentAccessPolicy } from '../../src/modules/agent-access/policy'
+import { CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE } from '../../src/modules/agent-access/contract'
+import { defaultSandboxAgentAccessPolicy } from '../../src/modules/agent-access/sandbox-policy'
+import { buildProductionAgentAccessPolicy } from '../../src/modules/agent-access/production-policy'
 
-const policy = defaultAgentAccessPolicy({ environment: 'sandbox', currency: 'USD', exponent: 2 })
+const policy = defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 })
 const scopes = [
   MARKET_OPERATIONS_INVOKE_SCOPE,
-  CUSTOMER_REQUEST_AGENT_SCOPE,
   CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE,
 ] as const
 const canonicalClaims = {
@@ -28,6 +28,7 @@ const canonicalClaims = {
   aeIssuanceKey: 'setup-12345678',
   aeApplicationRef: AGENT_ACCESS_DEFAULT_APPLICATION_REF,
   aeEnvironment: 'sandbox',
+  aeScopes: JSON.stringify(scopes),
 }
 
 function existingKey(overrides: Record<string, unknown> = {}) {
@@ -79,6 +80,55 @@ describe('agent access', () => {
       kind: 'created',
       authorityMode: 'bounded_mandate',
       scopes: [MARKET_SUPPLY_MANAGE_SCOPE],
+    })
+  })
+  it('refuses to mint customer_requests:create on a new key', async () => {
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: {
+        name: 'Legacy create key',
+        idempotencyKey: 'create-12345678',
+        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
+      },
+      policy,
+      api: {
+        create: vi.fn(),
+        getSecret: vi.fn(),
+        list: vi.fn().mockResolvedValue({ data: [] }),
+      },
+      registerGrant: vi.fn(),
+      registerPrincipal: vi.fn(),
+    })
+    expect(result).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+  })
+  it('issues a market invoke key with a bounded mandate and no customer-request create scope', async () => {
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: {
+        name: 'CLI key',
+        idempotencyKey: 'cli-12345678',
+        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+      },
+      policy,
+      api: {
+        create: vi.fn().mockResolvedValue({ id: 'cli_key', secret: 'cli_secret', revoked: false, expired: false }),
+        getSecret: vi.fn().mockResolvedValue({ secret: 'cli_secret' }),
+        list: vi.fn().mockResolvedValue({ data: [] }),
+      },
+      registerGrant: vi.fn().mockResolvedValue({
+        kind: 'recorded' as const,
+        grantRef: 'cli-12345678',
+        generation: 1,
+        policyDigest: 'policy:cli-12345678',
+        lifecycle: 'active' as const,
+        expiresAt: 2_000,
+      }),
+      registerPrincipal: vi.fn().mockResolvedValue({ kind: 'recorded' as const }),
+    })
+    expect(result).toMatchObject({
+      kind: 'created',
+      authorityMode: 'bounded_mandate',
+      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
     })
   })
   it('issues and exactly replays one canonical market-operations key', async () => {
@@ -174,6 +224,99 @@ describe('agent access', () => {
     expect(getSecret).toHaveBeenCalledWith('key_123')
   })
 
+  it('passes bounded production material and expiry to Clerk and conflicts on changed replay material', async () => {
+    const productionPolicy = buildProductionAgentAccessPolicy({
+      currency: 'USD',
+      exponent: 2,
+      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
+    })
+    const create = vi.fn().mockResolvedValue({ id: 'production_key', secret: 'production_secret' })
+    const registerGrant = vi.fn().mockResolvedValue({
+      kind: 'recorded' as const,
+      grantRef: 'production-12345678',
+      generation: 1,
+      policyDigest: 'policy:production',
+      lifecycle: 'active' as const,
+      expiresAt: 12_345_000,
+    })
+    const registerPrincipal = vi.fn().mockResolvedValue({ kind: 'recorded' as const })
+    const input = {
+      name: 'Production assistant',
+      idempotencyKey: 'production-12345678',
+      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_BOUNDED_MANDATE_SCOPE],
+      environment: 'production' as const,
+      maximumSpendPerInvocation: { currency: 'USD', units: '100', exponent: 2 },
+      maximumDailySpend: { currency: 'USD', units: '500', exponent: 2 },
+      maximumMonthlySpend: { currency: 'USD', units: '2000', exponent: 2 },
+      expiresInSeconds: 3_600,
+    }
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input,
+      policy: productionPolicy,
+      api: { create, getSecret: vi.fn().mockResolvedValue({ secret: 'production_secret' }), list: vi.fn().mockResolvedValue({ data: [] }) },
+      registerGrant,
+      registerPrincipal,
+    })
+    expect(result).toMatchObject({ kind: 'created', expiresInSeconds: 3_600, authorityMode: 'bounded_mandate' })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      secondsUntilExpiration: 3_600,
+      claims: expect.objectContaining({
+        aeEnvironment: 'production',
+        aeExpiresInSeconds: '3600',
+        aeMaximumSpendPerInvocation: 'USD:100:2',
+        aeMaximumDailySpend: 'USD:500:2',
+        aeMaximumMonthlySpend: 'USD:2000:2',
+      }),
+    }))
+
+    const existingClaims = {
+      ...canonicalClaims,
+      aeEnvironment: 'production',
+      aeAuthorityMode: 'bounded_mandate',
+      aeGrantRef: 'production-12345678',
+      aeIssuanceKey: 'production-12345678',
+      aeDisplayName: 'Production assistant',
+      aeExpiresInSeconds: '3600',
+      aeMaximumSpendPerInvocation: 'USD:100:2',
+      aeMaximumDailySpend: 'USD:500:2',
+      aeMaximumMonthlySpend: 'USD:2000:2',
+      aeScopes: JSON.stringify(input.scopes),
+    }
+    const conflict = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: { ...input, expiresInSeconds: 7_200 },
+      policy: productionPolicy,
+      api: {
+        create: vi.fn(),
+        getSecret: vi.fn(),
+        list: vi.fn().mockResolvedValue({ data: [existingKey({ claims: existingClaims, scopes: input.scopes, expiresAt: 4_000_000 })] }),
+      },
+      registerGrant: vi.fn(),
+      registerPrincipal: vi.fn(),
+    })
+    expect(conflict).toEqual({ kind: 'error', code: 'idempotency_conflict', retryable: false })
+  })
+
+  it('rejects production full_yolo before creating a Clerk key', async () => {
+    const create = vi.fn()
+    const result = await issueAgentAccessKey({
+      principal: { userId: 'owner_123' },
+      input: {
+        name: 'Unsafe production key',
+        idempotencyKey: 'unsafe-12345678',
+        scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, 'customer_requests:full_yolo'],
+        environment: 'production',
+      },
+      policy: defaultSandboxAgentAccessPolicy({ currency: 'USD', exponent: 2 }),
+      api: { create, getSecret: vi.fn(), list: vi.fn() },
+    })
+    expect(result).toEqual({ kind: 'error', code: 'invalid_input', retryable: false })
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('requires both durable grant and principal registration, then rolls back the Clerk key on failure', async () => {
     const revoke = vi.fn().mockResolvedValue(undefined)
     const registerGrant = vi.fn().mockResolvedValue({
@@ -266,6 +409,10 @@ describe('agent access', () => {
     expect(projectAgentAccessKey({
       ...record,
       scopes: [CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
+    })).toBeUndefined()
+    expect(projectAgentAccessKey({
+      ...record,
+      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE, CUSTOMER_REQUEST_AGENT_SCOPE, CUSTOMER_REQUEST_INSPECT_ONLY_SCOPE],
     })).toBeUndefined()
     expect(projectAgentAccessKey({
       ...record,

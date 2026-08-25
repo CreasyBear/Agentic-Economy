@@ -1,21 +1,5 @@
-import {
-  claimBusiness,
-  createEmptyBusinessSourceState,
-} from '@/modules/business/public'
-import {
-  createEmptyCatalogSourceState,
-  getPublicBusinessCatalog,
-  publicOwnerDefaultClaimInput,
-  toBusinessContext,
-} from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
-import { matchingCsrf } from '@/modules/common/matching-csrf'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type {
   BusinessId,
-  CorrelationId,
-  OfferingRef,
-  OperationKey,
   Slug,
 } from '@/modules/common/ids'
 import { normalizeSearchText } from '@/modules/common/normalize-search-text'
@@ -25,6 +9,7 @@ import type { RegistrySourceState } from './projection-contracts'
 
 import {
   PublicBusinessCatalogApiSchemaVersion,
+  getPublicBusinessCatalog,
   type PublicBusinessCatalogApiV2Dto,
   type PublicBusinessCatalogApiV2Page,
   type PublicBusinessCatalogApiV2SearchPage,
@@ -51,10 +36,6 @@ export type PublicBusinessCatalogSearchInput = {
   maxPrice?: ExactAmount
   hasPrice?: boolean
 }
-
-export type PublishedInquiryTargetResolution =
-  | { kind: 'resolved'; businessId: BusinessId; offeringRef: OfferingRef }
-  | { kind: 'not_found'; reason: string }
 
 export function listPublicBusinessOfferingSupply(
   state: RegistrySourceState,
@@ -156,96 +137,6 @@ export function getPublicBusinessOfferingSupplyBySlug(
       }
 }
 
-export function resolvePublishedInquiryTarget(
-  state: RegistrySourceState,
-  input: { businessSlug: Slug | string; offeringRef: OfferingRef | string },
-): PublishedInquiryTargetResolution {
-  const business = readPublicCatalogs(state)
-    .find((candidate) => candidate.slug === String(input.businessSlug))
-  const offering = business?.offerings.find((candidate) => candidate.offeringRef === String(input.offeringRef))
-  if (business === undefined || offering === undefined) {
-    return {
-      kind: 'not_found',
-      reason: 'No published Offering is discoverable for this slug on the business.',
-    }
-  }
-  return {
-    kind: 'resolved',
-    businessId: brandNonEmpty(business.businessId, 'BusinessId'),
-    offeringRef: brandNonEmpty(offering.offeringRef, 'OfferingRef'),
-  }
-}
-
-export function createDefaultRegistrySourceState(): RegistrySourceState {
-  const state: RegistrySourceState = {
-    ...createEmptyBusinessSourceState(),
-    ...createEmptyCatalogSourceState(),
-    operationKeys: [],
-    auditEvents: [],
-    registryProjectionItems: [],
-    registryProjectionAttempts: [],
-    registrySearchDocuments: [],
-    discoveryManifestAttempts: [],
-    indexStatus: [],
-    suppressionRules: [],
-  }
-  const publishedAt = Date.now()
-
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: 'source-owned-owner-session',
-      displayName: 'Sam',
-    },
-    facts: {
-      name: publicOwnerDefaultClaimInput.businessName,
-      category: publicOwnerDefaultClaimInput.category,
-      businessContext: toBusinessContext(publicOwnerDefaultClaimInput),
-      requestedSlug: publicOwnerDefaultClaimInput.requestedSlug,
-      ownerMessage: publicOwnerDefaultClaimInput.ownerMessage,
-      sourceRefs: [
-        {
-          label: publicOwnerDefaultClaimInput.sourceLabel,
-          evidenceRef: `private:evidence:${publicOwnerDefaultClaimInput.requestedSlug}`,
-          sourceHash: canonicalDigest(`source:${publicOwnerDefaultClaimInput.requestedSlug}`),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('claim'),
-    },
-    operationKey: operationKey(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    correlationId: correlationId(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    now: publishedAt - 1,
-  })
-
-  if (claim.kind === 'error') {
-    throw new Error(`Default registry claim failed: ${claim.reason}`)
-  }
-
-  claim.business.publicStatus = 'published'
-  claim.business.claimStatus = 'published'
-  claim.business.updatedAt = publishedAt
-  claim.claim.status = 'published'
-  claim.claim.updatedAt = publishedAt
-
-  appendPublishedOffering(state, {
-    businessId: claim.business.businessId,
-    offeringRef: brandNonEmpty(`offering:${claim.business.businessId}:emergency-pipe-repair`, 'OfferingRef'),
-    facts: {
-      name: 'Emergency pipe repair',
-      category: 'Emergency plumbing',
-      summary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
-      serviceAreaSummary: 'Parramatta and nearby suburbs',
-      availabilitySummary: publicOwnerDefaultClaimInput.hoursOrUnknown,
-    },
-    now: publishedAt,
-  })
-
-  return state
-}
-
-
 function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusinessCatalogApiV2Dto[] {
   const catalogs: PublicBusinessCatalogApiV2Dto[] = []
   for (const business of state.businesses) {
@@ -259,75 +150,6 @@ function readPublicCatalogs(state: RegistrySourceState): readonly PublicBusiness
     }
   }
   return catalogs.sort(compareCatalogs)
-}
-
-
-function appendPublishedOffering(
-  state: RegistrySourceState,
-  input: {
-    businessId: BusinessId
-    offeringRef: OfferingRef
-    facts: {
-      name: string
-      category: string
-      summary: string
-      serviceAreaSummary?: string
-      availabilitySummary?: string
-      pricingSummary?: string
-    }
-    accessPaths?: readonly {
-      channel: 'phone' | 'website' | 'ae_inquiry'
-      disclosure: string
-    }[]
-    now: number
-  },
-): void {
-  const sourceHash = canonicalDigest({
-    businessId: input.businessId,
-    offeringRef: input.offeringRef,
-    revision: 1,
-    ...input.facts,
-  })
-  state.offerings.push({
-    offeringRef: input.offeringRef,
-    businessId: input.businessId,
-    currentRevision: 1,
-    status: 'published',
-    createdAt: input.now,
-    updatedAt: input.now,
-  })
-  state.revisions.push({
-    offeringRef: input.offeringRef,
-    businessId: input.businessId,
-    revision: 1,
-    ...input.facts,
-    sourceHash,
-    createdAt: input.now,
-  })
-  for (const [index, accessPath] of (input.accessPaths ?? []).entries()) {
-    const descriptor = {
-      kind: 'human_request' as const,
-      channel: accessPath.channel,
-      disclosure: accessPath.disclosure,
-    }
-    const accessPathRef = `access:${input.offeringRef}:human:${index + 1}`
-    state.accessPaths.push({
-      accessPathRef: brandNonEmpty(accessPathRef, 'AccessPathRef'),
-      businessId: input.businessId,
-      offeringRef: input.offeringRef,
-      offeringRevision: 1,
-      offeringSourceHash: sourceHash,
-      status: 'published',
-      descriptor,
-      sourceHash: canonicalDigest({
-        accessPathRef,
-        offeringSourceHash: sourceHash,
-        descriptor,
-      }),
-      createdAt: input.now,
-      updatedAt: input.now,
-    })
-  }
 }
 function paginateCatalogs(
   items: readonly PublicBusinessCatalogApiV2Dto[],
@@ -434,14 +256,4 @@ function compareCatalogs(
 ): number {
   const byName = left.name.localeCompare(right.name)
   return byName === 0 ? left.slug.localeCompare(right.slug) : byName
-}
-
-
-
-function operationKey(value: string): OperationKey {
-  return brandNonEmpty(`op:registry-default:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string): CorrelationId {
-  return brandNonEmpty(`corr:registry-default:${value}`, 'CorrelationId')
 }

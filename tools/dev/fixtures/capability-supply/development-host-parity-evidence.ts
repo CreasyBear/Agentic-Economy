@@ -10,7 +10,7 @@ import {
   type DevelopmentHostSemanticRead,
   type DynamicPublishedAdapterSnapshot,
   type DynamicPublishedSnapshotAnchors,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { isBoundedJsonValue } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'

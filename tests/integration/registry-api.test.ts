@@ -1,54 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const captureLegacyRegistryApiRequestMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@/lib/observability/posthog.server', () => ({
-  captureLegacyRegistryApiRequest: captureLegacyRegistryApiRequestMock,
-}))
-
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '../helpers/local-e2e-business-fixtures'
 import { installLocalE2eRegistrySourceForTests } from '../helpers/registry-local-e2e'
 
-import { claimBusiness } from '@/modules/business/public'
 import { emptyRegistrySourceState } from '../fixtures/source-state'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   readPublicOfferingRegistryBusinessDetail,
   readPublicOfferingRegistryPage,
-  resolvePublicRegistryInquiryTarget,
 } from '@/modules/registry/registry.functions'
 import {
-  createDefaultRegistrySourceState,
   getPublicBusinessOfferingSupplyBySlug,
   listPublicBusinessOfferingSupply,
   searchPublicBusinessOfferingSupply,
 } from '@/modules/registry/public'
 import type {
-  PublicBusinessCatalogApiV2Page,
   RegistrySourceState,
 } from '@/modules/registry/public'
-import { readPublicTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
-import { Route as BusinessesRoute, handleDurableListBusinessesRequest } from '@/routes/api.businesses'
+import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
+import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import {
-  Route as BusinessDetailRoute,
-  handleDurableBusinessDetailRequest,
-} from '@/routes/api.businesses.$slug'
-import {
-  Route as BusinessSearchRoute,
   handleDurableSearchBusinessesRequest,
   optionalHasPrice,
   optionalMaxPrice,
 } from '@/routes/api.businesses.search'
-import { Route as ServicesRoute, handleDurableListServicesRequest } from '@/routes/api.v1.services'
-import {
-  Route as ServiceDetailRoute,
-  handleDurableServiceDetailRequest,
-} from '@/routes/api.v1.services.$serviceId'
-import {
-  Route as ServiceSearchRoute,
-  handleDurableSearchServicesRequest,
-} from '@/routes/api.v1.services.search'
+import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
+import { handleDurableSearchServicesRequest } from '@/routes/api.v1.services.search'
 
 const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
   (fixture) => fixture.inquiryAdmission === 'admitted',
@@ -119,7 +97,7 @@ describe('registry public API routes', () => {
       },
     })
     expect(JSON.stringify([registry, search, detail])).not.toContain(
-      'parramatta-emergency-plumbing',
+      'demo-listed-provider',
     )
   })
 
@@ -180,32 +158,6 @@ describe('registry public API routes', () => {
         throw new Error('Expected the admitted local E2E fixture to have a public listing.')
       }
 
-      const inquiryOffering = listing.business.offerings.find(
-        (offering) => offering.name === admittedLocalE2eOffering.name,
-      )
-      if (inquiryOffering === undefined) {
-        throw new Error('Expected the admitted local E2E fixture listing to expose its shared Offering.')
-      }
-      const inquiryAccessPath = inquiryOffering.accessPaths.find(
-        (path) => path.kind === 'human_request' && path.channel === 'ae_inquiry',
-      )
-      if (inquiryAccessPath === undefined) {
-        throw new Error('Expected the admitted local E2E fixture Offering to expose an AE inquiry path.')
-      }
-
-      const inquiryTarget = await resolvePublicRegistryInquiryTarget({
-        businessSlug: listing.business.slug,
-        offeringRef: inquiryOffering.offeringRef,
-      })
-      if (inquiryTarget.kind !== 'resolved') {
-        throw new Error('Expected the admitted local E2E fixture listing to resolve an inquiry target.')
-      }
-
-      const admission = await readPublicTargetAdmissionThroughSource({
-        businessId: inquiryTarget.businessId,
-        offeringRef: inquiryTarget.offeringRef,
-      })
-
       expect(registry).toMatchObject({
         query: searchQuery,
         kind: 'ok',
@@ -239,14 +191,6 @@ describe('registry public API routes', () => {
           },
         ],
       })
-      expect(admission).toMatchObject({
-        kind: 'ok',
-        admission: {
-          version: 'r1-target-admitted:v1',
-          admitted: true,
-          proof: { kind: 'claimed_owner' },
-        },
-      })
 
       restoreLocalSource()
       restoreLocalSource = undefined
@@ -264,7 +208,7 @@ describe('registry public API routes', () => {
       })).rejects.toThrow(
         'CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.',
       )
-      const defaultState = createDefaultRegistrySourceState()
+      const defaultState = emptyRegistrySourceState()
       const defaultCatalog = listPublicBusinessOfferingSupply(defaultState, {
         paginationOpts: { cursor: null, numItems: 50 },
       })
@@ -332,78 +276,12 @@ describe('registry public API routes', () => {
       vi.stubEnv('CONVEX_URL', undefined)
       vi.stubEnv('VITE_CONVEX_URL', undefined)
       restoreLocalSource = installLocalE2eRegistrySourceForTests()
-      captureLegacyRegistryApiRequestMock.mockReset()
     })
 
     afterEach(() => {
       restoreLocalSource?.()
       restoreLocalSource = undefined
       vi.unstubAllEnvs()
-    })
-
-    it('captures each public legacy GET adapter once without changing its response', async () => {
-      const cases = [
-        {
-          route: BusinessesRoute,
-          input: { request: new Request('https://ae.example/api/businesses'), params: {} },
-          direct: () => handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')),
-          expected: ['businesses', 'list'],
-        },
-        {
-          route: BusinessSearchRoute,
-          input: { request: new Request('https://ae.example/api/businesses/search?q=plumber'), params: {} },
-          direct: () => handleDurableSearchBusinessesRequest(new Request('https://ae.example/api/businesses/search?q=plumber')),
-          expected: ['businesses', 'search'],
-        },
-        {
-          route: BusinessDetailRoute,
-          input: {
-            request: new Request('https://ae.example/api/businesses/plumbing-demo'),
-            params: { slug: 'plumbing-demo' },
-          },
-          direct: () => handleDurableBusinessDetailRequest(
-            'plumbing-demo',
-            new Request('https://ae.example/api/businesses/plumbing-demo'),
-          ),
-          expected: ['businesses', 'detail'],
-        },
-        {
-          route: ServicesRoute,
-          input: { request: new Request('https://ae.example/api/v1/services'), params: {} },
-          direct: () => handleDurableListServicesRequest(new Request('https://ae.example/api/v1/services')),
-          expected: ['services', 'list'],
-        },
-        {
-          route: ServiceSearchRoute,
-          input: { request: new Request('https://ae.example/api/v1/services/search?q=plumber'), params: {} },
-          direct: () => handleDurableSearchServicesRequest(new Request('https://ae.example/api/v1/services/search?q=plumber')),
-          expected: ['services', 'search'],
-        },
-        {
-          route: ServiceDetailRoute,
-          input: {
-            request: new Request('https://ae.example/api/v1/services/plumbing-demo'),
-            params: { serviceId: 'plumbing-demo' },
-          },
-          direct: () => handleDurableServiceDetailRequest(
-            'plumbing-demo',
-            new Request('https://ae.example/api/v1/services/plumbing-demo'),
-          ),
-          expected: ['services', 'detail'],
-        },
-      ] as const
-
-      for (const testCase of cases) {
-        captureLegacyRegistryApiRequestMock.mockClear()
-        const response = await getLegacyGetHandler(testCase.route)(testCase.input)
-        const directResponse = await testCase.direct()
-
-        expect(captureLegacyRegistryApiRequestMock).toHaveBeenCalledOnce()
-        expect(captureLegacyRegistryApiRequestMock).toHaveBeenCalledWith(...testCase.expected)
-        expect(response.status).toBe(directResponse.status)
-        expect(response.headers.get('Cache-Control')).toBe(directResponse.headers.get('Cache-Control'))
-        expect(await response.json()).toEqual(await directResponse.json())
-      }
     })
 
     it('lists eligible public business supply without private fields', async () => {
@@ -419,13 +297,13 @@ describe('registry public API routes', () => {
         schemaVersion: 'public-business-catalog-api:v2',
         page: [
           {
-            slug: 'adelaide-dental-clinic',
-            publicUrl: '/adelaide-dental-clinic',
+            slug: 'adelaide-listed-provider',
+            publicUrl: '/adelaide-listed-provider',
             trustTier: 'claimed',
             disposition: 'partial',
             photos: [],
             offerings: [
-              { offeringRef: 'offering:adelaide-dental-clinic:general-dental-care' },
+              { offeringRef: 'offering:adelaide-listed-provider:listed-offering' },
             ],
           },
         ],
@@ -434,7 +312,7 @@ describe('registry public API routes', () => {
       })
       expect(typeof body.page[0].observedAt).toBe('number')
       // v2 publishes a business identifier by contract.
-      expect(body.page[0].businessId).toBe('business:adelaide-dental-clinic')
+      expect(body.page[0].businessId).toBe('business:adelaide-listed-provider')
       expect(JSON.stringify(body)).not.toMatch(
         /ownerId|clerk|sourceHash|rawContact|admin|private:evidence|callable|paymentRequired|MCP|OpenAPI/,
       )
@@ -531,7 +409,7 @@ describe('registry public API routes', () => {
     it('searches deterministically across name, service, category, suburb, state, and service-area tokens', async () => {
       const response = await handleDurableSearchBusinessesRequest(
         new Request(
-          'https://ae.example/api/businesses/search?q=emergency+plumber+parramatta',
+          'https://ae.example/api/businesses/search?q=listed+offering+parramatta',
         ),
       )
       const body = await response.json()
@@ -540,9 +418,9 @@ describe('registry public API routes', () => {
       expect(body).toMatchObject({
         kind: 'ok',
         schemaVersion: 'public-business-catalog-api:v2',
-        query: 'emergency plumber parramatta',
+        query: 'listed offering parramatta',
         items: [
-          { slug: 'parramatta-emergency-plumbing' },
+          { slug: 'demo-listed-provider' },
         ],
         pagination: { total: 1, hasMore: false },
       })
@@ -551,28 +429,28 @@ describe('registry public API routes', () => {
     it('keeps direct search scoped to the supplied local context', async () => {
       const perthResponse = await handleDurableSearchBusinessesRequest(
         new Request(
-          'https://ae.example/api/businesses/search?q=emergency+plumber&mode=near_me&location=Perth',
+          'https://ae.example/api/businesses/search?q=listed+offering&mode=near_me&location=Perth',
         ),
       )
       const perthBody = await perthResponse.json()
       const parramattaResponse = await handleDurableSearchBusinessesRequest(
         new Request(
-          'https://ae.example/api/businesses/search?q=emergency+plumber&mode=near_me&location=Parramatta',
+          'https://ae.example/api/businesses/search?q=listed+offering&mode=near_me&location=Parramatta',
         ),
       )
       const parramattaBody = await parramattaResponse.json()
 
       expect(perthBody).toMatchObject({
         kind: 'ok',
-        query: 'emergency plumber',
+        query: 'listed offering',
         items: [],
         pagination: { total: 0, hasMore: false },
       })
       expect(parramattaBody).toMatchObject({
         kind: 'ok',
-        query: 'emergency plumber',
+        query: 'listed offering',
         items: [
-          { slug: 'parramatta-emergency-plumbing' },
+          { slug: 'demo-listed-provider' },
         ],
         pagination: { total: 1, hasMore: false },
       })
@@ -635,31 +513,6 @@ describe('registry public API routes', () => {
       })
     })
 
-    it('drops an ae_inquiry access path the source will not admit, and keeps the rest of the listing', async () => {
-      // The local-e2e seed publishes plumbing-demo with an inquiry-only first
-      // request and no phone, which is the one shape that becomes an
-      // ae_inquiry access path.
-      const seam = await readPublicOfferingRegistryBusinessDetail({ slug: 'plumbing-demo' })
-      if (seam.kind !== 'found') {
-        throw new Error('Expected the explicit local source to publish plumbing-demo.')
-      }
-      const seamOffering = seam.business.offerings[0]
-      expect(seamOffering?.accessPaths).toEqual([
-        expect.objectContaining({ kind: 'human_request', channel: 'ae_inquiry' }),
-      ])
-
-      const response = await handleDurableBusinessDetailRequest('plumbing-demo')
-      const body = await response.json()
-
-      expect(response.status).toBe(200)
-      expect(body.kind).toBe('found')
-      const offering = body.business.offerings[0]
-      expect(offering.offeringRef).toBe(seamOffering?.offeringRef)
-      expect(offering.name).toBe('Diagnostic plumbing')
-      expect(offering.accessPaths).toEqual([])
-      expect(body.business.accessSummary.humanRequest).toBe(false)
-    })
-
     /**
      * Price filters are optional on a route agents already call. A value the
      * route cannot read is dropped, never turned into a 400: a malformed
@@ -688,13 +541,13 @@ describe('registry public API routes', () => {
 
     it('accepts exact price parameters on the live search route without narrowing supply that published no price', async () => {
       const baseline = await (await handleDurableSearchBusinessesRequest(
-        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta'),
+        new Request('https://ae.example/api/businesses/search?q=listed+offering+parramatta'),
       )).json()
       const budgeted = await handleDurableSearchBusinessesRequest(
-        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_currency=USDC&max_price_units=7000&max_price_exponent=6'),
+        new Request('https://ae.example/api/businesses/search?q=listed+offering+parramatta&max_price_currency=USDC&max_price_units=7000&max_price_exponent=6'),
       )
       const malformed = await handleDurableSearchBusinessesRequest(
-        new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta&max_price_currency=usdc&max_price_units=07000'),
+        new Request('https://ae.example/api/businesses/search?q=listed+offering+parramatta&max_price_currency=usdc&max_price_units=07000'),
       )
 
       expect(budgeted.status).toBe(200)
@@ -708,7 +561,13 @@ describe('registry public API routes', () => {
 
   it('excludes unpublished and suppressed source state from list and search', () => {
     const unpublishedState = emptyRegistrySourceState()
-    const publicState = createDefaultRegistrySourceState()
+    const publicState = createDurablePublishedRegistryState({
+      businessName: 'Demo listed provider',
+      requestedSlug: 'demo-listed-provider',
+      offeringName: 'Listed offering',
+      offeringQuery: 'listed offering parramatta',
+      suburb: 'Parramatta',
+    })
     const suppressed = publicState.businesses.at(0)
 
     if (suppressed === undefined) {
@@ -716,7 +575,6 @@ describe('registry public API routes', () => {
     }
 
     suppressed.publicStatus = 'suppressed'
-    suppressed.claimStatus = 'suppressed'
     suppressed.suppressedAt = 3_000
 
     expect(listPublicBusinessOfferingSupply(unpublishedState, {
@@ -727,13 +585,19 @@ describe('registry public API routes', () => {
     }).page).toEqual([])
     expect(
       searchPublicBusinessOfferingSupply(publicState, {
-        query: 'emergency plumber parramatta',
+        query: 'listed offering parramatta',
       }).items,
     ).toEqual([])
   })
 
   it('paginates public catalogs deterministically without skipping cursor records', () => {
-    const state = createDefaultRegistrySourceState()
+    const state = createDurablePublishedRegistryState({
+      businessName: 'Demo listed provider',
+      requestedSlug: 'demo-listed-provider',
+      offeringName: 'Listed offering',
+      offeringQuery: 'listed offering parramatta',
+      suburb: 'Parramatta',
+    })
     addPublishedCatalogClone(state, {
       name: 'Aardvark Plumbing',
       slug: 'aardvark-plumbing',
@@ -764,7 +628,7 @@ describe('registry public API routes', () => {
     expect(first.page.map((item) => item.slug)).toEqual(['aardvark-plumbing'])
     expect(first.continueCursor).toBe('1')
     expect(second.page.map((item) => item.slug)).toEqual([
-      'parramatta-emergency-plumbing',
+      'demo-listed-provider',
     ])
     expect(second.continueCursor).toBe('2')
     expect(third.page.map((item) => item.slug)).toEqual(['zebra-plumbing'])
@@ -839,12 +703,6 @@ function addPublishedCatalogClone(
   })
 }
 
-async function jsonBody(
-  response: Promise<Response>,
-): Promise<PublicBusinessCatalogApiV2Page> {
-  return (await response).json() as Promise<PublicBusinessCatalogApiV2Page>
-}
-
 function createDurablePublishedRegistryState(input: {
   businessName: string
   requestedSlug: string
@@ -854,51 +712,53 @@ function createDurablePublishedRegistryState(input: {
   publishedPhone?: string
 }): RegistrySourceState {
   const state = emptyRegistrySourceState()
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: `owner:${input.requestedSlug}`,
-      displayName: input.businessName,
-    },
-    facts: {
-      name: input.businessName,
-      category: 'Heat pump repair',
-      requestedSlug: input.requestedSlug,
-      businessContext: {
-        kind: 'local_human',
-        suburb: input.suburb,
-        stateTerritory: 'WA',
-        ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
-      },
-      ownerMessage: 'Owner supplied durable source facts.',
-      sourceRefs: [
-        {
-          label: `${input.businessName} Offering card`,
-          evidenceRef: `private:evidence:${input.requestedSlug}`,
-          sourceHash: canonicalDigest(`source:${input.requestedSlug}`),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('claim'),
-    },
-    operationKey: operationKey(`claim:${input.requestedSlug}`),
-    correlationId: correlationId(`claim:${input.requestedSlug}`),
-    now: 10_000,
+  const ownerId = brandNonEmpty(`owner:${input.requestedSlug}`, 'OwnerId')
+  const businessId = brandNonEmpty(`business:${input.requestedSlug}`, 'BusinessId')
+  const slug = brandNonEmpty(input.requestedSlug, 'Slug')
+  const businessContext = {
+    kind: 'local_human' as const,
+    suburb: input.suburb,
+    stateTerritory: 'WA',
+    ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
+  }
+  const businessSourceHash = canonicalDigest({ input, businessContext })
+  state.owners.push({
+    ownerId,
+    clerkUserId: `owner:${input.requestedSlug}`,
+    displayName: input.businessName,
+    createdAt: 10_000,
+    updatedAt: 10_000,
+  })
+  state.businesses.push({
+    businessId,
+    ownerId,
+    slug,
+    name: input.businessName,
+    normalizedName: input.businessName.toLowerCase(),
+    category: 'Heat pump repair',
+    businessContext,
+    publicStatus: 'published',
+    trustTier: 'claimed',
+    sourceHash: businessSourceHash,
+    createdAt: 10_000,
+    updatedAt: 11_000,
+  })
+  state.businessContexts.push({
+    businessId,
+    category: 'Heat pump repair',
+    businessContext,
+    ownerMessage: 'Owner supplied durable source facts.',
+    sourceRefs: [{
+      label: `${input.businessName} Offering card`,
+      evidenceRef: `private:evidence:${input.requestedSlug}`,
+      sourceHash: businessSourceHash,
+    }],
+    sourceHash: businessSourceHash,
+    approvedAt: 10_000,
   })
 
-  if (claim.kind === 'error') {
-    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
-  }
-
-  claim.business.publicStatus = 'published'
-  claim.business.claimStatus = 'published'
-  claim.business.updatedAt = 11_000
-  claim.claim.status = 'published'
-  claim.claim.updatedAt = 11_000
-
   const offeringRef = brandNonEmpty(
-    `offering:${claim.business.businessId}:${input.offeringName.toLowerCase().replaceAll(' ', '-')}`,
+    `offering:${businessId}:${input.offeringName.toLowerCase().replaceAll(' ', '-')}`,
     'OfferingRef',
   )
   const facts = {
@@ -909,14 +769,14 @@ function createDurablePublishedRegistryState(input: {
     availabilitySummary: 'Weekdays by appointment',
   }
   const sourceHash = canonicalDigest({
-    businessId: claim.business.businessId,
+    businessId,
     offeringRef,
     revision: 1,
     ...facts,
   })
   state.offerings.push({
     offeringRef,
-    businessId: claim.business.businessId,
+    businessId,
     currentRevision: 1,
     status: 'published',
     createdAt: 11_000,
@@ -924,7 +784,7 @@ function createDurablePublishedRegistryState(input: {
   })
   state.revisions.push({
     offeringRef,
-    businessId: claim.business.businessId,
+    businessId,
     revision: 1,
     ...facts,
     sourceHash,
@@ -940,60 +800,6 @@ function suppressFirstBusiness(state: RegistrySourceState): void {
     throw new Error('Expected a business to suppress.')
   }
 
-  state.suppressionRules.push({
-    targetType: 'business',
-    targetRef: business.businessId,
-    status: 'active',
-    reasonCode: 'privacy_removal_requested',
-    evidenceRefs: ['private:evidence:suppression'],
-    createdByAdminRef: 'admin:test',
-    createdAt: 12_000,
-    beforePublicStatus: business.publicStatus,
-    beforeClaimStatus: business.claimStatus,
-  })
-}
-
-function matchingCsrf(key: string) {
-  return {
-    csrfToken: `csrf-${key}`,
-    csrfCookie: `csrf-${key}`,
-    allowedOrigins: ['https://ae.example'],
-  }
-}
-
-function operationKey(value: string) {
-  return brandNonEmpty(`op:registry-durable-test:${value}`, 'OperationKey')
-}
-
-function correlationId(value: string) {
-  return brandNonEmpty(`corr:registry-durable-test:${value}`, 'CorrelationId')
-}
-
-
-type LegacyGetHandler = (input: {
-  request: Request
-  params: Record<string, string>
-}) => Promise<Response>
-
-function getLegacyGetHandler(route: unknown): LegacyGetHandler {
-  if (typeof route !== 'object' || route === null || !('options' in route)) {
-    throw new Error('Legacy registry route is missing options.')
-  }
-  const options = route.options
-  if (typeof options !== 'object' || options === null || !('server' in options)) {
-    throw new Error('Legacy registry route is missing server handlers.')
-  }
-  const server = options.server
-  if (typeof server !== 'object' || server === null || !('handlers' in server)) {
-    throw new Error('Legacy registry route is missing server handlers.')
-  }
-  const handlers = server.handlers
-  if (typeof handlers !== 'object' || handlers === null) {
-    throw new Error('Legacy registry route is missing server handlers.')
-  }
-  const get = Reflect.get(handlers, 'GET')
-  if (typeof get !== 'function') {
-    throw new Error('Legacy registry route is missing its GET handler.')
-  }
-  return get as LegacyGetHandler
+  business.publicStatus = 'suppressed'
+  business.suppressedAt = 12_000
 }

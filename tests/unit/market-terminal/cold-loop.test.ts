@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runConnectCommand } from '../../../tools/ae/commands/connect'
 import { runCompareCommand } from '../../../tools/ae/commands/compare'
@@ -7,10 +10,11 @@ import { runInspectCommand } from '../../../tools/ae/commands/inspect'
 import { runSearchCommand } from '../../../tools/ae/commands/search'
 import { runStatusCommand } from '../../../tools/ae/commands/status'
 import { runInvokeCommand } from '../../../tools/ae/commands/invoke'
-import { runImportCommand } from '../../../tools/ae/commands/import'
 import { parseArgs, type CliOptions } from '../../../tools/ae/lib/args'
 import { CliFailure } from '../../../tools/ae/lib/output'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
+import { projectOperationSearchChoices } from '@/modules/registry/operation-choice-contracts'
+import { operationSearchOutputSchema } from '@/modules/capability-supply/public'
 
 type OperationDescriptorFixture = Readonly<{ operationRef: string; [key: string]: unknown }>
 
@@ -49,7 +53,7 @@ function operationDescriptor(operationRef: string, summary = 'Current reference 
 }
 
 function operationSearchResult(query: string, operations: readonly OperationDescriptorFixture[]) {
-  return {
+  return projectOperationSearchChoices(operationSearchOutputSchema.parse({
     kind: 'ok' as const,
     schemaVersion: 'registry-operations:v1' as const,
     query,
@@ -62,7 +66,7 @@ function operationSearchResult(query: string, operations: readonly OperationDesc
     })),
     pagination: { limit: 20, hasMore: false },
     navigation: [],
-  }
+  }))
 }
 
 function operationDetailResult(operation: OperationDescriptorFixture) {
@@ -93,12 +97,21 @@ function setApiKey(value: string, origin = options.baseUrl): void {
   process.env.AE_API_KEY_ORIGIN = new URL(origin).origin
 }
 
+let testConfigDirectory = ''
+
+beforeEach(() => {
+  testConfigDirectory = mkdtempSync(join(tmpdir(), 'ae-cli-cold-loop-'))
+  process.env.AE_CONFIG_DIR = testConfigDirectory
+})
+
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   delete process.env.AE_API_KEY
   delete process.env.AE_API_KEY_ORIGIN
+  delete process.env.AE_CONFIG_DIR
+  rmSync(testConfigDirectory, { recursive: true, force: true })
 })
 
 describe('external-agent Market Operation cold loop', () => {
@@ -146,6 +159,7 @@ describe('external-agent Market Operation cold loop', () => {
 
     await runSearchCommand(['reference lookup'], {
       ...options,
+      technical: true,
       limit: '3',
       cursor: 'opaque-prior-cursor',
       filters: JSON.stringify({ availability: ['routeable'] }),
@@ -158,6 +172,24 @@ describe('external-agent Market Operation cold loop', () => {
       filters: { availability: ['routeable'] },
     })
     expect(JSON.parse(output.read())).toEqual(result)
+  })
+  it('returns decision-sized JSON by default and keeps the full contract behind technical mode', async () => {
+    const operationRef = `operation:v1:${'e'.repeat(64)}`
+    const result = operationSearchResult('reference lookup', [operationDescriptor(operationRef)])
+    const output = captureStdout()
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })))
+
+    await runSearchCommand(['reference lookup'], options)
+
+    const serialized = output.read()
+    const compact = JSON.parse(serialized) as Record<string, unknown>
+    expect(new TextEncoder().encode(serialized).length).toBeLessThan(4 * 1024)
+    expect(compact).toHaveProperty('items')
+    expect(serialized).not.toContain('inputJsonSchema')
+    expect(serialized).not.toContain('outputJsonSchema')
   })
   it('rejects an out-of-range search limit before network work', async () => {
     const fetchMock = vi.fn<typeof fetch>()
@@ -201,41 +233,6 @@ describe('external-agent Market Operation cold loop', () => {
         filters: '{"availability":["routeable"]}',
       },
     })
-  })
-
-  it('imports one absolute HTTP URL through the demand route', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'unavailable',
-      reason: 'test',
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await runImportCommand(['https://supplier.example/catalog'], options)
-
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('https://market.example/api/storefront/import-draft')
-    expect(init?.method).toBe('POST')
-    expect(JSON.parse(String(init?.body))).toEqual({ websiteUrl: 'https://supplier.example/catalog' })
-  })
-
-  it('rejects invalid demand import URLs and extra positionals before network work', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-    vi.stubGlobal('fetch', fetchMock)
-    const invalidCases: readonly { args: readonly string[]; code: string }[] = [
-      { args: [], code: 'import-usage' },
-      { args: ['https://supplier.example/catalog', 'extra'], code: 'import-usage' },
-      { args: ['javascript:alert(1)'], code: 'import-url-invalid' },
-      { args: ['file:///tmp/catalog'], code: 'import-url-invalid' },
-      { args: ['supplier.example/catalog'], code: 'import-url-invalid' },
-    ]
-
-    for (const invalidCase of invalidCases) {
-      await expect(runImportCommand(invalidCase.args, options)).rejects.toMatchObject({
-        kind: 'INVALID_ARGUMENT',
-        code: invalidCase.code,
-      } satisfies Partial<CliFailure>)
-    }
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('inspects one exact operation anonymously', async () => {
@@ -445,8 +442,8 @@ describe('external-agent Market Operation cold loop', () => {
       return JSON.parse(writes.slice(start).join('')) as Record<string, unknown>
     }
     const pending = await readJsonOutput(() => runInvokeCommand(
-      [operationRef, JSON.stringify(initialInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(pending).toMatchObject({ kind: 'pending', invocationRef, operationRef, idempotencyKey })
 
@@ -460,19 +457,19 @@ describe('external-agent Market Operation cold loop', () => {
     })
 
     const replay = await readJsonOutput(() => runInvokeCommand(
-      [operationRef, JSON.stringify(initialInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(initialInput) },
     ))
     expect(replay).toEqual({
       ...completedResult,
       idempotencyKey,
-      nextCommand: `npm run -s ae -- status ${invocationRef}`,
+      nextCommand: `ae status ${invocationRef}`,
     })
     expect(status.result).toEqual(completedResult)
 
     await expect(runInvokeCommand(
-      [operationRef, JSON.stringify(changedInput)],
-      invokeOptions,
+      [operationRef],
+      { ...invokeOptions, input: JSON.stringify(changedInput) },
     )).rejects.toMatchObject({
       kind: 'ALREADY_EXISTS',
       code: 'idempotency_conflict',
@@ -511,16 +508,22 @@ describe('external-agent Market Operation cold loop', () => {
     ])
   })
 
-  it('requires an explicit stable idempotency key before invoke network work', async () => {
+  it('generates a durable idempotency key when call omits one', async () => {
     setApiKey('ae-test-caller-key')
-    const fetchMock = vi.fn<typeof fetch>()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'pending', invocationRef: 'invocation:generated', operationRef: 'operation:v1:current', retryAfterMs: 100,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(runInvokeCommand(['operation:v1:current', '{}'], options)).rejects.toMatchObject({
-      kind: 'INVALID_ARGUMENT',
-      code: 'idempotency-key-required',
-    } satisfies Partial<CliFailure>)
-    expect(fetchMock).not.toHaveBeenCalled()
+    const output = captureStdout()
+    try {
+      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}' })
+    } finally {
+      output.restore()
+    }
+    const result = JSON.parse(output.read()) as { idempotencyKey: string }
+    expect(result.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u)
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('returns pending with a reusable key and status continuation without --wait', async () => {
@@ -535,7 +538,7 @@ describe('external-agent Market Operation cold loop', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     try {
-      await runInvokeCommand(['operation:v1:current', '{}'], { ...options, idempotencyKey: 'idem-stable' })
+      await runInvokeCommand(['operation:v1:current'], { ...options, input: '{}', idempotencyKey: 'idem-stable' })
     } finally {
       output.restore()
     }
@@ -554,7 +557,7 @@ describe('external-agent Market Operation cold loop', () => {
       operationRef: 'operation:v1:current',
       retryAfterMs: 100,
       idempotencyKey: 'idem-stable',
-      nextCommand: 'npm run -s ae -- status invocation:current',
+      nextCommand: 'ae status invocation:current',
     })
     expect(fetchMock).toHaveBeenCalledOnce()
   })
@@ -646,8 +649,14 @@ describe('external-agent Market Operation cold loop', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         access_token: 'ae-issued-secret',
         token_type: 'Bearer',
-        scope: 'market_operations:invoke',
+        scope: 'market_operations:invoke customer_requests:bounded_mandate',
         expires_in: 604800,
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        kind: 'refused',
+        invocationRef: 'invocation:v1:connect-validation',
+        code: 'invocation_not_found',
+        retryable: false,
       }), { status: 200, headers: { 'content-type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -662,7 +671,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(JSON.parse(String(registration[1]?.body))).toMatchObject({
       grant_types: ['urn:ietf:params:oauth:grant-type:device_code'],
       token_endpoint_auth_method: 'none',
-      scope: 'market_operations:invoke',
+      scope: 'market_operations:invoke customer_requests:bounded_mandate',
     })
     const deviceAuthorization = fetchMock.mock.calls[1]!
     expect(deviceAuthorization[0]).toBe('https://market.example/oauth/device_authorization')
@@ -672,9 +681,11 @@ describe('external-agent Market Operation cold loop', () => {
     expect(String(token[1]?.body)).toContain('device_code=device-code')
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'connected',
-      access_token: 'ae-issued-secret',
+      credential: 'origin_bound_agent_key',
+      credentialStored: true,
       apiKeyOrigin: 'https://market.example',
     })
+    expect(output.read()).not.toContain('ae-issued-secret')
   })
 
   it('refuses an existing key origin mismatch before connect validation fetch', async () => {
@@ -713,7 +724,7 @@ describe('external-agent Market Operation cold loop', () => {
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer ae-existing-secret')
     expect(JSON.parse(output.read())).toMatchObject({
       kind: 'connected',
-      credential: 'AE_API_KEY',
+      credential: 'origin_bound_agent_key',
       source: 'validated_environment',
       apiKeyOrigin: 'https://market.example',
     })

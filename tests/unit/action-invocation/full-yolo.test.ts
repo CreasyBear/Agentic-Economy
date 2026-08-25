@@ -11,9 +11,6 @@ import {
   runFullYoloEvidence,
   verifyFullYoloEvidence,
 } from '../../../tools/dev/full-yolo-evidence-packet'
-import {
-  developmentCancellationConfirmationRule,
-} from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-offset-rule'
 import * as developmentProviderOperationProviderSource from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-provider'
 import { createDevelopmentProviderOperationProvider } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-provider'
 import { resumeDevelopmentProviderOperationObjective } from '../../../tools/dev/fixtures/provider-operation/development-provider-operation-objective'

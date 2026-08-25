@@ -103,7 +103,7 @@ export const CURRENT_PARTIAL_ENTRY_SURFACES: readonly PartialEntrySurface[] = [
     acceptedInput: ['named business slug', 'human inquiry message'],
     requiresAeLineage: [],
     output: ['qualified inquiry receipt', 'eventual human reply'],
-    currentMaturity: 'current',
+    currentMaturity: 'absent',
   },
   {
     capability: 'qualify',

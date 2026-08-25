@@ -24,8 +24,7 @@ type RouteExpectation = {
 
 const config = readSmokeConfig()
 
-const privateDataPattern =
-  /\/admin\/|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
+
 
 const privateSurfacePattern =
   /\/admin\/|\/owner\/status|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
@@ -38,22 +37,6 @@ const publicRoutes: readonly RouteExpectation[] = [
     securityHeaders: true,
     mustContain: ['Say the big thing.'],
     mustNotMatch: privateSurfacePattern,
-  },
-  {
-    path: '/claim',
-    status: 200,
-    contentType: /text\/html/i,
-    securityHeaders: true,
-    mustContain: ['Sign in'],
-    mustNotMatch: privateSurfacePattern,
-  },
-  {
-    path: `/claim/success?slug=${config.businessSlug}`,
-    status: 200,
-    contentType: /text\/html/i,
-    securityHeaders: true,
-    mustContain: ['Sign in'],
-    mustNotMatch: privateDataPattern,
   },
   {
     path: '/privacy/remove-business',
@@ -105,7 +88,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     securityHeaders: true,
     cache: 'no-store',
     cors: '*',
-    mustContain: ['ae-ucp-fallback:v1', config.businessSlug, '"callable":false', '"paymentRequired":false'],
+    mustContain: ['ae-ucp:v2', config.businessSlug, '"callable":false', '"paymentRequired":false'],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -124,7 +107,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     cache: 'no-store',
     cors: '*',
     mustContain: ['<urlset', `/${config.businessSlug}</loc>`],
-    mustNotMatch: /\/admin\/|\/claim\/success|\/owner\/status|\/ucp<\/loc>|suppressed/i,
+    mustNotMatch: /\/admin\/|\/owner\/status|\/ucp<\/loc>|suppressed/i,
   },
   {
     path: '/robots.txt',
@@ -132,7 +115,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     contentType: /text\/plain/i,
     cache: 'no-store',
     cors: '*',
-    mustContain: ['User-agent: *', 'Disallow: /admin/', 'Disallow: /claim/success', 'Sitemap:'],
+    mustContain: ['User-agent: *', 'Disallow: /admin/', 'Sitemap:'],
     mustNotMatch: /^Allow:\s*\/admin\//im,
   },
 ]
@@ -189,7 +172,7 @@ test.describe('Phase 1 deployed readback smoke', () => {
 
       const sitemap = await api.get(resolvePath('/sitemap.xml', config.baseUrl))
       const sitemapBody = await sitemap.text()
-      expect(sitemapBody).not.toMatch(/\/admin\/|\/claim\/success|\/owner\/status|missing-business-smoke-slug/i)
+      expect(sitemapBody).not.toMatch(/\/admin\/|\/owner\/status|missing-business-smoke-slug/i)
     } finally {
       await api.dispose()
     }
@@ -201,7 +184,7 @@ test.describe('Phase 1 deployed readback smoke', () => {
     })
 
     try {
-      for (const route of ['/admin/claims', '/admin/audit-events', '/admin/index-health']) {
+      for (const route of ['/admin/audit-events', '/admin/index-health']) {
         const response = await ownerContext.get(resolvePath(route, config.baseUrl))
         const body = await response.text()
 
@@ -229,11 +212,6 @@ test.describe('Phase 1 deployed readback smoke', () => {
       expect(indexBody).toMatch(/Regenerate projection|No repair available|Source auth required/)
       expect(indexBody).toMatch(/Public surfaces|Readback|Repair result/)
       expect(indexBody).not.toMatch(/Access denied|Private rows returned<\/span>\s*<span[^>]*>0/i)
-
-      const claims = await adminContext.get(resolvePath('/admin/claims', config.baseUrl))
-      const claimsBody = await claims.text()
-      expect(claims.status()).toBe(200)
-      expect(claimsBody).toMatch(/Claim recovery readback|Review claim/)
 
       const audit = await adminContext.get(resolvePath('/admin/audit-events', config.baseUrl))
       const auditBody = await audit.text()
@@ -300,7 +278,7 @@ function readSmokeConfig(): SmokeConfig {
   const businessSlug = (required.SMOKE_BUSINESS_SLUG as string).trim()
 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(businessSlug)) {
-    throw new Error('SMOKE_BUSINESS_SLUG must be a lowercase public route slug, such as parramatta-emergency-plumbing.')
+    throw new Error('SMOKE_BUSINESS_SLUG must be a lowercase public route slug, such as demo-listed-provider.')
   }
 
   return {

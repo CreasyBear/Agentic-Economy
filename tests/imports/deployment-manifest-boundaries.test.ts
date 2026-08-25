@@ -25,7 +25,7 @@ describe('deployment manifest import seam', () => {
     const result = validateDeploymentManifest({ NODE_ENV: 'development' }, { environment: 'development', nodeMajor: 22 })
 
     expect(result.findings).toEqual([])
-    expect(result.configuration.conditional.some((group) => group.scope === 'notifications:resend')).toBe(true)
+    expect(result.configuration.conditional.some((group) => group.scope === 'observability:build')).toBe(true)
     expect(result.readinessProbes.find((probe) => probe.id === 'readiness')?.dependencies).toEqual([
       'deployment-config',
       'convex-source',

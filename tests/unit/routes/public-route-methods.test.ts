@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  invoke: vi.fn(async () => new Response('invoked', { status: 201 })),
-  prepare: vi.fn(async () => new Response('prepared', { status: 202 })),
   readOfferingManifest: vi.fn(async () => ({
     kind: 'published' as const,
     manifest: { businessId: 'private-business', routes: [] },
@@ -10,18 +8,11 @@ const mocks = vi.hoisted(() => ({
   readLlmsTxt: vi.fn(async () => ({ body: 'llms body' })),
 }))
 
-vi.mock('@/lib/server/business-tool-api', () => ({
-  handleBusinessToolInvoke: mocks.invoke,
-  handleBusinessToolPrepare: mocks.prepare,
-}))
-
 vi.mock('@/modules/discovery/discovery.functions', () => ({
   readPublicOfferingDiscoveryManifest: mocks.readOfferingManifest,
   readPublicLlmsTxt: mocks.readLlmsTxt,
 }))
 
-import { Route as ToolInvokeRoute } from '@/routes/$slug.tools.$toolId'
-import { Route as ToolPrepareRoute } from '@/routes/$slug.tools.$toolId.prepare'
 import { Route as UcpRoute } from '@/routes/$slug.ucp'
 import { Route as SkillRoute } from '@/routes/SKILL[.]md'
 import { Route as SiteUcpRoute } from '@/routes/[.]well-known/ucp'
@@ -42,8 +33,6 @@ type RouteLike = { options: { server?: { handlers?: unknown } } }
 
 const request = new Request('https://ae.example/public-route')
 const routeCases: RouteCase[] = [
-  { name: 'tool invoke', route: ToolInvokeRoute, allowed: 'POST', params: { slug: 'demo', toolId: 'quote' } },
-  { name: 'tool prepare', route: ToolPrepareRoute, allowed: 'POST', params: { slug: 'demo', toolId: 'quote' } },
   { name: 'business UCP', route: UcpRoute, allowed: 'GET', params: { slug: 'demo' } },
   { name: 'SKILL.md', route: SkillRoute, allowed: 'GET' },
   { name: 'site UCP', route: SiteUcpRoute, allowed: 'GET' },
@@ -73,8 +62,6 @@ async function assertMethodNotAllowed(response: Response, allowed: Method): Prom
 describe('public route method contracts', () => {
   it('keeps each route allowed handler wired to its current content handler', async () => {
     const expectedStatus: Record<string, number> = {
-      'tool invoke': 201,
-      'tool prepare': 202,
       'business UCP': 200,
       'SKILL.md': 200,
       'site UCP': 200,
@@ -90,8 +77,6 @@ describe('public route method contracts', () => {
       expect(response.status, routeCase.name).toBe(expectedStatus[routeCase.name])
     }
 
-    expect(mocks.invoke).toHaveBeenCalledWith(request, 'demo', 'quote')
-    expect(mocks.prepare).toHaveBeenCalledWith(request, 'demo', 'quote')
     expect(mocks.readOfferingManifest).toHaveBeenCalledWith(expect.objectContaining({ slug: 'demo' }))
     expect(mocks.readLlmsTxt).toHaveBeenCalledWith(expect.objectContaining({ canonicalBaseUrl: expect.any(String) }))
   })

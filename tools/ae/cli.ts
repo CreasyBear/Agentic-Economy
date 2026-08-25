@@ -1,47 +1,36 @@
-#!/usr/bin/env tsx
 /**
  * AE CLI. Exercises AE the way an external agent would through public machine
  * surfaces. Market Operation search/detail/compare are anonymous HTTP reads;
- * connect uses the existing OAuth device flow; invoke/status/cancel/reconcile
+ * connect uses the existing OAuth device flow; call/status/cancel/reconcile
  * use the canonical authenticated gateway (the CLI's `recover` command is
  * the `operation.reconcile` action).
- * Run: npm run -s ae -- <command> [args] [--json]
+ * Run: ae <command> [args] [--json]
  *
  * Evidence class: every HTTP command here is labelled local execution against
  * whatever `--base-url` points at. It never proves hosted behavior.
  */
 
-import { loadEnv } from 'vite'
-
 import { COMMANDS, type CommandManifestEntry } from './commands/manifest'
-import { parseArgs, printUsage, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
+import { parseArgs, safeOriginForDiagnostics, type CliOptions, type ParsedArgs } from './lib/args'
 import { CliFailure, printJson, sourceErrorToCliFailure } from './lib/output'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
 import type { ProblemKind } from '@/lib/errors'
 
 type CommandRunner = (args: readonly string[], options: CliOptions) => Promise<void>
 
-const CLI_ENTRYPOINT = 'npm run -s ae --'
+const CLI_ENTRYPOINT = 'ae'
 const JSON_HELP_FLAGS = {
-  '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, or the hosted default.' },
+  '--base-url': { type: 'string', description: 'Server to call; defaults to AE_CLI_BASE_URL, AE_CANONICAL_BASE_URL, local Vite when Convex is loopback, or the hosted origin.' },
   '--limit': { type: 'string', description: 'Search page size from 1 through 20; search only.' },
   '--cursor': { type: 'string', description: 'Opaque search continuation cursor; search only.' },
   '--filters': { type: 'string', description: 'Canonical JSON search filters; search only.' },
+  '--input': { type: 'string', description: 'Schema-valid JSON object for call.' },
+  '--mcp': { type: 'boolean', description: 'Write a user-only Streamable HTTP MCP connection file after connect.' },
   '--json': { type: 'boolean', description: 'Emit exactly one machine-readable JSON value on stdout.' },
   '--help': { type: 'boolean', description: 'Show help without performing command work.' },
   '--technical': { type: 'boolean', description: 'Include operation identity and evidence metadata in human compare output.' },
-  '--allow-write': { type: 'boolean', description: 'Permit a non-read-only action or explicit Braintrust export.' },
-  '--idempotency-key': { type: 'string', description: 'Stable replay identity for invoke/cancel/reconcile; never generated.' },
-  '--wait': { type: 'boolean', description: 'Bounded invoke wait; timeout returns durable recovery detail.' },
-  '--thread-id': { type: 'string', description: 'Ask follow-up thread identifier; plain queries load continuation state server-side.' },
-  '--operation-ref': { type: 'string', description: 'Exact operation reference to select in automation mode.' },
-  '--candidate-digest': { type: 'string', description: 'Frozen candidate-set digest for automation mode.' },
-  '--turn-id': { type: 'string', repeatable: true, description: 'Explicit finalized answer turn identifier; repeatable up to 25.' },
-  '--manifest': { type: 'string', description: 'Explicit JSON manifest with bounded turn IDs.' },
-  '--project': { type: 'string', description: 'Braintrust project (or AE_BRAINTRUST_PROJECT).' },
-  '--dataset': { type: 'string', description: 'Braintrust dataset (or AE_BRAINTRUST_DATASET).' },
-  '--snapshot-name': { type: 'string', description: 'Snapshot name for advanced evaluation.' },
-  '--update-snapshot': { type: 'boolean', description: 'Allow replacing an existing snapshot name.' },
+  '--idempotency-key': { type: 'string', description: 'Optional stable retry identity; call generates one when omitted.' },
+  '--wait': { type: 'boolean', description: 'Wait for a bounded call result; timeout preserves recovery detail.' },
 } as const
 
 const COMMON_COMMAND_OPTIONS = ['base-url', 'json'] as const
@@ -51,31 +40,13 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = {
   inspect: [],
   compare: ['technical'],
   'inspect-plan': [],
-  connect: [],
-  invoke: ['idempotency-key', 'wait'],
+  connect: ['mcp'],
+  fund: [],
+  call: ['input', 'idempotency-key', 'wait'],
   status: [],
+  cancel: ['idempotency-key'],
   recover: ['idempotency-key'],
-  'demand ask': ['thread-id', 'operation-ref', 'candidate-digest'],
-  'demand business': [],
-  'demand discover': [],
-  'demand enrich': ['suburb'],
-  'demand import': [],
-  'demand journey': [],
-  'demand request': [],
-  'advanced action': ['allow-write'],
-  'advanced actions': [],
-  'advanced cancel': ['idempotency-key'],
-  'advanced doctor': [],
-  'advanced eval': [
-    'allow-write',
-    'turn-id',
-    'manifest',
-    'project',
-    'dataset',
-    'snapshot-name',
-    'update-snapshot',
-  ],
-  'advanced policy': ['apply'],
+  revoke: [],
 }
 
 function commandMetadata(path: string): CommandManifestEntry | undefined {
@@ -99,11 +70,11 @@ const AUTH_HELP = {
   deviceFlow: 'connect registers a public device client, displays the server-provided verification URI and user code, then polls for a one-time credential after approval.',
   existingKey: 'If AE_API_KEY is already set, connect validates it against the configured server before reporting connected; AE_API_KEY_ORIGIN must exactly match that server origin.',
   origin: 'Bind AE_API_KEY to the exact --base-url origin in AE_API_KEY_ORIGIN. Credentialed calls require HTTPS except loopback localhost, 127.0.0.1, or ::1 development.',
-  next: 'After approval, export AE_API_KEY=<token> and AE_API_KEY_ORIGIN=<origin printed by connect>; invoke, status, cancel, and reconcile use the key as a Bearer credential.',
+  next: 'Connect stores one origin-bound key with user-only permissions; call, status, cancel, and recovery reuse it automatically.',
   authenticatedOperations: {
-    invoke: commandUsage('invoke'),
+    call: commandUsage('call'),
     status: commandUsage('status'),
-    cancel: commandUsage('advanced cancel'),
+    cancel: commandUsage('cancel'),
     reconcile: commandUsage('recover'),
   },
   cancelRequirements: 'Cancel requires the AE access key AE_API_KEY plus --idempotency-key, sent as body.idempotencyKey.',
@@ -116,9 +87,6 @@ function commandHelpName(command: string | undefined, positionals: readonly stri
       ? positionals
       : [command, ...positionals]
   if (tokens.length === 0) return undefined
-  if ((tokens[0] === 'demand' || tokens[0] === 'advanced') && tokens[1] !== undefined) {
-    return `${tokens[0]} ${tokens[1]}`
-  }
   return tokens[0]
 }
 
@@ -167,8 +135,9 @@ function jsonHelp(
       auth: {
         ...AUTH_HELP,
         guidance: [
-          'Keep the returned one-time credential private and set AE_API_KEY plus the exact printed origin as AE_API_KEY_ORIGIN in the calling environment.',
           'Open the displayed verification URI and approve the displayed user code.',
+          'Connect validates the issued key and stores it for this exact origin with user-only file permissions.',
+          'Pass --mcp to write the matching Streamable HTTP MCP connection at the same time.',
         ],
       },
     } : {}),
@@ -178,11 +147,46 @@ function printAuthenticatedOperationHelp(): void {
   process.stdout.write([
     '',
     'Authenticated Operation actions:',
-    `  invoke: ${AUTH_HELP.authenticatedOperations.invoke}`,
+    `  call: ${AUTH_HELP.authenticatedOperations.call}`,
     `  status: ${AUTH_HELP.authenticatedOperations.status}`,
     `  cancel: ${AUTH_HELP.authenticatedOperations.cancel} (${AUTH_HELP.cancelRequirements})`,
     `  reconcile: ${AUTH_HELP.authenticatedOperations.reconcile}`,
   ].join('\n') + '\n')
+}
+
+function printUsage(): void {
+  process.stdout.write(`AE CLI - exercise AE the way an external agent would.
+
+Usage: ${CLI_ENTRYPOINT} <command> [args] [flags]
+
+Canonical Operation commands (need a running server; hosted default https://agentic-economy-phi.vercel.app, or http://127.0.0.1:3024 when CONVEX_URL is loopback):
+  ${CLI_ENTRYPOINT} manifest
+  ${CLI_ENTRYPOINT} search "<job>" [--limit <1-20>] [--cursor <cursor>] [--filters '<json>']
+  ${CLI_ENTRYPOINT} inspect <operation-ref>
+  ${CLI_ENTRYPOINT} compare <operation-ref> [operation-ref ...]
+  ${CLI_ENTRYPOINT} inspect-plan <operation-ref> [operation-ref ...]
+  ${CLI_ENTRYPOINT} connect
+  ${CLI_ENTRYPOINT} fund
+  ${CLI_ENTRYPOINT} call <operation-ref> --input '<json>' [--wait]
+  ${CLI_ENTRYPOINT} status <invocation-ref>
+  ${CLI_ENTRYPOINT} cancel <invocation-ref> --idempotency-key <key>
+  ${CLI_ENTRYPOINT} recover <invocation-ref> '<evidence-json>' --idempotency-key <key>
+  ${CLI_ENTRYPOINT} revoke
+
+Flags:
+  --base-url <url>   server to call (env: AE_CLI_BASE_URL or AE_CANONICAL_BASE_URL)
+  Credentials:
+  AE_API_KEY <token>          reusable caller credential for credentialed commands
+  AE_API_KEY_ORIGIN <origin>  exact origin bound to AE_API_KEY; required with HTTPS except loopback HTTP development
+  --json             machine-readable output
+  --limit <1-20>     search page size (search only)
+  --cursor <cursor>  opaque search continuation cursor (search only)
+  --filters '<json>' canonical search filters (search only)
+  --technical        human compare output with operation identity and evidence metadata
+  --idempotency-key <key>  optional stable retry identity; call generates one when omitted
+  --wait             bounded call wait; timeout returns durable recovery detail
+  --help
+`)
 }
 
 function printUsageWithAuthenticatedOperationHelp(): void {
@@ -239,7 +243,6 @@ function resolveHelpPath(
   command: string | undefined,
   positionals: readonly string[],
   commands: Readonly<Record<string, CommandRunner>>,
-  groups: Readonly<Record<'demand' | 'advanced', Readonly<Record<string, CommandRunner>>>>,
 ): HelpPathResult {
   const tokens = command === undefined
     ? []
@@ -252,27 +255,13 @@ function resolveHelpPath(
     // Never echo the raw token: hostile/paste argv can embed secrets.
     return { error: { code: 'unknown-command', message: 'Unknown command' } }
   }
-  if (root !== 'demand' && root !== 'advanced') return { path: root }
-  const subcommand = tokens[1]
-  if (subcommand === undefined) return { path: root }
-  if (groups[root][subcommand] === undefined) {
-    return {
-      error: {
-        code: `${root}-subcommand`,
-        message: `Usage: ${commandUsage(root)} (available: ${Object.keys(groups[root]).join(', ')})`,
-      },
-    }
-  }
-  return { path: `${root} ${subcommand}` }
+  return { path: root }
 }
 
 function validateCommandOptions(parsed: ParsedArgs): void {
   const command = parsed.command
   if (command === undefined) return
-  const commandPath =
-    command === 'demand' || command === 'advanced'
-      ? `${command} ${parsed.positionals[0] ?? ''}`.trim()
-      : command
+  const commandPath = command
   const allowed = new Set([
     ...COMMON_COMMAND_OPTIONS,
     ...(COMMAND_OPTIONS[commandPath] ?? []),
@@ -298,88 +287,40 @@ function validateCommandOptions(parsed: ParsedArgs): void {
 
 
 async function main(): Promise<number> {
-  loadCliEnvironment()
   const [
-    actionCommands,
-    askCommands,
-    businessCommands,
     cancelCommands,
     marketOperationCommands,
     connectCommands,
-    discoverCommands,
-    doctorCommands,
-    enrichCommands,
-    evalCommands,
-    importCommands,
+    fundCommands,
     invokeCommands,
-    journeyCommands,
     manifestCommands,
-    policyCommands,
     recoverCommands,
-    requestCommands,
+    revokeCommands,
     statusCommands,
   ] = await Promise.all([
-    import('./commands/actions'),
-    import('./commands/ask'),
-    import('./commands/business'),
     import('./commands/cancel'),
     import('./commands/market-operations'),
     import('./commands/connect'),
-    import('./commands/discover'),
-    import('./commands/doctor'),
-    import('./commands/enrich'),
-    import('./commands/eval'),
-    import('./commands/import'),
+    import('./commands/fund'),
     import('./commands/invoke'),
-    import('./commands/journey'),
     import('./commands/manifest'),
-    import('./commands/policy'),
     import('./commands/recover'),
-    import('./commands/request'),
+    import('./commands/revoke'),
     import('./commands/status'),
   ])
-  const demandCommands: Record<string, CommandRunner> = {
-    ask: askCommands.runAskCommand,
-    business: businessCommands.runBusinessCommand,
-    discover: discoverCommands.runDiscoverCommand,
-    enrich: enrichCommands.runEnrichCommand,
-    import: importCommands.runImportCommand,
-    journey: journeyCommands.runJourneyCommand,
-    request: requestCommands.runRequestCommand,
-  }
-  const advancedCommands: Record<string, CommandRunner> = {
-    action: actionCommands.runActionCommand,
-    actions: actionCommands.runActionsCommand,
-    cancel: cancelCommands.runCancelCommand,
-    doctor: doctorCommands.runDoctorCommand,
-    eval: evalCommands.runEvalCommand,
-    policy: policyCommands.runPolicyCommand,
-  }
   const marketOperationRunners: Record<string, CommandRunner> = Object.fromEntries(
     marketOperationCommands.MARKET_OPERATION_COMMAND_DESCRIPTORS.map(({ command, run }) => [command, run] as const),
-  )
-  const groupCommand = (namespace: 'demand' | 'advanced', group: Record<string, CommandRunner>): CommandRunner => (
-    async (args, options) => {
-      const [subcommand, ...subArgs] = args
-      const run = subcommand === undefined ? undefined : group[subcommand]
-      if (run === undefined) {
-        throw new CliFailure(
-          `Usage: npm run -s ae -- ${namespace} <subcommand> ... (available: ${Object.keys(group).join(', ')})`,
-          { kind: 'INVALID_ARGUMENT', code: `${namespace}-subcommand` },
-        )
-      }
-      await run(subArgs, options)
-    }
   )
   const commands: Record<string, CommandRunner> = {
     manifest: manifestCommands.runManifestCommand,
     ...marketOperationRunners,
     connect: connectCommands.runConnectCommand,
+    fund: fundCommands.runFundCommand,
     [invokeCommands.invokeCommandDescriptor.command]: invokeCommands.invokeCommandDescriptor.run,
     status: statusCommands.runStatusCommand,
+    cancel: cancelCommands.runCancelCommand,
     recover: recoverCommands.runRecoverCommand,
-    demand: groupCommand('demand', demandCommands),
-    advanced: groupCommand('advanced', advancedCommands),
+    revoke: revokeCommands.runRevokeCommand,
   }
 
   const rawArgv = process.argv.slice(2)
@@ -398,10 +339,7 @@ async function main(): Promise<number> {
   }
   const isHelp = parsed.command === 'help' || parsed.options.help
   if (isHelp) {
-    const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands, {
-      demand: demandCommands,
-      advanced: advancedCommands,
-    })
+    const helpPath = resolveHelpPath(parsed.command, parsed.positionals, commands)
     if (helpPath.error !== undefined) {
       if (parsed.options.json) {
         printJson({
@@ -490,13 +428,6 @@ async function main(): Promise<number> {
       process.stderr.write(`${message}\n`)
     }
     return exitCode
-  }
-}
-
-function loadCliEnvironment(): void {
-  const fileEnvironment = loadEnv('development', process.cwd(), '')
-  for (const [name, value] of Object.entries(fileEnvironment)) {
-    if (process.env[name] === undefined) process.env[name] = value
   }
 }
 

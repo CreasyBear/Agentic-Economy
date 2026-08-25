@@ -2,6 +2,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
@@ -50,6 +51,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
   const requiredParameters = operation.parameters?.filter(({ required }) => required) ?? []
   const optionalParameters = operation.parameters?.filter(({ required }) => !required) ?? []
   const inputExample = operation.contract.inputExamples?.[0]
+  const mcpInput = inputExample === undefined
+    ? '<JSON matching the published schema>'
+    : JSON.stringify(inputExample.input)
   const invokeInput = inputExample === undefined
     ? '"$AE_INPUT_JSON"'
     : `'${JSON.stringify(inputExample.input).replaceAll("'", "'\\''")}'`
@@ -60,43 +64,42 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
       : operation.navigation.some(({ relation }) => relation === 'invoke')
         ? 'authenticated_invoke'
         : 'inspect_only'
+  const lastVerifiedAt = operation.availability.observedAt
+    ?? operation.commercial.priceEvidence?.observedAt
   return (
     <AePublicShell>
-      <article className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 md:px-6 md:py-12">
-        <header className="grid max-w-4xl gap-4">
+      <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8">
+        <nav aria-label="Breadcrumb">
+          <Button asChild variant="ghost" size="sm" className="min-h-11 px-2">
+            <Link to="/market" search={{ window: '30d' }} hash="operations">← Back to catalog</Link>
+          </Button>
+        </nav>
+        <header className="grid max-w-4xl gap-4 border-b border-border pb-6">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">Current Operation</Badge>
-            <Badge variant={operation.availability.posture === 'routeable' ? 'default' : 'secondary'}>
+            <Badge variant="outline">Capability</Badge>
+            <Badge variant={operation.availability.posture === 'routeable' ? 'success' : 'warning'}>
               {label(operation.availability.posture)}
             </Badge>
           </div>
           <div className="grid gap-2">
-            <p className="text-sm font-medium text-muted-foreground">{operation.business.name}</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">{operation.offering.label}</h1>
-            <p className="max-w-3xl text-lg text-muted-foreground">{operation.summary}</p>
+            <p className="font-mono text-xs font-medium uppercase tracking-widest text-muted-foreground">{operation.business.name}</p>
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight text-foreground sm:text-4xl">{operation.offering.label}</h1>
+            <p className="max-w-3xl text-base leading-7 text-muted-foreground">{operation.summary}</p>
           </div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Fact label="Operation reference"><Ref value={operation.operationRef} /></Fact>
-            <Fact label="Operation ID" value={operation.operationId} />
-            <Fact label="Capability" value={`${operation.contract.capabilityId} · version ${operation.contract.version}`} />
-            <Fact label="Supplier"><BusinessLink operation={operation} /></Fact>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
+            <Fact label="Total price" value={totalPrice(operation)} />
+            <Fact label="Readiness" value={label(operation.availability.posture)} />
+            <Fact label="Authentication" value={authenticationLabel(operation)} />
+            <TimeFact label="Last verified" value={lastVerifiedAt} />
           </dl>
         </header>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-          <div className="grid min-w-0 gap-8">
-            <Section title="Availability" description="Current routeability and the readiness window attached to this exact reference.">
-              <dl className="grid gap-3 sm:grid-cols-3">
-                <Fact label="Posture" value={label(operation.availability.posture)} />
-                <TimeFact label="Observed" value={operation.availability.observedAt} />
-                <TimeFact label="Valid until" value={operation.availability.validUntil} />
-                {operation.availability.reason === undefined ? null : <Fact label="Reason" value={label(operation.availability.reason)} />}
-              </dl>
-            </Section>
-
-            <Section title="Inputs" description="Use values that satisfy the technical input schema below.">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+          <div className="grid min-w-0 gap-6">
+            <Section title="Parameters" description="The fields your agent needs before it calls this Operation.">
               {operation.parameters === undefined ? (
-                <p className="text-sm text-muted-foreground">No flat parameter list is published. Inspect the input schema before invoking.</p>
+                <p className="text-sm text-muted-foreground">No flat parameter list is published. <a href="#technical-contract" className="font-medium text-foreground underline underline-offset-4">Read the input JSON Schema</a> before calling.</p>
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2">
                   <ParameterList title="Required parameters" parameters={requiredParameters} empty="No required parameters." />
@@ -105,12 +108,23 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
               )}
             </Section>
 
-            <Section title="Commercial terms" description="Price and relationship facts published for this exact current Operation.">
+            <Section title="Example input and output" description="Published examples only. Missing examples are never inferred.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Example
+                  title="Example input"
+                  value={inputExample?.input}
+                  empty="No example input is published. Use the input schema below."
+                />
+                <Example
+                  title="Example output"
+                  empty="No example output is published. Validate the response against the output schema below."
+                />
+              </div>
+            </Section>
+
+            <Section title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
+              <PriceBreakdown operation={operation} />
               <dl className="grid gap-3 sm:grid-cols-2">
-                <Fact label="Price" value={formatPrice(operation.commercial.price)} />
-                <Fact label="Price digest" value={operation.commercial.priceEvidence?.priceDigest ?? 'Not published'} />
-                <Fact label="Price source" value={operation.commercial.priceEvidence?.sourceRef ?? 'Not published'} />
-                <Fact label="Price evidence" value={operation.commercial.priceEvidence?.evidenceRefs.join(', ') || 'Not published'} />
                 {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
                   <TimeFact label="Price observed" value={operation.commercial.priceEvidence.observedAt} />
                 )}
@@ -118,72 +132,78 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   <TimeFact label="Price valid until" value={operation.commercial.priceEvidence.validUntil} />
                 )}
                 <Fact label="Commercial relationship" value={`${label(operation.commercial.relationship.kind)} — ${operation.commercial.relationship.summary}`} />
-                <Fact label="Business relation"><BusinessLink operation={operation} /></Fact>
+                <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
               </dl>
               <TermList terms={operation.commercial.materialTerms} />
             </Section>
 
-            <Section title="Data use" description="What input may be released, when, to whom, and why.">
-              <ul className="m-0 grid list-none gap-3 p-0">
-                {operation.dataUse.length === 0 ? <li className="text-sm text-muted-foreground">No data-use effects are declared.</li> : operation.dataUse.map((effect) => (
-                  <li key={effect.effectId} className="rounded-lg border border-border p-4">
-                    <p className="font-medium text-foreground">{label(effect.classification)} · {effect.inputPointer}</p>
-                    <p className="text-sm text-muted-foreground">Effect: {effect.effectId} · {label(effect.phase)} · {label(effect.recipient)} · {effect.purposes.join(', ')}</p>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-
-            <Section title="Effects and authority" description="Consequences, approval requirements, and reversibility declared by the contract.">
-              <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
-                {operation.effects.length === 0 ? <li className="text-sm text-muted-foreground">No consequential effects are declared.</li> : operation.effects.map((effect) => (
-                  <li key={effect.effectId} className="rounded-lg border border-border p-4">
-                    <p className="font-medium text-foreground">{label(effect.class)}</p>
-                    <p className="text-sm text-muted-foreground">Effect: {effect.effectId} · Authority: {label(effect.authority)} · Reversibility: {label(effect.reversibility)}</p>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-
-            <Section title="Evidence and recovery" description="What supports completion and how uncertain work must be handled.">
+            <Section title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
               <dl className="grid gap-3 sm:grid-cols-2">
+                <Fact label="Status" value={label(operation.availability.posture)} />
+                <TimeFact label="Readiness verified" value={operation.availability.observedAt} />
+                <TimeFact label="Readiness valid until" value={operation.availability.validUntil} />
                 <Fact label="Idempotency" value={label(operation.recovery.idempotency)} />
                 <Fact label="Recovery" value={label(operation.recovery.recovery)} />
                 <Fact label="Cancellation" value={label(operation.cancellation.kind)} />
-                <Fact label="Authentication" value={authenticationLabel(operation)} />
+                <Fact label="Observed calls" value="Not available on this descriptor" />
               </dl>
               <ul className="m-0 grid list-none gap-3 p-0">
                 {operation.evidence.length === 0 ? <li className="text-sm text-muted-foreground">No output evidence pointers are declared.</li> : operation.evidence.map((evidence) => (
-                  <li key={evidence.evidenceId} className="rounded-lg border border-border p-4 text-sm">
+                  <li key={evidence.evidenceId} className="rounded-card border border-border bg-card p-4 text-sm">
                     <span className="font-medium text-foreground">{label(evidence.purpose)}</span>
                     <span className="text-muted-foreground"> · {evidence.evidenceId} · {evidence.outputPointer}</span>
                   </li>
                 ))}
               </ul>
             </Section>
-
-            <Section title="Provenance" description="Publication and source class for the current descriptor.">
-              <dl className="grid gap-3 sm:grid-cols-2">
-                <Fact label="Publisher" value={label(operation.provenance.publisher)} />
-                <Fact label="Source kind" value={label(operation.provenance.sourceKind)} />
-                <Fact label="Transport" value={`${operation.transport.method}${operation.transport.pathTemplate === undefined ? '' : ` ${operation.transport.pathTemplate}`}`} />
-                <Fact label="Request timeout" value={`${operation.transport.requestTimeoutMs} ms`} />
-              </dl>
-            </Section>
-
-            <details className="rounded-xl border border-border bg-card">
-              <summary className="flex min-h-11 cursor-pointer items-center px-5 py-4 font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                Technical input and output schemas
-              </summary>
-              <div className="grid gap-5 border-t border-border p-5">
-                <Schema title="Input JSON Schema" value={operation.contract.inputJsonSchema} />
-                <Schema title="Output JSON Schema" value={operation.contract.outputJsonSchema} />
-              </div>
-            </details>
           </div>
 
-          <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} />
+          <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} mcpInput={mcpInput} />
         </div>
+
+        <details id="technical-contract" className="scroll-mt-6 rounded-card border border-border bg-card">
+          <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            Technical contract, schemas, digests, and references
+          </summary>
+          <div className="grid gap-6 border-t border-border p-4 sm:p-5">
+            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Fact label="Operation reference"><Ref value={operation.operationRef} /></Fact>
+              <Fact label="Operation ID" value={operation.operationId} />
+              <Fact label="Capability" value={`${operation.contract.capabilityId} · version ${operation.contract.version}`} />
+              <Fact label="Publisher" value={label(operation.provenance.publisher)} />
+              <Fact label="Source kind" value={label(operation.provenance.sourceKind)} />
+              <Fact label="Transport" value={`${operation.transport.method}${operation.transport.pathTemplate === undefined ? '' : ` ${operation.transport.pathTemplate}`}`} />
+              <Fact label="Request timeout" value={`${operation.transport.requestTimeoutMs} ms`} />
+              <Fact label="Price digest" value={operation.commercial.priceEvidence?.priceDigest ?? 'Not published'} />
+              <Fact label="Price source" value={operation.commercial.priceEvidence?.sourceRef ?? 'Not published'} />
+              <Fact label="Price evidence" value={operation.commercial.priceEvidence?.evidenceRefs.join(', ') || 'Not published'} />
+            </dl>
+            <section className="grid gap-3">
+              <h3 className="text-sm font-semibold text-foreground">Data use</h3>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {operation.dataUse.length === 0 ? <li className="text-sm text-muted-foreground">No data-use effects are declared.</li> : operation.dataUse.map((effect) => (
+                  <li key={`${effect.effectId}:${effect.inputPointer}:${effect.phase}`} className="rounded-md border border-border p-3 text-sm">
+                    <span className="font-medium text-foreground">{label(effect.classification)} · {effect.inputPointer}</span>
+                    <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.phase)} · {label(effect.recipient)} · {effect.purposes.join(', ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section className="grid gap-3">
+              <h3 className="text-sm font-semibold text-foreground">Effects and authority</h3>
+              <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+                {operation.effects.length === 0 ? <li className="text-sm text-muted-foreground">No consequential effects are declared.</li> : operation.effects.map((effect) => (
+                  <li key={`${effect.effectId}:${effect.class}:${effect.authority}:${effect.reversibility}`} className="rounded-md border border-border p-3 text-sm">
+                    <span className="font-medium text-foreground">{label(effect.class)}</span>
+                    <span className="text-muted-foreground"> · {effect.effectId} · {label(effect.authority)} · {label(effect.reversibility)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <Schema title="Input JSON Schema" value={operation.contract.inputJsonSchema} />
+            <Schema title="Output JSON Schema" value={operation.contract.outputJsonSchema} />
+          </div>
+        </details>
       </article>
     </AePublicShell>
   )
@@ -193,31 +213,33 @@ function OperationAccessSidecard({
   operation,
   accessMode,
   invokeInput,
+  mcpInput,
 }: Readonly<{
   operation: PublicOperationDescriptor
   accessMode: 'anonymous_execute' | 'authenticated_invoke' | 'inspect_only'
   invokeInput: string
+  mcpInput: string
 }>) {
   if (accessMode === 'anonymous_execute') {
     return (
-      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
-        <Card className="gap-5">
+      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
+        <Card className="gap-4 p-4">
           <CardHeader>
-            <h2 id="execution-title" className="text-xl font-semibold text-foreground">Run through direct-keyless MCP</h2>
-            <CardDescription>This exact descriptor advertises anonymous execution for a free, keyless, read-only Operation. No AE caller key is used on this lane.</CardDescription>
+            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
+            <CardDescription>Ready now with no provider key. Inspect the contract, then call it through MCP.</CardDescription>
           </CardHeader>
           <CardContent>
             <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect" code={`npm run -s ae -- inspect '${operation.operationRef}' --json`} />
+              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
               <CommandStep
                 number={2}
-                title="Call the MCP tool"
-                code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=<JSON matching the published schema>`}
+                title="Call capability"
+                code={`ae_operation_execute\noperationRef=${operation.operationRef}\ninput=${mcpInput}`}
               />
             </ol>
           </CardContent>
           <CardContent className="border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground">Pass only the published input fields. Anonymous execution is available through MCP and the internal Answer runtime, not a public HTTP or CLI execute command.</p>
+            <p className="text-sm text-muted-foreground">Pass only published input fields. Headline availability can change; the current descriptor remains authoritative.</p>
           </CardContent>
         </Card>
       </aside>
@@ -226,22 +248,27 @@ function OperationAccessSidecard({
 
   if (accessMode === 'authenticated_invoke') {
     return (
-      <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="execution-title">
-        <Card className="gap-5">
+      <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="execution-title">
+        <Card className="gap-4 p-4">
           <CardHeader>
-            <h2 id="execution-title" className="text-xl font-semibold text-foreground">Use this exact Operation</h2>
-            <CardDescription>Inspect, connect once, invoke with a stable idempotency key, then follow the returned invocation reference.</CardDescription>
+            <h2 id="execution-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
+            <CardDescription>Connect once, call this capability, then follow the returned receipt. The CLI keeps the credential and retry identity for you.</CardDescription>
           </CardHeader>
           <CardContent>
+            <Button asChild className="min-h-11 w-full">
+              <Link to="/for-agents">Connect an agent</Link>
+            </Button>
+          </CardContent>
+          <CardContent>
             <ol className="m-0 grid list-none gap-5 p-0">
-              <CommandStep number={1} title="Inspect" code={`npm run -s ae -- inspect '${operation.operationRef}' --json`} />
-              <CommandStep number={2} title="Connect" code="npm run -s ae -- connect --json" />
-              <CommandStep number={3} title="Invoke" code={`npm run -s ae -- invoke '${operation.operationRef}' ${invokeInput} --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`} />
-              <CommandStep number={4} title="Status" code={'npm run -s ae -- status "$AE_INVOCATION_REF" --json'} />
+              <CommandStep number={1} title="Inspect capability" code={inspectCommand(operation.operationRef)} />
+              <CommandStep number={2} title="Connect once" code="ae connect" />
+              <CommandStep number={3} title="Call capability" code={`ae call '${operation.operationRef}' --input ${invokeInput}`} />
+              <CommandStep number={4} title="Open the receipt" code="ae status <invocation-ref>" />
             </ol>
           </CardContent>
           <CardContent className="border-t border-border pt-5">
-            <p className="text-sm text-muted-foreground">Connect may reveal an AE caller key once. Save it securely when shown; this page never receives, stores, or displays that secret. Recovery is offered only from a recorded uncertain invocation and must preserve its original identity.</p>
+            <p className="text-sm text-muted-foreground"><code>ae connect</code> stores and validates one origin-bound agent key with user-only permissions. <code>ae call</code> generates a durable retry identity when one is not supplied.</p>
           </CardContent>
         </Card>
       </aside>
@@ -249,19 +276,17 @@ function OperationAccessSidecard({
   }
 
   return (
-    <aside className="grid gap-4 lg:sticky lg:top-6" aria-labelledby="availability-title">
-      <Card className="gap-5">
+    <aside className="grid gap-4 lg:sticky lg:top-20" aria-labelledby="availability-title">
+      <Card className="gap-4 p-4">
         <CardHeader>
-          <h2 id="availability-title" className="text-xl font-semibold text-foreground">
-            {operation.availability.posture === 'integrated' ? 'Setup required before invocation' : 'Currently unavailable'}
-          </h2>
+          <h2 id="availability-title" className="text-lg font-semibold text-foreground">Use this capability</h2>
           <CardDescription>
-            AE reports {label(operation.availability.reason ?? operation.availability.posture)} for this exact Operation. Its current contract, commercial, and provenance facts remain available to inspect, but it cannot be invoked now.
+            {operation.availability.posture === 'integrated' ? 'Setup is required before invocation.' : 'This capability is currently unavailable.'} You can still inspect its price and contract, but it cannot be called now.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button asChild className="min-h-11"><Link to="/" search={{ q: operation.operationRef }}>Search current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+          <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
         </CardContent>
       </Card>
     </aside>
@@ -288,13 +313,13 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
       <section className="mx-auto grid w-full max-w-3xl gap-6 px-4 py-16 md:px-6">
         <div className="grid gap-3">
           <Badge variant="outline">Unavailable</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-5xl">{presentation.title}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{presentation.title}</h1>
           <p className="text-muted-foreground">{presentation.description}</p>
           <Ref value={result.operationRef} />
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="min-h-11"><Link to="/" search={{ q: result.operationRef }}>Search current Operations</Link></Button>
-          <Button asChild variant="secondary" className="min-h-11"><Link to="/">Back to Ask</Link></Button>
+          <Button asChild className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Browse current Operations</Link></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }}>Back to market</Link></Button>
         </div>
       </section>
     </AePublicShell>
@@ -304,8 +329,8 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
 function OperationDetailPending() {
   return (
     <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true">
-        <p className="text-muted-foreground">Checking the exact current Operation…</p>
+      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6" aria-busy="true" aria-live="polite">
+        <p role="status" className="text-muted-foreground">Checking the current capability…</p>
       </section>
     </AePublicShell>
   )
@@ -317,9 +342,9 @@ function OperationDetailError() {
 
 function Section({ title, description, children }: Readonly<{ title: string; description: string; children: ReactNode }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-8">
+    <section className="grid gap-4 border-t border-border pt-6">
       <div className="grid gap-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       {children}
@@ -352,7 +377,7 @@ function ParameterList({ title, parameters, empty }: Readonly<{ title: string; p
       {parameters.length === 0 ? <p className="text-sm text-muted-foreground">{empty}</p> : (
         <ul className="m-0 grid list-none gap-3 p-0">
           {parameters.map((parameter) => (
-            <li key={`${parameter.group}:${parameter.name}`} className="rounded-lg border border-border p-4">
+            <li key={`${parameter.group}:${parameter.name}`} className="rounded-card border border-border bg-card p-4">
               <p className="font-medium text-foreground"><code className="font-mono text-sm">{parameter.name}</code> <span className="text-sm font-normal text-muted-foreground">{parameter.type} · {parameter.group}</span></p>
               {parameter.description === undefined ? null : <p className="mt-1 text-sm text-muted-foreground">{parameter.description}</p>}
               {parameter.enumValues === undefined ? null : <p className="mt-1 text-xs text-muted-foreground">Allowed: {parameter.enumValues.join(', ')}</p>}
@@ -369,18 +394,65 @@ function TermList({ terms }: Readonly<{ terms: PublicOperationDescriptor['commer
   return <dl className="grid gap-3 sm:grid-cols-2">{terms.map((term) => <Fact key={`${term.label}:${term.value}`} label={term.label} value={term.value} />)}</dl>
 }
 
+function PriceBreakdown({ operation }: Readonly<{ operation: PublicOperationDescriptor }>) {
+  const breakdown = operation.commercial.priceBreakdown
+  if (breakdown === undefined) {
+    return (
+      <div className="grid gap-1 rounded-lg border bg-muted/20 p-4">
+        <p className="text-xs font-medium text-muted-foreground">Total price</p>
+        <p className="font-mono text-lg font-semibold tabular-nums">{totalPrice(operation)}</p>
+        <p className="text-xs text-muted-foreground">No separate fee breakdown is published for this capability.</p>
+      </div>
+    )
+  }
+  return (
+    <section aria-labelledby="price-breakdown-heading" className="grid gap-3 rounded-lg border bg-muted/20 p-4">
+      <h3 id="price-breakdown-heading" className="font-semibold text-foreground">Exact price breakdown</h3>
+      <dl className="grid gap-3 sm:grid-cols-3">
+        <Fact label="Provider price" value={formatCurrencyAmount(breakdown.providerQuotedAmount)} />
+        <Fact label="Agentic Economy fee" value={formatCurrencyAmount(breakdown.agenticEconomyFee)} />
+        <Fact label="Total authorization" value={formatCurrencyAmount(breakdown.totalBuyerAuthorization)} />
+        <Fact label="Payment network" value={`Base (${breakdown.network})`} />
+        <Fact label="Payment asset" value={`USDC (${breakdown.asset})`} />
+      </dl>
+      <p className="text-xs text-muted-foreground">The total authorization is the maximum charged for this call.</p>
+    </section>
+  )
+}
+
+function Example({ title, value, empty }: Readonly<{ title: string; value?: unknown; empty: string }>) {
+  return (
+    <section className="grid min-w-0 content-start gap-2 rounded-lg border bg-card p-4">
+      <h3 className="font-semibold text-foreground">{title}</h3>
+      {value === undefined
+        ? <p className="text-sm leading-6 text-muted-foreground">{empty}</p>
+        : <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre>}
+    </section>
+  )
+}
+
 function Schema({ title, value }: Readonly<{ title: string; value: Readonly<Record<string, unknown>> }>) {
-  return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
+  return <section className="grid min-w-0 gap-2"><h3 className="font-semibold text-foreground">{title}</h3><pre className="max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(value, null, 2)}</code></pre></section>
 }
 
 function CommandStep({ number, title, code }: Readonly<{ number: number; title: string; code: string }>) {
-  return <li className="grid min-w-0 gap-2"><h3 className="text-sm font-semibold text-foreground">{number}. {title}</h3><pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs text-foreground"><code>{code}</code></pre></li>
+  return <li className="grid min-w-0 gap-2"><h3 className="text-sm font-semibold text-foreground">{number}. {title}</h3><AeCopyCommand compact label={title} code={code} /></li>
+}
+
+function inspectCommand(operationRef: string): string {
+  return `ae inspect '${operationRef}'`
 }
 
 function formatPrice(price: PublicOperationPrice): string {
   if (price.kind === 'on_request') return 'On request'
   if (price.kind === 'fixed') return formatCurrencyAmount(price.amount)
   return `${formatCurrencyAmount(price.minimum)}–${formatCurrencyAmount(price.maximum)}`
+}
+
+function totalPrice(operation: PublicOperationDescriptor): string {
+  return operation.commercial.priceBreakdown === undefined
+    ? formatPrice(operation.commercial.price)
+    : formatCurrencyAmount(operation.commercial.priceBreakdown.totalBuyerAuthorization)
 }
 
 function authenticationLabel(operation: PublicOperationDescriptor): string {

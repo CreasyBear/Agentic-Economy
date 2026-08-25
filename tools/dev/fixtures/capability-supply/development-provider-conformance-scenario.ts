@@ -10,7 +10,7 @@ import {
   materialDigest,
   type DynamicPublishedInvocationResult,
   type PaidOperationInterpreter,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { createDevelopmentScenarioX402PaymentAttemptPort } from '../action-invocation/development-file-x402-payment-attempt-port'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -28,7 +28,6 @@ import {
 import { projectDevelopmentBtcUsdQuoteResult } from './btc-usd-quote-result'
 import type { PublishedOperation } from '@/modules/capability-supply/public'
 import type {
-  RouteTransportRuntime,
   X402RouteTransportRuntime,
 } from '@/modules/capability-supply/route-transport-runtime'
 import {
@@ -328,6 +327,7 @@ function paymentRuntime(
     },
     x402PaymentSigningAvailable: () => true,
     verifyX402Settlement: async () => true,
+    markX402PaymentPossiblySubmitted: () => undefined,
     prepareX402PaymentAuthorization: async (request) => {
       const identity = canonicalDigest({
         provider: operation.identity.businessId,

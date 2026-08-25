@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
-  AE_EXPLAINER_FULL,
-  AE_EXPLAINER_NO_PHONE,
+  DIRECT_CONTACT_EXPLAINER,
+  NO_CONTACT_EXPLAINER,
   NO_REPLY_HISTORY,
   buildListingTrustProjection,
 } from '@/lib/ui/trust-projection'
@@ -74,7 +74,7 @@ describe('buildListingTrustProjection', () => {
         updatedAt: UPDATED_AT,
       },
       replyPosture: { kind: 'no_history', label: 'No reply history yet' },
-      explainer: AE_EXPLAINER_NO_PHONE,
+      explainer: NO_CONTACT_EXPLAINER,
     })
   })
 
@@ -92,7 +92,7 @@ describe('buildListingTrustProjection', () => {
       value: '0412 345 678',
       updatedAt: UPDATED_AT,
     })
-    expect(projection.explainer).toBe(AE_EXPLAINER_FULL)
+    expect(projection.explainer).toBe(DIRECT_CONTACT_EXPLAINER)
   })
 
   it('labels every unavailable trust fact without inventing phone, hours, service area, or reply history', () => {
@@ -108,7 +108,7 @@ describe('buildListingTrustProjection', () => {
       hours: { kind: 'not_published', label: 'Hours not published here' },
       serviceArea: { kind: 'not_published', label: 'Service area not published here' },
       replyPosture: { kind: 'no_history', label: 'No reply history yet' },
-      explainer: AE_EXPLAINER_NO_PHONE,
+      explainer: NO_CONTACT_EXPLAINER,
     })
   })
 
@@ -144,11 +144,11 @@ describe('buildListingTrustProjection', () => {
     },
   )
 
-  it('locks both capability-gated public explainers and the no-history string exactly', () => {
-    expect(AE_EXPLAINER_FULL).toBe(
-      'AE sends your request in writing and keeps a record — or call directly.',
+  it('locks the public contact explainers and the no-history string exactly', () => {
+    expect(DIRECT_CONTACT_EXPLAINER).toBe(
+      'Use the published phone number to contact this business directly.',
     )
-    expect(AE_EXPLAINER_NO_PHONE).toBe('AE sends your request in writing and keeps a record.')
+    expect(NO_CONTACT_EXPLAINER).toBe('Contact details and a request path are not published yet.')
     expect(NO_REPLY_HISTORY).toBe('No reply history yet')
   })
 })

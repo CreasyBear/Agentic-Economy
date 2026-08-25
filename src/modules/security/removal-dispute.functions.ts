@@ -6,7 +6,6 @@ import {
 } from '@/lib/server/convex-source'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
 import { normalizeSlug } from '@/modules/common/normalize-slug'
 import {
   SourceWriteAdmissionError,
@@ -25,7 +24,7 @@ export type RemovalDisputeInput = {
 }
 
 type PublicBusinessCatalogReadResult =
-  | { kind: 'available'; catalog: PublicBusinessCatalogApiV2Dto }
+  | { kind: 'available'; catalog: Readonly<{ businessId: string; slug: string }> }
   | { kind: 'not_found'; reason: 'not_public' }
 
 type OpenRemovalDisputeArgs = {

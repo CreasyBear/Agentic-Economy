@@ -37,20 +37,20 @@ export function buildPublicAgentSkillMarkdown(options: {
   const status = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.status.actionId)
   const reconcile = routeFor(OPERATION_INVOKE_ROUTE_CONTRACT.reconcile.actionId)
   const authenticatedToolNames = new Set(routes.map(({ route }) => route.mcpToolName).filter((name): name is string => name !== undefined))
-  const anonymousToolNames = listMcpActions()
-    .filter((action) => action.readOnly && action.credentialAdmission === undefined)
-    .map(mcpToolName)
+  const anonymousToolNames = listMcpActions().flatMap((action) =>
+    action.readOnly && action.credentialAdmission === undefined ? [mcpToolName(action)] : [],
+  )
   const operationMcpToolNames = [...authenticatedToolNames]
   const invokeInputExample = JSON.stringify(invoke.example.actionInput)
   const invokeHttpExample = JSON.stringify(invoke.example.http.body ?? {})
   const invokeInputSchema = JSON.stringify(invoke.route.inputJsonSchema ?? {})
   const operationOutcomes = operationInvokeResultKindValues.join(' | ')
   const operationStatusStates = operationInvokeStatusStateValues.join(' | ')
-  const cli = 'npm run -s ae --'
+  const cli = 'ae'
   return [
     '---',
     'name: agentic-economy',
-    'description: Read the raw AE handshake, search and inspect current Market Operations anonymously, then invoke and recover work through one authenticated caller boundary.',
+    'description: Read the compact AE handshake, search and inspect current Operations, call eligible free keyless reads anonymously, and connect only when the selected capability requires it.',
     '---',
     '',
     '# Agentic Economy — Operation market loop',
@@ -59,8 +59,10 @@ export function buildPublicAgentSkillMarkdown(options: {
     '',
     `\`curl -fsSL ${base}/.well-known/ucp\``,
     '',
-    'Install the repository package only when local execution is needed, then inspect the same contract with:',
+    'Install the compiled CLI only when local execution is needed, then inspect the same contract with:',
     '```sh',
+    'npm install --global @agentic-economy/cli',
+    `export AE_CLI_BASE_URL="${base}"`,
     `${cli} manifest --json`,
     '```',
     '',
@@ -68,7 +70,12 @@ export function buildPublicAgentSkillMarkdown(options: {
     '## 2. Search by job — anonymous',
     '',
     '```sh',
-    `${cli} search "extract line items from a supplier invoice" --json`,
+    `curl -sS '${base}${OPERATION_MARKET_SEARCH_PATH}' -H 'content-type: application/json' --data '{"query":"weather forecast","limit":5}'`,
+    '```',
+    '',
+    'CLI:',
+    '```sh',
+    `${cli} search "weather forecast" --json`,
     '```',
     '',
     `HTTP: \`POST ${base}${OPERATION_MARKET_SEARCH_PATH}\`. This read needs no account or caller key.`,
@@ -76,30 +83,41 @@ export function buildPublicAgentSkillMarkdown(options: {
     '## 3. Inspect one exact Operation — anonymous',
     '',
     '```sh',
+    `curl -sS '${base}${OPERATION_MARKET_DETAIL_PATH}' -H 'content-type: application/json' --data '{"operationRef":"operation:v1:…"}'`,
+    '```',
+    '',
+    'Source-checkout helper:',
+    '```sh',
     `${cli} inspect "$AE_OPERATION_REF" --json`,
     '```',
     '',
     `HTTP detail: \`POST ${base}${OPERATION_MARKET_DETAIL_PATH}\`. Read the current input schema, terms, price, effects, availability, and evidence before connecting or invoking.`,
     `Optional anonymous reads: \`${cli} compare "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_COMPARE_PATH}\`; inspect a proposed plan with \`${cli} inspect-plan "$AE_OPERATION_REF_1" "$AE_OPERATION_REF_2" --json\` or \`POST ${base}${OPERATION_MARKET_INSPECT_PLAN_PATH}\`.`,
 
-    'After exact detail, choose one execution mode: the global `executionModes.directKeyless` entry describes an optional capability, not a guarantee for every Operation. Use the anonymous MCP tool `ae_operation_execute` (action `operation.execute`) only when that exact current detail includes a navigation relation with `relation: "execute"`, `actionId: "operation.execute"`, `authentication: "none"`, and routeable availability; then pass the exact `operationRef` and only the published `input` fields. Otherwise continue to connect and use the authenticated `operation.invoke` path below for the controlled market flow. Never substitute one path for the other.',
+    '`executionModes.directKeyless` is not a guarantee for every Operation. The compiled `ae call` command uses the official MCP client only when the server revalidates the Operation as free, keyless, read-only, and routeable. On `agent_access_key_required`, connect once and repeat the same call through `operation.invoke`.',
     OperationMarketAnonymousBoundaryLine,
     '',
-    '## 4. Connect one AE caller key',
+    '## 4. Try the capability; connect only when required',
+    '',
+    '```sh',
+    `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json`,
+    '```',
+    '',
+    'Eligible free keyless read Operations run anonymously through the official MCP client and return literal output plus an `evidenceHash`. If the CLI returns `agent_access_key_required`, connect once:',
     '',
     '```sh',
     `${cli} connect --json`,
     '```',
     '',
-    `The command registers a public device client at \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\`, starts the device flow at \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\`, sends the owner to \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\`, and polls \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. If \`AE_API_KEY\` is already present, the command validates it against the authenticated gateway before reporting connected; a nonempty string alone is never proof.`,
+    `Device flow: \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.register}\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.deviceAuthorization}\` → owner approval at \`${base}${AGENT_ACCESS_OAUTH_PATHS.deviceVerification}?user_code=...\` → \`POST ${base}${AGENT_ACCESS_OAUTH_PATHS.token}\`. An existing \`AE_API_KEY\` is validated; a nonempty string is not proof.`,
     '',
     'The AE key identifies the caller. It never contains or grants a provider credential, endpoint override, payment approval, or silent consequential authority.',
+    `Use \`${cli} connect --mcp\` to write an importable Streamable HTTP MCP connection alongside the origin-bound key.`,
     '',
-    '## 5. Invoke with one required stable idempotency key',
+    '## 5. Authenticated gateway details',
     '',
     '```sh',
-    'export AE_IDEMPOTENCY_KEY="invoice-extract-2026-08-11-001"',
-    `${cli} invoke "$AE_OPERATION_REF" "$AE_INPUT_JSON" --idempotency-key "$AE_IDEMPOTENCY_KEY" --json`,
+    `${cli} call "$AE_OPERATION_REF" --input "$AE_INPUT_JSON" --json`,
     '```',
     '',
     `HTTP: \`${invoke.route.method} ${base}${invoke.route.path}\` with \`Authorization: Bearer $AE_API_KEY\`, \`Content-Type: ${OPERATION_INVOKE_ROUTE_CONTRACT.media.request}\`, and only schema-valid material in the body.`,
@@ -131,15 +149,15 @@ export function buildPublicAgentSkillMarkdown(options: {
     '- A timeout, `outcome_unknown`, or `reconciliation_required` is not a terminal success and is not permission to create a new invocation; read status, then recover.',
     '- Do not retry authentication, validation, authority, or idempotency-conflict problems without changing the invalid input or authority state.',
     '',
-    '## Advanced only',
+    '## Safe recovery',
     '',
-    `Cancellation is an advanced operator action; use \`${cli} advanced cancel\` only when the manifest and current status direct you there. Use the root \`${cli} recover\` command for reconciliation.`,
+    `Use \`${cli} cancel\` only when the current receipt offers cancellation. Use \`${cli} recover\` only when that receipt requires reconciliation.`,
     '',
     '## MCP projection',
     '',
     `Endpoint: \`${base}/mcp\`. Anonymous tools: ${anonymousToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}. Authenticated tools: ${operationMcpToolNames.map((name) => `\`${name}\``).join(', ') || 'none'}.`,
     'MCP follows the same order and boundaries. Static tool names do not enumerate live Operations.',
-    `Installed MCP SDK lifecycle (protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`): connect to \`${base}/mcp\`; complete \`initialize\` then \`notifications/initialized\`; call \`tools/list\` before \`tools/call\`; close the transport.`,
+    `Official MCP SDK lifecycle (protocol \`${MCP_LATEST_PROTOCOL_VERSION}\`): connect to \`${base}/mcp\` (the client performs initialization); the server is stateless and may omit \`Mcp-Session-Id\`; call \`tools/list\` before \`tools/call\`; close the client transport. Malformed JSON-RPC requests return protocol errors, while valid tool calls with invalid tool arguments return \`isError\` tool results.`,
     '',
     '## Business catalog is business-only',
     '',

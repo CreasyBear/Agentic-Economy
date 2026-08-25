@@ -1,9 +1,6 @@
-import { isRedirect } from '@tanstack/react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { Route as AboutRoute } from '@/routes/about'
 import { Route as AgentsRoute } from '@/routes/for-agents'
-import { Route as HelpRoute } from '@/routes/help'
 import { handleDurableListServicesRequest } from '@/routes/api.v1.services'
 import { handleDurableServiceDetailRequest } from '@/routes/api.v1.services.$serviceId'
 import type { PublicBusinessCatalogApiV2Page } from '@/modules/registry/public'
@@ -103,27 +100,7 @@ describe('services public route', () => {
   })
 })
 
-describe('legacy human route redirects', () => {
-  it.each([
-    ['about', AboutRoute],
-    ['help', HelpRoute],
-  ])('%s permanently redirects to /', (_name, route) => {
-    const beforeLoad = route.options.beforeLoad
-    if (beforeLoad === undefined) throw new Error('legacy redirect is unavailable')
-
-    let thrown: unknown
-    try {
-      beforeLoad({} as never)
-    } catch (error) {
-      thrown = error
-    }
-
-    expect(isRedirect(thrown)).toBe(true)
-    if (!isRedirect(thrown)) return
-    expect(thrown.options).toMatchObject({ to: '/', statusCode: 301 })
-  })
-
-
+describe('agent route', () => {
   /** `/for-agents` is advertised in the sitemap and llms.txt, so it has to serve
    *  the agent door itself rather than bounce a reader back to home. */
   it('for-agents serves the agent door instead of redirecting', () => {

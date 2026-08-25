@@ -1,14 +1,13 @@
 import type { AdminMembership } from '@/modules/security/public'
 import { requireAdminAuthority } from './admin-authority'
 
-const AdminReadbackSurfaceValues = ['claims_queue', 'audit_events', 'index_health'] as const
+const AdminReadbackSurfaceValues = ['audit_events', 'index_health'] as const
 export type AdminReadbackSurface = (typeof AdminReadbackSurfaceValues)[number]
 
-const AdminReadbackRowTypeValues = ['claim', 'audit_event', 'index_surface'] as const
+const AdminReadbackRowTypeValues = ['audit_event', 'index_surface'] as const
 export type AdminReadbackRowType = (typeof AdminReadbackRowTypeValues)[number]
 
 const AdminReadbackRowStateValues = [
-  'pending_review',
   'no_source_rows',
   'guarded',
   'queued',
@@ -20,7 +19,6 @@ const AdminReadbackRowStateValues = [
 export type AdminReadbackRowState = (typeof AdminReadbackRowStateValues)[number]
 
 const AdminReadbackRepairActionValues = [
-  'review_claim',
   'inspect_audit',
   'regenerate_projection',
   'source_auth_required',
@@ -112,7 +110,7 @@ export function readAdminRouteShell(request: AdminReadbackRequest): AdminShellRe
 
 function summarizeAdminRows(rows: readonly AdminReadbackRow[]): AdminReadbackSummary {
   return {
-    queued: rows.filter((row) => row.rowState === 'queued' || row.rowState === 'pending_review').length,
+    queued: rows.filter((row) => row.rowState === 'queued').length,
     attention: rows.filter((row) => row.rowState === 'degraded' || row.rowState === 'guarded').length,
     stale: rows.filter((row) => row.rowState === 'stale').length,
     suppressed: rows.filter((row) => row.rowState === 'suppressed').length,

@@ -1,4 +1,9 @@
-import { callPublicSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import {
+  callPublicSourceMutation,
+  createConvexServerFunctionAssertion,
+  sourceMutation,
+  type ConvexServerFunctionAssertion,
+} from '@/lib/server/convex-source'
 import { readCookie } from '@/lib/http/cookies'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { problem } from '@/lib/server/problem'
@@ -8,21 +13,30 @@ export type RateLimitName =
   | 'public-read'
   | 'public-mutation'
   | 'oauth-issuance'
-  | 'answer-turn-submit'
-  | 'answer-follow-up-chips'
-  | 'answer-stream'
-  | 'inquiry-submit'
+  | 'chat-anonymous'
+  | 'chat-anonymous-edge'
+
+type HttpRateLimitName = Exclude<RateLimitName, 'chat-submit' | 'chat-anonymous'>
+type GenericHttpRateLimitName = Exclude<HttpRateLimitName, 'chat-anonymous-edge'>
 
 export type RateLimitResult =
   | { ok: true; retryAfter?: number | undefined }
   | { ok: false; retryAfter: number }
 
 type RateLimitMutationArgs = {
-  name: RateLimitName
+  name: GenericHttpRateLimitName
   key: string
 }
 
 const admitMutation = sourceMutation<RateLimitMutationArgs, RateLimitResult>('rateLimit:admitHttp')
+type AnonymousChatAdmissionResult =
+  | Readonly<{ kind: 'admitted'; retryAfter?: number }>
+  | Readonly<{ kind: 'limited'; retryAfter: number }>
+  | Readonly<{ kind: 'refused'; code: 'authentication_required' }>
+const anonymousChatAdmissionMutation = sourceMutation<{
+  key: string
+  serviceAuth: ConvexServerFunctionAssertion
+}, AnonymousChatAdmissionResult>('chatAdmission:admitAnonymousEdge')
 
 export type RateLimitAdmission = (input: Readonly<{
   request: Request
@@ -31,7 +45,7 @@ export type RateLimitAdmission = (input: Readonly<{
 }>) => Promise<RateLimitResult>
 export type HttpRateLimitAdmissionForTests = (input: Readonly<{
   request: Request
-  name: RateLimitName
+  name: HttpRateLimitName
   key: string
 }>) => Promise<RateLimitResult>
 
@@ -43,16 +57,35 @@ export function setHttpRateLimitAdmissionForTests(admission: HttpRateLimitAdmiss
 
 export async function assertHttpAdmission(
   request: Request,
-  name: RateLimitName,
+  name: HttpRateLimitName,
   options: Readonly<{ key?: string; keySuffix?: string }> = {},
 ): Promise<RateLimitResult> {
-  const key = options.key ?? requestAdmissionKey(request, options.keySuffix)
+  const key = options.key ?? (name === 'chat-anonymous-edge'
+    ? anonymousChatAdmissionKey(request)
+    : requestAdmissionKey(request, options.keySuffix))
   if (admissionForTests !== undefined) return await admissionForTests({ request, name, key })
   if (isLocalE2EAuthBypassEnabled()) return { ok: true }
+  if (name === 'chat-anonymous-edge') {
+    const serviceAuth = await createConvexServerFunctionAssertion({
+      operation: 'chatAdmission.admitAnonymousEdge',
+      scope: 'chat_anonymous:admit',
+      command: { key },
+    })
+    const result = await callPublicSourceMutation(anonymousChatAdmissionMutation, {
+      key,
+      serviceAuth,
+    })
+    if (result.kind === 'refused') throw new Error('anonymous_chat_admission_refused')
+    return result.kind === 'limited'
+      ? { ok: false, retryAfter: result.retryAfter }
+      : result.retryAfter === undefined
+        ? { ok: true }
+        : { ok: true, retryAfter: result.retryAfter }
+  }
   return await callPublicSourceMutation(admitMutation, { name, key })
 }
 
-export function createHttpRateLimitAdmission(name: RateLimitName): RateLimitAdmission {
+export function createHttpRateLimitAdmission(name: HttpRateLimitName): RateLimitAdmission {
   return async ({ request, key, keySuffix }) => await assertHttpAdmission(request, name, {
     ...(key === undefined ? {} : { key }),
     ...(keySuffix === undefined ? {} : { keySuffix }),
@@ -61,7 +94,7 @@ export function createHttpRateLimitAdmission(name: RateLimitName): RateLimitAdmi
 
 export async function withHttpRateLimit(
   request: Request,
-  name: RateLimitName,
+  name: HttpRateLimitName,
   operation: () => Promise<Response>,
 ): Promise<Response> {
   const admission = await assertHttpAdmission(request, name)
@@ -89,6 +122,15 @@ export function requestAdmissionKey(request: Request, keySuffix?: string): strin
   return keySuffix === undefined || keySuffix.length === 0
     ? base
     : `${base}:${canonicalDigest(keySuffix)}`
+}
+
+export function anonymousChatAdmissionKey(request: Request): string {
+  const trustedIngressIp = firstNonEmptyHeader(request, [
+    'x-vercel-forwarded-for',
+    'cf-connecting-ip',
+    'x-real-ip',
+  ])?.split(',')[0]?.trim() || 'unknown'
+  return `ip:${canonicalDigest(trustedIngressIp)}:${canonicalDigest('chat-anonymous')}`
 }
 
 function requestIdentity(request: Request): Readonly<{ kind: 'principal' | 'session' | 'ip'; value: string }> {
@@ -121,4 +163,3 @@ function bearerToken(value: string | null): string | undefined {
   const match = /^Bearer\s+(.+)$/iu.exec(value.trim())
   return match?.[1]?.trim() || undefined
 }
-

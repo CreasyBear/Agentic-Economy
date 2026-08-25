@@ -1,7 +1,7 @@
 import {
   readDevelopmentHostSnapshot,
   verifyDevelopmentHostReadReceipt,
-} from '@/modules/action-invocation'
+} from '@/modules/capability-execution/legacy-dynamic'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import { verifyDevelopmentPublishedOperationEvidence } from './development-published-operation-evidence'

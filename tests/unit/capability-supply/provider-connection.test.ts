@@ -14,7 +14,6 @@ import {
   reauthorizeProviderConnection,
   resolveProviderConnectionCredentialRef,
   resolveProviderConnectionCredentialRefForLease,
-  validateProviderConnectionAuthority,
   validateProviderConnectionLeaseAuthority,
   type CreateProviderConnectionCommand,
   type ProviderConnection,
