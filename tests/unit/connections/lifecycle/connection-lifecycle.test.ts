@@ -158,7 +158,7 @@ function harness(options: Readonly<{ now?: number; uuids?: readonly string[] }> 
 async function install(setup: ReturnType<typeof harness>, operation = 'install'): Promise<Connection> {
   return await setup.service.install({
     context: setup.context(operation),
-    grantRef: 'grant:owner',
+    grantRef: 'grant:owner', expectedGrantGeneration: 1,
     providerNamespace: 'oauth/acme',
     providerLocator: 'provider-locator',
     externalState: { kind: 'known', value: 'ready' },
@@ -169,7 +169,7 @@ async function lease(setup: ReturnType<typeof harness>, connection: Connection, 
   return await setup.service.lease({
     connectionRef: connection.connectionRef,
     context: setup.context(operation),
-    grantRef: 'grant:owner',
+    grantRef: 'grant:owner', expectedGrantGeneration: 1,
     expiresAt: 10_000,
   })
 }
@@ -195,7 +195,7 @@ describe('Connection lifecycle validation and references', () => {
     const service = new ConnectionLifecycleService(setup.store, setup.authority)
     const connection = await service.install({
       context: setup.context('defaults'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       externalState: { kind: 'known', value: 'ready' },
     })
@@ -212,10 +212,10 @@ describe('Connection lifecycle validation and references', () => {
 
     for (const providerNamespace of ['', 'bad value']) {
       const setup = harness()
-      await expectCode(setup.service.install({ context: setup.context('metadata'), grantRef: 'grant:owner', providerNamespace, externalState: { kind: 'known', value: 'ready' } }), 'connection_provider_metadata_invalid')
+      await expectCode(setup.service.install({ context: setup.context('metadata'), grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace, externalState: { kind: 'known', value: 'ready' } }), 'connection_provider_metadata_invalid')
     }
     const badLocator = harness()
-    await expectCode(badLocator.service.install({ context: badLocator.context('locator'), grantRef: 'grant:owner', providerNamespace: 'oauth/acme', providerLocator: '', externalState: { kind: 'known', value: 'ready' } }), 'connection_provider_metadata_invalid')
+    await expectCode(badLocator.service.install({ context: badLocator.context('locator'), grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', providerLocator: '', externalState: { kind: 'known', value: 'ready' } }), 'connection_provider_metadata_invalid')
 
     for (const externalState of [
       { kind: 'known', value: 'new-provider-state' },
@@ -224,23 +224,55 @@ describe('Connection lifecycle validation and references', () => {
       { kind: 'other', value: 'provider_state' },
     ]) {
       const setup = harness()
-      await expectCode(setup.service.install({ context: setup.context('state'), grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: externalState as never }), 'connection_external_state_invalid')
+      await expectCode(setup.service.install({ context: setup.context('state'), grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: externalState as never }), 'connection_external_state_invalid')
     }
 
     const installed = await install(harness())
     const invalidGeneration = harness()
     invalidGeneration.store.connections.set(installed.connectionRef, installed)
-    await expectCode(invalidGeneration.service.refresh({ connectionRef: installed.connectionRef, expectedGeneration: 0, externalState: { kind: 'known', value: 'ready' }, context: invalidGeneration.context('generation'), grantRef: 'grant:owner' }), 'connection_generation_stale')
+    await expectCode(invalidGeneration.service.refresh({ connectionRef: installed.connectionRef, expectedGeneration: 0, externalState: { kind: 'known', value: 'ready' }, context: invalidGeneration.context('generation'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }), 'connection_generation_stale')
   })
 })
 
 describe('Connection install and authority provenance', () => {
+  it('selects an expected Grant generation without treating it as authority proof', async () => {
+    const setup = harness()
+    setup.authority.generation = 7
+    await setup.service.install({
+      context: setup.context('expected-grant-generation'),
+      grantRef: 'grant:owner',
+      expectedGrantGeneration: 7,
+      providerNamespace: 'oauth/acme',
+      externalState: { kind: 'known', value: 'ready' },
+    })
+    expect(setup.authority.requests[0]?.expectedGrantGeneration).toBe(7)
+
+    setup.authority.generation = 8
+    await expectCode(setup.service.install({
+      context: setup.context('stale-expected-grant-generation'),
+      grantRef: 'grant:owner',
+      expectedGrantGeneration: 7,
+      providerNamespace: 'oauth/acme',
+      externalState: { kind: 'known', value: 'ready' },
+    }), 'connection_grant_stale')
+
+    for (const expectedGrantGeneration of [0, Number.MAX_SAFE_INTEGER + 1]) {
+      await expectCode(setup.service.install({
+        context: setup.context(`invalid-expected-grant-${expectedGrantGeneration}`),
+        grantRef: 'grant:owner',
+        expectedGrantGeneration,
+        providerNamespace: 'oauth/acme',
+        externalState: { kind: 'known', value: 'ready' },
+      }), 'connection_authority_invalid')
+    }
+  })
+
   it('binds exact authority snapshot, canonical resources and optional SecretRef through replay', async () => {
     const setup = harness()
     const installedSecretRef = secretRef('sec_00000000000000000000000000000001')
     const input = {
       context: setup.context('composed-install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       providerLocator: 'tenant-42',
       secretRef: installedSecretRef,
@@ -275,7 +307,7 @@ describe('Connection install and authority provenance', () => {
     const setup = harness()
     const connection = await setup.service.install({
       context: setup.context('parse-install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       secretRef: secretRef('sec_00000000000000000000000000000001'),
       externalState: { kind: 'known', value: 'ready' },
@@ -284,7 +316,7 @@ describe('Connection install and authority provenance', () => {
       connectionRef: connection.connectionRef,
       granteeAccountRef: setup.otherAccountRef,
       context: setup.context('parse-share'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const activeLease = await lease(setup, connection, 'parse-lease')
     const admission = await setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('parse-effect') })
@@ -293,7 +325,7 @@ describe('Connection install and authority provenance', () => {
       expectedGeneration: 1,
       externalState: { kind: 'unknown', value: 'provider_timeout' },
       context: setup.context('parse-refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const command = [...setup.store.commands.values()][0]!
     const source = structuredClone(refreshed)
@@ -312,14 +344,14 @@ describe('Connection install and authority provenance', () => {
       expectedGeneration: 2,
       externalState: { kind: 'known', value: 'revoked' },
       context: setup.context('parse-revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const deleted = await setup.service.delete({
       connectionRef: connection.connectionRef,
       expectedGeneration: 3,
       externalState: { kind: 'known', value: 'deleted' },
       context: setup.context('parse-delete'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     expect(parsePersistedConnection(structuredClone(connection))).toEqual(connection)
     expect(parsePersistedConnection(structuredClone(revoked))).toEqual(revoked)
@@ -368,7 +400,7 @@ describe('Connection install and authority provenance', () => {
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'ready' },
       context: setup.context('timestamp-coherence-refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const command = [...setup.store.commands.values()][0]!
     const mismatchedCommand = {
@@ -394,12 +426,12 @@ describe('Connection install and authority provenance', () => {
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'ready' },
       context: setup.context('timestamp-coherence-refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })).resolves.toBe(refreshed)
   })
   it('replays an identical install but rejects every conflicting replay dimension', async () => {
     const setup = harness()
-    const firstInput = { context: setup.context('install-replay'), grantRef: 'grant:owner', providerNamespace: 'oauth/acme', providerLocator: 'provider-locator', externalState: { kind: 'known', value: 'ready' } as const }
+    const firstInput = { context: setup.context('install-replay'), grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', providerLocator: 'provider-locator', externalState: { kind: 'known', value: 'ready' } as const }
     const first = await setup.service.install(firstInput)
     await expect(setup.service.install(firstInput)).resolves.toBe(first)
     await expectCode(setup.service.install({ ...firstInput, providerNamespace: 'oauth/other' }), 'connection_idempotency_conflict')
@@ -411,25 +443,25 @@ describe('Connection install and authority provenance', () => {
     const setup = harness({ uuids: [uuid(1), uuid(1)] })
     const first = await install(setup, 'first')
     expect(first.providerLocator).toBe('provider-locator')
-    await expectCode(setup.service.install({ context: setup.context('second'), grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_ref_conflict')
+    await expectCode(setup.service.install({ context: setup.context('second'), grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_ref_conflict')
   })
 
   it('does not let another actor or Grant reuse an Account-scoped idempotency key', async () => {
     const setup = harness()
     const context = setup.context('authority-bound-replay')
-    await setup.service.install({ context, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } })
-    await expectCode(setup.service.install({ context: { ...context, correlationRef: 'correlation:drifted' }, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
-    await expectCode(setup.service.install({ context: { ...context, actorPrincipalRef: setup.otherPrincipalRef }, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
-    await expectCode(setup.service.install({ context, grantRef: 'grant:other', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
+    await setup.service.install({ context, grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } })
+    await expectCode(setup.service.install({ context: { ...context, correlationRef: 'correlation:drifted' }, grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
+    await expectCode(setup.service.install({ context: { ...context, actorPrincipalRef: setup.otherPrincipalRef }, grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
+    await expectCode(setup.service.install({ context, grantRef: 'grant:other', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
     setup.authority.generation = 2
-    await expectCode(setup.service.install({ context, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
+    await expectCode(setup.service.install({ context, grantRef: 'grant:owner', expectedGrantGeneration: 2, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_idempotency_conflict')
   })
 
   it('durably replays the original install after refresh overwrites the mutable last action', async () => {
     const setup = harness()
     const installInput = {
       context: setup.context('durable-install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       providerLocator: 'durable-provider-locator',
       externalState: { kind: 'known', value: 'ready' } as const,
@@ -440,7 +472,7 @@ describe('Connection install and authority provenance', () => {
       expectedGeneration: 1,
       externalState: { kind: 'unknown', value: 'refresh_ambiguous' },
       context: setup.context('refresh-after-install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const replay = await setup.service.install(installInput)
 
@@ -468,8 +500,8 @@ describe('Connection install and authority provenance', () => {
     }
 
     const invalidContext = harness()
-    await expectCode(invalidContext.service.install({ context: { ...invalidContext.context('bad-context'), correlationRef: '' }, grantRef: 'grant:owner', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_authority_invalid')
-    await expectCode(invalidContext.service.install({ context: invalidContext.context('bad-grant'), grantRef: '', providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_authority_invalid')
+    await expectCode(invalidContext.service.install({ context: { ...invalidContext.context('bad-context'), correlationRef: '' }, grantRef: 'grant:owner', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_authority_invalid')
+    await expectCode(invalidContext.service.install({ context: invalidContext.context('bad-grant'), grantRef: '', expectedGrantGeneration: 1, providerNamespace: 'oauth/acme', externalState: { kind: 'known', value: 'ready' } }), 'connection_authority_invalid')
   })
 })
 
@@ -477,19 +509,19 @@ describe('Connection sharing and leasing', () => {
   it('rejects missing, inactive, wrong-owner and self shares', async () => {
     const setup = harness()
     const missing = connectionRef('con_ffffffffffffffffffffffffffffffff')
-    await expectCode(setup.service.share({ connectionRef: missing, granteeAccountRef: setup.otherAccountRef, context: setup.context('missing'), grantRef: 'grant:owner' }), 'connection_not_found')
+    await expectCode(setup.service.share({ connectionRef: missing, granteeAccountRef: setup.otherAccountRef, context: setup.context('missing'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }), 'connection_not_found')
     const connection = await install(setup)
     setup.store.connections.set(connection.connectionRef, { ...connection, lifecycle: 'revoked' })
-    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('inactive'), grantRef: 'grant:owner' }), 'connection_not_active')
+    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('inactive'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }), 'connection_not_active')
     setup.store.connections.set(connection.connectionRef, connection)
-    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('wrong-owner', setup.otherAccountRef, setup.otherPrincipalRef), grantRef: 'grant:other' }), 'connection_access_denied')
-    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.ownerAccountRef, context: setup.context('self'), grantRef: 'grant:owner' }), 'connection_access_denied')
+    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('wrong-owner', setup.otherAccountRef, setup.otherPrincipalRef), grantRef: 'grant:other', expectedGrantGeneration: 1 }), 'connection_access_denied')
+    await expectCode(setup.service.share({ connectionRef: connection.connectionRef, granteeAccountRef: setup.ownerAccountRef, context: setup.context('self'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }), 'connection_access_denied')
   })
 
   it('replays, deduplicates and collision-checks explicit shares', async () => {
     const setup = harness({ uuids: [uuid(1), uuid(2), uuid(2)] })
     const connection = await install(setup)
-    const input = { connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('share'), grantRef: 'grant:owner' }
+    const input = { connectionRef: connection.connectionRef, granteeAccountRef: setup.otherAccountRef, context: setup.context('share'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }
     const shared = await setup.service.share(input)
     await expect(setup.service.share(input)).resolves.toBe(shared)
     await expectCode(setup.service.share({ ...input, granteeAccountRef: accountRef('acc_00000000000000000000000000000003') }), 'connection_idempotency_conflict')
@@ -509,19 +541,20 @@ describe('Connection sharing and leasing', () => {
       granteeAccountRef: setup.otherAccountRef,
       context: setup.context('share-before-refresh'),
       grantRef: 'grant:owner',
+      expectedGrantGeneration: 1,
     })
     const refreshed = await setup.service.refresh({
       connectionRef: connection.connectionRef,
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'ready' },
       context: setup.context('refresh-after-share'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
 
     await expect(setup.service.lease({
       connectionRef: refreshed.connectionRef,
       context: setup.context('shared-after-refresh', setup.otherAccountRef, setup.otherPrincipalRef),
-      grantRef: 'grant:other',
+      grantRef: 'grant:other', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })).resolves.toMatchObject({ activeAccountRef: setup.otherAccountRef, connectionGeneration: 2 })
   })
@@ -530,16 +563,16 @@ describe('Connection sharing and leasing', () => {
     const setup = harness({ uuids: [uuid(1), uuid(2), uuid(2)] })
     setup.authority.expiresAt = 100_000
     const connection = await install(setup)
-    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('expired-now'), grantRef: 'grant:owner', expiresAt: 1_000 }), 'connection_lease_expired')
-    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('after-grant'), grantRef: 'grant:owner', expiresAt: 100_001 }), 'connection_lease_expired')
+    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('expired-now'), grantRef: 'grant:owner', expectedGrantGeneration: 1, expiresAt: 1_000 }), 'connection_lease_expired')
+    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('after-grant'), grantRef: 'grant:owner', expectedGrantGeneration: 1, expiresAt: 100_001 }), 'connection_lease_expired')
     setup.store.connections.set(connection.connectionRef, { ...connection, externalState: { kind: 'unknown', value: 'timeout' } })
-    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('unknown'), grantRef: 'grant:owner', expiresAt: 10_000 }), 'connection_external_state_untrusted')
+    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('unknown'), grantRef: 'grant:owner', expectedGrantGeneration: 1, expiresAt: 10_000 }), 'connection_external_state_untrusted')
     setup.store.connections.set(connection.connectionRef, { ...connection, externalState: { kind: 'known', value: 'unavailable' } })
-    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('unavailable'), grantRef: 'grant:owner', expiresAt: 10_000 }), 'connection_external_state_untrusted')
+    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('unavailable'), grantRef: 'grant:owner', expectedGrantGeneration: 1, expiresAt: 10_000 }), 'connection_external_state_untrusted')
     setup.store.connections.set(connection.connectionRef, connection)
-    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('stranger', setup.otherAccountRef, setup.otherPrincipalRef), grantRef: 'grant:other', expiresAt: 10_000 }), 'connection_access_denied')
+    await expectCode(setup.service.lease({ connectionRef: connection.connectionRef, context: setup.context('stranger', setup.otherAccountRef, setup.otherPrincipalRef), grantRef: 'grant:other', expectedGrantGeneration: 1, expiresAt: 10_000 }), 'connection_access_denied')
 
-    const input = { connectionRef: connection.connectionRef, context: setup.context('lease-replay'), grantRef: 'grant:owner', expiresAt: 10_000 }
+    const input = { connectionRef: connection.connectionRef, context: setup.context('lease-replay'), grantRef: 'grant:owner', expectedGrantGeneration: 1, expiresAt: 10_000 }
     const first = await setup.service.lease(input)
     await expect(setup.service.lease(input)).resolves.toBe(first)
     await expectCode(setup.service.lease({ ...input, expiresAt: 9_000 }), 'connection_idempotency_conflict')
@@ -552,7 +585,7 @@ describe('Connection generation transitions and effect admission', () => {
   it('rejects refresh by the wrong Account, inactive state, stale generation and backwards server time', async () => {
     const setup = harness()
     const connection = await install(setup)
-    const base = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'known', value: 'ready' } as const, grantRef: 'grant:owner' }
+    const base = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'known', value: 'ready' } as const, grantRef: 'grant:owner', expectedGrantGeneration: 1 }
     await expectCode(setup.service.refresh({ ...base, context: setup.context('wrong', setup.otherAccountRef, setup.otherPrincipalRef) }), 'connection_access_denied')
     setup.store.connections.set(connection.connectionRef, { ...connection, lifecycle: 'revoked' })
     await expectCode(setup.service.refresh({ ...base, context: setup.context('inactive') }), 'connection_not_active')
@@ -565,7 +598,7 @@ describe('Connection generation transitions and effect admission', () => {
   it('replays only an identical refresh and rejects action-idempotency conflicts', async () => {
     const setup = harness()
     const connection = await install(setup)
-    const input = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'unknown', value: 'provider_timeout' } as const, context: setup.context('refresh'), grantRef: 'grant:owner' }
+    const input = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'unknown', value: 'provider_timeout' } as const, context: setup.context('refresh'), grantRef: 'grant:owner', expectedGrantGeneration: 1 }
     const refreshed = await setup.service.refresh(input)
     await expect(setup.service.refresh(input)).resolves.toBe(refreshed)
     await expectCode(setup.service.refresh({ ...input, externalState: { kind: 'unknown', value: 'different' } }), 'connection_idempotency_conflict')
@@ -579,7 +612,7 @@ describe('Connection generation transitions and effect admission', () => {
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'ready' } as const,
       context: setup.context('historical-refresh-b'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     }
     const first = await setup.service.refresh(firstInput)
     const second = await setup.service.refresh({
@@ -587,7 +620,7 @@ describe('Connection generation transitions and effect admission', () => {
       expectedGeneration: 2,
       externalState: { kind: 'unknown', value: 'provider_timeout' },
       context: setup.context('historical-refresh-c'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
 
     await expect(setup.service.refresh(firstInput)).resolves.toBe(first)
@@ -610,7 +643,7 @@ describe('Connection generation transitions and effect admission', () => {
       expectedGeneration: 3,
       externalState: { kind: 'known', value: 'revoked' },
       context: firstInput.context,
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     }), 'connection_idempotency_conflict')
     expect(setup.store.connections.get(connection.connectionRef)).toBe(second)
     expect(setup.store.commands).toHaveLength(2)
@@ -624,7 +657,7 @@ describe('Connection generation transitions and effect admission', () => {
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'revoked' } as const,
       context: setup.context('historical-revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     }
     const revoked = await setup.service.revoke(revokeInput)
     const deleted = await setup.service.delete({
@@ -632,7 +665,7 @@ describe('Connection generation transitions and effect admission', () => {
       expectedGeneration: 2,
       externalState: { kind: 'known', value: 'deleted' },
       context: setup.context('delete-after-revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
 
     await expect(setup.service.revoke(revokeInput)).resolves.toBe(revoked)
@@ -647,7 +680,7 @@ describe('Connection generation transitions and effect admission', () => {
   it('guards revoke/delete ownership, lifecycle, generation, time and replay', async () => {
     const setup = harness()
     const connection = await install(setup)
-    const base = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'known', value: 'revoked' } as const, grantRef: 'grant:owner' }
+    const base = { connectionRef: connection.connectionRef, expectedGeneration: 1, externalState: { kind: 'known', value: 'revoked' } as const, grantRef: 'grant:owner', expectedGrantGeneration: 1 }
     await expectCode(setup.service.revoke({ ...base, context: setup.context('wrong', setup.otherAccountRef, setup.otherPrincipalRef) }), 'connection_access_denied')
     await expectCode(setup.service.revoke({ ...base, expectedGeneration: 2, context: setup.context('stale') }), 'connection_generation_stale')
     setup.store.connections.set(connection.connectionRef, { ...connection, updatedAt: 2_000 })
@@ -691,7 +724,17 @@ describe('Connection generation transitions and effect admission', () => {
     await expectCode(setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('wrong-account', setup.otherAccountRef, setup.otherPrincipalRef) }), 'connection_access_denied')
     setup.authority.generation = 2
     await expectCode(setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('grant') }), 'connection_grant_stale')
+    expect(setup.authority.requests.at(-1)?.expectedGrantGeneration).toBe(activeLease.grantGeneration)
     setup.authority.generation = 1
+
+    setup.authority.beforeConsequence = (request) => {
+      if (request.operation === 'begin_effect') {
+        setup.store.leases.set(activeLease.leaseRef, { ...activeLease, grantGeneration: 2 })
+      }
+    }
+    await expectCode(setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('raced-lease-grant') }), 'connection_grant_stale')
+    setup.store.leases.set(activeLease.leaseRef, activeLease)
+    setup.authority.beforeConsequence = () => {}
 
     const first = await setup.service.beginEffect({ leaseRef: activeLease.leaseRef, context: setup.context('effect') })
     const otherLease = { ...activeLease, leaseRef: connectionLeaseRef('cls_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee') }
@@ -706,7 +749,7 @@ describe('Connection generation transitions and effect admission', () => {
     const expiringLease = await setup.service.lease({
       connectionRef: connection.connectionRef,
       context: setup.context('boundary-lease'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 2_000,
     })
     setup.authority.beforeConsequence = (request) => {

@@ -132,6 +132,7 @@ export type ConnectionActionRequest = Readonly<{
   operation: ConnectionOperation
   context: AccountActionContext
   grantRef: string
+  expectedGrantGeneration: number
   connectionRef?: ConnectionRef
   counterpartyAccountRef?: AccountRef
   resourceRefs: readonly string[]
@@ -376,6 +377,7 @@ export class ConnectionLifecycleService {
   async install(input: Readonly<{
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
     providerNamespace: string
     providerLocator?: string
     secretRef?: SecretRef
@@ -386,9 +388,10 @@ export class ConnectionLifecycleService {
       ? undefined
       : validOpaque(input.providerLocator, 'connection_provider_metadata_invalid')
     const externalState = validExternalState(input.externalState)
+    const expectedGrantGeneration = validPositiveGeneration(input.expectedGrantGeneration)
     const installedSecretRef = input.secretRef === undefined ? undefined : secretRef(input.secretRef)
     const resources = installResourceRefs(providerNamespace, providerLocator, installedSecretRef)
-    return await this.#withAuthority('install', input.context, input.grantRef, undefined, undefined, resources, async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('install', input.context, input.grantRef, expectedGrantGeneration, undefined, undefined, resources, async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getConnectionByInstallIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
@@ -427,11 +430,13 @@ export class ConnectionLifecycleService {
     connectionRef: ConnectionRef
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
     expiresAt: number
   }>): Promise<ConnectionLease> {
     const ref = connectionRef(input.connectionRef)
     const expiresAt = validTimestamp(input.expiresAt)
-    return await this.#withAuthority('lease', input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
+    const expectedGrantGeneration = validPositiveGeneration(input.expectedGrantGeneration)
+    return await this.#withAuthority('lease', input.context, input.grantRef, expectedGrantGeneration, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       if (expiresAt <= timestamp || expiresAt > snapshot.grantExpiresAt) {
         throw new ConnectionLifecycleError('connection_lease_expired')
       }
@@ -474,10 +479,12 @@ export class ConnectionLifecycleService {
     granteeAccountRef: AccountRef
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
   }>): Promise<ConnectionShare> {
     const ref = connectionRef(input.connectionRef)
     const granteeAccountRef = accountRef(input.granteeAccountRef)
-    return await this.#withAuthority('share', input.context, input.grantRef, ref, granteeAccountRef, connectionResourceRefs(ref, granteeAccountRef), async (snapshot, action, timestamp) => {
+    const expectedGrantGeneration = validPositiveGeneration(input.expectedGrantGeneration)
+    return await this.#withAuthority('share', input.context, input.grantRef, expectedGrantGeneration, ref, granteeAccountRef, connectionResourceRefs(ref, granteeAccountRef), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const connection = await requiredConnection(transaction, ref)
         if (connection.lifecycle !== 'active') throw new ConnectionLifecycleError('connection_not_active')
@@ -518,11 +525,13 @@ export class ConnectionLifecycleService {
     externalState: ConnectionExternalState
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
   }>): Promise<Connection> {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority('refresh', input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
+    const expectedGrantGeneration = validPositiveGeneration(input.expectedGrantGeneration)
+    return await this.#withAuthority('refresh', input.context, input.grantRef, expectedGrantGeneration, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
@@ -561,6 +570,7 @@ export class ConnectionLifecycleService {
     externalState: ConnectionExternalState
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
   }>): Promise<Connection> {
     return await this.#transitionTerminal(input, 'revoke', 'revoked', ['active'])
   }
@@ -571,6 +581,7 @@ export class ConnectionLifecycleService {
     externalState: ConnectionExternalState
     context: AccountActionContext
     grantRef: string
+    expectedGrantGeneration: number
   }>): Promise<Connection> {
     return await this.#transitionTerminal(input, 'delete', 'deleted', ['active', 'revoked'])
   }
@@ -582,7 +593,7 @@ export class ConnectionLifecycleService {
     const leaseRef = connectionLeaseRef(input.leaseRef)
     const lease = await this.#store.transact(async (transaction) => await transaction.getLease(leaseRef))
     if (lease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
-    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, lease.connectionRef, undefined, connectionResourceRefs(lease.connectionRef), async (snapshot, action, timestamp) => {
+    return await this.#withAuthority('begin_effect', input.context, lease.grantRef, lease.grantGeneration, lease.connectionRef, undefined, connectionResourceRefs(lease.connectionRef), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const currentLease = await transaction.getLease(leaseRef)
         if (currentLease === undefined) throw new ConnectionLifecycleError('connection_lease_not_found')
@@ -625,6 +636,7 @@ export class ConnectionLifecycleService {
       externalState: ConnectionExternalState
       context: AccountActionContext
       grantRef: string
+      expectedGrantGeneration: number
     }>,
     operation: 'revoke' | 'delete',
     lifecycle: 'revoked' | 'deleted',
@@ -633,7 +645,8 @@ export class ConnectionLifecycleService {
     const ref = connectionRef(input.connectionRef)
     const expectedGeneration = validExpectedGeneration(input.expectedGeneration)
     const externalState = validExternalState(input.externalState)
-    return await this.#withAuthority(operation, input.context, input.grantRef, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
+    const expectedGrantGeneration = validPositiveGeneration(input.expectedGrantGeneration)
+    return await this.#withAuthority(operation, input.context, input.grantRef, expectedGrantGeneration, ref, undefined, connectionResourceRefs(ref), async (snapshot, action, timestamp) => {
       return await this.#store.transact(async (transaction) => {
         const replay = await transaction.getLifecycleCommandByIdempotency(snapshot.activeAccountRef, action.idempotencyRef)
         if (replay !== undefined) {
@@ -671,6 +684,7 @@ export class ConnectionLifecycleService {
     operation: ConnectionOperation,
     context: AccountActionContext,
     grantRefInput: string,
+    expectedGrantGeneration: number,
     connectionRefInput: ConnectionRef | undefined,
     counterpartyAccountRef: AccountRef | undefined,
     resourceRefsInput: readonly string[],
@@ -689,6 +703,7 @@ export class ConnectionLifecycleService {
       operation,
       context: validContext,
       grantRef,
+      expectedGrantGeneration,
       ...(connectionRefInput === undefined ? {} : { connectionRef: connectionRefInput }),
       ...(counterpartyAccountRef === undefined ? {} : { counterpartyAccountRef }),
       resourceRefs,
@@ -696,7 +711,7 @@ export class ConnectionLifecycleService {
     }, async (snapshotInput) => {
       const consequenceTime = validTimestamp(this.#now())
       if (consequenceTime < requestTime) throw new ConnectionLifecycleError('connection_timestamp_invalid')
-      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, resourceRefs, consequenceTime)
+      const snapshot = validAuthoritySnapshot(snapshotInput, validContext, grantRef, expectedGrantGeneration, resourceRefs, consequenceTime)
       const action = Object.freeze({
         operation,
         snapshotRef: snapshot.snapshotRef,
@@ -931,6 +946,7 @@ function validAuthoritySnapshot(
   snapshot: ConnectionActionSnapshot,
   context: AccountActionContext,
   grantRef: string,
+  expectedGrantGeneration: number,
   resourceRefs: readonly string[],
   timestamp: number,
 ): ConnectionActionSnapshot {
@@ -944,6 +960,7 @@ function validAuthoritySnapshot(
   if (actorPrincipalRef !== context.actorPrincipalRef || activeAccountRef !== context.activeAccountRef || snapshotGrantRef !== grantRef) {
     throw new ConnectionLifecycleError('connection_authority_invalid')
   }
+  if (grantGeneration !== expectedGrantGeneration) throw new ConnectionLifecycleError('connection_grant_stale')
   if (grantExpiresAt <= timestamp) throw new ConnectionLifecycleError('connection_grant_expired')
   if (!stringArraysEqual(snapshotResourceRefs, resourceRefs)) throw new ConnectionLifecycleError('connection_authority_invalid')
   return Object.freeze({ snapshotRef, actorPrincipalRef, activeAccountRef, grantRef: snapshotGrantRef, grantGeneration, grantExpiresAt, resourceRefs: snapshotResourceRefs })

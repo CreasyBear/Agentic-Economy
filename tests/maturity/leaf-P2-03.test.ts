@@ -119,7 +119,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const installedSecretRef = secretRef('sec_00000000000000000000000000000001')
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       providerLocator: 'provider-connection-42',
       secretRef: installedSecretRef,
@@ -128,7 +128,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const lease = await setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'lease'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })
     const admission = await setup.service.beginEffect({
@@ -149,6 +149,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       'connection-provider:oauth/acme:provider-connection-42',
       `secret:${installedSecretRef}`,
     ])
+    expect(setup.authority.requests[0]?.expectedGrantGeneration).toBe(1)
     expect(installed.action).toMatchObject({
       snapshotRef: 'das_00000000000000000000000000000001',
       resourceRefs: setup.authority.requests[0]?.resourceRefs,
@@ -182,7 +183,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const strangerAccountRef = accountRef('acc_00000000000000000000000000000003')
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install-share'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       externalState: { kind: 'known', value: 'ready' },
     })
@@ -190,7 +191,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     await expect(setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(strangerAccountRef, granteePrincipalRef, 'stranger'),
-      grantRef: 'grant:stranger',
+      grantRef: 'grant:stranger', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })).rejects.toMatchObject({ code: 'connection_access_denied' })
 
@@ -198,12 +199,12 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       connectionRef: installed.connectionRef,
       granteeAccountRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'share'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     const lease = await setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(granteeAccountRef, granteePrincipalRef, 'shared-lease'),
-      grantRef: 'grant:grantee',
+      grantRef: 'grant:grantee', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })
 
@@ -222,14 +223,14 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const setup = fixture()
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install-refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       externalState: { kind: 'known', value: 'ready' },
     })
     const staleLease = await setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'lease-before-refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })
     setup.setNow(2_000)
@@ -238,7 +239,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       expectedGeneration: 1,
       externalState: { kind: 'known', value: 'ready' },
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'refresh'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
 
     expect(refreshed).toMatchObject({ generation: 2, revision: 2, lifecycle: 'active' })
@@ -252,14 +253,14 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const setup = fixture()
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install-revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       externalState: { kind: 'known', value: 'ready' },
     })
     const lease = await setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'lease-before-revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })
     setup.setNow(2_000)
@@ -268,7 +269,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       expectedGeneration: 1,
       externalState: { kind: 'unknown', value: 'provider_timeout' },
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'revoke'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
 
     expect(revoked).toMatchObject({ lifecycle: 'revoked', generation: 2, externalState: { kind: 'unknown', value: 'provider_timeout' } })
@@ -283,7 +284,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
       expectedGeneration: 2,
       externalState: { kind: 'unknown', value: 'provider_timeout' },
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'delete'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
     })
     expect(deleted).toMatchObject({ lifecycle: 'deleted', generation: 3, externalState: { kind: 'unknown', value: 'provider_timeout' } })
     await expect(setup.service.beginEffect({
@@ -293,7 +294,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     await expect(setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'lease-after-delete'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 10_000,
     })).rejects.toMatchObject({ code: 'connection_not_active' })
   })
@@ -302,14 +303,14 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const setup = fixture()
     const installed = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'install-live-check'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       externalState: { kind: 'known', value: 'ready' },
     })
     const lease = await setup.service.lease({
       connectionRef: installed.connectionRef,
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'live-lease'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       expiresAt: 3_000,
     })
     setup.setNow(2_000)
@@ -337,7 +338,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     const providerLocator = 'same-provider-identifier'
     const ownerConnection = await setup.service.install({
       context: setup.context(setup.ownerAccountRef, setup.ownerPrincipalRef, 'owner-install'),
-      grantRef: 'grant:owner',
+      grantRef: 'grant:owner', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       providerLocator,
       externalState: { kind: 'known', value: 'ready' },
@@ -345,7 +346,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     } as Parameters<typeof setup.service.install>[0] & { owningAccountRef: AccountRef })
     const otherConnection = await setup.service.install({
       context: setup.context(otherAccountRef, otherPrincipalRef, 'other-install'),
-      grantRef: 'grant:other',
+      grantRef: 'grant:other', expectedGrantGeneration: 1,
       providerNamespace: 'oauth/acme',
       providerLocator,
       externalState: { kind: 'known', value: 'ready' },
@@ -357,7 +358,7 @@ describe('P2-03 canonical Connection lifecycle contract', () => {
     await expect(setup.service.lease({
       connectionRef: ownerConnection.connectionRef,
       context: setup.context(otherAccountRef, otherPrincipalRef, 'forged-share-proof'),
-      grantRef: 'grant:other',
+      grantRef: 'grant:other', expectedGrantGeneration: 1,
       expiresAt: 10_000,
       shareRef: 'csh_ffffffffffffffffffffffffffffffff',
     } as Parameters<typeof setup.service.lease>[0] & { shareRef: string })).rejects.toMatchObject({ code: 'connection_access_denied' })

@@ -5,7 +5,7 @@ Scope: Private Connections support install, sharing, lease, refresh, revoke and 
 Ownership: src/modules/connections/lifecycle, tests/unit/connections/lifecycle, tests/maturity/leaf-P2-03.test.ts
 
 - [x] G1: The leaf's observable outcome is implemented completely under the frozen contract.
-  EVIDENCE: Context-local public.ts exposes the canonical lifecycle plus exact-shape persistence parsers. Consequences reread trusted time; immutable actions bind P2-01 snapshot identity and exact resources; stored command/result and generation-one install timestamps are internally exact while later retry time is ignored; installs bind normalized provider targets and optional P2-04 SecretRef; explicit shares survive refresh.
+  EVIDENCE: Context-local public.ts exposes the canonical lifecycle plus exact-shape persistence parsers. Every caller-controlled operation supplies a validated expected Grant generation selector to P2-01 authority, returned canonical generation must match, and begin-effect derives the selector only from its immutable lease. Consequences retain exact snapshot/resources/time provenance, optional P2-04 SecretRef binding and refresh-surviving shares.
 
 - [x] G2: A leaf-specific executable contract test exists.
   CHECK: cd ../.. && test -f tests/maturity/leaf-P2-03.test.ts && echo LEAF_TEST_PRESENT
@@ -17,16 +17,16 @@ Ownership: src/modules/connections/lifecycle, tests/unit/connections/lifecycle, 
   EVIDENCE: Node v22.22.0 Vitest: tests/maturity/leaf-P2-03.test.ts, 1 file and 6 tests passed in 259ms.
 
 - [x] G4: The critical negative invariant is proved: revoked or stale-generation Connections cannot start new effects.
-  EVIDENCE: Retained public-seam tests reject stale authority, strict expiry and stale leases while preserving refresh-surviving shares. Hostile cases reject snapshot/resource/correlation/actor/Grant/Secret drift, command/result timestamp splits, generation-one install-time splits, malformed persistence, unsafe generations and lifecycle-result contradictions while accepting later retry time. Owned run: 30/30 passed at exact 100% statements/branches/functions/lines (330/263/81/288).
+  EVIDENCE: Retained public-seam tests reject stale authority, strict expiry and stale leases while preserving refresh-surviving shares. Hostile cases reject zero/unsafe/mismatched expected Grant generations, canonical Grant advance, a lease-generation race, provenance drift and stored timestamp contradictions while accepting later retry time. Owned run: 31/31 passed at exact 100% statements/branches/functions/lines (337/265/81/294).
 
 - [x] G5: Type checking passes with the leaf integrated through context-local exports.
   CHECK: cd ../.. && npm run typecheck
-  EVIDENCE: Node v22.22.0 `npm run typecheck` completed successfully with typed P2-01 DelegationSnapshotRef and P2-04 SecretRef composition through the context-local public.ts.
+  EVIDENCE: Node v22.22.0 `npm run typecheck` completed successfully with the required P2-01 expectedGeneration selector, typed DelegationSnapshotRef and P2-04 SecretRef composition through the context-local public.ts.
 
 - [x] G6: Owned production files contain no placeholder implementation markers.
   CHECK: cd ../.. && if rg -n '(TODO|FIXME|not implemented)' tests/maturity/leaf-P2-03.test.ts 2>/dev/null; then exit 1; else echo NO_PLACEHOLDERS; fi
   EXPECT: NO_PLACEHOLDERS
-  EVIDENCE: NO_PLACEHOLDERS across all owned production and test paths; full-project `npm run lint` passed with zero warnings.
+  EVIDENCE: NO_PLACEHOLDERS across all owned production and test paths; scoped oxlint passed with zero warnings.
 
 - [x] G7: The expert reread, defect hunt and free-polish pass found no remaining improvement.
-  EVIDENCE: Four passes complete: implementation reread verified all seven operations/resources and stored timestamp equalities; integration pass exercised P2-01/P2-04 types and all five parsers; defect hunt attacked command/result and initial-install timestamp splits plus valid later retry tolerance; free polish retained direct Share/Lease/Admission action-time checks. Final Node 22 tests, exact coverage, typecheck, placeholder scan, diff check and full lint are green.
+  EVIDENCE: Four passes complete: implementation reread verified selectors on install/share/lease/refresh/revoke/delete and lease-derived begin-effect; integration pass compiled the P2-01 adapter call; defect hunt attacked zero/unsafe/mismatched selectors and a post-selection lease race; free polish kept expected generation a selector rather than proof. Final Node 22 tests, exact coverage, typecheck, placeholder scan, diff check and scoped lint are green.
