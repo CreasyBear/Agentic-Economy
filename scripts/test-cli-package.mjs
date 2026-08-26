@@ -7,6 +7,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { assertCliPackIntegrity } from "../tools/release/maturity-release-integrity.ts";
+
 const run = promisify(execFile);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expectedFiles = ["README.md", "dist/ae.js", "package.json"];
@@ -102,13 +104,14 @@ try {
       { cwd: repositoryRoot, maxBuffer: 10 * 1024 * 1024 },
     );
     const packReport = JSON.parse(packed.stdout);
+    const verifiedPack = assertCliPackIntegrity(sourceManifest, packReport);
     assert(
       packReport.length === 1,
       `Expected one packed CLI artifact, received ${packReport.length}.`,
     );
 
     const artifact = packReport[0];
-    const filename = artifact?.filename;
+    const filename = verifiedPack.filename;
     assert(typeof filename === "string", "CLI package tarball was not created.");
     const packedFiles = (artifact.files ?? []).map((file) => file.path).sort();
     assert(

@@ -75,6 +75,7 @@ describe('green release baseline', () => {
       'test:e2e:a11y',
       'test:e2e:paid-operation',
       'test:cli-package',
+      'test:maturity:coverage',
       'build',
     ]) {
       expect(chain, `gate:release must execute ${subGate}`).toContain(`npm run ${subGate}`)
@@ -85,6 +86,7 @@ describe('green release baseline', () => {
       'test:conformance',
       'test:chat:conformance',
       'verify:convex-generated:anonymous',
+      'verify:maturity-release-integrity',
       'test:release:source:after-codegen',
     ]
     for (let index = 1; index < orderedSourceGates.length; index += 1) {
@@ -106,12 +108,16 @@ describe('green release baseline', () => {
     expect(anonymousCodegenProof).not.toMatch(/CONVEX_DEPLOYMENT|CONVEX_DEPLOY_KEY|CONVEX_SELF_HOSTED/u)
     expect(anonymousCodegenProof).toContain("rmSync(resolve(isolatedRoot, generatedDirectory, name))")
     expect(anonymousCodegenProof).toContain('terminateIsolatedProcesses(isolatedRoot)')
+    expect(scripts['verify:maturity-release-integrity']).toBe(
+      'tsx tools/release/verify-maturity-release-integrity.ts -- npm run build',
+    )
     expect(scripts['smoke:chat:staging']).toBe(
       'node tools/dev/run-with-cleanup.mjs playwright test --config=playwright.chat-staging.config.ts',
     )
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:a11y')
     expect(scripts['test:release:source:after-codegen']).toContain('npm run test:e2e:paid-operation')
+    expect(scripts['test:release:source:after-codegen']).toContain('npm run test:maturity:coverage')
     expect(scripts['test:release:source:after-codegen']!.indexOf('npm run test:e2e:paid-operation')).toBeGreaterThan(
       scripts['test:release:source:after-codegen']!.indexOf('npm run test:e2e:a11y'),
     )
@@ -150,12 +156,15 @@ describe('green release baseline', () => {
     expect(sourceConfig).not.toContain('secrets.')
     const anonymousIndex = source?.steps?.findIndex((step) => step.name === 'Prove committed Convex source with an isolated anonymous local backend') ?? -1
     const driftIndex = source?.steps?.findIndex((step) => step.name === 'Prove anonymous generation did not mutate the source checkout') ?? -1
+    const integrityIndex = source?.steps?.findIndex((step) => step.name === 'Verify generated source and pinned release inputs') ?? -1
     const sourceGateIndex = source?.steps?.findIndex((step) => step.name === 'Run source release contract without deployment credentials') ?? -1
     expect(source?.steps?.[anonymousIndex]?.run).toBe('npm run verify:convex-generated:anonymous')
     expect(source?.steps?.[driftIndex]?.run).toBe('git diff --exit-code -- convex/_generated')
+    expect(source?.steps?.[integrityIndex]?.run).toBe('npm run verify:maturity-release-integrity')
     expect(anonymousIndex).toBeGreaterThanOrEqual(0)
     expect(anonymousIndex).toBeLessThan(driftIndex)
-    expect(driftIndex).toBeLessThan(sourceGateIndex)
+    expect(driftIndex).toBeLessThan(integrityIndex)
+    expect(integrityIndex).toBeLessThan(sourceGateIndex)
     const sourceGate = source?.steps?.find((step) => step.name === 'Run source release contract without deployment credentials')
     expect(sourceGate?.run).toBe('npm run test:release:source:after-codegen')
     expect(sourceGate?.env).toBeUndefined()

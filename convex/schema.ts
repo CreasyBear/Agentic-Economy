@@ -16,6 +16,7 @@ import { securityTables } from '../src/modules/security/schema'
 import { moneyTables } from '../src/modules/money/schema'
 import { marketTables } from '../src/modules/market/schema'
 import { chatTables } from '../src/modules/chat/schema'
+import { principalAccountTables } from '../src/modules/principal-account/public'
 
 export default defineSchema({
   ...chatTables,
@@ -33,4 +34,5 @@ export default defineSchema({
   ...securityTables,
   ...moneyTables,
   ...marketTables,
+  ...principalAccountTables,
 })

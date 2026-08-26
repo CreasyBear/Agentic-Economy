@@ -120,6 +120,9 @@ jobs:
       - name: Prove anonymous generation did not mutate the source checkout
         run: git diff --exit-code -- convex/_generated
 
+      - name: Verify generated source and pinned release inputs
+        run: npm run verify:maturity-release-integrity
+
       - name: Run source release contract without deployment credentials
         run: npm run test:release:source:after-codegen
 

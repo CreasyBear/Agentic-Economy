@@ -1,0 +1,26 @@
+export {
+  CANONICAL_IDENTITY_TABLES,
+  LEGACY_IDENTITY_RESET_MANIFEST,
+  LegacyIdentityResetError,
+  executeLegacyIdentityReset,
+  planLegacyIdentityReset,
+} from './legacy-identity-reset'
+export type {
+  CanonicalIdentityTable,
+  LegacyIdentityResetActionContext,
+  LegacyIdentityResetApplyReceipt,
+  LegacyIdentityResetEntry,
+  LegacyIdentityResetErrorCode,
+  LegacyIdentityResetEvidencePort,
+  LegacyIdentityResetExecutionPort,
+  LegacyIdentityResetExecutionIdentity,
+  LegacyIdentityResetInventoryPort,
+  LegacyIdentityResetMutationPort,
+  LegacyIdentityResetPlan,
+  LegacyIdentityResetReconciliationPort,
+  LegacyIdentityResetReconciliationSnapshot,
+  LegacyIdentityResetResult,
+  LegacyIdentityResetTrustedExecution,
+  LegacyIdentityTable,
+  RetainedCanonicalEntry,
+} from './legacy-identity-reset'

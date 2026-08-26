@@ -41,6 +41,15 @@ const SchemaExport = z.object({
 })
 
 const durableTables = [
+  'principals',
+  'accounts',
+  'accountOwnerships',
+  'memberships',
+  'accountRecoveryParticipantApprovals',
+  'accountSuccessionAuthorizations',
+  'accountSuccessionAuthorizationParticipants',
+  'externalIdentityBindings',
+  'credentials',
   'owners',
   'businesses',
   'businessOfferings',
@@ -102,6 +111,52 @@ const durableTables = [
 ] as const
 
 const requiredIndexes = {
+  principals: ['by_principalRef', 'by_kind_and_lifecycle', 'by_lifecycle_and_updatedAt'],
+  accounts: [
+    'by_accountRef',
+    'by_creationActorPrincipalRef_and_creationIdempotencyRef',
+    'by_lifecycle_and_updatedAt',
+  ],
+  accountOwnerships: [
+    'by_ownershipRef',
+    'by_accountRef_and_lifecycle',
+    'by_ownerPrincipalRef_and_lifecycle',
+    'by_accountRef_and_ownerPrincipalRef_and_lifecycle',
+  ],
+  memberships: [
+    'by_membershipRef',
+    'by_accountRef_and_lifecycle',
+    'by_memberPrincipalRef_and_lifecycle',
+    'by_accountRef_and_memberPrincipalRef_and_lifecycle',
+  ],
+  accountRecoveryParticipantApprovals: [
+    'by_approvalRef',
+    'by_accountRef_and_lifecycle',
+    'by_participantPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizations: [
+    'by_authorizationRef',
+    'by_accountRef_and_lifecycle',
+    'by_accountRef_and_successorOwnerPrincipalRef_and_lifecycle',
+  ],
+  accountSuccessionAuthorizationParticipants: [
+    'by_authorizationRef',
+    'by_accountRef_and_createdAt',
+    'by_participantPrincipalRef_and_createdAt',
+  ],
+  externalIdentityBindings: [
+    'by_bindingRef',
+    'by_providerNamespace_and_providerIdentifier',
+    'by_principalRef_and_lifecycle',
+    'by_principalRef_and_bindIdempotencyRef',
+  ],
+  credentials: [
+    'by_credentialRef',
+    'by_bindingRef_and_generation_and_lifecycle',
+    'by_principalRef_and_lifecycle',
+    'by_principalRef_and_issueIdempotencyRef',
+    'by_predecessorCredentialRef',
+  ],
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
   moneyLedgerEntries: [
     'by_transactionRef',
@@ -232,7 +287,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(58)
+    expect(durableTables).toHaveLength(67)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
