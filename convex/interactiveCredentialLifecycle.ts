@@ -116,7 +116,7 @@ export async function armInteractiveCredentialExpiryHandler(
   if (now >= credential.expiresAt) {
     return await expireCredential(ctx, credential, args, now)
   }
-  const nonce = scheduleNonce(credential)
+  const nonce = interactiveCredentialExpiryNonce(credential)
   const materialization = credential.expiryMaterialization
   if (materialization !== undefined) {
     if (!materializationMatches(materialization, credential, nonce)) {
@@ -237,7 +237,7 @@ async function expireCredential(
   args: LifecycleArgs,
   now: number,
 ): Promise<LifecycleResult> {
-  const nonce = scheduleNonce(credential)
+  const nonce = interactiveCredentialExpiryNonce(credential)
   await ctx.db.patch(credential._id, {
     lifecycle: 'stale',
     staleAt: credential.expiresAt,
@@ -257,7 +257,9 @@ async function expireCredential(
   return { kind: 'expired' }
 }
 
-function scheduleNonce(credential: Pick<Doc<'credentials'>, 'bindingRef' | 'credentialRef' | 'generation' | 'expiresAt'>): string {
+export function interactiveCredentialExpiryNonce(
+  credential: Pick<Doc<'credentials'>, 'bindingRef' | 'credentialRef' | 'generation' | 'expiresAt'>,
+): string {
   return canonicalDigest({
     kind: 'interactive_credential_expiry:v1',
     bindingRef: credential.bindingRef,

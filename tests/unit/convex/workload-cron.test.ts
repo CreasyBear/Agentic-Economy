@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DelegationService } from '@/modules/authority/delegation/public'
 
 import convexCrons from '../../../convex/crons'
+import { probeFromCron } from '../../../convex/capabilitySupplyReadiness'
 import {
   PHASE_2_CRON_ACCOUNT_REF,
   PHASE_2_CRON_PRINCIPAL_REF,
@@ -21,14 +22,23 @@ import {
   refreshAgenticEconomyApiRegistryHandler,
   refreshAgenticMarketSnapshotsHandler,
   refreshCapabilitySupplyReadinessHandler,
+  refreshCapabilitySupplyReadiness,
   refreshCurrentMarketPresenceHandler,
   refreshFacilitatorDiscoveryHandler,
   runDailySupplierSettlementHandler,
   dispatchWorkloadCronConsequenceHandler,
+  reconcile,
   type WorkloadCronActionContext,
   type WorkloadCronMutationContext,
   type WorkloadCronSnapshot,
 } from '../../../convex/workloadCron'
+
+type RegisteredRuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+const refreshCapabilitySupplyReadinessRuntime = (
+  refreshCapabilitySupplyReadiness as unknown as { _handler: RegisteredRuntimeHandler }
+)._handler
+const reconcileRuntime = (reconcile as unknown as { _handler: RegisteredRuntimeHandler })._handler
+const probeFromCronRuntime = (probeFromCron as unknown as { _handler: RegisteredRuntimeHandler })._handler
 
 const EXPECTED_BINDINGS = {
   'cleanup expired agent access oauth grants': 'workloadCron:cleanupExpiredAgentAccessOAuthGrants',
@@ -82,6 +92,89 @@ describe('Phase 2 canonical workload cron boundary', () => {
       && declaration.activeAccountRef === PHASE_2_CRON_ACCOUNT_REF
     ))).toBe(true)
     expect(JSON.stringify(WORKLOAD_CRON_DECLARATIONS)).not.toMatch(/credential|provider|ownerId|principalId|superuser/iu)
+  })
+
+  it('runs the registered readiness cron handler from current canonical facts and denies missing authority before dispatch', async () => {
+    const allowed = new FakeRuntimeContext(canonicalDb())
+    await expect(refreshCapabilitySupplyReadinessRuntime(allowed.mutation(), {})).resolves.toBeNull()
+    expect(allowed.dispatches).toEqual(['capabilitySupply:scheduleDueCapabilityProbes'])
+    expect(allowed.db.queries).toEqual([
+      'principals',
+      'accounts',
+      'accountOwnerships',
+      'memberships',
+    ])
+
+    const denied = new FakeRuntimeContext(new FakeDb())
+    await expect(refreshCapabilitySupplyReadinessRuntime(denied.mutation(), {}))
+      .rejects.toMatchObject({ code: 'workload_principal_missing' })
+    expect(denied.dispatches).toEqual([])
+  })
+
+  it('runs the registered workload reconciliation query and denies a lifecycle change at consequence time', async () => {
+    const db = canonicalDb()
+    const snapshot = await admitWorkloadCron(queryContext(db), 'refresh capability supply readiness')
+
+    await expect(reconcileRuntime(queryContext(db), {
+      name: 'refresh capability supply readiness',
+      snapshot,
+    })).resolves.toMatchObject({
+      actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+      principalRevision: 7,
+      activeAccountRevision: 11,
+    })
+
+    const suspended = canonicalDb({ principalLifecycle: 'suspended' })
+    await expect(reconcileRuntime(queryContext(suspended), {
+      name: 'refresh capability supply readiness',
+      snapshot,
+    })).rejects.toMatchObject({ code: 'workload_principal_inactive' })
+  })
+
+  it('runs the registered scheduled probe through reconciliation and the bound action context without widening authority', async () => {
+    const db = canonicalDb()
+    const snapshot = await admitWorkloadCron(queryContext(db), 'refresh capability supply readiness')
+    const queryRefs: string[] = []
+    const runMutation = vi.fn()
+    const ctx = {
+      runQuery: vi.fn(async (reference: RuntimeReference, args: Record<string, unknown>) => {
+        const name = getFunctionName(reference)
+        queryRefs.push(name)
+        if (name === 'workloadCron:reconcile') return await reconcileRuntime(queryContext(db), args)
+        if (name === 'capabilitySupply:readCapabilityProbeTarget') {
+          return { kind: 'unavailable', reason: 'publication_missing', evidenceRefs: [] }
+        }
+        throw new Error(`unexpected_runtime_query:${name}`)
+      }),
+      runMutation,
+    }
+
+    await expect(probeFromCronRuntime(ctx, {
+      publicationRef: 'publication:runtime-sink',
+      expectedRevision: 1,
+      workload: snapshot,
+    })).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'publication_missing',
+      evidenceRefs: [],
+    })
+    expect(queryRefs).toEqual([
+      'workloadCron:reconcile',
+      'capabilitySupply:readCapabilityProbeTarget',
+    ])
+    expect(runMutation).not.toHaveBeenCalled()
+
+    await expect(probeFromCronRuntime(ctx, {
+      publicationRef: 'publication:runtime-sink',
+      expectedRevision: 1,
+      workload: { ...snapshot, activeAccountRef: 'acc_ffffffffffffffffffffffffffffffff' },
+    })).rejects.toMatchObject({ code: 'workload_snapshot_invalid' })
+    expect(queryRefs).toEqual([
+      'workloadCron:reconcile',
+      'capabilitySupply:readCapabilityProbeTarget',
+    ])
+    expect(runMutation).not.toHaveBeenCalled()
   })
 
   it('admits every declared job from current canonical membership facts', async () => {

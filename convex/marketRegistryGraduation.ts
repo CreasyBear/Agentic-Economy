@@ -31,7 +31,7 @@ const resultValue = v.union(
 type GraduationArgs = {
   documentId: string;
   expectedSourceDigest: string;
-  workload?: unknown;
+  workload: unknown;
 };
 type CandidateResult =
   | { kind: "found"; candidate: Parameters<typeof probeRegistryEntryForAdmission>[0] }
@@ -45,22 +45,18 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
   args: {
     documentId: v.string(),
     expectedSourceDigest: v.string(),
-    workload: v.optional(workloadCronSnapshotValue),
+    workload: workloadCronSnapshotValue,
   },
   returns: resultValue,
   handler: async (ctx, args): Promise<GraduationResult> => {
-    const workload = args.workload === undefined
-      ? undefined
-      : await ctx.runQuery(internal.workloadCron.reconcile, {
-          name: "refresh Agentic Economy API registry",
-          snapshot: parseWorkloadCronSnapshot(args.workload),
-        });
-    const authorized = workload === undefined
-      ? ctx
-      : bindWorkloadCronActionContext(ctx, {
-          name: "refresh Agentic Economy API registry",
-          snapshot: workload,
-        });
+    const workload = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    });
+    const authorized = bindWorkloadCronActionContext(ctx, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: workload,
+    });
     const candidateArgs = {
       documentId: args.documentId,
       expectedSourceDigest: args.expectedSourceDigest,
@@ -99,7 +95,7 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
 type SweepArgs = {
   generation: string;
   cursor: string | null;
-  workload?: unknown;
+  workload: unknown;
 };
 type SweepResult = {
   kind: "advanced" | "complete" | "stale_generation";
@@ -121,16 +117,14 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
   args: {
     generation: v.string(),
     cursor: v.union(v.string(), v.null()),
-    workload: v.optional(workloadCronSnapshotValue),
+    workload: workloadCronSnapshotValue,
   },
   returns: sweepResultValue,
   handler: async (ctx, args): Promise<SweepResult> => {
-    const workload = args.workload === undefined
-      ? undefined
-      : await ctx.runQuery(internal.workloadCron.reconcile, {
-          name: "refresh Agentic Economy API registry",
-          snapshot: parseWorkloadCronSnapshot(args.workload),
-        });
+    const workload = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    });
     const selected: {
       kind: "stale_generation";
     } | {
@@ -153,7 +147,7 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
         {
           documentId: candidate.documentId,
           expectedSourceDigest: candidate.sourceDigest,
-          ...(workload === undefined ? {} : { workload }),
+          workload,
         },
       );
       if (result.kind === "graduated" && result.published) graduated += 1;
@@ -162,7 +156,7 @@ export const sweep: RegisteredAction<"internal", SweepArgs, SweepResult> = inter
       await ctx.scheduler.runAfter(1_000, internal.marketRegistryGraduation.sweep, {
         generation: args.generation,
         cursor: selected.continueCursor,
-        ...(workload === undefined ? {} : { workload }),
+        workload,
       });
     }
     return {

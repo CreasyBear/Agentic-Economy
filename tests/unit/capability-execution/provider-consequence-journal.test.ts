@@ -1,5 +1,7 @@
 import { convexTest, type TestConvex } from 'convex-test'
+import { getFunctionName, type FunctionArgs, type FunctionReference } from 'convex/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 
 import { internal } from '../../../convex/_generated/api'
 import type { Id } from '../../../convex/_generated/dataModel'
@@ -13,6 +15,8 @@ import {
   completeProviderConsequenceHandler,
   issueProviderConsequenceTicketHandler,
 } from '../../../convex/capabilityProviderConsequenceJournal'
+import { completeProviderConsequenceJournal } from '../../../convex/providerConsequenceHttp'
+import type { ActionCtx } from '../../../convex/_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
@@ -38,6 +42,7 @@ import {
 const NOW = 2_000_000_000_000
 const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
 const JOURNAL_TOKEN = 'journal-token-never-persisted'
+const HTTP_JOURNAL_TOKEN = 't'.repeat(43)
 const TOKEN_DIGEST = canonicalDigest(JOURNAL_TOKEN)
 const REQUEST_DIGEST = DIGEST('1')
 const INVOCATION_DIGEST = DIGEST('2')
@@ -52,6 +57,10 @@ const { getVercelOidcToken } = vi.hoisted(() => ({ getVercelOidcToken: vi.fn() }
 vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 type Backend = TestConvex<typeof schema>
 type CanonicalOwner = Readonly<{ principalRef: string; accountRef: string }>
+type HttpExport = { _handler: (ctx: ActionCtx, request: Request) => Promise<Response> }
+const completeProviderConsequenceRuntime = (
+  completeProviderConsequenceJournal as unknown as HttpExport
+)._handler
 
 async function canonicalOwner(
   backend: ConvexFixtureBackend,
@@ -1278,6 +1287,73 @@ describe('provider consequence durable journal', () => {
       journalTokenDigest: TOKEN_DIGEST,
       claimRef: CLAIM_REF,
     }))).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it('executes the registered completion HTTP action and the same journal handler exactly once', async () => {
+    const journalTokenDigest = `sha256:${createHash('sha256').update(HTTP_JOURNAL_TOKEN).digest('hex')}`
+    const backend = await backendWithJournal({
+      state: 'started',
+      claimRef: CLAIM_REF,
+      startedAt: NOW - 100,
+      journalTokenDigest,
+    })
+    type CompleteProviderConsequenceArgs = FunctionArgs<
+      typeof internal.capabilityProviderConsequenceJournal.completeProviderConsequence
+    >
+    const runMutation = async (
+      reference: FunctionReference<'mutation'>,
+      args: CompleteProviderConsequenceArgs,
+    ) => {
+      expect(getFunctionName(reference)).toBe(
+        getFunctionName(internal.capabilityProviderConsequenceJournal.completeProviderConsequence),
+      )
+      return await backend.mutation(
+        internal.capabilityProviderConsequenceJournal.completeProviderConsequence,
+        args,
+      )
+    }
+    const ctx = { runMutation } as unknown as ActionCtx
+    const observation = succeededObservation()
+    const request = () => new Request('https://deployment.convex.site/internal/provider-consequence/journal/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${HTTP_JOURNAL_TOKEN}`,
+      },
+      body: JSON.stringify({
+        ticketRef: TICKET_REF,
+        claimRef: CLAIM_REF,
+        observation,
+      }),
+    })
+
+    await expect(completeProviderConsequenceRuntime(ctx, request()))
+      .resolves.toMatchObject({ status: 200 })
+    const first = await readJournal(backend)
+    expect(first).toMatchObject({
+      state: 'completed',
+      observationDigest: canonicalDigest(observation),
+    })
+
+    await expect(completeProviderConsequenceRuntime(ctx, request()))
+      .resolves.toMatchObject({ status: 200 })
+    await expect(readJournal(backend)).resolves.toEqual(first)
+
+    const conflict = new Request('https://deployment.convex.site/internal/provider-consequence/journal/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${HTTP_JOURNAL_TOKEN}`,
+      },
+      body: JSON.stringify({
+        ticketRef: TICKET_REF,
+        claimRef: CLAIM_REF,
+        observation: succeededObservation(DIGEST('f')),
+      }),
+    })
+    await expect(completeProviderConsequenceRuntime(ctx, conflict))
+      .resolves.toMatchObject({ status: 409 })
+    await expect(readJournal(backend)).resolves.toEqual(first)
   })
 
   it('rejects completion when the journal or exact claim identity is missing', async () => {

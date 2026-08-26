@@ -24,15 +24,14 @@ type AuthzCtx = {
   auth: QueryCtx['auth']
 }
 
-type BusinessActorCtx = Readonly<{
-  auth: QueryCtx['auth']
-}> & (
+type BusinessActorCtx =
+  | Readonly<{ auth: QueryCtx['auth']; db: GenericDatabaseReader<DataModel> }>
   | Readonly<{
-      db: GenericDatabaseReader<DataModel>
-      scheduler?: MutationCtx['scheduler']
+      auth: MutationCtx['auth']
+      db: MutationCtx['db']
+      scheduler: MutationCtx['scheduler']
     }>
-  | Readonly<{ runAction: ActionCtx['runAction'] }>
-)
+  | Readonly<{ auth: ActionCtx['auth']; runAction: ActionCtx['runAction'] }>
 
 const resolveCurrentInteractiveAuthorityRef = makeFunctionReference<
   'action',
@@ -54,7 +53,10 @@ export async function resolveBusinessActor(
       if (!('scheduler' in ctx) || ctx.scheduler === undefined) {
         authority = await resolveMaterializedInteractiveAuthorityContext(ctx.db, identity)
       } else {
-        authority = await resolveInteractiveAuthorityContext(ctx.db, identity)
+        authority = await resolveInteractiveAuthorityContext({
+          db: ctx.db as MutationCtx['db'],
+          scheduler: ctx.scheduler,
+        }, identity)
       }
     } else {
       authority = await ctx.runAction(resolveCurrentInteractiveAuthorityRef, {})

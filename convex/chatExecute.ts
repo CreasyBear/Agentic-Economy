@@ -25,8 +25,9 @@ import {
 } from '@/modules/agent-access/service-auth-envelope'
 import { isRecord } from '@/modules/common/is-record'
 
-import { api } from './_generated/api'
+import { api, internal } from './_generated/api'
 import { env, internalAction, type ActionCtx } from './_generated/server'
+import { interactiveAuthorityContextValue } from './interactiveAuthority'
 
 type ExecutableDescriptorWire = Readonly<
   Omit<OperationExecutableDescriptor, 'inputSchema' | 'outputSchema'> & {
@@ -40,6 +41,11 @@ type KeylessExecutor = (
   input: OperationExecuteInput,
   source: KeylessExecutableSourcePort,
 ) => Promise<OperationExecuteResult>
+type DescriptorAuthority = Readonly<{
+  principalId: string
+  ownerId: string
+  credentialId: string
+}>
 
 const EXECUTABLE_DESCRIPTOR_OPERATION = 'capabilitySupplyOperations:readKeylessExecutable'
 const EXECUTABLE_DESCRIPTOR_SCOPE = 'capability_supply:read_executable'
@@ -104,15 +110,14 @@ function decodeExecutableDescriptor(
 async function descriptorServiceAuth(
   operationRef: string,
   serviceKey: string,
+  authority: DescriptorAuthority,
 ): Promise<CustomerRequestServiceAssertion> {
   return await createCustomerRequestServiceAssertion({
     key: serviceKey,
     operation: EXECUTABLE_DESCRIPTOR_OPERATION,
     command: toStableHashValue({ operationRef }),
     principal: {
-      principalId: 'ae:server-function',
-      ownerId: 'ae:server-function',
-      credentialId: 'ae:server-function',
+      ...authority,
       scopes: [EXECUTABLE_DESCRIPTOR_SCOPE],
     },
     issuedAt: Date.now(),
@@ -128,9 +133,10 @@ export async function runChatOperationExecute(
   input: OperationExecuteInput,
   execute: KeylessExecutor = executeKeylessOperation,
   serviceKey?: string,
+  authority?: DescriptorAuthority,
 ): Promise<OperationExecuteResult> {
   const serviceKeyValue = serviceKey?.trim()
-  if (serviceKeyValue === undefined || serviceKeyValue.length < 32) {
+  if (serviceKeyValue === undefined || serviceKeyValue.length < 32 || authority === undefined) {
     return {
       kind: 'error',
       operationRef: input.operationRef,
@@ -144,7 +150,7 @@ export async function runChatOperationExecute(
     list: async () => [],
     search: async () => [],
     read: async (operationRef) => {
-      const serviceAuth = await descriptorServiceAuth(operationRef, serviceKeyValue)
+      const serviceAuth = await descriptorServiceAuth(operationRef, serviceKeyValue, authority)
       const row: ExecutableDescriptorWire | null = await ctx.runQuery(
         api.capabilitySupplyOperations.readKeylessExecutable,
         {
@@ -172,13 +178,33 @@ export const execute = internalAction({
   args: {
     operationRef: v.string(),
     input: jsonObject,
+    authority: interactiveAuthorityContextValue,
   },
   returns: operationExecuteResultValue,
-  handler: async (ctx, args): Promise<OperationExecuteResult> =>
-    runChatOperationExecute(
+  handler: async (ctx, args): Promise<OperationExecuteResult> => {
+    const current = await ctx.runQuery(
+      internal.interactiveAuthority.reconcileScheduledInteractiveAuthority,
+      { authority: args.authority },
+    )
+    if (current === null) {
+      return {
+        kind: 'error',
+        operationRef: args.operationRef,
+        code: 'source_unavailable',
+        retryable: false,
+        reason: 'Current Principal and Account authority is unavailable.',
+      }
+    }
+    return await runChatOperationExecute(
       ctx,
       args,
       executeKeylessOperation,
       env.AE_CONVEX_SERVER_FUNCTION_TOKEN,
-    ),
+      {
+        principalId: current.principalRef,
+        ownerId: current.accountRef,
+        credentialId: current.provenance.credentialRef,
+      },
+    )
+  },
 })

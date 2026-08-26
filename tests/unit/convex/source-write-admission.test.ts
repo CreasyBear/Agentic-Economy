@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { requireSourceWrite } from '../../../convex/sourceWriteAdmission'
 import {
+  readControlSource,
+  recordLateObservationSource,
+} from '../../../convex/actionInvocationControl'
+import {
   createSourceWriteAdmission,
   sourceWriteBodyDigest,
   sourceWriteCommandDigest,
@@ -19,11 +23,66 @@ const request: SourceWriteAdmissionRequest = {
   bodyDigest: sourceWriteBodyDigest('{"operationRef":"op:one"}'),
 }
 
+type RuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+const readControlSourceRuntime = (readControlSource as unknown as { _handler: RuntimeHandler })._handler
+const recordLateObservationSourceRuntime = (
+  recordLateObservationSource as unknown as { _handler: RuntimeHandler }
+)._handler
+
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('Convex source-write:v2 admission', () => {
+  it('runs the registered source read query with exact signed provenance and denies caller drift before data access', async () => {
+    vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
+    const db = createNonceDb()
+    const command = {
+      invocationRef: 'invocation:runtime-read',
+      callerRef: 'caller:runtime-read',
+      principalRef: 'principal:runtime-read',
+      operationKey: 'actionInvocationControl:readControlSource',
+      correlationId: 'correlation:runtime-read',
+    }
+    const args = await signedArgs(command, 'nonce:runtime-read')
+
+    await expect(readControlSourceRuntime({ db }, args)).resolves.toBeNull()
+    expect(db.queries).toEqual(['actionInvocationControls'])
+
+    await expect(readControlSourceRuntime({ db }, {
+      ...args,
+      principalRef: 'principal:attacker',
+    })).rejects.toThrow()
+    expect(db.queries).toEqual(['actionInvocationControls'])
+  })
+
+  it('runs the registered source write mutation once and rejects replay before a duplicate control effect', async () => {
+    vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
+    const db = createNonceDb()
+    const command = {
+      invocationRef: 'invocation:runtime-write',
+      commandId: 'command:runtime-write',
+      effectGeneration: 1,
+      actorRef: 'actor:runtime-write',
+      sourceEvidenceRef: 'evidence:runtime-write',
+      release: 'not_released',
+      evidenceDigest: `sha256:${'a'.repeat(64)}`,
+      recordedAt: '2026-08-26T00:00:00.000Z',
+      operationKey: 'actionInvocationControl:recordLateObservationSource',
+      correlationId: 'correlation:runtime-write',
+    }
+    const args = await signedArgs(command, 'nonce:runtime-write')
+
+    await expect(recordLateObservationSourceRuntime({ db }, args)).resolves.toEqual({
+      kind: 'refused',
+      code: 'stale_invocation_version',
+    })
+    await expect(recordLateObservationSourceRuntime({ db }, args))
+      .rejects.toThrow('action_invocation_source_write_rejected:source_write_nonce_replayed')
+    expect(db.inserts).toHaveLength(1)
+    expect(db.queries.filter((table) => table === 'actionInvocationControls')).toHaveLength(1)
+  })
+
   it('accepts a valid exact command and consumes the nonce exactly once', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
@@ -91,6 +150,14 @@ describe('Convex source-write:v2 admission', () => {
 
 async function validArgs(nonce: string, scope: 'protected_action' | 'catalog_publish' = 'protected_action'): Promise<Record<string, unknown> & { sourceWrite: SourceWriteAdmission }> {
   const command = { operationKey: 'operation:one', correlationId: 'correlation:one', value: 'one' }
+  return await signedArgs(command, nonce, scope)
+}
+
+async function signedArgs(
+  command: Record<string, unknown> & { operationKey: string; correlationId: string },
+  nonce: string,
+  scope: 'protected_action' | 'catalog_publish' = 'protected_action',
+): Promise<Record<string, unknown> & { sourceWrite: SourceWriteAdmission }> {
   const sourceWrite = await createSourceWriteAdmission({
     env: { AE_SOURCE_WRITE_SECRET: secret },
     request,
@@ -106,10 +173,13 @@ async function validArgs(nonce: string, scope: 'protected_action' | 'catalog_pub
 function createNonceDb() {
   const rows = new Map<string, Record<string, unknown>>()
   const inserts: Record<string, unknown>[] = []
+  const queries: string[] = []
   const db = {
     inserts,
-    query: (_tableName: string) => ({
+    queries,
+    query: (tableName: string) => ({
       withIndex: (_indexName: string, callback: (builder: { eq: (field: string, value: unknown) => unknown }) => unknown) => {
+        queries.push(tableName)
         const filters: Record<string, unknown> = {}
         callback({
           eq: (field, value) => {

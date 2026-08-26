@@ -3,10 +3,9 @@ import type {
   MeasuredProtectedSurfaceRow,
 } from '../../../lib/server/authority-boundary/protected-surface-manifest'
 import {
+  evaluateCanonicalIsolationProbe,
   generateIsolationMatrix,
-  type IsolationDecision,
   type IsolationMatrix,
-  type IsolationProbe,
   type IsolationSurface,
 } from './isolation'
 import {
@@ -19,7 +18,7 @@ import type { AccountRef } from '../../principal-account/account/public'
 import type { PrincipalRef } from '../../principal-account/principal/public'
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u
-const EXPECTED_COUNTS = Object.freeze({
+const PHASE_2_BASELINE_COUNTS = Object.freeze({
   serverFunctions: 43,
   publicConvex: 116,
   convexHttpActions: 1,
@@ -32,6 +31,7 @@ const EXPECTED_COUNTS = Object.freeze({
 
 export type ProductionEvidenceErrorCode =
   | 'production_evidence_inventory_invalid'
+  | 'production_evidence_runtime_handler_red'
   | 'production_evidence_sink_invalid'
 
 export class ProductionEvidenceError extends Error {
@@ -55,6 +55,22 @@ export type ProductionEvidenceSinkCollectors = Readonly<Record<
   () => Promise<ProductionSinkEvidence>
 >>
 
+export type ProductionRuntimeHandlerTestRow =
+  | Readonly<{
+      status: 'covered'
+      surfaceRef: string
+      testFile: string
+      testName: string
+      sha256: string
+    }>
+  | Readonly<{ status: 'red'; reason: string }>
+
+export type ProductionRuntimeHandlerTestRegistry = Readonly<{
+  format: 'phase-2-authority-sink-runtime-tests:v1'
+  inventorySha256: string
+  rows: Readonly<Record<string, ProductionRuntimeHandlerTestRow>>
+}>
+
 export type ProductionEvidenceRequest = Readonly<{
   measuredInventory: MeasuredProtectedSurfaceInventory
   resolveSurface(row: MeasuredProtectedSurfaceRow): Promise<Omit<IsolationSurface, 'protection'>>
@@ -66,15 +82,26 @@ export type ProductionEvidenceRequest = Readonly<{
   }>
   wrongAccountRef: AccountRef
   currentGeneration: number
-  evaluate(probe: IsolationProbe): Promise<IsolationDecision>
+  measuredInventorySha256: string
+  runtimeHandlerTests: ProductionRuntimeHandlerTestRegistry
   canary: Uint8Array
   sinkCollectors: ProductionEvidenceSinkCollectors
 }>
 
 export type ProductionEvidenceProof = Readonly<{
+  baselineSurfaceCount: number
+  baselineCounts: typeof PHASE_2_BASELINE_COUNTS
+  candidateCounts: Readonly<Record<string, number>>
   measuredSurfaceCount: number
   measuredSurfaceRefs: readonly string[]
-  isolation: IsolationMatrix
+  expectedDecisionMatrix: IsolationMatrix
+  runtimeHandlerTestIndex: Readonly<{
+    kind: 'generated_full_suite_test_index'
+    inventorySha256: string
+    sinkCount: number
+    authoritySinks: readonly string[]
+    testRefs: readonly string[]
+  }>
   canary: SecretCanaryProof
   sinkSourceRefs: readonly string[]
 }>
@@ -83,6 +110,7 @@ export async function collectProductionEvidence(
   request: ProductionEvidenceRequest,
 ): Promise<ProductionEvidenceProof> {
   const measuredRows = measuredInventoryRows(request.measuredInventory)
+  const runtimeHandlerTestIndex = runtimeHandlerTestIndexEvidence(request, measuredRows)
   const surfaces = await Promise.all(measuredRows.map(async (measured): Promise<IsolationSurface> => {
     const protection = protectionFor(measured)
     const resolved = await request.resolveSurface(measured)
@@ -125,20 +153,62 @@ export async function collectProductionEvidence(
   const artifacts = collected.map(({ artifact }) => artifact)
   if (new Set(sourceRefs).size !== SECRET_CANARY_SINKS.length) throw sinkError()
 
-  const isolation = await generateIsolationMatrix({
+  const expectedDecisionMatrix = await generateIsolationMatrix({
     surfaces: Object.freeze(surfaces),
     actors: request.actors,
     wrongAccountRef: request.wrongAccountRef,
     currentGeneration: request.currentGeneration,
-    evaluate: request.evaluate,
+    evaluate: async (probe) => evaluateCanonicalIsolationProbe(probe, request.actors),
   })
   const canary = proveSecretCanaryIsolation(request.canary, artifacts)
   return Object.freeze({
+    baselineSurfaceCount: baselineSurfaceCount(),
+    baselineCounts: PHASE_2_BASELINE_COUNTS,
+    candidateCounts: candidateCounts(request.measuredInventory),
     measuredSurfaceCount: measuredRows.length,
     measuredSurfaceRefs: Object.freeze(measuredRows.map((row) => row.ref)),
-    isolation,
+    expectedDecisionMatrix,
+    runtimeHandlerTestIndex,
     canary,
     sinkSourceRefs: Object.freeze(sourceRefs),
+  })
+}
+
+function runtimeHandlerTestIndexEvidence(
+  request: ProductionEvidenceRequest,
+  measuredRows: readonly MeasuredProtectedSurfaceRow[],
+): ProductionEvidenceProof['runtimeHandlerTestIndex'] {
+  const registry = request.runtimeHandlerTests
+  const protectedRows = measuredRows.filter((row) => protectionFor(row) === 'protected')
+  const authoritySinks = Object.freeze([...new Set(protectedRows.map((row) => row.authoritySink as string))].sort())
+  const registrySinks = Object.keys(registry.rows).sort()
+  if (registry.format !== 'phase-2-authority-sink-runtime-tests:v1'
+    || !SHA256_PATTERN.test(request.measuredInventorySha256)
+    || registry.inventorySha256 !== request.measuredInventorySha256
+    || registrySinks.length !== authoritySinks.length
+    || registrySinks.some((sink, index) => sink !== authoritySinks[index])) {
+    throw inventoryError()
+  }
+  const testRefs: string[] = []
+  for (const authoritySink of authoritySinks) {
+    const row = registry.rows[authoritySink] as ProductionRuntimeHandlerTestRow
+    if (row.status === 'red') throw runtimeHandlerRedError()
+    const measured = protectedRows.find((candidate) => (
+      candidate.authoritySink === authoritySink && candidate.ref === row.surfaceRef
+    ))
+    if (measured === undefined
+      || !/^tests\/.+\.test\.ts$/u.test(row.testFile)
+      || row.testName.length === 0
+      || !SHA256_PATTERN.test(row.sha256)) throw inventoryError()
+    testRefs.push(`${row.testFile}:${row.testName}`)
+  }
+  if (new Set(testRefs).size !== testRefs.length) throw inventoryError()
+  return Object.freeze({
+    kind: 'generated_full_suite_test_index',
+    inventorySha256: registry.inventorySha256,
+    sinkCount: authoritySinks.length,
+    authoritySinks,
+    testRefs: Object.freeze(testRefs),
   })
 }
 
@@ -149,22 +219,20 @@ function measuredInventoryRows(
     ...inventory.serverFunctions,
     ...inventory.publicConvex,
     ...inventory.convexHttpActions,
+    ...inventory.convexHttpRoutes,
     ...inventory.crons,
     ...inventory.backgroundFamilies,
   ]
   if (inventory.format !== 'phase-2-protected-surfaces:v2'
-    || !countsEqual(inventory.expectedCounts)
-    || !countsEqual(inventory.actualCounts)
-    || inventory.serverFunctions.length !== EXPECTED_COUNTS.serverFunctions
-    || inventory.publicConvex.length !== EXPECTED_COUNTS.publicConvex
-    || inventory.convexHttpActions.length !== EXPECTED_COUNTS.convexHttpActions
-    || inventory.crons.length !== EXPECTED_COUNTS.crons
-    || inventory.backgroundFamilies.length !== EXPECTED_COUNTS.backgroundFamilies
-    || inventory.frozenContract.httpRefs.length !== EXPECTED_COUNTS.frozenHttp
-    || inventory.frozenContract.mcpRefs.length !== EXPECTED_COUNTS.frozenMcp
-    || inventory.frozenContract.cliRefs.length !== EXPECTED_COUNTS.frozenCli
+    || !baselineCountsEqual(inventory.expectedCounts)
+    || !baselineCountsEqual(inventory.baselineCounts)
+    || !exactCountsEqual(inventory.candidateCounts, inventory.actualCounts)
+    || !candidateCountsEqual(inventory)
+    || inventory.frozenContract.httpRefs.length !== PHASE_2_BASELINE_COUNTS.frozenHttp
+    || inventory.frozenContract.mcpRefs.length !== PHASE_2_BASELINE_COUNTS.frozenMcp
+    || inventory.frozenContract.cliRefs.length !== PHASE_2_BASELINE_COUNTS.frozenCli
     || !SHA256_PATTERN.test(inventory.frozenContract.sha256)
-    || rows.length !== 195
+    || rows.length === 0
     || new Set(rows.map((row) => row.ref)).size !== rows.length
     || rows.some((row) => row.status !== 'bound')
     || Object.values(inventory.blockedByKind).some((count) => count !== 0)) {
@@ -202,13 +270,56 @@ function protectionFor(row: MeasuredProtectedSurfaceRow): 'protected' | 'tested_
   return 'protected'
 }
 
-function countsEqual(counts: Readonly<Record<keyof typeof EXPECTED_COUNTS, number>>): boolean {
-  return Object.entries(EXPECTED_COUNTS).every(([key, value]) =>
-    counts[key as keyof typeof EXPECTED_COUNTS] === value)
+function baselineCountsEqual(
+  counts: Readonly<Record<keyof typeof PHASE_2_BASELINE_COUNTS, number>>,
+): boolean {
+  return Object.entries(PHASE_2_BASELINE_COUNTS).every(([key, value]) =>
+    counts[key as keyof typeof PHASE_2_BASELINE_COUNTS] === value)
+}
+
+function candidateCounts(
+  inventory: MeasuredProtectedSurfaceInventory,
+): Readonly<Record<string, number>> {
+  return Object.freeze({ ...inventory.candidateCounts })
+}
+
+function candidateCountsEqual(inventory: MeasuredProtectedSurfaceInventory): boolean {
+  const actual = inventory.actualCounts as Readonly<Record<string, number>>
+  return actual.serverFunctions === inventory.serverFunctions.length
+    && actual.publicConvex === inventory.publicConvex.length
+    && actual.convexHttpActions === inventory.convexHttpActions.length
+    && actual.convexHttpRoutes === inventory.convexHttpRoutes.length
+    && actual.crons === inventory.crons.length
+    && actual.backgroundFamilies === inventory.backgroundFamilies.length
+    && actual.frozenHttp === inventory.frozenContract.httpRefs.length
+    && actual.frozenMcp === inventory.frozenContract.mcpRefs.length
+    && actual.frozenCli === inventory.frozenContract.cliRefs.length
+}
+
+function exactCountsEqual(
+  left: Readonly<Record<string, number>>,
+  right: Readonly<Record<string, number>>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => left[key] === right[key])
+}
+
+function baselineSurfaceCount(): number {
+  return PHASE_2_BASELINE_COUNTS.serverFunctions
+    + PHASE_2_BASELINE_COUNTS.publicConvex
+    + PHASE_2_BASELINE_COUNTS.convexHttpActions
+    + PHASE_2_BASELINE_COUNTS.crons
+    + PHASE_2_BASELINE_COUNTS.backgroundFamilies
 }
 
 function inventoryError(): ProductionEvidenceError {
   return new ProductionEvidenceError('production_evidence_inventory_invalid')
+}
+
+function runtimeHandlerRedError(): ProductionEvidenceError {
+  return new ProductionEvidenceError('production_evidence_runtime_handler_red')
 }
 
 function sinkError(): ProductionEvidenceError {

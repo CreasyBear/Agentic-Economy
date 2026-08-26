@@ -2,6 +2,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import schema from '../../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -249,6 +250,64 @@ describe('V2 capability contract Convex registry', () => {
     expect(finalContracts).toHaveLength(1)
   })
 
+  it.each([
+    'expired_credential',
+    'revoked_binding',
+    'credential_principal_drift',
+    'cross_account_compatibility_drift',
+  ] as const)('denies %s through the public registration handler without effects', async (scenario) => {
+    const backend = convexTest(schema, modules)
+    const owner = await ownerAdmin(backend, `user_capability_admin_${scenario}`)
+
+    await backend.run(async (ctx) => {
+      const [binding] = await ctx.db.query('externalIdentityBindings').take(1)
+      const [credential] = await ctx.db.query('credentials').take(1)
+      const [compatibilityOwner] = await ctx.db.query('owners').take(1)
+      if (binding === undefined || credential === undefined || compatibilityOwner === undefined) {
+        throw new Error('canonical authority fixture missing')
+      }
+
+      if (scenario === 'expired_credential') {
+        const expiresAt = Date.now() - 1
+        const expiredCredential = { ...credential, expiresAt }
+        const scheduleNonce = interactiveCredentialExpiryNonce(expiredCredential)
+        await ctx.db.patch(credential._id, {
+          expiresAt,
+          expiryMaterialization: {
+            state: 'scheduled',
+            credentialGeneration: credential.generation,
+            credentialExpiresAt: expiresAt,
+            scheduleNonce,
+            scheduleRef: `scheduled:expired:${credential.credentialRef}`,
+            materializedAt: Date.now() - 2,
+          },
+        })
+        return
+      }
+      if (scenario === 'revoked_binding') {
+        await ctx.db.patch(binding._id, { lifecycle: 'revoked' })
+        return
+      }
+      if (scenario === 'credential_principal_drift') {
+        await ctx.db.patch(credential._id, { principalRef: `prn_${'f'.repeat(32)}` })
+        return
+      }
+      await ctx.db.patch(compatibilityOwner._id, {
+        canonicalAccountRef: `acc_${'f'.repeat(32)}`,
+      })
+    })
+
+    await expect(owner.mutation(
+      api.capabilityContractDocuments.register,
+      publicArgs(JSON.stringify(capabilityContractV2()), scenario),
+    )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+    await expect(backend.run(async (ctx) => ({
+      contracts: await ctx.db.query('capabilityContractDocuments').take(1),
+      audits: await ctx.db.query('auditEvents').take(1),
+      operations: await ctx.db.query('operationKeys').take(1),
+    }))).resolves.toEqual({ contracts: [], audits: [], operations: [] })
+  })
+
   it('rejects oversized raw registration material before parsing it', async () => {
     const backend = convexTest(schema, modules)
     const owner = await ownerAdmin(backend, 'user_capability_admin')
@@ -291,11 +350,11 @@ type PublicRegistrationArgs = Readonly<{
   evidenceRefs: string[]
 }>
 
-function publicArgs(documentJson: string): PublicRegistrationArgs {
+function publicArgs(documentJson: string, suffix = 'register'): PublicRegistrationArgs {
   return {
     documentJson,
-    operationKey: 'op:capability-contract:register',
-    correlationId: 'corr:capability-contract:register',
+    operationKey: `op:capability-contract:${suffix}`,
+    correlationId: `corr:capability-contract:${suffix}`,
     reasonCode: 'source_test_registration',
     evidenceRefs: ['test:capability-contract-registry'],
   }

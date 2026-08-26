@@ -7,6 +7,7 @@ import {
   readAdminAuditEvents,
   readAdminIndexHealth,
 } from '../../convex/security'
+import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -553,7 +554,7 @@ function seedCanonicalIdentity(db: FakeDb, identity: UserIdentity): void {
     createdAt: now,
     updatedAt: now,
   })
-  db.seed('credentials', {
+  const credential = {
     _id: `credentials:${suffix}`,
     _creationTime: now,
     credentialRef,
@@ -566,15 +567,18 @@ function seedCanonicalIdentity(db: FakeDb, identity: UserIdentity): void {
     revision: 1,
     issuedAt: now,
     expiresAt,
+    updatedAt: now,
+  }
+  db.seed('credentials', {
+    ...credential,
     expiryMaterialization: {
       state: 'scheduled',
       credentialGeneration: 1,
       credentialExpiresAt: expiresAt,
-      scheduleNonce: `schedule:${credentialRef}`,
+      scheduleNonce: interactiveCredentialExpiryNonce(credential),
       scheduleRef: `scheduled:${credentialRef}`,
       materializedAt: now,
     },
-    updatedAt: now,
   })
   db.seed('owners', {
     _id: `owners:${suffix}`,

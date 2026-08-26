@@ -7,9 +7,10 @@ import ts from 'typescript'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const DEFAULT_OUTPUT = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-protected-surfaces.json')
+const SINK_TEST_REGISTRY = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-authority-sink-runtime-tests.json')
 const CLASSIFICATIONS = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-protected-surfaces.classifications.json')
 const INVENTORY_TEST = 'tests/maturity/phase-2-protected-surfaces.test.ts'
-const EXPECTED_COUNTS = Object.freeze({
+const BASELINE_COUNTS = Object.freeze({
   serverFunctions: 43,
   publicConvex: 116,
   convexHttpActions: 1,
@@ -27,14 +28,38 @@ const PUBLIC_CONVEX_REGISTRARS = new Set([
   'query',
   'queryGeneric',
 ])
+const CONVEX_HTTP_REGISTRARS = new Set(['httpAction', 'httpActionGeneric'])
+const ALL_CONVEX_REGISTRARS = new Set([
+  ...PUBLIC_CONVEX_REGISTRARS,
+  ...CONVEX_HTTP_REGISTRARS,
+  'internalAction',
+  'internalActionGeneric',
+  'internalMutation',
+  'internalMutationGeneric',
+  'internalQuery',
+  'internalQueryGeneric',
+])
 const AUTHORITY_SINKS = Object.freeze({
-  interactive_account: Object.freeze(['convex/authz.ts:resolveBusinessActor']),
+  interactive_account: Object.freeze([
+    'convex/authz.ts:resolveBusinessActor',
+    'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext',
+    'convex/interactiveAuthority.ts:resolveMaterializedInteractiveAuthorityContext',
+    'convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext',
+    'convex/interactiveAuthority.ts:currentContextAtTrustedServerTime',
+    'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts',
+    'convex/recoveryBreakGlass.ts:resolveRecoveryOperator',
+  ]),
   canonical_agent: Object.freeze([
     'convex/authorityBoundary.ts:resolveCanonicalAgentBinding',
     'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext',
     'convex/lib/canonicalAgentAuthority.ts:validateCanonicalAgentDelegation',
     'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal',
     'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority',
+    'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler',
+    'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler',
+    'convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler',
+    'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler',
+    'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler',
   ]),
   signed_callback: Object.freeze([
     'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion',
@@ -50,6 +75,8 @@ const AUTHORITY_SINKS = Object.freeze({
     'convex/workloadCron.ts:admitWorkloadCron',
     'convex/workloadCron.ts:reconcileWorkloadCronSnapshot',
     'convex/workloadCron.ts:bindWorkloadCronActionContext',
+    'convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority',
+    'convex/lib/secretLifecyclePersistence.ts:requireSnapshot',
   ]),
 })
 const EXEMPT_BINDINGS = new Set([
@@ -73,40 +100,41 @@ const FUNCTION_REFERENCE_FACTORIES = new Set([
   'sourceAction',
   'makeFunctionReference',
 ])
-
-const BACKGROUND_FAMILIES = [
-  ['callback:stripe-money-webhook', 'callback', 'src/routes/api.stripe.webhook.ts', 'handleStripeWebhookRequest', 'signed_callback'],
-  ['callback:provider-connection-cleanup', 'callback', 'convex/capabilityProviderConnectionCleanup.ts', 'completeWork', 'workload_account'],
-  ['worker:capability-operation-run', 'worker', 'convex/capabilityOperationInvocationWorker.ts', 'run', 'workload_account'],
-  ['worker:capability-operation-recover', 'worker', 'convex/capabilityOperationInvocationWorker.ts', 'recover', 'workload_account'],
-  ['worker:provider-connection-cleanup', 'worker', 'convex/capabilityProviderConnectionCleanup.ts', 'run', 'workload_account'],
-  ['continuation:operation-workpool-complete', 'continuation', 'convex/capabilityOperationInvocations.ts', 'completeWork', 'workload_account'],
-  ['continuation:connection-workpool-complete', 'continuation', 'convex/capabilityProviderConnectionCleanup.ts', 'completeWork', 'workload_account'],
-  ['job:facilitator-discovery', 'job', 'convex/facilitatorDiscoveryAction.ts', 'run', 'workload_account'],
-  ['job:market-external-refresh', 'job', 'convex/marketExternalRefresh.ts', 'run', 'narrow_system_non_consequential'],
-  ['job:market-registry-refresh', 'job', 'convex/marketExternalRegistryRefresh.ts', 'run', 'narrow_system_non_consequential'],
-  ['job:market-aggregate-backfill', 'job', 'convex/marketAggregateBackfill.ts', 'run', 'narrow_system_non_consequential'],
-  ['job:market-presence-refresh', 'job', 'convex/marketPresence.ts', 'refresh', 'narrow_system_non_consequential'],
-  ['job:capability-supply-readiness', 'job', 'convex/capabilitySupplyReadiness.ts', 'probe', 'workload_account'],
-  ['job:source-write-nonce-cleanup', 'job', 'convex/sourceWriteAdmission.ts', 'cleanupExpiredSourceWriteNonces', 'narrow_system_non_consequential'],
-  ['job:oauth-grant-cleanup', 'job', 'convex/agentAccessOAuth.ts', 'cleanupExpiredOAuthGrants', 'narrow_system_non_consequential'],
-  ['job:supplier-settlement', 'job', 'convex/moneyLedger.ts', 'runDailySupplierSettlement', 'workload_account'],
-  ['reconciliation:scheduled-invocations', 'reconciliation', 'convex/capabilityOperationInvocationWorker.ts', 'reconcileScheduled', 'workload_account'],
-  ['reconciliation:operation-http', 'reconciliation', 'src/routes/api.v1.operations.$invocationRef.reconcile.ts', 'Route', 'canonical_agent'],
-  ['reconciliation:operation-convex', 'reconciliation', 'convex/capabilityOperationInvocations.ts', 'reconcileInvocation', 'canonical_agent'],
-  ['reconciliation:owner-operation-convex', 'reconciliation', 'convex/capabilityOperationInvocations.ts', 'reconcileOwnerInvocation', 'interactive_account'],
-  ['reconciliation:charge', 'reconciliation', 'convex/moneyLedger.ts', 'reconcileCharge', 'workload_account'],
-  ['reconciliation:invocation-charge', 'reconciliation', 'convex/moneyLedger.ts', 'reconcileInvocationCharge', 'workload_account'],
-  ['reconciliation:external-spend', 'reconciliation', 'convex/moneyLedger.ts', 'reconcileExternalInvocationSpend', 'workload_account'],
-  ['reconciliation:payout-transfer', 'reconciliation', 'convex/moneyLedger.ts', 'reconcilePayoutTransfer', 'interactive_account'],
-  ['reconciliation:x402-attempt', 'reconciliation', 'convex/moneyX402PaymentAttempts.ts', 'reconcileX402PaymentAttempt', 'workload_account'],
-]
+const SINK_TEST_ASSIGNMENTS = Object.freeze({
+  'convex/authz.ts:resolveBusinessActor': ['convex/qualifiedUse.ts:readOwnerQualifiedUse', 'tests/maturity/phase-2-owner-query-authority.test.ts', 'preserves current account-scoped reads through every non-chat query caller'],
+  'convex/sourceWriteAdmission.ts:requireSourceRead': ['convex/actionInvocationControl.ts:readControlSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source read query with exact signed provenance and denies caller drift before data access'],
+  'convex/sourceWriteAdmission.ts:requireSourceWrite': ['convex/actionInvocationControl.ts:recordLateObservationSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source write mutation once and rejects replay before a duplicate control effect'],
+  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/capabilitySupplyOperations.ts:readKeylessExecutable', 'tests/integration/capability-supply-operations.test.ts', 'excludes effectful POST from listing and read, so direct execution cannot fetch it'],
+  'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext': ['convex/agentAccessPrincipals.ts:registerAgentPrincipal', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'registers only current server-resolved agent provenance and canonical grant facts'],
+  'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'requires exact source-write admission for the registered production mutation'],
+  'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'requires canonical agent expectations and exact authority targets on every public agent action'],
+  'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal': ['convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication', 'tests/integration/capability-supply-owner-funnel-reserve.test.ts', 'requires a verified owner principal and rejects changed material before draft effects'],
+  'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext': ['convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority', 'tests/integration/chat-scheduled-authority.test.ts', 'arms the exact verified generation and preserves the current account-scoped read'],
+  'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts': ['convex/recoveryBreakGlass.ts:authorizeRecoveryOperation', 'tests/unit/convex/recovery-break-glass-driver.test.ts', 'runs the registered mutation wrappers and preserves canonical consumed values'],
+  'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'rejects malformed terminal callbacks and contains journal outages'],
+  'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler': ['convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'attests only the exact pending ticket and contains malformed or unavailable reads'],
+  'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'hashes the bearer and binds the exact journal-begin body'],
+  'convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'executes the registered completion HTTP action and the same journal handler exactly once'],
+  'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler': ['convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'canonicalizes provider-direct reserve identity and strips every caller custody field'],
+  'convex/lib/secretLifecyclePersistence.ts:requireSnapshot': ['convex/secretLifecycleHttp.ts:secretLifecycleRpc', 'tests/unit/convex/secret-lifecycle-http.test.ts', 'requires the exact hashed transport token before parsing or mutating'],
+  'convex/workloadCron.ts:reconcileWorkloadCronSnapshot': ['reconciliation:convex/workloadCron.ts:reconcile', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered workload reconciliation query and denies a lifecycle change at consequence time'],
+  'convex/workloadCron.ts:bindWorkloadCronActionContext': ['scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered scheduled probe through reconciliation and the bound action context without widening authority'],
+  'convex/workloadCron.ts:admitWorkloadCron': ['cron:refresh capability supply readiness', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered readiness cron handler from current canonical facts and denies missing authority before dispatch'],
+  'src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook': ['callback:src/routes/api.stripe.webhook.ts:Route', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered Stripe webhook route through signature verification and preserves applied then replayed outcomes'],
+  'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority': ['workpool:convex/capabilityOperationInvocationWorker.ts:run', 'tests/unit/convex/capability-operation-worker-authority-boundary.test.ts', 'reconciles invocation-bound authority before run and preserves the valid result'],
+  'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority': ['workpool:convex/capabilityProviderConnectionCleanup.ts:run', 'tests/unit/convex/provider-connection-cleanup.test.ts', 'refuses a cleanup result when resource authority changes at consequence time'],
+  'convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority': ['scheduler:convex/capabilitySupplyReadiness.ts:probe', 'tests/integration/capability-publication-probe.test.ts', 'refuses automatic readiness for an OpenAPI %s operation before network execution'],
+  'convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext': ['scheduler:convex/chatGenerate.ts:generate', 'tests/integration/chat-scheduled-authority.test.ts', 're-derives current Principal and Account before scheduled provider work'],
+  'convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent': ['reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend', 'tests/integration/money-external-spend.test.ts', 'denies external-spend reconciliation after the durable grant is revoked'],
+  'convex/interactiveAuthority.ts:currentContextAtTrustedServerTime': ['run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority', 'tests/unit/convex/interactive-authority.test.ts', 'resolves current authenticated sessions only at the non-cached action boundary'],
+  'convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority': ['scheduler:convex/devSeed.ts:seedOfferingSupply', 'tests/integration/catalog-system-offering-authority.test.ts', 'runs the paged internal seed worker only after the workload admission'],
+})
 
 function filesUnder(directory) {
   return readdirSync(resolve(ROOT, directory), { withFileTypes: true }).flatMap((entry) => {
     const path = `${directory}/${entry.name}`
     if (entry.isDirectory()) return entry.name === '_generated' ? [] : filesUnder(path)
-    return /\.tsx?$/.test(entry.name) ? [path] : []
+    return /\.tsx?$/.test(entry.name) && !/\.(?:test|spec)\.tsx?$/u.test(entry.name) ? [path] : []
   })
 }
 
@@ -423,86 +451,407 @@ export function inspectProtectedSurfaceGraph(ref) {
   }
 }
 
+function sourceAst(path) {
+  const source = readFileSync(resolve(ROOT, path), 'utf8')
+  return {
+    source,
+    ast: ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true),
+  }
+}
+
+function functionReferenceAliases(ast) {
+  const aliases = new Map()
+  for (const statement of ast.statements) {
+    if (!ts.isVariableStatement(statement)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined) continue
+      let resolved
+      function visit(node) {
+        if (resolved !== undefined || !ts.isCallExpression(node) || !ts.isIdentifier(node.expression)
+          || !FUNCTION_REFERENCE_FACTORIES.has(node.expression.text) || node.arguments[0] === undefined
+          || !ts.isStringLiteralLike(node.arguments[0])) {
+          if (resolved === undefined) ts.forEachChild(node, visit)
+          return
+        }
+        resolved = sourceFunctionReference(node.arguments[0].text)
+      }
+      visit(declaration.initializer)
+      if (resolved !== undefined) aliases.set(declaration.name.text, resolved)
+    }
+  }
+  return aliases
+}
+
+function targetFromExpression(node, aliases) {
+  const direct = convexFunctionReferences(node)[0]
+  if (direct !== undefined) return direct
+  let current = node
+  while (ts.isAsExpression(current) || ts.isParenthesizedExpression(current)) current = current.expression
+  return ts.isIdentifier(current) ? aliases.get(current.text) : undefined
+}
+
+function enclosingDeclaration(node, path, ast) {
+  let current = node
+  while (current !== undefined && !ts.isSourceFile(current)) {
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)
+      && ts.isVariableDeclarationList(current.parent)
+      && ts.isVariableStatement(current.parent.parent)
+      && ts.isSourceFile(current.parent.parent.parent)) {
+      return { path, symbol: current.name.text, declarationRef: `${path}:${current.name.text}` }
+    }
+    if (ts.isFunctionDeclaration(current) && current.name !== undefined && ts.isSourceFile(current.parent)) {
+      return { path, symbol: current.name.text, declarationRef: `${path}:${current.name.text}` }
+    }
+    current = current.parent
+  }
+  const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+  throw new Error(`protected_surface_enclosing_declaration_missing:${path}:${line}`)
+}
+
+function callSite(path, ast, node, expression) {
+  const location = ast.getLineAndCharacterOfPosition(node.getStart(ast))
+  return Object.freeze({
+    file: path,
+    line: location.line + 1,
+    column: location.character + 1,
+    expression: expression.getText(ast),
+  })
+}
+
+function addDiscoveredFamily(rows, kind, target, site, fallback) {
+  const declaration = target === undefined ? fallback : {
+    path: target.slice(0, target.lastIndexOf(':')),
+    symbol: target.slice(target.lastIndexOf(':') + 1),
+    declarationRef: target,
+  }
+  const ref = `${kind}:${target ?? `${fallback.declarationRef}@${site.line}`}`
+  const existing = rows.get(ref)
+  if (existing === undefined) {
+    rows.set(ref, { ref, discoveryKind: kind, ...declaration, callSites: [site] })
+  } else {
+    existing.callSites.push(site)
+  }
+}
+
+function discoverBackgroundFamilies() {
+  const rows = new Map()
+  for (const path of filesUnder('convex')) {
+    const { ast } = sourceAst(path)
+    const aliases = functionReferenceAliases(ast)
+    function visit(node) {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const method = node.expression.name.text
+        if ((method === 'runAfter' || method === 'runAt')
+          && ts.isPropertyAccessExpression(node.expression.expression)
+          && node.expression.expression.name.text === 'scheduler') {
+          const fallback = enclosingDeclaration(node, path, ast)
+          const site = callSite(path, ast, node, node.expression)
+          addDiscoveredFamily(rows, 'scheduler', node.arguments[1] === undefined
+            ? undefined : targetFromExpression(node.arguments[1], aliases), site, fallback)
+        }
+        if (method === 'runAction') {
+          const fallback = enclosingDeclaration(node, path, ast)
+          const site = callSite(path, ast, node, node.expression)
+          addDiscoveredFamily(rows, 'run_action', node.arguments[0] === undefined
+            ? undefined : targetFromExpression(node.arguments[0], aliases), site, fallback)
+        }
+        if (method === 'enqueueAction') {
+          const fallback = enclosingDeclaration(node, path, ast)
+          const site = callSite(path, ast, node, node.expression)
+          addDiscoveredFamily(rows, 'workpool', node.arguments[1] === undefined
+            ? undefined : targetFromExpression(node.arguments[1], aliases), site, fallback)
+          const options = node.arguments[3]
+          if (options !== undefined && ts.isObjectLiteralExpression(options)) {
+            const completion = options.properties.find((property) => ts.isPropertyAssignment(property)
+              && property.name.getText(ast) === 'onComplete')
+            if (completion !== undefined && ts.isPropertyAssignment(completion)) {
+              addDiscoveredFamily(rows, 'continuation', targetFromExpression(completion.initializer, aliases), site, fallback)
+            }
+          }
+        }
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && (node.expression.text === 'runAdmittedAction' || node.expression.text === 'runAdmittedMutation')) {
+        const fallback = enclosingDeclaration(node, path, ast)
+        const site = callSite(path, ast, node, node.expression)
+        addDiscoveredFamily(rows, 'job', node.arguments[2] === undefined
+          ? undefined : targetFromExpression(node.arguments[2], aliases), site, fallback)
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(ast)
+
+    for (const statement of ast.statements) {
+      if (!ts.isVariableStatement(statement) || !exported(statement)) continue
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined
+          || !/^reconcil/u.test(declaration.name.text)) continue
+        const registrar = directRegistrar(declaration.initializer)
+        if (registrar === null || !ALL_CONVEX_REGISTRARS.has(registrar)) continue
+        const site = callSite(path, ast, declaration, declaration.name)
+        addDiscoveredFamily(rows, 'reconciliation', `${path}:${declaration.name.text}`, site, {
+          path,
+          symbol: declaration.name.text,
+          declarationRef: `${path}:${declaration.name.text}`,
+        })
+      }
+    }
+  }
+
+  for (const path of filesUnder('src').filter((candidate) => /reconcil/u.test(candidate))) {
+    const { ast } = sourceAst(path)
+    for (const statement of ast.statements) {
+      if (!ts.isVariableStatement(statement) || !exported(statement)) continue
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'Route') continue
+        const site = callSite(path, ast, declaration, declaration.name)
+        addDiscoveredFamily(rows, 'reconciliation', `${path}:Route`, site, {
+          path,
+          symbol: 'Route',
+          declarationRef: `${path}:Route`,
+        })
+      }
+    }
+  }
+  return [...rows.values()].sort((left, right) => left.ref.localeCompare(right.ref))
+}
+
+function localImportMap(ast, path) {
+  const imports = new Map()
+  for (const statement of ast.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)
+      || !statement.moduleSpecifier.text.startsWith('./')) continue
+    const clause = statement.importClause?.namedBindings
+    if (clause === undefined || !ts.isNamedImports(clause)) continue
+    const module = statement.moduleSpecifier.text.replace(/^\.\//u, '')
+    const targetPath = `${path.slice(0, path.lastIndexOf('/') + 1)}${module}.ts`
+    for (const element of clause.elements) {
+      imports.set(element.name.text, {
+        path: targetPath,
+        symbol: element.propertyName?.text ?? element.name.text,
+      })
+    }
+  }
+  return imports
+}
+
+function discoverConvexHttpRoutes() {
+  const path = 'convex/http.ts'
+  const { ast } = sourceAst(path)
+  const imports = localImportMap(ast, path)
+  const rows = []
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'http'
+      && node.expression.name.text === 'route' && node.arguments[0] !== undefined
+      && ts.isObjectLiteralExpression(node.arguments[0])) {
+      const fields = Object.fromEntries(node.arguments[0].properties.flatMap((property) =>
+        ts.isPropertyAssignment(property) ? [[property.name.getText(ast), property.initializer]] : []))
+      const routePath = fields.path
+      const method = fields.method
+      const handler = fields.handler
+      if (!ts.isStringLiteralLike(routePath) || !ts.isStringLiteralLike(method) || !ts.isIdentifier(handler)) {
+        const location = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+        throw new Error(`protected_surface_http_route_invalid:${path}:${location}`)
+      }
+      const target = imports.get(handler.text)
+      if (target === undefined) throw new Error(`protected_surface_http_handler_unresolved:${handler.text}`)
+      rows.push({
+        ref: `convex_http_route:${method.text} ${routePath.text}`,
+        path: target.path,
+        symbol: target.symbol,
+        declarationRef: `${target.path}:${target.symbol}`,
+        handlerRef: `${target.path}:${target.symbol}`,
+        method: method.text,
+        routePath: routePath.text,
+        callSites: [callSite(path, ast, node, node.expression)],
+      })
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return rows.sort((left, right) => left.ref.localeCompare(right.ref))
+}
+
+function discoverCrons() {
+  const path = 'convex/crons.ts'
+  const { ast } = sourceAst(path)
+  const rows = []
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'crons'
+      && (node.expression.name.text === 'interval' || node.expression.name.text === 'cron')) {
+      const name = node.arguments[0]
+      const targetNode = node.arguments[2]
+      if (!ts.isStringLiteralLike(name) || targetNode === undefined) {
+        const line = ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1
+        throw new Error(`protected_surface_cron_invalid:${path}:${line}`)
+      }
+      const target = targetFromExpression(targetNode, new Map())
+      if (target === undefined) throw new Error(`protected_surface_cron_target_unresolved:${name.text}`)
+      rows.push({
+        ref: `cron:${name.text}`,
+        path: target.slice(0, target.lastIndexOf(':')),
+        symbol: target.slice(target.lastIndexOf(':') + 1),
+        declarationRef: target,
+        registrar: node.expression.name.text,
+        callSites: [callSite(path, ast, node, node.expression)],
+      })
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return rows.sort((left, right) => left.ref.localeCompare(right.ref))
+}
+
+function discoverCallbackFamilies(convexHttpRoutes) {
+  const rows = convexHttpRoutes.filter((row) => row.routePath.startsWith('/internal/')).map((row) => ({
+    ref: `callback:${row.handlerRef}`,
+    discoveryKind: 'callback',
+    path: row.path,
+    symbol: row.symbol,
+    declarationRef: row.declarationRef,
+    callSites: row.callSites,
+  }))
+  for (const path of filesUnder('src').filter((candidate) => /(?:callback|webhook)/u.test(candidate))) {
+    const { ast } = sourceAst(path)
+    for (const statement of ast.statements) {
+      if (!ts.isVariableStatement(statement) || !exported(statement)) continue
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'Route') continue
+        rows.push({
+          ref: `callback:${path}:Route`,
+          discoveryKind: 'callback',
+          path,
+          symbol: 'Route',
+          declarationRef: `${path}:Route`,
+          callSites: [callSite(path, ast, declaration, declaration.name)],
+        })
+      }
+    }
+  }
+  return rows.sort((left, right) => left.ref.localeCompare(right.ref))
+}
+
+export function discoverProtectedSurfaceRefs() {
+  const serverFunctions = []
+  const publicConvex = []
+  const convexHttpActions = []
+  for (const directory of ['src', 'convex']) {
+    for (const path of filesUnder(directory)) {
+      const { ast } = sourceAst(path)
+      for (const statement of ast.statements) {
+        if (!ts.isVariableStatement(statement) || !exported(statement)) continue
+        for (const declaration of statement.declarationList.declarations) {
+          if (declaration.initializer === undefined || !ts.isIdentifier(declaration.name)) continue
+          if (directory === 'src' && containsRegistrar(declaration.initializer, 'createServerFn')) {
+            serverFunctions.push({ ref: `${path}:${declaration.name.text}`, path, symbol: declaration.name.text })
+          }
+          if (directory === 'convex') {
+            const registrar = directRegistrar(declaration.initializer)
+            if (registrar !== null && PUBLIC_CONVEX_REGISTRARS.has(registrar)) {
+              publicConvex.push({ ref: `${path}:${declaration.name.text}`, path, symbol: declaration.name.text, registrar })
+            }
+            if (registrar !== null && CONVEX_HTTP_REGISTRARS.has(registrar)) {
+              convexHttpActions.push({ ref: `${path}:${declaration.name.text}`, path, symbol: declaration.name.text, registrar })
+            }
+          }
+        }
+      }
+    }
+  }
+  const convexHttpRoutes = discoverConvexHttpRoutes()
+  const backgroundFamilies = [...discoverBackgroundFamilies(), ...discoverCallbackFamilies(convexHttpRoutes)]
+    .sort((left, right) => left.ref.localeCompare(right.ref))
+  return {
+    serverFunctions: serverFunctions.sort((left, right) => left.ref.localeCompare(right.ref)),
+    publicConvex: publicConvex.sort((left, right) => left.ref.localeCompare(right.ref)),
+    convexHttpActions: convexHttpActions.sort((left, right) => left.ref.localeCompare(right.ref)),
+    convexHttpRoutes,
+    crons: discoverCrons(),
+    backgroundFamilies,
+  }
+}
+
 export function collectProtectedSurfaces() {
   const classifications = classificationMap()
   const graph = createSourceGraph()
+  const discovered = discoverProtectedSurfaceRefs()
   const frozenSource = readFileSync(resolve(ROOT, '.planning/maturity-execution/contracts/public-surface-inventory.json'), 'utf8')
   const frozenInventory = JSON.parse(frozenSource)
-  const serverFunctions = []
-  for (const path of filesUnder('src')) {
-    const source = readFileSync(resolve(ROOT, path), 'utf8')
-    const ast = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
-    for (const statement of ast.statements) {
-      if (!ts.isVariableStatement(statement) || !exported(statement)) continue
-      for (const declaration of statement.declarationList.declarations) {
-        if (!declaration.initializer || !ts.isIdentifier(declaration.name)
-          || !containsRegistrar(declaration.initializer, 'createServerFn')) continue
-        const ref = `${path}:${declaration.name.text}`
-        serverFunctions.push(evaluateSurface(
-          graph,
-          surfaceInput(graph, ref, 'server_function', path, declaration.name.text, 'createServerFn'),
-          classification(ref, classifications),
-        ))
-      }
-    }
-  }
-
-  const publicConvex = []
-  const convexHttpActions = []
-  for (const path of filesUnder('convex')) {
-    const source = readFileSync(resolve(ROOT, path), 'utf8')
-    const ast = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
-    for (const statement of ast.statements) {
-      if (!ts.isVariableStatement(statement) || !exported(statement)) continue
-      for (const declaration of statement.declarationList.declarations) {
-        if (!declaration.initializer || !ts.isIdentifier(declaration.name)) continue
-        const registrar = directRegistrar(declaration.initializer)
-        if (registrar !== 'httpAction' && (registrar === null || !PUBLIC_CONVEX_REGISTRARS.has(registrar))) continue
-        const ref = `${path}:${declaration.name.text}`
-        const row = evaluateSurface(
-          graph,
-          surfaceInput(graph, ref, registrar === 'httpAction' ? 'http' : 'convex_public', path, declaration.name.text, registrar),
-          classification(ref, classifications),
-        )
-        if (registrar === 'httpAction') convexHttpActions.push(row)
-        else publicConvex.push(row)
-      }
-    }
-  }
-
-  const backgroundFamilies = BACKGROUND_FAMILIES.map(([ref, kind, path, symbol, binding]) => {
-    const declared = classification(ref, classifications)
-    if (declared.binding !== binding) throw new Error(`protected_surface_classification_conflict:${ref}`)
-    return evaluateSurface(
+  const serverFunctions = discovered.serverFunctions.map(({ ref, path, symbol }) => evaluateSurface(
+    graph,
+    surfaceInput(graph, ref, 'server_function', path, symbol, 'createServerFn'),
+    classification(ref, classifications),
+  ))
+  const publicConvex = discovered.publicConvex.map(({ ref, path, symbol, registrar }) => evaluateSurface(
+    graph,
+    surfaceInput(graph, ref, 'convex_public', path, symbol, registrar),
+    classification(ref, classifications),
+  ))
+  const convexHttpActions = discovered.convexHttpActions.map(({ ref, path, symbol, registrar }) => evaluateSurface(
+    graph,
+    surfaceInput(graph, ref, 'http', path, symbol, registrar),
+    classification(ref, classifications),
+  ))
+  const convexHttpRoutes = discovered.convexHttpRoutes.map((input) => Object.assign(evaluateSurface(
+    graph,
+    surfaceInput(graph, input.ref, 'http', input.path, input.symbol, 'http.route'),
+    classification(input.ref, classifications),
+  ), {
+    handlerRef: input.handlerRef,
+    method: input.method,
+    routePath: input.routePath,
+    callSites: input.callSites,
+  }))
+  const backgroundFamilies = discovered.backgroundFamilies.map((input) => Object.assign(evaluateSurface(
+    graph,
+    surfaceInput(
       graph,
-      surfaceInput(graph, ref, kind, path, symbol, 'background_family'),
-      declared,
-    )
-  })
+      input.ref,
+      input.discoveryKind === 'continuation' ? 'continuation'
+        : input.discoveryKind === 'reconciliation' ? 'reconciliation'
+          : input.discoveryKind === 'scheduler' || input.discoveryKind === 'job' ? 'job'
+            : input.discoveryKind === 'callback' ? 'callback' : 'worker',
+      input.path,
+      input.symbol,
+      input.discoveryKind,
+    ),
+    classification(input.ref, classifications),
+  ), { discoveryKind: input.discoveryKind, callSites: input.callSites }))
 
-  const cronSource = readFileSync(resolve(ROOT, 'convex/crons.ts'), 'utf8')
-  const crons = [...cronSource.matchAll(/crons\.(?:interval|cron)\(\s*['"]([^'"]+)['"][\s\S]*?internal\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/g)]
-    .map((match) => {
-      const ref = `cron:${match[1]}`
-      const path = `convex/${match[2]}.ts`
-      const symbol = match[3]
+  const crons = discovered.crons.map((input) => {
+      const { ref, path, symbol } = input
       const declared = classification(ref, classifications)
       if (declared.binding !== 'workload_account') throw new Error(`protected_surface_classification_conflict:${ref}`)
-      return evaluateSurface(
+      return Object.assign(evaluateSurface(
         graph,
-        surfaceInput(graph, ref, 'cron', path, symbol, 'cron'),
+        surfaceInput(graph, ref, 'cron', path, symbol, input.registrar),
         declared,
-      )
+      ), { callSites: input.callSites })
     })
 
   const sort = (rows) => rows.sort((left, right) => left.ref.localeCompare(right.ref))
   const inventory = {
     format: 'phase-2-protected-surfaces:v2',
-    expectedCounts: EXPECTED_COUNTS,
+    expectedCounts: BASELINE_COUNTS,
+    baselineCounts: BASELINE_COUNTS,
     actualCounts: {
       serverFunctions: serverFunctions.length,
       publicConvex: publicConvex.length,
       convexHttpActions: convexHttpActions.length,
+      convexHttpRoutes: convexHttpRoutes.length,
+      crons: crons.length,
+      backgroundFamilies: backgroundFamilies.length,
+      frozenHttp: frozenInventory.http?.length,
+      frozenMcp: frozenInventory.mcp?.length,
+      frozenCli: frozenInventory.cli?.length,
+    },
+    candidateCounts: {
+      serverFunctions: serverFunctions.length,
+      publicConvex: publicConvex.length,
+      convexHttpActions: convexHttpActions.length,
+      convexHttpRoutes: convexHttpRoutes.length,
       crons: crons.length,
       backgroundFamilies: backgroundFamilies.length,
       frozenHttp: frozenInventory.http?.length,
@@ -519,8 +868,13 @@ export function collectProtectedSurfaces() {
     serverFunctions: sort(serverFunctions),
     publicConvex: sort(publicConvex),
     convexHttpActions: sort(convexHttpActions),
+    convexHttpRoutes: sort(convexHttpRoutes),
     crons: sort(crons),
     backgroundFamilies: sort(backgroundFamilies),
+    backgroundDiscovery: {
+      discoveryKinds: [...new Set(backgroundFamilies.map((row) => row.discoveryKind))].sort(),
+      callSiteCount: backgroundFamilies.reduce((count, row) => count + row.callSites.length, 0),
+    },
   }
   const rows = allRows(inventory)
   inventory.blockedByKind = Object.fromEntries(
@@ -541,6 +895,7 @@ function allRows(inventory) {
     ...inventory.serverFunctions,
     ...inventory.publicConvex,
     ...inventory.convexHttpActions,
+    ...inventory.convexHttpRoutes,
     ...inventory.crons,
     ...inventory.backgroundFamilies,
   ]
@@ -548,21 +903,23 @@ function allRows(inventory) {
 
 export function validateProtectedSurfaceInventory(inventory) {
   if (inventory.format !== 'phase-2-protected-surfaces:v2'
-    || JSON.stringify(inventory.expectedCounts) !== JSON.stringify(EXPECTED_COUNTS)
-    || JSON.stringify(inventory.actualCounts) !== JSON.stringify(EXPECTED_COUNTS)
-    || inventory.serverFunctions.length !== EXPECTED_COUNTS.serverFunctions
-    || inventory.publicConvex.length !== EXPECTED_COUNTS.publicConvex
-    || inventory.convexHttpActions.length !== EXPECTED_COUNTS.convexHttpActions
-    || inventory.crons.length !== EXPECTED_COUNTS.crons
-    || inventory.backgroundFamilies.length !== EXPECTED_COUNTS.backgroundFamilies
+    || JSON.stringify(inventory.expectedCounts) !== JSON.stringify(BASELINE_COUNTS)
+    || JSON.stringify(inventory.baselineCounts) !== JSON.stringify(BASELINE_COUNTS)
+    || JSON.stringify(inventory.actualCounts) !== JSON.stringify(inventory.candidateCounts)
+    || inventory.serverFunctions.length !== inventory.candidateCounts?.serverFunctions
+    || inventory.publicConvex.length !== inventory.candidateCounts?.publicConvex
+    || inventory.convexHttpActions.length !== inventory.candidateCounts?.convexHttpActions
+    || inventory.convexHttpRoutes.length !== inventory.candidateCounts?.convexHttpRoutes
+    || inventory.crons.length !== inventory.candidateCounts?.crons
+    || inventory.backgroundFamilies.length !== inventory.candidateCounts?.backgroundFamilies
     || inventory.frozenContract?.sourceFile !== '.planning/maturity-execution/contracts/public-surface-inventory.json'
     || !/^[a-f0-9]{64}$/u.test(inventory.frozenContract?.sha256 ?? '')
-    || inventory.frozenContract?.httpRefs?.length !== EXPECTED_COUNTS.frozenHttp
-    || inventory.frozenContract?.mcpRefs?.length !== EXPECTED_COUNTS.frozenMcp
-    || inventory.frozenContract?.cliRefs?.length !== EXPECTED_COUNTS.frozenCli
-    || new Set(inventory.frozenContract?.httpRefs).size !== EXPECTED_COUNTS.frozenHttp
-    || new Set(inventory.frozenContract?.mcpRefs).size !== EXPECTED_COUNTS.frozenMcp
-    || new Set(inventory.frozenContract?.cliRefs).size !== EXPECTED_COUNTS.frozenCli) {
+    || inventory.frozenContract?.httpRefs?.length !== BASELINE_COUNTS.frozenHttp
+    || inventory.frozenContract?.mcpRefs?.length !== BASELINE_COUNTS.frozenMcp
+    || inventory.frozenContract?.cliRefs?.length !== BASELINE_COUNTS.frozenCli
+    || new Set(inventory.frozenContract?.httpRefs).size !== BASELINE_COUNTS.frozenHttp
+    || new Set(inventory.frozenContract?.mcpRefs).size !== BASELINE_COUNTS.frozenMcp
+    || new Set(inventory.frozenContract?.cliRefs).size !== BASELINE_COUNTS.frozenCli) {
     throw new Error('protected_surface_inventory_count_invalid')
   }
   const rows = allRows(inventory)
@@ -607,6 +964,21 @@ export function validateProtectedSurfaceInventory(inventory) {
       throw new Error(`protected_surface_authority_path_invalid:${row.ref}`)
     }
   }
+  for (const row of [...inventory.convexHttpRoutes, ...inventory.crons, ...inventory.backgroundFamilies]) {
+    if (!Array.isArray(row.callSites) || row.callSites.length === 0
+      || row.callSites.some((site) => typeof site.file !== 'string' || site.file.length === 0
+        || !Number.isInteger(site.line) || site.line < 1
+        || !Number.isInteger(site.column) || site.column < 1
+        || typeof site.expression !== 'string' || site.expression.length === 0)) {
+      throw new Error(`protected_surface_call_sites_invalid:${row.ref}`)
+    }
+  }
+  const discoveryKinds = [...new Set(inventory.backgroundFamilies.map((row) => row.discoveryKind))].sort()
+  if (JSON.stringify(inventory.backgroundDiscovery?.discoveryKinds) !== JSON.stringify(discoveryKinds)
+    || inventory.backgroundDiscovery?.callSiteCount !== inventory.backgroundFamilies
+      .reduce((count, row) => count + row.callSites.length, 0)) {
+    throw new Error('protected_surface_background_discovery_invalid')
+  }
   const blocked = rows.filter((row) => row.status === 'blocked')
   const blockedKinds = [...new Set(rows.map((row) => row.kind))].sort()
   if (JSON.stringify(Object.keys(inventory.blockedByKind ?? {}).sort()) !== JSON.stringify(blockedKinds)) {
@@ -623,9 +995,303 @@ export function validateProtectedSurfaceInventory(inventory) {
   return inventory
 }
 
+function runtimeTestCase(source, file, testName) {
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+  const matches = []
+  function visit(node) {
+    const directTest = ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+      && (node.expression.text === 'it' || node.expression.text === 'test')
+    const tableTest = ts.isCallExpression(node) && ts.isCallExpression(node.expression)
+      && ts.isPropertyAccessExpression(node.expression.expression)
+      && ts.isIdentifier(node.expression.expression.expression)
+      && (node.expression.expression.expression.text === 'it'
+        || node.expression.expression.expression.text === 'test')
+      && node.expression.expression.name.text === 'each'
+    if ((directTest || tableTest)
+      && node.arguments[0] !== undefined && ts.isStringLiteralLike(node.arguments[0])
+      && node.arguments[0].text === testName && node.arguments[1] !== undefined) {
+      matches.push(node.arguments[1])
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(ast)
+  return matches.length === 1 ? { ast, behavior: matches[0] } : undefined
+}
+
+function normalizedModulePath(testFile, specifier) {
+  let path
+  if (specifier.startsWith('@/')) path = `src/${specifier.slice(2)}`
+  else if (specifier.startsWith('.')) path = projectPath(resolve(ROOT, dirname(testFile), specifier))
+  else return undefined
+  return path.replace(/\.(?:tsx?|jsx?)$/u, '').replace(/\/index$/u, '')
+}
+
+function runtimeInvocationProof(source, testFile, testName, surface) {
+  const testCase = runtimeTestCase(source, testFile, testName)
+  if (testCase === undefined) return undefined
+  const { ast, behavior } = testCase
+  const targetFile = surface.file.replace(/\.(?:tsx?|jsx?)$/u, '').replace(/\/index$/u, '')
+  const targetRef = `${surface.file}:${surface.symbol}`
+  const targetConvexRef = surface.file.startsWith('convex/')
+    ? `${surface.file.slice('convex/'.length).replace(/\.ts$/u, '')}:${surface.symbol}`
+    : undefined
+  const imports = new Map()
+  const declarations = new Map()
+  for (const statement of ast.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteralLike(statement.moduleSpecifier)) {
+      const modulePath = normalizedModulePath(testFile, statement.moduleSpecifier.text)
+      const clause = statement.importClause
+      if (modulePath !== undefined && clause?.name !== undefined) {
+        imports.set(clause.name.text, { imported: 'default', modulePath })
+      }
+      if (modulePath !== undefined && clause?.namedBindings !== undefined
+        && ts.isNamedImports(clause.namedBindings)) {
+        for (const element of clause.namedBindings.elements) {
+          imports.set(element.name.text, {
+            imported: element.propertyName?.text ?? element.name.text,
+            modulePath,
+          })
+        }
+      }
+    }
+    if (ts.isFunctionDeclaration(statement) && statement.name !== undefined) {
+      declarations.set(statement.name.text, statement)
+    }
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name)) declarations.set(declaration.name.text, declaration)
+      }
+    }
+  }
+  const visitedDeclarations = new Set()
+  let proof
+  function record(kind, expression) {
+    proof ??= { kind, target: targetRef, expression }
+  }
+  function importedTarget(identifier) {
+    const binding = imports.get(identifier.text)
+    return binding?.modulePath === targetFile && binding.imported === surface.symbol
+  }
+  function importedHandlerAlias(identifier) {
+    const declaration = declarations.get(identifier.text)
+    if (declaration === undefined || !ts.isVariableDeclaration(declaration)
+      || declaration.initializer === undefined) return false
+    function unwrap(node) {
+      let current = node
+      while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current)) current = current.expression
+      return current
+    }
+    function importedRouteHandler(node) {
+      const parts = []
+      let current = unwrap(node)
+      while (ts.isPropertyAccessExpression(current)) {
+        parts.unshift(current.name.text)
+        current = unwrap(current.expression)
+      }
+      return ts.isIdentifier(current)
+        && importedTarget(current)
+        && parts.join('.') === 'options.server.handlers.POST'
+    }
+    function resolves(node, seen = new Set()) {
+      const current = unwrap(node)
+      if (importedRouteHandler(current)) return true
+      if (ts.isIdentifier(current)) {
+        if (importedTarget(current)) return true
+        const alias = declarations.get(current.text)
+        if (alias === undefined || !ts.isVariableDeclaration(alias)
+          || alias.initializer === undefined || seen.has(alias)) return false
+        seen.add(alias)
+        return resolves(alias.initializer, seen)
+      }
+      return ts.isPropertyAccessExpression(current) && current.name.text === '_handler'
+        && resolves(current.expression, seen)
+    }
+    return resolves(declaration.initializer)
+  }
+  function convexReference(node) {
+    if (targetConvexRef === undefined) return false
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+      && node.expression.text === 'makeFunctionReference'
+      && node.arguments[0] !== undefined && ts.isStringLiteralLike(node.arguments[0])
+      && node.arguments[0].text === targetConvexRef) return true
+    if (!ts.isPropertyAccessExpression(node)) return false
+    const parts = []
+    let cursor = node
+    while (ts.isPropertyAccessExpression(cursor)) {
+      parts.unshift(cursor.name.text)
+      cursor = cursor.expression
+    }
+    if (!ts.isIdentifier(cursor)
+      || (cursor.text !== 'api' && cursor.text !== 'internal' && cursor.text !== 'anyApi')) return false
+    return `${parts.slice(0, -1).join('/')}:${parts.at(-1)}` === targetConvexRef
+  }
+  function convexReferenceExpression(node, seen = new Set()) {
+    let current = node
+    while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current)) current = current.expression
+    if (convexReference(current)) return current.getText(ast)
+    if (!ts.isIdentifier(current)) return undefined
+    const declaration = declarations.get(current.text)
+    if (declaration === undefined || !ts.isVariableDeclaration(declaration) || declaration.initializer === undefined
+      || seen.has(declaration)) return undefined
+    seen.add(declaration)
+    return convexReferenceExpression(declaration.initializer, seen)
+  }
+  function visit(node) {
+    if (proof !== undefined) return
+    if (ts.isCallExpression(node)) {
+      let callee = node.expression
+      while (ts.isParenthesizedExpression(callee) || ts.isAsExpression(callee)) callee = callee.expression
+      const runtimeMethod = ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined
+      const referenceIndex = runtimeMethod === 'runAfter' || runtimeMethod === 'runAt' ? 1 : 0
+      if (runtimeMethod !== undefined && new Set([
+        'action', 'mutation', 'query', 'runAction', 'runMutation', 'runQuery', 'runAfter', 'runAt',
+      ]).has(runtimeMethod)) {
+        const expression = node.arguments[referenceIndex] === undefined
+          ? undefined
+          : convexReferenceExpression(node.arguments[referenceIndex])
+        if (expression !== undefined) record('convex_runtime_invocation', expression)
+      }
+      if (ts.isIdentifier(callee) && importedTarget(callee)) {
+        record('imported_handler_call', node.expression.getText(ast))
+      } else if (ts.isIdentifier(callee) && importedHandlerAlias(callee)) {
+        record('registered_handler_call', node.expression.getText(ast))
+      } else if (ts.isPropertyAccessExpression(callee) && callee.name.text === '_handler'
+        && ts.isIdentifier(callee.expression) && importedTarget(callee.expression)) {
+        record('registered_handler_call', node.expression.getText(ast))
+      }
+    }
+    if (ts.isIdentifier(node)) {
+      const declaration = declarations.get(node.text)
+      if (declaration !== undefined && !visitedDeclarations.has(declaration)) {
+        visitedDeclarations.add(declaration)
+        visit(declaration)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(behavior)
+  return proof
+}
+
+function runtimeTestChecksum(source, testFile, testName) {
+  const testCase = runtimeTestCase(source, testFile, testName)
+  return testCase === undefined ? undefined : digest(testCase.behavior.getText(testCase.ast))
+}
+
+function sinkRows(inventory) {
+  return allRows(inventory).filter((row) => typeof row.authoritySink === 'string')
+}
+
+function buildSinkTestRegistry(inventory) {
+  const rows = {}
+  const surfaces = new Map(allRows(inventory).map((row) => [row.ref, row]))
+  const sinks = [...new Set(sinkRows(inventory).map((row) => row.authoritySink))].sort()
+  for (const sink of sinks) {
+    const assignment = SINK_TEST_ASSIGNMENTS[sink]
+    if (assignment === undefined) throw new Error(`protected_surface_sink_assignment_missing:${sink}`)
+    if (assignment === null) {
+      rows[sink] = {
+        status: 'red',
+        reason: 'No honest existing test invokes a registered runtime handler or composition that reaches this sink.',
+      }
+      continue
+    }
+    const [surfaceRef, testFile, testName] = assignment
+    const surface = surfaces.get(surfaceRef)
+    if (surface?.authoritySink !== sink || surface.consequential !== true) {
+      throw new Error(`protected_surface_sink_assignment_surface_invalid:${sink}`)
+    }
+    const source = readFileSync(resolve(ROOT, testFile), 'utf8')
+    const invocation = runtimeInvocationProof(source, testFile, testName, surface)
+    if (invocation === undefined) {
+      rows[sink] = {
+        status: 'red',
+        reason: 'The assigned test does not mechanically invoke the registered runtime surface that reaches this sink.',
+      }
+      continue
+    }
+    rows[sink] = {
+      status: 'covered',
+      surfaceRef,
+      testFile,
+      testName,
+      checksumScope: 'named_test_case_ast',
+      sha256: runtimeTestChecksum(source, testFile, testName),
+      invocation,
+      authorityPathSha256: digest(JSON.stringify(surface.authorityPath)),
+    }
+  }
+  return {
+    format: 'phase-2-authority-sink-runtime-tests:v1',
+    inventorySha256: digest(`${JSON.stringify(inventory, null, 2)}\n`),
+    rows,
+  }
+}
+
+export function validateSinkTestRegistry(inventory, registry) {
+  const expectedSinks = [...new Set(sinkRows(inventory).map((row) => row.authoritySink))].sort()
+  if (registry?.format !== 'phase-2-authority-sink-runtime-tests:v1'
+    || registry.inventorySha256 !== digest(`${JSON.stringify(inventory, null, 2)}\n`)
+    || JSON.stringify(Object.keys(registry.rows ?? {}).sort()) !== JSON.stringify(expectedSinks)) {
+    throw new Error('protected_surface_sink_registry_invalid')
+  }
+  const pairs = new Set()
+  const surfaces = new Map(allRows(inventory).map((row) => [row.ref, row]))
+  for (const sink of expectedSinks) {
+    const row = registry.rows[sink]
+    if (row?.status === 'red') {
+      if (typeof row.reason !== 'string' || row.reason.length < 20
+        || Object.keys(row).sort().join(',') !== 'reason,status') {
+        throw new Error(`protected_surface_sink_registry_red_invalid:${sink}`)
+      }
+      continue
+    }
+    if (row?.status !== 'covered' || surfaces.get(row.surfaceRef)?.authoritySink !== sink
+      || surfaces.get(row.surfaceRef)?.consequential !== true
+      || !/^tests\/.+\.test\.tsx?$/u.test(row.testFile ?? '')
+      || typeof row.testName !== 'string' || !/^[a-f0-9]{64}$/u.test(row.sha256 ?? '')
+      || row.checksumScope !== 'named_test_case_ast'
+      || !/^[a-f0-9]{64}$/u.test(row.authorityPathSha256 ?? '')) {
+      throw new Error(`protected_surface_sink_registry_row_invalid:${sink}`)
+    }
+    const pair = `${row.testFile}\u0000${row.testName}`
+    if (pairs.has(pair)) throw new Error(`protected_surface_sink_registry_duplicate_test:${sink}`)
+    pairs.add(pair)
+    const source = readFileSync(resolve(ROOT, row.testFile), 'utf8')
+    const surface = surfaces.get(row.surfaceRef)
+    const invocation = runtimeInvocationProof(source, row.testFile, row.testName, surface)
+    if (runtimeTestChecksum(source, row.testFile, row.testName) !== row.sha256 || invocation === undefined
+      || JSON.stringify(invocation) !== JSON.stringify(row.invocation)
+      || digest(JSON.stringify(surface.authorityPath)) !== row.authorityPathSha256) {
+      throw new Error(`protected_surface_sink_registry_test_invalid:${sink}`)
+    }
+  }
+  return registry
+}
+
+function writeSinkTestRegistry(inventory) {
+  const registry = buildSinkTestRegistry(inventory)
+  validateSinkTestRegistry(inventory, registry)
+  writeFileSync(SINK_TEST_REGISTRY, `${JSON.stringify(registry, null, 2)}\n`)
+  return registry
+}
+
+function checkSinkTestRegistry(inventory) {
+  if (!existsSync(SINK_TEST_REGISTRY)) throw new Error('protected_surface_sink_registry_missing')
+  const registry = validateSinkTestRegistry(
+    inventory,
+    JSON.parse(readFileSync(SINK_TEST_REGISTRY, 'utf8')),
+  )
+  if (JSON.stringify(registry) !== JSON.stringify(buildSinkTestRegistry(inventory))) {
+    throw new Error('protected_surface_sink_registry_drift')
+  }
+  return registry
+}
+
 export function writeProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
   const inventory = collectProtectedSurfaces()
   writeFileSync(output, `${JSON.stringify(inventory, null, 2)}\n`)
+  if (output === DEFAULT_OUTPUT) writeSinkTestRegistry(inventory)
   return inventory
 }
 
@@ -635,6 +1301,7 @@ export function checkProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
   validateProtectedSurfaceInventory(expected)
   const actual = collectProtectedSurfaces()
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('protected_surface_inventory_drift')
+  if (output === DEFAULT_OUTPUT) checkSinkTestRegistry(actual)
   return actual
 }
 
@@ -646,18 +1313,73 @@ function outputArgument(argv) {
   return resolve(ROOT, value)
 }
 
+function registryArgument(argv) {
+  const index = argv.indexOf('--registry')
+  if (index === -1) return SINK_TEST_REGISTRY
+  const value = argv[index + 1]
+  if (value === undefined || value.startsWith('--')) throw new Error('protected_surface_registry_argument_missing')
+  return resolve(ROOT, value)
+}
+
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  if (process.argv.includes('--discover-refs')) {
+    process.stdout.write(`${JSON.stringify(discoverProtectedSurfaceRefs(), null, 2)}\n`)
+    process.exit(0)
+  }
   const output = outputArgument(process.argv)
+  if (process.argv.includes('--validate-sink-registry')) {
+    if (!existsSync(output)) throw new Error('protected_surface_inventory_missing')
+    const inventory = validateProtectedSurfaceInventory(JSON.parse(readFileSync(output, 'utf8')))
+    const registryPath = registryArgument(process.argv)
+    if (!existsSync(registryPath)) throw new Error('protected_surface_sink_registry_missing')
+    const registry = validateSinkTestRegistry(
+      inventory,
+      JSON.parse(readFileSync(registryPath, 'utf8')),
+    )
+    const redSinks = Object.entries(registry.rows)
+      .filter(([, row]) => row.status === 'red').map(([sink]) => sink)
+    process.stdout.write(`${JSON.stringify({
+      validated: true,
+      total: Object.keys(registry.rows).length,
+      covered: Object.keys(registry.rows).length - redSinks.length,
+      red: redSinks.length,
+      redSinks,
+    })}\n`)
+    if (process.argv.includes('--require-runtime-tests') && redSinks.length > 0) process.exitCode = 1
+    process.exit()
+  }
+  if (process.argv.includes('--validate-only')) {
+    if (!existsSync(output)) throw new Error('protected_surface_inventory_missing')
+    const inventory = validateProtectedSurfaceInventory(JSON.parse(readFileSync(output, 'utf8')))
+    if (process.argv.includes('--require-bound')
+      && allRows(inventory).some((row) => row.status === 'blocked')) {
+      throw new Error('protected_surface_unbound')
+    }
+    process.stdout.write('{"validated":true}\n')
+    process.exit(0)
+  }
   const snapshotOnly = process.argv.includes('--check-snapshot')
   const check = process.argv.includes('--check') || snapshotOnly || process.argv.includes('--require-bound')
   const inventory = check ? checkProtectedSurfaceInventory(output) : writeProtectedSurfaceInventory(output)
   const blocked = allRows(inventory).filter((row) => row.status === 'blocked')
+  const sinkRegistry = output === DEFAULT_OUTPUT
+    ? JSON.parse(readFileSync(SINK_TEST_REGISTRY, 'utf8'))
+    : buildSinkTestRegistry(inventory)
+  const redSinks = Object.entries(sinkRegistry.rows)
+    .filter(([, row]) => row.status === 'red').map(([sink]) => sink)
   process.stdout.write(`${JSON.stringify({
     counts: inventory.actualCounts,
     bound: allRows(inventory).length - blocked.length,
     blocked: blocked.length,
     blockedByKind: inventory.blockedByKind,
     blockerRefs: blocked.map((row) => row.ref),
+    runtimeSinkTests: {
+      total: Object.keys(sinkRegistry.rows).length,
+      covered: Object.keys(sinkRegistry.rows).length - redSinks.length,
+      red: redSinks.length,
+      redSinks,
+    },
   }, null, 2)}\n`)
   if (process.argv.includes('--require-bound') && blocked.length > 0) process.exitCode = 1
+  if (process.argv.includes('--require-runtime-tests') && redSinks.length > 0) process.exitCode = 1
 }

@@ -3,7 +3,7 @@ import { register as registerWorkpool } from '@convex-dev/workpool/test'
 import { register as registerRateLimiter } from '@convex-dev/rate-limiter/test'
 import { register as registerAggregate } from '@convex-dev/aggregate/test'
 import agentTest from '@convex-dev/agent/test'
-import { components } from '../../convex/_generated/api'
+import { api, components } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -60,11 +60,12 @@ export async function ownerAdmin(
   backend: ConvexFixtureBackend,
   subject: string,
 ) {
+  const credentialExpirySeconds = Math.floor(Date.now() / 1_000) + 86_400
   const identity = {
     subject,
     issuer: 'https://identity.example',
     tokenIdentifier: subject.replace(/^user_/u, 'token_'),
-    exp: 8_000_000_000,
+    exp: credentialExpirySeconds,
   }
   const suffix = canonicalDigest({
     format: 'test-owner-admin-authority:v1',
@@ -75,7 +76,7 @@ export async function ownerAdmin(
   const ownershipRef = `own_${suffix}`
   const bindingRef = `eib_${suffix}`
   const credentialRef = `crd_${suffix}`
-  const credentialExpiresAt = identity.exp * 1_000
+  const credentialExpiresAt = credentialExpirySeconds * 1_000
   await backend.run(async (ctx) => {
     const existingBinding = await ctx.db.query('externalIdentityBindings')
       .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
@@ -150,14 +151,6 @@ export async function ownerAdmin(
         revision: 1,
         issuedAt: 1,
         expiresAt: credentialExpiresAt,
-        expiryMaterialization: {
-          state: 'scheduled',
-          credentialGeneration: 1,
-          credentialExpiresAt,
-          scheduleNonce: `schedule:${credentialRef}`,
-          scheduleRef: `scheduled:${credentialRef}`,
-          materializedAt: 1,
-        },
         updatedAt: 1,
       })
       await ctx.db.insert('owners', {
@@ -185,7 +178,13 @@ export async function ownerAdmin(
       })
     }
   })
-  return backend.withIdentity(identity)
+  const owner = backend.withIdentity(identity)
+  const materialized = await owner.mutation(
+    api.interactiveAuthority.materializeCurrentInteractiveAuthority,
+    {},
+  )
+  if (!materialized) throw new Error('test owner authority materialization failed')
+  return owner
 }
 
 export type PublishedBusinessOwnerOptions = Readonly<{

@@ -8,6 +8,7 @@ import {
   completeProviderConsequenceJournal,
   providerConsequenceX402Rpc,
 } from './providerConsequenceHttp'
+import { secretLifecycleRpc } from './secretLifecycleHttp'
 
 const http = httpRouter()
 
@@ -17,5 +18,6 @@ http.route({ path: '/internal/provider-consequence/journal/attest', method: 'POS
 http.route({ path: '/internal/provider-consequence/journal/complete', method: 'POST', handler: completeProviderConsequenceJournal })
 http.route({ path: '/internal/provider-consequence/journal/abort', method: 'POST', handler: abortProviderConsequenceJournal })
 http.route({ path: '/internal/provider-consequence/x402', method: 'POST', handler: providerConsequenceX402Rpc })
+http.route({ path: '/internal/secret-lifecycle', method: 'POST', handler: secretLifecycleRpc })
 
 export default http

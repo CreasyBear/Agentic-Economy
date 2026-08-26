@@ -8,6 +8,7 @@ import {
   runOwnerSupplyReadiness,
   runOwnerSupplyTest,
 } from '../../../convex/capabilitySupplyOwnerSupply'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { payoutAuthorityAllowed } from '../../../convex/moneyPayoutTransferShared'
 import { convexModules as modules, publishedBusinessOwner } from '../../helpers/convex-fixtures'
 import { withSourceWrite } from '../../helpers/source-write-admission'
@@ -142,7 +143,12 @@ describe('interactive consequence authority', () => {
               state: 'scheduled',
               credentialGeneration: credential.generation,
               credentialExpiresAt: 1_000,
-              scheduleNonce: `sha256:${slug}`,
+              scheduleNonce: interactiveCredentialExpiryNonce({
+                bindingRef: credential.bindingRef,
+                credentialRef: credential.credentialRef,
+                generation: credential.generation,
+                expiresAt: 1_000,
+              }),
               scheduleRef: `scheduled:${credential.credentialRef}`,
               materializedAt: 1,
             },
@@ -238,7 +244,12 @@ describe('interactive consequence authority', () => {
       state: 'scheduled',
       credentialGeneration: 1,
       credentialExpiresAt: 1_000,
-      scheduleNonce: 'sha256:payout-expired',
+      scheduleNonce: interactiveCredentialExpiryNonce({
+        bindingRef: String(expiredCredential.bindingRef),
+        credentialRef: String(expiredCredential.credentialRef),
+        generation: 1,
+        expiresAt: 1_000,
+      }),
       scheduleRef: 'scheduled:payout-expired',
       materializedAt: 1,
     }

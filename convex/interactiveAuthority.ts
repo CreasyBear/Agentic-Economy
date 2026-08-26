@@ -20,7 +20,11 @@ import type {
   InteractiveBusinessAuthorityContext,
 } from '../src/modules/business/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import { internalAction, internalQuery } from './_generated/server'
+import { internalAction, internalQuery, mutation, type MutationCtx } from './_generated/server'
+import {
+  armInteractiveCredentialExpiryHandler,
+  interactiveCredentialExpiryNonce,
+} from './interactiveCredentialLifecycle'
 
 const CLERK_USER_PROVIDER_NAMESPACE = 'clerk/user' as const
 
@@ -62,7 +66,7 @@ export class InteractiveAuthorityError extends Error {
   }
 }
 
-const interactiveAuthorityContextValue = v.object({
+export const interactiveAuthorityContextValue = v.object({
   principalRef: v.string(),
   accountRef: v.string(),
   legacyOwnerId: v.string(),
@@ -157,16 +161,79 @@ type AccessFact =
  * facts. The Clerk token identifier is an external binding locator only.
  */
 export async function resolveInteractiveAuthorityContext(
-  db: AuthorityDb,
+  source: AuthorityDb | Pick<MutationCtx, 'db' | 'scheduler'>,
   identity: UserIdentity,
 ): Promise<InteractiveBusinessAuthorityContext> {
+  const db = 'db' in source ? source.db : source
   const now = Date.now()
-  const current = currentContextAtTrustedServerTime(
-    await resolveInteractiveAuthorityFacts(db, identity),
-    now,
-  )
+  let facts: InteractiveAuthorityFacts
+  try {
+    facts = await resolveInteractiveAuthorityFacts(db, identity)
+  } catch (error) {
+    if (!('scheduler' in source)
+      || !(error instanceof InteractiveAuthorityError)
+      || error.code !== 'credential_not_current') throw error
+    await materializeInteractiveCredentialExpiry(source, identity)
+    facts = await resolveInteractiveAuthorityFacts(db, identity)
+  }
+  const current = currentContextAtTrustedServerTime(facts, now)
   if (current === null) throw new InteractiveAuthorityError('credential_not_current')
   return current
+}
+
+/**
+ * Session bootstrap for cache-safe authenticated reads. The verified Clerk
+ * token is only a binding locator; the lifecycle handler loads and validates
+ * the canonical binding and credential before it schedules exact expiry.
+ */
+export const materializeCurrentInteractiveAuthority = mutation({
+  args: {},
+  returns: v.boolean(),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return false
+    try {
+      await resolveInteractiveAuthorityContext(ctx, identity)
+      return true
+    } catch (error) {
+      if (error instanceof InteractiveAuthorityError) return false
+      throw error
+    }
+  },
+})
+
+async function materializeInteractiveCredentialExpiry(
+  ctx: Pick<MutationCtx, 'db' | 'scheduler'>,
+  identity: UserIdentity,
+): Promise<void> {
+  const tokenIdentifier = identity.tokenIdentifier
+  if (typeof tokenIdentifier !== 'string' || tokenIdentifier.trim().length === 0) return
+  const bindings = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+      .eq('providerNamespace', CLERK_USER_PROVIDER_NAMESPACE)
+      .eq('providerIdentifier', tokenIdentifier))
+    .take(2)
+  if (bindings.length !== 1) return
+  const binding = bindings[0]!
+  const credentials = await ctx.db.query('credentials')
+    .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+      .eq('bindingRef', binding.bindingRef)
+      .eq('generation', binding.credentialGeneration)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  if (credentials.length !== 1) return
+  const credential = credentials[0]!
+  if (credential.type !== 'provider_token'
+    || credential.principalRef !== binding.principalRef
+    || typeof identity.exp !== 'number'
+    || !Number.isSafeInteger(identity.exp)
+    || identity.exp * 1_000 !== credential.expiresAt) return
+  const result = await armInteractiveCredentialExpiryHandler(ctx as MutationCtx, {
+    bindingRef: binding.bindingRef,
+    credentialRef: credential.credentialRef,
+    expectedGeneration: credential.generation,
+  })
+  if (result.kind === 'refused') throw new InteractiveAuthorityError('credential_not_current')
 }
 
 /**
@@ -196,6 +263,18 @@ async function resolveInteractiveAuthorityFacts(
     throw new InteractiveAuthorityError('identity_invalid')
   }
 
+  return await resolveInteractiveAuthorityFactsForToken(
+    db,
+    tokenIdentifier,
+    typeof identity.exp === 'number' ? identity.exp : Number.NaN,
+  )
+}
+
+async function resolveInteractiveAuthorityFactsForToken(
+  db: AuthorityDb,
+  tokenIdentifier: string,
+  verifiedTokenExpirySeconds: number | undefined,
+): Promise<InteractiveAuthorityFacts> {
   const binding = requireExactlyOne(
     await db
       .query('externalIdentityBindings')
@@ -244,10 +323,10 @@ async function resolveInteractiveAuthorityFacts(
   // `exp` is the actual JWT expiry verified by Convex before it exposes the
   // identity. It is used only to bind the credential's time window; canonical
   // Principal, Account, access, and ownership come exclusively from DB facts.
-  const verifiedTokenExpirySeconds = identity.exp
-  if (!Number.isSafeInteger(verifiedTokenExpirySeconds)
-    || (verifiedTokenExpirySeconds as number) < 1
-    || (verifiedTokenExpirySeconds as number) * 1_000 !== credential.expiresAt) {
+  if (verifiedTokenExpirySeconds !== undefined
+    && (!Number.isSafeInteger(verifiedTokenExpirySeconds)
+      || verifiedTokenExpirySeconds < 1
+      || verifiedTokenExpirySeconds * 1_000 !== credential.expiresAt)) {
     throw new InteractiveAuthorityError('credential_not_current')
   }
   const materialization = credential.expiryMaterialization
@@ -255,6 +334,7 @@ async function resolveInteractiveAuthorityFacts(
     || materialization.state !== 'scheduled'
     || materialization.credentialGeneration !== credential.generation
     || materialization.credentialExpiresAt !== credential.expiresAt
+    || materialization.scheduleNonce !== interactiveCredentialExpiryNonce(credential)
     || materialization.scheduleRef === undefined
     || materialization.scheduleRef.trim().length === 0
     || materialization.scheduleNonce.trim().length === 0
@@ -388,6 +468,67 @@ async function resolveInteractiveAuthorityFacts(
     credentialExpiresAt: credential.expiresAt,
     authorityMaterializedAt: materialization.materializedAt,
   })
+}
+
+/**
+ * Re-derives a previously admitted interactive context from canonical records.
+ * The binding reference is only a locator: every Principal, Account, access,
+ * revision and current-time fact is loaded again and must exactly match.
+ */
+export async function resolveScheduledInteractiveAuthorityContext(
+  db: AuthorityDb,
+  expectedInput: typeof interactiveAuthorityContextValue.type,
+): Promise<InteractiveBusinessAuthorityContext | null> {
+  try {
+    const expected = expectedInput as unknown as InteractiveBusinessAuthorityContext
+    const bindingRefValue = externalIdentityBindingRef(expected.provenance.bindingRef)
+    const bindings = await db.query('externalIdentityBindings')
+      .withIndex('by_bindingRef', (query) => query.eq('bindingRef', bindingRefValue))
+      .take(2)
+    const binding = requireExactlyOne(bindings, 'binding_missing', 'binding_ambiguous')
+    const facts = await resolveInteractiveAuthorityFactsForToken(
+      db,
+      binding.providerIdentifier,
+      undefined,
+    )
+    const current = currentContextAtTrustedServerTime(facts, Date.now())
+    if (current === null || !sameScheduledAuthority(current, expected)) return null
+    return current
+  } catch {
+    return null
+  }
+}
+
+export const reconcileScheduledInteractiveAuthority = internalQuery({
+  args: { authority: interactiveAuthorityContextValue },
+  returns: v.union(interactiveAuthorityContextValue, v.null()),
+  handler: async (ctx, args) =>
+    await resolveScheduledInteractiveAuthorityContext(ctx.db, args.authority),
+})
+
+function sameScheduledAuthority(
+  current: InteractiveBusinessAuthorityContext,
+  expected: InteractiveBusinessAuthorityContext,
+): boolean {
+  return current.principalRef === expected.principalRef
+    && current.accountRef === expected.accountRef
+    && current.legacyOwnerId === expected.legacyOwnerId
+    && current.legacyOwnerLocator === expected.legacyOwnerLocator
+    && current.provenance.providerNamespace === expected.provenance.providerNamespace
+    && current.provenance.bindingRef === expected.provenance.bindingRef
+    && current.provenance.credentialRef === expected.provenance.credentialRef
+    && current.provenance.credentialGeneration === expected.provenance.credentialGeneration
+    && current.provenance.accessKind === expected.provenance.accessKind
+    && current.provenance.accessRef === expected.provenance.accessRef
+    && current.provenance.currentOwnershipRef === expected.provenance.currentOwnershipRef
+    && current.revision.binding === expected.revision.binding
+    && current.revision.credential === expected.revision.credential
+    && current.revision.principal === expected.revision.principal
+    && current.revision.account === expected.revision.account
+    && current.revision.access === expected.revision.access
+    && current.revision.currentOwnership === expected.revision.currentOwnership
+    && current.revision.currentOwnerPrincipal === expected.revision.currentOwnerPrincipal
+    && current.revision.compatibilityUpdatedAt === expected.revision.compatibilityUpdatedAt
 }
 
 function currentContextAtTrustedServerTime(

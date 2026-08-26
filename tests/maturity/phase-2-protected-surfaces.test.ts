@@ -20,11 +20,40 @@ type PublicInventory = Readonly<{
 
 const contractRoot = resolve(process.cwd(), '.planning/maturity-execution/contracts')
 const publicInventory = JSON.parse(readFileSync(resolve(contractRoot, 'public-surface-inventory.json'), 'utf8')) as PublicInventory
-const measuredInventory = JSON.parse(readFileSync(resolve(contractRoot, 'phase-2-protected-surfaces.json'), 'utf8')) as MeasuredProtectedSurfaceInventory
+type MeasuredRow = MeasuredProtectedSurfaceInventory['convexHttpActions'][number]
+type CandidateInventory = Omit<MeasuredProtectedSurfaceInventory, 'convexHttpRoutes'> & Readonly<{
+  baselineCounts: Readonly<Record<string, number>>
+  candidateCounts: Readonly<Record<string, number>>
+  convexHttpRoutes: readonly (MeasuredRow & Readonly<{ handlerRef: string }>)[]
+  backgroundDiscovery: Readonly<{ discoveryKinds: readonly string[]; callSiteCount: number }>
+}>
+const measuredInventory = JSON.parse(readFileSync(
+  resolve(contractRoot, 'phase-2-protected-surfaces.json'),
+  'utf8',
+)) as CandidateInventory
 const classifications = JSON.parse(readFileSync(
   resolve(contractRoot, 'phase-2-protected-surfaces.classifications.json'),
   'utf8',
 )) as Readonly<{ rows: Readonly<Record<string, unknown>> }>
+type SinkTestRow = Readonly<{
+  status: 'covered' | 'red'
+  surfaceRef?: string
+  testFile?: string
+  testName?: string
+  sha256?: string
+  invocation?: Readonly<{ kind: string; target: string; expression: string }>
+  authorityPathSha256?: string
+  reason?: string
+}>
+type SinkTestRegistry = Readonly<{
+  format: string
+  inventorySha256: string
+  rows: Readonly<Record<string, SinkTestRow>>
+}>
+const sinkTestRegistry = JSON.parse(readFileSync(
+  resolve(contractRoot, 'phase-2-authority-sink-runtime-tests.json'),
+  'utf8',
+)) as SinkTestRegistry
 
 function refs(kind: ProtectedSurfaceManifestRow['kind']): readonly string[] {
   return PROTECTED_SURFACE_MANIFEST
@@ -33,17 +62,182 @@ function refs(kind: ProtectedSurfaceManifestRow['kind']): readonly string[] {
     .sort()
 }
 
-function measuredRows(inventory: MeasuredProtectedSurfaceInventory = measuredInventory) {
+function measuredRows(inventory: CandidateInventory = measuredInventory) {
   return [
     ...inventory.serverFunctions,
     ...inventory.publicConvex,
     ...inventory.convexHttpActions,
+    ...inventory.convexHttpRoutes,
     ...inventory.crons,
     ...inventory.backgroundFamilies,
   ]
 }
 
+function expectMeasuredInventoryRejected(candidate: unknown): void {
+  const directory = mkdtempSync(resolve(tmpdir(), 'ae-protected-surface-validation-'))
+  try {
+    const output = resolve(directory, 'candidate.json')
+    writeFileSync(output, `${JSON.stringify(candidate, null, 2)}\n`)
+    expect(() => execFileSync(
+      '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
+      ['tools/maturity/phase-2-protected-surfaces.mjs', '--validate-only', '--require-bound', '--output', output],
+      { cwd: process.cwd(), stdio: 'pipe' },
+    )).toThrow()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+function expectSinkRegistryRejected(candidate: unknown): void {
+  const directory = mkdtempSync(resolve(tmpdir(), 'ae-authority-sink-registry-validation-'))
+  try {
+    const registry = resolve(directory, 'candidate.json')
+    writeFileSync(registry, `${JSON.stringify(candidate, null, 2)}\n`)
+    expect(() => execFileSync(
+      '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
+      ['tools/maturity/phase-2-protected-surfaces.mjs', '--validate-sink-registry', '--registry', registry],
+      { cwd: process.cwd(), stdio: 'pipe' },
+    )).toThrow()
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 describe('Phase 2 generated protected-surface manifest', () => {
+  it('indexes every authority sink by an exact runtime-handler test or an explicit RED gap', () => {
+    const sinks = [...new Set(measuredRows()
+      .map((row) => row.authoritySink)
+      .filter((sink): sink is string => typeof sink === 'string'))].sort()
+    expect(Object.keys(sinkTestRegistry.rows).sort()).toEqual(sinks)
+    expect(sinks).toHaveLength(27)
+    expect(Object.entries(sinkTestRegistry.rows)
+      .filter(([, row]) => row.status === 'red')
+      .map(([sink]) => sink).sort()).toEqual([])
+    expect(() => execFileSync(
+      '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
+      ['tools/maturity/phase-2-protected-surfaces.mjs', '--validate-sink-registry'],
+      { cwd: process.cwd(), stdio: 'pipe' },
+    )).not.toThrow()
+  })
+
+  it('rejects missing, renamed, duplicated, forged, or stale runtime-handler test mappings', () => {
+    const covered = Object.entries(sinkTestRegistry.rows).filter(([, row]) => row.status === 'covered')
+    const first = covered[0]
+    const second = covered[1]
+    if (first === undefined || second === undefined) throw new Error('expected covered runtime sink tests')
+    const firstTestFile = first[1].testFile
+    const firstTestName = first[1].testName
+    const secondSurfaceRef = second[1].surfaceRef
+    if (firstTestFile === undefined || firstTestName === undefined || secondSurfaceRef === undefined) {
+      throw new Error('covered runtime sink test fields missing')
+    }
+
+    const missing = structuredClone(sinkTestRegistry) as { rows: Record<string, SinkTestRow> }
+    delete missing.rows[first[0]]
+    expectSinkRegistryRejected(missing)
+
+    const renamed = structuredClone(sinkTestRegistry) as { rows: Record<string, SinkTestRow> }
+    renamed.rows[first[0]] = { ...first[1], testName: `${first[1].testName}:renamed` }
+    expectSinkRegistryRejected(renamed)
+
+    const duplicate = structuredClone(sinkTestRegistry) as { rows: Record<string, SinkTestRow> }
+    duplicate.rows[second[0]] = {
+      ...second[1],
+      testFile: firstTestFile,
+      testName: firstTestName,
+    }
+    expectSinkRegistryRejected(duplicate)
+
+    const forgedSurface = structuredClone(sinkTestRegistry) as { rows: Record<string, SinkTestRow> }
+    forgedSurface.rows[first[0]] = { ...first[1], surfaceRef: secondSurfaceRef }
+    expectSinkRegistryRejected(forgedSurface)
+
+    const staleChecksum = structuredClone(sinkTestRegistry) as { rows: Record<string, SinkTestRow> }
+    staleChecksum.rows[first[0]] = { ...first[1], sha256: '0'.repeat(64) }
+    expectSinkRegistryRejected(staleChecksum)
+  })
+
+  it('preserves frozen baseline counts separately from mechanically discovered candidate counts', () => {
+    const inventory = measuredInventory as MeasuredProtectedSurfaceInventory & {
+      baselineCounts?: Record<string, number>
+      candidateCounts?: Record<string, number>
+    }
+    expect(inventory.baselineCounts).toMatchObject({
+      serverFunctions: 43,
+      publicConvex: 116,
+      convexHttpActions: 1,
+      crons: 10,
+      backgroundFamilies: 25,
+      frozenHttp: 39,
+      frozenMcp: 14,
+      frozenCli: 12,
+    })
+    expect(inventory.candidateCounts?.serverFunctions).toBe(inventory.serverFunctions.length)
+    expect(inventory.candidateCounts?.publicConvex).toBe(inventory.publicConvex.length)
+    expect(inventory.candidateCounts?.publicConvex).toBeGreaterThanOrEqual(116)
+    expect(inventory.candidateCounts?.frozenHttp).toBe(39)
+    expect(inventory.candidateCounts?.frozenMcp).toBe(14)
+    expect(inventory.candidateCounts?.frozenCli).toBe(12)
+  })
+
+  it('discovers generic Convex HTTP handlers and every registered HTTP route', () => {
+    const inventory = measuredInventory
+    expect(inventory.convexHttpActions.map((row) => row.ref)).toContain(
+      'convex/secretLifecycleHttp.ts:secretLifecycleRpc',
+    )
+    expect(inventory.convexHttpActions.map((row) => row.ref)).toContain(
+      'convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc',
+    )
+    expect(inventory.convexHttpRoutes?.map((row) => row.ref)).toContain(
+      'convex_http_route:POST /internal/secret-lifecycle',
+    )
+    expect(inventory.convexHttpRoutes?.map((row) => row.handlerRef)).toEqual(
+      expect.arrayContaining(inventory.convexHttpActions.map((row) => row.ref)),
+    )
+  })
+
+  it('mechanically accounts for every background and reconciliation reference', () => {
+    const inventory = measuredInventory as MeasuredProtectedSurfaceInventory & {
+      backgroundDiscovery?: Readonly<{ discoveryKinds: readonly string[]; callSiteCount: number }>
+    }
+    const discovered = measuredInventory.backgroundFamilies.map((row) => row.ref)
+    expect(discovered).toContain('scheduler:convex/chatGenerate.ts:generate')
+    expect(discovered).toContain('scheduler:convex/marketRegistryGraduation.ts:sweep')
+    expect(discovered).toContain('scheduler:convex/interactiveCredentialLifecycle.ts:expireInteractiveCredential')
+    expect(discovered).toContain('run_action:convex/capabilityOperationInvocationWorker.ts:recover')
+    expect(discovered).toContain('workpool:convex/capabilityOperationInvocationWorker.ts:run')
+    expect(discovered).toContain('continuation:convex/capabilityOperationInvocations.ts:completeWork')
+    expect(discovered.some((ref) => ref.startsWith('reconciliation:'))).toBe(true)
+    expect(inventory.backgroundDiscovery?.discoveryKinds).toEqual([
+      'callback', 'continuation', 'job', 'reconciliation', 'run_action', 'scheduler', 'workpool',
+    ])
+    expect(inventory.backgroundDiscovery?.callSiteCount).toBeGreaterThanOrEqual(28)
+    expect(measuredInventory.crons.every((row) => Array.isArray((row as { callSites?: unknown }).callSites))).toBe(true)
+  })
+
+  it('rejects hostile omissions and unchanged-count substitutions in every discovered collection', () => {
+    for (const collection of [
+      'serverFunctions',
+      'publicConvex',
+      'convexHttpActions',
+      'convexHttpRoutes',
+      'crons',
+      'backgroundFamilies',
+    ] as const) {
+      const omitted = structuredClone(measuredInventory) as unknown as Record<string, unknown>
+      const omittedRows = omitted[collection] as Array<Record<string, unknown>>
+      omittedRows.splice(0, 1)
+      expectMeasuredInventoryRejected(omitted)
+
+      const substituted = structuredClone(measuredInventory) as unknown as Record<string, unknown>
+      const substitutedRows = substituted[collection] as Array<Record<string, unknown>>
+      const first = substitutedRows[0]
+      if (first === undefined) throw new Error(`expected a measured ${collection} surface`)
+      Object.assign(first, { ref: `${collection}:hostile-same-count-substitution` })
+      expectMeasuredInventoryRejected(substituted)
+    }
+  }, 30_000)
+
   it('preserves source identity and rejects omissions, duplicates, and unchanged-count replacements', () => {
     expect(() => execFileSync(
       '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
@@ -54,6 +248,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       measuredInventory.serverFunctions,
       measuredInventory.publicConvex,
       measuredInventory.convexHttpActions,
+      measuredInventory.convexHttpRoutes,
       measuredInventory.crons,
       measuredInventory.backgroundFamilies,
     ]) {
@@ -70,6 +265,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       ...measuredInventory.serverFunctions,
       ...measuredInventory.publicConvex,
       ...measuredInventory.convexHttpActions,
+      ...measuredInventory.convexHttpRoutes,
       ...measuredInventory.crons,
       ...measuredInventory.backgroundFamilies,
     ].map((row) => row.ref).sort()
@@ -129,16 +325,16 @@ describe('Phase 2 generated protected-surface manifest', () => {
 
   it('requires exact measured counts with no blocked production surface', () => {
     expect(measuredInventory.actualCounts.serverFunctions).toBe(43)
-    expect(measuredInventory.actualCounts.publicConvex).toBe(116)
-    expect(measuredInventory.actualCounts.convexHttpActions).toBe(1)
+    expect(measuredInventory.actualCounts.publicConvex).toBe(119)
+    expect(measuredInventory.actualCounts.convexHttpActions).toBe(7)
+    expect((measuredInventory.actualCounts as Record<string, number>).convexHttpRoutes).toBe(7)
     expect(measuredInventory.actualCounts.crons).toBe(10)
-    expect(measuredInventory.actualCounts.backgroundFamilies).toBe(25)
+    expect(measuredInventory.actualCounts.backgroundFamilies).toBe(52)
     expect(measuredInventory.actualCounts.frozenHttp).toBe(39)
     expect(measuredInventory.actualCounts.frozenMcp).toBe(14)
     expect(measuredInventory.actualCounts.frozenCli).toBe(12)
     expect(measuredRows().filter((row) => row.status === 'blocked')).toEqual([])
     expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, measuredInventory)).not.toThrow()
   })
 
   it('proves bound authority through a transitive declaration and call-path evidence chain', () => {
@@ -212,7 +408,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       { cwd: process.cwd(), stdio: 'pipe' },
     )).not.toThrow()
 
-    const candidate = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const candidate = structuredClone(measuredInventory) as CandidateInventory
     const exemptRow = measuredRows().find((row) => row.status === 'bound'
       && row.binding === 'public_non_consequential')
     expect(exemptRow).toBeDefined()
@@ -223,8 +419,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       ...exemptRow!.exemption,
       testFile: 'tests/maturity/phase-2-protected-surfaces.test.ts',
     } })
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, candidate))
-      .toThrowError('protected_surface_measured_gate_failed')
+    expectMeasuredInventoryRejected(candidate)
   }, 30_000)
 
   it('rejects every unproven surface instead of accepting an open blocked list', () => {
@@ -239,6 +434,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
       ...measuredInventory.serverFunctions,
       ...measuredInventory.publicConvex,
       ...measuredInventory.convexHttpActions,
+      ...measuredInventory.convexHttpRoutes,
       ...measuredInventory.crons,
       ...measuredInventory.backgroundFamilies,
     ]
@@ -268,7 +464,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST.slice(1)))
       .toThrowError('protected_surface_inventory_invalid')
 
-    const dishonest = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const dishonest = structuredClone(measuredInventory) as CandidateInventory
     const target = measuredRows(dishonest).find((row) => row.status === 'bound'
       && row.binding !== 'public_non_consequential'
       && row.binding !== 'narrow_system_non_consequential')
@@ -280,33 +476,29 @@ describe('Phase 2 generated protected-surface manifest', () => {
       blocker: { code: 'missing_transitive_authority_path', detail: 'hostile fixture' },
     })
     Object.assign(dishonest.blockedByKind, { [target!.kind]: 1 })
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, dishonest))
-      .toThrowError('protected_surface_measured_gate_failed')
+    expectMeasuredInventoryRejected(dishonest)
   })
 
   it('rejects malformed blocker, status, and transitive-path evidence rows', () => {
-    const malformedBlocker = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const malformedBlocker = structuredClone(measuredInventory) as CandidateInventory
     const blocked = measuredRows(malformedBlocker).find((row) => row.status === 'bound')
     expect(blocked).toBeDefined()
     Object.assign(blocked!, { status: 'blocked', authorityPath: undefined, authoritySink: undefined, blocker: undefined })
     Object.assign(malformedBlocker.blockedByKind, { [blocked!.kind]: 1 })
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedBlocker))
-      .toThrowError('protected_surface_measured_gate_failed')
+    expectMeasuredInventoryRejected(malformedBlocker)
 
-    const malformedStatus = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const malformedStatus = structuredClone(measuredInventory) as CandidateInventory
     const bound = measuredRows(malformedStatus).find((row) => row.status === 'bound')
     expect(bound).toBeDefined()
     Object.assign(bound!, { status: 'future' })
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedStatus))
-      .toThrowError('protected_surface_measured_gate_failed')
+    expectMeasuredInventoryRejected(malformedStatus)
 
-    const malformedPath = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const malformedPath = structuredClone(measuredInventory) as CandidateInventory
     const authorityBound = measuredRows(malformedPath).find((row) => row.status === 'bound'
       && row.binding !== 'public_non_consequential'
       && row.binding !== 'narrow_system_non_consequential')
     expect(authorityBound).toBeDefined()
     Object.assign(authorityBound!, { authorityPath: [] })
-    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedPath))
-      .toThrowError('protected_surface_measured_gate_failed')
+    expectMeasuredInventoryRejected(malformedPath)
   })
 })

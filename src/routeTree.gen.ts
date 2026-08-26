@@ -53,6 +53,7 @@ import { Route as ApiV1RegistryRouteImport } from './routes/api.v1.registry'
 import { Route as ApiV1MarketMetricsRouteImport } from './routes/api.v1.market-metrics'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api.stripe.webhook'
 import { Route as ApiObservabilityClientErrorRouteImport } from './routes/api.observability.client-error'
+import { Route as ApiInternalSecretLifecycleRouteImport } from './routes/api.internal.secret-lifecycle'
 import { Route as ApiInternalProviderConsequenceRouteImport } from './routes/api.internal.provider-consequence'
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
@@ -306,6 +307,12 @@ const ApiObservabilityClientErrorRoute =
     path: '/api/observability/client-error',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiInternalSecretLifecycleRoute =
+  ApiInternalSecretLifecycleRouteImport.update({
+    id: '/api/internal/secret-lifecycle',
+    path: '/api/internal/secret-lifecycle',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiInternalProviderConsequenceRoute =
   ApiInternalProviderConsequenceRouteImport.update({
     id: '/api/internal/provider-consequence',
@@ -508,6 +515,7 @@ export interface FileRoutesByFullPath {
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
+  '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -580,6 +588,7 @@ export interface FileRoutesByTo {
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
+  '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -654,6 +663,7 @@ export interface FileRoutesById {
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
   '/api/internal/provider-consequence': typeof ApiInternalProviderConsequenceRoute
+  '/api/internal/secret-lifecycle': typeof ApiInternalSecretLifecycleRoute
   '/api/observability/client-error': typeof ApiObservabilityClientErrorRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/api/v1/market-metrics': typeof ApiV1MarketMetricsRoute
@@ -728,6 +738,7 @@ export interface FileRouteTypes {
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
+    | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -800,6 +811,7 @@ export interface FileRouteTypes {
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
+    | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -873,6 +885,7 @@ export interface FileRouteTypes {
     | '/api/discovery/examples'
     | '/api/discovery/schema'
     | '/api/internal/provider-consequence'
+    | '/api/internal/secret-lifecycle'
     | '/api/observability/client-error'
     | '/api/stripe/webhook'
     | '/api/v1/market-metrics'
@@ -932,6 +945,7 @@ export interface RootRouteChildren {
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
   ApiInternalProviderConsequenceRoute: typeof ApiInternalProviderConsequenceRoute
+  ApiInternalSecretLifecycleRoute: typeof ApiInternalSecretLifecycleRoute
   ApiObservabilityClientErrorRoute: typeof ApiObservabilityClientErrorRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
   ApiV1MarketMetricsRoute: typeof ApiV1MarketMetricsRoute
@@ -1254,6 +1268,13 @@ declare module '@tanstack/react-router' {
       path: '/api/observability/client-error'
       fullPath: '/api/observability/client-error'
       preLoaderRoute: typeof ApiObservabilityClientErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/secret-lifecycle': {
+      id: '/api/internal/secret-lifecycle'
+      path: '/api/internal/secret-lifecycle'
+      fullPath: '/api/internal/secret-lifecycle'
+      preLoaderRoute: typeof ApiInternalSecretLifecycleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/internal/provider-consequence': {
@@ -1637,6 +1658,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
   ApiInternalProviderConsequenceRoute: ApiInternalProviderConsequenceRoute,
+  ApiInternalSecretLifecycleRoute: ApiInternalSecretLifecycleRoute,
   ApiObservabilityClientErrorRoute: ApiObservabilityClientErrorRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
   ApiV1MarketMetricsRoute: ApiV1MarketMetricsRoute,

@@ -11,6 +11,7 @@ import {
   resolveAdminAuthority,
   resolveBusinessActor,
 } from '../../../convex/authz'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -85,6 +86,8 @@ describe('Convex authz helpers', () => {
       accountRef: `acc_${'2'.repeat(32)}`,
       legacyOwnerId: 'owners:canonical',
       legacyOwnerLocator: 'legacy-owner-row',
+      displayName: 'Canonical owner',
+      emailHash: 'sha256:canonical-owner',
       revision: {
         binding: 1,
         credential: 1,
@@ -115,6 +118,8 @@ describe('Convex authz helpers', () => {
       clerkUserId: 'legacy-owner-row',
       canonicalPrincipalRef: authority.principalRef,
       canonicalAccountRef: authority.accountRef,
+      displayName: 'Canonical owner',
+      emailHash: 'sha256:canonical-owner',
     })
     expect(Object.isFrozen(actor)).toBe(true)
 
@@ -234,6 +239,55 @@ describe('Convex authz helpers', () => {
       reason: 'missing_membership',
     })
   })
+
+  it('fails closed when the verified identity disappears between actor and admin checks', async () => {
+    const db = new FakeDb()
+    seedSamAuthority(db)
+    db.seed('adminMemberships', row('admin:sam', {
+      clerkUserId: 'user_sam',
+      tokenIdentifier: 'clerk|user_sam',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'root',
+      grantedAt: 1,
+    }))
+    let calls = 0
+    const ctx = {
+      db: db as unknown as AuthCtx['db'],
+      auth: {
+        getUserIdentity: async () => (++calls === 1 ? sam() : null),
+      },
+    }
+
+    await expect(resolveAdminAuthority(ctx, 'register_capability_supply')).resolves.toEqual({
+      kind: 'denied',
+      reason: 'missing_membership',
+    })
+    calls = 0
+    await expect(readCurrentActiveAdminMembership(ctx)).resolves.toBeUndefined()
+  })
+
+  it('requires an exact current admin membership identity', async () => {
+    const db = new FakeDb()
+    seedSamAuthority(db)
+
+    await expect(readActiveAdminMembership(db as unknown as AuthCtx['db'], {
+      tokenIdentifier: 'clerk|missing',
+    })).resolves.toBeUndefined()
+
+    db.seed('adminMemberships', row('admin:mismatched-locator', {
+      clerkUserId: 'user_someone_else',
+      tokenIdentifier: 'clerk|user_sam',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'root',
+      grantedAt: 1,
+    }))
+    await expect(resolveAdminAuthority(authCtx(db, sam()), 'register_capability_supply'))
+      .resolves.toEqual({ kind: 'denied', reason: 'missing_membership' })
+    await expect(readCurrentActiveAdminMembership(authCtx(db, sam())))
+      .resolves.toBeUndefined()
+  })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -351,7 +405,12 @@ function seedSamAuthority(db: FakeDb): void {
       credentialGeneration: 1,
       credentialExpiresAt: expiresAt,
       scheduleRef: 'schedule:sam',
-      scheduleNonce: 'nonce:sam',
+      scheduleNonce: interactiveCredentialExpiryNonce({
+        bindingRef,
+        credentialRef,
+        generation: 1,
+        expiresAt,
+      } as never),
       materializedAt: 1,
     },
   }))

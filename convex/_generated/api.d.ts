@@ -137,6 +137,8 @@ import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as recoveryBreakGlass from "../recoveryBreakGlass.js";
 import type * as registry from "../registry.js";
+import type * as secretLifecycleHttp from "../secretLifecycleHttp.js";
+import type * as secretLifecycleOperations from "../secretLifecycleOperations.js";
 import type * as security from "../security.js";
 import type * as securityAdminMembership from "../securityAdminMembership.js";
 import type * as securityAdminReadbacks from "../securityAdminReadbacks.js";
@@ -282,6 +284,8 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   recoveryBreakGlass: typeof recoveryBreakGlass;
   registry: typeof registry;
+  secretLifecycleHttp: typeof secretLifecycleHttp;
+  secretLifecycleOperations: typeof secretLifecycleOperations;
   security: typeof security;
   securityAdminMembership: typeof securityAdminMembership;
   securityAdminReadbacks: typeof securityAdminReadbacks;

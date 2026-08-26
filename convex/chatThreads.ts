@@ -13,6 +13,7 @@ import type { Doc } from './_generated/dataModel'
 import { mutation, query } from './_generated/server'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
+import type { BusinessActor } from '../src/modules/business/public'
 
 const DEFAULT_PAGE_SIZE = 20
 const MAX_PAGE_SIZE = 50
@@ -30,11 +31,17 @@ const threadSummary = v.object({
 type ThreadContext = Pick<QueryCtx, 'auth' | 'db'>
 
 export async function requireChatOwnerId(ctx: ThreadContext): Promise<string> {
+  return (await requireChatOwner(ctx)).canonicalAccountRef
+}
+
+export async function requireChatOwner(
+  ctx: ThreadContext,
+): Promise<Extract<BusinessActor, { kind: 'authenticated_owner' }>> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') {
     throw new Error('unauthenticated')
   }
-  return actor.canonicalAccountRef
+  return actor
 }
 
 export async function requireOwnedChatThread(

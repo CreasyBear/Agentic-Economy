@@ -13,6 +13,7 @@ import {
   recordConnectAccountEvent,
   runDailySupplierSettlement,
 } from '../../../convex/moneyLedger'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { STRIPE_TRANSFER_RECOVERY_WINDOW_MS } from '../../../src/modules/money/public'
 import {
   PHASE_2_CRON_ACCOUNT_REF,
@@ -368,7 +369,12 @@ export function seedPayout(
       state: 'scheduled',
       credentialGeneration: 1,
       credentialExpiresAt,
-      scheduleNonce: 'sha256:payout-owner-expiry',
+      scheduleNonce: interactiveCredentialExpiryNonce({
+        bindingRef,
+        credentialRef,
+        generation: 1,
+        expiresAt: credentialExpiresAt,
+      }),
       scheduleRef: `scheduled:${credentialRef}`,
       materializedAt: 1,
     },

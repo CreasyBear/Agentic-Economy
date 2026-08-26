@@ -64,10 +64,32 @@ export type MeasuredProtectedSurfaceInventory = Readonly<{
     frozenMcp: 14
     frozenCli: 12
   }>
+  baselineCounts: Readonly<{
+    serverFunctions: 43
+    publicConvex: 116
+    convexHttpActions: 1
+    crons: 10
+    backgroundFamilies: 25
+    frozenHttp: 39
+    frozenMcp: 14
+    frozenCli: 12
+  }>
+  candidateCounts: Readonly<{
+    serverFunctions: number
+    publicConvex: number
+    convexHttpActions: number
+    convexHttpRoutes: number
+    crons: number
+    backgroundFamilies: number
+    frozenHttp: number
+    frozenMcp: number
+    frozenCli: number
+  }>
   actualCounts: Readonly<{
     serverFunctions: number
     publicConvex: number
     convexHttpActions: number
+    convexHttpRoutes: number
     crons: number
     backgroundFamilies: number
     frozenHttp: number
@@ -84,6 +106,7 @@ export type MeasuredProtectedSurfaceInventory = Readonly<{
   serverFunctions: readonly MeasuredProtectedSurfaceRow[]
   publicConvex: readonly MeasuredProtectedSurfaceRow[]
   convexHttpActions: readonly MeasuredProtectedSurfaceRow[]
+  convexHttpRoutes: readonly MeasuredProtectedSurfaceRow[]
   crons: readonly MeasuredProtectedSurfaceRow[]
   backgroundFamilies: readonly MeasuredProtectedSurfaceRow[]
   blockedByKind: Readonly<Record<string, number>>

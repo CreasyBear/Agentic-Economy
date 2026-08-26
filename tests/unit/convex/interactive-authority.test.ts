@@ -15,8 +15,11 @@ import {
 import schema from '../../../convex/schema'
 import {
   InteractiveAuthorityError,
+  materializeCurrentInteractiveAuthority,
+  reconcileScheduledInteractiveAuthority,
   resolveInteractiveAuthorityContext,
 } from '../../../convex/interactiveAuthority'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import { resolveBusinessActor } from '../../../convex/authz'
 import { convexModules as modules } from '../../helpers/convex-fixtures'
 
@@ -292,6 +295,94 @@ describe('canonical interactive authority', () => {
       ctx.db,
       identity({ tokenIdentifier: '   ' }),
     ))).rejects.toEqual(new InteractiveAuthorityError('identity_invalid'))
+
+    await seedAuthority(backend)
+    await expect(backend.run(async (ctx) => resolveInteractiveAuthorityContext(
+      ctx.db,
+      identity({ exp: undefined }),
+    ))).rejects.toEqual(new InteractiveAuthorityError('credential_not_current'))
+  })
+
+  it('keeps the registered materializer fail closed across changing identity facts', async () => {
+    const cases = [
+      { secondToken: '   ', alternateBinding: false },
+      { secondToken: 'https://clerk.example.test|user_missing_binding', alternateBinding: false },
+      { secondToken: 'https://clerk.example.test|user_missing_credential', alternateBinding: true },
+    ] as const
+    const handler = (materializeCurrentInteractiveAuthority as unknown as {
+      _handler: (ctx: unknown, args: Record<string, never>) => Promise<boolean>
+    })._handler
+
+    for (const testCase of cases) {
+      const backend = convexTest(schema, modules)
+      await seedAuthority(backend, { omitExpiryMaterialization: true })
+      if (testCase.alternateBinding) {
+        await backend.run(async (ctx) => {
+          await ctx.db.insert('externalIdentityBindings', {
+            bindingRef: `eib_${'8'.repeat(32)}`,
+            principalRef: PRINCIPAL_REF,
+            providerNamespace: 'clerk/user',
+            providerIdentifier: testCase.secondToken,
+            providerState: { kind: 'known', value: 'active' },
+            lifecycle: 'active',
+            credentialGeneration: 99,
+            bindIdempotencyRef: 'bind:missing-credential',
+            revision: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          })
+        })
+      }
+      let reads = 0
+      const changingIdentity = {
+        ...identity(),
+        get tokenIdentifier() {
+          reads += 1
+          return reads === 2 ? testCase.secondToken : TOKEN_IDENTIFIER
+        },
+      }
+
+      await expect(backend.run(async (ctx) => await handler({
+        auth: { getUserIdentity: async () => changingIdentity },
+        db: ctx.db,
+        scheduler: ctx.scheduler,
+      }, {}))).resolves.toBe(false)
+    }
+  })
+
+  it('rethrows unexpected failures from the registered materializer and invokes registered reconciliation', async () => {
+    const materializeHandler = (materializeCurrentInteractiveAuthority as unknown as {
+      _handler: (ctx: unknown, args: Record<string, never>) => Promise<boolean>
+    })._handler
+    const unexpected = new Error('database_unavailable')
+    await expect(materializeHandler({
+      auth: { getUserIdentity: async () => identity() },
+      db: { query: () => { throw unexpected } },
+      scheduler: {},
+    }, {})).rejects.toBe(unexpected)
+
+    const backend = convexTest(schema, modules)
+    await seedAuthority(backend)
+    const expected = await backend.run(async (ctx) =>
+      resolveInteractiveAuthorityContext(ctx.db, identity()))
+    const reconcileHandler = (reconcileScheduledInteractiveAuthority as unknown as {
+      _handler: (ctx: unknown, args: { authority: unknown }) => Promise<unknown>
+    })._handler
+    await expect(backend.run(async (ctx) => reconcileHandler(
+      { db: ctx.db },
+      { authority: expected },
+    ))).resolves.toMatchObject({
+      principalRef: PRINCIPAL_REF,
+      accountRef: ACCOUNT_REF,
+    })
+    await expect(backend.run(async (ctx) => reconcileHandler(
+      { db: ctx.db },
+      { authority: { ...expected, accountRef: `acc_${'9'.repeat(32)}` } },
+    ))).resolves.toBeNull()
+    await expect(backend.run(async (ctx) => reconcileHandler(
+      { db: ctx.db },
+      { authority: { ...expected, provenance: { ...expected.provenance, bindingRef: 'invalid' } } },
+    ))).resolves.toBeNull()
   })
 })
 
@@ -384,7 +475,14 @@ async function seedAuthority(backend: Backend, options: SeedOptions = {}): Promi
             state: 'scheduled' as const,
             credentialGeneration: options.credentialGeneration ?? options.bindingGeneration ?? 2,
             credentialExpiresAt: options.expiresAt ?? 20_000,
-            scheduleNonce: 'sha256:interactive-credential-expiry',
+            scheduleNonce: Number.isFinite(options.expiresAt ?? 20_000)
+              ? interactiveCredentialExpiryNonce({
+                  bindingRef: options.credentialBindingRef ?? BINDING_REF,
+                  credentialRef: CREDENTIAL_REF,
+                  generation: options.credentialGeneration ?? options.bindingGeneration ?? 2,
+                  expiresAt: options.expiresAt ?? 20_000,
+                } as never)
+              : 'sha256:invalid-expiry-fixture',
             scheduleRef: 'scheduled:interactive-credential-expiry',
             materializedAt: 6,
           },

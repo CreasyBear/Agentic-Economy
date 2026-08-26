@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { ClerkProvider, useAuth } from '@clerk/tanstack-react-start'
 import { ConvexProviderWithClerk } from 'convex/react-clerk'
-import { ConvexReactClient } from 'convex/react'
+import { ConvexReactClient, useConvexAuth, useMutation } from 'convex/react'
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouter, useRouterState } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
@@ -14,6 +14,7 @@ import { bootClientObservability } from '@/lib/observability/boot-client-observa
 import appCss from '../styles/globals.css?url'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { HOME } from '@/content/brand-copy'
+import { api } from '../../convex/_generated/api'
 
 function AeObservabilityBoot() {
   const router = useRouter()
@@ -134,7 +135,20 @@ function ChatConvexProvider({ children }: { children: ReactNode }) {
 
 function ConfiguredChatConvexProvider({ convexUrl, children }: { convexUrl: string; children: ReactNode }) {
   const [client] = useState(() => new ConvexReactClient(convexUrl))
-  return <ConvexProviderWithClerk client={client} useAuth={useAuth}>{children}</ConvexProviderWithClerk>
+  return (
+    <ConvexProviderWithClerk client={client} useAuth={useAuth}>
+      <InteractiveAuthorityMaterializer>{children}</InteractiveAuthorityMaterializer>
+    </ConvexProviderWithClerk>
+  )
+}
+
+function InteractiveAuthorityMaterializer({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useConvexAuth()
+  const materialize = useMutation(api.interactiveAuthority.materializeCurrentInteractiveAuthority)
+  useEffect(() => {
+    if (isAuthenticated) void materialize({}).catch(() => undefined)
+  }, [isAuthenticated, materialize])
+  return children
 }
 
 export function requiresChatProviders(pathname: string): boolean {

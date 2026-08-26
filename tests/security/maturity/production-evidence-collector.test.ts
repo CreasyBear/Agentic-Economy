@@ -61,16 +61,17 @@ function rows(kind: MeasuredProtectedSurfaceRow['kind'], count: number, firstExe
 }
 
 function inventory(): MeasuredProtectedSurfaceInventory {
+  const baselineCounts = Object.freeze({
+    serverFunctions: 43, publicConvex: 116, convexHttpActions: 1, crons: 10,
+    backgroundFamilies: 25, frozenHttp: 39, frozenMcp: 14, frozenCli: 12,
+  })
+  const candidateCounts = Object.freeze({ ...baselineCounts, convexHttpRoutes: 0 })
   return Object.freeze({
     format: 'phase-2-protected-surfaces:v2',
-    expectedCounts: Object.freeze({
-      serverFunctions: 43, publicConvex: 116, convexHttpActions: 1, crons: 10,
-      backgroundFamilies: 25, frozenHttp: 39, frozenMcp: 14, frozenCli: 12,
-    }),
-    actualCounts: Object.freeze({
-      serverFunctions: 43, publicConvex: 116, convexHttpActions: 1, crons: 10,
-      backgroundFamilies: 25, frozenHttp: 39, frozenMcp: 14, frozenCli: 12,
-    }),
+    expectedCounts: baselineCounts,
+    baselineCounts,
+    candidateCounts,
+    actualCounts: candidateCounts,
     frozenContract: Object.freeze({
       sourceFile: '.planning/maturity-execution/contracts/public-surface-inventory.json',
       sha256: HASH,
@@ -81,6 +82,7 @@ function inventory(): MeasuredProtectedSurfaceInventory {
     serverFunctions: rows('server_function', 43),
     publicConvex: rows('convex_public', 116, true),
     convexHttpActions: rows('http', 1),
+    convexHttpRoutes: Object.freeze([]),
     crons: rows('cron', 10),
     backgroundFamilies: rows('job', 25),
     blockedByKind: Object.freeze({ server_function: 0, convex_public: 0, http: 0, cron: 0, job: 0 }),
@@ -98,6 +100,34 @@ function sinks(): ProductionEvidenceSinkCollectors {
   })
 }
 
+function runtimeHandlerTests(candidate: MeasuredProtectedSurfaceInventory): ProductionEvidenceRequest['runtimeHandlerTests'] {
+  const protectedRows = [
+    ...candidate.serverFunctions,
+    ...candidate.publicConvex,
+    ...candidate.convexHttpActions,
+    ...candidate.convexHttpRoutes,
+    ...candidate.crons,
+    ...candidate.backgroundFamilies,
+  ].filter((measured) => measured.consequential)
+  const rows = Object.fromEntries([...new Set(protectedRows.map((measured) => measured.authoritySink as string))]
+    .map((authoritySink, index) => {
+      const measured = protectedRows.find((candidateRow) => candidateRow.authoritySink === authoritySink)
+      if (measured === undefined) throw new Error('test_runtime_sink_missing')
+      return [authoritySink, Object.freeze({
+        status: 'covered' as const,
+        surfaceRef: measured.ref,
+        testFile: `tests/unit/runtime-handler-${index}.test.ts`,
+        testName: `executes runtime handler ${index}`,
+        sha256: HASH,
+      })]
+    }))
+  return Object.freeze({
+    format: 'phase-2-authority-sink-runtime-tests:v1',
+    inventorySha256: HASH,
+    rows: Object.freeze(rows),
+  })
+}
+
 function evidenceRequest(candidate = inventory(), collectors = sinks()): ProductionEvidenceRequest {
   return {
     measuredInventory: candidate,
@@ -109,11 +139,8 @@ function evidenceRequest(candidate = inventory(), collectors = sinks()): Product
     actors,
     wrongAccountRef: OTHER,
     currentGeneration: 4,
-    evaluate: async (probe) => probe.protection === 'tested_public_exemption'
-      ? { kind: 'allowed' }
-      : probe.caseKind === 'owner' || probe.caseKind === 'member' || probe.caseKind === 'workload'
-        ? { kind: 'allowed' }
-        : { kind: 'denied', reason: 'canonical_authority_denied' },
+    measuredInventorySha256: HASH,
+    runtimeHandlerTests: runtimeHandlerTests(candidate),
     canary: new TextEncoder().encode('production-canary'),
     sinkCollectors: collectors,
   }
@@ -123,22 +150,65 @@ async function collect(candidate = inventory(), collectors = sinks()) {
   return await collectProductionEvidence(evidenceRequest(candidate, collectors))
 }
 
+function candidateSurfaceCount(candidate: MeasuredProtectedSurfaceInventory): number {
+  return candidate.serverFunctions.length
+    + candidate.publicConvex.length
+    + candidate.convexHttpActions.length
+    + candidate.convexHttpRoutes.length
+    + candidate.crons.length
+    + candidate.backgroundFamilies.length
+}
+
 describe('P2-05 production evidence collector', () => {
-  it('accounts for all 195 exact measured IDs and generates 1,365 isolation decisions from real sink classes', async () => {
+  it('accounts for every exact measured ID and generates seven isolation decisions per candidate row', async () => {
     const proof = await collect()
-    expect(proof.measuredSurfaceCount).toBe(195)
-    expect(proof.isolation.surfaceCount).toBe(195)
-    expect(proof.isolation.caseCount).toBe(1_365)
-    expect(new Set(proof.isolation.rows.map((value) => value.surfaceRef))).toHaveLength(195)
-    expect(proof.isolation.rows.filter((value) => value.protection === 'tested_public_exemption'))
+    const candidateCount = candidateSurfaceCount(inventory())
+    expect(proof.baselineSurfaceCount).toBe(195)
+    expect(proof.measuredSurfaceCount).toBe(candidateCount)
+    expect(proof.expectedDecisionMatrix.surfaceCount).toBe(candidateCount)
+    expect(proof.expectedDecisionMatrix.caseCount).toBe(candidateCount * 7)
+    expect(new Set(proof.expectedDecisionMatrix.rows.map((value) => value.surfaceRef))).toHaveLength(candidateCount)
+    expect(proof.expectedDecisionMatrix.rows.filter((value) => value.protection === 'tested_public_exemption'))
       .toHaveLength(7)
-    expect(proof.isolation.rows.find((value) => value.protection === 'tested_public_exemption'
+    expect(proof.expectedDecisionMatrix.rows.find((value) => value.protection === 'tested_public_exemption'
       && value.caseKind === 'missing_workload')?.decision).toEqual({ kind: 'allowed' })
+    expect(proof.runtimeHandlerTestIndex).toMatchObject({
+      kind: 'generated_full_suite_test_index', sinkCount: 1, inventorySha256: HASH,
+    })
     expect(proof.canary.checkedSinks).toHaveLength(6)
     expect(proof.sinkSourceRefs).toEqual([
       'convex:export', 'logger:capture', 'errors:capture',
       'audit:readback', 'runtime:environment', 'test:snapshot',
     ])
+  })
+
+  it('keeps the frozen baseline separate when the measured candidate inventory expands', async () => {
+    const expanded = structuredClone(inventory()) as unknown as {
+      publicConvex: MeasuredProtectedSurfaceRow[]
+      convexHttpRoutes: MeasuredProtectedSurfaceRow[]
+      candidateCounts: MeasuredProtectedSurfaceInventory['candidateCounts']
+      actualCounts: MeasuredProtectedSurfaceInventory['actualCounts']
+    } & MeasuredProtectedSurfaceInventory
+    expanded.publicConvex.push(
+      row('mcp', 116),
+      row('cli', 117),
+      row('callback', 118),
+      row('worker', 119),
+      row('reconciliation', 120),
+      row('continuation', 121),
+    )
+    expanded.convexHttpRoutes = [row('http', 122)]
+    expanded.candidateCounts = { ...expanded.candidateCounts, publicConvex: 122, convexHttpRoutes: 1 }
+    expanded.actualCounts = { ...expanded.actualCounts, publicConvex: 122, convexHttpRoutes: 1 }
+
+    const proof = await collect(expanded)
+
+    expect(proof.baselineCounts).toEqual(inventory().expectedCounts)
+    expect(proof.baselineSurfaceCount).toBe(195)
+    expect(proof.candidateCounts.publicConvex).toBe(122)
+    expect(proof.candidateCounts.convexHttpRoutes).toBe(1)
+    expect(proof.measuredSurfaceCount).toBe(202)
+    expect(proof.expectedDecisionMatrix.caseCount).toBe(202 * 7)
   })
 
   it('rejects omissions, duplicates, unproved exemptions and synthetic sink rows', async () => {
@@ -154,11 +224,23 @@ describe('P2-05 production evidence collector', () => {
     duplicate.publicConvex[1] = duplicate.publicConvex[0]!
     await expect(collect(duplicate)).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
 
+    const routeCountMismatch = structuredClone(inventory()) as unknown as {
+      candidateCounts: MeasuredProtectedSurfaceInventory['candidateCounts']
+      actualCounts: MeasuredProtectedSurfaceInventory['actualCounts']
+    } & MeasuredProtectedSurfaceInventory
+    routeCountMismatch.candidateCounts = { ...routeCountMismatch.candidateCounts, convexHttpRoutes: 2 }
+    routeCountMismatch.actualCounts = { ...routeCountMismatch.actualCounts, convexHttpRoutes: 2 }
+    await expect(collect(routeCountMismatch)).rejects.toMatchObject({
+      code: 'production_evidence_inventory_invalid',
+    })
+
     const unproved = structuredClone(inventory())
     delete (unproved.publicConvex[0] as { exemption?: unknown }).exemption
     await expect(collect(unproved)).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
 
     await expect(collect(inventory(), { ...sinks(), log: async () => ({ sourceRef: '', textFragments: ['clean'] }) }))
+      .rejects.toMatchObject({ code: 'production_evidence_sink_invalid' })
+    await expect(collect(inventory(), { ...sinks(), log: async () => ({ sourceRef: 'logger:empty' }) }))
       .rejects.toMatchObject({ code: 'production_evidence_sink_invalid' })
 
     const badProtected = structuredClone(inventory()) as unknown as {
@@ -166,6 +248,73 @@ describe('P2-05 production evidence collector', () => {
     } & MeasuredProtectedSurfaceInventory
     badProtected.serverFunctions[0] = { ...badProtected.serverFunctions[0]!, authorityPath: [] }
     await expect(collect(badProtected)).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
+
+    const blocked = structuredClone(inventory()) as unknown as {
+      serverFunctions: MeasuredProtectedSurfaceRow[]
+    } & MeasuredProtectedSurfaceInventory
+    blocked.serverFunctions[0] = { ...blocked.serverFunctions[0]!, status: 'blocked' }
+    await expect(collect(blocked)).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
+
+    const registry = runtimeHandlerTests(inventory())
+    const [authoritySink] = Object.keys(registry.rows)
+    if (authoritySink === undefined) throw new Error('test_runtime_sink_missing')
+    const redRegistry = {
+      ...registry,
+      rows: { ...registry.rows, [authoritySink]: { status: 'red' as const, reason: 'runtime_handler_test_missing' } },
+    }
+    await expect(collectProductionEvidence({
+      ...evidenceRequest(), runtimeHandlerTests: redRegistry,
+    })).rejects.toMatchObject({ code: 'production_evidence_runtime_handler_red' })
+
+    const wrongInventoryDigest = { ...registry, inventorySha256: 'b'.repeat(64) }
+    await expect(collectProductionEvidence({
+      ...evidenceRequest(), runtimeHandlerTests: wrongInventoryDigest,
+    })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
+
+    const { [authoritySink]: _omitted, ...remainingRuntimeSinks } = registry.rows
+    const missingRuntimeSink = { ...registry, rows: remainingRuntimeSinks }
+    await expect(collectProductionEvidence({
+      ...evidenceRequest(), runtimeHandlerTests: missingRuntimeSink,
+    })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
+
+    const covered = registry.rows[authoritySink]
+    if (covered?.status !== 'covered') throw new Error('test_runtime_sink_missing')
+    const wrongRuntimeSurface = {
+      ...registry,
+      rows: { ...registry.rows, [authoritySink]: { ...covered, surfaceRef: 'surface:wrong' } },
+    }
+    await expect(collectProductionEvidence({
+      ...evidenceRequest(), runtimeHandlerTests: wrongRuntimeSurface,
+    })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
+
+    const twoSinks = structuredClone(inventory()) as unknown as {
+      serverFunctions: MeasuredProtectedSurfaceRow[]
+    } & MeasuredProtectedSurfaceInventory
+    const secondSink = 'convex/secondAuthoritySink.ts:admit'
+    const original = twoSinks.serverFunctions[0]!
+    twoSinks.serverFunctions[0] = {
+      ...original,
+      authoritySink: secondSink,
+      authorityPath: Object.freeze([
+        original.authorityPath![0]!,
+        Object.freeze({
+          ref: secondSink, file: 'convex/secondAuthoritySink.ts', line: 1, column: 1, via: 'call' as const,
+        }),
+      ]),
+    }
+    const twoSinkRegistry = runtimeHandlerTests(twoSinks)
+    const firstCovered = Object.values(twoSinkRegistry.rows).find((row) => row.status === 'covered')
+    if (firstCovered?.status !== 'covered') throw new Error('test_runtime_sink_missing')
+    const duplicateTestRefs = {
+      ...twoSinkRegistry,
+      rows: Object.fromEntries(Object.entries(twoSinkRegistry.rows).map(([sink, row]) => [
+        sink,
+        row.status === 'red' ? row : { ...row, testFile: firstCovered.testFile, testName: firstCovered.testName },
+      ])),
+    }
+    await expect(collectProductionEvidence({
+      ...evidenceRequest(twoSinks), runtimeHandlerTests: duplicateTestRefs,
+    })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
 
     await expect(collectProductionEvidence({
       ...evidenceRequest(),

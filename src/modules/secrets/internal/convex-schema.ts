@@ -27,6 +27,21 @@ export const secretLifecycleStateValue = v.union(
   v.literal('pointer_conflict'),
 )
 
+const secretLifecycleRecordFields = {
+  operationRef: v.string(),
+  idempotencyRef: v.string(),
+  operation: v.union(v.literal('provision'), v.literal('rotate')),
+  secretRef: v.string(),
+  targetGeneration: v.string(),
+  previousGeneration: v.optional(v.string()),
+  previousRevision: v.number(),
+  state: secretLifecycleStateValue,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+} as const
+
+export const secretLifecycleRecordValue = v.object(secretLifecycleRecordFields)
+
 export const secretReferenceTables = {
   secretPointers: defineTable({
     secretRef: v.string(),
@@ -53,16 +68,7 @@ export const secretReferenceTables = {
     ])
     .index('by_secretRef_and_newRevision', ['secretRef', 'newRevision']),
   secretLifecycleJournal: defineTable({
-    operationRef: v.string(),
-    idempotencyRef: v.string(),
-    operation: v.union(v.literal('provision'), v.literal('rotate')),
-    secretRef: v.string(),
-    targetGeneration: v.string(),
-    previousGeneration: v.optional(v.string()),
-    previousRevision: v.number(),
-    state: secretLifecycleStateValue,
-    createdAt: v.number(),
-    updatedAt: v.number(),
+    ...secretLifecycleRecordFields,
     authority: secretPointerAuthorityValue,
   })
     .index('by_idempotencyRef', ['idempotencyRef'])
