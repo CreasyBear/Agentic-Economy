@@ -11,14 +11,14 @@ Last updated: 2026-08-26 Australia/Perth
 |---|---|---|---|
 | 0 | INTEGRATED | `50f74aa72` | Foundation predecessor retained |
 | 1 | SOURCE_ACCEPTED_EVIDENCE_OPEN | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; evidence handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Phase 2 launched |
-| 2 | IMPLEMENTING | task `01a039cb-a32a-7952-9c39-330b3c4ec860`; branch `codex/ae-maturity-phase-2`; current measured HEAD `787396e15b1d7c3e769b00843d3bcc8326e80d19`; base `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Freeze and verify real effect-path dominance proof, bounded repair, internal handoff, then fresh acceptance |
-| 3 | ARCHITECTING | task `01a03cd1-732d-7a81-8d23-a90e5840af85`; worktree `/Users/joelchan/.codex/worktrees/25b3/Agentic-Economy`; preparation ref `d9c645794cadbff1799d1a0b7d3e31f30fa642b5` | Internally verify architecture, then fresh Ox Alpha design acceptance; implementation still waits for Phase 2 source acceptance |
-| 4 | BLOCKED_BY_DEPENDENCY | waits for Phase 3 | Complete transaction kernel |
-| 5 | BLOCKED_BY_DEPENDENCY | waits for Phase 2 source acceptance | Launch Lane B foundations |
-| 6 | BLOCKED_BY_DEPENDENCY | waits for Phase 2; call/continuation integration also waits for Phase 4 | Launch bounded Lane C scope |
-| 7 | BLOCKED_BY_DEPENDENCY | waits for branch integration | Scale/fairness/cost |
-| 8 | BLOCKED_BY_DEPENDENCY | waits for branch integration | Support/lifecycle/integrity |
-| 9 | BLOCKED_BY_DEPENDENCY | waits for every program branch gate | GA readiness/evidence |
+| 2 | IMPLEMENTING | task `01a039cb-a32a-7952-9c39-330b3c4ec860`; branch `codex/ae-maturity-phase-2`; current measured HEAD `3dd77ba0c8800124e1374a91bc83b06ca970effc`; base `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Finish the frozen authority-entry migration, internal handoff, then fresh acceptance |
+| 3 | REBASELINE_HOLD | architecture tasks `01a03cd1-732d-7a81-8d23-a90e5840af85` and `01a03d14-df23-72f3-88d5-4d246472b07b` stopped and archived; prior drafts are explicitly unaccepted with 0/12 reset gates met | Wait for Phase 2 acceptance, Phase 1–2 forensics and a new engineering-reviewed executable baseline |
+| 4 | REBASELINE_HOLD | prior Phase 3 dependency model is not authorized | Wait for the new baseline |
+| 5 | REBASELINE_HOLD | automatic parallel launch is suspended | Wait for the new baseline |
+| 6 | REBASELINE_HOLD | automatic parallel launch is suspended | Wait for the new baseline |
+| 7 | REBASELINE_HOLD | prior branch scheduler is suspended | Wait for the new baseline |
+| 8 | REBASELINE_HOLD | prior branch scheduler is suspended | Wait for the new baseline |
+| 9 | REBASELINE_HOLD | prior root sequencing is suspended | Wait for the new baseline |
 
 ## Phase 1 accepted boundary
 
@@ -54,13 +54,15 @@ Last updated: 2026-08-26 Australia/Perth
 
 ## Next automatic actions
 
-1. Require Phase 2 to freeze and independently challenge the effect-path dominance
-   proof before another source repair.
-2. Require an exact internally verified Phase 2 ref and clean handoff.
-3. Create a new context-independent Phase 2 acceptance task.
-4. Independently complete and accept the Phase 3 pre-code architecture package;
-   no Phase 3 implementation begins before both design and Phase 2 source acceptance.
-5. On `CHANGES_REQUIRED`, return findings to the owning task and commission a new
-   acceptance attempt after repair.
-6. On source acceptance, freeze Phase 2 learnings and launch dependency-safe Lane
-   A, B and bounded C tasks in separate worktrees.
+1. Finish only the frozen Phase 2 authority-entry migration and require an exact
+   internally verified ref plus clean handoff.
+2. Create a fresh context-independent Phase 2 validation, review, evaluation and
+   Ox acceptance task; return any source finding to the Phase 2 task for bounded
+   repair and require another fresh acceptance attempt.
+3. Complete Phase 2 housekeeping and preserve its exact evidence, learnings,
+   papercuts and open external-evidence assignments.
+4. Run a read-only GSD forensics review across Phases 1–2 to measure what worked,
+   what failed and why repeated fault-finding/repair loops occurred.
+5. Rebaseline the maturity program with an actual executable plan and complete
+   engineering review. Do not resume Phase 3 or launch any parallel downstream
+   lane until that new baseline is explicitly accepted.
