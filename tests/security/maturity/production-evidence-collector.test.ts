@@ -5,22 +5,13 @@ import {
   type ProductionEvidenceRequest,
   type ProductionEvidenceSinkCollectors,
 } from '../../../src/modules/authority/recovery/public'
-import { accountRef } from '../../../src/modules/principal-account/account/public'
-import { principalRef } from '../../../src/modules/principal-account/principal/public'
 import type {
   MeasuredProtectedSurfaceInventory,
   MeasuredProtectedSurfaceRow,
 } from '../../../src/lib/server/authority-boundary/protected-surface-manifest'
 
-const ACCOUNT = accountRef('acc_00000000000040008000000000000041')
-const OTHER = accountRef('acc_00000000000040008000000000000042')
-const actors = Object.freeze({
-  owner: principalRef('prn_00000000000040008000000000000041'),
-  member: principalRef('prn_00000000000040008000000000000042'),
-  stranger: principalRef('prn_00000000000040008000000000000043'),
-  workload: principalRef('prn_00000000000040008000000000000044'),
-})
 const HASH = 'a'.repeat(64)
+const CASE_LABELS = ['owner', 'member', 'workload', 'missing_workload', 'stranger', 'wrong_account', 'stale_generation'] as const
 
 function row(kind: MeasuredProtectedSurfaceRow['kind'], index: number, exempt = false): MeasuredProtectedSurfaceRow {
   const ref = `measured/${kind}/${index}.ts:surface${index}`
@@ -119,28 +110,62 @@ function runtimeHandlerTests(candidate: MeasuredProtectedSurfaceInventory): Prod
         testFile: `tests/unit/runtime-handler-${index}.test.ts`,
         testName: `executes runtime handler ${index}`,
         sha256: HASH,
+        caseLabels: CASE_LABELS,
       })]
     }))
   return Object.freeze({
-    format: 'phase-2-authority-sink-runtime-tests:v1',
+    format: 'phase-2-authority-sink-runtime-tests:v2',
     inventorySha256: HASH,
     rows: Object.freeze(rows),
+  })
+}
+
+function surfaceAuthorityMap(candidate: MeasuredProtectedSurfaceInventory): ProductionEvidenceRequest['surfaceAuthorityMap'] {
+  const registry = runtimeHandlerTests(candidate)
+  const measuredRows = [
+    ...candidate.serverFunctions, ...candidate.publicConvex, ...candidate.convexHttpActions,
+    ...candidate.convexHttpRoutes, ...candidate.crons, ...candidate.backgroundFamilies,
+  ]
+  const protectedCount = measuredRows.filter((measured) => measured.consequential).length
+  return Object.freeze({
+    format: 'phase-2-surface-authority-map:v1',
+    inventorySha256: HASH,
+    total: measuredRows.length,
+    protected: protectedCount,
+    exemptions: measuredRows.length - protectedCount,
+    proved: protectedCount,
+    red: 0,
+    rows: Object.freeze(measuredRows.map((measured) => measured.consequential
+      ? Object.freeze({
+          surfaceRef: measured.ref,
+          runtimeHandlerRef: `${measured.file}:${measured.symbol}`,
+          authoritySink: measured.authoritySink as string,
+          dominance: Object.freeze({ status: 'proved' as const, sha256: HASH }),
+          runtimeIsolation: (() => {
+            const test = registry.rows[measured.authoritySink as string]
+            if (test?.status !== 'covered') throw new Error('test_runtime_sink_missing')
+            return Object.freeze({
+              testFile: test.testFile, testName: test.testName,
+              testSha256: test.sha256, caseLabels: CASE_LABELS,
+            })
+          })(),
+        })
+      : Object.freeze({
+          surfaceRef: measured.ref,
+          runtimeHandlerRef: `${measured.file}:${measured.symbol}`,
+          status: 'tested_exemption' as const,
+          testFile: measured.exemption?.testFile ?? '',
+          testName: measured.exemption?.testName ?? '',
+        }))),
   })
 }
 
 function evidenceRequest(candidate = inventory(), collectors = sinks()): ProductionEvidenceRequest {
   return {
     measuredInventory: candidate,
-    resolveSurface: async (measured) => ({
-      surfaceRef: measured.ref,
-      owningAccountRef: ACCOUNT,
-      resourceRef: `surface:${measured.ref}`,
-    }),
-    actors,
-    wrongAccountRef: OTHER,
-    currentGeneration: 4,
     measuredInventorySha256: HASH,
     runtimeHandlerTests: runtimeHandlerTests(candidate),
+    surfaceAuthorityMap: surfaceAuthorityMap(candidate),
     canary: new TextEncoder().encode('production-canary'),
     sinkCollectors: collectors,
   }
@@ -160,20 +185,20 @@ function candidateSurfaceCount(candidate: MeasuredProtectedSurfaceInventory): nu
 }
 
 describe('P2-05 production evidence collector', () => {
-  it('accounts for every exact measured ID and generates seven isolation decisions per candidate row', async () => {
+  it('accounts for every exact measured ID through the measured runtime-isolation map', async () => {
     const proof = await collect()
     const candidateCount = candidateSurfaceCount(inventory())
     expect(proof.baselineSurfaceCount).toBe(195)
     expect(proof.measuredSurfaceCount).toBe(candidateCount)
-    expect(proof.expectedDecisionMatrix.surfaceCount).toBe(candidateCount)
-    expect(proof.expectedDecisionMatrix.caseCount).toBe(candidateCount * 7)
-    expect(new Set(proof.expectedDecisionMatrix.rows.map((value) => value.surfaceRef))).toHaveLength(candidateCount)
-    expect(proof.expectedDecisionMatrix.rows.filter((value) => value.protection === 'tested_public_exemption'))
-      .toHaveLength(7)
-    expect(proof.expectedDecisionMatrix.rows.find((value) => value.protection === 'tested_public_exemption'
-      && value.caseKind === 'missing_workload')?.decision).toEqual({ kind: 'allowed' })
+    expect(proof.surfaceRuntimeIsolationIndex).toMatchObject({
+      surfaceCount: candidateCount,
+      protectedSurfaceCount: candidateCount - 1,
+      testedExemptionCount: 1,
+      caseCount: (candidateCount - 1) * 7,
+    })
+    expect(new Set(proof.surfaceRuntimeIsolationIndex.surfaceRefs)).toHaveLength(candidateCount)
     expect(proof.runtimeHandlerTestIndex).toMatchObject({
-      kind: 'generated_full_suite_test_index', sinkCount: 1, inventorySha256: HASH,
+      kind: 'generated_authority_composition_test_index', sinkCount: 1, caseCount: 7, inventorySha256: HASH,
     })
     expect(proof.canary.checkedSinks).toHaveLength(6)
     expect(proof.sinkSourceRefs).toEqual([
@@ -208,7 +233,7 @@ describe('P2-05 production evidence collector', () => {
     expect(proof.candidateCounts.publicConvex).toBe(122)
     expect(proof.candidateCounts.convexHttpRoutes).toBe(1)
     expect(proof.measuredSurfaceCount).toBe(202)
-    expect(proof.expectedDecisionMatrix.caseCount).toBe(202 * 7)
+    expect(proof.surfaceRuntimeIsolationIndex.caseCount).toBe(201 * 7)
   })
 
   it('rejects omissions, duplicates, unproved exemptions and synthetic sink rows', async () => {
@@ -303,24 +328,24 @@ describe('P2-05 production evidence collector', () => {
       ]),
     }
     const twoSinkRegistry = runtimeHandlerTests(twoSinks)
-    const firstCovered = Object.values(twoSinkRegistry.rows).find((row) => row.status === 'covered')
-    if (firstCovered?.status !== 'covered') throw new Error('test_runtime_sink_missing')
-    const duplicateTestRefs = {
+    const malformedCases = {
       ...twoSinkRegistry,
       rows: Object.fromEntries(Object.entries(twoSinkRegistry.rows).map(([sink, row]) => [
         sink,
-        row.status === 'red' ? row : { ...row, testFile: firstCovered.testFile, testName: firstCovered.testName },
+        row.status === 'red' ? row : { ...row, caseLabels: CASE_LABELS.slice(0, 6) },
       ])),
     }
     await expect(collectProductionEvidence({
-      ...evidenceRequest(twoSinks), runtimeHandlerTests: duplicateTestRefs,
+      ...evidenceRequest(twoSinks), runtimeHandlerTests: malformedCases,
     })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
 
+    const wrongMap = structuredClone(surfaceAuthorityMap(inventory())) as unknown as {
+      rows: Array<{ runtimeHandlerRef: string }>
+    } & ProductionEvidenceRequest['surfaceAuthorityMap']
+    wrongMap.rows[0]!.runtimeHandlerRef = 'surface:wrong'
     await expect(collectProductionEvidence({
       ...evidenceRequest(),
-      resolveSurface: async (measured) => ({
-        surfaceRef: `${measured.ref}:wrong`, owningAccountRef: ACCOUNT, resourceRef: 'surface:wrong',
-      }),
+      surfaceAuthorityMap: wrongMap,
     })).rejects.toMatchObject({ code: 'production_evidence_inventory_invalid' })
 
     const missingSink = { ...sinks() } as unknown as Record<string, unknown>

@@ -3,19 +3,11 @@ import type {
   MeasuredProtectedSurfaceRow,
 } from '../../../lib/server/authority-boundary/protected-surface-manifest'
 import {
-  evaluateCanonicalIsolationProbe,
-  generateIsolationMatrix,
-  type IsolationMatrix,
-  type IsolationSurface,
-} from './isolation'
-import {
   SECRET_CANARY_SINKS,
   proveSecretCanaryIsolation,
   type SecretCanaryProof,
   type SecretCanarySink,
 } from './secret-canary'
-import type { AccountRef } from '../../principal-account/account/public'
-import type { PrincipalRef } from '../../principal-account/principal/public'
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u
 const PHASE_2_BASELINE_COUNTS = Object.freeze({
@@ -62,28 +54,46 @@ export type ProductionRuntimeHandlerTestRow =
       testFile: string
       testName: string
       sha256: string
+      caseLabels: readonly string[]
     }>
   | Readonly<{ status: 'red'; reason: string }>
 
 export type ProductionRuntimeHandlerTestRegistry = Readonly<{
-  format: 'phase-2-authority-sink-runtime-tests:v1'
+  format: 'phase-2-authority-sink-runtime-tests:v2'
   inventorySha256: string
   rows: Readonly<Record<string, ProductionRuntimeHandlerTestRow>>
 }>
 
+export type ProductionSurfaceAuthorityMap = Readonly<{
+  format: 'phase-2-surface-authority-map:v1'
+  inventorySha256: string
+  total: number
+  protected: number
+  exemptions: number
+  proved: number
+  red: number
+  rows: readonly Readonly<{
+    surfaceRef: string
+    runtimeHandlerRef: string
+    authoritySink?: string
+    status?: 'tested_exemption'
+    testFile?: string
+    testName?: string
+    dominance?: Readonly<{ status: 'proved' | 'red'; sha256?: string }>
+    runtimeIsolation?: Readonly<{
+      testFile: string
+      testName: string
+      testSha256: string
+      caseLabels: readonly string[]
+    }>
+  }>[]
+}>
+
 export type ProductionEvidenceRequest = Readonly<{
   measuredInventory: MeasuredProtectedSurfaceInventory
-  resolveSurface(row: MeasuredProtectedSurfaceRow): Promise<Omit<IsolationSurface, 'protection'>>
-  actors: Readonly<{
-    owner: PrincipalRef
-    member: PrincipalRef
-    stranger: PrincipalRef
-    workload: PrincipalRef
-  }>
-  wrongAccountRef: AccountRef
-  currentGeneration: number
   measuredInventorySha256: string
   runtimeHandlerTests: ProductionRuntimeHandlerTestRegistry
+  surfaceAuthorityMap: ProductionSurfaceAuthorityMap
   canary: Uint8Array
   sinkCollectors: ProductionEvidenceSinkCollectors
 }>
@@ -94,11 +104,20 @@ export type ProductionEvidenceProof = Readonly<{
   candidateCounts: Readonly<Record<string, number>>
   measuredSurfaceCount: number
   measuredSurfaceRefs: readonly string[]
-  expectedDecisionMatrix: IsolationMatrix
+  surfaceRuntimeIsolationIndex: Readonly<{
+    kind: 'measured_surface_runtime_isolation_index'
+    inventorySha256: string
+    surfaceCount: number
+    protectedSurfaceCount: number
+    testedExemptionCount: number
+    caseCount: number
+    surfaceRefs: readonly string[]
+  }>
   runtimeHandlerTestIndex: Readonly<{
-    kind: 'generated_full_suite_test_index'
+    kind: 'generated_authority_composition_test_index'
     inventorySha256: string
     sinkCount: number
+    caseCount: number
     authoritySinks: readonly string[]
     testRefs: readonly string[]
   }>
@@ -111,12 +130,7 @@ export async function collectProductionEvidence(
 ): Promise<ProductionEvidenceProof> {
   const measuredRows = measuredInventoryRows(request.measuredInventory)
   const runtimeHandlerTestIndex = runtimeHandlerTestIndexEvidence(request, measuredRows)
-  const surfaces = await Promise.all(measuredRows.map(async (measured): Promise<IsolationSurface> => {
-    const protection = protectionFor(measured)
-    const resolved = await request.resolveSurface(measured)
-    if (resolved.surfaceRef !== measured.ref) throw inventoryError()
-    return Object.freeze({ ...resolved, protection })
-  }))
+  const surfaceRuntimeIsolationIndex = surfaceRuntimeIsolationEvidence(request, measuredRows)
 
   const sinkKeys = Object.keys(request.sinkCollectors)
   if (sinkKeys.length !== SECRET_CANARY_SINKS.length
@@ -153,13 +167,6 @@ export async function collectProductionEvidence(
   const artifacts = collected.map(({ artifact }) => artifact)
   if (new Set(sourceRefs).size !== SECRET_CANARY_SINKS.length) throw sinkError()
 
-  const expectedDecisionMatrix = await generateIsolationMatrix({
-    surfaces: Object.freeze(surfaces),
-    actors: request.actors,
-    wrongAccountRef: request.wrongAccountRef,
-    currentGeneration: request.currentGeneration,
-    evaluate: async (probe) => evaluateCanonicalIsolationProbe(probe, request.actors),
-  })
   const canary = proveSecretCanaryIsolation(request.canary, artifacts)
   return Object.freeze({
     baselineSurfaceCount: baselineSurfaceCount(),
@@ -167,7 +174,7 @@ export async function collectProductionEvidence(
     candidateCounts: candidateCounts(request.measuredInventory),
     measuredSurfaceCount: measuredRows.length,
     measuredSurfaceRefs: Object.freeze(measuredRows.map((row) => row.ref)),
-    expectedDecisionMatrix,
+    surfaceRuntimeIsolationIndex,
     runtimeHandlerTestIndex,
     canary,
     sinkSourceRefs: Object.freeze(sourceRefs),
@@ -182,7 +189,8 @@ function runtimeHandlerTestIndexEvidence(
   const protectedRows = measuredRows.filter((row) => protectionFor(row) === 'protected')
   const authoritySinks = Object.freeze([...new Set(protectedRows.map((row) => row.authoritySink as string))].sort())
   const registrySinks = Object.keys(registry.rows).sort()
-  if (registry.format !== 'phase-2-authority-sink-runtime-tests:v1'
+  const expectedCases = ['owner', 'member', 'workload', 'missing_workload', 'stranger', 'wrong_account', 'stale_generation']
+  if (registry.format !== 'phase-2-authority-sink-runtime-tests:v2'
     || !SHA256_PATTERN.test(request.measuredInventorySha256)
     || registry.inventorySha256 !== request.measuredInventorySha256
     || registrySinks.length !== authoritySinks.length
@@ -199,16 +207,68 @@ function runtimeHandlerTestIndexEvidence(
     if (measured === undefined
       || !/^tests\/.+\.test\.ts$/u.test(row.testFile)
       || row.testName.length === 0
+      || JSON.stringify(row.caseLabels) !== JSON.stringify(expectedCases)
       || !SHA256_PATTERN.test(row.sha256)) throw inventoryError()
     testRefs.push(`${row.testFile}:${row.testName}`)
   }
-  if (new Set(testRefs).size !== testRefs.length) throw inventoryError()
   return Object.freeze({
-    kind: 'generated_full_suite_test_index',
+    kind: 'generated_authority_composition_test_index',
     inventorySha256: registry.inventorySha256,
     sinkCount: authoritySinks.length,
+    caseCount: authoritySinks.length * expectedCases.length,
     authoritySinks,
     testRefs: Object.freeze(testRefs),
+  })
+}
+
+function surfaceRuntimeIsolationEvidence(
+  request: ProductionEvidenceRequest,
+  measuredRows: readonly MeasuredProtectedSurfaceRow[],
+): ProductionEvidenceProof['surfaceRuntimeIsolationIndex'] {
+  const map = request.surfaceAuthorityMap
+  const measuredByRef = new Map(measuredRows.map((row) => [row.ref, row]))
+  const expectedRefs = measuredRows.map((row) => row.ref)
+  if (map.format !== 'phase-2-surface-authority-map:v1'
+    || map.inventorySha256 !== request.measuredInventorySha256
+    || map.total !== measuredRows.length
+    || map.protected + map.exemptions !== map.total
+    || map.proved !== map.protected
+    || map.red !== 0
+    || map.rows.length !== map.total
+    || JSON.stringify(map.rows.map((row) => row.surfaceRef)) !== JSON.stringify(expectedRefs)) {
+    throw inventoryError()
+  }
+  const expectedCases = ['owner', 'member', 'workload', 'missing_workload', 'stranger', 'wrong_account', 'stale_generation']
+  for (const row of map.rows) {
+    const measured = measuredByRef.get(row.surfaceRef)
+    if (measured === undefined || row.runtimeHandlerRef !== `${measured.file}:${measured.symbol}`) {
+      throw inventoryError()
+    }
+    if (protectionFor(measured) === 'protected') {
+      const composition = row.runtimeIsolation
+      const sinkTest = request.runtimeHandlerTests.rows[measured.authoritySink as string]
+      if (row.authoritySink !== measured.authoritySink
+        || row.dominance?.status !== 'proved'
+        || !SHA256_PATTERN.test(row.dominance.sha256 ?? '')
+        || composition === undefined
+        || sinkTest?.status !== 'covered'
+        || composition.testFile !== sinkTest.testFile
+        || composition.testName !== sinkTest.testName
+        || composition.testSha256 !== sinkTest.sha256
+        || JSON.stringify(composition.caseLabels) !== JSON.stringify(expectedCases)) throw inventoryError()
+    } else if (row.status !== 'tested_exemption'
+      || row.testFile !== measured.exemption?.testFile
+      || row.testName !== measured.exemption?.testName
+      || row.runtimeIsolation !== undefined) throw inventoryError()
+  }
+  return Object.freeze({
+    kind: 'measured_surface_runtime_isolation_index',
+    inventorySha256: map.inventorySha256,
+    surfaceCount: map.total,
+    protectedSurfaceCount: map.protected,
+    testedExemptionCount: map.exemptions,
+    caseCount: map.protected * expectedCases.length,
+    surfaceRefs: Object.freeze([...expectedRefs]),
   })
 }
 

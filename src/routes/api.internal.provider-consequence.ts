@@ -28,8 +28,6 @@ import {
   type ProviderConsequenceJournal,
 } from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
 import { readX402EvmReceipt } from '@/modules/capability-execution/invocation-worker/x402Settlement'
-import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
-import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import {
   createProductionSecretRuntime,
   secretGeneration,
@@ -254,6 +252,7 @@ async function postConvex(
   token: string,
   body: unknown,
 ): Promise<unknown> {
+  const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const response = await sendGuardedHttpRequest(new Request(`${origin}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -579,6 +578,8 @@ export async function handleProviderConsequenceRequest(
       return noStore({ kind: 'unavailable' }, 503)
     }
   }
+  const { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } =
+    await import('@/modules/network-guard/public')
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   const send: RouteTransportFetch = async (target, init) => {
     if (!await isPublicHttpTarget(target, defaultDnsResolver)) {

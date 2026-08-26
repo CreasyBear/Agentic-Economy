@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { OperationInvokeService } from '@/modules/capability-execution/operation-invoke'
+import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 import {
   handleOperationInvokeCancelPost,
   handleOperationInvokeReconcilePost,
@@ -11,8 +12,8 @@ import {
 const operationRef = `operation:v1:${'a'.repeat(64)}`
 const invocationRef = `operation-invocation:v1:${'b'.repeat(64)}`
 const principal = {
-  principalId: 'clerk_api_key:credential:one',
-  ownerId: 'user_one',
+  principalId: `prn_${'1'.repeat(32)}`,
+  ownerId: `acc_${'2'.repeat(32)}`,
   credentialId: 'credential:one',
   applicationRef: 'agentic-economy',
   environment: 'sandbox' as const,
@@ -20,11 +21,13 @@ const principal = {
   authorityMode: 'inspect_only' as const,
 }
 
+const resolveCanonicalPrincipal: AgentAccessPrincipalResolver = async () => principal
+
 const authenticate = async () => ({
   isAuthenticated: true as const,
   tokenType: 'api_key' as const,
   id: principal.credentialId,
-  subject: principal.ownerId,
+  subject: 'user_operation-recovery',
   scopes: principal.scopes,
 })
 
@@ -97,7 +100,7 @@ describe('operation recovery HTTP adapters', () => {
         headers: { 'x-ae-request-id': 'corr_recovery_http' },
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
     const cancelResponse = await handleOperationInvokeCancelPost(
       new Request(`https://ae.example/api/v1/operations/${invocationRef}/cancel`, {
@@ -106,7 +109,7 @@ describe('operation recovery HTTP adapters', () => {
         body: JSON.stringify({ idempotencyKey: 'cancel:one' }),
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
 
     expect(statusResponse.status).toBe(200)
@@ -146,7 +149,7 @@ describe('operation recovery HTTP adapters', () => {
         body: JSON.stringify({ idempotencyKey: 'reconcile:one', evidence }),
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
     const cancelled = await handleOperationInvokeCancelPost(
       new Request(`https://ae.example/api/v1/operations/${invocationRef}/cancel`, {
@@ -155,7 +158,7 @@ describe('operation recovery HTTP adapters', () => {
         body: JSON.stringify({ idempotencyKey: 'cancel:after-release' }),
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
 
     expect(response.status).toBe(200)
@@ -179,7 +182,7 @@ describe('operation recovery HTTP adapters', () => {
         body: JSON.stringify({ credential: secret }),
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
     const missingBody = await missingBodyResponse.text()
 
@@ -195,7 +198,7 @@ describe('operation recovery HTTP adapters', () => {
         body: JSON.stringify({ idempotencyKey: 'body:two' }),
       }),
       invocationRef,
-      { authenticate, operationInvokeService: executor },
+      { authenticate, resolvePrincipal: resolveCanonicalPrincipal, operationInvokeService: executor },
     )
 
     expect(bodyIdentityResponse.status).toBe(200)

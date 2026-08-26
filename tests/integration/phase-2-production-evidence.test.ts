@@ -41,12 +41,12 @@ vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 
 const CONTRACT = '.planning/maturity-execution/contracts/phase-2-protected-surfaces.json'
 const RUNTIME_TEST_REGISTRY = '.planning/maturity-execution/contracts/phase-2-authority-sink-runtime-tests.json'
+const SURFACE_AUTHORITY_MAP = '.planning/maturity-execution/contracts/phase-2-surface-authority-map.json'
 const NOW = 2_000_000_000_000
 const SECRET_REF = secretRef(`sec_${'1'.repeat(32)}`)
 const SECRET_GENERATION = secretGeneration(`sgn_${'1'.repeat(32)}`)
 const CONNECTION_REF = `con_${'2'.repeat(32)}`
 const ACCOUNT = accountRef('acc_00000000000040008000000000000061')
-const OTHER_ACCOUNT = accountRef('acc_00000000000040008000000000000062')
 const actors = Object.freeze({
   owner: principalRef('prn_00000000000040008000000000000061'),
   member: principalRef('prn_00000000000040008000000000000062'),
@@ -319,10 +319,11 @@ describe('Phase 2 exact production evidence composition', () => {
     expectJitEvidenceIsSafe(jit, canaryText)
   })
 
-  it('drives every measured candidate identity through seven canonical cases and six runtime-captured sinks', async () => {
+  it('proves every measured runtime handler through a seven-case authority composition and six captured sinks', async () => {
     const inventorySource = text(CONTRACT)
     const measuredInventory = JSON.parse(inventorySource) as MeasuredProtectedSurfaceInventory
     const runtimeHandlerTests = JSON.parse(text(RUNTIME_TEST_REGISTRY)) as ProductionEvidenceRequest['runtimeHandlerTests']
+    const surfaceAuthorityMap = JSON.parse(text(SURFACE_AUTHORITY_MAP)) as ProductionEvidenceRequest['surfaceAuthorityMap']
     const measuredInventorySha256 = createHash('sha256').update(inventorySource).digest('hex')
     const candidateSurfaceCount = measuredInventory.serverFunctions.length
       + measuredInventory.publicConvex.length
@@ -335,16 +336,9 @@ describe('Phase 2 exact production evidence composition', () => {
     const jit = await captureJitEvidence(canaryText)
     const proof = await collectProductionEvidence({
       measuredInventory,
-      resolveSurface: async (row) => Object.freeze({
-        surfaceRef: row.ref,
-        owningAccountRef: ACCOUNT,
-        resourceRef: `phase2-evidence:${row.sha256}`,
-      }),
-      actors,
-      wrongAccountRef: OTHER_ACCOUNT,
-      currentGeneration: 1,
       measuredInventorySha256,
       runtimeHandlerTests,
+      surfaceAuthorityMap,
       canary,
       sinkCollectors: jit.collectors,
     })
@@ -355,20 +349,15 @@ describe('Phase 2 exact production evidence composition', () => {
     expect(proof.measuredSurfaceCount).toBe(candidateSurfaceCount)
     expect(proof.measuredSurfaceRefs).toHaveLength(candidateSurfaceCount)
     expect(new Set(proof.measuredSurfaceRefs).size).toBe(candidateSurfaceCount)
-    expect(proof.expectedDecisionMatrix).toMatchObject({
+    expect(proof.surfaceRuntimeIsolationIndex).toMatchObject({
       surfaceCount: candidateSurfaceCount,
-      caseCount: candidateSurfaceCount * 7,
+      protectedSurfaceCount: surfaceAuthorityMap.protected,
+      testedExemptionCount: surfaceAuthorityMap.exemptions,
+      caseCount: surfaceAuthorityMap.protected * 7,
     })
-    expect(proof.expectedDecisionMatrix.rows).toHaveLength(candidateSurfaceCount * 7)
-    expect(new Set(proof.expectedDecisionMatrix.rows.map(({ surfaceRef }) => surfaceRef)).size)
+    expect(proof.surfaceRuntimeIsolationIndex.surfaceRefs).toHaveLength(candidateSurfaceCount)
+    expect(new Set(proof.surfaceRuntimeIsolationIndex.surfaceRefs).size)
       .toBe(candidateSurfaceCount)
-    const protectedRows = proof.expectedDecisionMatrix.rows
-      .filter(({ protection }) => protection === 'protected')
-    expect(protectedRows.filter(({ caseKind, decision }) =>
-      ['missing_workload', 'stranger', 'wrong_account', 'stale_generation'].includes(caseKind)
-      && decision.kind === 'denied')).toHaveLength(protectedRows.length * 4 / 7)
-    expect(protectedRows.some(({ caseKind, decision }) =>
-      caseKind === 'missing_workload' && decision.kind === 'allowed')).toBe(false)
     const consequentialRows = [
       ...measuredInventory.serverFunctions,
       ...measuredInventory.publicConvex,
@@ -378,9 +367,10 @@ describe('Phase 2 exact production evidence composition', () => {
       ...measuredInventory.backgroundFamilies,
     ].filter((row) => row.consequential)
     expect(proof.runtimeHandlerTestIndex).toMatchObject({
-      kind: 'generated_full_suite_test_index',
+      kind: 'generated_authority_composition_test_index',
       inventorySha256: measuredInventorySha256,
       sinkCount: new Set(consequentialRows.map((row) => row.authoritySink)).size,
+      caseCount: new Set(consequentialRows.map((row) => row.authoritySink)).size * 7,
     })
     expect(proof.runtimeHandlerTestIndex.testRefs)
       .toHaveLength(proof.runtimeHandlerTestIndex.sinkCount)

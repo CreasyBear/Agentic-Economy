@@ -79,32 +79,6 @@ export class IsolationProofError extends Error {
   }
 }
 
-export function evaluateCanonicalIsolationProbe(
-  probe: IsolationProbe,
-  authorizedActors: Readonly<{
-    owner: PrincipalRef
-    member: PrincipalRef
-    workload: PrincipalRef
-  }>,
-): IsolationDecision {
-  if (probe.protection === 'tested_public_exemption') return Object.freeze({ kind: 'allowed' })
-  if (probe.actorPrincipalRef === undefined) {
-    return Object.freeze({ kind: 'denied', reason: 'missing_workload_context' })
-  }
-  if (probe.activeAccountRef !== probe.owningAccountRef) {
-    return Object.freeze({ kind: 'denied', reason: 'wrong_account_context' })
-  }
-  if (probe.presentedGeneration !== probe.currentGeneration) {
-    return Object.freeze({ kind: 'denied', reason: 'stale_authority_generation' })
-  }
-  if (probe.actorPrincipalRef !== authorizedActors.owner
-    && probe.actorPrincipalRef !== authorizedActors.member
-    && probe.actorPrincipalRef !== authorizedActors.workload) {
-    return Object.freeze({ kind: 'denied', reason: 'principal_not_authorized' })
-  }
-  return Object.freeze({ kind: 'allowed' })
-}
-
 export async function generateIsolationMatrix(request: IsolationMatrixRequest): Promise<IsolationMatrix> {
   assertInventory(request)
   const rows = await Promise.all(request.surfaces.flatMap((surface) =>

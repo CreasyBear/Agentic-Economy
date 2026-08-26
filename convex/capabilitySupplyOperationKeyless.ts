@@ -336,7 +336,10 @@ async function serverFunctionAuthorized(
 ): Promise<boolean> {
   const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (serviceAuth === undefined || key === undefined || key.length < 32
-    || !serviceAuth.scopes.includes(EXECUTABLE_DESCRIPTOR_SCOPE)) return false
+    || !serviceAuth.scopes.includes(EXECUTABLE_DESCRIPTOR_SCOPE)
+    || serviceAuth.principalId !== 'ae:server-function'
+    || serviceAuth.ownerId !== 'ae:server-function'
+    || serviceAuth.credentialId !== 'ae:server-function') return false
   return await verifyCustomerRequestServiceAssertion({
     key,
     operation: EXECUTABLE_DESCRIPTOR_OPERATION,

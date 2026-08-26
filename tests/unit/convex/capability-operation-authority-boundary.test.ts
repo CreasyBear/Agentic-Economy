@@ -82,6 +82,24 @@ import { registerAgentPrincipal } from '../../../convex/agentAccessPrincipals'
 import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+type IsolationCaseKind =
+  | 'owner'
+  | 'member'
+  | 'workload'
+  | 'missing_workload'
+  | 'stranger'
+  | 'wrong_account'
+  | 'stale_generation'
+
+const ISOLATION_CASES = [
+  'owner',
+  'member',
+  'workload',
+  'missing_workload',
+  'stranger',
+  'wrong_account',
+  'stale_generation',
+] as const satisfies readonly IsolationCaseKind[]
 const invokeBoundary = (invoke as unknown as { _handler: Handler })._handler
 const statusBoundary = (readInvocationStatus as unknown as { _handler: Handler })._handler
 const cancelBoundary = (cancelInvocation as unknown as { _handler: Handler })._handler
@@ -135,6 +153,9 @@ function agentArgs() {
 type Row = Record<string, unknown> & { _id: string }
 
 class AuthorityMemoryDb {
+  readonly patches: Array<Readonly<{ id: string; value: Record<string, unknown> }>> = []
+  readonly insertions: Array<Readonly<{ table: string; value: Record<string, unknown> }>> = []
+
   constructor(private readonly tables: Readonly<Record<string, readonly Row[]>>) {}
 
   query(table: string) {
@@ -162,6 +183,7 @@ class AuthorityMemoryDb {
   }
 
   async patch(id: string, value: Record<string, unknown>) {
+    this.patches.push({ id, value })
     for (const rows of Object.values(this.tables)) {
       const row = rows.find((candidate) => candidate._id === id)
       if (row !== undefined) Object.assign(row, value)
@@ -169,6 +191,7 @@ class AuthorityMemoryDb {
   }
 
   async insert(table: string, value: Record<string, unknown>) {
+    this.insertions.push({ table, value })
     const rows = (this.tables as Record<string, Row[]>)[table]
     if (rows === undefined) throw new Error(`missing_table:${table}`)
     rows.push({ _id: `${table}:${rows.length + 1}`, ...value })
@@ -306,6 +329,81 @@ afterEach(() => {
 })
 
 describe('capability operation canonical authority boundary', () => {
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered cancel action and its real current-agent sink',
+    async (caseKind) => {
+      const rows = authorityRows(caseKind === 'stale_generation'
+        ? { accessGrant: { generation: 3 } }
+        : {})
+      const db = new AuthorityMemoryDb(rows)
+      const principal = isolationPrincipal(caseKind)
+      const ctx = {
+        runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+          if (path(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') {
+            return await resolveAgentBoundary({ db }, args)
+          }
+          throw new Error(`unexpected_mutation:${path(reference)}`)
+        }),
+      }
+
+      const result = await cancelBoundary(ctx, {
+        operationKey: 'surface:http:agent-operation-cancel',
+        correlationId: `correlation:operation:cancel:${caseKind}`,
+        principal,
+        invocationRef: 'invocation:canonical',
+        idempotencyKey: `isolation:${caseKind}`,
+      })
+
+      if (caseKind === 'workload') {
+        expect(result).toMatchObject({ kind: 'found', state: 'cancelled' })
+        expect(mocks.cancel).toHaveBeenCalledTimes(1)
+      } else {
+        expect(result).toMatchObject({ kind: 'refused', code: 'invocation_not_found' })
+        expect(mocks.cancel).not.toHaveBeenCalled()
+      }
+      expect(ctx.runMutation).toHaveBeenCalledTimes(1)
+      expect(db.patches).toHaveLength(0)
+      expect(db.insertions).toHaveLength(0)
+    },
+  )
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered agent registration mutation and its real canonical-context sink',
+    async (caseKind) => {
+      const rows = authorityRows(caseKind === 'stale_generation'
+        ? { binding: { credentialGeneration: 2 } }
+        : {})
+      rows.agentAccessPrincipals = []
+      if (caseKind === 'wrong_account') {
+        rows.accountOwnerships[0]!.accountRef = `acc_${'d'.repeat(32)}`
+      }
+      const db = new AuthorityMemoryDb(rows)
+      const tokenIdentifier = caseKind === 'workload' || caseKind === 'wrong_account' || caseKind === 'stale_generation'
+        ? callerPrincipal.credentialId
+        : caseKind === 'missing_workload'
+          ? null
+          : `unknown-${caseKind}-credential`
+
+      const result = await registerAgentBoundary({
+        db,
+        auth: {
+          getUserIdentity: async () => tokenIdentifier === null ? null : { tokenIdentifier },
+        },
+      }, registrationArgs())
+
+      if (caseKind === 'workload') {
+        expect(result).toEqual({ kind: 'recorded' })
+        expect(rows.agentAccessPrincipals).toHaveLength(1)
+        expect(db.insertions).toHaveLength(1)
+      } else {
+        expect(result).not.toEqual({ kind: 'recorded' })
+        expect(rows.agentAccessPrincipals).toHaveLength(0)
+        expect(db.insertions).toHaveLength(0)
+      }
+      expect(db.patches).toHaveLength(0)
+    },
+  )
+
   it('derives agent provenance from the current credential, Principal, Account, and exact Grant generation', async () => {
     const result = await resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows()) },
@@ -764,3 +862,22 @@ describe('capability operation canonical authority boundary', () => {
     expect(mocks.readOwner).not.toHaveBeenCalled()
   })
 })
+
+function isolationPrincipal(caseKind: IsolationCaseKind): typeof callerPrincipal {
+  switch (caseKind) {
+    case 'workload':
+      return callerPrincipal
+    case 'owner':
+      return { ...callerPrincipal, principalId: `prn_${'a'.repeat(32)}` }
+    case 'member':
+      return { ...callerPrincipal, principalId: `prn_${'b'.repeat(32)}` }
+    case 'missing_workload':
+      return { ...callerPrincipal, scopes: [] }
+    case 'stranger':
+      return { ...callerPrincipal, credentialId: 'unknown-stranger-credential' }
+    case 'wrong_account':
+      return { ...callerPrincipal, ownerId: `acc_${'d'.repeat(32)}` }
+    case 'stale_generation':
+      return callerPrincipal
+  }
+}

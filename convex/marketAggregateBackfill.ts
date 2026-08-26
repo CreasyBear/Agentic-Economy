@@ -21,16 +21,14 @@ const projections: readonly Projection[] = ['invocations', 'qualified_uses', 'x4
 const PAGE_SIZE = 20
 
 export const run = internalMutation({
-  args: { workload: v.optional(workloadCronSnapshotValue) },
+  args: { workload: workloadCronSnapshotValue },
   returns: v.object({ projection: v.union(projectionValue, v.null()), processed: v.number(), complete: v.boolean() }),
   handler: async (ctx, args) => {
-    if (args.workload !== undefined) {
-      await reconcileWorkloadCronSnapshot(
-        ctx,
-        'continue market aggregate backfill',
-        parseWorkloadCronSnapshot(args.workload),
-      )
-    }
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'continue market aggregate backfill',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const states = await ctx.db.query('marketAggregateBackfills').take(projections.length)
     const stateByProjection = new Map(states.map((state) => [state.projection, state]))
     const projection = projections.find((candidate) => stateByProjection.get(candidate)?.completedAt === undefined)

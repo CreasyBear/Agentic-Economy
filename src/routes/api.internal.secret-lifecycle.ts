@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
-import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import { isRecord } from '@/modules/common/is-record'
 import {
   InfisicalCloudSecretStore,
@@ -222,6 +221,7 @@ async function rpc(
   operation: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
+  const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const response = await sendGuardedHttpRequest(new Request(
     `${convexSiteOrigin(environment)}/internal/secret-lifecycle`,
     {

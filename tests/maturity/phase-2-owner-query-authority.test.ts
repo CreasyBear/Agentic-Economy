@@ -81,6 +81,16 @@ type QueryFixture = Readonly<{
 
 type QueryClient = Pick<OwnerClient, 'query'>
 
+const ISOLATION_CASES = [
+  'owner',
+  'member',
+  'workload',
+  'missing_workload',
+  'stranger',
+  'wrong_account',
+  'stale_generation',
+] as const
+
 function ownerQueries(input: Readonly<{
   businessId: Id<'businesses'>
   businessRef: string
@@ -244,6 +254,75 @@ describe('Phase 2 public owner-query authority', () => {
       EXPECTED_QUERY_CALLERS,
     )
   })
+
+  it.each(ISOLATION_CASES)(
+    'evaluates resolveBusinessActor %s through the registered account-scoped provider query',
+    async (caseKind) => {
+      const caseSuffix = {
+        owner: 'own', member: 'mem', workload: 'wrk', missing_workload: 'mis',
+        stranger: 'str', wrong_account: 'acc', stale_generation: 'stl',
+      } as const
+      const fixture = await currentQueryFixture(`ai-${caseSuffix[caseKind]}`)
+      let client: QueryClient = fixture.owner
+
+      if (caseKind === 'member' || caseKind === 'workload') {
+        const member = await seedOwnerQueryMember(
+          fixture.backend,
+          fixture.businessId,
+          `actor-isolation-${caseKind}`,
+        )
+        client = member.client
+        if (caseKind === 'workload') {
+          await fixture.backend.run(async (ctx) => {
+            const principal = await ctx.db.query('principals')
+              .withIndex('by_principalRef', (query) => query.eq('principalRef', member.principalRef))
+              .unique()
+            if (principal === null) throw new Error('owner_query_member_principal_missing')
+            await ctx.db.patch(principal._id, { kind: 'workload' })
+          })
+        }
+      } else if (caseKind === 'missing_workload') {
+        client = fixture.backend
+      } else if (caseKind === 'stranger') {
+        client = fixture.backend.withIdentity({
+          subject: 'user_owner-query-stranger',
+          issuer: 'https://identity.example',
+          exp: 8_000_000_000,
+        })
+      } else if (caseKind === 'wrong_account') {
+        client = fixture.otherOwner
+      } else if (caseKind === 'stale_generation') {
+        await fixture.backend.run(async (ctx) => {
+          const binding = await ctx.db.query('externalIdentityBindings')
+            .withIndex('by_bindingRef', (query) => query.eq('bindingRef', fixture.credential.bindingRef))
+            .unique()
+          if (binding === null) throw new Error('owner_query_binding_missing')
+          await ctx.db.patch(binding._id, {
+            credentialGeneration: binding.credentialGeneration + 1,
+            revision: binding.revision + 1,
+          })
+        })
+      }
+
+      const protectedState = async () => await fixture.backend.run(async (ctx) => {
+        const row = await ctx.db.query('capabilityProviderConnections')
+          .withIndex('by_connectionRef', (query) => query.eq('connectionRef', fixture.connectionRef))
+          .unique()
+        return row
+      })
+      const before = await protectedState()
+      const result = await client.query(api.capabilityProviderConnections.readOwner, {
+        connectionRef: fixture.connectionRef,
+      })
+
+      if (caseKind === 'owner') {
+        expect(result).toMatchObject({ connectionRef: fixture.connectionRef })
+      } else {
+        expect(result).toBeNull()
+      }
+      await expect(protectedState()).resolves.toEqual(before)
+    },
+  )
 
   it('preserves current account-scoped reads through every non-chat query caller', async () => {
     const fixture = await currentQueryFixture('current')
@@ -878,6 +957,112 @@ async function currentQueryFixture(
     otherBusinessId: other.businessId,
     otherOwner: other.owner,
     credential,
+  }
+}
+
+async function seedOwnerQueryMember(
+  backend: ConvexFixtureBackend,
+  businessId: Id<'businesses'>,
+  suffix: string,
+): Promise<Readonly<{
+  client: QueryClient
+  principalRef: string
+}>> {
+  const digest = canonicalDigest({ kind: 'owner-query-member:v1', suffix })
+    .slice('sha256:'.length, 'sha256:'.length + 32)
+  const principalRef = `prn_${digest}`
+  const bindingRef = `eib_${digest}`
+  const credentialRef = `crd_${digest}`
+  const membershipRef = `mem_${digest}`
+  const subject = `user_owner-query-member-${suffix}`
+  const issuer = 'https://identity.example'
+  const tokenIdentifier = `${issuer}|${subject}`
+  const expiresAt = 8_000_000_000_000
+  await backend.run(async (ctx) => {
+    const business = await ctx.db.get(businessId)
+    if (business === null) throw new Error('owner_query_member_business_missing')
+    const owner = await ctx.db.get(business.ownerId)
+    if (owner?.canonicalAccountRef === undefined || owner.canonicalPrincipalRef === undefined) {
+      throw new Error('owner_query_member_account_missing')
+    }
+    await ctx.db.insert('principals', {
+      principalRef,
+      kind: 'human',
+      displayName: `Owner query member ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef,
+      accountRef: owner.canonicalAccountRef,
+      memberPrincipalRef: principalRef,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: owner.canonicalPrincipalRef,
+        activeAccountRef: owner.canonicalAccountRef,
+        correlationRef: `create:${membershipRef}`,
+        idempotencyRef: `create:${membershipRef}`,
+      },
+    })
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef,
+      principalRef,
+      providerNamespace: 'clerk/user',
+      providerIdentifier: tokenIdentifier,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+      bindIdempotencyRef: `bind:${bindingRef}`,
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef,
+      bindingRef,
+      principalRef,
+      type: 'provider_token',
+      lifecycle: 'active',
+      generation: 1,
+      issueIdempotencyRef: `issue:${credentialRef}`,
+      revision: 1,
+      issuedAt: 1,
+      expiresAt,
+      expiryMaterialization: {
+        state: 'scheduled',
+        credentialGeneration: 1,
+        credentialExpiresAt: expiresAt,
+        scheduleNonce: canonicalDigest({
+          kind: 'interactive_credential_expiry:v1',
+          bindingRef,
+          credentialRef,
+          generation: 1,
+          expiresAt,
+        }),
+        scheduleRef: `scheduled:${credentialRef}`,
+        materializedAt: 1,
+      },
+      updatedAt: 1,
+    })
+    await ctx.db.insert('owners', {
+      clerkUserId: subject,
+      canonicalPrincipalRef: principalRef,
+      canonicalAccountRef: owner.canonicalAccountRef,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  })
+  return {
+    principalRef,
+    client: backend.withIdentity({
+      subject,
+      issuer,
+      exp: expiresAt / 1_000,
+    }),
   }
 }
 

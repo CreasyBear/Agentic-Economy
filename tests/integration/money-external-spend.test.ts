@@ -472,6 +472,107 @@ describe('provider-direct external spend reservations', () => {
     )
     expect(after).toEqual(before)
   })
+
+  it.each([
+    ['owner', true],
+    ['member', true],
+    ['workload', false],
+    ['missing_workload', false],
+    ['stranger', false],
+    ['wrong_account', false],
+    ['stale_generation', false],
+  ] as const)(
+    'evaluates %s through the registered external-spend reconciler with no denied ledger effect',
+    async (caseKind, allowed) => {
+      const backend = await seeded()
+      const identity = acceptedIdentity(await backend.mutation(reserve, reserveArgs))
+      await backend.mutation(finalize, {
+        ...identity,
+        submissionStatus: 'possibly_submitted',
+        settlementStatus: 'unknown',
+        providerReceiptDigest: `provider-receipt:isolation-${caseKind}`,
+        evidenceRefs: [`provider-observation:isolation-${caseKind}`],
+        observedAt: 2_155,
+      })
+      await backend.run(async (ctx) => {
+        if (caseKind === 'owner') {
+          const membership = await ctx.db.query('memberships').first()
+          const account = await ctx.db.query('accounts').first()
+          if (membership === null || account === null) throw new Error('external_spend_membership_fixture_missing')
+          await ctx.db.delete(membership._id)
+          const ownershipRef = `ownership:current:${baseFacts.principalId}`
+          await ctx.db.insert('accountOwnerships', {
+            ownershipRef,
+            accountRef: account.accountRef,
+            ownerPrincipalRef: baseFacts.principalId,
+            lifecycle: 'active',
+            changeKind: 'creation',
+            revision: 1,
+            createdAt: 1,
+            createdBy: {
+              actorPrincipalRef: baseFacts.principalId,
+              activeAccountRef: account.accountRef,
+              correlationRef: 'ownership:external-spend',
+              idempotencyRef: 'ownership:external-spend',
+            },
+          })
+          await ctx.db.patch(account._id, { currentOwnershipRef: ownershipRef })
+          return
+        }
+        if (caseKind === 'member') return
+        if (caseKind === 'workload' || caseKind === 'missing_workload') {
+          const principal = await ctx.db.query('principals').first()
+          if (principal === null) throw new Error('external_spend_principal_fixture_missing')
+          if (caseKind === 'workload') await ctx.db.patch(principal._id, { kind: 'workload' })
+          else await ctx.db.delete(principal._id)
+          return
+        }
+        if (caseKind === 'stranger') {
+          const invocation = await ctx.db.query('capabilityOperationInvocations').first()
+          if (invocation === null) throw new Error('external_spend_invocation_fixture_missing')
+          await ctx.db.patch(invocation._id, { principalId: 'principal:external-stranger' })
+          return
+        }
+        if (caseKind === 'wrong_account') {
+          const grant = await ctx.db.query('authorityDelegationGrants').first()
+          if (grant === null) throw new Error('external_spend_grant_fixture_missing')
+          await ctx.db.patch(grant._id, { accountRef: 'account:external-foreign' })
+          return
+        }
+        const binding = await ctx.db.query('externalIdentityBindings').first()
+        if (binding === null) throw new Error('external_spend_binding_fixture_missing')
+        await ctx.db.patch(binding._id, { credentialGeneration: 2 })
+      })
+      const consequenceState = async () => await backend.run(async (ctx) => ({
+        reservation: await ctx.db.query('moneyExternalSpendReservations')
+          .withIndex('by_reservationRef', (query) => query.eq('reservationRef', identity.reservationRef))
+          .unique(),
+        budgets: await ctx.db.query('moneyCredentialBudgetStates').collect(),
+        transactions: await ctx.db.query('moneyTransactions').collect(),
+        entries: await ctx.db.query('moneyLedgerEntries').collect(),
+      }))
+      const before = await consequenceState()
+      const result = await backend.mutation(reconcile, {
+        ...identity,
+        settlementStatus: 'not_settled',
+        paymentResponseDigest: `payment-response:isolation-${caseKind}`,
+        evidenceRef: `reconciliation:isolation-${caseKind}`,
+        evidenceDigest: `reconciliation-digest:isolation-${caseKind}`,
+        observedAt: 2_156,
+      })
+
+      if (allowed) {
+        expect(result).toMatchObject({ kind: 'accepted', status: 'released' })
+      } else {
+        expect(result).toEqual({
+          kind: 'refused',
+          code: 'external_spend_grant_invalid',
+          retryable: false,
+        })
+        await expect(consequenceState()).resolves.toEqual(before)
+      }
+    },
+  )
   it.each([
     'expired credential',
     'stale credential generation',

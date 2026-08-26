@@ -177,6 +177,79 @@ describe('Phase 2 canonical workload cron boundary', () => {
     expect(runMutation).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['owner', false, () => canonicalDb({ principalKind: 'agent', workloadOwnsAccount: true, includeMembership: false }), (value: WorkloadCronSnapshot) => value],
+    ['member', false, () => canonicalDb({ principalKind: 'agent' }), (value: WorkloadCronSnapshot) => value],
+    ['workload', true, () => canonicalDb(), (value: WorkloadCronSnapshot) => value],
+    ['missing_workload', false, () => new FakeDb(), (value: WorkloadCronSnapshot) => value],
+    ['stranger', false, () => canonicalDb({ includeOwnership: false, includeMembership: false }), (value: WorkloadCronSnapshot) => value],
+    ['wrong_account', false, () => {
+      const db = canonicalDb({ includeMembership: false })
+      db.seed('memberships', membership({ accountRef: 'acc_ffffffffffffffffffffffffffffffff' }))
+      return db
+    }, (value: WorkloadCronSnapshot) => value],
+    // Workload snapshots carry revisions, not a grant generation. A stale
+    // revision is reconciled to current facts by this registered boundary.
+    ['stale_generation', true, () => canonicalDb(), (value: WorkloadCronSnapshot) => ({
+      ...value,
+      principalRevision: value.principalRevision - 1,
+    })],
+  ] as const)(
+    'evaluates %s through the registered workload reconciliation and scheduled probe before dispatch',
+    async (_caseKind, allowed, makeDb, present) => {
+      const current = canonicalDb()
+      const admitted = await admitWorkloadCron(queryContext(current), 'refresh capability supply readiness')
+      const snapshot = present(admitted)
+      const db = makeDb()
+      const admission = new FakeRuntimeContext(db)
+      const targetReads: string[] = []
+      const runMutation = vi.fn()
+      const action = {
+        runQuery: vi.fn(async (reference: RuntimeReference, args: Record<string, unknown>) => {
+          const name = getFunctionName(reference)
+          if (name === 'workloadCron:reconcile') return await reconcileRuntime(queryContext(db), args)
+          targetReads.push(name)
+          return { kind: 'unavailable', reason: 'publication_missing', evidenceRefs: [] }
+        }),
+        runMutation,
+      }
+
+      if (allowed) {
+        await expect(refreshCapabilitySupplyReadinessRuntime(admission.mutation(), {}))
+          .resolves.toBeNull()
+        expect(admission.dispatches).toEqual(['capabilitySupply:scheduleDueCapabilityProbes'])
+        await expect(reconcileRuntime(queryContext(db), {
+          name: snapshot.name,
+          snapshot,
+        })).resolves.toMatchObject({
+          actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+          activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+        })
+        await expect(probeFromCronRuntime(action, {
+          publicationRef: 'publication:isolation-matrix',
+          expectedRevision: 1,
+          workload: snapshot,
+        })).resolves.toMatchObject({ kind: 'unavailable' })
+        expect(targetReads).toEqual(['capabilitySupply:readCapabilityProbeTarget'])
+      } else {
+        await expect(refreshCapabilitySupplyReadinessRuntime(admission.mutation(), {}))
+          .rejects.toThrow()
+        expect(admission.dispatches).toEqual([])
+        await expect(reconcileRuntime(queryContext(db), {
+          name: snapshot.name,
+          snapshot,
+        })).rejects.toThrow()
+        await expect(probeFromCronRuntime(action, {
+          publicationRef: 'publication:isolation-matrix',
+          expectedRevision: 1,
+          workload: snapshot,
+        })).rejects.toThrow()
+        expect(targetReads).toEqual([])
+      }
+      expect(runMutation).not.toHaveBeenCalled()
+    },
+  )
+
   it('admits every declared job from current canonical membership facts', async () => {
     const db = canonicalDb()
     for (const [index, declaration] of WORKLOAD_CRON_DECLARATIONS.entries()) {

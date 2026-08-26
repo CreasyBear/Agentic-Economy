@@ -86,6 +86,7 @@ async function seedFacilitatorDiscoveryWorkload(backend: ReturnType<typeof conve
 describe('facilitator discovery reconciliation', () => {
   it('creates deterministic provider state and replays the same publication', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const deadlineAt = Date.now() + 60_000
     const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
     const item = admission.admitted[0]
@@ -96,11 +97,13 @@ describe('facilitator discovery reconciliation', () => {
       items: Array.from({ length: 21 }, () => item),
       complete: false,
       deadlineAt,
+      workload,
     })
     const second = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
       items: [item],
       complete: false,
       deadlineAt,
+      workload,
     })
     expect(first).toMatchObject({ admitted: 21, published: 1, skipped: 20 })
     expect(second).toMatchObject({ admitted: 1, published: 0, skipped: 1 })
@@ -135,6 +138,7 @@ describe('facilitator discovery reconciliation', () => {
       items: [{ ...item, sourceRevision: `${item.sourceRevision}-refresh` }],
       complete: false,
       deadlineAt,
+      workload,
     })
     expect(refreshed).toMatchObject({ published: 1, skipped: 0 })
     await expect(backend.run(async (ctx) => (await ctx.db.query('capabilityPublications')
@@ -147,6 +151,7 @@ describe('facilitator discovery reconciliation', () => {
       complete: true,
       seenPublicationRefs: [],
       deadlineAt,
+      workload,
     })
     expect(withdrawn.withdrawn).toBe(1)
     await expect(backend.run(async (ctx) => ({
@@ -163,6 +168,7 @@ describe('facilitator discovery reconciliation', () => {
 
   it('rejects refresh and withdrawal for non-observed facilitator provenance', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const deadlineAt = Date.now() + 60_000
     const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
     const item = admission.admitted[0]
@@ -172,6 +178,7 @@ describe('facilitator discovery reconciliation', () => {
       items: [item],
       complete: false,
       deadlineAt,
+      workload,
     })
     await backend.run(async (ctx) => {
       const publication = await ctx.db.query('capabilityPublications').unique()
@@ -190,6 +197,7 @@ describe('facilitator discovery reconciliation', () => {
       items: [changedItem],
       complete: false,
       deadlineAt,
+      workload,
     })
     expect(refreshAttempt).toMatchObject({ published: 0, skipped: 1 })
     const withdrawalAttempt = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
@@ -197,6 +205,7 @@ describe('facilitator discovery reconciliation', () => {
       complete: true,
       seenPublicationRefs: [],
       deadlineAt,
+      workload,
     })
     expect(withdrawalAttempt).toMatchObject({ withdrawn: 0 })
     await expect(backend.run(async (ctx) => await ctx.db.query('capabilityPublications').unique()))
@@ -205,6 +214,7 @@ describe('facilitator discovery reconciliation', () => {
 
   it('does not withdraw a registry-graduated Operation during facilitator refresh', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const deadlineAt = Date.now() + 60_000
     const admission = await admitRegistryPaymentRequiredItem(timezoneFixture.paymentRequired)
     const item = admission.admitted[0]
@@ -215,12 +225,14 @@ describe('facilitator discovery reconciliation', () => {
       items: [item],
       complete: false,
       deadlineAt,
+      workload,
     })
     const refresh = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
       items: [],
       complete: true,
       seenPublicationRefs: [],
       deadlineAt,
+      workload,
     })
 
     expect(refresh.withdrawn).toBe(0)
@@ -252,12 +264,14 @@ describe('facilitator discovery reconciliation', () => {
 
   it('does not create a business for malformed input or withdraw on a partial run', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const admission = await admitFacilitatorDiscoveryItems([{ malformed: true }])
     expect(admission.admitted).toHaveLength(0)
     const result = await backend.mutation(internal.facilitatorDiscovery.reconcile, {
       items: [...admission.admitted],
       complete: false,
       deadlineAt: Date.now() + 60_000,
+      workload,
     })
     expect(result).toMatchObject({ admitted: 0, published: 0, withdrawn: 0 })
     await expect(backend.run(async (ctx) => await ctx.db.query('businesses').collect())).resolves.toHaveLength(0)
@@ -265,6 +279,7 @@ describe('facilitator discovery reconciliation', () => {
 
   it('performs no writes when the reconciliation deadline has expired', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
     const item = admission.admitted[0]
     expect(item).toBeDefined()
@@ -275,6 +290,7 @@ describe('facilitator discovery reconciliation', () => {
       complete: true,
       seenPublicationRefs: [],
       deadlineAt: 0,
+      workload,
     })
 
     expect(result).toMatchObject({
@@ -297,6 +313,7 @@ describe('facilitator discovery reconciliation', () => {
 
   it('rejects structural reconciliation limits before any writes', async () => {
     const backend = convexTest(schema, convexModules)
+    const workload = await seedFacilitatorDiscoveryWorkload(backend)
     const deadlineAt = Date.now() + 60_000
     const admission = await admitFacilitatorDiscoveryItems([timezoneFixture.paymentRequired])
     const item = admission.admitted[0]
@@ -307,12 +324,14 @@ describe('facilitator discovery reconciliation', () => {
       items: Array.from({ length: 101 }, () => item),
       complete: false,
       deadlineAt,
+      workload,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
       items: [{ ...item, sourceImportJson: 'x'.repeat(262_144) }],
       complete: false,
       deadlineAt,
+      workload,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')
 
     await expect(backend.mutation(internal.facilitatorDiscovery.reconcile, {
@@ -320,6 +339,7 @@ describe('facilitator discovery reconciliation', () => {
       complete: true,
       seenPublicationRefs: Array.from({ length: 2_001 }, (_, index) => `ref-${index}`),
       deadlineAt,
+      workload,
     })).rejects.toThrow('facilitator_discovery_batch_invalid')
 
     await expect(backend.run(async (ctx) => ({

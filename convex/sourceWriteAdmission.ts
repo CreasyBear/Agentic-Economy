@@ -266,17 +266,15 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
   args: {
     now: v.optional(v.number()),
     batchSize: v.optional(v.number()),
-    workload: v.optional(workloadCronSnapshotValue),
+    workload: workloadCronSnapshotValue,
   },
   returns: sourceWriteNonceCleanupResult,
   handler: async (ctx, args) => {
-    if (args.workload !== undefined) {
-      await reconcileWorkloadCronSnapshot(
-        ctx,
-        'cleanup expired source write nonces',
-        parseWorkloadCronSnapshot(args.workload),
-      )
-    }
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'cleanup expired source write nonces',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const cutoff = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
     const batchSize = args.batchSize !== undefined && Number.isFinite(args.batchSize)
       ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)

@@ -8,6 +8,7 @@ import ts from 'typescript'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const DEFAULT_OUTPUT = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-protected-surfaces.json')
 const SINK_TEST_REGISTRY = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-authority-sink-runtime-tests.json')
+const SURFACE_AUTHORITY_MAP = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-surface-authority-map.json')
 const CLASSIFICATIONS = resolve(ROOT, '.planning/maturity-execution/contracts/phase-2-protected-surfaces.classifications.json')
 const INVENTORY_TEST = 'tests/maturity/phase-2-protected-surfaces.test.ts'
 const BASELINE_COUNTS = Object.freeze({
@@ -100,34 +101,63 @@ const FUNCTION_REFERENCE_FACTORIES = new Set([
   'sourceAction',
   'makeFunctionReference',
 ])
+const CONSEQUENCE_CALLS = new Set([
+  'action',
+  'callPublicSourceAction',
+  'callPublicSourceMutation',
+  'callSourceAction',
+  'callSourceMutation',
+  'delete',
+  'enqueueAction',
+  'fetch',
+  'insert',
+  'mutation',
+  'patch',
+  'postConvex',
+  'replace',
+  'runAction',
+  'runAfter',
+  'runAt',
+  'runMutation',
+  'sendGuardedHttpRequest',
+])
+const ISOLATION_CASE_LABELS = Object.freeze([
+  'owner',
+  'member',
+  'workload',
+  'missing_workload',
+  'stranger',
+  'wrong_account',
+  'stale_generation',
+])
 const SINK_TEST_ASSIGNMENTS = Object.freeze({
-  'convex/authz.ts:resolveBusinessActor': ['convex/qualifiedUse.ts:readOwnerQualifiedUse', 'tests/maturity/phase-2-owner-query-authority.test.ts', 'preserves current account-scoped reads through every non-chat query caller'],
-  'convex/sourceWriteAdmission.ts:requireSourceRead': ['convex/actionInvocationControl.ts:readControlSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source read query with exact signed provenance and denies caller drift before data access'],
-  'convex/sourceWriteAdmission.ts:requireSourceWrite': ['convex/actionInvocationControl.ts:recordLateObservationSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source write mutation once and rejects replay before a duplicate control effect'],
-  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/capabilitySupplyOperations.ts:readKeylessExecutable', 'tests/integration/capability-supply-operations.test.ts', 'runs the registered keyless read query and excludes effectful POST before provider transport'],
-  'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext': ['convex/agentAccessPrincipals.ts:registerAgentPrincipal', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'registers only current server-resolved agent provenance and canonical grant facts'],
-  'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'requires exact source-write admission for the registered production mutation'],
-  'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'requires canonical agent expectations and exact authority targets on every public agent action'],
-  'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal': ['convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication', 'tests/integration/capability-supply-owner-funnel-reserve.test.ts', 'requires a verified owner principal and rejects changed material before draft effects'],
-  'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext': ['convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority', 'tests/integration/chat-scheduled-authority.test.ts', 'arms the exact verified generation and preserves the current account-scoped read'],
-  'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts': ['convex/recoveryBreakGlass.ts:authorizeRecoveryOperation', 'tests/unit/convex/recovery-break-glass-driver.test.ts', 'runs the registered mutation wrappers and preserves canonical consumed values'],
-  'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider journal abort route through the durable abort mutation'],
-  'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler': ['convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider ticket attestation route through the durable ticket query'],
-  'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider journal begin route through the durable claim mutation'],
-  'convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'executes the registered completion HTTP action and the same journal handler exactly once'],
-  'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler': ['convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider x402 route through durable authorization and never reaches money for an unknown ticket'],
-  'convex/lib/secretLifecyclePersistence.ts:requireSnapshot': ['convex/secretLifecycleHttp.ts:secretLifecycleRpc', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered secret lifecycle route through the durable journal reader without secret material'],
-  'convex/workloadCron.ts:reconcileWorkloadCronSnapshot': ['reconciliation:convex/workloadCron.ts:reconcile', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered workload reconciliation query and denies a lifecycle change at consequence time'],
-  'convex/workloadCron.ts:bindWorkloadCronActionContext': ['scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered scheduled probe through reconciliation and the bound action context without widening authority'],
-  'convex/workloadCron.ts:admitWorkloadCron': ['cron:refresh capability supply readiness', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered readiness cron handler from current canonical facts and denies missing authority before dispatch'],
-  'src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook': ['callback:src/routes/api.stripe.webhook.ts:Route', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered Stripe webhook route through signature verification and preserves applied then replayed outcomes'],
-  'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority': ['workpool:convex/capabilityOperationInvocationWorker.ts:run', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered invocation worker action through durable authority reconciliation and denies an unknown invocation'],
-  'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority': ['workpool:convex/capabilityProviderConnectionCleanup.ts:run', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered cleanup worker action through the durable target reader and refuses an unknown connection'],
-  'convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority': ['scheduler:convex/capabilitySupplyReadiness.ts:probe', 'tests/integration/capability-publication-probe.test.ts', 'refuses automatic readiness for an OpenAPI %s operation before network execution'],
-  'convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext': ['scheduler:convex/chatGenerate.ts:generate', 'tests/integration/chat-scheduled-authority.test.ts', 're-derives current Principal and Account before scheduled provider work'],
-  'convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent': ['reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend', 'tests/integration/money-external-spend.test.ts', 'denies external-spend reconciliation after the durable grant is revoked'],
-  'convex/interactiveAuthority.ts:currentContextAtTrustedServerTime': ['run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority', 'tests/unit/convex/interactive-authority.test.ts', 'resolves current authenticated sessions only at the non-cached action boundary'],
-  'convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority': ['scheduler:convex/devSeed.ts:seedOfferingSupply', 'tests/integration/catalog-system-offering-authority.test.ts', 'runs the paged internal seed worker only after the workload admission'],
+  'convex/authz.ts:resolveBusinessActor': ['convex/capabilityProviderConnections.ts:readOwner', 'tests/maturity/phase-2-owner-query-authority.test.ts', 'evaluates resolveBusinessActor %s through the registered account-scoped provider query'],
+  'convex/sourceWriteAdmission.ts:requireSourceRead': ['convex/actionInvocationControl.ts:readControlSource', 'tests/unit/convex/source-write-admission.test.ts', 'drives the %s isolation case through both registered source handlers without a denied data or control effect'],
+  'convex/sourceWriteAdmission.ts:requireSourceWrite': ['convex/actionInvocationControl.ts:recordLateObservationSource', 'tests/unit/convex/source-write-admission.test.ts', 'drives the %s isolation case through both registered source handlers without a denied data or control effect'],
+  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/capabilitySupplyOperations.ts:readKeylessExecutable', 'tests/integration/capability-supply-operations.test.ts', 'drives the %s isolation case through the registered fixed-query descriptor handler'],
+  'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext': ['convex/agentAccessPrincipals.ts:registerAgentPrincipal', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered agent registration mutation and its real canonical-context sink'],
+  'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'drives the %s isolation case through the registered mutation and commits no denied authority snapshot'],
+  'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'drives the %s isolation case through the registered cancel action and its real current-agent sink'],
+  'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal': ['convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication', 'tests/integration/capability-supply-owner-funnel-reserve.test.ts', 'drives the %s isolation case through the registered reservation mutation without a denied publication effect'],
+  'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext': ['convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority', 'tests/integration/chat-scheduled-authority.test.ts', 'evaluates resolveInteractiveAuthorityContext %s through the registered materialization mutation'],
+  'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts': ['convex/recoveryBreakGlass.ts:authorizeRecoveryOperation', 'tests/unit/convex/recovery-break-glass-driver.test.ts', 'evaluates %s through the registered recovery operation with atomic denial'],
+  'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider abort route and abortProviderConsequence sink'],
+  'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler': ['convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider attest route and attestProviderConsequenceTicket sink'],
+  'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider begin route and claimProviderConsequence sink'],
+  'convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider complete route and completeProviderConsequence sink'],
+  'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler': ['convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'drives the %s isolation case through the registered provider x402 route and authorizeProviderConsequenceX402Rpc sink'],
+  'convex/lib/secretLifecyclePersistence.ts:requireSnapshot': ['convex/secretLifecycleHttp.ts:secretLifecycleRpc', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'drives the %s isolation case through the registered secret lifecycle route and requireSnapshot sink'],
+  'convex/workloadCron.ts:reconcileWorkloadCronSnapshot': ['reconciliation:convex/workloadCron.ts:reconcile', 'tests/unit/convex/workload-cron.test.ts', 'evaluates %s through the registered workload reconciliation and scheduled probe before dispatch'],
+  'convex/workloadCron.ts:bindWorkloadCronActionContext': ['scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron', 'tests/unit/convex/workload-cron.test.ts', 'evaluates %s through the registered workload reconciliation and scheduled probe before dispatch'],
+  'convex/workloadCron.ts:admitWorkloadCron': ['cron:refresh capability supply readiness', 'tests/unit/convex/workload-cron.test.ts', 'evaluates %s through the registered workload reconciliation and scheduled probe before dispatch'],
+  'src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook': ['callback:src/routes/api.stripe.webhook.ts:Route', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'drives the %s isolation case through the registered Stripe webhook route and signature sink'],
+  'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority': ['workpool:convex/capabilityOperationInvocationWorker.ts:run', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'drives the %s isolation case through the registered invocation worker run action and reconcilePersistedInvocationAuthority sink'],
+  'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority': ['workpool:convex/capabilityProviderConnectionCleanup.ts:run', 'tests/unit/convex/provider-connection-driver.test.ts', 'evaluates readCurrentCleanupResourceAuthority %s through the registered cleanup action'],
+  'convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority': ['scheduler:convex/capabilitySupplyReadiness.ts:probe', 'tests/integration/capability-publication-probe.test.ts', 'evaluates readCurrentCapabilityProbeAuthority %s through the registered readiness action'],
+  'convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext': ['scheduler:convex/chatGenerate.ts:generate', 'tests/integration/chat-scheduled-authority.test.ts', 'evaluates resolveScheduledInteractiveAuthorityContext %s through the registered generation action'],
+  'convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent': ['reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend', 'tests/integration/money-external-spend.test.ts', 'evaluates %s through the registered external-spend reconciler with no denied ledger effect'],
+  'convex/interactiveAuthority.ts:currentContextAtTrustedServerTime': ['run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority', 'tests/unit/convex/interactive-authority.test.ts', 'evaluates %s through the registered trusted-time action without mutating authority facts'],
+  'convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority': ['scheduler:convex/devSeed.ts:seedOfferingSupply', 'tests/integration/catalog-system-offering-authority.test.ts', 'evaluates %s through the registered seed worker before any catalog consequence'],
 })
 
 function filesUnder(directory) {
@@ -187,6 +217,54 @@ function classification(ref, classifications) {
   return row
 }
 
+function nearestCall(node, boundary) {
+  let current = node
+  while (current !== undefined && current !== boundary) {
+    if (ts.isCallExpression(current)) return current
+    current = current.parent
+  }
+  return undefined
+}
+
+function executionControlPath(node, boundary) {
+  const path = []
+  let child = node
+  let current = node.parent
+  while (current !== undefined && current !== boundary) {
+    if (ts.isIfStatement(current)) {
+      const branch = current.thenStatement === child ? 'then'
+        : current.elseStatement === child ? 'else' : 'condition'
+      path.push(`if:${current.getStart()}:${branch}`)
+    } else if (ts.isConditionalExpression(current)) {
+      const branch = current.whenTrue === child ? 'true'
+        : current.whenFalse === child ? 'false' : 'condition'
+      path.push(`conditional:${current.getStart()}:${branch}`)
+    } else if (ts.isCaseClause(current) || ts.isDefaultClause(current)) {
+      path.push(`switch:${current.getStart()}`)
+    } else if (ts.isForStatement(current) || ts.isForInStatement(current)
+      || ts.isForOfStatement(current) || ts.isWhileStatement(current)
+      || ts.isDoStatement(current)) {
+      path.push(`loop:${current.getStart()}`)
+    } else if (ts.isCatchClause(current)) {
+      path.push(`catch:${current.getStart()}`)
+    }
+    child = current
+    current = current.parent
+  }
+  return path.reverse()
+}
+
+function consequenceCallName(node) {
+  if (!ts.isCallExpression(node)) return undefined
+  if (ts.isIdentifier(node.expression)) return node.expression.text
+  return ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : undefined
+}
+
+function controlPathDominates(guard, effect) {
+  const branchGuards = guard.filter((segment) => !segment.endsWith(':condition'))
+  return branchGuards.every((segment, index) => effect[index] === segment)
+}
+
 function createSourceGraph() {
   const configPath = ts.findConfigFile(ROOT, ts.sys.fileExists, 'tsconfig.json')
   if (configPath === undefined) throw new Error('protected_surface_tsconfig_missing')
@@ -217,13 +295,27 @@ function createSourceGraph() {
 
   for (const graphNode of nodes.values()) {
     const edges = new Map()
+    const effects = []
     function addSymbolEdge(location, via) {
       let symbol = checker.getSymbolAtLocation(location)
       if (symbol === undefined) return
       if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol)
       for (const declaration of symbol.declarations ?? []) {
         const target = enclosingGraphRef(declaration, declarationToRef)
-        if (target !== undefined && target !== graphNode.ref) edges.set(target, via)
+        if (target !== undefined && target !== graphNode.ref) {
+          const call = nearestCall(location, graphNode.declaration)
+          const site = call ?? location
+          const candidate = {
+            target,
+            via,
+            offset: site.getStart(graphNode.source),
+            end: site.getEnd(),
+            expression: site.getText(graphNode.source),
+            controlPath: executionControlPath(site, graphNode.declaration),
+          }
+          const existing = edges.get(target)
+          if (existing === undefined || candidate.offset < existing.offset) edges.set(target, candidate)
+        }
       }
     }
     function visit(node) {
@@ -233,6 +325,20 @@ function createSourceGraph() {
         addSymbolEdge(node.initializer, 'call')
       }
       if (ts.isCallExpression(node)) {
+        const consequenceName = consequenceCallName(node)
+        const registrarDefinition = ts.isVariableDeclaration(graphNode.declaration)
+          && graphNode.declaration.initializer === node
+          && consequenceName !== undefined
+          && ALL_CONVEX_REGISTRARS.has(consequenceName)
+        if (!registrarDefinition && consequenceName !== undefined && CONSEQUENCE_CALLS.has(consequenceName)) {
+          effects.push({
+            name: consequenceName,
+            offset: node.getStart(graphNode.source),
+            end: node.getEnd(),
+            expression: node.expression.getText(graphNode.source),
+            controlPath: executionControlPath(node, graphNode.declaration),
+          })
+        }
         addSymbolEdge(node.expression, 'call')
         const calleeName = ts.isIdentifier(node.expression)
           ? node.expression.text
@@ -247,7 +353,16 @@ function createSourceGraph() {
           && node.arguments[0] !== undefined && ts.isStringLiteralLike(node.arguments[0])) {
           const target = sourceFunctionReference(node.arguments[0].text)
           if (target !== undefined && nodes.has(target) && target !== graphNode.ref) {
-            edges.set(target, 'function_reference')
+            const candidate = {
+              target,
+              via: 'function_reference',
+              offset: node.getStart(graphNode.source),
+              end: node.getEnd(),
+              expression: node.getText(graphNode.source),
+              controlPath: executionControlPath(node, graphNode.declaration),
+            }
+            const existing = edges.get(target)
+            if (existing === undefined || candidate.offset < existing.offset) edges.set(target, candidate)
           }
         }
         if (ts.isPropertyAccessExpression(node.expression)
@@ -256,15 +371,27 @@ function createSourceGraph() {
         }
         for (const argument of node.arguments) {
           for (const target of convexFunctionReferences(argument)) {
-            if (nodes.has(target) && target !== graphNode.ref) edges.set(target, 'function_reference')
+            if (nodes.has(target) && target !== graphNode.ref) {
+              const candidate = {
+                target,
+                via: 'function_reference',
+                offset: node.getStart(graphNode.source),
+                end: node.getEnd(),
+                expression: node.getText(graphNode.source),
+                controlPath: executionControlPath(node, graphNode.declaration),
+              }
+              const existing = edges.get(target)
+              if (existing === undefined || candidate.offset < existing.offset) edges.set(target, candidate)
+            }
           }
         }
       }
       ts.forEachChild(node, visit)
     }
     visit(graphNode.declaration)
-    graphNode.edges = [...edges].map(([target, via]) => ({ target, via }))
+    graphNode.edges = [...edges.values()]
       .sort((left, right) => left.target.localeCompare(right.target))
+    graphNode.effects = effects.sort((left, right) => left.offset - right.offset)
   }
   return nodes
 }
@@ -280,6 +407,7 @@ function registerGraphNode(nodes, declarationToRef, source, file, symbol, declar
   const text = declaration.getText(source)
   nodes.set(ref, {
     ref,
+    source,
     declaration,
     identity: {
       file,
@@ -289,6 +417,7 @@ function registerGraphNode(nodes, declarationToRef, source, file, symbol, declar
       sha256: digest(text),
     },
     edges: [],
+    effects: [],
   })
   declarationToRef.set(declaration, ref)
 }
@@ -324,11 +453,12 @@ function convexFunctionReferences(node) {
   return references
 }
 
-function traceAuthorityPath(graph, declarationRef, binding, surfaceRef = declarationRef) {
+function traceAuthorityPaths(graph, declarationRef, binding, surfaceRef = declarationRef) {
   const sinks = AUTHORITY_SINKS[binding]
-  if (sinks === undefined) return undefined
+  if (sinks === undefined) return []
   const queue = [{ ref: declarationRef, path: [] }]
   const seen = new Set()
+  const candidates = []
   while (queue.length > 0) {
     const current = queue.shift()
     if (seen.has(current.ref)) continue
@@ -339,7 +469,8 @@ function traceAuthorityPath(graph, declarationRef, binding, surfaceRef = declara
       ? [{ ref: surfaceRef, file: node.identity.file, line: node.identity.line, column: node.identity.column, via: 'declaration' }]
       : current.path
     if (sinks.includes(current.ref) && path.length >= 2) {
-      return { authoritySink: current.ref, authorityPath: path }
+      candidates.push({ authoritySink: current.ref, authorityPath: path })
+      continue
     }
     for (const edge of node.edges) {
       const target = graph.get(edge.target)
@@ -356,7 +487,55 @@ function traceAuthorityPath(graph, declarationRef, binding, surfaceRef = declara
       })
     }
   }
-  return undefined
+  return candidates
+}
+
+function proveAuthorityDominatesConsequences(graph, row) {
+  const authorityPath = row.authorityPath
+  const hops = []
+  for (let index = 0; index < authorityPath.length - 1; index += 1) {
+    const current = authorityPath[index]
+    const next = authorityPath[index + 1]
+    const node = graph.get(index === 0 ? `${row.file}:${row.symbol}` : current.ref)
+    if (node === undefined) {
+      return { status: 'red', reason: `runtime_handler_identity_missing:${current.ref}` }
+    }
+    const edge = node.edges.find((candidate) => candidate.target === next.ref)
+    if (edge === undefined) {
+      return { status: 'red', reason: `authority_edge_missing:${current.ref}=>${next.ref}` }
+    }
+    const bypasses = node.effects.filter((effect) => {
+      if (effect.offset === edge.offset && effect.end === edge.end) return false
+      const dispatchIsIndependentlyGuarded = node.edges.some((candidate) => (
+        candidate.offset >= effect.offset
+        && candidate.end <= effect.end
+        && AUTHORITY_SINKS[row.binding]?.some((sink) => graphReaches(graph, candidate.target, sink))
+      ))
+      if (dispatchIsIndependentlyGuarded) return false
+      if (effect.offset >= edge.offset && controlPathDominates(edge.controlPath, effect.controlPath)) return false
+      return true
+    })
+    if (bypasses.length > 0) {
+      return {
+        status: 'red',
+        reason: `pre_sink_consequence:${current.ref}:${bypasses[0].name}`,
+        bypasses: bypasses.map(({ name, expression, offset }) => ({ name, expression, offset })),
+      }
+    }
+    hops.push(Object.freeze({
+      from: current.ref,
+      to: next.ref,
+      via: edge.via,
+      callSiteSha256: digest(`${edge.expression}\n${edge.offset}:${edge.end}`),
+      consequencePrimitiveCount: node.effects.length,
+    }))
+  }
+  return Object.freeze({
+    status: 'proved',
+    method: 'ordered_recursive_authority_dominance:v1',
+    hops: Object.freeze(hops),
+    sha256: digest(JSON.stringify(hops)),
+  })
 }
 
 function graphReaches(graph, from, target) {
@@ -433,7 +612,12 @@ function evaluateSurface(graph, input, declared) {
         } }
       : { ...base, status: 'bound', marker: `tested_exemption:${exemption.testFile}:${exemption.testName}`, exemption }
   }
-  const authority = traceAuthorityPath(graph, input.declarationRef, declared.binding, input.ref)
+  const authorities = traceAuthorityPaths(graph, input.declarationRef, declared.binding, input.ref)
+  const authority = authorities.find((candidate) => proveAuthorityDominatesConsequences(graph, {
+    ...input,
+    binding: declared.binding,
+    ...candidate,
+  }).status === 'proved') ?? authorities[0]
   return authority === undefined
     ? { ...base, status: 'blocked', marker: `missing_transitive_authority_path:${input.ref}`, blocker: {
         code: 'missing_transitive_authority_path',
@@ -918,6 +1102,34 @@ function allRows(inventory) {
   ]
 }
 
+export function auditProtectedSurfaceDominance(inventory = collectProtectedSurfaces()) {
+  const graph = createSourceGraph()
+  const rows = allRows(inventory).map((row) => row.authorityPath === undefined
+    ? Object.freeze({
+        surfaceRef: row.ref,
+        runtimeHandlerRef: `${row.file}:${row.symbol}`,
+        status: 'tested_exemption',
+        testFile: row.exemption?.testFile,
+        testName: row.exemption?.testName,
+      })
+    : Object.freeze({
+        surfaceRef: row.ref,
+        runtimeHandlerRef: `${row.file}:${row.symbol}`,
+        authoritySink: row.authoritySink,
+        authorityPathSha256: digest(JSON.stringify(row.authorityPath)),
+        dominance: proveAuthorityDominatesConsequences(graph, row),
+      }))
+  return Object.freeze({
+    format: 'phase-2-surface-authority-dominance-audit:v1',
+    total: rows.length,
+    protected: rows.filter((row) => row.dominance !== undefined).length,
+    proved: rows.filter((row) => row.dominance?.status === 'proved').length,
+    red: rows.filter((row) => row.dominance?.status === 'red').length,
+    exemptions: rows.filter((row) => row.status === 'tested_exemption').length,
+    rows: Object.freeze(rows),
+  })
+}
+
 export function validateProtectedSurfaceInventory(inventory) {
   if (inventory.format !== 'phase-2-protected-surfaces:v2'
     || JSON.stringify(inventory.expectedCounts) !== JSON.stringify(BASELINE_COUNTS)
@@ -1027,12 +1239,50 @@ function runtimeTestCase(source, file, testName) {
     if ((directTest || tableTest)
       && node.arguments[0] !== undefined && ts.isStringLiteralLike(node.arguments[0])
       && node.arguments[0].text === testName && node.arguments[1] !== undefined) {
-      matches.push(node.arguments[1])
+      matches.push({
+        behavior: node.arguments[1],
+        table: tableTest ? node.expression.arguments[0] : undefined,
+      })
     }
     ts.forEachChild(node, visit)
   }
   visit(ast)
-  return matches.length === 1 ? { ast, behavior: matches[0] } : undefined
+  return matches.length === 1 ? { ast, ...matches[0] } : undefined
+}
+
+function runtimeIsolationCaseLabels(source, file, testName) {
+  const testCase = runtimeTestCase(source, file, testName)
+  if (testCase?.table === undefined) return undefined
+  const declarations = new Map()
+  for (const statement of testCase.ast.statements) {
+    if (!ts.isVariableStatement(statement)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.initializer !== undefined) {
+        declarations.set(declaration.name.text, declaration.initializer)
+      }
+    }
+  }
+  function unwrap(node, seen = new Set()) {
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)
+      || ts.isSatisfiesExpression(node)) return unwrap(node.expression, seen)
+    if (ts.isIdentifier(node)) {
+      const declaration = declarations.get(node.text)
+      if (declaration === undefined || seen.has(node.text)) return node
+      seen.add(node.text)
+      return unwrap(declaration, seen)
+    }
+    return node
+  }
+  const table = unwrap(testCase.table)
+  if (!ts.isArrayLiteralExpression(table)) return undefined
+  const labels = table.elements.map((element) => {
+    const value = unwrap(element)
+    if (ts.isStringLiteralLike(value)) return value.text
+    if (!ts.isArrayLiteralExpression(value) || value.elements[0] === undefined) return undefined
+    const label = unwrap(value.elements[0])
+    return ts.isStringLiteralLike(label) ? label.text : undefined
+  })
+  return labels.every((label) => label !== undefined) ? labels : undefined
 }
 
 function normalizedModulePath(testFile, specifier) {
@@ -1236,11 +1486,12 @@ function buildSinkTestRegistry(inventory) {
       checksumScope: 'named_test_case_ast',
       sha256: runtimeTestChecksum(source, testFile, testName),
       invocation,
+      caseLabels: runtimeIsolationCaseLabels(source, testFile, testName),
       authorityPathSha256: digest(JSON.stringify(surface.authorityPath)),
     }
   }
   return {
-    format: 'phase-2-authority-sink-runtime-tests:v1',
+    format: 'phase-2-authority-sink-runtime-tests:v2',
     inventorySha256: digest(`${JSON.stringify(inventory, null, 2)}\n`),
     rows,
   }
@@ -1248,12 +1499,11 @@ function buildSinkTestRegistry(inventory) {
 
 export function validateSinkTestRegistry(inventory, registry) {
   const expectedSinks = [...new Set(sinkRows(inventory).map((row) => row.authoritySink))].sort()
-  if (registry?.format !== 'phase-2-authority-sink-runtime-tests:v1'
+  if (registry?.format !== 'phase-2-authority-sink-runtime-tests:v2'
     || registry.inventorySha256 !== digest(`${JSON.stringify(inventory, null, 2)}\n`)
     || JSON.stringify(Object.keys(registry.rows ?? {}).sort()) !== JSON.stringify(expectedSinks)) {
     throw new Error('protected_surface_sink_registry_invalid')
   }
-  const pairs = new Set()
   const surfaces = new Map(allRows(inventory).map((row) => [row.ref, row]))
   for (const sink of expectedSinks) {
     const row = registry.rows[sink]
@@ -1269,17 +1519,17 @@ export function validateSinkTestRegistry(inventory, registry) {
       || !/^tests\/.+\.test\.tsx?$/u.test(row.testFile ?? '')
       || typeof row.testName !== 'string' || !/^[a-f0-9]{64}$/u.test(row.sha256 ?? '')
       || row.checksumScope !== 'named_test_case_ast'
+      || JSON.stringify(row.caseLabels) !== JSON.stringify(ISOLATION_CASE_LABELS)
       || !/^[a-f0-9]{64}$/u.test(row.authorityPathSha256 ?? '')) {
       throw new Error(`protected_surface_sink_registry_row_invalid:${sink}`)
     }
-    const pair = `${row.testFile}\u0000${row.testName}`
-    if (pairs.has(pair)) throw new Error(`protected_surface_sink_registry_duplicate_test:${sink}`)
-    pairs.add(pair)
     const source = readFileSync(resolve(ROOT, row.testFile), 'utf8')
     const surface = surfaces.get(row.surfaceRef)
     const invocation = runtimeInvocationProof(source, row.testFile, row.testName, surface)
     if (runtimeTestChecksum(source, row.testFile, row.testName) !== row.sha256 || invocation === undefined
       || JSON.stringify(invocation) !== JSON.stringify(row.invocation)
+      || JSON.stringify(runtimeIsolationCaseLabels(source, row.testFile, row.testName))
+        !== JSON.stringify(ISOLATION_CASE_LABELS)
       || digest(JSON.stringify(surface.authorityPath)) !== row.authorityPathSha256) {
       throw new Error(`protected_surface_sink_registry_test_invalid:${sink}`)
     }
@@ -1306,10 +1556,61 @@ function checkSinkTestRegistry(inventory) {
   return registry
 }
 
+function buildSurfaceAuthorityMap(inventory, registry) {
+  const redSink = Object.entries(registry.rows).find(([, row]) => row.status !== 'covered')
+  if (redSink !== undefined) {
+    throw new Error(`protected_surface_authority_map_runtime_red:${redSink[0]}`)
+  }
+  const audit = auditProtectedSurfaceDominance(inventory)
+  const rows = audit.rows.map((row) => row.dominance === undefined
+    ? row
+    : Object.freeze({
+        ...row,
+        runtimeIsolation: Object.freeze({
+          testFile: registry.rows[row.authoritySink].testFile,
+          testName: registry.rows[row.authoritySink].testName,
+          testSha256: registry.rows[row.authoritySink].sha256,
+          caseLabels: Object.freeze([...registry.rows[row.authoritySink].caseLabels]),
+        }),
+      }))
+  return Object.freeze({
+    format: 'phase-2-surface-authority-map:v1',
+    inventorySha256: digest(`${JSON.stringify(inventory, null, 2)}\n`),
+    total: audit.total,
+    protected: audit.protected,
+    exemptions: audit.exemptions,
+    proved: audit.proved,
+    red: audit.red,
+    rows: Object.freeze(rows),
+  })
+}
+
+function writeSurfaceAuthorityMap(inventory, registry) {
+  const map = buildSurfaceAuthorityMap(inventory, registry)
+  if (map.red !== 0 || map.total !== 242 || map.protected + map.exemptions !== map.total) {
+    throw new Error('protected_surface_authority_map_red')
+  }
+  writeFileSync(SURFACE_AUTHORITY_MAP, `${JSON.stringify(map, null, 2)}\n`)
+  return map
+}
+
+function checkSurfaceAuthorityMap(inventory, registry) {
+  if (!existsSync(SURFACE_AUTHORITY_MAP)) throw new Error('protected_surface_authority_map_missing')
+  const expected = JSON.parse(readFileSync(SURFACE_AUTHORITY_MAP, 'utf8'))
+  const actual = buildSurfaceAuthorityMap(inventory, registry)
+  if (actual.red !== 0 || JSON.stringify(expected) !== JSON.stringify(actual)) {
+    throw new Error('protected_surface_authority_map_drift')
+  }
+  return actual
+}
+
 export function writeProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
   const inventory = collectProtectedSurfaces()
   writeFileSync(output, `${JSON.stringify(inventory, null, 2)}\n`)
-  if (output === DEFAULT_OUTPUT) writeSinkTestRegistry(inventory)
+  if (output === DEFAULT_OUTPUT) {
+    const registry = writeSinkTestRegistry(inventory)
+    writeSurfaceAuthorityMap(inventory, registry)
+  }
   return inventory
 }
 
@@ -1319,7 +1620,10 @@ export function checkProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
   validateProtectedSurfaceInventory(expected)
   const actual = collectProtectedSurfaces()
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('protected_surface_inventory_drift')
-  if (output === DEFAULT_OUTPUT) checkSinkTestRegistry(actual)
+  if (output === DEFAULT_OUTPUT) {
+    const registry = checkSinkTestRegistry(actual)
+    checkSurfaceAuthorityMap(actual, registry)
+  }
   return actual
 }
 
@@ -1343,6 +1647,12 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--discover-refs')) {
     process.stdout.write(`${JSON.stringify(discoverProtectedSurfaceRefs(), null, 2)}\n`)
     process.exit(0)
+  }
+  if (process.argv.includes('--audit-dominance')) {
+    const audit = auditProtectedSurfaceDominance()
+    process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`)
+    if (process.argv.includes('--require-dominance') && audit.red > 0) process.exitCode = 1
+    process.exit()
   }
   const output = outputArgument(process.argv)
   if (process.argv.includes('--validate-sink-registry')) {

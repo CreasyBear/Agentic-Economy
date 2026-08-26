@@ -815,31 +815,25 @@
     "continuation:convex/capabilityOperationInvocations.ts:completeWork": { "binding": "workload_account", "consequential": true },
     "continuation:convex/capabilityProviderConnectionCleanup.ts:completeWork": { "binding": "workload_account", "consequential": true },
     "job:convex/agentAccessOAuth.ts:cleanupExpiredOAuthGrants": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:oauth-grant-cleanup deletes only expired grants in a bounded batch and preserves cross-account live grants" }
+      "binding": "workload_account", "consequential": true
     },
     "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": { "binding": "workload_account", "consequential": true },
     "job:convex/facilitatorDiscoveryAction.ts:run": { "binding": "workload_account", "consequential": true },
     "job:convex/marketAggregateBackfill.ts:run": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:market-aggregate-backfill changes only bounded projection bookkeeping on an empty public evidence set" }
+      "binding": "workload_account", "consequential": true
     },
     "job:convex/marketExternalRefresh.ts:run": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:market-external-refresh binds a current workload snapshot and writes only bounded public snapshot metadata" }
+      "binding": "workload_account", "consequential": true
     },
     "job:convex/marketExternalRegistryRefresh.ts:run": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:market-registry-refresh preserves the active generation on incomplete input and cannot widen workload authority" }
+      "binding": "workload_account", "consequential": true
     },
     "job:convex/marketPresence.ts:refresh": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:market-presence-refresh removes no authority and creates no presence from an empty publication set" }
+      "binding": "workload_account", "consequential": true
     },
     "job:convex/moneyLedger.ts:runDailySupplierSettlement": { "binding": "workload_account", "consequential": true },
     "job:convex/sourceWriteAdmission.ts:cleanupExpiredSourceWriteNonces": {
-      "binding": "narrow_system_non_consequential", "consequential": false,
-      "exemption": { "testFile": "tests/maturity/phase-2-public-exemptions.test.ts", "testName": "job:source-write-nonce-cleanup deletes only expired replay rows and preserves live cross-account nonces" }
+      "binding": "workload_account", "consequential": true
     },
     "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation": { "binding": "canonical_agent", "consequential": true },
     "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority": { "binding": "workload_account", "consequential": true },
@@ -868,7 +862,7 @@
     "run_action:convex/chatExecute.ts:execute": { "binding": "interactive_account", "consequential": true },
     "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
     "run_action:convex/marketRegistryGraduation.ts:run": { "binding": "workload_account", "consequential": true },
-    "run_action:convex/workloadCron.ts:runAdmittedAction@542": { "binding": "workload_account", "consequential": true },
+    "run_action:convex/workloadCron.ts:runAdmittedAction@545": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/chatGenerate.ts:generate": { "binding": "interactive_account", "consequential": true },

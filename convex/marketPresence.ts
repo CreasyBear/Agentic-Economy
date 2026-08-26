@@ -85,17 +85,15 @@ export async function countMarketPresence(ctx: QueryCtx): Promise<{ operations: 
 export const refresh = internalMutation({
   args: {
     cursor: v.union(v.string(), v.null()),
-    workload: v.optional(workloadCronSnapshotValue),
+    workload: workloadCronSnapshotValue,
   },
   returns: v.object({ processed: v.number(), complete: v.boolean() }),
   handler: async (ctx, args) => {
-    if (args.workload !== undefined) {
-      await reconcileWorkloadCronSnapshot(
-        ctx,
-        'refresh current market presence',
-        parseWorkloadCronSnapshot(args.workload),
-      )
-    }
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'refresh current market presence',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const now = Date.now()
     const page = await ctx.db.query('capabilityPublications').paginate({
       cursor: args.cursor,

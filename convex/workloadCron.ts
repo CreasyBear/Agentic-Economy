@@ -502,7 +502,10 @@ export async function dispatchWorkloadCronConsequenceHandler(
     case 'capabilitySupply:recordCapabilityProbeResult':
       return await ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, args.payload as never)
     case 'facilitatorDiscovery:reconcile':
-      return await ctx.runMutation(internal.facilitatorDiscovery.reconcile, args.payload as never)
+      return await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
+        ...(args.payload as Record<string, unknown>),
+        workload: current,
+      } as never)
     case 'marketExternalRegistry:begin':
       return await ctx.runMutation(internal.marketExternalRegistry.begin, args.payload as never)
     case 'marketExternalRegistry:fail':

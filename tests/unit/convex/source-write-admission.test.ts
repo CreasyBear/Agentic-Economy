@@ -24,6 +24,24 @@ const request: SourceWriteAdmissionRequest = {
 }
 
 type RuntimeHandler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
+type IsolationCaseKind =
+  | 'owner'
+  | 'member'
+  | 'workload'
+  | 'missing_workload'
+  | 'stranger'
+  | 'wrong_account'
+  | 'stale_generation'
+
+const ISOLATION_CASES = [
+  'owner',
+  'member',
+  'workload',
+  'missing_workload',
+  'stranger',
+  'wrong_account',
+  'stale_generation',
+] as const satisfies readonly IsolationCaseKind[]
 const readControlSourceRuntime = (readControlSource as unknown as { _handler: RuntimeHandler })._handler
 const recordLateObservationSourceRuntime = (
   recordLateObservationSource as unknown as { _handler: RuntimeHandler }
@@ -34,6 +52,56 @@ afterEach(() => {
 })
 
 describe('Convex source-write:v2 admission', () => {
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through both registered source handlers without a denied data or control effect',
+    async (caseKind) => {
+      vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
+      const readDb = createNonceDb()
+      const readCommand = {
+        invocationRef: `invocation:isolation-read:${caseKind}`,
+        callerRef: `caller:isolation-read:${caseKind}`,
+        principalRef: `principal:isolation-read:${caseKind}`,
+        operationKey: 'actionInvocationControl:readControlSource',
+        correlationId: `correlation:isolation-read:${caseKind}`,
+      }
+      const readArgs = await isolationArgs(readCommand, `nonce:isolation-read:${caseKind}`, caseKind)
+
+      const writeDb = createNonceDb()
+      const writeCommand = {
+        invocationRef: `invocation:isolation-write:${caseKind}`,
+        commandId: `command:isolation-write:${caseKind}`,
+        effectGeneration: 1,
+        actorRef: `actor:isolation-write:${caseKind}`,
+        sourceEvidenceRef: `evidence:isolation-write:${caseKind}`,
+        release: 'not_released',
+        evidenceDigest: `sha256:${'b'.repeat(64)}`,
+        recordedAt: '2026-08-26T00:00:00.000Z',
+        operationKey: 'actionInvocationControl:recordLateObservationSource',
+        correlationId: `correlation:isolation-write:${caseKind}`,
+      }
+      const writeArgs = await isolationArgs(writeCommand, `nonce:isolation-write:${caseKind}`, caseKind)
+
+      if (caseKind === 'workload') {
+        await expect(readControlSourceRuntime({ db: readDb }, readArgs)).resolves.toBeNull()
+        await expect(recordLateObservationSourceRuntime({ db: writeDb }, writeArgs)).resolves.toEqual({
+          kind: 'refused',
+          code: 'stale_invocation_version',
+        })
+        expect(readDb.queries).toEqual(['actionInvocationControls'])
+        expect(writeDb.queries.filter((table) => table === 'actionInvocationControls')).toHaveLength(1)
+        expect(writeDb.inserts).toHaveLength(1)
+        return
+      }
+
+      await expect(readControlSourceRuntime({ db: readDb }, readArgs)).rejects.toThrow()
+      await expect(recordLateObservationSourceRuntime({ db: writeDb }, writeArgs)).rejects.toThrow()
+      expect(readDb.queries).toHaveLength(0)
+      expect(readDb.inserts).toHaveLength(0)
+      expect(writeDb.queries).toHaveLength(0)
+      expect(writeDb.inserts).toHaveLength(0)
+    },
+  )
+
   it('runs the registered source read query with exact signed provenance and denies caller drift before data access', async () => {
     vi.stubEnv('AE_SOURCE_WRITE_SECRET', secret)
     const db = createNonceDb()
@@ -157,6 +225,7 @@ async function signedArgs(
   command: Record<string, unknown> & { operationKey: string; correlationId: string },
   nonce: string,
   scope: 'protected_action' | 'catalog_publish' = 'protected_action',
+  now?: number,
 ): Promise<Record<string, unknown> & { sourceWrite: SourceWriteAdmission }> {
   const sourceWrite = await createSourceWriteAdmission({
     env: { AE_SOURCE_WRITE_SECRET: secret },
@@ -166,8 +235,38 @@ async function signedArgs(
     correlationId: command.correlationId,
     commandDigest: sourceWriteCommandDigest(command),
     nonce,
+    ...(now === undefined ? {} : { now }),
   })
   return { ...command, sourceWriteRequest: request, sourceWrite }
+}
+
+async function isolationArgs(
+  command: Record<string, unknown> & { operationKey: string; correlationId: string },
+  nonce: string,
+  caseKind: IsolationCaseKind,
+): Promise<Record<string, unknown>> {
+  if (caseKind === 'owner' || caseKind === 'missing_workload') return command
+  if (caseKind === 'member') {
+    return await signedArgs(command, nonce, 'catalog_publish')
+  }
+  const args = await signedArgs(command, nonce)
+  if (caseKind === 'workload') return args
+  if (caseKind === 'stranger') {
+    return {
+      ...args,
+      sourceWrite: {
+        ...args.sourceWrite,
+        signature: `${args.sourceWrite.signature}forged`,
+      },
+    }
+  }
+  if (caseKind === 'wrong_account') {
+    if (typeof command.principalRef === 'string') {
+      return { ...args, principalRef: `principal:wrong-account:${nonce}` }
+    }
+    return { ...args, actorRef: `actor:wrong-account:${nonce}` }
+  }
+  return await signedArgs(command, nonce, 'protected_action', Date.now() - 10 * 60_000)
 }
 
 function createNonceDb() {

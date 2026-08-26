@@ -26,6 +26,7 @@ const ACCOUNT = accountRef('acc_00000000000040008000000000000041')
 const OWNER = principalRef('prn_00000000000040008000000000000041')
 const OPERATOR_ONE = principalRef('prn_00000000000040008000000000000042')
 const OPERATOR_TWO = principalRef('prn_00000000000040008000000000000043')
+const RECOVERY_WORKLOAD = principalRef('prn_00000000000040008000000000000044')
 const GRANT = delegationGrantRef('grt_00000000000040008000000000000041')
 
 function approval(
@@ -221,6 +222,83 @@ async function seedTrustedApprovals(
       await session.insertVerifiedApproval(approval('approval:one', OPERATOR_ONE, action))
       await session.insertVerifiedApproval(approval('approval:two', OPERATOR_TWO, action))
     })
+  })
+}
+
+async function seedRecoveryIdentity(
+  backend: TestConvex<typeof schema>,
+  input: Readonly<{
+    principal: typeof OWNER | typeof RECOVERY_WORKLOAD
+    principalKind: 'human' | 'workload'
+    tokenIdentifier: string
+    suffix: '43' | '44'
+    includeMembership: boolean
+  }>,
+) {
+  await backend.run(async (ctx) => {
+    if (input.principal === RECOVERY_WORKLOAD) {
+      await ctx.db.insert('principals', {
+        principalRef: input.principal,
+        kind: input.principalKind,
+        displayName: 'Recovery workload',
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 900,
+        updatedAt: 900,
+      })
+    }
+    const bindingRef = `ext_000000000000400080000000000000${input.suffix}`
+    const credentialRef = `crd_000000000000400080000000000000${input.suffix}`
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef,
+      providerNamespace: 'clerk/user',
+      providerIdentifier: input.tokenIdentifier,
+      principalRef: input.principal,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+      revision: 1,
+      bindIdempotencyRef: `binding:${input.suffix}`,
+      createdAt: 900,
+      updatedAt: 900,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef,
+      bindingRef,
+      principalRef: input.principal,
+      type: 'provider_token',
+      generation: 1,
+      lifecycle: 'active',
+      issueIdempotencyRef: `credential:${input.suffix}`,
+      issuedAt: 900,
+      expiresAt: 2_000,
+      expiryMaterialization: {
+        state: 'scheduled',
+        credentialGeneration: 1,
+        credentialExpiresAt: 2_000,
+        scheduleNonce: `nonce:${input.suffix}`,
+        scheduleRef: `schedule:${input.suffix}`,
+        materializedAt: 900,
+      },
+      revision: 1,
+      updatedAt: 900,
+    })
+    if (input.includeMembership) {
+      await ctx.db.insert('memberships', {
+        membershipRef: `mem_000000000000400080000000000000${input.suffix}`,
+        accountRef: ACCOUNT,
+        memberPrincipalRef: input.principal,
+        lifecycle: 'active',
+        revision: 1,
+        createdAt: 900,
+        createdBy: {
+          actorPrincipalRef: OWNER,
+          activeAccountRef: ACCOUNT,
+          correlationRef: `operator:add:${input.suffix}`,
+          idempotencyRef: `operator:add:${input.suffix}`,
+        },
+      })
+    }
   })
 }
 
@@ -472,6 +550,73 @@ describe('recovery break-glass Convex driver', () => {
       })
     })
   })
+
+  it.each([
+    ['owner', false, { subject: 'protected-owner', issuer: 'https://recovery.test', tokenIdentifier: 'recovery|owner' }, ACCOUNT, 4],
+    ['member', true, identity('41'), ACCOUNT, 4],
+    ['workload', false, { subject: 'recovery-workload', issuer: 'https://recovery.test', tokenIdentifier: 'recovery|workload' }, ACCOUNT, 4],
+    ['missing_workload', false, null, ACCOUNT, 4],
+    ['stranger', false, { subject: 'recovery-stranger', issuer: 'https://recovery.test', tokenIdentifier: 'recovery|stranger' }, ACCOUNT, 4],
+    ['wrong_account', false, identity('41'), accountRef('acc_00000000000040008000000000000999'), 4],
+    ['stale_generation', false, identity('41'), ACCOUNT, 3],
+  ] as const)(
+    'evaluates %s through the registered recovery operation with atomic denial',
+    async (caseKind, allowed, presentedIdentity, selectedAccount, generation) => {
+      vi.spyOn(Date, 'now').mockReturnValue(NOW)
+      vi.spyOn(globalThis.crypto, 'randomUUID')
+        .mockReturnValue('00000000-0000-4000-8000-000000000049')
+      const backend = convexTest(schema, convexModules)
+      await seed(backend)
+      if (caseKind === 'owner') {
+        await seedRecoveryIdentity(backend, {
+          principal: OWNER,
+          principalKind: 'human',
+          tokenIdentifier: 'recovery|owner',
+          suffix: '43',
+          includeMembership: false,
+        })
+      }
+      if (caseKind === 'workload') {
+        await seedRecoveryIdentity(backend, {
+          principal: RECOVERY_WORKLOAD,
+          principalKind: 'workload',
+          tokenIdentifier: 'recovery|workload',
+          suffix: '44',
+          includeMembership: true,
+        })
+      }
+      await seedTrustedApprovals(backend)
+      const consequenceState = async () => await backend.run(async (ctx) => ({
+        account: await ctx.db.query('accounts').collect(),
+        grants: await ctx.db.query('authorityDelegationGrants').collect(),
+        approvals: await ctx.db.query('recoveryBreakGlassApprovals').collect(),
+        admissions: await ctx.db.query('recoveryBreakGlassAdmissions').collect(),
+        snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+      }))
+      const before = await consequenceState()
+      const client = presentedIdentity === null ? backend : backend.withIdentity(presentedIdentity)
+      const consequence = client.mutation(api.recoveryBreakGlass.authorizeRecoveryOperation, {
+        action: 'isolate',
+        accountRef: selectedAccount,
+        grantRef: GRANT,
+        expectedGrantGeneration: generation,
+        approvalRefs: ['approval:one', 'approval:two'],
+        correlationRef: `recovery:isolation-matrix:${caseKind}`,
+        idempotencyRef: `recovery:isolation-matrix:${caseKind}`,
+      })
+
+      if (allowed) {
+        await expect(consequence).resolves.toMatchObject({
+          lifecycle: 'consumed',
+          accountRef: ACCOUNT,
+          operatorPrincipalRef: OPERATOR_ONE,
+        })
+      } else {
+        await expect(consequence).rejects.toThrow()
+        await expect(consequenceState()).resolves.toEqual(before)
+      }
+    },
+  )
 
   it('fails closed on missing account ownership facts before consulting approvals', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(NOW)

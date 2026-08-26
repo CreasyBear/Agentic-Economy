@@ -101,6 +101,166 @@ async function install(
 }
 
 describe('canonical provider-connection driver', () => {
+  it.each([
+    'owner',
+    'member',
+    'workload',
+    'missing_workload',
+    'stranger',
+    'wrong_account',
+    'stale_generation',
+  ] as const)(
+    'evaluates readCurrentCleanupResourceAuthority %s through the registered cleanup action',
+    async (caseKind) => {
+      const backend = convexTestWithWorkers({ pauseWorkpool: true })
+      const fixture = await publishedBusinessOwner(backend, `cleanup-isolation-${caseKind}`)
+      const owner = await canonicalOwner(backend, fixture.businessId)
+      const suffixes = {
+        owner: ['a', '1'],
+        member: ['b', '2'],
+        workload: ['c', '3'],
+        missing_workload: ['d', '4'],
+        stranger: ['e', '5'],
+        wrong_account: ['f', '6'],
+        stale_generation: ['7', '8'],
+      } as const
+      const [installGrantSuffix, revokeGrantSuffix] = suffixes[caseKind]
+      await grant(backend, owner, installGrantSuffix, 'connection:install', [
+        `connection-provider:${PROVIDER_NAMESPACE}`,
+        `connection-provider:${PROVIDER_NAMESPACE}:${PROVIDER_ACCOUNT_REF}`,
+        `secret:${SECRET_REF}`,
+      ])
+      const installed = await install(backend, fixture.businessId, `cleanup-isolation-${caseKind}`)
+      if (installed.kind === 'refused' || installed.connection.canonicalConnectionRef === undefined) {
+        throw new Error('cleanup_isolation_install_failed')
+      }
+      await grant(backend, owner, revokeGrantSuffix, 'connection:revoke', [
+        `connection:${installed.connection.canonicalConnectionRef}`,
+      ])
+      const revoked = await fixture.owner.mutation(api.capabilityProviderConnections.revokeOwner, {
+        connectionRef: installed.connection.connectionRef,
+        commandId: `command:cleanup-isolation:${caseKind}:revoke`,
+        expectedAuthorityGeneration: installed.connection.authorityGeneration,
+        expectedAuthorityDigest: installed.connection.authorityDigest,
+        evidenceRefs: [`evidence:cleanup-isolation:${caseKind}`],
+      })
+      if (revoked.kind === 'refused') throw new Error(`cleanup_isolation_revoke_${revoked.code}`)
+      if (revoked.kind === 'duplicate') throw new Error('cleanup_isolation_revoke_duplicate')
+      const cleanup = await backend.run(async (ctx) => {
+        const row = await ctx.db.query('capabilityProviderConnections')
+          .withIndex('by_connectionRef', (query) => query.eq('connectionRef', installed.connection.connectionRef))
+          .unique()
+        if (row?.cleanupCommandId === undefined
+          || row.cleanupRequestDigest === undefined
+          || row.cleanupAttempt === undefined) {
+          throw new Error('cleanup_isolation_binding_missing')
+        }
+        return row
+      })
+      const cleanupArgs = {
+        connectionRef: cleanup.connectionRef,
+        commandId: cleanup.cleanupCommandId as string,
+        expectedAuthorityGeneration: cleanup.authorityGeneration,
+        expectedAuthorityDigest: cleanup.authorityDigest,
+        requestDigest: cleanup.cleanupRequestDigest as string,
+        cleanupAttempt: cleanup.cleanupAttempt as number,
+      }
+      const target = await backend.query(
+        internal.capabilityProviderConnections.readCleanupTarget,
+        { ...cleanupArgs, now: Date.now() },
+      )
+      if (target === null) throw new Error('cleanup_isolation_target_missing')
+
+      await backend.run(async (ctx) => {
+        const principal = await ctx.db.query('principals')
+          .withIndex('by_principalRef', (query) => query.eq('principalRef', owner.principalRef as never))
+          .unique()
+        const grantRow = await ctx.db.query('authorityDelegationGrants')
+          .withIndex('by_grantRef', (query) => query.eq('grantRef', target.resourceAuthority.grantRef))
+          .unique()
+        if (principal === null || grantRow === null) {
+          throw new Error('cleanup_isolation_authority_rows_missing')
+        }
+        if (caseKind === 'member') {
+          const memberPrincipalRef = `prn_${'b'.repeat(32)}`
+          const membershipRef = `mem_${'b'.repeat(32)}`
+          await ctx.db.insert('principals', {
+            principalRef: memberPrincipalRef,
+            kind: 'human',
+            displayName: 'Cleanup account member',
+            lifecycle: 'active',
+            revision: 1,
+            createdAt: 2,
+            updatedAt: 2,
+          })
+          await ctx.db.insert('memberships', {
+            membershipRef,
+            accountRef: owner.accountRef,
+            memberPrincipalRef,
+            lifecycle: 'active',
+            revision: 1,
+            createdAt: 2,
+            createdBy: {
+              actorPrincipalRef: owner.principalRef,
+              activeAccountRef: owner.accountRef,
+              correlationRef: `create:${membershipRef}`,
+              idempotencyRef: `create:${membershipRef}`,
+            },
+          })
+          const account = await ctx.db.query('accounts')
+            .withIndex('by_accountRef', (query) => query.eq('accountRef', owner.accountRef as never))
+            .unique()
+          if (account === null) throw new Error('cleanup_isolation_account_missing')
+          const ownership = await ctx.db.query('accountOwnerships')
+            .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+            .unique()
+          if (ownership === null) throw new Error('cleanup_isolation_ownership_missing')
+          await ctx.db.patch(ownership._id, { ownerPrincipalRef: memberPrincipalRef })
+        } else if (caseKind === 'workload') {
+          await ctx.db.patch(principal._id, { kind: 'workload' })
+        } else if (caseKind === 'missing_workload') {
+          await ctx.db.delete(principal._id)
+        } else if (caseKind === 'stranger') {
+          await ctx.db.patch(grantRow._id, { subjectPrincipalRef: `prn_${'e'.repeat(32)}` })
+        } else if (caseKind === 'wrong_account') {
+          await ctx.db.patch(grantRow._id, { accountRef: `acc_${'f'.repeat(32)}` })
+        } else if (caseKind === 'stale_generation') {
+          await ctx.db.patch(grantRow._id, {
+            generation: grantRow.generation + 1,
+            revision: grantRow.revision + 1,
+          })
+        }
+      })
+
+      const connectionState = async () => await backend.run(async (ctx) =>
+        await ctx.db.query('capabilityProviderConnections')
+          .withIndex('by_connectionRef', (query) => query.eq('connectionRef', cleanup.connectionRef))
+          .unique())
+      const before = await connectionState()
+      const result = await backend.action(internal.capabilityProviderConnectionCleanup.run, {
+        ...cleanupArgs,
+        workKind: 'lease_drain',
+        resourceAuthority: target.resourceAuthority,
+      })
+
+      if (caseKind === 'owner' || caseKind === 'workload') {
+        expect(result).toEqual({ kind: 'lease_drain' })
+      } else {
+        expect(result).toEqual({
+          kind: 'cleanup',
+          result: {
+            outcome: 'outcome_unknown',
+            reasonCode: 'cleanup_target_unavailable',
+            evidenceRefs: ['provider_cleanup:cleanup_target_unavailable'],
+          },
+        })
+      }
+      // The action is the read-only recovery worker. Durable cleanup is only
+      // applied by its separately-authorized completion callback.
+      await expect(connectionState()).resolves.toEqual(before)
+    },
+  )
+
   it('installs idempotently and makes the legacy row a fail-closed canonical projection', async () => {
     const backend = convexTestWithWorkers({ pauseWorkpool: true })
     const fixture = await publishedBusinessOwner(backend, 'connection-driver-install')
@@ -328,6 +488,12 @@ describe('canonical provider-connection driver', () => {
     })
     if (cleanupTarget === null) throw new Error('cleanup_target_missing')
     const cleanupAuthority = cleanupTarget.resourceAuthority
+    const { now: _queryAdmissionTime, ...cleanupWorkerArgs } = cleanupArgs
+    await expect(backend.action(internal.capabilityProviderConnectionCleanup.run, {
+      ...cleanupWorkerArgs,
+      workKind: 'lease_drain',
+      resourceAuthority: cleanupAuthority,
+    })).resolves.toEqual({ kind: 'lease_drain' })
     await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, {
       ...cleanupArgs,
       now: -1,

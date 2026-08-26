@@ -63,17 +63,15 @@ export const cleanupExpiredOAuthGrants = internalMutation({
   args: {
     now: v.optional(v.number()),
     batchSize: v.optional(v.number()),
-    workload: v.optional(workloadCronSnapshotValue),
+    workload: workloadCronSnapshotValue,
   },
   returns: oauthGrantCleanupResult,
   handler: async (ctx, args) => {
-    if (args.workload !== undefined) {
-      await reconcileWorkloadCronSnapshot(
-        ctx,
-        'cleanup expired agent access oauth grants',
-        parseWorkloadCronSnapshot(args.workload),
-      )
-    }
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'cleanup expired agent access oauth grants',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const effectiveNow = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
     const cutoff = effectiveNow - 60 * 60 * 1_000
     const batchSize = args.batchSize === undefined || !Number.isFinite(args.batchSize)

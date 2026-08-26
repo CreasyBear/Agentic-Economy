@@ -1,384 +1,627 @@
 {
-  "format": "phase-2-authority-sink-runtime-tests:v1",
-  "inventorySha256": "02002ed397e2f63b120034b5f243329dbb6bfa389538fea5e3b09bcf5a1fdd2a",
+  "format": "phase-2-authority-sink-runtime-tests:v2",
+  "inventorySha256": "597df302b11bad267106e285fcf2688dd1ca2c72453833edaf24a67a58aff65c",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
       "surfaceRef": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
       "testFile": "tests/integration/capability-supply-owner-funnel-reserve.test.ts",
-      "testName": "requires a verified owner principal and rejects changed material before draft effects",
+      "testName": "drives the %s isolation case through the registered reservation mutation without a denied publication effect",
       "checksumScope": "named_test_case_ast",
-      "sha256": "a4fc2d40d30bff8fae6a4dfe3a0283e478aa3f0ed291bd85a96c5cdb342a90b1",
+      "sha256": "93baaa984fec93332a2fd16c702aafc874d23efe5797141e0f232f58ae260ca6",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication",
         "expression": "api.capabilitySupplyOwnerFunnel.reserveOwnerCapabilityPublication"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "f29e98cdd681080a58f8662007d96319fb8903662d8fc202ea682c31b07e0a5e"
     },
     "convex/authorityBoundary.ts:resolveCanonicalAgentBinding": {
       "status": "covered",
       "surfaceRef": "convex/authorityBoundary.ts:resolveAgentBinding",
       "testFile": "tests/unit/convex/authority-boundary.test.ts",
-      "testName": "requires exact source-write admission for the registered production mutation",
+      "testName": "drives the %s isolation case through the registered mutation and commits no denied authority snapshot",
       "checksumScope": "named_test_case_ast",
-      "sha256": "a7addf968c84e18c4af9c7f30262486804e5d16e3fad464f3360b7e5094a98d4",
+      "sha256": "d75268fdaf31d3f3101935062f0204e414f235812aa9228c11fe70a81fad0616",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/authorityBoundary.ts:resolveAgentBinding",
         "expression": "makeFunctionReference<'mutation', MutationArgs, CanonicalAgentBinding | null>(\n  'authorityBoundary:resolveAgentBinding',\n)"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "73d59cf6e3c16efc31130ee4d34af5b59c050c137f95f63886e8f063a0d5e384"
     },
     "convex/authz.ts:resolveBusinessActor": {
       "status": "covered",
-      "surfaceRef": "convex/qualifiedUse.ts:readOwnerQualifiedUse",
+      "surfaceRef": "convex/capabilityProviderConnections.ts:readOwner",
       "testFile": "tests/maturity/phase-2-owner-query-authority.test.ts",
-      "testName": "preserves current account-scoped reads through every non-chat query caller",
+      "testName": "evaluates resolveBusinessActor %s through the registered account-scoped provider query",
       "checksumScope": "named_test_case_ast",
-      "sha256": "519867762f3c11f5d7196c128cd9aba458173a429b38a7519dd0c9692d47d7f1",
+      "sha256": "55834865f1a955d982946fd0068004ac509e9908d6666d504c4a3c6fd10e57b7",
       "invocation": {
         "kind": "convex_runtime_invocation",
-        "target": "convex/qualifiedUse.ts:readOwnerQualifiedUse",
-        "expression": "api.qualifiedUse.readOwnerQualifiedUse"
+        "target": "convex/capabilityProviderConnections.ts:readOwner",
+        "expression": "api.capabilityProviderConnections.readOwner"
       },
-      "authorityPathSha256": "bd7db7b6ab84e029a016bfcdc3747277b7195a0da1e7cc240096dc87eb4de92d"
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "c080a6e7658720901d41cb3e6a77bea95fe1d36d19838cbf466f3e8bb3e1b6e6"
     },
     "convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority": {
       "status": "covered",
       "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
       "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered invocation worker action through durable authority reconciliation and denies an unknown invocation",
+      "testName": "drives the %s isolation case through the registered invocation worker run action and reconcilePersistedInvocationAuthority sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "004842b34570bda9291c0cc1e78717c406a1814e18fb8c6b9305715f345b662d",
+      "sha256": "7646a9890707f594c948cbf3b96e251860676dc87e5d426af42501807bfee3e9",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilityOperationInvocationWorker.ts:run",
         "expression": "internal.capabilityOperationInvocationWorker.run"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "f727116efeee5c8b336ba0c2542a0004ecb708abec1cebf703c7b1823f43dfcb"
     },
     "convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority": {
       "status": "covered",
       "surfaceRef": "convex/capabilityOperationInvocations.ts:cancelInvocation",
       "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
-      "testName": "requires canonical agent expectations and exact authority targets on every public agent action",
+      "testName": "drives the %s isolation case through the registered cancel action and its real current-agent sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "58eba53d33497f1ea5e0ad14f5f859dd942983d7bda1ed923ccf287c529c342c",
+      "sha256": "d9643abd26a55297cce78e37a05e335172845a96972952c86905625c0db8c384",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/capabilityOperationInvocations.ts:cancelInvocation",
         "expression": "cancelBoundary"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "31b1c99a4a9be6b16914bb4d28750256f8c3d0db896ff6d486ed6627d1d6bbd1"
     },
     "convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority": {
       "status": "covered",
       "surfaceRef": "workpool:convex/capabilityProviderConnectionCleanup.ts:run",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered cleanup worker action through the durable target reader and refuses an unknown connection",
+      "testFile": "tests/unit/convex/provider-connection-driver.test.ts",
+      "testName": "evaluates readCurrentCleanupResourceAuthority %s through the registered cleanup action",
       "checksumScope": "named_test_case_ast",
-      "sha256": "18ccda291c3d2c115f1b87bc9c84b86739724b90a14b6875913f059b919215e3",
+      "sha256": "07cd790426896596badd31fc309d535dd8cd043149d3d6b1f00fae4008fcf8e0",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilityProviderConnectionCleanup.ts:run",
         "expression": "internal.capabilityProviderConnectionCleanup.run"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "02a3d4335dd3803b3d3a3fd1ac31c207a79e33bff7cd7d2de5c882bda6ddc187"
     },
     "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered provider journal abort route through the durable abort mutation",
+      "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
+      "testName": "drives the %s isolation case through the registered provider abort route and abortProviderConsequence sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "b3cfe37e3e1cfe44f5dbcdebea00667d0ddbf207192b101318ff94d0e77bf2e7",
+      "sha256": "48085f89397b3d82714da08e2c6ea7939e36b6ad2bbb07dbdff88f3f082d752d",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
-        "expression": "abortProviderConsequenceRuntime._handler"
+        "expression": "abortProviderConsequenceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "426d4f9e26ccac32257a379ea2079394178b1463228c78eb966d380288761688"
     },
     "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered provider ticket attestation route through the durable ticket query",
+      "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
+      "testName": "drives the %s isolation case through the registered provider attest route and attestProviderConsequenceTicket sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "c0c4f847142aed919faaa967a3466aaa3e746486a6449ed65748817a4d34f0de",
+      "sha256": "5e6c7dff961505e7b4bfdd531528cfc3a833f3cfd67973717f3f56be85c0f3c0",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
-        "expression": "attestProviderConsequenceRuntime._handler"
+        "expression": "attestProviderConsequenceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "b1bc4355f1875ea6e5942a5f7e7ad05b94689f11c3543596ec46f52073a1853e"
     },
     "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered provider x402 route through durable authorization and never reaches money for an unknown ticket",
+      "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
+      "testName": "drives the %s isolation case through the registered provider x402 route and authorizeProviderConsequenceX402Rpc sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "e326309bd0a0a0c0f58f2bc0618dde282940a9ec7e70ff88720049469a28fa34",
+      "sha256": "6f58b9e5c56a0ba724413e766964e5df213d4ec0b99e0d71980aee9f4fd41309",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
-        "expression": "providerConsequenceX402Runtime._handler"
+        "expression": "providerConsequenceX402Runtime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "3a6a7f2f5da954a83ae4273f9539e7e6ea1299fceda6dbee92288d61719466e1"
     },
     "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
-      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered provider journal begin route through the durable claim mutation",
+      "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
+      "testName": "drives the %s isolation case through the registered provider begin route and claimProviderConsequence sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "4fd0e0d6f794817f2bc10b831e823ff1241c950aa5e850670caeb7df87d11f96",
+      "sha256": "eb46bf2bf44660c9d99aedcd5b2b18aadab96d43580996e0f09184d3a24065df",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
-        "expression": "beginProviderConsequenceRuntime._handler"
+        "expression": "beginProviderConsequenceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "a2a89c31f7a9f4158a3a95243c530b7b20170ac4dde81aa55177828c16f6918c"
     },
     "convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal",
       "testFile": "tests/unit/capability-execution/provider-consequence-journal.test.ts",
-      "testName": "executes the registered completion HTTP action and the same journal handler exactly once",
+      "testName": "drives the %s isolation case through the registered provider complete route and completeProviderConsequence sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "208ecf03ec04d89c7a2259778db44110b664ac0537c1e25917ea8053d48d3489",
+      "sha256": "df485c583ae3e6dd6d1c0cc5ef48779a251c7381b4cb783d34be0ce821ab55e1",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal",
         "expression": "completeProviderConsequenceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "e415684c673ff6acfa5773b2648f547f2cbbc7cd68d7c629be83051aaae19a9f"
     },
     "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority": {
       "status": "covered",
       "surfaceRef": "scheduler:convex/capabilitySupplyReadiness.ts:probe",
       "testFile": "tests/integration/capability-publication-probe.test.ts",
-      "testName": "refuses automatic readiness for an OpenAPI %s operation before network execution",
+      "testName": "evaluates readCurrentCapabilityProbeAuthority %s through the registered readiness action",
       "checksumScope": "named_test_case_ast",
-      "sha256": "eb53aca6598327dcc98d806fdba5dbfbdda42a70a0dfa9f331f207ab4928295d",
+      "sha256": "ab64f1036ed2680f18b5a7d37347273a180948f545b771fbe2bac4cc3740f90b",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilitySupplyReadiness.ts:probe",
         "expression": "internal.capabilitySupplyReadiness.probe"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "a636da7d9e532eaa6719d248049b05f8ad70d3741440a59468c56ba0cd08d10d"
     },
     "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority": {
       "status": "covered",
       "surfaceRef": "scheduler:convex/devSeed.ts:seedOfferingSupply",
       "testFile": "tests/integration/catalog-system-offering-authority.test.ts",
-      "testName": "runs the paged internal seed worker only after the workload admission",
+      "testName": "evaluates %s through the registered seed worker before any catalog consequence",
       "checksumScope": "named_test_case_ast",
-      "sha256": "7e52ac5251ebdcbb0f9c123d0fe658043c24804e045f3c2dba0c334cf4412ec3",
+      "sha256": "fe3066efa32cb829a6ec1843a864a7f4f071dfdcbf87e566f4703f4a85840c14",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/devSeed.ts:seedOfferingSupply",
         "expression": "internal.devSeed.seedOfferingSupply"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "9f03585c4271e1e50a5e8f640727be00afa817ea181d831abef63b7ce145c409"
     },
     "convex/interactiveAuthority.ts:currentContextAtTrustedServerTime": {
       "status": "covered",
       "surfaceRef": "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority",
       "testFile": "tests/unit/convex/interactive-authority.test.ts",
-      "testName": "resolves current authenticated sessions only at the non-cached action boundary",
+      "testName": "evaluates %s through the registered trusted-time action without mutating authority facts",
       "checksumScope": "named_test_case_ast",
-      "sha256": "1a4ac90048c220a355a7b4a1553935d55f9d07d9f73be079c0668a617f3b26c6",
+      "sha256": "2ea298b0c3e6820020d2517731271cfc99b40b7c8bc0fb99233d9051801b7ccd",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority",
         "expression": "makeFunctionReference<\n  'action',\n  Record<string, never>,\n  unknown\n>('interactiveAuthority:resolveCurrentInteractiveAuthority')"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "cef1190c6412281d2f0de609345f121c2f30d417d2b301cba4c1cf37ee42c38a"
     },
     "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext": {
       "status": "covered",
       "surfaceRef": "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority",
       "testFile": "tests/integration/chat-scheduled-authority.test.ts",
-      "testName": "arms the exact verified generation and preserves the current account-scoped read",
+      "testName": "evaluates resolveInteractiveAuthorityContext %s through the registered materialization mutation",
       "checksumScope": "named_test_case_ast",
-      "sha256": "c2c2ed5a6a338dadd0b8da758b9f33896c239e5443dbb156e20f40038b15e5f8",
+      "sha256": "609f9f85739dbb3eb64064443fe60a4c1c57cd8f067e89926a24239ff10cd7d2",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority",
         "expression": "api.interactiveAuthority.materializeCurrentInteractiveAuthority"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "a605b0d9a6a5c63bf359258ed917fa0b2ea34a124183ee479a77966bf982e01e"
     },
     "convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext": {
       "status": "covered",
       "surfaceRef": "scheduler:convex/chatGenerate.ts:generate",
       "testFile": "tests/integration/chat-scheduled-authority.test.ts",
-      "testName": "re-derives current Principal and Account before scheduled provider work",
+      "testName": "evaluates resolveScheduledInteractiveAuthorityContext %s through the registered generation action",
       "checksumScope": "named_test_case_ast",
-      "sha256": "a5947fc8b959bf1c67afbf0d9247797997fc7df37f34e5ccdff8953dabb5c1ac",
+      "sha256": "5b36b2090c4caf7e04a571969a729df6339aa61a2b7272277994972fb9879bc3",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/chatGenerate.ts:generate",
         "expression": "internal.chatGenerate.generate"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "3208201cb9d80809d9cee2049679967805e54e15e2c1b87dce6f5500adc7ce3a"
     },
     "convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext": {
       "status": "covered",
       "surfaceRef": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
       "testFile": "tests/unit/convex/capability-operation-authority-boundary.test.ts",
-      "testName": "registers only current server-resolved agent provenance and canonical grant facts",
+      "testName": "drives the %s isolation case through the registered agent registration mutation and its real canonical-context sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "9bef00c85e47d99faf652de2af9e775c4f1067b8db31aa79fd731ab7c16f7838",
+      "sha256": "0c95e74643f1beedd1de1dddcf648d6a3027b2784ba9bcc7f6985cb2922a277c",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/agentAccessPrincipals.ts:registerAgentPrincipal",
         "expression": "registerAgentBoundary"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "1a647fdf7a87c10c609ecfa8ae3c4500ba2b74e9f6cc21c21e6a3d404ec9f90e"
     },
     "convex/lib/secretLifecyclePersistence.ts:requireSnapshot": {
       "status": "covered",
       "surfaceRef": "convex/secretLifecycleHttp.ts:secretLifecycleRpc",
       "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered secret lifecycle route through the durable journal reader without secret material",
+      "testName": "drives the %s isolation case through the registered secret lifecycle route and requireSnapshot sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "b538565d32dc8140ea8ce053f659bc350a626f693c92e8d4bcd7990959eb3a3a",
+      "sha256": "eba9168d8e7c5def66794dd54a0ddc30215044bc143f059d210085e0c6b1465b",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/secretLifecycleHttp.ts:secretLifecycleRpc",
         "expression": "secretLifecycleRuntime._handler"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "6cd2c8b43d54c6af7b1ac8d4ce458b4d933c44dbb18386b7ee7e21d4f00a75f3"
     },
     "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent": {
       "status": "covered",
       "surfaceRef": "reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend",
       "testFile": "tests/integration/money-external-spend.test.ts",
-      "testName": "denies external-spend reconciliation after the durable grant is revoked",
+      "testName": "evaluates %s through the registered external-spend reconciler with no denied ledger effect",
       "checksumScope": "named_test_case_ast",
-      "sha256": "df1e930a7cf3c1bb87208ac79281b48c830f43ee321198c1ef9e7ff88f246585",
+      "sha256": "bd05d6d303ec8c8cf9fd713ec601be493467c73f3356a52b0c707f09117a1b5e",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/moneyLedger.ts:reconcileExternalInvocationSpend",
         "expression": "anyApi.moneyLedger?.reconcileExternalInvocationSpend"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "733845da2301f6e9e90a241af64020f34309976c42eeedfe2467efa1ef3885b8"
     },
     "convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts": {
       "status": "covered",
       "surfaceRef": "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation",
       "testFile": "tests/unit/convex/recovery-break-glass-driver.test.ts",
-      "testName": "runs the registered mutation wrappers and preserves canonical consumed values",
+      "testName": "evaluates %s through the registered recovery operation with atomic denial",
       "checksumScope": "named_test_case_ast",
-      "sha256": "d2491139c35d8aab6d824b25d8cda8343f51cc7ec94b669d1c599de06db8ab49",
+      "sha256": "9e43629229e04c8eaeec3133ed92c56ca1428964480026696748ef30d0ee5e85",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation",
         "expression": "api.recoveryBreakGlass.authorizeRecoveryOperation"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "acb2cb7f9301746d06de6b35d6794b0e4374a45c971fe7894dc4cb6aad6b4176"
     },
     "convex/sourceWriteAdmission.ts:requireSourceRead": {
       "status": "covered",
       "surfaceRef": "convex/actionInvocationControl.ts:readControlSource",
       "testFile": "tests/unit/convex/source-write-admission.test.ts",
-      "testName": "runs the registered source read query with exact signed provenance and denies caller drift before data access",
+      "testName": "drives the %s isolation case through both registered source handlers without a denied data or control effect",
       "checksumScope": "named_test_case_ast",
-      "sha256": "ed9eccb315d104eecb86bde3934ebab594dcd225cb1811cb287490b4ad97ae3f",
+      "sha256": "33e4f53025e4a5190749a2b0cc86693cf55e389ac088dce1ce2b4972fb8bc6b3",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/actionInvocationControl.ts:readControlSource",
         "expression": "readControlSourceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "40162e96695b30b5a18a10acecc06a6a819123448290021ea84b051547d0cd64"
     },
     "convex/sourceWriteAdmission.ts:requireSourceWrite": {
       "status": "covered",
       "surfaceRef": "convex/actionInvocationControl.ts:recordLateObservationSource",
       "testFile": "tests/unit/convex/source-write-admission.test.ts",
-      "testName": "runs the registered source write mutation once and rejects replay before a duplicate control effect",
+      "testName": "drives the %s isolation case through both registered source handlers without a denied data or control effect",
       "checksumScope": "named_test_case_ast",
-      "sha256": "b8a0e71bf3b7a29890143f624129b2ce358bf69d2083c028f82a25cd7c814410",
+      "sha256": "33e4f53025e4a5190749a2b0cc86693cf55e389ac088dce1ce2b4972fb8bc6b3",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/actionInvocationControl.ts:recordLateObservationSource",
         "expression": "recordLateObservationSourceRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "f67034e38c20911f6fbe9c78a697dd157be38d3cb80eb2bf2d9085b1a26b6dd9"
     },
     "convex/workloadCron.ts:admitWorkloadCron": {
       "status": "covered",
       "surfaceRef": "cron:refresh capability supply readiness",
       "testFile": "tests/unit/convex/workload-cron.test.ts",
-      "testName": "runs the registered readiness cron handler from current canonical facts and denies missing authority before dispatch",
+      "testName": "evaluates %s through the registered workload reconciliation and scheduled probe before dispatch",
       "checksumScope": "named_test_case_ast",
-      "sha256": "f56651307b391d71d7edfaa62c3b922b94ae3bf21ede50828e5f04cdcae9379d",
+      "sha256": "bfb46230f8aefb4ccd38ce1272418eb5f9ae6ceaf36388319d69d724ed621796",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/workloadCron.ts:refreshCapabilitySupplyReadiness",
         "expression": "refreshCapabilitySupplyReadinessRuntime"
       },
-      "authorityPathSha256": "3990ec1a2ee21b4b910132a8015162df212919a5bf74471ad8e83930564311dc"
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "3b5a176d3bf987ddadf4272221f7c1c562a7b898d17363c9d7d5b7e4562e97fc"
     },
     "convex/workloadCron.ts:bindWorkloadCronActionContext": {
       "status": "covered",
       "surfaceRef": "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron",
       "testFile": "tests/unit/convex/workload-cron.test.ts",
-      "testName": "runs the registered scheduled probe through reconciliation and the bound action context without widening authority",
+      "testName": "evaluates %s through the registered workload reconciliation and scheduled probe before dispatch",
       "checksumScope": "named_test_case_ast",
-      "sha256": "1e3b4ffcf67b0eec0eedfa103a0f278b806b5b52ec0f6558b8349e3953ea1d08",
+      "sha256": "bfb46230f8aefb4ccd38ce1272418eb5f9ae6ceaf36388319d69d724ed621796",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/capabilitySupplyReadiness.ts:probeFromCron",
         "expression": "probeFromCronRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "bf28910e686cf8c684d461d8bfec463212fc310e5ac1c72a98c0e8569a25e1e0"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
       "surfaceRef": "reconciliation:convex/workloadCron.ts:reconcile",
       "testFile": "tests/unit/convex/workload-cron.test.ts",
-      "testName": "runs the registered workload reconciliation query and denies a lifecycle change at consequence time",
+      "testName": "evaluates %s through the registered workload reconciliation and scheduled probe before dispatch",
       "checksumScope": "named_test_case_ast",
-      "sha256": "b3e4489ea98bc23e6b9e7fa797e6d8c27fa2c2d0e0f27834e2bd412e51d61ed7",
+      "sha256": "bfb46230f8aefb4ccd38ce1272418eb5f9ae6ceaf36388319d69d724ed621796",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/workloadCron.ts:reconcile",
         "expression": "reconcileRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "47776fd5babb01bd71c00c9b513bb7513e9a0fab3e3b0d3c71298f2f445ffbb4"
     },
     "src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook": {
       "status": "covered",
       "surfaceRef": "callback:src/routes/api.stripe.webhook.ts:Route",
       "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
-      "testName": "runs the registered Stripe webhook route through signature verification and preserves applied then replayed outcomes",
+      "testName": "drives the %s isolation case through the registered Stripe webhook route and signature sink",
       "checksumScope": "named_test_case_ast",
-      "sha256": "3fe777b792cb9633a953c838c3ddea219b5da6904f8a3ccb9a4d54a24a13dec5",
+      "sha256": "cb122b982e9d5cb6d16d5131f465ab7f24ce00cd9b679db413d0a5a446e7744e",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "src/routes/api.stripe.webhook.ts:Route",
         "expression": "stripeWebhookPostRuntime"
       },
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
       "authorityPathSha256": "f55bc5b996bb6e6e235da01ea8c852841ee454469d4026fbacd209ad2acb06f3"
     },
     "src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion": {
       "status": "covered",
       "surfaceRef": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
       "testFile": "tests/integration/capability-supply-operations.test.ts",
-      "testName": "runs the registered keyless read query and excludes effectful POST before provider transport",
+      "testName": "drives the %s isolation case through the registered fixed-query descriptor handler",
       "checksumScope": "named_test_case_ast",
-      "sha256": "df88102ba59be30d8dd55cc8fde46762353c901d5962942a747062c1a3535046",
+      "sha256": "df4951d011760f7a7133446fa438c40f6ac5d8719a89d7e9de2854b79bda869e",
       "invocation": {
         "kind": "convex_runtime_invocation",
         "target": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
         "expression": "api.capabilitySupplyOperations.readKeylessExecutable"
       },
-      "authorityPathSha256": "3e74cc8acfeab05aed705bd728c4b5ac50a23ae2c025fa902eaec71a3f724b57"
+      "caseLabels": [
+        "owner",
+        "member",
+        "workload",
+        "missing_workload",
+        "stranger",
+        "wrong_account",
+        "stale_generation"
+      ],
+      "authorityPathSha256": "c79ae9d25367c8877c771969a97088c90a9301a693f24b475d18e92006254b8b"
     }
   }
 }

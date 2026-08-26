@@ -140,6 +140,45 @@ describe('canonical interactive authority', () => {
       })
   })
 
+  it.each([
+    ['owner', true, { access: 'ownership' }, identity()],
+    ['member', true, { access: 'membership' }, identity()],
+    ['workload', false, { principalKind: 'workload' }, identity()],
+    ['missing_workload', false, { omit: 'principal' }, identity()],
+    ['stranger', false, {}, identity({ tokenIdentifier: 'https://clerk.example.test|user_stranger' })],
+    ['wrong_account', false, { ownerAccountRef: `acc_${'9'.repeat(32)}` }, identity()],
+    ['stale_generation', false, { bindingGeneration: 3, credentialGeneration: 2 }, identity()],
+  ] as const)(
+    'evaluates %s through the registered trusted-time action without mutating authority facts',
+    async (_caseKind, allowed, options, presentedIdentity) => {
+      const backend = convexTest(schema, modules)
+      await seedAuthority(backend, options as SeedOptions)
+      const authorityState = async () => await backend.run(async (ctx) => ({
+        bindings: await ctx.db.query('externalIdentityBindings').collect(),
+        credentials: await ctx.db.query('credentials').collect(),
+        principals: await ctx.db.query('principals').collect(),
+        accounts: await ctx.db.query('accounts').collect(),
+        ownerships: await ctx.db.query('accountOwnerships').collect(),
+        memberships: await ctx.db.query('memberships').collect(),
+      }))
+      const before = await authorityState()
+      const result = backend.withIdentity(presentedIdentity).action(
+        resolveCurrentInteractiveAuthorityRef,
+        {},
+      )
+
+      if (allowed) {
+        await expect(result).resolves.toMatchObject({
+          principalRef: PRINCIPAL_REF,
+          accountRef: ACCOUNT_REF,
+        })
+      } else {
+        await expect(result).resolves.toBeNull()
+      }
+      await expect(authorityState()).resolves.toEqual(before)
+    },
+  )
+
   it('expires authority after a cached fact read without accepting caller-shaped time', async () => {
     const backend = convexTest(schema, modules)
     await seedAuthority(backend, { expiresAt: NOW + 1_000 })
@@ -403,7 +442,7 @@ type SeedOptions = Readonly<{
   issuedAt?: number
   expiresAt?: number
   principalLifecycle?: 'active' | 'suspended'
-  principalKind?: 'human' | 'agent'
+  principalKind?: 'human' | 'agent' | 'workload'
   addMembershipToOwnership?: boolean
   accountLifecycle?: 'active' | 'suspended'
   accountCurrentOwnershipRef?: string

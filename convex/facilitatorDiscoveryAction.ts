@@ -51,6 +51,7 @@ export const run = internalAction({
         items: [...structuredClone(admission.admitted)],
         complete: false,
         deadlineAt,
+        workload,
       })
       admitted += result.admitted
       skipped += result.skipped
@@ -69,6 +70,7 @@ export const run = internalAction({
         complete,
         seenPublicationRefs: [...seenPublicationRefs].sort(),
         deadlineAt,
+        workload,
       })
       skipped += result.skipped
       if (result.deadlineExceeded) complete = false

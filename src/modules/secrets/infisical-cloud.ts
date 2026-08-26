@@ -6,8 +6,6 @@ import {
   type SecretStore,
   type SecretTarget,
 } from './secret-plane'
-import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
-import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 
 const DEFAULT_TOKEN_REFRESH_SKEW_MS = 5_000
 const DEFAULT_MAXIMUM_ACCESS_TOKEN_TTL_MS = 2 * 60 * 60 * 1_000
@@ -84,8 +82,10 @@ export class InfisicalCloudSecretStore implements SecretStore {
       : requireNonEmpty(options.organizationSlug, 'organizationSlug')
     this.#identityTokenProvider = options.identityTokenProvider
     this.#usesGuardedNetwork = options.fetch === undefined
-    this.#fetch = options.fetch ?? (async (input, init) =>
-      await sendGuardedHttpRequest(new Request(input, init), 512 * 1024))
+    this.#fetch = options.fetch ?? (async (input, init) => {
+      const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
+      return await sendGuardedHttpRequest(new Request(input, init), 512 * 1024)
+    })
     this.#now = options.now ?? Date.now
     this.#tokenRefreshSkewMs = options.tokenRefreshSkewMs ?? DEFAULT_TOKEN_REFRESH_SKEW_MS
     this.#maximumAccessTokenTtlMs = options.maximumAccessTokenTtlMs ?? DEFAULT_MAXIMUM_ACCESS_TOKEN_TTL_MS
@@ -221,7 +221,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
     let response: Response
     try {
       const target = new URL(path, this.#baseUrl)
-      if (this.#usesGuardedNetwork && !await isPublicHttpTarget(target, defaultDnsResolver)) {
+      if (this.#usesGuardedNetwork && !await this.#isPublicTarget(target)) {
         throw new Error('secret_store_target_refused')
       }
       response = await this.#fetch(target, {
@@ -308,7 +308,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
     let response: Response
     try {
       const target = new URL('/api/v1/auth/oidc-auth/login', this.#baseUrl)
-      if (this.#usesGuardedNetwork && !await isPublicHttpTarget(target, defaultDnsResolver)) {
+      if (this.#usesGuardedNetwork && !await this.#isPublicTarget(target)) {
         throw new Error('secret_store_target_refused')
       }
       response = await this.#fetch(target, {
@@ -352,6 +352,11 @@ export class InfisicalCloudSecretStore implements SecretStore {
       throw new SecretPlaneError('secret_store_authentication_failed')
     }
     return Object.freeze({ value: accessToken, expiresAt: this.#now() + ttlMs })
+  }
+
+  async #isPublicTarget(target: URL): Promise<boolean> {
+    const { defaultDnsResolver, isPublicHttpTarget } = await import('@/modules/network-guard/public')
+    return await isPublicHttpTarget(target, defaultDnsResolver)
   }
 
   async #readJson(

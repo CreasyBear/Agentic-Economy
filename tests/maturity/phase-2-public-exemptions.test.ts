@@ -492,12 +492,18 @@ describe('Phase 2 public Convex exemptions', () => {
   })
 })
 
-describe('Phase 2 narrow-system job exemptions', () => {
-  it('job:market-aggregate-backfill changes only bounded projection bookkeeping on an empty public evidence set', async () => {
+describe('Phase 2 authority-bound narrow-system jobs', () => {
+  it('authority-bound job:market-aggregate-backfill changes only bounded projection bookkeeping on an empty public evidence set', async () => {
     vi.useFakeTimers()
     const backend = convexTestWithMarketComponents()
+    await seedWorkloadAuthority(backend)
+    const workload = await backend.query(internal.workloadCron.admit, {
+      name: 'continue market aggregate backfill',
+    })
     const before = await consequenceState(backend)
 
+    await expect(backend.mutation(internal.marketAggregateBackfill.run, {} as never))
+      .rejects.toThrow(/Missing required field `workload`/u)
     await expect(backend.mutation(internal.marketAggregateBackfill.run, {
       workload: forgedWorkload(
         'continue market aggregate backfill',
@@ -507,7 +513,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await backend.run((ctx) => ctx.db.query('marketAggregateBackfills').collect()))
       .toEqual([])
 
-    const result = await backend.mutation(internal.marketAggregateBackfill.run, {})
+    const result = await backend.mutation(internal.marketAggregateBackfill.run, { workload })
 
     expect(result).toEqual({ projection: 'invocations', processed: 0, complete: false })
     expect(await backend.run((ctx) => ctx.db.query('marketAggregateBackfills').collect()))
@@ -515,7 +521,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await consequenceState(backend)).toEqual(before)
   })
 
-  it('job:market-external-refresh binds a current workload snapshot and writes only bounded public snapshot metadata', async () => {
+  it('authority-bound job:market-external-refresh binds a current workload snapshot and writes only bounded public snapshot metadata', async () => {
     const backend = convexTest(schema, convexModules)
     await seedWorkloadAuthority(backend)
     const workload = await backend.query(internal.workloadCron.admit, {
@@ -540,10 +546,16 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await consequenceState(backend)).toEqual(before)
   })
 
-  it('job:market-presence-refresh removes no authority and creates no presence from an empty publication set', async () => {
+  it('authority-bound job:market-presence-refresh removes no authority and creates no presence from an empty publication set', async () => {
     const backend = convexTestWithMarketComponents()
+    await seedWorkloadAuthority(backend)
+    const workload = await backend.query(internal.workloadCron.admit, {
+      name: 'refresh current market presence',
+    })
     const before = await consequenceState(backend)
 
+    await expect(backend.mutation(internal.marketPresence.refresh, { cursor: null } as never))
+      .rejects.toThrow(/Missing required field `workload`/u)
     await expect(backend.mutation(internal.marketPresence.refresh, {
       cursor: null,
       workload: forgedWorkload(
@@ -553,7 +565,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     })).rejects.toThrow('workload_snapshot_invalid')
     expect(await backend.run((ctx) => ctx.db.query('marketActiveOperations').collect())).toEqual([])
 
-    const result = await backend.mutation(internal.marketPresence.refresh, { cursor: null })
+    const result = await backend.mutation(internal.marketPresence.refresh, { cursor: null, workload })
 
     expect(result).toEqual({ processed: 0, complete: true })
     expect(await backend.run((ctx) => ctx.db.query('marketActiveOperations').collect())).toEqual([])
@@ -561,7 +573,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await consequenceState(backend)).toEqual(before)
   })
 
-  it('job:market-registry-refresh preserves the active generation on incomplete input and cannot widen workload authority', async () => {
+  it('authority-bound job:market-registry-refresh preserves the active generation on incomplete input and cannot widen workload authority', async () => {
     vi.useFakeTimers()
     const backend = convexTest(schema, convexModules)
     await seedWorkloadAuthority(backend)
@@ -588,9 +600,13 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await consequenceState(backend)).toEqual(before)
   })
 
-  it('job:oauth-grant-cleanup deletes only expired grants in a bounded batch and preserves cross-account live grants', async () => {
+  it('authority-bound job:oauth-grant-cleanup deletes only expired grants in a bounded batch and preserves cross-account live grants', async () => {
     vi.useFakeTimers()
     const backend = convexTest(schema, convexModules)
+    await seedWorkloadAuthority(backend)
+    const workload = await backend.query(internal.workloadCron.admit, {
+      name: 'cleanup expired agent access oauth grants',
+    })
     const now = 10_000_000
     const cutoff = now - 60 * 60 * 1_000
     await backend.run(async (ctx) => {
@@ -599,6 +615,10 @@ describe('Phase 2 narrow-system job exemptions', () => {
     })
     const before = await consequenceState(backend)
 
+    await expect(backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 1,
+    } as never)).rejects.toThrow(/Missing required field `workload`/u)
     await expect(backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
       now,
       batchSize: 1,
@@ -613,6 +633,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
       now,
       batchSize: 1,
+      workload,
     })
 
     expect(result).toEqual({ deleted: 1, cutoff, rescheduled: true })
@@ -621,15 +642,23 @@ describe('Phase 2 narrow-system job exemptions', () => {
     expect(await consequenceState(backend)).toEqual(before)
   })
 
-  it('job:source-write-nonce-cleanup deletes only expired replay rows and preserves live cross-account nonces', async () => {
+  it('authority-bound job:source-write-nonce-cleanup deletes only expired replay rows and preserves live cross-account nonces', async () => {
     vi.useFakeTimers()
     const backend = convexTest(schema, convexModules)
+    await seedWorkloadAuthority(backend)
+    const workload = await backend.query(internal.workloadCron.admit, {
+      name: 'cleanup expired source write nonces',
+    })
     await backend.run(async (ctx) => {
       await ctx.db.insert('sourceWriteNonces', sourceNonce('expired', 999, MUST_NOT_LEAK))
       await ctx.db.insert('sourceWriteNonces', sourceNonce('live', 1_000, 'cross-account-live'))
     })
     const before = await consequenceState(backend)
 
+    await expect(backend.mutation(internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
+      now: 1_000,
+      batchSize: 1,
+    } as never)).rejects.toThrow(/Missing required field `workload`/u)
     await expect(backend.mutation(internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
       now: 1_000,
       batchSize: 1,
@@ -644,6 +673,7 @@ describe('Phase 2 narrow-system job exemptions', () => {
     const result = await backend.mutation(internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
       now: 1_000,
       batchSize: 1,
+      workload,
     })
 
     expect(result).toEqual({ deleted: 1, cutoff: 1_000, rescheduled: true })

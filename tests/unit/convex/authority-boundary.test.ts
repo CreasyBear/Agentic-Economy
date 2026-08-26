@@ -52,6 +52,7 @@ type MutationArgs = Readonly<{
 }>
 
 type SeedOverrides = Readonly<{
+  accessKind?: 'owner' | 'member'
   binding?: Readonly<Record<string, unknown>> | null
   credential?: Readonly<Record<string, unknown>> | null
   principal?: Readonly<Record<string, unknown>> | null
@@ -68,6 +69,47 @@ afterEach(() => {
 })
 
 describe('canonical agent authority boundary', () => {
+  it.each([
+    ['owner', { accessKind: 'owner', principal: { kind: 'human' } }, {}],
+    ['member', { accessKind: 'member', principal: { kind: 'human' } }, {}],
+    ['workload', {}, {}],
+    ['missing_workload', { binding: null }, {}],
+    ['stranger', {}, { credentialId: 'ak_live_stranger' }],
+    ['wrong_account', { grant: { accountRef: OTHER_ACCOUNT_REF } }, {}],
+    ['stale_generation', { binding: { credentialGeneration: 2 } }, {}],
+  ] satisfies readonly (readonly [
+    'owner' | 'member' | 'workload' | 'missing_workload' | 'stranger' | 'wrong_account' | 'stale_generation',
+    SeedOverrides,
+    Partial<MutationArgs>,
+  ])[])(
+    'drives the %s isolation case through the registered mutation and commits no denied authority snapshot',
+    async (caseKind, overrides, inputPatch) => {
+      vi.stubEnv('AE_SOURCE_WRITE_SECRET', SECRET)
+      const backend = testBackend()
+      await seedCanonicalChain(backend, overrides)
+      const args = await signedMutationArgs(inputPatch, `authority-boundary-isolation:${caseKind}`)
+
+      const result = await backend.mutation(resolveAgentBinding, args)
+      const allowed = caseKind === 'owner' || caseKind === 'member' || caseKind === 'workload'
+      if (allowed) {
+        expect(result).toMatchObject({
+          principalId: PRINCIPAL_REF,
+          ownerId: ACCOUNT_REF,
+          grantGeneration: 4,
+        })
+      } else {
+        expect(result).toBeNull()
+      }
+
+      const durable = await backend.run(async (ctx) => ({
+        snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+        nonces: await ctx.db.query('sourceWriteNonces').collect(),
+      }))
+      expect(durable.snapshots).toHaveLength(allowed ? 1 : 0)
+      expect(durable.nonces).toHaveLength(1)
+    },
+  )
+
   it('resolves an API-key locator through canonical current authority without caller-selected ownership', async () => {
     const backend = testBackend()
     await seedCanonicalChain(backend)
@@ -401,6 +443,8 @@ async function seedCanonicalChain(
       revision: 1,
       createdAt: NOW - 7_000,
     }, overrides.secondGrant)
+    const accessKind = overrides.accessKind ?? 'member'
+    const currentOwnerPrincipalRef = accessKind === 'owner' ? PRINCIPAL_REF : OTHER_PRINCIPAL_REF
     const account = mergeRow({
       accountRef: ACCOUNT_REF,
       displayName: 'Canonical Account',
@@ -429,22 +473,24 @@ async function seedCanonicalChain(
       await ctx.db.insert('accountOwnerships', {
         ownershipRef: OWNERSHIP_REF,
         accountRef: ACCOUNT_REF,
-        ownerPrincipalRef: OTHER_PRINCIPAL_REF,
+        ownerPrincipalRef: currentOwnerPrincipalRef,
         lifecycle: 'active',
         changeKind: 'creation',
         revision: 1,
         createdAt: NOW - 20_000,
         createdBy: grantAction,
       })
-      await ctx.db.insert('memberships', {
-        membershipRef: `mem_${'b'.repeat(32)}`,
-        accountRef: ACCOUNT_REF,
-        memberPrincipalRef: PRINCIPAL_REF,
-        lifecycle: 'active',
-        revision: 1,
-        createdAt: NOW - 10_000,
-        createdBy: grantAction,
-      })
+      if (accessKind === 'member') {
+        await ctx.db.insert('memberships', {
+          membershipRef: `mem_${'b'.repeat(32)}`,
+          accountRef: ACCOUNT_REF,
+          memberPrincipalRef: PRINCIPAL_REF,
+          lifecycle: 'active',
+          revision: 1,
+          createdAt: NOW - 10_000,
+          createdBy: grantAction,
+        })
+      }
     }
   })
 }
@@ -457,8 +503,11 @@ function mergeRow(
   return { ...base, ...override }
 }
 
-async function signedMutationArgs(): Promise<MutationArgs> {
-  const command = validInput()
+async function signedMutationArgs(
+  patch: Partial<MutationArgs> = {},
+  nonce = 'authority-boundary-valid',
+): Promise<MutationArgs> {
+  const command = { ...validInput(), ...patch }
   const request: SourceWriteAdmissionRequest = {
     method: 'POST',
     initiatorOrigin: 'https://app.example.test',
@@ -474,7 +523,7 @@ async function signedMutationArgs(): Promise<MutationArgs> {
     operationKey: command.operationKey,
     correlationId: command.correlationId,
     commandDigest: sourceWriteCommandDigest(command),
-    nonce: 'authority-boundary-valid',
+    nonce,
   })
   return { ...command, sourceWriteRequest: request, sourceWrite }
 }

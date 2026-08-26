@@ -15,7 +15,14 @@ import {
   completeProviderConsequenceHandler,
   issueProviderConsequenceTicketHandler,
 } from '../../../convex/capabilityProviderConsequenceJournal'
-import { completeProviderConsequenceJournal } from '../../../convex/providerConsequenceHttp'
+import {
+  abortProviderConsequenceJournal,
+  attestProviderConsequenceTicket,
+  beginProviderConsequenceJournal,
+  completeProviderConsequenceJournal,
+  providerConsequenceX402Rpc,
+} from '../../../convex/providerConsequenceHttp'
+import convexHttp from '../../../convex/http'
 import type { ActionCtx } from '../../../convex/_generated/server'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
@@ -43,6 +50,7 @@ const NOW = 2_000_000_000_000
 const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
 const JOURNAL_TOKEN = 'journal-token-never-persisted'
 const HTTP_JOURNAL_TOKEN = 't'.repeat(43)
+const HTTP_JOURNAL_TOKEN_DIGEST = `sha256:${createHash('sha256').update(HTTP_JOURNAL_TOKEN).digest('hex')}`
 const TOKEN_DIGEST = canonicalDigest(JOURNAL_TOKEN)
 const REQUEST_DIGEST = DIGEST('1')
 const INVOCATION_DIGEST = DIGEST('2')
@@ -58,9 +66,84 @@ vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 type Backend = TestConvex<typeof schema>
 type CanonicalOwner = Readonly<{ principalRef: string; accountRef: string }>
 type HttpExport = { _handler: (ctx: ActionCtx, request: Request) => Promise<Response> }
+type IsolationCaseKind =
+  | 'owner'
+  | 'member'
+  | 'workload'
+  | 'missing_workload'
+  | 'stranger'
+  | 'wrong_account'
+  | 'stale_generation'
+const ISOLATION_CASES = [
+  'owner',
+  'member',
+  'workload',
+  'missing_workload',
+  'stranger',
+  'wrong_account',
+  'stale_generation',
+] as const satisfies readonly IsolationCaseKind[]
+const beginProviderConsequenceRuntime = (beginProviderConsequenceJournal as unknown as HttpExport)._handler
+const attestProviderConsequenceRuntime = (attestProviderConsequenceTicket as unknown as HttpExport)._handler
 const completeProviderConsequenceRuntime = (
   completeProviderConsequenceJournal as unknown as HttpExport
 )._handler
+const abortProviderConsequenceRuntime = (abortProviderConsequenceJournal as unknown as HttpExport)._handler
+const providerConsequenceX402Runtime = (providerConsequenceX402Rpc as unknown as HttpExport)._handler
+
+function registeredProviderPost(path: string): HttpExport['_handler'] {
+  const match = convexHttp.lookup(path, 'POST')
+  if (match === null || match[1] !== 'POST' || match[2] !== path) {
+    throw new Error(`registered_provider_POST_missing:${path}`)
+  }
+  return (match[0] as unknown as HttpExport)._handler
+}
+
+function providerToken(caseKind: IsolationCaseKind): string | null {
+  if (caseKind === 'missing_workload') return null
+  if (caseKind === 'workload' || caseKind === 'wrong_account' || caseKind === 'stale_generation') {
+    return HTTP_JOURNAL_TOKEN
+  }
+  return caseKind === 'owner' ? 'o'.repeat(43) : caseKind === 'member' ? 'm'.repeat(43) : 's'.repeat(43)
+}
+
+function providerRequest(
+  path: string,
+  body: unknown,
+  token: string | null,
+): Request {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  return new Request(`https://deployment.convex.site${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+}
+
+function providerActionContext(
+  backend: Backend,
+  callTrace: string[],
+): ActionCtx {
+  const mutation = backend.mutation.bind(backend) as unknown as (
+    reference: FunctionReference<'mutation'>,
+    args: Record<string, unknown>,
+  ) => Promise<unknown>
+  const query = backend.query.bind(backend) as unknown as (
+    reference: FunctionReference<'query'>,
+    args: Record<string, unknown>,
+  ) => Promise<unknown>
+  return {
+    runMutation: async (reference: FunctionReference<'mutation'>, args: Record<string, unknown>) => {
+      callTrace.push(getFunctionName(reference))
+      return await mutation(reference, args)
+    },
+    runQuery: async (reference: FunctionReference<'query'>, args: Record<string, unknown>) => {
+      callTrace.push(getFunctionName(reference))
+      return await query(reference, args)
+    },
+  } as unknown as ActionCtx
+}
 
 async function canonicalOwner(
   backend: ConvexFixtureBackend,
@@ -456,6 +539,59 @@ async function backendWithJournal(overrides: Record<string, unknown> = {}) {
 async function readJournal(backend: Backend) {
   return await backend.run(async (ctx) => await ctx.db.query('providerConsequenceJournal')
     .withIndex('by_ticketRef', (query) => query.eq('ticketRef', TICKET_REF)).unique())
+}
+
+async function seedProviderX402RuntimeRows(
+  backend: Backend,
+  caseKind: IsolationCaseKind,
+): Promise<void> {
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('capabilityOperationInvocations', {
+      invocationRef: 'invocation:test',
+      principalId: caseKind === 'wrong_account' ? `prn_${'f'.repeat(32)}` : `prn_${'2'.repeat(32)}`,
+      ownerId: 'owner:test',
+      credentialId: 'credential:test',
+      applicationRef: 'application:test',
+      operationRef: 'operation:test',
+      idempotencyKey: 'idempotency:test',
+      environment: 'sandbox',
+      grantRef: 'grant:test',
+      grantGeneration: caseKind === 'stale_generation' ? 2 : 3,
+      policyDigest: DIGEST('8'),
+      grantExpiresAt: NOW + 20_000,
+      inputDigest: DIGEST('9'),
+      requestDigest: REQUEST_DIGEST,
+      state: 'pending',
+      attemptRef: 'attempt:test',
+      updatedAt: NOW,
+      createdAt: NOW,
+    })
+    await ctx.db.insert('moneyX402PaymentAttempts', {
+      dispatchRef: 'invocation:test',
+      attemptRef: 'attempt:test',
+      effectGeneration: 1,
+      operationRef: 'operation:test',
+      paymentIdentifier: OPERATION_KEY_DIGEST,
+      operationKeyDigest: OPERATION_KEY_DIGEST,
+      challengeDigest: DIGEST('a'),
+      challengeJson: '{}',
+      selectedRequirementJson: '{}',
+      providerEndpoint: 'https://provider.example/pay',
+      credentialRef: PAYMENT_SECRET_REF,
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: 'asset:test',
+      payTo: 'payee:test',
+      amountUnits: '1',
+      currency: 'USD',
+      exponent: 2,
+      custodyRef: 'custody:test',
+      authorizationDigest: DIGEST('b'),
+      state: 'prepared',
+      preparedAt: NOW,
+      evidenceRefs: [],
+    })
+  })
 }
 
 function testOidcJwt(): string {
@@ -1579,4 +1715,206 @@ describe('provider consequence durable journal', () => {
       args: { dispatchRef: 'invocation:test' },
     }))).resolves.toEqual({ kind: 'unavailable' })
   })
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered provider begin route and claimProviderConsequence sink',
+    async (caseKind) => {
+      const backend = await backendWithJournal({ journalTokenDigest: HTTP_JOURNAL_TOKEN_DIGEST })
+      const callTrace: string[] = []
+      const path = '/internal/provider-consequence/journal/begin'
+      const response = await beginProviderConsequenceRuntime(
+        providerActionContext(backend, callTrace),
+        providerRequest(path, {
+          ticketRef: TICKET_REF,
+          effectRef: caseKind === 'wrong_account' ? 'connection-effect:other-account' : EFFECT_REF,
+          requestDigest: REQUEST_DIGEST,
+          invocationDigest: INVOCATION_DIGEST,
+          ticketClaimsDigest: CLAIMS_DIGEST,
+          expiresAt: caseKind === 'stale_generation' ? NOW + 9_999 : NOW + 10_000,
+        }, providerToken(caseKind)),
+      )
+      const row = await readJournal(backend)
+
+      expect(registeredProviderPost(path)).toBe(beginProviderConsequenceRuntime)
+      expect(response.status).toBe(caseKind === 'missing_workload' ? 401 : 200)
+      await expect(response.json()).resolves.toEqual(caseKind === 'workload'
+        ? { kind: 'claimed', claimRef: CLAIM_REF }
+        : { kind: 'unavailable' })
+      expect(callTrace).toEqual(caseKind === 'missing_workload'
+        ? []
+        : ['capabilityProviderConsequenceJournal:claimProviderConsequence'])
+      expect(row).toMatchObject(caseKind === 'workload'
+        ? { state: 'started', claimRef: CLAIM_REF }
+        : { state: 'pending' })
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyTransactions').take(1))).toEqual([])
+    },
+  )
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered provider attest route and attestProviderConsequenceTicket sink',
+    async (caseKind) => {
+      const backend = await backendWithJournal({ journalTokenDigest: HTTP_JOURNAL_TOKEN_DIGEST })
+      await backend.run(async (ctx) => {
+        await ctx.db.insert('secretPointers', {
+          secretRef: `sec_${'8'.repeat(32)}`,
+          owningAccountRef: caseKind === 'wrong_account' ? `acc_${'0'.repeat(32)}` : `acc_${'9'.repeat(32)}`,
+          activeGeneration: `sgn_${'9'.repeat(32)}`,
+          revision: 2,
+          createdAt: NOW,
+          updatedAt: NOW,
+          lastAction: {
+            operation: 'provision',
+            snapshotRef: 'snapshot:signing',
+            accountRef: `acc_${'9'.repeat(32)}`,
+            actorPrincipalRef: `prn_${'9'.repeat(32)}`,
+            grantRef: 'grant:signing',
+            grantGeneration: 1,
+            correlationRef: 'correlation:signing',
+            idempotencyRef: 'idempotency:signing',
+            occurredAt: NOW,
+          },
+        })
+      })
+      const callTrace: string[] = []
+      const path = '/internal/provider-consequence/journal/attest'
+      const response = await attestProviderConsequenceRuntime(
+        providerActionContext(backend, callTrace),
+        providerRequest(path, {
+          ticketRef: TICKET_REF,
+          ticketClaimsDigest: CLAIMS_DIGEST,
+          expiresAt: NOW + 10_000,
+          signingSecretRef: `sec_${'8'.repeat(32)}`,
+          signingSecretGeneration: caseKind === 'stale_generation'
+            ? `sgn_${'0'.repeat(32)}`
+            : `sgn_${'9'.repeat(32)}`,
+          signingSecretPointerRevision: 2,
+        }, providerToken(caseKind)),
+      )
+
+      expect(registeredProviderPost(path)).toBe(attestProviderConsequenceRuntime)
+      expect(response.status).toBe(caseKind === 'workload' ? 200 : caseKind === 'missing_workload' ? 401 : 409)
+      await expect(response.json()).resolves.toEqual(caseKind === 'workload'
+        ? { kind: 'attested' }
+        : { kind: 'unavailable' })
+      expect(callTrace).toEqual(caseKind === 'missing_workload'
+        ? []
+        : ['capabilityProviderConsequenceJournal:attestProviderConsequenceTicket'])
+      expect(await readJournal(backend)).toMatchObject({ state: 'pending' })
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyTransactions').take(1))).toEqual([])
+    },
+  )
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered provider abort route and abortProviderConsequence sink',
+    async (caseKind) => {
+      const backend = await backendWithJournal({
+        state: 'started',
+        claimRef: CLAIM_REF,
+        startedAt: NOW - 100,
+        journalTokenDigest: HTTP_JOURNAL_TOKEN_DIGEST,
+      })
+      const callTrace: string[] = []
+      const path = '/internal/provider-consequence/journal/abort'
+      const response = await abortProviderConsequenceRuntime(
+        providerActionContext(backend, callTrace),
+        providerRequest(path, {
+          ticketRef: TICKET_REF,
+          claimRef: caseKind === 'wrong_account' || caseKind === 'stale_generation'
+            ? 'provider-claim:other-authority'
+            : CLAIM_REF,
+        }, providerToken(caseKind)),
+      )
+      const row = await readJournal(backend)
+
+      expect(registeredProviderPost(path)).toBe(abortProviderConsequenceRuntime)
+      expect(response.status).toBe(caseKind === 'workload' ? 200 : caseKind === 'missing_workload' ? 401 : 409)
+      await expect(response.json()).resolves.toEqual(caseKind === 'workload'
+        ? { kind: 'aborted' }
+        : { kind: 'unavailable' })
+      expect(callTrace).toEqual(caseKind === 'missing_workload'
+        ? []
+        : ['capabilityProviderConsequenceJournal:abortProviderConsequence'])
+      expect(row).toMatchObject({ state: caseKind === 'workload' ? 'aborted' : 'started' })
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyTransactions').take(1))).toEqual([])
+    },
+  )
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered provider complete route and completeProviderConsequence sink',
+    async (caseKind) => {
+      const backend = await backendWithJournal({
+        state: 'started',
+        claimRef: CLAIM_REF,
+        startedAt: NOW - 100,
+        journalTokenDigest: HTTP_JOURNAL_TOKEN_DIGEST,
+      })
+      const callTrace: string[] = []
+      const path = '/internal/provider-consequence/journal/complete'
+      const response = await completeProviderConsequenceRuntime(
+        providerActionContext(backend, callTrace),
+        providerRequest(path, {
+          ticketRef: TICKET_REF,
+          claimRef: caseKind === 'wrong_account' ? 'provider-claim:other-account' : CLAIM_REF,
+          observation: succeededObservation(caseKind === 'stale_generation' ? DIGEST('f') : REQUEST_DIGEST),
+        }, providerToken(caseKind)),
+      )
+      const row = await readJournal(backend)
+
+      expect(registeredProviderPost(path)).toBe(completeProviderConsequenceRuntime)
+      expect(response.status).toBe(caseKind === 'workload' ? 200 : caseKind === 'missing_workload' ? 401 : 409)
+      await expect(response.json()).resolves.toEqual(caseKind === 'workload'
+        ? { kind: 'completed' }
+        : { kind: 'unavailable' })
+      expect(callTrace).toEqual(caseKind === 'missing_workload'
+        ? []
+        : ['capabilityProviderConsequenceJournal:completeProviderConsequence'])
+      expect(row).toMatchObject({ state: caseKind === 'workload' ? 'completed' : 'started' })
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyTransactions').take(1))).toEqual([])
+    },
+  )
+
+  it.each(ISOLATION_CASES)(
+    'drives the %s isolation case through the registered provider x402 route and authorizeProviderConsequenceX402Rpc sink',
+    async (caseKind) => {
+      const backend = await backendWithJournal({
+        state: 'started',
+        claimRef: CLAIM_REF,
+        startedAt: NOW - 100,
+        journalTokenDigest: HTTP_JOURNAL_TOKEN_DIGEST,
+      })
+      await seedProviderX402RuntimeRows(backend, caseKind)
+      const callTrace: string[] = []
+      const path = '/internal/provider-consequence/x402'
+      const response = await providerConsequenceX402Runtime(
+        providerActionContext(backend, callTrace),
+        providerRequest(path, {
+          ticketRef: TICKET_REF,
+          operation: 'read_authorization',
+          args: {
+            custodyRef: 'custody:test',
+            authorizationDigest: DIGEST('b'),
+          },
+        }, providerToken(caseKind)),
+      )
+      const body = await response.json() as { kind?: string; value?: { custodyRef?: string } }
+
+      expect(registeredProviderPost(path)).toBe(providerConsequenceX402Runtime)
+      expect(response.status).toBe(caseKind === 'workload' ? 200 : caseKind === 'missing_workload' ? 401 : 409)
+      expect(body).toMatchObject(caseKind === 'workload'
+        ? { kind: 'result', value: { custodyRef: 'custody:test' } }
+        : { kind: 'unavailable' })
+      expect(callTrace).toEqual(caseKind === 'missing_workload'
+        ? []
+        : caseKind === 'workload'
+          ? [
+              'capabilityProviderConsequenceJournal:authorizeProviderConsequenceX402Rpc',
+              'moneyX402PaymentAttempts:readX402PaymentAuthorization',
+            ]
+          : ['capabilityProviderConsequenceJournal:authorizeProviderConsequenceX402Rpc'])
+      expect(await readJournal(backend)).toMatchObject({ state: 'started' })
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyTransactions').take(1))).toEqual([])
+      expect(await backend.run(async (ctx) => await ctx.db.query('moneyX402PaymentAttempts').take(2)))
+        .toHaveLength(1)
+    },
+  )
 })

@@ -82,6 +82,7 @@ export const run: RegisteredAction<"internal", GraduationArgs, GraduationResult>
       items: [structuredClone(result.draft)] as FunctionArgs<typeof internal.facilitatorDiscovery.reconcile>["items"],
       complete: false,
       deadlineAt: Date.now() + 30_000,
+      workload,
     });
     return {
       kind: "graduated" as const,

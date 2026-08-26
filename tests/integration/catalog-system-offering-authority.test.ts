@@ -255,6 +255,61 @@ describe('system offering source authority', () => {
       done: true,
     })
   })
+
+  it.each([
+    ['owner', false, async (backend: CatalogBackend): Promise<void> => {
+      await patchDevSeedPrincipal(backend, { kind: 'human' })
+    }],
+    ['member', false, async (backend: CatalogBackend): Promise<void> => {
+      await configureDevSeedHumanMember(backend)
+    }],
+    ['workload', true, async (_backend: CatalogBackend): Promise<void> => undefined],
+    ['missing_workload', false, async (backend: CatalogBackend): Promise<void> => {
+      await backend.run(async (ctx) => {
+        const row = await ctx.db.query('principals')
+          .withIndex('by_principalRef', (query) => query.eq('principalRef', DEV_SEED_CATALOG_PRINCIPAL_REF))
+          .unique()
+        if (row !== null) await ctx.db.delete(row._id)
+      })
+    }],
+    ['stranger', false, async (backend: CatalogBackend): Promise<void> => {
+      await patchDevSeedPrincipal(backend, { displayName: 'Caller-shaped catalog job' })
+    }],
+    ['wrong_account', false, async (backend: CatalogBackend): Promise<void> => {
+      await patchGrant(backend, { accountRef: 'acc_d2000000000000000000000000000002' })
+    }],
+    ['stale_generation', false, async (backend: CatalogBackend): Promise<void> => {
+      await configureStaleDevSeedParentGeneration(backend)
+    }],
+  ] as const)(
+    'evaluates %s through the registered seed worker before any catalog consequence',
+    async (_caseKind, allowed, mutateAuthority) => {
+      const backend = convexTest(schema, modules)
+      await seedSystemOfferingFixture(backend)
+      await mutateAuthority(backend)
+      const consequenceState = async () => await backend.run(async (ctx) => ({
+        offerings: await ctx.db.query('businessOfferings').collect(),
+        revisions: await ctx.db.query('businessOfferingRevisions').collect(),
+        paths: await ctx.db.query('offeringAccessPaths').collect(),
+        operations: await ctx.db.query('operationKeys').collect(),
+        snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+      }))
+      const before = await consequenceState()
+      const consequence = backend.mutation(internal.devSeed.seedOfferingSupply, { cursor: null })
+
+      if (allowed) {
+        await expect(consequence).resolves.toMatchObject({
+          processed: 1,
+          seeded: 1,
+          errors: [],
+          done: true,
+        })
+      } else {
+        await expect(consequence).rejects.toThrow()
+        await expect(consequenceState()).resolves.toEqual(before)
+      }
+    },
+  )
 })
 
 async function revise(
@@ -396,6 +451,89 @@ async function patchGrant(
       .unique()
     if (grant === null) throw new Error('dev_seed_grant_missing')
     await ctx.db.patch(grant._id, patch)
+  })
+}
+
+async function patchDevSeedPrincipal(
+  backend: CatalogBackend,
+  patch: Record<string, unknown>,
+) {
+  await backend.run(async (ctx) => {
+    const principal = await ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', DEV_SEED_CATALOG_PRINCIPAL_REF))
+      .unique()
+    if (principal === null) throw new Error('dev_seed_principal_missing')
+    await ctx.db.patch(principal._id, patch)
+  })
+}
+
+async function configureDevSeedHumanMember(backend: CatalogBackend) {
+  await patchDevSeedPrincipal(backend, { kind: 'human' })
+  await backend.run(async (ctx) => {
+    const currentOwner = 'prn_d2000000000000000000000000000002'
+    await ctx.db.insert('principals', {
+      principalRef: currentOwner,
+      kind: 'human',
+      displayName: 'Development catalog account owner',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const ownership = await ctx.db.query('accountOwnerships')
+      .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', 'own_d2000000000000000000000000000001'))
+      .unique()
+    if (ownership === null) throw new Error('dev_seed_ownership_missing')
+    await ctx.db.patch(ownership._id, { ownerPrincipalRef: currentOwner })
+    await ctx.db.insert('memberships', {
+      membershipRef: 'mem_d2000000000000000000000000000002',
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      memberPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: currentOwner,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-member:create',
+        idempotencyRef: 'dev-seed-member:create',
+      },
+    })
+  })
+}
+
+async function configureStaleDevSeedParentGeneration(backend: CatalogBackend) {
+  await backend.run(async (ctx) => {
+    const leaf = await ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', GRANT_REF))
+      .unique()
+    if (leaf === null) throw new Error('dev_seed_grant_missing')
+    const parentGrantRef = 'grt_d2000000000000000000000000000003'
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef: parentGrantRef,
+      accountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+      actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      subjectPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+      scopes: ['catalog:dev_seed'],
+      resourceRefs: ['catalog:dev-seed'],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: leaf.expiresAt,
+      generation: 2,
+      revision: 2,
+      lifecycle: 'active',
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
+        activeAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+        correlationRef: 'dev-seed-parent:create',
+        idempotencyRef: 'dev-seed-parent:create',
+      },
+    })
+    await ctx.db.patch(leaf._id, {
+      parentGrantRef,
+      parentGeneration: 1,
+    })
   })
 }
 
