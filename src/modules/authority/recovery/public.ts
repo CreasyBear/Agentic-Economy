@@ -53,6 +53,13 @@ export type {
   DurableRecoverySession,
   ProductionRecoveryServiceOptions,
 } from './production-support'
+export {
+  recoveryActionValue,
+  recoveryAdmissionValue,
+  recoveryApprovalLifecycleValue,
+  recoveryApprovalValue,
+  recoveryProductionTables,
+} from './convex-schema'
 export type {
   SecretCanaryArtifact,
   SecretCanaryErrorCode,
