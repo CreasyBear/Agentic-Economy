@@ -84,6 +84,12 @@ import {
 } from './moneyExternalSpend'
 import { exactAmount, identifier, moneyArgs } from './moneyLedgerValues'
 import {
+  canonicalBillingPrincipalContext,
+  canonicalBillingTransactionContext,
+  canonicalBillingTopupContext,
+  persistedInvocationAuthorityIsCurrent,
+} from './moneyBillingAuthorization'
+import {
   beginPayoutTransferHandler,
   payoutBeginArgs,
   payoutTransferResultValue,
@@ -149,7 +155,24 @@ export const finalizeExternalInvocationSpend = internalMutation({
 export const reconcileExternalInvocationSpend = internalMutation({
   args: reconcileExternalInvocationSpendArgs,
   returns: externalSpendMutationResultValue,
-  handler: reconcileExternalInvocationSpendHandler,
+  handler: async (ctx, args) => {
+    if (!(await persistedInvocationAuthorityIsCurrent(ctx, {
+      invocationRef: args.invocationRef,
+      principalId: args.principalId,
+      credentialId: args.credentialId,
+      grantRef: args.grantRef,
+      grantGeneration: args.grantGeneration,
+      operationRef: args.operationRef,
+      attemptRef: args.attemptRef,
+    }))) {
+      return {
+        kind: 'refused' as const,
+        code: 'external_spend_grant_invalid' as const,
+        retryable: false,
+      }
+    }
+    return await reconcileExternalInvocationSpendHandler(ctx, args)
+  },
 })
 
 export const reverseExternalInvocationSpend = internalMutation({
@@ -285,23 +308,67 @@ export const recordBrokeredInvalidOutputLoss = internalMutation({
 export const reserveCreditTopup = mutation({
   args: reserveCreditTopupArgs.fields,
   returns: topupCommandResultValue,
-  handler: reserveCreditTopupHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingPrincipalContext(
+      ctx,
+      args.principalId,
+    )
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing',
+          retryable: false,
+        }
+      : await reserveCreditTopupHandler(canonicalCtx, args)
+  },
 })
 export const markCreditTopupOutcomeUnknown = mutation({
   args: markCreditTopupOutcomeUnknownArgs.fields,
   returns: topupCommandResultValue,
-  handler: markCreditTopupOutcomeUnknownHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingTopupContext(ctx, {
+      commandRef: args.commandRef,
+      idempotencyKey: args.idempotencyKey,
+    })
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing',
+          retryable: false,
+        }
+      : await markCreditTopupOutcomeUnknownHandler(canonicalCtx, args)
+  },
 })
 
 export const bindCreditPaymentSession = mutation({
   args: bindCreditPaymentSessionArgs.fields,
   returns: topupCommandResultValue,
-  handler: bindCreditPaymentSessionHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingTopupContext(ctx, {
+      commandRef: args.commandRef,
+    })
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing',
+          retryable: false,
+        }
+      : await bindCreditPaymentSessionHandler(canonicalCtx, args)
+  },
 })
 export const readCreditTopupCommand = query({
   args: topupReadInputArg.fields,
   returns: topupCommandResultValue,
-  handler: readCreditTopupCommandHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingTopupContext(ctx, args)
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing',
+          retryable: false,
+        }
+      : await readCreditTopupCommandHandler(canonicalCtx, args)
+  },
 })
 
 export const readCreditTopupWebhookCommand = query({
@@ -408,24 +475,62 @@ export const appendRefund = internalMutation({
 
 export const reconcileCharge = internalMutation({
   args: reconcileChargeArgs,
-  handler: reconcileChargeHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingTransactionContext(ctx, args)
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'charge_reconciliation_required',
+          retryable: false,
+        }
+      : await reconcileChargeHandler(canonicalCtx, args)
+  },
 })
 
 export const reconcileInvocationCharge = internalMutation({
   args: reconcileInvocationChargeArgs,
   returns: invocationChargeReconciliationResult,
-  handler: reconcileInvocationChargeHandler,
+  handler: async (ctx, args) =>
+    (await persistedInvocationAuthorityIsCurrent(ctx, {
+      invocationRef: args.invocationRef,
+      principalId: args.principalId,
+      credentialId: args.credentialId,
+      inputDigest: args.inputDigest,
+      attemptRef: args.attemptRef,
+    }))
+      ? await reconcileInvocationChargeHandler(ctx, args)
+      : { kind: 'reconciliation_required' as const },
 })
 
 export const markChargeOutcomeUnknown = internalMutation({
   args: markChargeOutcomeUnknownArgs,
   returns: chargeOutcomeUnknownResultValue,
-  handler: markChargeOutcomeUnknownHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingTransactionContext(ctx, args)
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'charge_reconciliation_required',
+          retryable: false,
+        }
+      : await markChargeOutcomeUnknownHandler(canonicalCtx, args)
+  },
 })
 
 export const readCreditAccount = query({
   args: { ...moneyArgs },
-  handler: readCreditAccountHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingPrincipalContext(
+      ctx,
+      args.principalId,
+    )
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing' as const,
+        }
+      : await readCreditAccountHandler(canonicalCtx, args)
+  },
 })
 
 export const listCreditActivity = query({
@@ -435,7 +540,20 @@ export const listCreditActivity = query({
     currency: identifier,
     paginationOpts: paginationOptsValidator,
   },
-  handler: listCreditActivityHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingPrincipalContext(
+      ctx,
+      args.principalId,
+      args.credentialId,
+    )
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing' as const,
+          items: [] as const,
+        }
+      : await listCreditActivityHandler(canonicalCtx, args)
+  },
 })
 
 export const readKeyUsage = query({
@@ -444,7 +562,20 @@ export const readKeyUsage = query({
     credentialId: identifier,
     currency: identifier,
   },
-  handler: readKeyUsageHandler,
+  handler: async (ctx, args) => {
+    const canonicalCtx = await canonicalBillingPrincipalContext(
+      ctx,
+      args.principalId,
+      args.credentialId,
+    )
+    return canonicalCtx === null
+      ? {
+          kind: 'refused' as const,
+          code: 'billing_identity_missing' as const,
+          items: [] as const,
+        }
+      : await readKeyUsageHandler(canonicalCtx, args)
+  },
 })
 
 export const readOwnerProviderEarnings = query({
@@ -456,7 +587,112 @@ export const readOwnerProviderEarnings = query({
 export const readAgentProviderEarnings = mutation({
   args: agentProviderEarningsReadArgs,
   returns: ownerProviderEarningsResultValue,
-  handler: readAgentProviderEarningsHandler,
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const [storedAgent, principal, account, owner] = await Promise.all([
+      ctx.db
+        .query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) =>
+          query.eq('principalId', args.agentPrincipal.principalId),
+        )
+        .unique(),
+      ctx.db
+        .query('principals')
+        .withIndex('by_principalRef', (query) =>
+          query.eq('principalRef', args.agentPrincipal.principalId),
+        )
+        .unique(),
+      ctx.db
+        .query('accounts')
+        .withIndex('by_accountRef', (query) =>
+          query.eq('accountRef', args.agentPrincipal.ownerId),
+        )
+        .unique(),
+      ctx.db
+        .query('owners')
+        .withIndex('by_canonicalAccountRef', (query) =>
+          query.eq('canonicalAccountRef', args.agentPrincipal.ownerId),
+        )
+        .unique(),
+    ])
+    if (
+      storedAgent === null ||
+      storedAgent.principalId !== args.agentPrincipal.principalId ||
+      storedAgent.ownerId !== args.agentPrincipal.ownerId ||
+      storedAgent.credentialId !== args.agentPrincipal.credentialId ||
+      storedAgent.applicationRef !== args.agentPrincipal.applicationRef ||
+      storedAgent.environment !== args.agentPrincipal.environment ||
+      storedAgent.authorityMode !== args.agentPrincipal.authorityMode ||
+      storedAgent.lifecycle !== 'active' ||
+      (storedAgent.expiresAt !== undefined && storedAgent.expiresAt <= now) ||
+      principal === null ||
+      principal.principalRef !== storedAgent.principalId ||
+      principal.kind !== 'agent' ||
+      principal.lifecycle !== 'active' ||
+      account === null ||
+      account.accountRef !== storedAgent.ownerId ||
+      account.lifecycle !== 'active' ||
+      owner === null ||
+      owner.canonicalAccountRef !== storedAgent.ownerId ||
+      owner.canonicalPrincipalRef === undefined
+    ) {
+      return { kind: 'error' as const, code: 'unauthenticated' as const }
+    }
+    const admission = await readAgentProviderEarningsHandler(ctx, args)
+    if (admission.kind === 'error') return admission
+    const business = await ctx.db
+      .query('businesses')
+      .withIndex('by_owner_updatedAt', (query) => query.eq('ownerId', owner._id))
+      .order('desc')
+      .first()
+    if (business === null) return { kind: 'not_found' as const }
+    const businessId = String(business._id)
+    const requestedCurrency = args.currency
+    const accountRows =
+      requestedCurrency === undefined
+        ? await ctx.db
+            .query('moneyAccounts')
+            .withIndex('by_businessId_and_currency', (query) =>
+              query.eq('businessId', businessId),
+            )
+            .take(11)
+        : await ctx.db
+            .query('moneyAccounts')
+            .withIndex('by_businessId_and_currency', (query) =>
+              query
+                .eq('businessId', businessId)
+                .eq('currency', requestedCurrency),
+            )
+            .take(1)
+    const providerAccounts = accountRows.filter(
+      (candidate) => candidate.accountKind === 'provider_earnings',
+    )
+    const projected = await Promise.all(
+      providerAccounts.slice(0, 10).map(async (providerAccount) => {
+        const earnings = await readProviderEarningsHandler(ctx, {
+          businessId,
+          currency: providerAccount.currency,
+        })
+        const payout = await readPayoutStatusHandler(ctx, {
+          businessId,
+          currency: providerAccount.currency,
+        })
+        return earnings.kind === 'ok' && payout.kind === 'ok'
+          ? { currency: providerAccount.currency, earnings, payout }
+          : undefined
+      }),
+    )
+    if (projected.some((candidate) => candidate === undefined)) {
+      return { kind: 'error' as const, code: 'source_unavailable' as const }
+    }
+    return {
+      kind: 'available' as const,
+      businessId,
+      accounts: projected.filter((candidate) => candidate !== undefined),
+      accountsTruncated:
+        args.currency === undefined && providerAccounts.length > 10,
+    }
+  },
 })
 
 export const readProviderEarnings = internalQuery({

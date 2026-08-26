@@ -8,6 +8,7 @@ import {
   prepareX402PaymentAuthorization,
   readX402PaymentAuthorization,
   readX402PaymentAuthorizationByDigest,
+  reconcileX402PaymentAttempt,
   recordX402PaymentObservation,
   recordX402PaymentSignatureDigest,
   recordX402PaymentSigningIntent,
@@ -29,10 +30,14 @@ type Query = {
 }
 type Db = {
   query: (table: string) => Query
+  get: (id: string) => Promise<Row | null>
   insert: (table: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
-type Handler = (ctx: { db: Db }, args: Record<string, unknown>) => Promise<unknown>
+type Handler = (
+  ctx: { db: Db; runMutation?: () => Promise<null> },
+  args: Record<string, unknown>,
+) => Promise<unknown>
 type HandlerExport = { _handler: Handler }
 
 const claim = (claimX402PaymentAuthorization as unknown as HandlerExport)._handler
@@ -44,6 +49,7 @@ const recordIntent = (recordX402PaymentSigningIntent as unknown as HandlerExport
 const markPossiblySubmitted = (markX402PaymentPossiblySubmitted as unknown as HandlerExport)._handler
 const observe = (observeX402PaymentAttempt as unknown as HandlerExport)._handler
 const recordObservation = (recordX402PaymentObservation as unknown as HandlerExport)._handler
+const reconcile = (reconcileX402PaymentAttempt as unknown as HandlerExport)._handler
 const listExpiredPrepared = (listExpiredPreparedX402PaymentAttempts as unknown as HandlerExport)._handler
 const queueExpired = (queueExpiredX402Authorization as unknown as HandlerExport)._handler
 
@@ -427,6 +433,83 @@ describe('money x402 payment authorization attempt', () => {
     await expect(recordObservation({ db }, driftedArgs)).rejects.toThrow(error)
 
     expect(db.patchCalls).toHaveLength(0)
+    expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it('rechecks the persisted invocation grant before reconciling an x402 effect', async () => {
+    const active = new MemoryDb()
+    seedReconciliationAuthority(active, 'active')
+    await expect(
+      reconcile({ db: active, runMutation: async () => null }, reconciliationArgs()),
+    ).resolves.toEqual({
+      kind: 'settled',
+      settlementStatus: 'settled',
+    })
+    expect(active.rows('moneyX402PaymentAttempts')[0]).toMatchObject({
+      state: 'observed',
+      settlementStatus: 'settled',
+      reconciliationEvidenceRef: 'evidence:x402-reconciliation',
+      reconciliationEvidenceDigest: 'sha256:x402-reconciliation',
+    })
+
+    const revoked = new MemoryDb()
+    seedReconciliationAuthority(revoked, 'revoked')
+    const before = JSON.stringify(revoked.rows('moneyX402PaymentAttempts'))
+    await expect(
+      reconcile({ db: revoked, runMutation: async () => null }, reconciliationArgs()),
+    ).resolves.toEqual({
+      kind: 'reconciliation_required',
+    })
+    expect(JSON.stringify(revoked.rows('moneyX402PaymentAttempts'))).toBe(before)
+  })
+
+  it.each([
+    {
+      name: 'expired credential',
+      mutate: (db: MemoryDb) => {
+        const row = db.rows('credentials')[0]
+        if (row !== undefined) row.expiresAt = 1
+      },
+    },
+    {
+      name: 'stale credential generation',
+      mutate: (db: MemoryDb) => {
+        const row = db.rows('externalIdentityBindings')[0]
+        if (row !== undefined) row.credentialGeneration = 2
+      },
+    },
+    {
+      name: 'delegation scope mismatch',
+      mutate: (db: MemoryDb) => {
+        const row = db.rows('authorityDelegationGrants')[0]
+        if (row !== undefined) row.scopes = ['market.operations.read']
+      },
+    },
+    {
+      name: 'delegation ancestry cycle',
+      mutate: (db: MemoryDb) => {
+        const row = db.rows('authorityDelegationGrants')[0]
+        if (row !== undefined) {
+          row.parentGrantRef = row.grantRef
+          row.parentGeneration = row.generation
+        }
+      },
+    },
+    {
+      name: 'cross-account delegation',
+      mutate: (db: MemoryDb) => {
+        const row = db.rows('authorityDelegationGrants')[0]
+        if (row !== undefined) row.accountRef = `acc_${'8'.repeat(32)}`
+      },
+    },
+  ])('keeps x402 ambiguity safe for $name', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedReconciliationAuthority(db, 'active')
+    mutate(db)
+    const before = JSON.stringify(db.rows('moneyX402PaymentAttempts'))
+    await expect(
+      reconcile({ db, runMutation: async () => null }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'reconciliation_required' })
     expect(JSON.stringify(db.rows('moneyX402PaymentAttempts'))).toBe(before)
   })
 
@@ -833,6 +916,134 @@ function paymentObservationArgs(overrides: Record<string, unknown> = {}): Record
   }
 }
 
+function reconciliationArgs(): Record<string, unknown> {
+  return {
+    dispatchRef: 'invocation:test',
+    attemptRef: 'attempt:test',
+    effectGeneration: 1,
+    operationRef: 'operation:test',
+    inputDigest: 'sha256:input',
+    evidenceRef: 'evidence:x402-reconciliation',
+    evidenceDigest: 'sha256:x402-reconciliation',
+    reservationRef: 'reservation:test',
+    paymentIdentifier,
+    challengeDigest: 'sha256:challenge',
+    settlementStatus: 'settled',
+    amountUnits: '1',
+    currency: 'USDC',
+    exponent: 6,
+    paymentResponseDigest: 'sha256:payment-response',
+    transportObservationDigest: 'sha256:transport-observation',
+    transportRequestDigest: 'sha256:transport-request',
+    paymentObservationDigest: 'sha256:payment-observation',
+    observedAt: 2_000,
+  }
+}
+
+function seedReconciliationAuthority(
+  db: MemoryDb,
+  grantLifecycle: 'active' | 'revoked',
+): void {
+  db.seed({
+    ...attempt(),
+    state: 'reconciliation_required',
+    operationRef: 'operation:test',
+    inputDigest: 'sha256:input',
+    reservationRef: 'reservation:test',
+    transportObservationDigest: 'sha256:transport-observation',
+    transportRequestDigest: 'sha256:transport-request',
+    paymentObservationDigest: 'sha256:payment-observation',
+    settlementStatus: 'unknown',
+  })
+  db.seedTable('capabilityOperationInvocations', invocationRow({
+    principalId: `prn_${'2'.repeat(32)}`,
+    ownerId: `acc_${'3'.repeat(32)}`,
+    credentialId: `crd_${'4'.repeat(32)}`,
+    grantRef: `grt_${'5'.repeat(32)}`,
+    grantExpiresAt: 8_000_000_000_000,
+  }))
+  db.seedTable('principals', {
+    _id: 'principals:agent',
+    principalRef: `prn_${'2'.repeat(32)}`,
+    kind: 'agent',
+    lifecycle: 'active',
+  })
+  db.seedTable('accounts', {
+    _id: 'accounts:owner',
+    accountRef: `acc_${'3'.repeat(32)}`,
+    lifecycle: 'active',
+    currentOwnershipRef: `own_${'9'.repeat(32)}`,
+  })
+  db.seedTable('agentAccessPrincipals', {
+    _id: 'agentAccessPrincipals:agent',
+    principalId: `prn_${'2'.repeat(32)}`,
+    ownerId: `acc_${'3'.repeat(32)}`,
+    credentialId: `crd_${'4'.repeat(32)}`,
+    applicationRef: 'application:test',
+    environment: 'sandbox',
+    scopes: ['market_operations:invoke'],
+    grantGeneration: 1,
+    policyDigest: 'sha256:policy',
+    lifecycle: 'active',
+    expiresAt: 8_000_000_000_000,
+  })
+  db.seedTable('agentAccessGrants', {
+    _id: 'agentAccessGrants:grant',
+    grantRef: `grt_${'5'.repeat(32)}`,
+    principalId: `prn_${'2'.repeat(32)}`,
+    ownerId: `acc_${'3'.repeat(32)}`,
+    credentialId: `crd_${'4'.repeat(32)}`,
+    applicationRef: 'application:test',
+    environment: 'sandbox',
+    generation: 1,
+    policyDigest: 'sha256:policy',
+    lifecycle: grantLifecycle,
+    expiresAt: 8_000_000_000_000,
+  })
+  db.seedTable('memberships', {
+    _id: 'memberships:agent',
+    accountRef: `acc_${'3'.repeat(32)}`,
+    memberPrincipalRef: `prn_${'2'.repeat(32)}`,
+    lifecycle: 'active',
+  })
+  db.seedTable('externalIdentityBindings', {
+    _id: 'externalIdentityBindings:agent',
+    bindingRef: `eib_${'6'.repeat(32)}`,
+    principalRef: `prn_${'2'.repeat(32)}`,
+    providerNamespace: 'clerk/api-key',
+    providerIdentifier: `crd_${'4'.repeat(32)}`,
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+  })
+  db.seedTable('credentials', {
+    _id: 'credentials:agent',
+    credentialRef: `crd_${'7'.repeat(32)}`,
+    bindingRef: `eib_${'6'.repeat(32)}`,
+    principalRef: `prn_${'2'.repeat(32)}`,
+    type: 'api_key',
+    lifecycle: 'active',
+    generation: 1,
+    expiresAt: 8_000_000_000_000,
+  })
+  db.seedTable('authorityDelegationGrants', {
+    _id: 'authorityDelegationGrants:grant',
+    grantRef: `grt_${'5'.repeat(32)}`,
+    accountRef: `acc_${'3'.repeat(32)}`,
+    actorPrincipalRef: `prn_${'2'.repeat(32)}`,
+    subjectPrincipalRef: `prn_${'2'.repeat(32)}`,
+    scopes: ['market_operations:invoke'],
+    resourceRefs: ['operation:test'],
+    budgetLimit: 1_000,
+    budgetUsed: 0,
+    expiresAt: 8_000_000_000_000,
+    generation: 1,
+    revision: 1,
+    lifecycle: grantLifecycle,
+    createdAt: 1,
+  })
+}
+
 function invocationRow(overrides: Record<string, unknown> = {}): Row {
   return {
     _id: 'invocation:row',
@@ -925,6 +1136,14 @@ class MemoryDb implements Db {
     const rows = this.tables.get(table) ?? []
     this.tables.set(table, [...rows, { ...value, _id: id } as Row])
     return id
+  }
+
+  async get(id: string): Promise<Row | null> {
+    for (const rows of this.tables.values()) {
+      const row = rows.find((candidate) => candidate._id === id)
+      if (row !== undefined) return row
+    }
+    return null
   }
 
   query(table: string): Query {

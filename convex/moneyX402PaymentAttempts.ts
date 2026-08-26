@@ -41,6 +41,7 @@ import {
   readX402PaymentAuthorizationHandler,
   readX402PaymentAuthorizationReturns,
 } from './moneyX402PaymentRead'
+import { persistedInvocationAuthorityIsCurrent } from './moneyBillingAuthorization'
 
 export const prepareX402PaymentAuthorization = internalMutation({
   args: prepareX402PaymentAuthorizationArgs,
@@ -111,5 +112,29 @@ export const recordX402PaymentObservation = internalMutation({
 export const reconcileX402PaymentAttempt = internalMutation({
   args: reconcileX402PaymentAttemptArgs,
   returns: reconcileX402PaymentAttemptReturns,
-  handler: reconcileX402PaymentAttemptHandler,
+  handler: async (ctx, args) => {
+    const attempt = await ctx.db
+      .query('moneyX402PaymentAttempts')
+      .withIndex('by_attemptRef_and_effectGeneration', (query) =>
+        query
+          .eq('attemptRef', args.attemptRef)
+          .eq('effectGeneration', args.effectGeneration),
+      )
+      .unique()
+    if (
+      attempt === null ||
+      attempt.dispatchRef !== args.dispatchRef ||
+      attempt.operationRef !== args.operationRef ||
+      attempt.inputDigest !== args.inputDigest ||
+      !(await persistedInvocationAuthorityIsCurrent(ctx, {
+        invocationRef: attempt.dispatchRef,
+        operationRef: attempt.operationRef,
+        inputDigest: attempt.inputDigest,
+        attemptRef: attempt.attemptRef,
+      }))
+    ) {
+      return { kind: 'reconciliation_required' as const }
+    }
+    return await reconcileX402PaymentAttemptHandler(ctx, args)
+  },
 })

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { listCreditActivity, readKeyUsage } from '../../../convex/moneyLedger'
+import {
+  listCreditActivityHandler,
+  readKeyUsageHandler,
+} from '../../../convex/moneyCreditReads'
 import type { CreditActivityView, KeyUsageView } from '../../../src/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
@@ -32,12 +35,14 @@ type QueryContext = {
   auth: { getUserIdentity: () => Promise<{ tokenIdentifier: string }> }
 }
 
-const activityHandler = (listCreditActivity as unknown as {
-  _handler: (ctx: QueryContext, args: ActivityArgs) => Promise<ActivityResult>
-})._handler
-const keyUsageHandler = (readKeyUsage as unknown as {
-  _handler: (ctx: QueryContext, args: KeyUsageArgs) => Promise<KeyUsageResult>
-})._handler
+const activityHandler = listCreditActivityHandler as unknown as (
+  ctx: QueryContext,
+  args: ActivityArgs,
+) => Promise<ActivityResult>
+const keyUsageHandler = readKeyUsageHandler as unknown as (
+  ctx: QueryContext,
+  args: KeyUsageArgs,
+) => Promise<KeyUsageResult>
 
 class IndexBuilder {
   readonly filters: Filter[] = []

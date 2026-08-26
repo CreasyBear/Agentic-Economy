@@ -4,9 +4,14 @@ import {
   authorizeInvocationCharge,
   readOperatorAccountVersion,
   markChargeOutcomeUnknown,
+  reconcileCharge,
   reconcileInvocationCharge,
   reverseDisputedQualifiedUse,
 } from '../../../convex/moneyLedger'
+import {
+  markChargeOutcomeUnknownHandler,
+  reconcileInvocationChargeHandler,
+} from '../../../convex/moneyChargeReconcile'
 import {
   accountRefForOwner,
   accountRefForProvider,
@@ -148,15 +153,19 @@ type Handler = (
 type HandlerExport = { _handler: Handler }
 const authorizeExport = authorizeInvocationCharge as unknown as HandlerExport
 const reconcileExport = reconcileInvocationCharge as unknown as HandlerExport
+const chargeReconcileExport = reconcileCharge as unknown as HandlerExport
 const markerExport = markChargeOutcomeUnknown as unknown as HandlerExport
 const disputeExport = reverseDisputedQualifiedUse as unknown as HandlerExport
 const qualifiedUseExport = recordQualifiedUse as unknown as HandlerExport
 const completionExport = completeWork as unknown as HandlerExport
 const accountVersionExport = readOperatorAccountVersion as unknown as HandlerExport
 export const authorizeHandler = authorizeExport._handler
-export const markerHandler = markerExport._handler
+export const authorityBoundChargeReconcileHandler = chargeReconcileExport._handler
+export const authorityBoundMarkerHandler = markerExport._handler
+export const markerHandler = markChargeOutcomeUnknownHandler as unknown as Handler
 export const accountVersionHandler = accountVersionExport._handler
-export const reconcileHandler = reconcileExport._handler
+export const authorityBoundReconcileHandler = reconcileExport._handler
+export const reconcileHandler = reconcileInvocationChargeHandler as unknown as Handler
 export const disputeHandler = disputeExport._handler
 const rawQualifiedUseHandler = qualifiedUseExport._handler
 export const qualifiedUseHandler: Handler = async (ctx, args) =>
