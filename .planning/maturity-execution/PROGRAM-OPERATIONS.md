@@ -14,6 +14,10 @@ until every root gate is met and no gate is abandoned.
 
 ```text
 PREPARED
+  -> ARCHITECTING
+  -> DESIGN_ACCEPTANCE
+     -> DESIGN_CHANGES_REQUIRED -> ARCHITECTING -> DESIGN_ACCEPTANCE
+     -> DESIGN_ACCEPTED
   -> IMPLEMENTING
   -> INTERNALLY_VERIFIED
   -> ACCEPTANCE_REVIEW
@@ -25,6 +29,17 @@ PREPARED
 
 - `PREPARED`: predecessor source is accepted and the launch packet freezes scope,
   ownership, dependencies, counterexamples and success criteria.
+- `ARCHITECTING`: for a phase with a new bounded context or consequential state
+  machine, a planning-only task resolves the domain model, deep module interfaces,
+  failure semantics, data/query design, implementation ownership and test
+  architecture before production code changes.
+- `DESIGN_ACCEPTANCE`: a fresh context-independent task attacks the architecture,
+  state machines, trust boundaries, runtime proof strategy and blast-radius map.
+- `DESIGN_CHANGES_REQUIRED`: a design defect returns to the architecture task. It
+  may not be deferred into implementation as a hoped-for repair.
+- `DESIGN_ACCEPTED`: the exact architecture ref has zero unresolved decisions and
+  is the frozen input to implementation. Material design changes invalidate this
+  state and require fresh design acceptance.
 - `IMPLEMENTING`: one phase task owns implementation and delegates bounded leaves.
 - `INTERNALLY_VERIFIED`: the implementer has checked every leaf and phase gate,
   run the exact release gate, recorded the ref, and stopped.
@@ -42,11 +57,17 @@ No implementation task may accept its own phase. No review task may quietly repa
 the source it reviews. Review findings return to the phase task, and the repaired
 ref receives another fresh acceptance task.
 
+Phases 3 and 4, and any later phase introducing a new consequential state machine
+or bounded context, require `DESIGN_ACCEPTED` before `IMPLEMENTING`. This gate is
+not satisfied by a roadmap, schema sketch or implementation-looking test list.
+
 ## Task isolation and ownership
 
 - Every phase after Phase 0 runs in a separate Codex task and worktree.
 - Every acceptance attempt runs in a new, context-independent task.
 - Each phase task sets one phase-only goal before repository work.
+- Architecture tasks are planning-only and own only explicit context, ADR, design,
+  gate and launch artifacts. They do not edit production source or tests.
 - The phase driver delegates discrete leaves with non-overlapping owned paths,
   explicit outcomes and explicit stop conditions.
 - Only the phase integration driver edits shared composition surfaces named in the
@@ -56,6 +77,12 @@ ref receives another fresh acceptance task.
 - A phase task stops after its exact internal handoff. It never starts a successor.
 
 ## Required implementation passes
+
+Before implementation, the accepted architecture package must freeze the actual
+runtime proof model. A gate that projects one canonical sink over many labelled
+surfaces is insufficient unless it proves identical composition and effect-path
+dominance for every actual registered handler. Tests may not reimplement policy in
+a parallel evaluator and call that runtime coverage.
 
 Each leaf performs the four Unlazy passes:
 
