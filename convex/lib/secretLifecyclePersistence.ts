@@ -16,7 +16,7 @@ import {
   type SecretPointerControl,
   type SecretRef,
   type SecretTarget,
-} from '../../src/modules/secrets/public'
+} from '../../src/modules/secrets/convex'
 import { accountRef, principalRef } from '../../src/modules/principal-account/public'
 import {
   createConvexSecretPointerStore,

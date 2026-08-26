@@ -389,6 +389,23 @@ describe('provider consequence route coverage gaps', () => {
     expect(mocks.agents[0]?.close).toHaveBeenCalledOnce()
   })
 
+  it('drives the registered consequence handler through its default dispatcher and refuses a private provider target before release', async () => {
+    mocks.isPublicHttpTarget.mockImplementation(async (target: string | URL) => (
+      new URL(String(target)).hostname !== 'provider.example'
+    ))
+    vi.stubGlobal('fetch', scriptedFetch())
+
+    const response = await handleProviderConsequenceRequest(consequenceRequest(), environment())
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+    })
+    expect(mocks.isPublicHttpTarget).toHaveBeenCalled()
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['wrong signed-ticket prefix', `attacker-ticket.${NOW + 10_000}.${'a'.repeat(64)}`],
     ['non-hex signed-ticket signature', `provider-ticket:test.${NOW + 10_000}.${'z'.repeat(64)}`],

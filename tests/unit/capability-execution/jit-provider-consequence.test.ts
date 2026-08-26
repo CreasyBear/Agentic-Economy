@@ -5,6 +5,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   createJitProviderConsequenceBoundary,
+  ProviderConsequencePreReleaseRefusal,
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
@@ -1065,6 +1066,26 @@ describe('JIT provider consequence boundary', () => {
     })
     expect(send).toHaveBeenCalledOnce()
     expect(durableJournal.abortBeforeRelease).not.toHaveBeenCalled()
+    expect(durableJournal.complete).not.toHaveBeenCalled()
+  })
+
+  it('aborts a claimed ticket when the trusted transport refuses before external release', async () => {
+    const durableJournal = journal()
+    const send = vi.fn<RouteTransportFetch>(async () => {
+      throw new ProviderConsequencePreReleaseRefusal()
+    })
+    const active = harness({ journal: durableJournal, send })
+
+    await expect(active.boundary.execute({
+      ticket: 'opaque-ticket',
+      invocation: active.routeInvocation,
+    })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'provider_consequence_target_refused',
+    })
+    expect(send).toHaveBeenCalledOnce()
+    expect(durableJournal.abortBeforeRelease).toHaveBeenCalledWith({ claimRef: 'claim:test' })
     expect(durableJournal.complete).not.toHaveBeenCalled()
   })
 

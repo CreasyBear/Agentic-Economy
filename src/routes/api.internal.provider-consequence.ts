@@ -21,6 +21,7 @@ import { isRecord } from '@/modules/common/is-record'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   createJitProviderConsequenceBoundary,
+  ProviderConsequencePreReleaseRefusal,
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
   type JitProviderX402RuntimeFactory,
@@ -580,7 +581,9 @@ export async function handleProviderConsequenceRequest(
   }
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   const send: RouteTransportFetch = async (target, init) => {
-    if (!await isPublicHttpTarget(target, defaultDnsResolver)) throw new Error('endpoint_not_public')
+    if (!await isPublicHttpTarget(target, defaultDnsResolver)) {
+      throw new ProviderConsequencePreReleaseRefusal()
+    }
     return await guardedFetch(target, { ...init, dispatcher })
   }
   try {

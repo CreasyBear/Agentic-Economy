@@ -37,7 +37,7 @@ import {
   type AccountRef,
   type PrincipalRef,
 } from '../src/modules/principal-account/public'
-import { secretRef } from '../src/modules/secrets/public'
+import { secretRef } from '../src/modules/secrets/convex'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import { internal } from './_generated/api'
 import type { MutationCtx, QueryCtx } from './_generated/server'

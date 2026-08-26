@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v1",
-  "inventorySha256": "3a34c3c04db83914a9ed91c5f8005da80445e29a5a3a8a9f2c603408e06c0136",
+  "inventorySha256": "02002ed397e2f63b120034b5f243329dbb6bfa389538fea5e3b09bcf5a1fdd2a",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -47,14 +47,14 @@
     "convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority": {
       "status": "covered",
       "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
-      "testFile": "tests/unit/convex/capability-operation-worker-authority-boundary.test.ts",
-      "testName": "reconciles invocation-bound authority before run and preserves the valid result",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered invocation worker action through durable authority reconciliation and denies an unknown invocation",
       "checksumScope": "named_test_case_ast",
-      "sha256": "7c51ec802c254b2d5bb0e7e1eb3ea3443eaf1d21f125042f192602296faf8803",
+      "sha256": "004842b34570bda9291c0cc1e78717c406a1814e18fb8c6b9305715f345b662d",
       "invocation": {
-        "kind": "registered_handler_call",
+        "kind": "convex_runtime_invocation",
         "target": "convex/capabilityOperationInvocationWorker.ts:run",
-        "expression": "runBoundary"
+        "expression": "internal.capabilityOperationInvocationWorker.run"
       },
       "authorityPathSha256": "f727116efeee5c8b336ba0c2542a0004ecb708abec1cebf703c7b1823f43dfcb"
     },
@@ -75,70 +75,70 @@
     "convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority": {
       "status": "covered",
       "surfaceRef": "workpool:convex/capabilityProviderConnectionCleanup.ts:run",
-      "testFile": "tests/unit/convex/provider-connection-cleanup.test.ts",
-      "testName": "refuses a cleanup result when resource authority changes at consequence time",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered cleanup worker action through the durable target reader and refuses an unknown connection",
       "checksumScope": "named_test_case_ast",
-      "sha256": "55ae6361a2ad129b2c09bc15bc6919a4111a58cf92f98c0aba6dba227b2738ed",
+      "sha256": "18ccda291c3d2c115f1b87bc9c84b86739724b90a14b6875913f059b919215e3",
       "invocation": {
-        "kind": "registered_handler_call",
+        "kind": "convex_runtime_invocation",
         "target": "convex/capabilityProviderConnectionCleanup.ts:run",
-        "expression": "workerHandler"
+        "expression": "internal.capabilityProviderConnectionCleanup.run"
       },
       "authorityPathSha256": "02a3d4335dd3803b3d3a3fd1ac31c207a79e33bff7cd7d2de5c882bda6ddc187"
     },
     "convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
-      "testFile": "tests/unit/capability-execution/provider-consequence-http.test.ts",
-      "testName": "rejects malformed terminal callbacks and contains journal outages",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered provider journal abort route through the durable abort mutation",
       "checksumScope": "named_test_case_ast",
-      "sha256": "467e207e9205db3922de9db95dbf783847c4d2f6514c342e14e3c012b85a599d",
+      "sha256": "b3cfe37e3e1cfe44f5dbcdebea00667d0ddbf207192b101318ff94d0e77bf2e7",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal",
-        "expression": "abort"
+        "expression": "abortProviderConsequenceRuntime._handler"
       },
       "authorityPathSha256": "426d4f9e26ccac32257a379ea2079394178b1463228c78eb966d380288761688"
     },
     "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
-      "testFile": "tests/unit/capability-execution/provider-consequence-http.test.ts",
-      "testName": "attests only the exact pending ticket and contains malformed or unavailable reads",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered provider ticket attestation route through the durable ticket query",
       "checksumScope": "named_test_case_ast",
-      "sha256": "c6a427ac1f87c4d79c789053cc8054f4a553a5a63ecb4406687e7cf2cd617089",
+      "sha256": "c0c4f847142aed919faaa967a3466aaa3e746486a6449ed65748817a4d34f0de",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket",
-        "expression": "attest"
+        "expression": "attestProviderConsequenceRuntime._handler"
       },
       "authorityPathSha256": "b1bc4355f1875ea6e5942a5f7e7ad05b94689f11c3543596ec46f52073a1853e"
     },
     "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
-      "testFile": "tests/unit/capability-execution/provider-consequence-http.test.ts",
-      "testName": "canonicalizes provider-direct reserve identity and strips every caller custody field",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered provider x402 route through durable authorization and never reaches money for an unknown ticket",
       "checksumScope": "named_test_case_ast",
-      "sha256": "98128b7f28ae100ef55e0817a0cac2a3e0b372bf1324ce76d5f7d3a4de2c5ffb",
+      "sha256": "e326309bd0a0a0c0f58f2bc0618dde282940a9ec7e70ff88720049469a28fa34",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc",
-        "expression": "x402"
+        "expression": "providerConsequenceX402Runtime._handler"
       },
       "authorityPathSha256": "3a6a7f2f5da954a83ae4273f9539e7e6ea1299fceda6dbee92288d61719466e1"
     },
     "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler": {
       "status": "covered",
       "surfaceRef": "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
-      "testFile": "tests/unit/capability-execution/provider-consequence-http.test.ts",
-      "testName": "hashes the bearer and binds the exact journal-begin body",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered provider journal begin route through the durable claim mutation",
       "checksumScope": "named_test_case_ast",
-      "sha256": "e83ad39258306660086b5a40e62f7600a56251d76c87f85837362287d1404281",
+      "sha256": "4fd0e0d6f794817f2bc10b831e823ff1241c950aa5e850670caeb7df87d11f96",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal",
-        "expression": "begin"
+        "expression": "beginProviderConsequenceRuntime._handler"
       },
       "authorityPathSha256": "a2a89c31f7a9f4158a3a95243c530b7b20170ac4dde81aa55177828c16f6918c"
     },
@@ -243,16 +243,16 @@
     "convex/lib/secretLifecyclePersistence.ts:requireSnapshot": {
       "status": "covered",
       "surfaceRef": "convex/secretLifecycleHttp.ts:secretLifecycleRpc",
-      "testFile": "tests/unit/convex/secret-lifecycle-http.test.ts",
-      "testName": "requires the exact hashed transport token before parsing or mutating",
+      "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
+      "testName": "runs the registered secret lifecycle route through the durable journal reader without secret material",
       "checksumScope": "named_test_case_ast",
-      "sha256": "2cd5878e0c6f3b83de855dbcebcf0617ae7594bde90a0eb6b1376b04563aeeda",
+      "sha256": "b538565d32dc8140ea8ce053f659bc350a626f693c92e8d4bcd7990959eb3a3a",
       "invocation": {
         "kind": "registered_handler_call",
         "target": "convex/secretLifecycleHttp.ts:secretLifecycleRpc",
-        "expression": "handler"
+        "expression": "secretLifecycleRuntime._handler"
       },
-      "authorityPathSha256": "70781e7fc4e08603e23bffb660314ca06aaee6a3d2455fbbfaa44eff3fcd7879"
+      "authorityPathSha256": "6cd2c8b43d54c6af7b1ac8d4ce458b4d933c44dbb18386b7ee7e21d4f00a75f3"
     },
     "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent": {
       "status": "covered",
@@ -280,7 +280,7 @@
         "target": "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation",
         "expression": "api.recoveryBreakGlass.authorizeRecoveryOperation"
       },
-      "authorityPathSha256": "2e8efeeedd2332eef40663a25be177f1f74513a5a5c6b31fb23c25f69a94bff6"
+      "authorityPathSha256": "acb2cb7f9301746d06de6b35d6794b0e4374a45c971fe7894dc4cb6aad6b4176"
     },
     "convex/sourceWriteAdmission.ts:requireSourceRead": {
       "status": "covered",
@@ -370,7 +370,7 @@
       "status": "covered",
       "surfaceRef": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
       "testFile": "tests/integration/capability-supply-operations.test.ts",
-      "testName": "excludes effectful POST from listing and read, so direct execution cannot fetch it",
+      "testName": "runs the registered keyless read query and excludes effectful POST before provider transport",
       "checksumScope": "named_test_case_ast",
       "sha256": "df88102ba59be30d8dd55cc8fde46762353c901d5962942a747062c1a3535046",
       "invocation": {

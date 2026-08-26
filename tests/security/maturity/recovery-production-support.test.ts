@@ -474,6 +474,27 @@ describe('P2-05 durable recovery production support', () => {
     expect(recorded.expiresAt).toBe(recorded.verifiedAt + 1)
   })
 
+  it('records approvals without an authority port and refuses consequence authorization', async () => {
+    const repository = new DurableRepository()
+    const subject = new ProductionRecoveryService({
+      persistence: repository,
+      accountFacts: { resolve: async () => facts() },
+      approvalVerifier: {
+        verify: async () => ({ operatorPrincipalRef: OP1, verificationRef: 'trusted:approval-only' }),
+      },
+      approvalTtlMs: 300,
+      now: () => 1_100,
+    })
+
+    await expect(subject.recordApproval(approvalIntent('approval:authority-absent')))
+      .resolves.toMatchObject({ approvalRef: 'approval:authority-absent' })
+    await expect(subject.authorize({
+      action: 'isolate', accountRef: ACCOUNT, subjectPrincipalRef: OWNER,
+      grantRef: GRANT, expectedGrantGeneration: 4,
+      approvalRefs: ['approval:authority-absent'], context: context(),
+    })).rejects.toMatchObject({ code: 'recovery_authority_invalid' })
+  })
+
   it('exposes a transaction-faithful store adapter and rejects malformed or ambiguous atomic commits', async () => {
     const completed = service()
     await completed.subject.recordApproval(approvalIntent('approval:one'))

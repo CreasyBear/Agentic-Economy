@@ -90,6 +90,14 @@ export type ProviderConsequenceTicketVerifier = (
   opaqueTicket: string,
 ) => Promise<CanonicalProviderConsequenceTicket | undefined>
 
+/** A trusted transport rejected the target before any external request began. */
+export class ProviderConsequencePreReleaseRefusal extends Error {
+  constructor() {
+    super('provider_consequence_pre_release_refusal')
+    this.name = 'ProviderConsequencePreReleaseRefusal'
+  }
+}
+
 export interface JitProviderConsequenceBoundary {
   execute(input: Readonly<{
     ticket: string
@@ -198,13 +206,22 @@ export function createJitProviderConsequenceBoundary(
       const { claimRef } = journalResult
       let expiredBeforeRelease = false
       let releaseAttempted = false
+      let transportRefusedBeforeRelease = false
       const send: RouteTransportFetch = async (target, init) => {
         if (now() >= canonical.expiresAt) {
           expiredBeforeRelease = true
           throw new Error('provider_consequence_expired')
         }
         releaseAttempted = true
-        return await options.send(target, init)
+        try {
+          return await options.send(target, init)
+        } catch (error) {
+          if (error instanceof ProviderConsequencePreReleaseRefusal) {
+            releaseAttempted = false
+            transportRefusedBeforeRelease = true
+          }
+          throw error
+        }
       }
       try {
         const pinnedStore = pinnedPointerStore(
@@ -291,6 +308,19 @@ export function createJitProviderConsequenceBoundary(
             }
           },
         )
+        if (transportRefusedBeforeRelease) {
+          observation = refused(
+            transport,
+            prepared.requestDigest,
+            'provider_consequence_target_refused',
+          )
+          try {
+            await options.journal.abortBeforeRelease({ claimRef })
+          } catch {
+            // The trusted transport proved no external request began.
+          }
+          return observation
+        }
         if (expiredBeforeRelease) {
           if (releaseAttempted) {
             return unknown(

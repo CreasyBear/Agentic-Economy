@@ -75,7 +75,8 @@ export type DurableRecoveryPersistence = Readonly<{
 export type ProductionRecoveryServiceOptions = RecoveryCoordinatorOptions & Readonly<{
   persistence: DurableRecoveryPersistence
   accountFacts: RecoveryAccountFactsPort
-  authority: RecoveryAuthorityPort
+  /** Required only for consequence authorization; approval recording never establishes authority. */
+  authority?: RecoveryAuthorityPort
   approvalVerifier?: RecoveryApprovalVerifierPort
   approvalTtlMs?: number
 }>
@@ -86,7 +87,7 @@ export class ProductionRecoveryService {
   readonly #approvalVerifier: RecoveryApprovalVerifierPort | undefined
   readonly #approvalTtlMs: number
   readonly #now: () => number
-  readonly #coordinator: RecoveryCoordinator
+  readonly #coordinator: RecoveryCoordinator | undefined
 
   constructor(options: ProductionRecoveryServiceOptions) {
     this.#persistence = options.persistence
@@ -101,12 +102,14 @@ export class ProductionRecoveryService {
       ...(options.now === undefined ? {} : { now: options.now }),
       ...(options.randomUuid === undefined ? {} : { randomUuid: options.randomUuid }),
     })
-    this.#coordinator = new RecoveryCoordinator(
-      createDurableRecoveryStore(options.persistence),
-      options.accountFacts,
-      options.authority,
-      coordinatorOptions,
-    )
+    this.#coordinator = options.authority === undefined
+      ? undefined
+      : new RecoveryCoordinator(
+          createDurableRecoveryStore(options.persistence),
+          options.accountFacts,
+          options.authority,
+          coordinatorOptions,
+        )
   }
 
   async recordApproval(input: RecoveryApprovalIntent): Promise<VerifiedBreakGlassApproval> {
@@ -177,6 +180,7 @@ export class ProductionRecoveryService {
   }
 
   async authorize(input: AuthorizeRecoveryRequest): Promise<RecoveryAdmission> {
+    if (this.#coordinator === undefined) throw new RecoveryError('recovery_authority_invalid')
     return await this.#coordinator.authorize(input)
   }
 }

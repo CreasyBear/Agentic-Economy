@@ -22,6 +22,7 @@ const serverMocks = vi.hoisted(() => ({
   readPublicOfferingRegistryBusinessDetail: vi.fn(),
   readDeveloperDiscoveryRoute: vi.fn(),
   buildDeveloperDiscoveryRouteSnapshot: vi.fn(),
+  requireClerkServerSession: vi.fn(),
 }))
 
 const marketSourceMocks = vi.hoisted(() => ({
@@ -60,6 +61,9 @@ vi.mock('@/routes/api.discovery.schema', () => ({
   buildDeveloperDiscoveryRouteSnapshot:
     serverMocks.buildDeveloperDiscoveryRouteSnapshot,
 }))
+vi.mock('@/lib/server/require-clerk-server-session', () => ({
+  requireClerkServerSession: serverMocks.requireClerkServerSession,
+}))
 vi.mock('@/modules/market/agentic-market-source', () => ({
   fetchAgenticMarketSnapshot: marketSourceMocks.fetchAgenticMarketSnapshot,
 }))
@@ -69,6 +73,7 @@ vi.mock('@/modules/market/registry-source-adapters', () => ({
 }))
 
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
+import { requireOperatorBeforeLoad } from '@/lib/server/require-operator-session'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-status.functions'
 import { readPublicBusinessRouteServer } from '@/modules/catalog/public-route.functions'
 import { loadDeveloperDiscoveryRouteServer } from '@/modules/discovery/developer-discovery-route'
@@ -124,6 +129,10 @@ beforeEach(() => {
     kind: 'public_snapshot',
     slugs: ['public-provider'],
   })
+  serverMocks.requireClerkServerSession.mockResolvedValue({
+    kind: 'authenticated',
+    userId: 'caller-shaped-user',
+  })
   serverMocks.readDeveloperDiscoveryRoute.mockImplementation(
     async (_input: unknown, options: { routeSnapshot: unknown }) => options.routeSnapshot,
   )
@@ -148,6 +157,20 @@ afterEach(() => {
 describe('Phase 2 public server read exemptions', () => {
   it('src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin', async () => {
     expect(readCanonicalBaseUrlServer()).toBe('https://public.example')
+    expect(serverMocks.callPublicSourceQuery).not.toHaveBeenCalled()
+    expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
+  })
+
+  it('src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority', async () => {
+    const admission = await requireOperatorBeforeLoad({
+      location: { href: 'https://public.example/admin/audit-events?accountRef=caller-shaped' },
+    })
+
+    expect(admission).toEqual({ kind: 'authenticated', userId: 'caller-shaped-user' })
+    expect(serverMocks.requireClerkServerSession).toHaveBeenCalledWith({
+      localBypassPrincipal: 'local-e2e-operator',
+      redirectTo: 'https://public.example/admin/audit-events?accountRef=caller-shaped',
+    })
     expect(serverMocks.callPublicSourceQuery).not.toHaveBeenCalled()
     expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
   })

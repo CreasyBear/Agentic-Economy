@@ -9,14 +9,23 @@
       "binding": "interactive_account",
       "consequential": true
     },
-    "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer": {
+      "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin"
-      }
-    },
+        }
+      },
+      "src/lib/server/require-operator-session.ts:admitOperatorSessionServer": {
+        "binding": "narrow_system_non_consequential",
+        "consequential": false,
+        "exemption": {
+          "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+          "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
+          "testSymbol": "requireOperatorBeforeLoad"
+        }
+      },
     "src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer": {
       "binding": "interactive_account",
       "consequential": true
@@ -197,14 +206,26 @@
         "testName": "recordServerFunnelEventServer discards caller-shaped actor and business provenance before analytics release"
       }
     },
-    "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer": {
+      "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer treats the operation ref as lookup data, never authority"
-      }
-    },
+        }
+      },
+      "src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer": {
+        "binding": "interactive_account",
+        "consequential": true
+      },
+      "src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer": {
+        "binding": "interactive_account",
+        "consequential": true
+      },
+      "src/routes/privacy.remove-business.tsx:openRemovalServer": {
+        "binding": "signed_callback",
+        "consequential": true
+      },
     "convex/actionInvocationControl.ts:readAttemptSource": {
       "binding": "signed_callback",
       "consequential": true

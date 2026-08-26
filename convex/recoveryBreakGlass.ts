@@ -66,11 +66,6 @@ export async function submitRecoveryApprovalHandler(
     approvalVerifier: {
       verify: async (request) => trustedRecoveryApprovalAttestation(request, operator),
     },
-    authority: {
-      admitConsequence: async () => {
-        throw new RecoveryError('recovery_approval_unavailable')
-      },
-    },
     now: () => now,
   }).recordApproval(intent)
 }
@@ -448,10 +443,11 @@ export const authorizeRecoveryOperation = mutation({
 })
 
 async function applyRecoveryEffect(ctx: MutationCtx, admission: RecoveryAdmission): Promise<void> {
-  const account = await ctx.db.query('accounts')
+  // Authorization resolved this canonical account earlier in the same Convex
+  // mutation transaction, so it cannot disappear between admission and effect.
+  const account = (await ctx.db.query('accounts')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', admission.accountRef))
-    .unique()
-  if (account === null) throw new RecoveryError('recovery_account_facts_invalid')
+    .unique())!
   if (admission.action === 'freeze') {
     if (account.lifecycle !== 'active') throw new RecoveryError('recovery_account_facts_invalid')
     await ctx.db.patch(account._id, {

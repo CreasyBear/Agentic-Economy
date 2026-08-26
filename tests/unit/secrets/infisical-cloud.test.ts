@@ -1,4 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const networkMocks = vi.hoisted(() => ({
+  isPublicHttpTarget: vi.fn(),
+  sendGuardedHttpRequest: vi.fn(),
+}))
+
+vi.mock('@/modules/network-guard/public', () => ({
+  defaultDnsResolver: { lookup: vi.fn() },
+  isPublicHttpTarget: networkMocks.isPublicHttpTarget,
+}))
+vi.mock('@/modules/network-guard/server', () => ({
+  sendGuardedHttpRequest: networkMocks.sendGuardedHttpRequest,
+}))
 
 import {
   InfisicalCloudSecretStore,
@@ -77,7 +90,79 @@ function createHarness(responder?: (request: Request) => Response | Promise<Resp
   return { store, identity, fetcher, requests, advance: (milliseconds: number) => (now += milliseconds) }
 }
 
+beforeEach(() => {
+  networkMocks.isPublicHttpTarget.mockReset()
+  networkMocks.isPublicHttpTarget.mockResolvedValue(true)
+  networkMocks.sendGuardedHttpRequest.mockReset()
+})
+
 describe('InfisicalCloudSecretStore', () => {
+  it('uses the guarded production transport for OIDC login and secret reads', async () => {
+    networkMocks.sendGuardedHttpRequest.mockImplementation(async (request: Request) => (
+      request.url.endsWith('/api/v1/auth/oidc-auth/login')
+        ? json({ accessToken: 'guarded-access', expiresIn: 60, accessTokenMaxTTL: 60, tokenType: 'Bearer' })
+        : json({
+            secret: {
+              secretKey: `${REF}--${GENERATION}`,
+              secretValue: CANARY,
+              environment: 'production',
+              workspace: 'customer-connectors',
+            },
+          })
+    ))
+    const store = new InfisicalCloudSecretStore({
+      baseUrl: 'https://us.infisical.com',
+      projectId: 'customer-connectors',
+      environment: 'production',
+      secretPath: '/agentic-economy',
+      machineIdentityId: 'machine-identity',
+      identityTokenProvider: {
+        getIdentityToken: async () => ({ jwt: 'signed-workload-assertion', expiresAt: 70_000 }),
+      },
+      now: () => 10_000,
+    })
+    let observed = ''
+
+    await store.withSecret(TARGET, async (lease) => {
+      await lease.useBytes(async (bytes) => { observed = new TextDecoder().decode(bytes) })
+    })
+
+    expect(observed).toBe(CANARY)
+    expect(networkMocks.isPublicHttpTarget).toHaveBeenCalledTimes(2)
+    expect(networkMocks.sendGuardedHttpRequest).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses private OIDC and vault targets before guarded transport release', async () => {
+    const options = {
+      baseUrl: 'https://us.infisical.com',
+      projectId: 'customer-connectors',
+      environment: 'production',
+      secretPath: '/agentic-economy',
+      machineIdentityId: 'machine-identity',
+      identityTokenProvider: {
+        getIdentityToken: async () => ({ jwt: 'signed-workload-assertion', expiresAt: 70_000 }),
+      },
+      now: () => 10_000,
+    } as const
+
+    networkMocks.isPublicHttpTarget.mockResolvedValueOnce(false)
+    await expect(new InfisicalCloudSecretStore(options).withSecret(TARGET, async () => undefined))
+      .rejects.toEqual(new SecretPlaneError('secret_store_authentication_failed'))
+    expect(networkMocks.sendGuardedHttpRequest).not.toHaveBeenCalled()
+
+    networkMocks.isPublicHttpTarget.mockReset()
+    networkMocks.isPublicHttpTarget.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    networkMocks.sendGuardedHttpRequest.mockResolvedValueOnce(json({
+      accessToken: 'guarded-access',
+      expiresIn: 60,
+      accessTokenMaxTTL: 60,
+      tokenType: 'Bearer',
+    }))
+    await expect(new InfisicalCloudSecretStore(options).withSecret(TARGET, async () => undefined))
+      .rejects.toEqual(new SecretPlaneError('secret_store_unavailable'))
+    expect(networkMocks.sendGuardedHttpRequest).toHaveBeenCalledOnce()
+  })
+
   it('exchanges an OIDC assertion for a short-lived token and performs real v4 secret HTTP operations', async () => {
     const context = createHarness()
     let matched = false

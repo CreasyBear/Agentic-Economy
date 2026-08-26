@@ -77,7 +77,7 @@ vi.mock('../../../src/modules/authority/recovery/public', async (importOriginal)
 
   class ProbeProductionRecoveryService {
     readonly #accountFacts: RecoveryAccountFactsPort
-    readonly #authority: RecoveryAuthorityPort
+    readonly #authority: RecoveryAuthorityPort | undefined
 
     constructor(options: ProductionRecoveryServiceOptions) {
       this.#accountFacts = options.accountFacts
@@ -90,6 +90,7 @@ vi.mock('../../../src/modules/authority/recovery/public', async (importOriginal)
     }
 
     async authorize(input: AuthorizeRecoveryRequest): Promise<RecoveryAdmission> {
+      if (this.#authority === undefined) throw new Error('recovery_authority_invalid')
       return await this.#authority.admitConsequence({
         grantRef: input.grantRef,
         expectedGeneration: input.expectedGrantGeneration,

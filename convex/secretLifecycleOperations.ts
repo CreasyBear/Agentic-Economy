@@ -6,8 +6,6 @@ import {
   secretGeneration,
   secretRef,
   type SecretLifecycleRecord,
-} from '../src/modules/secrets/public'
-import {
   secretLifecycleRecordValue,
   secretLifecycleStateValue,
   secretPointerAuthorityValue,

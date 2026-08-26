@@ -22,10 +22,7 @@ const contractRoot = resolve(process.cwd(), '.planning/maturity-execution/contra
 const publicInventory = JSON.parse(readFileSync(resolve(contractRoot, 'public-surface-inventory.json'), 'utf8')) as PublicInventory
 type MeasuredRow = MeasuredProtectedSurfaceInventory['convexHttpActions'][number]
 type CandidateInventory = Omit<MeasuredProtectedSurfaceInventory, 'convexHttpRoutes'> & Readonly<{
-  baselineCounts: Readonly<Record<string, number>>
-  candidateCounts: Readonly<Record<string, number>>
   convexHttpRoutes: readonly (MeasuredRow & Readonly<{ handlerRef: string }>)[]
-  backgroundDiscovery: Readonly<{ discoveryKinds: readonly string[]; callSiteCount: number }>
 }>
 const measuredInventory = JSON.parse(readFileSync(
   resolve(contractRoot, 'phase-2-protected-surfaces.json'),
@@ -310,7 +307,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(measuredInventory.frozenContract.mcpRefs).toEqual(refs('mcp'))
     expect(measuredInventory.frozenContract.cliRefs).toEqual(refs('cli'))
     expect(measuredInventory.frozenContract.sha256).toMatch(/^[a-f0-9]{64}$/)
-    expect(verifyProtectedSurfaceManifest()).toMatchObject({
+    expect(verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, measuredInventory)).toMatchObject({
       http: 39,
       mcp: 14,
       cli: 12,
@@ -324,7 +321,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
   })
 
   it('requires exact measured counts with no blocked production surface', () => {
-    expect(measuredInventory.actualCounts.serverFunctions).toBe(43)
+    expect(measuredInventory.actualCounts.serverFunctions).toBe(47)
     expect(measuredInventory.actualCounts.publicConvex).toBe(119)
     expect(measuredInventory.actualCounts.convexHttpActions).toBe(7)
     expect((measuredInventory.actualCounts as Record<string, number>).convexHttpRoutes).toBe(7)
@@ -335,6 +332,23 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(measuredInventory.actualCounts.frozenCli).toBe(12)
     expect(measuredRows().filter((row) => row.status === 'blocked')).toEqual([])
     expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)
+
+    const omittedRoute: CandidateInventory = {
+      ...structuredClone(measuredInventory),
+      convexHttpRoutes: structuredClone(measuredInventory.convexHttpRoutes).slice(0, -1),
+    }
+    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, omittedRoute))
+      .toThrowError('protected_surface_measured_gate_failed')
+
+    const forgedCount: CandidateInventory = {
+      ...structuredClone(measuredInventory),
+      actualCounts: {
+        ...structuredClone(measuredInventory.actualCounts),
+        serverFunctions: measuredInventory.actualCounts.serverFunctions - 1,
+      },
+    }
+    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, forgedCount))
+      .toThrowError('protected_surface_measured_gate_failed')
   })
 
   it('proves bound authority through a transitive declaration and call-path evidence chain', () => {

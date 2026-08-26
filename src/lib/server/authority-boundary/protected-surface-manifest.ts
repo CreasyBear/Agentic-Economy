@@ -253,6 +253,29 @@ export const PROTECTED_SURFACE_MANIFEST = Object.freeze([
 
 export type ProtectedSurfaceManifest = typeof PROTECTED_SURFACE_MANIFEST
 
+function exactCountRecords(
+  left: Readonly<Record<string, number>>,
+  right: Readonly<Record<string, number>>,
+): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => left[key] === right[key])
+}
+
+function candidateCountsMatchRows(measured: MeasuredProtectedSurfaceInventory): boolean {
+  const counts = measured.candidateCounts
+  return counts.serverFunctions === measured.serverFunctions.length
+    && counts.publicConvex === measured.publicConvex.length
+    && counts.convexHttpActions === measured.convexHttpActions.length
+    && counts.convexHttpRoutes === measured.convexHttpRoutes.length
+    && counts.crons === measured.crons.length
+    && counts.backgroundFamilies === measured.backgroundFamilies.length
+    && counts.frozenHttp === measured.frozenContract.httpRefs.length
+    && counts.frozenMcp === measured.frozenContract.mcpRefs.length
+    && counts.frozenCli === measured.frozenContract.cliRefs.length
+}
+
 export function verifyProtectedSurfaceManifest(
   manifest: readonly ProtectedSurfaceManifestRow[] = PROTECTED_SURFACE_MANIFEST,
   measured?: MeasuredProtectedSurfaceInventory,
@@ -279,7 +302,8 @@ export function verifyProtectedSurfaceManifest(
   }
   if (measured !== undefined) {
     const measuredRows = [...measured.serverFunctions, ...measured.publicConvex,
-      ...measured.convexHttpActions, ...measured.crons, ...measured.backgroundFamilies]
+      ...measured.convexHttpActions, ...measured.convexHttpRoutes,
+      ...measured.crons, ...measured.backgroundFamilies]
     const blockedRows = measuredRows.filter((row) => row.status === 'blocked')
     if (measured.format !== 'phase-2-protected-surfaces:v2'
       || measured.expectedCounts.serverFunctions !== 43
@@ -290,14 +314,16 @@ export function verifyProtectedSurfaceManifest(
       || measured.expectedCounts.frozenHttp !== 39
       || measured.expectedCounts.frozenMcp !== 14
       || measured.expectedCounts.frozenCli !== 12
-      || measured.actualCounts.serverFunctions !== 43
-      || measured.actualCounts.publicConvex !== 116
-      || measured.actualCounts.convexHttpActions !== 1
-      || measured.actualCounts.crons !== 10
-      || measured.actualCounts.backgroundFamilies !== 25
-      || measured.actualCounts.frozenHttp !== 39
-      || measured.actualCounts.frozenMcp !== 14
-      || measured.actualCounts.frozenCli !== 12
+      || measured.baselineCounts.serverFunctions !== 43
+      || measured.baselineCounts.publicConvex !== 116
+      || measured.baselineCounts.convexHttpActions !== 1
+      || measured.baselineCounts.crons !== 10
+      || measured.baselineCounts.backgroundFamilies !== 25
+      || measured.baselineCounts.frozenHttp !== 39
+      || measured.baselineCounts.frozenMcp !== 14
+      || measured.baselineCounts.frozenCli !== 12
+      || !exactCountRecords(measured.actualCounts, measured.candidateCounts)
+      || !candidateCountsMatchRows(measured)
       || measured.frozenContract.sourceFile !== '.planning/maturity-execution/contracts/public-surface-inventory.json'
       || !/^[a-f0-9]{64}$/.test(measured.frozenContract.sha256)
       || measured.frozenContract.httpRefs.length !== 39
@@ -306,11 +332,6 @@ export function verifyProtectedSurfaceManifest(
       || new Set(measured.frozenContract.httpRefs).size !== 39
       || new Set(measured.frozenContract.mcpRefs).size !== 14
       || new Set(measured.frozenContract.cliRefs).size !== 12
-      || measured.serverFunctions.length !== 43
-      || measured.publicConvex.length !== 116
-      || measured.convexHttpActions.length !== 1
-      || measured.crons.length !== 10
-      || measured.backgroundFamilies.length !== 25
       || new Set(measured.serverFunctions.map((row) => row.ref)).size !== measured.serverFunctions.length
       || new Set(measured.publicConvex.map((row) => row.ref)).size !== measured.publicConvex.length
       || new Set(measuredRows.map((row) => row.ref)).size !== measuredRows.length

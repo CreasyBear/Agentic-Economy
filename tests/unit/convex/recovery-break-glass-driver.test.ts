@@ -16,10 +16,7 @@ import {
 } from '../../../src/modules/authority/delegation/public'
 import {
   recoveryAdmissionRef,
-  type AuthorizeRecoveryRequest,
-  type ProductionRecoveryServiceOptions,
   type RecoveryAdmission,
-  type RecoveryApprovalIntent,
   type VerifiedBreakGlassApproval,
 } from '../../../src/modules/authority/recovery/public'
 import { convexModules } from '../../helpers/convex-fixtures'
@@ -823,67 +820,96 @@ describe('recovery break-glass Convex driver', () => {
       consumedByAdmissionRef === admitted.admissionRef)).toBe(true)
   })
 
-  it('keeps transaction-unreachable recovery guards fail-closed through the registered mutation composition', async () => {
+  it('rejects unresolvable recovery principals and accounts through the registered production composition with zero effects', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(NOW)
 
-    vi.resetModules()
-    vi.doMock('../../../src/modules/authority/recovery/public', async () => {
-      const actual = await vi.importActual<typeof import(
-        '../../../src/modules/authority/recovery/public'
-      )>('../../../src/modules/authority/recovery/public')
+    const consequenceState = async (backend: TestConvex<typeof schema>) => await backend.run(
+      async (ctx) => ({
+        accounts: await ctx.db.query('accounts').collect(),
+        grants: await ctx.db.query('authorityDelegationGrants').collect(),
+        approvals: await ctx.db.query('recoveryBreakGlassApprovals').collect(),
+        admissions: await ctx.db.query('recoveryBreakGlassAdmissions').collect(),
+        snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+      }),
+    )
 
-      class ProbeProductionRecoveryService {
-        readonly #authority: ProductionRecoveryServiceOptions['authority']
-
-        constructor(options: ProductionRecoveryServiceOptions) {
-          this.#authority = options.authority
-        }
-
-        async recordApproval(_input: RecoveryApprovalIntent): Promise<never> {
-          return await this.#authority.admitConsequence({} as never) as never
-        }
-
-        async authorize(input: AuthorizeRecoveryRequest): Promise<RecoveryAdmission> {
-          return {
-            accountRef: accountRef('acc_00000000000040008000000000000999'),
-            action: input.action,
-            admittedAt: NOW,
-            operatorPrincipalRef: input.context.actorPrincipalRef,
-            context: input.context,
-          } as unknown as RecoveryAdmission
-        }
-      }
-
-      return { ...actual, ProductionRecoveryService: ProbeProductionRecoveryService }
+    const missingPrincipalBackend = convexTest(schema, convexModules)
+    await seed(missingPrincipalBackend)
+    await missingPrincipalBackend.run(async (ctx) => {
+      const operator = await ctx.db.query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', OPERATOR_ONE))
+        .unique()
+      if (operator === null) throw new Error('seeded_operator_missing')
+      await ctx.db.delete(operator._id)
     })
+    const beforeMissingPrincipal = await consequenceState(missingPrincipalBackend)
+    await expect(missingPrincipalBackend.withIdentity(identity('41')).mutation(
+      api.recoveryBreakGlass.submitRecoveryApproval,
+      { approvalRef: 'approval:missing-principal', accountRef: ACCOUNT, action: 'isolate' },
+    )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+    await expect(consequenceState(missingPrincipalBackend)).resolves.toEqual(beforeMissingPrincipal)
 
-    try {
-      const isolatedModules = (await import('../../helpers/convex-fixtures')).convexModules
-      const approvalBackend = convexTest(schema, isolatedModules)
-      await seed(approvalBackend)
-      await expect(approvalBackend.withIdentity(identity('41')).mutation(
-        api.recoveryBreakGlass.submitRecoveryApproval,
-        { approvalRef: 'approval:defensive', accountRef: ACCOUNT, action: 'isolate' },
-      )).rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+    const missingAccountBackend = convexTest(schema, convexModules)
+    await seed(missingAccountBackend)
+    await missingAccountBackend.run(async (ctx) => {
+      const account = await ctx.db.query('accounts')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', ACCOUNT))
+        .unique()
+      if (account === null) throw new Error('seeded_account_missing')
+      await ctx.db.delete(account._id)
+    })
+    const beforeMissingAccount = await consequenceState(missingAccountBackend)
+    await expect(missingAccountBackend.withIdentity(identity('41')).mutation(
+      api.recoveryBreakGlass.authorizeRecoveryOperation,
+      {
+        action: 'isolate',
+        accountRef: ACCOUNT,
+        grantRef: GRANT,
+        expectedGrantGeneration: 4,
+        approvalRefs: ['approval:one', 'approval:two'],
+        correlationRef: 'recovery:missing-account',
+        idempotencyRef: 'recovery:missing-account',
+      },
+    )).rejects.toMatchObject({ code: 'recovery_account_facts_invalid' })
+    await expect(consequenceState(missingAccountBackend)).resolves.toEqual(beforeMissingAccount)
+  })
 
-      const missingAccountBackend = convexTest(schema, isolatedModules)
-      await seed(missingAccountBackend)
-      await expect(missingAccountBackend.withIdentity(identity('41')).mutation(
-        api.recoveryBreakGlass.authorizeRecoveryOperation,
-        {
-          action: 'isolate',
-          accountRef: ACCOUNT,
-          grantRef: GRANT,
-          expectedGrantGeneration: 4,
-          approvalRefs: ['approval:one', 'approval:two'],
-          correlationRef: 'recovery:defensive:missing-account',
-          idempotencyRef: 'recovery:defensive:missing-account',
-        },
-      ))
-        .rejects.toMatchObject({ code: 'recovery_account_facts_invalid' })
-    } finally {
-      vi.doUnmock('../../../src/modules/authority/recovery/public')
-      vi.resetModules()
-    }
+  it('rejects a conflicting recovery journal replay through the registered production composition with zero effects', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW)
+    const backend = convexTest(schema, convexModules)
+    await seed(backend)
+    await seedPersistedReplay(backend, 'isolate', '64')
+    await submitRegisteredApprovals(backend, 'isolate')
+
+    const consequenceState = async () => await backend.run(async (ctx) => ({
+      account: await ctx.db.query('accounts')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', ACCOUNT)).unique(),
+      grant: await ctx.db.query('authorityDelegationGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', GRANT)).unique(),
+      approvals: await ctx.db.query('recoveryBreakGlassApprovals').collect(),
+      admissions: await ctx.db.query('recoveryBreakGlassAdmissions').collect(),
+      snapshots: await ctx.db.query('authorityDelegationSnapshots').collect(),
+    }))
+    const before = await consequenceState()
+
+    await expect(backend.withIdentity(identity('41')).mutation(
+      api.recoveryBreakGlass.authorizeRecoveryOperation,
+      {
+        action: 'isolate',
+        accountRef: ACCOUNT,
+        grantRef: GRANT,
+        expectedGrantGeneration: 3,
+        approvalRefs: ['approval:one', 'approval:two'],
+        correlationRef: 'recovery:isolate',
+        idempotencyRef: 'recovery:isolate:64',
+      },
+    ))
+      .rejects.toMatchObject({ code: 'recovery_idempotency_conflict' })
+    await expect(consequenceState()).resolves.toEqual(before)
+    expect(before.account).toMatchObject({ lifecycle: 'suspended', revision: 12 })
+    expect(before.grant).toMatchObject({ lifecycle: 'active', generation: 4, revision: 4 })
+    expect(before.approvals.map(({ lifecycle }) => lifecycle)).toEqual(['verified', 'verified'])
+    expect(before.admissions).toHaveLength(1)
+    expect(before.snapshots).toHaveLength(0)
   })
 })

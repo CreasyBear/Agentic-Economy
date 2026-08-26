@@ -242,7 +242,7 @@ function sourceFor(backend: ConvexFixtureBackend): KeylessExecutableSourcePort {
 }
 
 describe('keyless operation projection', () => {
-  it('excludes effectful POST from listing and read, so direct execution cannot fetch it', async () => {
+  it('runs the registered keyless read query and excludes effectful POST before provider transport', async () => {
     const backend = convexTestWithMarketComponents()
     for (const [suffix, effectClass] of [
       ['effectful-post-state', 'external_state_change'],

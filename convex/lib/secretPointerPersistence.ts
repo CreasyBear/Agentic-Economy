@@ -10,7 +10,7 @@ import {
   type SecretPointer,
   type SecretPointerStore,
   type SecretRef,
-} from '../../src/modules/secrets/public'
+} from '../../src/modules/secrets/convex'
 
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 

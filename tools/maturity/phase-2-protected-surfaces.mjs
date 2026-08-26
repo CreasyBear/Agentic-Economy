@@ -104,25 +104,25 @@ const SINK_TEST_ASSIGNMENTS = Object.freeze({
   'convex/authz.ts:resolveBusinessActor': ['convex/qualifiedUse.ts:readOwnerQualifiedUse', 'tests/maturity/phase-2-owner-query-authority.test.ts', 'preserves current account-scoped reads through every non-chat query caller'],
   'convex/sourceWriteAdmission.ts:requireSourceRead': ['convex/actionInvocationControl.ts:readControlSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source read query with exact signed provenance and denies caller drift before data access'],
   'convex/sourceWriteAdmission.ts:requireSourceWrite': ['convex/actionInvocationControl.ts:recordLateObservationSource', 'tests/unit/convex/source-write-admission.test.ts', 'runs the registered source write mutation once and rejects replay before a duplicate control effect'],
-  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/capabilitySupplyOperations.ts:readKeylessExecutable', 'tests/integration/capability-supply-operations.test.ts', 'excludes effectful POST from listing and read, so direct execution cannot fetch it'],
+  'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion': ['convex/capabilitySupplyOperations.ts:readKeylessExecutable', 'tests/integration/capability-supply-operations.test.ts', 'runs the registered keyless read query and excludes effectful POST before provider transport'],
   'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext': ['convex/agentAccessPrincipals.ts:registerAgentPrincipal', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'registers only current server-resolved agent provenance and canonical grant facts'],
   'convex/authorityBoundary.ts:resolveCanonicalAgentBinding': ['convex/authorityBoundary.ts:resolveAgentBinding', 'tests/unit/convex/authority-boundary.test.ts', 'requires exact source-write admission for the registered production mutation'],
   'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority': ['convex/capabilityOperationInvocations.ts:cancelInvocation', 'tests/unit/convex/capability-operation-authority-boundary.test.ts', 'requires canonical agent expectations and exact authority targets on every public agent action'],
   'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal': ['convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication', 'tests/integration/capability-supply-owner-funnel-reserve.test.ts', 'requires a verified owner principal and rejects changed material before draft effects'],
   'convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext': ['convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority', 'tests/integration/chat-scheduled-authority.test.ts', 'arms the exact verified generation and preserves the current account-scoped read'],
   'convex/recoveryBreakGlass.ts:resolveRecoveryAccountFacts': ['convex/recoveryBreakGlass.ts:authorizeRecoveryOperation', 'tests/unit/convex/recovery-break-glass-driver.test.ts', 'runs the registered mutation wrappers and preserves canonical consumed values'],
-  'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'rejects malformed terminal callbacks and contains journal outages'],
-  'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler': ['convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'attests only the exact pending ticket and contains malformed or unavailable reads'],
-  'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'hashes the bearer and binds the exact journal-begin body'],
+  'convex/capabilityProviderConsequenceJournal.ts:abortProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider journal abort route through the durable abort mutation'],
+  'convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler': ['convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider ticket attestation route through the durable ticket query'],
+  'convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider journal begin route through the durable claim mutation'],
   'convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler': ['convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal', 'tests/unit/capability-execution/provider-consequence-journal.test.ts', 'executes the registered completion HTTP action and the same journal handler exactly once'],
-  'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler': ['convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc', 'tests/unit/capability-execution/provider-consequence-http.test.ts', 'canonicalizes provider-direct reserve identity and strips every caller custody field'],
-  'convex/lib/secretLifecyclePersistence.ts:requireSnapshot': ['convex/secretLifecycleHttp.ts:secretLifecycleRpc', 'tests/unit/convex/secret-lifecycle-http.test.ts', 'requires the exact hashed transport token before parsing or mutating'],
+  'convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler': ['convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered provider x402 route through durable authorization and never reaches money for an unknown ticket'],
+  'convex/lib/secretLifecyclePersistence.ts:requireSnapshot': ['convex/secretLifecycleHttp.ts:secretLifecycleRpc', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered secret lifecycle route through the durable journal reader without secret material'],
   'convex/workloadCron.ts:reconcileWorkloadCronSnapshot': ['reconciliation:convex/workloadCron.ts:reconcile', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered workload reconciliation query and denies a lifecycle change at consequence time'],
   'convex/workloadCron.ts:bindWorkloadCronActionContext': ['scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered scheduled probe through reconciliation and the bound action context without widening authority'],
   'convex/workloadCron.ts:admitWorkloadCron': ['cron:refresh capability supply readiness', 'tests/unit/convex/workload-cron.test.ts', 'runs the registered readiness cron handler from current canonical facts and denies missing authority before dispatch'],
   'src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook': ['callback:src/routes/api.stripe.webhook.ts:Route', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered Stripe webhook route through signature verification and preserves applied then replayed outcomes'],
-  'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority': ['workpool:convex/capabilityOperationInvocationWorker.ts:run', 'tests/unit/convex/capability-operation-worker-authority-boundary.test.ts', 'reconciles invocation-bound authority before run and preserves the valid result'],
-  'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority': ['workpool:convex/capabilityProviderConnectionCleanup.ts:run', 'tests/unit/convex/provider-connection-cleanup.test.ts', 'refuses a cleanup result when resource authority changes at consequence time'],
+  'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority': ['workpool:convex/capabilityOperationInvocationWorker.ts:run', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered invocation worker action through durable authority reconciliation and denies an unknown invocation'],
+  'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority': ['workpool:convex/capabilityProviderConnectionCleanup.ts:run', 'tests/integration/phase-2-runtime-sink-handlers.test.ts', 'runs the registered cleanup worker action through the durable target reader and refuses an unknown connection'],
   'convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority': ['scheduler:convex/capabilitySupplyReadiness.ts:probe', 'tests/integration/capability-publication-probe.test.ts', 'refuses automatic readiness for an OpenAPI %s operation before network execution'],
   'convex/interactiveAuthority.ts:resolveScheduledInteractiveAuthorityContext': ['scheduler:convex/chatGenerate.ts:generate', 'tests/integration/chat-scheduled-authority.test.ts', 're-derives current Principal and Account before scheduled provider work'],
   'convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent': ['reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend', 'tests/integration/money-external-spend.test.ts', 'denies external-spend reconciliation after the durable grant is revoked'],
@@ -359,17 +359,34 @@ function traceAuthorityPath(graph, declarationRef, binding, surfaceRef = declara
   return undefined
 }
 
-function verifiedExemption(ref, symbol, declared) {
+function graphReaches(graph, from, target) {
+  const queue = [from]
+  const seen = new Set()
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (current === target) return true
+    if (seen.has(current)) continue
+    seen.add(current)
+    for (const edge of graph.get(current)?.edges ?? []) queue.push(edge.target)
+  }
+  return false
+}
+
+function verifiedExemption(graph, input, declared) {
   const proof = declared.exemption
   if (typeof proof !== 'object' || proof === null) return undefined
-  const { testFile, testName } = proof
+  const { testFile, testName, testSymbol = input.symbol } = proof
   if (typeof testFile !== 'string' || typeof testName !== 'string'
+    || typeof testSymbol !== 'string'
     || testFile === INVENTORY_TEST
     || !/^tests\/.+\.test\.ts$/u.test(testFile)
     || !existsSync(resolve(ROOT, testFile))) return undefined
+  const testEntrypointRef = `${input.file}:${testSymbol}`
+  if (testSymbol !== input.symbol
+    && (!graph.has(testEntrypointRef) || !graphReaches(graph, testEntrypointRef, input.declarationRef))) return undefined
   const source = readFileSync(resolve(ROOT, testFile), 'utf8')
-  if (!behaviorTestProvesSymbol(source, testFile, testName, symbol)) return undefined
-  return Object.freeze({ testFile, testName, sourceRef: ref, sha256: digest(source) })
+  if (!behaviorTestProvesSymbol(source, testFile, testName, testSymbol)) return undefined
+  return Object.freeze({ testFile, testName, sourceRef: input.ref, sha256: digest(source) })
 }
 
 function behaviorTestProvesSymbol(source, file, testName, symbol) {
@@ -408,7 +425,7 @@ function evaluateSurface(graph, input, declared) {
     declaration: input.declaration,
   }
   if (EXEMPT_BINDINGS.has(declared.binding)) {
-    const exemption = verifiedExemption(input.ref, input.symbol, declared)
+    const exemption = verifiedExemption(graph, input, declared)
     return exemption === undefined
       ? { ...base, status: 'blocked', marker: `missing_tested_exemption:${input.ref}`, blocker: {
           code: 'missing_tested_exemption',
@@ -741,13 +758,13 @@ export function discoverProtectedSurfaceRefs() {
     for (const path of filesUnder(directory)) {
       const { ast } = sourceAst(path)
       for (const statement of ast.statements) {
-        if (!ts.isVariableStatement(statement) || !exported(statement)) continue
+        if (!ts.isVariableStatement(statement)) continue
         for (const declaration of statement.declarationList.declarations) {
           if (declaration.initializer === undefined || !ts.isIdentifier(declaration.name)) continue
           if (directory === 'src' && containsRegistrar(declaration.initializer, 'createServerFn')) {
             serverFunctions.push({ ref: `${path}:${declaration.name.text}`, path, symbol: declaration.name.text })
           }
-          if (directory === 'convex') {
+          if (directory === 'convex' && exported(statement)) {
             const registrar = directRegistrar(declaration.initializer)
             if (registrar !== null && PUBLIC_CONVEX_REGISTRARS.has(registrar)) {
               publicConvex.push({ ref: `${path}:${declaration.name.text}`, path, symbol: declaration.name.text, registrar })
@@ -1156,7 +1173,8 @@ function runtimeInvocationProof(source, testFile, testName, surface) {
       } else if (ts.isIdentifier(callee) && importedHandlerAlias(callee)) {
         record('registered_handler_call', node.expression.getText(ast))
       } else if (ts.isPropertyAccessExpression(callee) && callee.name.text === '_handler'
-        && ts.isIdentifier(callee.expression) && importedTarget(callee.expression)) {
+        && ts.isIdentifier(callee.expression)
+        && (importedTarget(callee.expression) || importedHandlerAlias(callee.expression))) {
         record('registered_handler_call', node.expression.getText(ast))
       }
     }
