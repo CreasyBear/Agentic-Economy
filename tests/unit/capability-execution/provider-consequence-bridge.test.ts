@@ -13,6 +13,18 @@ import {
   type CanonicalProviderConsequenceTicket,
 } from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
 
+vi.mock('@/modules/network-guard/server', () => ({
+  sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    ...(request.method === 'GET' || request.method === 'HEAD'
+      ? {}
+      : { body: await request.text() }),
+    redirect: request.redirect,
+    signal: request.signal,
+  }),
+}))
+
 const NOW = 2_000_000_000_000
 const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
 const SIGNING_SECRET_REF = `sec_${'9'.repeat(32)}`

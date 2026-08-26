@@ -9,9 +9,11 @@ import {
   providerConsequenceInvocationDigest,
   type CanonicalProviderConsequenceTicket,
 } from './jitProviderConsequence'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 
 const SECRET_REF = /^sec_[0-9a-f]{32}$/u
 const HTTPS_ORIGIN = /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/u
+const MAXIMUM_BRIDGE_RESPONSE_BYTES = 512 * 1024
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -201,11 +203,11 @@ export async function invokeProviderConsequenceViaVercel(
   }
   let signedTicket: string
   try {
-    const signingResponse = await fetch(endpoint, {
+    const signingResponse = await sendGuardedHttpRequest(new Request(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'issue', ...envelope }),
-    })
+    }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
     const signingResult: unknown = await signingResponse.json()
     if (!signingResponse.ok
       || typeof signingResult !== 'object'
@@ -220,11 +222,11 @@ export async function invokeProviderConsequenceViaVercel(
   }
   let response: Response
   try {
-    response = await fetch(endpoint, {
+    response = await sendGuardedHttpRequest(new Request(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'execute', ...envelope, signedTicket, invocation }),
-    })
+    }), MAXIMUM_BRIDGE_RESPONSE_BYTES)
   } catch {
     return unknown(invocation, input.requestDigest, 'provider_consequence_bridge_unknown')
   }

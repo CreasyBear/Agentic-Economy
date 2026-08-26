@@ -31,6 +31,17 @@ vi.mock('@/modules/network-guard/public', () => ({
   defaultDnsResolver: { lookup: vi.fn() },
   isPublicHttpTarget: mocks.isPublicHttpTarget,
 }))
+vi.mock('@/modules/network-guard/server', () => ({
+  sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    ...(request.method === 'GET' || request.method === 'HEAD'
+      ? {}
+      : { body: await request.text() }),
+    redirect: request.redirect,
+    signal: request.signal,
+  }),
+}))
 
 import { handleProviderConsequenceRequest } from '@/routes/api.internal.provider-consequence'
 

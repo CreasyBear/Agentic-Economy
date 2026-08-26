@@ -6,6 +6,8 @@ import {
   type SecretStore,
   type SecretTarget,
 } from './secret-plane'
+import { defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 
 const DEFAULT_TOKEN_REFRESH_SKEW_MS = 5_000
 const DEFAULT_MAXIMUM_ACCESS_TOKEN_TTL_MS = 2 * 60 * 60 * 1_000
@@ -63,6 +65,7 @@ export class InfisicalCloudSecretStore implements SecretStore {
   readonly #tokenRefreshSkewMs: number
   readonly #maximumAccessTokenTtlMs: number
   readonly #requestTimeoutMs: number
+  readonly #usesGuardedNetwork: boolean
   #accessToken: AccessToken | undefined
   #tokenAcquisition: Promise<AccessToken> | undefined
 
@@ -80,7 +83,9 @@ export class InfisicalCloudSecretStore implements SecretStore {
       ? undefined
       : requireNonEmpty(options.organizationSlug, 'organizationSlug')
     this.#identityTokenProvider = options.identityTokenProvider
-    this.#fetch = options.fetch ?? fetch
+    this.#usesGuardedNetwork = options.fetch === undefined
+    this.#fetch = options.fetch ?? (async (input, init) =>
+      await sendGuardedHttpRequest(new Request(input, init), 512 * 1024))
     this.#now = options.now ?? Date.now
     this.#tokenRefreshSkewMs = options.tokenRefreshSkewMs ?? DEFAULT_TOKEN_REFRESH_SKEW_MS
     this.#maximumAccessTokenTtlMs = options.maximumAccessTokenTtlMs ?? DEFAULT_MAXIMUM_ACCESS_TOKEN_TTL_MS
@@ -215,7 +220,11 @@ export class InfisicalCloudSecretStore implements SecretStore {
     headers.set('authorization', `Bearer ${token.value}`)
     let response: Response
     try {
-      response = await this.#fetch(`${this.#baseUrl}${path}`, {
+      const target = new URL(path, this.#baseUrl)
+      if (this.#usesGuardedNetwork && !await isPublicHttpTarget(target, defaultDnsResolver)) {
+        throw new Error('secret_store_target_refused')
+      }
+      response = await this.#fetch(target, {
         ...init,
         headers,
         signal: AbortSignal.timeout(this.#requestTimeoutMs),
@@ -298,7 +307,11 @@ export class InfisicalCloudSecretStore implements SecretStore {
 
     let response: Response
     try {
-      response = await this.#fetch(`${this.#baseUrl}/api/v1/auth/oidc-auth/login`, {
+      const target = new URL('/api/v1/auth/oidc-auth/login', this.#baseUrl)
+      if (this.#usesGuardedNetwork && !await isPublicHttpTarget(target, defaultDnsResolver)) {
+        throw new Error('secret_store_target_refused')
+      }
+      response = await this.#fetch(target, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

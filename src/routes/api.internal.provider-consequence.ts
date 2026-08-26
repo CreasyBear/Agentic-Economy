@@ -28,6 +28,7 @@ import {
 } from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
 import { readX402EvmReceipt } from '@/modules/capability-execution/invocation-worker/x402Settlement'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import {
   createProductionSecretRuntime,
   secretGeneration,
@@ -252,11 +253,11 @@ async function postConvex(
   token: string,
   body: unknown,
 ): Promise<unknown> {
-  const response = await fetch(`${origin}${path}`, {
+  const response = await sendGuardedHttpRequest(new Request(`${origin}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
-  })
+  }), MAX_BODY_BYTES)
   const value: unknown = await response.json().catch(() => undefined)
   if (!response.ok) throw new Error('provider_consequence_convex_unavailable')
   return value

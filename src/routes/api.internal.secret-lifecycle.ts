@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readTrimmedEnv, type StringEnvironment } from '@/lib/server/read-trimmed-env'
+import { sendGuardedHttpRequest } from '@/modules/network-guard/server'
 import { isRecord } from '@/modules/common/is-record'
 import {
   InfisicalCloudSecretStore,
@@ -221,7 +222,9 @@ async function rpc(
   operation: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const response = await fetch(`${convexSiteOrigin(environment)}/internal/secret-lifecycle`, {
+  const response = await sendGuardedHttpRequest(new Request(
+    `${convexSiteOrigin(environment)}/internal/secret-lifecycle`,
+    {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -229,7 +232,8 @@ async function rpc(
     },
     body: JSON.stringify({ operation, args }),
     redirect: 'error',
-  })
+    },
+  ), 512 * 1024)
   const body: unknown = await response.json().catch(() => undefined)
   if (!response.ok || !isRecord(body) || body.kind !== 'ok') {
     throw new SecretLifecycleError('secret_lifecycle_ambiguous')
