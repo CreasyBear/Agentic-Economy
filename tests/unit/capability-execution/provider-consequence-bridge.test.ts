@@ -16,6 +16,7 @@ const NOW = 2_000_000_000_000
 const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
 const SIGNING_SECRET_REF = `sec_${'9'.repeat(32)}`
 const CUSTOMER_SECRET_REF = `sec_${'1'.repeat(32)}`
+const PAYMENT_SECRET_REF = `sec_${'6'.repeat(32)}`
 const GENERATION = `sgn_${'2'.repeat(32)}`
 const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
@@ -101,6 +102,13 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
       activeGeneration: GENERATION,
       pointerRevision: 5,
     },
+    ...(routeInvocation.binding.adapterId === 'x402-fetch:v2'
+      ? { paymentSecret: {
+          secretRef: PAYMENT_SECRET_REF,
+          activeGeneration: `sgn_${'6'.repeat(32)}`,
+          pointerRevision: 6,
+        } }
+      : {}),
   }
 }
 
@@ -136,6 +144,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     vi.setSystemTime(NOW)
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example'
     process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF = SIGNING_SECRET_REF
+    process.env.AE_X402_PAYMENT_SECRET_REF = PAYMENT_SECRET_REF
   })
 
   afterEach(() => {
@@ -143,6 +152,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     vi.useRealTimers()
     delete process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN
     delete process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF
+    delete process.env.AE_X402_PAYMENT_SECRET_REF
   })
 
   it('journals the exact admitted authority and sends the one-time token only to Vercel', async () => {
@@ -215,6 +225,48 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       failureCode: 'provider_consequence_bridge_unknown',
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('binds provider-direct x402 to a distinct payment pointer and fails before journal or transport when absent', async () => {
+    const routeInvocation = invocation()
+    ;(routeInvocation.binding as { adapterId: string }).adapterId = 'x402-fetch:v2'
+    const issue = issued(routeInvocation)
+    let fetchCount = 0
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => ++fetchCount === 1
+      ? signingResponse()
+      : Response.json({
+          transport: 'x402',
+          disposition: 'refused',
+          releaseStarted: false,
+          requestDigest: DIGEST('a'),
+          failureCode: 'payment_not_required',
+        }))
+    vi.stubGlobal('fetch', fetchMock)
+    const ctx = context(issue)
+
+    await expect(invokeProviderConsequenceViaVercel(ctx, {
+      invocation: routeInvocation,
+      requestDigest: DIGEST('a'),
+    })).resolves.toMatchObject({ transport: 'x402', disposition: 'refused' })
+    expect(vi.mocked(ctx.runMutation).mock.calls[0]?.[1]).toMatchObject({
+      paymentSecretRef: PAYMENT_SECRET_REF,
+      signingSecretRef: SIGNING_SECRET_REF,
+    })
+    expect(PAYMENT_SECRET_REF).not.toBe(CUSTOMER_SECRET_REF)
+
+    delete process.env.AE_X402_PAYMENT_SECRET_REF
+    const unavailable = context(issue)
+    fetchMock.mockClear()
+    await expect(invokeProviderConsequenceViaVercel(unavailable, {
+      invocation: routeInvocation,
+      requestDigest: DIGEST('a'),
+    })).resolves.toMatchObject({
+      disposition: 'refused',
+      releaseStarted: false,
+      failureCode: 'provider_consequence_runtime_unavailable',
+    })
+    expect(unavailable.runMutation).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('rejects a successful-looking Vercel response attributed to another request', async () => {

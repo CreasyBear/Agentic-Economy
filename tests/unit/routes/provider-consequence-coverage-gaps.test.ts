@@ -57,7 +57,10 @@ const CUSTOMER_SECRET_REF = `sec_${'1'.repeat(32)}`
 const CUSTOMER_GENERATION = `sgn_${'2'.repeat(32)}`
 const SIGNING_SECRET_REF = `sec_${'8'.repeat(32)}`
 const SIGNING_GENERATION = `sgn_${'9'.repeat(32)}`
+const PAYMENT_SECRET_REF = `sec_${'6'.repeat(32)}`
+const PAYMENT_GENERATION = `sgn_${'7'.repeat(32)}`
 const CUSTOMER_SECRET = `0x${'11'.repeat(32)}`
+const PAYMENT_SECRET = `0x${'22'.repeat(32)}`
 const SIGNING_KEY = 'platform-ticket-signing-key-at-least-32-bytes'
 const JOURNAL_TOKEN = 'a'.repeat(43)
 
@@ -238,7 +241,7 @@ describe('provider consequence route coverage gaps', () => {
         .resolves.toBeUndefined()
 
       const runtime = options.createCallbackScopedX402Runtime({ ticket: canonicalTicket, invocation: routeInvocation })
-      await expect(runtime.readX402PaymentCredentialRef()).resolves.toBe(CUSTOMER_SECRET_REF)
+      await expect(runtime.readX402PaymentCredentialRef()).resolves.toBe(PAYMENT_SECRET_REF)
       await expect(runtime.validateProviderConnectionAuthority({
         connectionRef: routeInvocation.binding.authority.connectionRef,
         providerRef: canonicalTicket.providerRef,
@@ -268,7 +271,7 @@ describe('provider consequence route coverage gaps', () => {
         attemptRef: routeInvocation.authority.attemptRef,
         effectGeneration: routeInvocation.authority.effectGeneration,
         paymentIdentifier: routeInvocation.authority.operationKeyDigest,
-        credential: CUSTOMER_SECRET_REF,
+        credential: PAYMENT_SECRET_REF,
         challenge,
         selectedRequirement,
         challengeDigest: canonicalDigest(challenge),
@@ -577,6 +580,13 @@ function ticket(routeInvocation: ProviderInvocation = invocation()): CanonicalPr
     owningAccountRef: `acc_${'1'.repeat(32)}`, activeAccountRef: `acc_${'1'.repeat(32)}`,
     actorPrincipalRef: `prn_${'2'.repeat(32)}`, grantRef: 'grant:test', grantGeneration: 3,
     secret: { secretRef: CUSTOMER_SECRET_REF, activeGeneration: CUSTOMER_GENERATION, pointerRevision: 4 },
+    ...(routeInvocation.binding.adapterId === 'x402-fetch:v2'
+      ? { paymentSecret: {
+          secretRef: PAYMENT_SECRET_REF,
+          activeGeneration: PAYMENT_GENERATION,
+          pointerRevision: 5,
+        } }
+      : {}),
   }
 }
 
@@ -667,12 +677,17 @@ function scriptedFetch(overrides: Readonly<{
     }
     if (url.hostname === 'app.infisical.com' && url.pathname.startsWith('/api/v4/secrets/')) {
       const platform = url.searchParams.get('projectId') === 'project-platform'
+      const payment = url.pathname.includes(PAYMENT_SECRET_REF)
       return Response.json({
         secret: {
-          secretKey: platform
+          secretKey: payment
+            ? `${PAYMENT_SECRET_REF}--${PAYMENT_GENERATION}`
+            : platform
             ? `${SIGNING_SECRET_REF}--${SIGNING_GENERATION}`
             : `${CUSTOMER_SECRET_REF}--${CUSTOMER_GENERATION}`,
-          secretValue: platform ? (overrides.signingKey ?? SIGNING_KEY) : CUSTOMER_SECRET,
+          secretValue: payment
+            ? PAYMENT_SECRET
+            : platform ? (overrides.signingKey ?? SIGNING_KEY) : CUSTOMER_SECRET,
           environment: 'production',
           workspace: platform ? 'project-platform' : 'project-customer',
         },
@@ -790,13 +805,18 @@ function probeFetch(
     }
     if (url.hostname === 'app.infisical.com' && url.pathname.startsWith('/api/v4/secrets/')) {
       const platform = url.searchParams.get('projectId') === 'project-platform'
-      if (platform) platformSecretReads += 1
+      const payment = url.pathname.includes(PAYMENT_SECRET_REF)
+      if (platform && !payment) platformSecretReads += 1
       return Response.json({
         secret: {
-          secretKey: platform
+          secretKey: payment
+            ? `${PAYMENT_SECRET_REF}--${PAYMENT_GENERATION}`
+            : platform
             ? `${SIGNING_SECRET_REF}--${SIGNING_GENERATION}`
             : `${CUSTOMER_SECRET_REF}--${CUSTOMER_GENERATION}`,
-          secretValue: platform
+          secretValue: payment
+            ? PAYMENT_SECRET
+            : platform
             ? (platformSecretReads === 1 ? SIGNING_KEY : 'different-platform-signing-key-at-least-32-bytes')
             : CUSTOMER_SECRET,
           environment: 'production', workspace: platform ? 'project-platform' : 'project-customer',
@@ -832,7 +852,7 @@ function probeFetch(
           state: 'prepared', dispatchRef: canonicalTicket.invocationRef,
           attemptRef: routeInvocation.authority.attemptRef,
           effectGeneration: routeInvocation.authority.effectGeneration,
-          operationRef: canonicalTicket.operationRef, credentialRef: CUSTOMER_SECRET_REF,
+          operationRef: canonicalTicket.operationRef, credentialRef: PAYMENT_SECRET_REF,
           challengeJson: JSON.stringify(challenge), selectedRequirementJson: JSON.stringify(selectedRequirement),
           challengeDigest: canonicalDigest(challenge), paymentIdentifier: routeInvocation.authority.operationKeyDigest,
         }

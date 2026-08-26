@@ -99,6 +99,11 @@ function consequenceEndpoint(): string | undefined {
   }
 }
 
+export function providerConsequenceX402PaymentCustodyAvailable(): boolean {
+  const paymentSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
+  return paymentSecretRef !== undefined && SECRET_REF.test(paymentSecretRef)
+}
+
 function providerInvocation(value: RouteTransportInvocation): value is AdmittedProviderInvocation {
   if (value.binding.authority.kind !== 'provider_connection') return false
   const authority = value.authority as ProviderInvocation['authority']
@@ -126,8 +131,13 @@ export async function invokeProviderConsequenceViaVercel(
   }
   const invocation = input.invocation
   const signingSecretRef = process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF?.trim()
+  const paymentSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
   const endpoint = consequenceEndpoint()
-  if (signingSecretRef === undefined || !SECRET_REF.test(signingSecretRef) || endpoint === undefined) {
+  if (signingSecretRef === undefined
+    || !SECRET_REF.test(signingSecretRef)
+    || (invocation.binding.adapterId === 'x402-fetch:v2'
+      && (paymentSecretRef === undefined || !SECRET_REF.test(paymentSecretRef)))
+    || endpoint === undefined) {
     return refused(invocation, input.requestDigest, 'provider_consequence_runtime_unavailable')
   }
   const journalToken = randomToken()
@@ -160,6 +170,9 @@ export async function invokeProviderConsequenceViaVercel(
         ? {}
         : { readinessDigest: invocation.authority.readinessDigest }),
       signingSecretRef,
+      ...(invocation.binding.adapterId === 'x402-fetch:v2' && paymentSecretRef !== undefined
+        ? { paymentSecretRef }
+        : {}),
       requestedExpiresAt: invocation.authority.expiresAt,
       },
     )

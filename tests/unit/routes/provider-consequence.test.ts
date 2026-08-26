@@ -40,7 +40,10 @@ const CUSTOMER_SECRET_REF = `sec_${'1'.repeat(32)}`
 const CUSTOMER_GENERATION = `sgn_${'2'.repeat(32)}`
 const SIGNING_SECRET_REF = `sec_${'8'.repeat(32)}`
 const SIGNING_GENERATION = `sgn_${'9'.repeat(32)}`
+const PAYMENT_SECRET_REF = `sec_${'6'.repeat(32)}`
+const PAYMENT_GENERATION = `sgn_${'7'.repeat(32)}`
 const CUSTOMER_SECRET = `0x${'11'.repeat(32)}`
+const PAYMENT_SECRET = `0x${'22'.repeat(32)}`
 const SIGNING_KEY = 'platform-ticket-signing-key-at-least-32-bytes'
 const JOURNAL_TOKEN = 'a'.repeat(43)
 const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
@@ -198,6 +201,13 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
       activeGeneration: CUSTOMER_GENERATION,
       pointerRevision: 4,
     },
+    ...(routeInvocation.binding.adapterId === 'x402-fetch:v2'
+      ? { paymentSecret: {
+          secretRef: PAYMENT_SECRET_REF,
+          activeGeneration: PAYMENT_GENERATION,
+          pointerRevision: 5,
+        } }
+      : {}),
   }
 }
 
@@ -430,12 +440,15 @@ describe('internal provider consequence route', () => {
       if (url.hostname === 'app.infisical.com' && url.pathname.startsWith('/api/v4/secrets/')) {
         const projectId = url.searchParams.get('projectId')
         const platform = projectId === 'project-platform'
+        const payment = url.pathname.includes(PAYMENT_SECRET_REF)
         return Response.json({
           secret: {
-            secretKey: platform
+            secretKey: payment
+              ? `${PAYMENT_SECRET_REF}--${PAYMENT_GENERATION}`
+              : platform
               ? `${SIGNING_SECRET_REF}--${SIGNING_GENERATION}`
               : `${CUSTOMER_SECRET_REF}--${CUSTOMER_GENERATION}`,
-            secretValue: platform ? SIGNING_KEY : CUSTOMER_SECRET,
+            secretValue: payment ? PAYMENT_SECRET : platform ? SIGNING_KEY : CUSTOMER_SECRET,
             environment: 'production',
             workspace: projectId,
           },
@@ -483,7 +496,7 @@ describe('internal provider consequence route', () => {
                 attemptRef: routeInvocation.authority.attemptRef,
                 effectGeneration: routeInvocation.authority.effectGeneration,
                 operationRef: canonicalTicket.operationRef,
-                credentialRef: CUSTOMER_SECRET_REF,
+                credentialRef: PAYMENT_SECRET_REF,
                 challengeJson: JSON.stringify(challenge),
                 selectedRequirementJson: JSON.stringify(challenge.accepts[0]),
                 challengeDigest: canonicalDigest(challenge),

@@ -180,14 +180,17 @@ function vaultConfiguration(environment: StringEnvironment, scope: 'platform' | 
   } as const
 }
 
-function fixedPointerStore(input: PointerInput): SecretPointerStore {
-  const pointer: SecretPointer = Object.freeze({
-    secretRef: secretRef(input.secretRef),
-    activeGeneration: secretGeneration(input.activeGeneration),
-    revision: input.pointerRevision,
-  })
+function fixedPointerStore(...inputs: readonly PointerInput[]): SecretPointerStore {
+  const pointers = new Map(inputs.map((input) => {
+    const pointer: SecretPointer = Object.freeze({
+      secretRef: secretRef(input.secretRef),
+      activeGeneration: secretGeneration(input.activeGeneration),
+      revision: input.pointerRevision,
+    })
+    return [pointer.secretRef, pointer] as const
+  }))
   return Object.freeze({
-    getActive: async (ref: SecretPointer['secretRef']) => ref === pointer.secretRef ? pointer : undefined,
+    getActive: async (ref: SecretPointer['secretRef']) => pointers.get(ref),
     advanceActive: async () => { throw new TypeError('provider_consequence_pointer_read_only') },
   })
 }
@@ -206,7 +209,10 @@ function secretRuntimeOptions(
       customer: vaultConfiguration(environment, 'customer'),
     },
     platform: {
-      pointerStore: fixedPointerStore(request.signingSecret),
+      pointerStore: fixedPointerStore(
+        request.signingSecret,
+        ...(request.ticket.paymentSecret === undefined ? [] : [request.ticket.paymentSecret]),
+      ),
       generationProbe: unusedRotationProbe,
     },
     customer: {
@@ -325,7 +331,9 @@ function x402RuntimeFactory(
   const signatureCache = new Map<string, string>()
   return ({ ticket, invocation }) => {
     const authority = invocation.authority
-    const credentialRef = ticket.secret.secretRef
+    const paymentSecret = ticket.paymentSecret
+    if (paymentSecret === undefined) throw new TypeError('payment_custody_unavailable')
+    const credentialRef = paymentSecret.secretRef
     const readAuthorization = async (
       prepared: X402PreparedAuthorization,
       byDigest: boolean,
@@ -364,7 +372,7 @@ function x402RuntimeFactory(
       }
       let signature: string | undefined
       const runtime = createProductionSecretRuntime(secretOptions)
-      await runtime.consequences.customer.execute({ secretRef: credentialRef }, async (lease) => {
+      await runtime.consequences.platform.execute({ secretRef: credentialRef }, async (lease) => {
         await lease.useBytes(async (material) => {
           const credential = new TextDecoder().decode(material)
           signature = await createSandboxEvmX402PaymentSignature({ ...paymentRequest, credential })

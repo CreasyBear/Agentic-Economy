@@ -56,6 +56,12 @@ export type CanonicalProviderConsequenceTicket = Readonly<{
     activeGeneration: string
     pointerRevision: number
   }>
+  /** Distinct platform-scoped payer credential for provider-direct x402. */
+  paymentSecret?: Readonly<{
+    secretRef: string
+    activeGeneration: string
+    pointerRevision: number
+  }>
 }>
 
 export type ProviderConsequenceJournalBegin = Readonly<{
@@ -497,6 +503,16 @@ function canonicalTicket(
     principalRef(candidate.actorPrincipalRef)
     secretRef(candidate.secret.secretRef)
     secretGeneration(candidate.secret.activeGeneration)
+    if (candidate.adapterId === 'x402-fetch:v2') {
+      if (candidate.paymentSecret === undefined
+        || candidate.paymentSecret.secretRef === candidate.secret.secretRef
+        || !Number.isSafeInteger(candidate.paymentSecret.pointerRevision)
+        || candidate.paymentSecret.pointerRevision < 1) return undefined
+      secretRef(candidate.paymentSecret.secretRef)
+      secretGeneration(candidate.paymentSecret.activeGeneration)
+    } else if (candidate.paymentSecret !== undefined) {
+      return undefined
+    }
     return candidate
   } catch {
     return undefined
@@ -559,6 +575,9 @@ export function providerConsequenceTicketClaimsDigest(
       grantedScopes: [...ticket.grantedScopes],
       grantedResources: [...ticket.grantedResources],
       secret: { ...ticket.secret },
+      ...(ticket.paymentSecret === undefined
+        ? {}
+        : { paymentSecret: { ...ticket.paymentSecret } }),
     },
   } as StableHashValue)
 }

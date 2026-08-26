@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => {
   const prepareRegisteredRouteTransportInvocation = vi.fn()
   const invokePreparedRouteTransport = vi.fn()
   const invokeProviderConsequenceViaVercel = vi.fn()
+  const providerConsequenceX402PaymentCustodyAvailable = vi.fn(() => (
+    (process.env.AE_X402_PAYMENT_CREDENTIAL_REF?.trim().length ?? 0) > 0
+  ))
   const signRouteTransportCall = vi.fn<SignRouteTransportCall>(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
   const createCdpEvmX402PaymentSignature = vi.fn(async (
     _request: unknown,
@@ -32,7 +35,7 @@ const mocks = vi.hoisted(() => {
     }
     return 'signed:payment'
   })
-  const createSandboxEvmX402PaymentSignature = vi.fn(async () => 'signed:payment')
+  const createSandboxEvmX402PaymentSignature = vi.fn(async (_request: unknown) => 'signed:payment')
   const cdpX402RequestFingerprint = vi.fn(() => `sha256:${'f'.repeat(64)}`)
   const readCdpX402PaymentAuthorization = vi.fn((
     _paymentSignature: string,
@@ -84,6 +87,7 @@ const mocks = vi.hoisted(() => {
     prepareRegisteredRouteTransportInvocation,
     invokePreparedRouteTransport,
     invokeProviderConsequenceViaVercel,
+    providerConsequenceX402PaymentCustodyAvailable,
     signRouteTransportCall,
     createCdpEvmX402PaymentSignature,
     createSandboxEvmX402PaymentSignature,
@@ -115,6 +119,7 @@ vi.mock('@/modules/capability-supply/route-transport-runtime', () => ({
 }))
 vi.mock('@/modules/capability-execution/invocation-worker/providerConsequenceBridge', () => ({
   invokeProviderConsequenceViaVercel: mocks.invokeProviderConsequenceViaVercel,
+  providerConsequenceX402PaymentCustodyAvailable: mocks.providerConsequenceX402PaymentCustodyAvailable,
 }))
 vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/server')>()),
@@ -1108,14 +1113,27 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
     invocation: RouteTransportInvocation
     requestDigest: string
   }) => {
-    state.transportCalls += 1
     if (kind !== 'x402') {
+      state.transportCalls += 1
       return options.observation ?? {
         transport: 'http',
         disposition: 'succeeded',
         releaseStarted: true,
         requestDigest: input.requestDigest,
         outputJson: successfulOutputJson,
+      }
+    }
+    const payerCredentialRef = mocks.x402PaymentCredentialRefFromEnvironment()
+    const payerCredential = payerCredentialRef === undefined
+      ? undefined
+      : mocks.credentialFromEnvironment(payerCredentialRef)
+    if (payerCredentialRef === undefined || payerCredential === undefined) {
+      return {
+        transport: 'x402',
+        disposition: 'refused',
+        releaseStarted: false,
+        requestDigest: input.requestDigest,
+        failureCode: 'payment_custody_unavailable',
       }
     }
     const runMutation = (bridgeCtx as { runMutation: (reference: string, args: Record<string, unknown>) => Promise<unknown> }).runMutation
@@ -1152,7 +1170,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
       }],
     }
     try {
-      await runMutation('moneyX402PaymentAttempts:prepareX402PaymentAuthorization', {
+      const preparedAuthorization = await runMutation('moneyX402PaymentAttempts:prepareX402PaymentAuthorization', {
         dispatchRef: dispatch.invocationRef,
         operationRef: dispatch.operationRef,
         inputDigest: dispatch.inputDigest,
@@ -1171,9 +1189,40 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         amountUnits: '1',
         currency: 'USD',
         exponent: 2,
-        credentialRef: providerCredentialRef,
+        credentialRef: payerCredentialRef,
         reservationRef: reservation.reservation?.reservationRef,
       })
+      const paymentSignature = await mocks.createSandboxEvmX402PaymentSignature({
+        challenge,
+        selectedRequirement: challenge.accepts[0],
+        paymentIdentifier: input.invocation.authority.operationKeyDigest,
+        credential: payerCredential,
+      })
+      return await mocks.invokePreparedRouteTransport(
+        { requestDigest: input.requestDigest },
+        {
+          readX402PaymentCredentialRef: async () => payerCredentialRef,
+          prepareX402PaymentAuthorization: async () => preparedAuthorization,
+          readX402PaymentAuthorization: async () => paymentSignature,
+          readX402PaymentAuthorizationByDigest: async () => paymentSignature,
+          markX402PaymentPossiblySubmitted: async (event: Record<string, unknown>) => {
+            await runMutation('moneyX402PaymentAttempts:markX402PaymentPossiblySubmitted', {
+              ...event,
+              dispatchRef: dispatch.invocationRef,
+              effectGeneration: 1,
+            })
+          },
+          observeX402PaymentAttempt: async (event: Record<string, unknown>) => {
+            await runMutation('moneyX402PaymentAttempts:observeX402PaymentAttempt', {
+              ...event,
+              dispatchRef: dispatch.invocationRef,
+              effectGeneration: 1,
+            })
+          },
+          verifyX402Settlement: async () => true,
+          send: async () => new Response('{}', { status: 200 }),
+        },
+      )
     } catch {
       if (options.preparePaymentErrorState !== 'possibly_submitted') throw new Error('unexpected_prepare_failure')
       await runMutation('moneyLedger:finalizeExternalInvocationSpend', {
@@ -1207,25 +1256,6 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         failureCode: 'payment_attempt_reconciliation_required',
       }
     }
-    return options.observation ?? {
-      transport: 'x402',
-      disposition: 'succeeded',
-      releaseStarted: true,
-      requestDigest: input.requestDigest,
-      outputJson: successfulOutputJson,
-      paymentAuthorizationStatus: 'created',
-      paymentSubmissionStatus: 'observed',
-      settlementEvidence: {
-        kind: 'settled',
-        response: {
-          success: true,
-          transaction: '0xworker-settled',
-          network: 'eip155:8453',
-          amount: '10000',
-        },
-        digest: digest('s'),
-      },
-    }
   })
   return { ctx, state }
 }
@@ -1237,6 +1267,7 @@ beforeEach(() => {
   mocks.prepareRegisteredRouteTransportInvocation.mockReset()
   mocks.invokePreparedRouteTransport.mockReset()
   mocks.invokeProviderConsequenceViaVercel.mockReset()
+  mocks.providerConsequenceX402PaymentCustodyAvailable.mockClear()
   mocks.signRouteTransportCall.mockClear()
   mocks.createCdpEvmX402PaymentSignature.mockClear()
   mocks.createSandboxEvmX402PaymentSignature.mockClear()

@@ -33,6 +33,8 @@ vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 const NOW = 2_000_000_000_000
 const REF = secretRef('sec_11111111111111111111111111111111')
 const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
+const PAYMENT_REF = secretRef('sec_22222222222222222222222222222222')
+const PAYMENT_GENERATION = secretGeneration('sgn_22222222222222222222222222222222')
 const CREDENTIAL = 'provider-secret-never-return'
 const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
@@ -196,6 +198,13 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     grantRef: 'grant:test',
     grantGeneration: 3,
     secret: { secretRef: REF, activeGeneration: GENERATION, pointerRevision: 7 },
+    ...(routeInvocation.binding.adapterId === 'x402-fetch:v2'
+      ? { paymentSecret: {
+          secretRef: PAYMENT_REF,
+          activeGeneration: PAYMENT_GENERATION,
+          pointerRevision: 8,
+        } }
+      : {}),
   })
 }
 
@@ -841,6 +850,33 @@ describe('JIT provider consequence boundary', () => {
       failureCode: 'payment_custody_unavailable',
     })
     expect(active.send).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing, malformed, or provider-secret-reused x402 payment pointers before journal or provider I/O', async () => {
+    const routeInvocation = x402Invocation()
+    const canonical = ticket(routeInvocation)
+    for (const paymentSecret of [
+      undefined,
+      { ...canonical.paymentSecret!, secretRef: canonical.secret.secretRef },
+      { ...canonical.paymentSecret!, pointerRevision: 0 },
+      { ...canonical.paymentSecret!, activeGeneration: 'caller-generation' },
+    ]) {
+      const verifiedTicket = {
+        ...canonical,
+        ...(paymentSecret === undefined ? {} : { paymentSecret }),
+      }
+      if (paymentSecret === undefined) Reflect.deleteProperty(verifiedTicket, 'paymentSecret')
+      const active = harness({ routeInvocation, verifiedTicket })
+      await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation }))
+        .resolves.toMatchObject({
+          transport: 'x402',
+          disposition: 'refused',
+          releaseStarted: false,
+          failureCode: 'provider_consequence_ticket_invalid',
+        })
+      expect(active.durableJournal.begin).not.toHaveBeenCalled()
+      expect(active.send).not.toHaveBeenCalled()
+    }
   })
 
   it('runs the existing x402 custody, submission marker, and reconciliation ports inside the JIT callback without retry', async () => {

@@ -16,7 +16,10 @@ import { brokeredProviderAuthorityValidator, createBrokeredX402PaymentCallbacks,
 import { issueProviderLease, providerCredentialReader, providerLeaseAuthorityValidator, settleProviderLease, type ProviderLeaseAuthority } from './lease'
 import { runBrokeredX402Transport } from './brokeredX402'
 import type { InvocationPreparation } from './runPreparation'
-import { invokeProviderConsequenceViaVercel } from './providerConsequenceBridge'
+import {
+  invokeProviderConsequenceViaVercel,
+  providerConsequenceX402PaymentCustodyAvailable,
+} from './providerConsequenceBridge'
 
 type PreparedInvocationRun = Extract<InvocationPreparation, { kind: 'prepared' }>
 
@@ -124,7 +127,7 @@ export async function releaseInvocationRun(
     invocation,
     isX402
       ? connectionAuthority !== undefined && economicRail !== 'brokered_x402'
-        ? () => true
+        ? providerConsequenceX402PaymentCustodyAvailable
         : dispatch.environment === 'production'
         ? () => true
         : () => x402PaymentCredentialRefFromEnvironment() !== undefined

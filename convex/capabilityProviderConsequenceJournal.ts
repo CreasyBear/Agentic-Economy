@@ -46,6 +46,11 @@ const ticketValue = v.object({
     activeGeneration: v.string(),
     pointerRevision: v.number(),
   }),
+  paymentSecret: v.optional(v.object({
+    secretRef: v.string(),
+    activeGeneration: v.string(),
+    pointerRevision: v.number(),
+  })),
 })
 
 const signingSecretValue = v.object({
@@ -74,6 +79,7 @@ export const issueProviderConsequenceTicketArgs = {
   readinessValidUntil: v.number(),
   readinessDigest: v.optional(v.string()),
   signingSecretRef: v.string(),
+  paymentSecretRef: v.optional(v.string()),
   requestedExpiresAt: v.number(),
 } as const
 
@@ -109,6 +115,7 @@ type IssueArgs = {
   readinessValidUntil: number
   readinessDigest?: string
   signingSecretRef: string
+  paymentSecretRef?: string
   requestedExpiresAt: number
 }
 
@@ -139,6 +146,7 @@ type CanonicalTicket = {
   grantRef: string
   grantGeneration: number
   secret: { secretRef: string; activeGeneration: string; pointerRevision: number }
+  paymentSecret?: { secretRef: string; activeGeneration: string; pointerRevision: number }
 }
 
 function unavailable(reason: string) {
@@ -157,6 +165,9 @@ function ticketClaimsDigest(ticket: CanonicalTicket): string {
       grantedScopes: [...ticket.grantedScopes],
       grantedResources: [...ticket.grantedResources],
       secret: { ...ticket.secret },
+      ...(ticket.paymentSecret === undefined
+        ? {}
+        : { paymentSecret: { ...ticket.paymentSecret } }),
     },
   } as StableHashValue)
 }
@@ -193,6 +204,15 @@ function ticketFromRow(row: Doc<'providerConsequenceJournal'>): CanonicalTicket 
       activeGeneration: row.secretGeneration,
       pointerRevision: row.secretPointerRevision,
     },
+    ...(row.paymentSecretRef === undefined
+      || row.paymentSecretGeneration === undefined
+      || row.paymentSecretPointerRevision === undefined
+      ? {}
+      : { paymentSecret: {
+          secretRef: row.paymentSecretRef,
+          activeGeneration: row.paymentSecretGeneration,
+          pointerRevision: row.paymentSecretPointerRevision,
+        } }),
   }
 }
 
@@ -214,6 +234,7 @@ function matchesIssueIdentity(row: Doc<'providerConsequenceJournal'>, args: Issu
     && row.readinessValidUntil === args.readinessValidUntil
     && row.readinessDigest === args.readinessDigest
     && row.signingSecretRef === args.signingSecretRef
+    && row.paymentSecretRef === args.paymentSecretRef
 }
 
 function matchesExistingEffect(
@@ -222,6 +243,7 @@ function matchesExistingEffect(
   admission: Extract<Awaited<ReturnType<typeof beginLeaseEffectHandler>>, { kind: 'admitted' }>,
   customerPointer: Doc<'secretPointers'>,
   signingPointer: Doc<'secretPointers'>,
+  paymentPointer: Doc<'secretPointers'> | null,
 ): boolean {
   return row.commandId === args.commandId
     && row.requestDigest === args.requestDigest
@@ -254,6 +276,10 @@ function matchesExistingEffect(
     && row.signingSecretGeneration === signingPointer.activeGeneration
     && row.signingSecretPointerRevision === signingPointer.revision
     && row.signingAccountRef === signingPointer.owningAccountRef
+    && row.paymentSecretRef === paymentPointer?.secretRef
+    && row.paymentSecretGeneration === paymentPointer?.activeGeneration
+    && row.paymentSecretPointerRevision === paymentPointer?.revision
+    && row.paymentAccountRef === paymentPointer?.owningAccountRef
 }
 
 function canonicalIssueInput(args: IssueArgs): boolean {
@@ -279,6 +305,9 @@ function canonicalIssueInput(args: IssueArgs): boolean {
     && Number.isSafeInteger(args.readinessValidUntil)
     && (args.readinessDigest === undefined || DIGEST.test(args.readinessDigest))
     && SECRET_REF.test(args.signingSecretRef)
+    && (args.adapterId === 'x402-fetch:v2'
+      ? args.paymentSecretRef !== undefined && SECRET_REF.test(args.paymentSecretRef)
+      : args.paymentSecretRef === undefined)
     && Number.isSafeInteger(args.requestedExpiresAt)
 }
 
@@ -315,13 +344,17 @@ export async function issueProviderConsequenceTicketHandler(
     }
     return unavailable('effect_journal_unavailable')
   }
-  const [lease, invocation, signingPointer] = await Promise.all([
+  const [lease, invocation, signingPointer, paymentPointer] = await Promise.all([
     ctx.db.query('capabilityProviderConnectionLeases')
       .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef)).unique(),
     ctx.db.query('capabilityOperationInvocations')
       .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef)).unique(),
     ctx.db.query('secretPointers')
       .withIndex('by_secretRef', (query) => query.eq('secretRef', args.signingSecretRef)).unique(),
+    args.paymentSecretRef === undefined
+      ? Promise.resolve(null)
+      : ctx.db.query('secretPointers')
+          .withIndex('by_secretRef', (query) => query.eq('secretRef', args.paymentSecretRef as string)).unique(),
   ])
   if (lease === null
     || lease.state !== 'active'
@@ -370,6 +403,17 @@ export async function issueProviderConsequenceTicketHandler(
     || !Number.isSafeInteger(signingPointer.revision)
     || customerPointer.revision < 1
     || signingPointer.revision < 1) return unavailable('secret_pointer_unavailable')
+  if (args.adapterId === 'x402-fetch:v2') {
+    if (paymentPointer === null
+      || paymentPointer.owningAccountRef !== signingPointer.owningAccountRef
+      || paymentPointer.secretRef === customerPointer.secretRef
+      || paymentPointer.secretRef === signingPointer.secretRef
+      || !SECRET_GENERATION.test(paymentPointer.activeGeneration)
+      || !Number.isSafeInteger(paymentPointer.revision)
+      || paymentPointer.revision < 1) return unavailable('payment_secret_pointer_unavailable')
+  } else if (paymentPointer !== null) {
+    return unavailable('payment_secret_pointer_unavailable')
+  }
   const expiresAt = Math.min(
     args.requestedExpiresAt,
     now + MAX_TICKET_LIFETIME_MS,
@@ -399,7 +443,7 @@ export async function issueProviderConsequenceTicketHandler(
   if (current !== null && current.state === 'pending' && current.expiresAt <= now) {
     await ctx.db.patch(current._id, { state: 'aborted', abortedAt: now, updatedAt: now })
   } else if (current !== null) {
-    if (!matchesExistingEffect(current, args, admission, customerPointer, signingPointer)) {
+    if (!matchesExistingEffect(current, args, admission, customerPointer, signingPointer, paymentPointer)) {
       return unavailable('effect_journal_identity_mismatch')
     }
     if (current.state === 'started') return { kind: 'started' as const, ticketRef: current.ticketRef }
@@ -458,6 +502,13 @@ export async function issueProviderConsequenceTicketHandler(
       activeGeneration: customerPointer.activeGeneration,
       pointerRevision: customerPointer.revision,
     },
+    ...(paymentPointer === null
+      ? {}
+      : { paymentSecret: {
+          secretRef: paymentPointer.secretRef,
+          activeGeneration: paymentPointer.activeGeneration,
+          pointerRevision: paymentPointer.revision,
+        } }),
   }
   const claimsDigest = ticketClaimsDigest(ticket)
   await ctx.db.insert('providerConsequenceJournal', {
@@ -493,6 +544,14 @@ export async function issueProviderConsequenceTicketHandler(
     secretRef: ticket.secret.secretRef,
     secretGeneration: ticket.secret.activeGeneration,
     secretPointerRevision: ticket.secret.pointerRevision,
+    ...(ticket.paymentSecret === undefined || paymentPointer === null
+      ? {}
+      : {
+          paymentSecretRef: ticket.paymentSecret.secretRef,
+          paymentSecretGeneration: ticket.paymentSecret.activeGeneration,
+          paymentSecretPointerRevision: ticket.paymentSecret.pointerRevision,
+          paymentAccountRef: paymentPointer.owningAccountRef,
+        }),
     signingSecretRef: signingPointer.secretRef,
     signingSecretGeneration: signingPointer.activeGeneration,
     signingSecretPointerRevision: signingPointer.revision,
@@ -740,7 +799,7 @@ function matchingOptionalIdentity(
     && (args.attemptRef === undefined || args.attemptRef === row.attemptRef)
     && (args.effectGeneration === undefined || args.effectGeneration === row.effectGeneration)
     && (args.providerRef === undefined || args.providerRef === row.providerRef)
-    && (args.credentialRef === undefined || args.credentialRef === row.secretRef)
+    && (args.credentialRef === undefined || args.credentialRef === row.paymentSecretRef)
     && (args.operationKeyDigest === undefined || args.operationKeyDigest === row.operationKeyDigest)
     && (args.paymentIdentifier === undefined || args.paymentIdentifier === row.operationKeyDigest)
 }
@@ -761,7 +820,7 @@ async function matchingStoredAttempt(
     && attempt.attemptRef === row.attemptRef
     && attempt.effectGeneration === row.effectGeneration
     && attempt.operationRef === row.operationRef
-    && attempt.credentialRef === row.secretRef
+    && attempt.credentialRef === row.paymentSecretRef
 }
 
 export async function authorizeProviderConsequenceX402RpcHandler(
@@ -776,6 +835,8 @@ export async function authorizeProviderConsequenceX402RpcHandler(
     .withIndex('by_ticketRef', (query) => query.eq('ticketRef', input.ticketRef)).unique()
   if (row === null
     || row.state !== 'started'
+    || row.adapterId !== 'x402-fetch:v2'
+    || row.paymentSecretRef === undefined
     || row.journalTokenDigest !== input.journalTokenDigest
     || !matchingOptionalIdentity(args, row)) return { kind: 'unavailable' as const }
   const postRelease = input.operation === 'observe_attempt'
@@ -798,7 +859,7 @@ export async function authorizeProviderConsequenceX402RpcHandler(
     operationRef: row.operationRef,
     attemptRef: row.attemptRef,
     effectGeneration: row.effectGeneration,
-    credentialRef: row.secretRef,
+    credentialRef: row.paymentSecretRef,
     principalId: invocation.principalId,
     credentialId: invocation.credentialId,
     grantRef: invocation.grantRef,

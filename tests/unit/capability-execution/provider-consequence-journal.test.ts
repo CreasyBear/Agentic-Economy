@@ -47,6 +47,7 @@ const TICKET_REF = 'provider-ticket:test'
 const EFFECT_REF = 'connection-effect:test'
 const CLAIM_REF = `provider-claim:${TICKET_REF}`
 const SECRET_REF = `sec_${'5'.repeat(32)}`
+const PAYMENT_SECRET_REF = `sec_${'6'.repeat(32)}`
 const { getVercelOidcToken } = vi.hoisted(() => ({ getVercelOidcToken: vi.fn() }))
 vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 type Backend = TestConvex<typeof schema>
@@ -102,11 +103,11 @@ async function grant(
   return { grantRef, expiresAt }
 }
 
-async function freshIssueAuthority() {
+async function freshIssueAuthority(adapterId = 'http-json:v1') {
   const backend = convexTestWithMarketComponents()
   const fixture = await publishedBusinessOwner(backend, 'provider-consequence-journal')
   const owner = await canonicalOwner(backend, fixture.businessId)
-  const providerNamespace = 'capability-provider/http-json:v1'
+  const providerNamespace = `capability-provider/${adapterId}`
   const providerAccountRef = 'account:journal'
   await grant(backend, owner, 'a', ['connection:install'], [
     `connection-provider:${providerNamespace}`,
@@ -119,7 +120,7 @@ async function freshIssueAuthority() {
     businessId: fixture.businessId,
     providerRef: 'provider:journal',
     providerAccountRef,
-    adapterId: 'http-json:v1',
+    adapterId,
     credentialRef: SECRET_REF,
     requestedScopes: ['profile:read'],
     grantedScopes: ['profile:read'],
@@ -257,6 +258,25 @@ async function freshIssueAuthority() {
         occurredAt: NOW,
       },
     })
+    await ctx.db.insert('secretPointers', {
+      secretRef: PAYMENT_SECRET_REF,
+      owningAccountRef: `acc_${'9'.repeat(32)}`,
+      activeGeneration: `sgn_${'6'.repeat(32)}`,
+      revision: 5,
+      createdAt: NOW,
+      updatedAt: NOW,
+      lastAction: {
+        operation: 'provision',
+        snapshotRef: 'snapshot:payment',
+        accountRef: `acc_${'9'.repeat(32)}`,
+        actorPrincipalRef: `prn_${'9'.repeat(32)}`,
+        grantRef: 'grant:payment',
+        grantGeneration: 1,
+        correlationRef: 'correlation:payment',
+        idempotencyRef: 'idempotency:payment',
+        occurredAt: NOW,
+      },
+    })
   })
   const args = issueArgs({
     commandId: 'provider-effect:invocation:journal:attempt:journal:1',
@@ -339,6 +359,10 @@ function journalRow(overrides: Record<string, unknown> = {}) {
     secretRef: SECRET_REF,
     secretGeneration: `sgn_${'3'.repeat(32)}`,
     secretPointerRevision: 4,
+    paymentSecretRef: PAYMENT_SECRET_REF,
+    paymentSecretGeneration: `sgn_${'6'.repeat(32)}`,
+    paymentSecretPointerRevision: 5,
+    paymentAccountRef: `acc_${'9'.repeat(32)}`,
     signingSecretRef: `sec_${'8'.repeat(32)}`,
     signingSecretGeneration: `sgn_${'9'.repeat(32)}`,
     signingSecretPointerRevision: 2,
@@ -364,6 +388,9 @@ function claimArgs(overrides: Record<string, unknown> = {}) {
 }
 
 function issueArgs(overrides: Record<string, unknown> = {}) {
+  const adapterId = typeof overrides.adapterId === 'string'
+    ? overrides.adapterId
+    : 'x402-fetch:v2'
   return {
     ticketRef: TICKET_REF,
     commandId: 'provider-effect:invocation:test:attempt:test:1',
@@ -377,13 +404,14 @@ function issueArgs(overrides: Record<string, unknown> = {}) {
     effectGeneration: 1,
     leaseRef: 'lease:test',
     providerRef: 'provider:test',
-    adapterId: 'x402-fetch:v2',
+    adapterId,
     authorityDigest: DIGEST('6'),
     grantedScopes: ['provider:invoke'],
     grantedResources: ['operation:test'],
     readinessValidUntil: NOW + 20_000,
     readinessDigest: DIGEST('7'),
     signingSecretRef: `sec_${'8'.repeat(32)}`,
+    ...(adapterId === 'x402-fetch:v2' ? { paymentSecretRef: PAYMENT_SECRET_REF } : {}),
     requestedExpiresAt: NOW + 10_000,
     ...overrides,
   }
@@ -856,6 +884,9 @@ describe('provider consequence durable journal', () => {
       { actorPrincipalRef: `prn_${'0'.repeat(32)}` }, { grantRef: 'grant:other' },
       { grantGeneration: 99 }, { secretRef: `sec_${'0'.repeat(32)}` },
       { secretGeneration: `sgn_${'0'.repeat(32)}` }, { secretPointerRevision: 99 },
+      { paymentSecretRef: `sec_${'0'.repeat(32)}` },
+      { paymentSecretGeneration: `sgn_${'0'.repeat(32)}` },
+      { paymentSecretPointerRevision: 99 }, { paymentAccountRef: `acc_${'0'.repeat(32)}` },
       { signingSecretRef: `sec_${'0'.repeat(32)}` },
       { signingSecretGeneration: `sgn_${'0'.repeat(32)}` },
       { signingSecretPointerRevision: 99 }, { signingAccountRef: `acc_${'0'.repeat(32)}` },
@@ -919,6 +950,66 @@ describe('provider consequence durable journal', () => {
         ctx,
         issueArgs(override),
       ))).resolves.toEqual({ kind: 'unavailable', reason: 'ticket_input_invalid' })
+    }
+  })
+
+  it('requires a distinct platform payment pointer only for x402 before effect admission', async () => {
+    const { backend, args } = await freshIssueAuthority('x402-fetch:v2')
+    for (const paymentSecretRef of [SECRET_REF, args.signingSecretRef]) {
+      await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, {
+        ...args,
+        paymentSecretRef,
+      }))).resolves.toEqual({ kind: 'unavailable', reason: 'payment_secret_pointer_unavailable' })
+    }
+    const { paymentSecretRef: _paymentSecretRef, ...missingPaymentPointer } = args
+    await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(
+      ctx,
+      missingPaymentPointer,
+    ))).resolves.toEqual({ kind: 'unavailable', reason: 'ticket_input_invalid' })
+    await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, {
+      ...args,
+      adapterId: 'http-json:v1',
+      paymentSecretRef: PAYMENT_SECRET_REF,
+    }))).resolves.toEqual({ kind: 'unavailable', reason: 'ticket_input_invalid' })
+    await expect(backend.run(async (ctx) => ctx.db.query('providerConsequenceJournal').collect()))
+      .resolves.toHaveLength(0)
+  })
+
+  it('pins admitted payment pointer generation, revision, and platform account across live pointer changes', async () => {
+    for (const substitution of [
+      { activeGeneration: `sgn_${'0'.repeat(32)}` },
+      { revision: 99 },
+      { owningAccountRef: `acc_${'0'.repeat(32)}` },
+    ]) {
+      const { backend, args } = await freshIssueAuthority('x402-fetch:v2')
+      await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, args)))
+        .resolves.toMatchObject({
+          kind: 'issued',
+          ticket: {
+            paymentSecret: {
+              secretRef: PAYMENT_SECRET_REF,
+              activeGeneration: `sgn_${'6'.repeat(32)}`,
+              pointerRevision: 5,
+            },
+          },
+        })
+      await backend.run(async (ctx) => {
+        const pointer = await ctx.db.query('secretPointers')
+          .withIndex('by_secretRef', (query) => query.eq('secretRef', PAYMENT_SECRET_REF)).unique()
+        if (pointer === null) throw new Error('payment_pointer_fixture_missing')
+        await ctx.db.patch(pointer._id, substitution)
+      })
+      await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, args)))
+        .resolves.toMatchObject({
+          kind: 'issued',
+          ticket: {
+            paymentSecret: {
+              secretRef: PAYMENT_SECRET_REF,
+              activeGeneration: `sgn_${'6'.repeat(32)}`,
+              pointerRevision: 5,
+            },
+          },
+        })
     }
   })
 
@@ -1256,7 +1347,7 @@ describe('provider consequence durable journal', () => {
       attemptRef: 'attempt:test',
       effectGeneration: 1,
       providerRef: 'provider:test',
-      credentialRef: SECRET_REF,
+      credentialRef: PAYMENT_SECRET_REF,
     }
 
     await expect(backend.run(async (ctx) => authorizeProviderConsequenceX402RpcHandler(ctx, {
@@ -1267,7 +1358,7 @@ describe('provider consequence durable journal', () => {
     }))).resolves.toMatchObject({
       kind: 'authorized',
       principalId: `prn_${'2'.repeat(32)}`,
-      credentialRef: SECRET_REF,
+      credentialRef: PAYMENT_SECRET_REF,
       environment: 'sandbox',
     })
     for (const hostile of [
@@ -1288,7 +1379,11 @@ describe('provider consequence durable journal', () => {
     }
     const persisted = await readJournal(backend)
     expect(JSON.stringify(persisted)).not.toContain(JOURNAL_TOKEN)
-    expect(persisted).toMatchObject({ secretRef: SECRET_REF, journalTokenDigest: TOKEN_DIGEST })
+    expect(persisted).toMatchObject({
+      secretRef: SECRET_REF,
+      paymentSecretRef: PAYMENT_SECRET_REF,
+      journalTokenDigest: TOKEN_DIGEST,
+    })
   })
 
   it('fails closed for malformed, expired, unstored, and unbound x402 callback identity', async () => {
