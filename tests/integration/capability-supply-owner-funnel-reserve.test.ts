@@ -13,8 +13,8 @@ import {
 describe('owner publish reservation authority', () => {
   it('requires a verified owner principal and rejects changed material before draft effects', async () => {
     const backend = convexTest(schema, modules)
-    const { businessId } = await createPublishedBusinessOwner(backend, 'reservation-owner')
-    const principal = await seedSupplyAgentPrincipal(backend, 'user_reservation-owner', 'one')
+    const { businessId, canonicalAccountRef } = await createPublishedBusinessOwner(backend, 'reservation-owner')
+    const principal = await seedSupplyAgentPrincipal(backend, canonicalAccountRef, 'one')
     const command = {
       businessId,
       offeringRef: 'offering:reservation',

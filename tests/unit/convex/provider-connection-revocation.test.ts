@@ -99,7 +99,7 @@ const createCommand = {
   providerRef: 'provider:cleanup-binding',
   providerAccountRef: 'account:cleanup-binding',
   adapterId: 'http-json:v1',
-  credentialRef: 'env:PROVIDER_SECRET',
+  credentialRef: `sec_${'6'.repeat(32)}`,
   requestedScopes: ['profile:read'],
   grantedScopes: ['profile:read'],
   requestedResources: ['account:cleanup-binding'],
@@ -119,13 +119,109 @@ describe('provider cleanup enqueue binding', () => {
       evidenceRefs: ['evidence:revoke'],
     }, 2_000)
     if (revoked.kind !== 'applied') throw new Error('provider connection revoke failed')
+    const canonicalConnectionRef = `con_${'c'.repeat(32)}`
+    const accountRef = `acc_${'1'.repeat(32)}`
+    const principalRef = `prn_${'2'.repeat(32)}`
+    const ownershipRef = `own_${'3'.repeat(32)}`
+    const revokeGrantRef = `grt_${'4'.repeat(32)}`
+    const installGrantRef = `grt_${'5'.repeat(32)}`
+    const secretRef = createCommand.credentialRef
     const connection = {
       ...revoked.connection,
+      canonicalConnectionRef,
+      owningAccountRef: accountRef,
+      installedByPrincipalRef: principalRef,
+      authorityGrantRef: revokeGrantRef,
+      authorityGrantGeneration: 1,
+      canonicalConnectionGeneration: 2,
+      secretRef,
       _id: 'connection:cleanup-binding:row',
       _creationTime: 1_000,
     }
     const db = new MemoryDb()
     db.seed('capabilityProviderConnections', connection)
+    db.seed('connections', {
+      _id: 'canonical:connection:cleanup-binding',
+      _creationTime: 1_000,
+      connectionRef: canonicalConnectionRef,
+      owningAccountRef: accountRef,
+      installedByPrincipalRef: principalRef,
+      providerNamespace: 'provider.test',
+      secretRef,
+      installedExternalState: { kind: 'known', value: 'ready' },
+      externalState: { kind: 'known', value: 'revoked' },
+      lifecycle: 'revoked',
+      generation: 2,
+      revision: 2,
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      installAction: {
+        operation: 'install',
+        snapshotRef: `das_${'7'.repeat(32)}`,
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        grantRef: installGrantRef,
+        grantGeneration: 1,
+        correlationRef: 'provider-connection:install:test',
+        idempotencyRef: 'provider-connection:install:test',
+        resourceRefs: ['connection-provider:provider.test', `secret:${secretRef}`],
+        occurredAt: 1_000,
+      },
+      action: {
+        operation: 'revoke',
+        snapshotRef: `das_${'8'.repeat(32)}`,
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        grantRef: revokeGrantRef,
+        grantGeneration: 1,
+        correlationRef: 'provider-connection:revoke:test',
+        idempotencyRef: 'provider-connection:revoke:test',
+        resourceRefs: [`connection:${canonicalConnectionRef}`],
+        occurredAt: 2_000,
+      },
+    })
+    db.seed('principals', {
+      _id: 'principal:cleanup-binding',
+      principalRef,
+      lifecycle: 'active',
+    })
+    db.seed('accounts', {
+      _id: 'account:cleanup-binding',
+      accountRef,
+      lifecycle: 'active',
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+    })
+    db.seed('accountOwnerships', {
+      _id: 'ownership:cleanup-binding',
+      ownershipRef,
+      accountRef,
+      ownerPrincipalRef: principalRef,
+      lifecycle: 'active',
+    })
+    db.seed('authorityDelegationGrants', {
+      _id: 'grant:cleanup-binding',
+      _creationTime: 1,
+      grantRef: revokeGrantRef,
+      accountRef,
+      actorPrincipalRef: principalRef,
+      subjectPrincipalRef: principalRef,
+      scopes: ['connection:revoke'],
+      resourceRefs: [`connection:${canonicalConnectionRef}`],
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: 4_000_000_000_000,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 1,
+      createdBy: {
+        actorPrincipalRef: principalRef,
+        activeAccountRef: accountRef,
+        correlationRef: 'test:cleanup:grant',
+        idempotencyRef: 'test:cleanup:grant',
+      },
+    })
     const scheduled = await enqueueCleanupWork({ db } as never, connection._id as never, connection, {
         connectionRef: connection.connectionRef,
         commandId: 'command:revoke:cleanup-binding',
