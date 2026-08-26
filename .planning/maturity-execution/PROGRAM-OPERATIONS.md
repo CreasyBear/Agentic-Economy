@@ -96,6 +96,12 @@ An unsupported decision is a `FIRST-PRINCIPLES EXCEPTION`; it requires an ADR th
 proves the established patterns are unsuitable and must survive fresh design
 acceptance. Unmarked or uncited invention blocks implementation.
 
+Verification architecture follows the same rule. Do not build a general parser,
+control-flow engine, policy evaluator, workflow engine or test harness when a
+maintained analyzer or framework-native harness owns the problem. Use primary-source
+research to select the mature mechanism, then keep AE-specific work to bounded
+configuration, declarative queries, adapters and hostile tests at the existing seam.
+
 Each leaf performs the four Unlazy passes:
 
 1. Complete implementation without production placeholders.
