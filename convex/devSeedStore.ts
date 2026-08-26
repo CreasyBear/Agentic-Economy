@@ -12,13 +12,17 @@ export type DevSeedPersistResult = {
 export async function persistDevSeedCatalogState(
   db: GenericDatabaseWriter<DataModel>,
   bundle: DevSeedCatalogBundle,
+  canonicalOwnerAuthority: Readonly<{
+    principalRef: string
+    accountRef: string
+  }>,
 ): Promise<DevSeedPersistResult> {
   const owner = bundle.state.owners.find((candidate) => candidate.clerkUserId === bundle.ownerClerkUserId)
   if (owner === undefined) {
     throw new Error('Dev seed owner was not found in module state.')
   }
 
-  const ownerId = await upsertOwner(db, owner)
+  const ownerId = await upsertOwner(db, owner, canonicalOwnerAuthority)
   const businessIdsBySlug: Record<string, Id<'businesses'>> = {}
 
   for (const business of bundle.state.businesses) {
@@ -53,6 +57,10 @@ export async function persistDevSeedCatalogState(
 async function upsertOwner(
   db: GenericDatabaseWriter<DataModel>,
   owner: DevSeedCatalogBundle['state']['owners'][number],
+  canonicalOwnerAuthority: Readonly<{
+    principalRef: string
+    accountRef: string
+  }>,
 ): Promise<Id<'owners'>> {
   const existing = await db
     .query('owners')
@@ -60,6 +68,8 @@ async function upsertOwner(
     .unique()
   const patch = {
     clerkUserId: owner.clerkUserId,
+    canonicalPrincipalRef: canonicalOwnerAuthority.principalRef,
+    canonicalAccountRef: canonicalOwnerAuthority.accountRef,
     ...(owner.displayName === undefined ? {} : { displayName: owner.displayName }),
     ...(owner.emailHash === undefined ? {} : { emailHash: owner.emailHash }),
     updatedAt: owner.updatedAt,
@@ -67,6 +77,13 @@ async function upsertOwner(
 
   if (existing === null) {
     return db.insert('owners', { ...patch, createdAt: owner.createdAt })
+  }
+
+  if ((existing.canonicalPrincipalRef !== undefined
+      && existing.canonicalPrincipalRef !== canonicalOwnerAuthority.principalRef)
+    || (existing.canonicalAccountRef !== undefined
+      && existing.canonicalAccountRef !== canonicalOwnerAuthority.accountRef)) {
+    throw new Error('Dev seed owner canonical authority conflicts with persisted state.')
   }
 
   await db.patch(existing._id, patch)

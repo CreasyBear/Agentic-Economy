@@ -21,8 +21,6 @@ import {
 } from './catalog'
 import {
   admitDevSeedCatalogAuthority,
-  DEV_SEED_CATALOG_ACCOUNT_REF,
-  DEV_SEED_CATALOG_PRINCIPAL_REF,
   reviseBusinessOfferingCommand,
   upsertOfferingAccessPathCommand,
 } from './catalogOfferingMutations'
@@ -45,13 +43,12 @@ export const seedDevCatalog = internalMutation({
     businessIdsBySlug: v.record(v.string(), v.string()),
   }),
   handler: async (ctx): Promise<SeedDevCatalogResult> => {
-    await admitDevSeedCatalogAuthority(ctx, 'seedDevCatalog')
+    const authority = await admitDevSeedCatalogAuthority(ctx, 'seedDevCatalog')
     // Reconcile existing capability publications before catalog and offering ingest.
     const bundle = buildDevSeedCatalogState(DEV_SEED_BUSINESS_FIXTURES)
-    const result = await persistDevSeedCatalogState(ctx.db, bundle)
-    await ctx.db.patch(result.ownerId, {
-      canonicalPrincipalRef: DEV_SEED_CATALOG_PRINCIPAL_REF,
-      canonicalAccountRef: DEV_SEED_CATALOG_ACCOUNT_REF,
+    const result = await persistDevSeedCatalogState(ctx.db, bundle, {
+      principalRef: authority.actorPrincipalRef,
+      accountRef: authority.accountRef,
     })
     let offeringSeed: {
       processed: number
