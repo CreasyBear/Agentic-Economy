@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { AeFactList, type AeFact } from "@/components/ae/data/AeFactList";
+import type { AeFact } from "@/components/ae/data/AeFactList";
 import { AeRecordSheet } from "@/components/ae/layout/AeRecordSheet";
 import {
   AeOperatorSortableHeader,
