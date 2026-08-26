@@ -53,6 +53,10 @@ export type {
   DurableRecoveryPersistence,
   DurableRecoverySession,
   ProductionRecoveryServiceOptions,
+  RecoveryApprovalIntent,
+  RecoveryApprovalVerificationRequest,
+  RecoveryApprovalVerifierPort,
+  TrustedRecoveryApprovalAttestation,
 } from './production-support'
 export {
   recoveryActionValue,
