@@ -11,12 +11,36 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   admitPublication,
   capabilityPublicationInput,
+  installCanonicalProviderConnectionFixture,
   operationContext,
   ownerMaintenanceArgs,
   preparedPublicationArgs,
-  registerProviderConnection,
+  providerAuthority,
   seedCatalogOffering,
 } from './capability-publication-harness'
+
+async function installCurrentProviderConnection(
+  backend: ReturnType<typeof convexTestWithMarketComponents>,
+  businessId: Parameters<typeof installCanonicalProviderConnectionFixture>[1]['businessId'],
+  suffix: string,
+) {
+  const authority = providerAuthority(suffix)
+  const result = await installCanonicalProviderConnectionFixture(backend, {
+    businessId,
+    ...authority,
+    providerAccountRef: `account:capability-publication:${suffix}`,
+    adapterId: 'http-json:v1',
+    secretRef: null,
+    scopes: [`capability:capability-publication:${suffix}`],
+    resources: [`resource:capability-publication:${suffix}`],
+    evidenceRefs: [`test:provider-connection:${suffix}`],
+    commandId: `command:create:capability-publication:${suffix}`,
+  })
+  if (result.kind !== 'applied') {
+    throw new Error(`provider_connection_fixture_${result.kind}`)
+  }
+  return result.connection
+}
 
 describe('capability publication owner', () => {
   it('preserves canonical owner catalog and editor reads', async () => {
@@ -47,7 +71,7 @@ describe('capability publication owner', () => {
       'user_capability_publication_observer',
     )
     const input = capabilityPublicationInput(businessId, 'lifecycle-one')
-    await registerProviderConnection(backend, businessId, 'lifecycle-one')
+    await installCurrentProviderConnection(backend, businessId, 'lifecycle-one')
     const published = await owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(backend, input),
@@ -154,7 +178,7 @@ describe('capability publication owner', () => {
       'maintenance-replay',
     )
     await seedCatalogOffering(backend, businessId, 'maintenance-replay')
-    await registerProviderConnection(backend, businessId, 'maintenance-replay')
+    await installCurrentProviderConnection(backend, businessId, 'maintenance-replay')
     const published = await owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(
