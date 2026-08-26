@@ -26,6 +26,7 @@ import {
   type CanonicalProviderConsequenceTicket,
   type JitProviderX402RuntimeFactory,
   type ProviderConsequenceJournal,
+  type ProviderConsequenceJsonValue,
 } from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
 import { readX402EvmReceipt } from '@/modules/capability-execution/invocation-worker/x402Settlement'
 import {
@@ -41,6 +42,13 @@ import {
 const MAX_BODY_BYTES = 512 * 1024
 const JOURNAL_TOKEN = /^[A-Za-z0-9_-]{43,128}$/u
 const SIGNED_TICKET = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
+
+function isJsonValue(value: unknown): value is ProviderConsequenceJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  return isRecord(value) && Object.values(value).every(isJsonValue)
+}
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -251,7 +259,7 @@ async function postConvex(
   path: string,
   token: string,
   body: unknown,
-): Promise<unknown> {
+): Promise<ProviderConsequenceJsonValue> {
   const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const response = await sendGuardedHttpRequest(new Request(`${origin}${path}`, {
     method: 'POST',
@@ -259,26 +267,30 @@ async function postConvex(
     body: JSON.stringify(body),
   }), MAX_BODY_BYTES)
   const value: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) throw new Error('provider_consequence_convex_unavailable')
+  if (!response.ok || !isJsonValue(value)) throw new Error('provider_consequence_convex_unavailable')
   return value
 }
 
 function journal(request: ConsequenceRequest, origin: string): ProviderConsequenceJournal {
   const { ticket, journalToken } = request
   return {
-    begin: async (input) => await postConvex(
-      origin,
-      '/internal/provider-consequence/journal/begin',
-      journalToken,
-      {
+    begin: async (input) => {
+      const result = await postConvex(
+        origin,
+        '/internal/provider-consequence/journal/begin',
+        journalToken,
+        {
         ticketRef: input.ticketRef,
         effectRef: input.effectRef,
         requestDigest: input.requestDigest,
         invocationDigest: input.invocationDigest,
         ticketClaimsDigest: input.ticketClaimsDigest,
         expiresAt: input.expiresAt,
-      },
-    ),
+        },
+      )
+      if (!isRecord(result)) throw new Error('provider_consequence_journal_invalid')
+      return result
+    },
     complete: async ({ claimRef, observation }) => {
       const result = await postConvex(
         origin,
@@ -305,7 +317,7 @@ async function x402Rpc(
   origin: string,
   operation: string,
   args: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<ProviderConsequenceJsonValue | undefined> {
   const result = await postConvex(
     origin,
     '/internal/provider-consequence/x402',

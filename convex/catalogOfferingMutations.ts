@@ -41,9 +41,12 @@ import {
 import { compareExactAmounts, exactAmountSchema, rescaleExactAmount } from '../src/modules/money/public'
 import {
   accountRef,
+  membershipRef,
+  ownershipRef,
   principalRef,
   WorkloadContextAdmission,
   type Account,
+  type AccountActionContext,
   type AccountOwnership,
   type AccountRef,
   type Membership,
@@ -231,21 +234,21 @@ class DevSeedCatalogWorkloadStore implements WorkloadContextStore {
     const row = await this.ctx.db.query('principals')
       .withIndex('by_principalRef', (query) => query.eq('principalRef', ref))
       .unique()
-    return row === null ? undefined : row as unknown as Principal
+    return row === null ? undefined : workloadPrincipalFromRow(row)
   }
 
   async getAccount(ref: AccountRef): Promise<Account | undefined> {
     const row = await this.ctx.db.query('accounts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', ref))
       .unique()
-    return row === null ? undefined : row as unknown as Account
+    return row === null ? undefined : workloadAccountFromRow(row)
   }
 
   async getOwnership(account: Account): Promise<AccountOwnership | undefined> {
     const row = await this.ctx.db.query('accountOwnerships')
       .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
       .unique()
-    return row === null ? undefined : row as unknown as AccountOwnership
+    return row === null ? undefined : workloadOwnershipFromRow(row)
   }
 
   async getActiveMembership(ref: AccountRef, principal: PrincipalRef): Promise<Membership | undefined> {
@@ -255,8 +258,89 @@ class DevSeedCatalogWorkloadStore implements WorkloadContextStore {
         .eq('memberPrincipalRef', principal)
         .eq('lifecycle', 'active'))
       .unique()
-    return row === null ? undefined : row as unknown as Membership
+    return row === null ? undefined : workloadMembershipFromRow(row)
   }
+}
+
+function workloadPrincipalFromRow(row: Doc<'principals'>): Principal {
+  return Object.freeze({
+    principalRef: principalRef(row.principalRef),
+    kind: row.kind,
+    displayName: row.displayName,
+    lifecycle: row.lifecycle,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    ...(row.mergedIntoPrincipalRef === undefined
+      ? {}
+      : { mergedIntoPrincipalRef: principalRef(row.mergedIntoPrincipalRef) }),
+  })
+}
+
+function workloadAccountFromRow(row: Doc<'accounts'>): Account {
+  return Object.freeze({
+    accountRef: accountRef(row.accountRef),
+    displayName: row.displayName,
+    lifecycle: row.lifecycle,
+    recoveryPolicy: Object.freeze({ ...row.recoveryPolicy }),
+    creationActorPrincipalRef: principalRef(row.creationActorPrincipalRef),
+    creationIdempotencyRef: row.creationIdempotencyRef,
+    initialOwnershipRef: ownershipRef(row.initialOwnershipRef),
+    currentOwnershipRef: ownershipRef(row.currentOwnershipRef),
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastAction: workloadActionContextFromRow(row.lastAction),
+  })
+}
+
+function workloadOwnershipFromRow(row: Doc<'accountOwnerships'>): AccountOwnership {
+  return Object.freeze({
+    ownershipRef: ownershipRef(row.ownershipRef),
+    accountRef: accountRef(row.accountRef),
+    ownerPrincipalRef: principalRef(row.ownerPrincipalRef),
+    lifecycle: row.lifecycle,
+    changeKind: row.changeKind,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    createdBy: workloadActionContextFromRow(row.createdBy),
+    ...(row.predecessorOwnershipRef === undefined
+      ? {}
+      : { predecessorOwnershipRef: ownershipRef(row.predecessorOwnershipRef) }),
+    ...(row.successionAuthorizationRef === undefined
+      ? {}
+      : { successionAuthorizationRef: row.successionAuthorizationRef }),
+    ...(row.endedAt === undefined ? {} : { endedAt: row.endedAt }),
+    ...(row.endedBy === undefined ? {} : { endedBy: workloadActionContextFromRow(row.endedBy) }),
+    ...(row.successorOwnershipRef === undefined
+      ? {}
+      : { successorOwnershipRef: ownershipRef(row.successorOwnershipRef) }),
+  })
+}
+
+function workloadMembershipFromRow(row: Doc<'memberships'>): Membership {
+  return Object.freeze({
+    membershipRef: membershipRef(row.membershipRef),
+    accountRef: accountRef(row.accountRef),
+    memberPrincipalRef: principalRef(row.memberPrincipalRef),
+    lifecycle: row.lifecycle,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    createdBy: workloadActionContextFromRow(row.createdBy),
+    ...(row.endedAt === undefined ? {} : { endedAt: row.endedAt }),
+    ...(row.endedBy === undefined ? {} : { endedBy: workloadActionContextFromRow(row.endedBy) }),
+  })
+}
+
+function workloadActionContextFromRow(
+  row: Doc<'accounts'>['lastAction'],
+): AccountActionContext {
+  return Object.freeze({
+    actorPrincipalRef: principalRef(row.actorPrincipalRef),
+    activeAccountRef: accountRef(row.activeAccountRef),
+    correlationRef: row.correlationRef,
+    idempotencyRef: row.idempotencyRef,
+  })
 }
 
 export async function admitDevSeedCatalogAuthority(
@@ -303,7 +387,8 @@ export async function admitDevSeedCatalogAuthority(
     && grant.scopes.includes(DEV_SEED_CATALOG_SCOPE)
     && resources.every((resource) => grant.resourceRefs.includes(resource)))
   if (matching.length !== 1) throw new DevSeedCatalogAuthorityError()
-  const grant = matching[0]!
+  const [grant] = matching
+  if (grant === undefined) throw new DevSeedCatalogAuthorityError()
   const digest = canonicalDigest({ operationKey, businessId: businessId ?? null, nonce })
   const snapshot = await new DelegationService(
     createConvexDelegationStore(ctx),

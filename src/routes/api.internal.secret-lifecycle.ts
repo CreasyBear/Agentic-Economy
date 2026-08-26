@@ -30,6 +30,13 @@ const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
 const OPAQUE_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 
 type LifecycleAction = 'provision' | 'rotate' | 'reconcile'
+type SecretLifecycleJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly SecretLifecycleJsonValue[]
+  | Readonly<{ [key: string]: SecretLifecycleJsonValue }>
 type SecretPointerAuthority = Readonly<{
   operation: LifecycleAction
   snapshotRef: ReturnType<typeof delegationSnapshotRef>
@@ -73,6 +80,47 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   const keys = Object.keys(value)
   return keys.length === expected.length
     && expected.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+}
+
+function isJsonValue(value: unknown): value is SecretLifecycleJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  return isRecord(value) && Object.values(value).every(isJsonValue)
+}
+
+function parseLifecycleRecord(value: SecretLifecycleJsonValue): SecretLifecycleRecord | undefined {
+  if (!isRecord(value)) return undefined
+  const expected = value.previousGeneration === undefined
+    ? ['operationRef', 'idempotencyRef', 'operation', 'secretRef', 'targetGeneration', 'previousRevision', 'state', 'createdAt', 'updatedAt']
+    : ['operationRef', 'idempotencyRef', 'operation', 'secretRef', 'targetGeneration', 'previousGeneration', 'previousRevision', 'state', 'createdAt', 'updatedAt']
+  if (!exactKeys(value, expected)
+    || typeof value.operationRef !== 'string' || !OPAQUE_REF_PATTERN.test(value.operationRef)
+    || typeof value.idempotencyRef !== 'string' || !OPAQUE_REF_PATTERN.test(value.idempotencyRef)
+    || (value.operation !== 'provision' && value.operation !== 'rotate')
+    || !['prepared', 'active', 'failed_validation', 'external_effect_unknown', 'pointer_conflict'].includes(String(value.state))
+    || !Number.isSafeInteger(value.previousRevision) || Number(value.previousRevision) < 0
+    || !Number.isSafeInteger(value.createdAt) || Number(value.createdAt) < 0
+    || !Number.isSafeInteger(value.updatedAt) || Number(value.updatedAt) < Number(value.createdAt)) return undefined
+  try {
+    const previousGeneration = value.previousGeneration === undefined
+      ? undefined
+      : secretGeneration(String(value.previousGeneration))
+    return Object.freeze({
+      operationRef: value.operationRef,
+      idempotencyRef: value.idempotencyRef,
+      operation: value.operation,
+      secretRef: secretRef(String(value.secretRef)),
+      targetGeneration: secretGeneration(String(value.targetGeneration)),
+      ...(previousGeneration === undefined ? {} : { previousGeneration }),
+      previousRevision: Number(value.previousRevision),
+      state: value.state as SecretLifecycleRecord['state'],
+      createdAt: Number(value.createdAt),
+      updatedAt: Number(value.updatedAt),
+    })
+  } catch {
+    return undefined
+  }
 }
 
 function required(environment: StringEnvironment, name: string): string {
@@ -220,7 +268,7 @@ async function rpc(
   environment: StringEnvironment,
   operation: string,
   args: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<SecretLifecycleJsonValue> {
   const { sendGuardedHttpRequest } = await import('@/modules/network-guard/server')
   const response = await sendGuardedHttpRequest(new Request(
     `${convexSiteOrigin(environment)}/internal/secret-lifecycle`,
@@ -235,7 +283,7 @@ async function rpc(
     },
   ), 512 * 1024)
   const body: unknown = await response.json().catch(() => undefined)
-  if (!response.ok || !isRecord(body) || body.kind !== 'ok') {
+  if (!response.ok || !isRecord(body) || body.kind !== 'ok' || !isJsonValue(body.result)) {
     throw new SecretLifecycleError('secret_lifecycle_ambiguous')
   }
   return body.result
@@ -250,7 +298,10 @@ function remotePersistence(environment: StringEnvironment, authority: SecretPoin
   const journal: SecretLifecycleJournal = Object.freeze({
     getByIdempotency: async (idempotencyRef) => {
       const result = await call('journal_read', { idempotencyRef })
-      return result === null ? undefined : result as SecretLifecycleRecord
+      if (result === null) return undefined
+      const record = parseLifecycleRecord(result)
+      if (record === undefined) throw new SecretLifecycleError('secret_lifecycle_ambiguous')
+      return record
     },
     insertPrepared: async (record) => { await call('journal_insert', { record }) },
     replace: async (record, expectedState) => {
@@ -275,7 +326,12 @@ function remotePersistence(environment: StringEnvironment, authority: SecretPoin
       })
     },
     advanceActive: async (request: SecretPointerAdvanceRequest) => {
-      await call('pointer_advance', request as unknown as Record<string, unknown>)
+      await call('pointer_advance', {
+        secretRef: request.secretRef,
+        expectedActiveGeneration: request.expectedActiveGeneration,
+        expectedRevision: request.expectedRevision,
+        newGeneration: request.newGeneration,
+      })
     },
   })
   return Object.freeze({ journal, pointerControl })
@@ -318,7 +374,9 @@ export async function handleSecretLifecycleRequest(
       }).reconcile({ idempotencyRef: input.idempotencyRef })
       return noStore({ kind: 'active', result }, 200)
     }
-    const material = decodeMaterial(input.materialBase64!)
+    const materialBase64 = input.materialBase64
+    if (materialBase64 === undefined) return noStore({ kind: 'unavailable' }, 400)
+    const material = decodeMaterial(materialBase64)
     try {
       const expectedDigest = await sha256(material)
       const service = new ProductionSecretLifecycleService({

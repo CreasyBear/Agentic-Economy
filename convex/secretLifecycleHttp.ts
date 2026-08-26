@@ -62,7 +62,12 @@ async function channelAuthenticated(request: Request): Promise<boolean> {
   if (supplied === undefined || configured === undefined || !TOKEN_PATTERN.test(configured)) return false
   const [left, right] = await Promise.all([digest(supplied), digest(configured)])
   let mismatch = left.byteLength ^ right.byteLength
-  for (let index = 0; index < left.byteLength; index += 1) mismatch |= left[index]! ^ right[index]!
+  for (let index = 0; index < left.byteLength; index += 1) {
+    const leftByte = left[index]
+    const rightByte = right[index]
+    if (leftByte === undefined || rightByte === undefined) return false
+    mismatch |= leftByte ^ rightByte
+  }
   return mismatch === 0
 }
 

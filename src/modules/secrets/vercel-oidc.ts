@@ -111,7 +111,9 @@ export class VercelOidcIdentityTokenProvider implements OidcIdentityTokenProvide
 
     let claims: unknown
     try {
-      claims = JSON.parse(Buffer.from(segments[1]!, 'base64url').toString('utf8')) as unknown
+      const encodedClaims = segments.at(1)
+      if (encodedClaims === undefined) throw authenticationFailure()
+      claims = JSON.parse(Buffer.from(encodedClaims, 'base64url').toString('utf8')) as unknown
     } catch {
       throw authenticationFailure()
     }

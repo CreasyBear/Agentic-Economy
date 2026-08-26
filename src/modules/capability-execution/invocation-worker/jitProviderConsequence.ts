@@ -80,8 +80,18 @@ export type ProviderConsequenceJournalBeginResult =
   | Readonly<{ kind: 'started' }>
   | Readonly<{ kind: 'unavailable' }>
 
+export type ProviderConsequenceJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly ProviderConsequenceJsonValue[]
+  | Readonly<{ [key: string]: ProviderConsequenceJsonValue }>
+
 export interface ProviderConsequenceJournal {
-  begin(input: ProviderConsequenceJournalBegin): Promise<unknown>
+  begin(input: ProviderConsequenceJournalBegin): Promise<
+    ProviderConsequenceJsonValue | Readonly<Record<string, unknown>>
+  >
   complete(input: Readonly<{ claimRef: string; observation: RouteTransportObservation }>): Promise<void>
   abortBeforeRelease(input: Readonly<{ claimRef: string }>): Promise<void>
 }

@@ -1,7 +1,11 @@
 import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Validator } from 'convex/values'
 
-import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
+import type { JsonValue } from '@/modules/capability-contract/public'
+import {
+  parseRouteTransportObservationJson,
+  type RouteTransportObservation,
+} from '@/modules/capability-supply/route-transport-runtime'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { beginLeaseEffectHandler } from './capabilityProviderConnectionLeases'
@@ -642,9 +646,74 @@ export const claimProviderConsequenceArgs = {
   expiresAt: v.number(),
 } as const
 
+const settlementResponseValue = v.object({
+  success: v.boolean(),
+  transaction: v.string(),
+  network: v.string(),
+  amount: v.optional(v.string()),
+  payer: v.optional(v.string()),
+  errorReason: v.optional(v.string()),
+  errorMessage: v.optional(v.string()),
+})
+
+const routeTransportObservationValue: Validator<RouteTransportObservation, 'required', string> = v.object({
+  transport: v.union(v.literal('http'), v.literal('mcp'), v.literal('x402'), v.literal('unknown')),
+  disposition: v.union(
+    v.literal('succeeded'),
+    v.literal('refused'),
+    v.literal('partial'),
+    v.literal('unknown'),
+  ),
+  releaseStarted: v.boolean(),
+  queryReleaseStatus: v.optional(v.union(
+    v.literal('not_released'),
+    v.literal('released'),
+    v.literal('unknown'),
+  )),
+  paymentAuthorizationStatus: v.optional(v.union(
+    v.literal('not_created'),
+    v.literal('created'),
+    v.literal('unknown'),
+  )),
+  paymentSubmissionStatus: v.optional(v.union(
+    v.literal('not_submitted'),
+    v.literal('possibly_submitted'),
+    v.literal('observed'),
+    v.literal('unknown'),
+  )),
+  settlementEvidence: v.optional(v.union(
+    v.object({ kind: v.literal('not_submitted') }),
+    v.object({
+      kind: v.union(v.literal('settled'), v.literal('not_settled')),
+      response: settlementResponseValue,
+      digest: v.string(),
+    }),
+    v.object({
+      kind: v.literal('unknown'),
+      reason: v.string(),
+      response: v.optional(settlementResponseValue),
+      digest: v.optional(v.string()),
+    }),
+  )),
+  quoteDeliveryStatus: v.optional(v.union(
+    v.literal('not_delivered'),
+    v.literal('delivered'),
+    v.literal('unknown'),
+  )),
+  requestDigest: v.string(),
+  responseDigest: v.optional(v.string()),
+  outputJson: v.optional(v.string()),
+  providerReceipt: v.optional(v.string()),
+  providerOfferDigest: v.optional(v.string()),
+  paymentProof: v.optional(v.string()),
+  paymentChallengeDigest: v.optional(v.string()),
+  continuationToken: v.optional(v.string()),
+  failureCode: v.optional(v.string()),
+})
+
 export const claimProviderConsequenceResult = v.union(
   v.object({ kind: v.literal('claimed'), claimRef: v.string() }),
-  v.object({ kind: v.literal('completed'), observation: v.any() }),
+  v.object({ kind: v.literal('completed'), observation: routeTransportObservationValue }),
   v.object({ kind: v.literal('started') }),
   v.object({ kind: v.literal('unavailable') }),
 )
@@ -782,11 +851,33 @@ type X402Operation =
   | 'mark_possibly_submitted'
   | 'observe_attempt'
 
+const providerRpcJsonScalarValue: Validator<null | boolean | number | string> = v.union(
+  v.null(),
+  v.boolean(),
+  v.number(),
+  v.string(),
+)
+
+function providerRpcJsonValueAtDepth(depth: number): Validator<JsonValue, 'required', string> {
+  if (depth === 0) return providerRpcJsonScalarValue
+  const child = providerRpcJsonValueAtDepth(depth - 1)
+  return v.union(
+    providerRpcJsonScalarValue,
+    v.array(child),
+    v.record(v.string(), child),
+  )
+}
+
+const providerConsequenceX402PayloadValue = v.record(
+  v.string(),
+  providerRpcJsonValueAtDepth(8),
+)
+
 export const authorizeProviderConsequenceX402RpcArgs = {
   ticketRef: v.string(),
   journalTokenDigest: v.string(),
   operation: providerConsequenceX402Operation,
-  args: v.any(),
+  args: providerConsequenceX402PayloadValue,
 } as const
 
 function matchingOptionalIdentity(
@@ -825,7 +916,12 @@ async function matchingStoredAttempt(
 
 export async function authorizeProviderConsequenceX402RpcHandler(
   ctx: MutationCtx,
-  input: { ticketRef: string; journalTokenDigest: string; operation: X402Operation; args: unknown },
+  input: {
+    ticketRef: string
+    journalTokenDigest: string
+    operation: X402Operation
+    args: unknown
+  },
 ) {
   if (typeof input.args !== 'object' || input.args === null || Array.isArray(input.args)) {
     return { kind: 'unavailable' as const }

@@ -1,7 +1,14 @@
 import { httpActionGeneric } from 'convex/server'
+import type { Infer } from 'convex/values'
 
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
+import { externalSpendMutationResultValue } from './moneyExternalSpend'
+import { prepareX402PaymentAuthorizationReturns } from './moneyX402PaymentAuthorization'
+import {
+  readX402PaymentAuthorizationByDigestReturns,
+  readX402PaymentAuthorizationReturns,
+} from './moneyX402PaymentRead'
 
 const MAX_BODY_BYTES = 128 * 1024
 const JOURNAL_TOKEN = /^[A-Za-z0-9_-]{43,128}$/u
@@ -181,12 +188,18 @@ const X402_OPERATIONS = new Set([
 ] as const)
 
 type X402Operation = typeof X402_OPERATIONS extends Set<infer Operation> ? Operation : never
+type X402OperationResult =
+  | Infer<typeof externalSpendMutationResultValue>
+  | Infer<typeof prepareX402PaymentAuthorizationReturns>
+  | Infer<typeof readX402PaymentAuthorizationReturns>
+  | Infer<typeof readX402PaymentAuthorizationByDigestReturns>
+  | null
 
 async function runX402Operation(
   ctx: Pick<ActionCtx, 'runMutation' | 'runQuery'>,
   operation: X402Operation,
   args: Record<string, unknown>,
-): Promise<unknown> {
+): Promise<X402OperationResult> {
   const checkedArgs = args as never
   switch (operation) {
     case 'reserve_external_spend':
@@ -292,7 +305,7 @@ export const providerConsequenceX402Rpc = httpActionGeneric(async (ctx, request)
   try {
     const authorization = await ctx.runMutation(
       internal.capabilityProviderConsequenceJournal.authorizeProviderConsequenceX402Rpc,
-      { ticketRef: body.ticketRef, journalTokenDigest: digest, operation, args: body.args },
+      { ticketRef: body.ticketRef, journalTokenDigest: digest, operation, args: body.args as never },
     )
     if (authorization.kind !== 'authorized') return json({ kind: 'unavailable' }, 409)
     const args = canonicalX402Args(operation, body.args, authorization)

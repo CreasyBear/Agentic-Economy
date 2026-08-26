@@ -145,7 +145,10 @@ export async function invokeProviderConsequenceViaVercel(
   const journalToken = randomToken()
   const ticketRef = `provider-ticket:${crypto.randomUUID()}`
   const commandId = `provider-effect:${invocation.authority.invocationRef}:${invocation.authority.attemptRef}:${invocation.authority.effectGeneration}`
-  const invocationDigest = providerConsequenceInvocationDigest(invocation)!
+  const invocationDigest = providerConsequenceInvocationDigest(invocation)
+  if (invocationDigest === undefined) {
+    return refused(invocation, input.requestDigest, 'provider_consequence_authority_invalid')
+  }
   let issue: Awaited<ReturnType<ActionCtx['runMutation']>>
   try {
     issue = await ctx.runMutation(

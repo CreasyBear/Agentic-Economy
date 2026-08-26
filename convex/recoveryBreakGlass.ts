@@ -445,9 +445,10 @@ export const authorizeRecoveryOperation = mutation({
 async function applyRecoveryEffect(ctx: MutationCtx, admission: RecoveryAdmission): Promise<void> {
   // Authorization resolved this canonical account earlier in the same Convex
   // mutation transaction, so it cannot disappear between admission and effect.
-  const account = (await ctx.db.query('accounts')
+  const account = await ctx.db.query('accounts')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', admission.accountRef))
-    .unique())!
+    .unique()
+  if (account === null) throw new RecoveryError('recovery_account_facts_invalid')
   if (admission.action === 'freeze') {
     if (account.lifecycle !== 'active') throw new RecoveryError('recovery_account_facts_invalid')
     await ctx.db.patch(account._id, {

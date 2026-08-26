@@ -52,7 +52,8 @@ export async function resolveCanonicalAgentContext(
       .eq('providerIdentifier', credentialLocator))
     .take(2)
   if (bindings.length !== 1) return null
-  const binding = bindings[0]!
+  const [binding] = bindings
+  if (binding === undefined) return null
   if (binding.lifecycle !== 'active'
     || binding.providerState.kind !== 'known'
     || binding.providerState.value !== 'active'
@@ -66,7 +67,8 @@ export async function resolveCanonicalAgentContext(
       .eq('lifecycle', 'active'))
     .take(2)
   if (credentials.length !== 1) return null
-  const credential = credentials[0]!
+  const [credential] = credentials
+  if (credential === undefined) return null
   if (credential.principalRef !== binding.principalRef
     || credential.type !== 'api_key'
     || credential.generation !== binding.credentialGeneration
@@ -80,7 +82,8 @@ export async function resolveCanonicalAgentContext(
     .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
     .take(2)
   if (principals.length !== 1) return null
-  const principal = principals[0]!
+  const [principal] = principals
+  if (principal === undefined) return null
   if (principal.kind !== 'agent' || principal.lifecycle !== 'active') return null
 
   const [ownerships, memberships] = await Promise.all([
@@ -96,13 +99,15 @@ export async function resolveCanonicalAgentContext(
       .take(2),
   ])
   if (ownerships.length + memberships.length !== 1) return null
-  const access = ownerships[0] ?? memberships[0]!
+  const access = ownerships[0] ?? memberships[0]
+  if (access === undefined) return null
 
   const accounts = await ctx.db.query('accounts')
     .withIndex('by_accountRef', (query) => query.eq('accountRef', access.accountRef))
     .take(2)
   if (accounts.length !== 1) return null
-  const account = accounts[0]!
+  const [account] = accounts
+  if (account === undefined) return null
   if (account.lifecycle !== 'active'
     || !Number.isSafeInteger(account.revision)
     || account.revision < 1) return null
@@ -111,15 +116,19 @@ export async function resolveCanonicalAgentContext(
     .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
     .take(2)
   if (currentOwnerships.length !== 1) return null
-  const currentOwnership = currentOwnerships[0]!
+  const [currentOwnership] = currentOwnerships
+  if (currentOwnership === undefined) return null
+  const [directOwnership] = ownerships
   if (currentOwnership.lifecycle !== 'active'
     || currentOwnership.accountRef !== account.accountRef
-    || (ownerships.length === 1 && currentOwnership.ownershipRef !== ownerships[0]!.ownershipRef)) return null
+    || (directOwnership !== undefined && currentOwnership.ownershipRef !== directOwnership.ownershipRef)) return null
 
   const currentOwners = await ctx.db.query('principals')
     .withIndex('by_principalRef', (query) => query.eq('principalRef', currentOwnership.ownerPrincipalRef))
     .take(2)
-  if (currentOwners.length !== 1 || currentOwners[0]!.lifecycle !== 'active') return null
+  if (currentOwners.length !== 1) return null
+  const [currentOwner] = currentOwners
+  if (currentOwner === undefined || currentOwner.lifecycle !== 'active') return null
 
   return Object.freeze({
     principalRef: principal.principalRef,

@@ -644,7 +644,8 @@ async function resolveCurrentAgentAuthority(
     .withIndex('by_credentialId', (query) => query.eq('credentialId', canonical.credentialLocator))
     .take(2)
   if (storedAgents.length !== 1) return null
-  const storedAgent = storedAgents[0]!
+  const [storedAgent] = storedAgents
+  if (storedAgent === undefined) return null
   if (storedAgent.principalId !== canonical.principalRef
     || storedAgent.ownerId !== canonical.accountRef
     || storedAgent.credentialId !== candidate.credentialId
@@ -672,7 +673,8 @@ async function resolveCurrentAgentAuthority(
   ])
   const activeGrants = [...sandboxGrants, ...productionGrants]
   if (activeGrants.length !== 1) return null
-  const grant = activeGrants[0]!
+  const [grant] = activeGrants
+  if (grant === undefined) return null
   if (grant.principalId !== canonical.principalRef
     || grant.ownerId !== storedAgent.ownerId
     || grant.applicationRef !== storedAgent.applicationRef
@@ -957,12 +959,16 @@ export const resolveInvocationAgentAuthority = internalMutation({
     if (args.operationRef !== undefined) {
       operationRef = args.operationRef
     } else {
+      const invocationRef = args.invocationRef
+      if (invocationRef === undefined) return null
       const rows = await ctx.db.query('capabilityOperationInvocations')
-        .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef as string))
+        .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
         .take(2)
       if (rows.length !== 1) return null
-      invocation = rows[0]!
-      operationRef = rows[0]!.operationRef
+      const [matchedInvocation] = rows
+      if (matchedInvocation === undefined) return null
+      invocation = matchedInvocation
+      operationRef = matchedInvocation.operationRef
     }
     const current = await resolveCurrentAgentAuthority(ctx, args.principal, Date.now(), operationRef)
     if (current === null) return null

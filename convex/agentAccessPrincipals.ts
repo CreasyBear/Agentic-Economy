@@ -195,11 +195,14 @@ export const registerAgentPrincipal = mutation({
     ])
     const grants = [...sandboxGrants, ...productionGrants]
     if (grants.length !== 1) return { kind: 'conflict' as const }
-    const grant = grants[0]!
+    const [grant] = grants
+    if (grant === undefined) return { kind: 'conflict' as const }
     const delegation = await ctx.db.query('authorityDelegationGrants')
       .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
       .take(2)
     if (delegation.length !== 1) return { kind: 'conflict' as const }
+    const [delegationGrant] = delegation
+    if (delegationGrant === undefined) return { kind: 'conflict' as const }
     const liveDelegation = await validateCanonicalAgentDelegation(ctx, {
       evidenceKind: 'agent-principal-registration',
       evidenceRef: identity.tokenIdentifier,
@@ -207,8 +210,8 @@ export const registerAgentPrincipal = mutation({
       accountRef: canonical.accountRef,
       grantRef: grant.grantRef,
       grantGeneration: grant.generation,
-      requiredScopes: delegation[0]!.scopes,
-      resourceRefs: delegation[0]!.resourceRefs,
+      requiredScopes: delegationGrant.scopes,
+      resourceRefs: delegationGrant.resourceRefs,
       now,
     })
     const expectedScopes = uniqueSorted(args.scopes)

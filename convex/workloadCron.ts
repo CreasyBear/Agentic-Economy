@@ -3,15 +3,19 @@ import {
   type DefaultFunctionArgs,
   type FunctionReference,
 } from 'convex/server'
-import { v } from 'convex/values'
+import { v, type Validator } from 'convex/values'
 
+import type { JsonValue } from '@/modules/capability-contract/public'
 import {
   accountRef,
   createWorkloadContext,
+  membershipRef,
+  ownershipRef,
   principalRef,
   WorkloadContextAdmission,
   type AdmittedWorkloadContext,
   type Account,
+  type AccountActionContext,
   type AccountOwnership,
   type AccountRef,
   type Membership,
@@ -39,6 +43,7 @@ import {
   createConvexDelegationContextPort,
   createConvexDelegationStore,
 } from './lib/delegationPersistence'
+import type { Doc } from './_generated/dataModel'
 
 export const PHASE_2_CRON_PRINCIPAL_REF = 'prn_f2000000000000000000000000000001' as PrincipalRef
 export const PHASE_2_CRON_ACCOUNT_REF = 'acc_f2000000000000000000000000000001' as AccountRef
@@ -219,6 +224,29 @@ const consequenceOperationValue = v.union(
   v.literal('moneyX402PaymentAttempts:reconcileX402PaymentAttempt'),
 )
 
+const consequenceJsonScalarValue: Validator<null | boolean | number | string> = v.union(
+  v.null(),
+  v.boolean(),
+  v.number(),
+  v.string(),
+)
+
+function consequenceJsonValueAtDepth(depth: number): Validator<JsonValue, 'required', string> {
+  if (depth === 0) return consequenceJsonScalarValue
+  const child = consequenceJsonValueAtDepth(depth - 1)
+  return v.union(
+    consequenceJsonScalarValue,
+    v.array(child),
+    v.record(v.string(), child),
+  )
+}
+
+// Consequence operations retain their own exact registered-function validators.
+// This shared boundary additionally rejects non-JSON payload/result shapes and
+// caps nesting before dispatching through the declared operation switch below.
+const consequenceJsonValue = consequenceJsonValueAtDepth(12)
+const consequencePayloadValue = v.record(v.string(), consequenceJsonValue)
+
 function declaration<Name extends string, Handler extends string>(
   name: Name,
   workloadKind: WorkloadKind,
@@ -242,7 +270,7 @@ class ConvexWorkloadContextStore implements WorkloadContextStore {
       .query('principals')
       .withIndex('by_principalRef', (query) => query.eq('principalRef', principalRef))
       .unique()
-    return row === null ? undefined : row as unknown as Principal
+    return row === null ? undefined : principalFromRow(row)
   }
 
   async getAccount(accountRef: AccountRef): Promise<Account | undefined> {
@@ -250,7 +278,7 @@ class ConvexWorkloadContextStore implements WorkloadContextStore {
       .query('accounts')
       .withIndex('by_accountRef', (query) => query.eq('accountRef', accountRef))
       .unique()
-    return row === null ? undefined : row as unknown as Account
+    return row === null ? undefined : accountFromRow(row)
   }
 
   async getOwnership(account: Account): Promise<AccountOwnership | undefined> {
@@ -258,7 +286,7 @@ class ConvexWorkloadContextStore implements WorkloadContextStore {
       .query('accountOwnerships')
       .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
       .unique()
-    return row === null ? undefined : row as unknown as AccountOwnership
+    return row === null ? undefined : ownershipFromRow(row)
   }
 
   async getActiveMembership(accountRef: AccountRef, principalRef: PrincipalRef): Promise<Membership | undefined> {
@@ -271,8 +299,87 @@ class ConvexWorkloadContextStore implements WorkloadContextStore {
           .eq('lifecycle', 'active')
       ))
       .unique()
-    return row === null ? undefined : row as unknown as Membership
+    return row === null ? undefined : membershipFromRow(row)
   }
+}
+
+function actionContextFromRow(value: Doc<'accounts'>['lastAction']): AccountActionContext {
+  return Object.freeze({
+    actorPrincipalRef: principalRef(value.actorPrincipalRef),
+    activeAccountRef: accountRef(value.activeAccountRef),
+    correlationRef: value.correlationRef,
+    idempotencyRef: value.idempotencyRef,
+  })
+}
+
+function principalFromRow(row: Doc<'principals'>): Principal {
+  return Object.freeze({
+    principalRef: principalRef(row.principalRef),
+    kind: row.kind,
+    displayName: row.displayName,
+    lifecycle: row.lifecycle,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    ...(row.mergedIntoPrincipalRef === undefined
+      ? {}
+      : { mergedIntoPrincipalRef: principalRef(row.mergedIntoPrincipalRef) }),
+  })
+}
+
+function accountFromRow(row: Doc<'accounts'>): Account {
+  return Object.freeze({
+    accountRef: accountRef(row.accountRef),
+    displayName: row.displayName,
+    lifecycle: row.lifecycle,
+    recoveryPolicy: row.recoveryPolicy,
+    creationActorPrincipalRef: principalRef(row.creationActorPrincipalRef),
+    creationIdempotencyRef: row.creationIdempotencyRef,
+    initialOwnershipRef: ownershipRef(row.initialOwnershipRef),
+    currentOwnershipRef: ownershipRef(row.currentOwnershipRef),
+    revision: row.revision,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    lastAction: actionContextFromRow(row.lastAction),
+  })
+}
+
+function ownershipFromRow(row: Doc<'accountOwnerships'>): AccountOwnership {
+  return Object.freeze({
+    ownershipRef: ownershipRef(row.ownershipRef),
+    accountRef: accountRef(row.accountRef),
+    ownerPrincipalRef: principalRef(row.ownerPrincipalRef),
+    lifecycle: row.lifecycle,
+    changeKind: row.changeKind,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    createdBy: actionContextFromRow(row.createdBy),
+    ...(row.predecessorOwnershipRef === undefined
+      ? {}
+      : { predecessorOwnershipRef: ownershipRef(row.predecessorOwnershipRef) }),
+    ...(row.successionAuthorizationRef === undefined
+      ? {}
+      : { successionAuthorizationRef: row.successionAuthorizationRef }),
+    ...(row.endedAt === undefined ? {} : { endedAt: row.endedAt }),
+    ...(row.endedBy === undefined ? {} : { endedBy: actionContextFromRow(row.endedBy) }),
+    ...(row.successorOwnershipRef === undefined
+      ? {}
+      : { successorOwnershipRef: ownershipRef(row.successorOwnershipRef) }),
+  })
+}
+
+function membershipFromRow(row: Doc<'memberships'>): Membership {
+  return Object.freeze({
+    membershipRef: membershipRef(row.membershipRef),
+    accountRef: accountRef(row.accountRef),
+    memberPrincipalRef: principalRef(row.memberPrincipalRef),
+    lifecycle: row.lifecycle,
+    revision: row.revision,
+    createdAt: row.createdAt,
+    createdBy: actionContextFromRow(row.createdBy),
+    ...(row.endedAt === undefined ? {} : { endedAt: row.endedAt }),
+    ...(row.endedBy === undefined ? {} : { endedBy: actionContextFromRow(row.endedBy) }),
+  })
 }
 
 export async function admitWorkloadCron(
@@ -483,9 +590,9 @@ export async function dispatchWorkloadCronConsequenceHandler(
     snapshot: WorkloadCronSnapshot
     resourceInvocationRef?: string
     operation: ConsequenceOperation
-    payload: unknown
+    payload: Readonly<Record<string, JsonValue>>
   }>,
-): Promise<unknown> {
+): Promise<JsonValue> {
   const current = await reconcileWorkloadCronSnapshot(ctx as Pick<QueryCtx, 'db'>, args.name, args.snapshot)
   if (args.resourceInvocationRef !== undefined) {
     await attributeInvocationResourceAccount(ctx, current, args.resourceInvocationRef)
@@ -503,7 +610,7 @@ export async function dispatchWorkloadCronConsequenceHandler(
       return await ctx.runMutation(internal.capabilitySupply.recordCapabilityProbeResult, args.payload as never)
     case 'facilitatorDiscovery:reconcile':
       return await ctx.runMutation(internal.facilitatorDiscovery.reconcile, {
-        ...(args.payload as Record<string, unknown>),
+        ...args.payload,
         workload: current,
       } as never)
     case 'marketExternalRegistry:begin':
@@ -529,9 +636,9 @@ export const dispatchConsequence = internalMutation({
     snapshot: workloadCronSnapshotValue,
     resourceInvocationRef: v.optional(v.string()),
     operation: consequenceOperationValue,
-    payload: v.any(),
+    payload: consequencePayloadValue,
   },
-  returns: v.any(),
+  returns: consequenceJsonValue,
   handler: dispatchWorkloadCronConsequenceHandler,
 })
 

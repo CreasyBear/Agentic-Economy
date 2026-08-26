@@ -41,8 +41,23 @@ interface AccessToken {
   readonly expiresAt: number
 }
 
+type InfisicalJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly InfisicalJsonValue[]
+  | Readonly<{ [key: string]: InfisicalJsonValue }>
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isJsonValue(value: unknown): value is InfisicalJsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  return isRecord(value) && Object.values(value).every(isJsonValue)
 }
 
 function requireNonEmpty(value: string, field: string): string {
@@ -362,9 +377,11 @@ export class InfisicalCloudSecretStore implements SecretStore {
   async #readJson(
     response: Response,
     errorCode: 'secret_store_invalid_response' | 'secret_store_authentication_failed' = 'secret_store_invalid_response',
-  ): Promise<unknown> {
+  ): Promise<InfisicalJsonValue> {
     try {
-      return await response.json()
+      const value: unknown = await response.json()
+      if (!isJsonValue(value)) throw new SecretPlaneError(errorCode)
+      return value
     } catch {
       throw new SecretPlaneError(errorCode)
     }

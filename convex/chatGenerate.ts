@@ -14,6 +14,34 @@ import type { ActionCtx } from './_generated/server'
 import { createChatAgent } from './chatTools'
 import { interactiveAuthorityContextValue } from './interactiveAuthority'
 import type { InteractiveBusinessAuthorityContext } from '../src/modules/business/public'
+import {
+  accountRef,
+  membershipRef,
+  ownershipRef,
+  principalRef,
+} from '../src/modules/principal-account/public'
+
+function interactiveAuthorityContextFromValue(
+  input: typeof interactiveAuthorityContextValue.type,
+): InteractiveBusinessAuthorityContext {
+  const accessRef = input.provenance.accessKind === 'ownership'
+    ? ownershipRef(input.provenance.accessRef)
+    : membershipRef(input.provenance.accessRef)
+  return Object.freeze({
+    principalRef: principalRef(input.principalRef),
+    accountRef: accountRef(input.accountRef),
+    legacyOwnerId: input.legacyOwnerId,
+    legacyOwnerLocator: input.legacyOwnerLocator,
+    ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+    ...(input.emailHash === undefined ? {} : { emailHash: input.emailHash }),
+    revision: Object.freeze({ ...input.revision }),
+    provenance: Object.freeze({
+      ...input.provenance,
+      accessRef,
+      currentOwnershipRef: ownershipRef(input.provenance.currentOwnershipRef),
+    }),
+  })
+}
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,
@@ -69,7 +97,7 @@ export const generate = internalAction({
         {
           ...args,
           ownerId: current.ownerId,
-          authority: args.authority as unknown as InteractiveBusinessAuthorityContext,
+          authority: interactiveAuthorityContextFromValue(args.authority),
         },
         openRouterModel(config, config.model),
       )

@@ -214,7 +214,8 @@ async function materializeInteractiveCredentialExpiry(
       .eq('providerIdentifier', tokenIdentifier))
     .take(2)
   if (bindings.length !== 1) return
-  const binding = bindings[0]!
+  const [binding] = bindings
+  if (binding === undefined) return
   const credentials = await ctx.db.query('credentials')
     .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
       .eq('bindingRef', binding.bindingRef)
@@ -222,7 +223,8 @@ async function materializeInteractiveCredentialExpiry(
       .eq('lifecycle', 'active'))
     .take(2)
   if (credentials.length !== 1) return
-  const credential = credentials[0]!
+  const [credential] = credentials
+  if (credential === undefined) return
   if (credential.type !== 'provider_token'
     || credential.principalRef !== binding.principalRef
     || typeof identity.exp !== 'number'
@@ -417,7 +419,8 @@ async function resolveInteractiveAuthorityFactsForToken(
     await rejectMismatchedCompatibility(db, canonicalPrincipalRef, canonicalAccountRef)
     throw new InteractiveAuthorityError('compatibility_missing')
   }
-  const owner = compatibleOwners[0]!
+  const [owner] = compatibleOwners
+  if (owner === undefined) throw new InteractiveAuthorityError('compatibility_missing')
   assertCanonicalFactNumbers([
     binding.credentialGeneration,
     binding.revision,
@@ -480,7 +483,7 @@ export async function resolveScheduledInteractiveAuthorityContext(
   expectedInput: typeof interactiveAuthorityContextValue.type,
 ): Promise<InteractiveBusinessAuthorityContext | null> {
   try {
-    const expected = expectedInput as unknown as InteractiveBusinessAuthorityContext
+    const expected = interactiveAuthorityContextFromValue(expectedInput)
     const bindingRefValue = externalIdentityBindingRef(expected.provenance.bindingRef)
     const bindings = await db.query('externalIdentityBindings')
       .withIndex('by_bindingRef', (query) => query.eq('bindingRef', bindingRefValue))
@@ -580,7 +583,9 @@ function requireExactlyOne<Value>(
 ): Value {
   if (rows.length === 0) throw new InteractiveAuthorityError(missingCode)
   if (rows.length !== 1) throw new InteractiveAuthorityError(ambiguousCode)
-  return rows[0]!
+  const [row] = rows
+  if (row === undefined) throw new InteractiveAuthorityError(missingCode)
+  return row
 }
 
 function requireSingleAccessFact(
@@ -631,8 +636,11 @@ async function requireCurrentOwnerActive(
     .withIndex('by_principalRef', (query) => query.eq('principalRef', ownerPrincipalRef))
     .take(2)
   if (owners.length !== 1) throw new InteractiveAuthorityError('ownership_mismatch')
-  if (owners[0]!.lifecycle !== 'active') throw new InteractiveAuthorityError('ownership_mismatch')
-  return owners[0]!
+  const [owner] = owners
+  if (owner === undefined || owner.lifecycle !== 'active') {
+    throw new InteractiveAuthorityError('ownership_mismatch')
+  }
+  return owner
 }
 
 async function rejectMismatchedCompatibility(
@@ -664,5 +672,27 @@ function freezeInteractiveContext(
     ...context,
     revision: Object.freeze(context.revision),
     provenance: Object.freeze(context.provenance),
+  })
+}
+
+function interactiveAuthorityContextFromValue(
+  input: typeof interactiveAuthorityContextValue.type,
+): InteractiveBusinessAuthorityContext {
+  const accessRef = input.provenance.accessKind === 'ownership'
+    ? ownershipRef(input.provenance.accessRef)
+    : membershipRef(input.provenance.accessRef)
+  return freezeInteractiveContext({
+    principalRef: principalRef(input.principalRef),
+    accountRef: accountRef(input.accountRef),
+    legacyOwnerId: input.legacyOwnerId,
+    legacyOwnerLocator: input.legacyOwnerLocator,
+    ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+    ...(input.emailHash === undefined ? {} : { emailHash: input.emailHash }),
+    revision: { ...input.revision },
+    provenance: {
+      ...input.provenance,
+      accessRef,
+      currentOwnershipRef: ownershipRef(input.provenance.currentOwnershipRef),
+    },
   })
 }
