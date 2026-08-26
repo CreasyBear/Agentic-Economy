@@ -48,6 +48,7 @@ describe('capability operation invocation worker run', () => {
     expect(worker.state.qualifiedUse).toHaveLength(0)
     expect(worker.state.transportCalls).toBe(0)
     expect(worker.state.mutationCalls.map(({ path }) => path)).toEqual([
+      'capabilityOperationInvocations:reconcileInvocationWorkloadAuthority',
       'capabilityOperationInvocations:claimDispatch',
     ])
     expect(mocks.invokePreparedRouteTransport).not.toHaveBeenCalled()

@@ -1,6 +1,7 @@
 import { vOnCompleteArgs } from '@convex-dev/workpool'
+import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
-import { action, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from './_generated/server'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { actionInvocationTransactArgs } from './actionInvocationControl'
 import {
@@ -43,6 +44,20 @@ import {
   reconcileOwnerInvocationHandler,
   recordHandler,
 } from './capabilityOperationInvokeActions'
+import { resolveBusinessActor } from './authz'
+import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  DelegationService,
+  delegationGrantRef,
+  type DelegationStore,
+} from '@/modules/authority/delegation/public'
+import { accountRef, principalRef } from '@/modules/principal-account/public'
+import {
+  createConvexDelegationContextPort,
+  createConvexDelegationStore,
+} from './lib/delegationPersistence'
 
 const RECONCILIATION_MAX_CANDIDATES = 25
 const RECONCILIATION_LEASE_MS = 60_000
@@ -183,7 +198,10 @@ async function completeWorkWithReconciliationInitialization(
   ctx: Parameters<typeof completeWorkHandler>[0],
   args: Parameters<typeof completeWorkHandler>[1],
 ): Promise<Awaited<ReturnType<typeof completeWorkHandler>>> {
-  const result = await completeWorkHandler(ctx, args)
+  const authority = await reconcilePersistedInvocationAuthority(ctx, args.context.invocationRef, Date.now())
+  const result = await completeWorkHandler(ctx, authority === null
+    ? { ...args, result: { kind: 'failed', error: 'operation_invocation_authority_not_current' } }
+    : args)
   await initializeReconciliationIfAbsent(ctx, args.context.invocationRef, Date.now())
   return result
 }
@@ -574,6 +592,432 @@ const abandonResult = v.union(
 )
 const workCompletionArgs = vOnCompleteArgs(v.object({ invocationRef: v.string() }))
 
+type OperationPrincipal = Infer<typeof principalValue>
+type CurrentAgentAuthority = Readonly<{
+  principal: OperationPrincipal
+  grantRef: string
+  grantGeneration: number
+  policyDigest: string
+  expiresAt: number
+}>
+
+const reconciledInvocationAuthorityValue = v.object({
+  principalId: v.string(),
+  accountRef: v.string(),
+  credentialId: v.string(),
+  grantRef: v.string(),
+  grantGeneration: v.number(),
+  policyDigest: v.string(),
+  expiresAt: v.number(),
+})
+type ReconciledInvocationAuthority = Infer<typeof reconciledInvocationAuthorityValue>
+const reconciledInvocationAuthorityResult = v.union(
+  v.object({ kind: v.literal('authorized'), authority: reconciledInvocationAuthorityValue }),
+  v.object({ kind: v.literal('refused') }),
+)
+
+const resolveInvocationAgentAuthorityRef = makeFunctionReference<
+  'mutation',
+  { principal: OperationPrincipal },
+  OperationPrincipal | null
+>('capabilityOperationInvocations:resolveInvocationAgentAuthority')
+
+async function canonicalAgentPrincipal(
+  ctx: ActionCtx,
+  principal: OperationPrincipal,
+): Promise<OperationPrincipal | null> {
+  return await ctx.runMutation(resolveInvocationAgentAuthorityRef, { principal })
+}
+
+async function resolveCurrentAgentAuthority(
+  ctx: MutationCtx,
+  candidate: OperationPrincipal,
+  now: number,
+): Promise<CurrentAgentAuthority | null> {
+  if (!Number.isSafeInteger(now)
+    || now < 0
+    || !candidate.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)) return null
+
+  const binding = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+      .eq('providerNamespace', 'clerk/api-key')
+      .eq('providerIdentifier', candidate.credentialId))
+    .unique()
+  if (binding === null
+    || binding.lifecycle !== 'active'
+    || binding.providerState.kind !== 'known'
+    || binding.providerState.value !== 'active'
+    || !Number.isSafeInteger(binding.credentialGeneration)
+    || binding.credentialGeneration < 0) return null
+
+  const [credential, principal, storedAgent] = await Promise.all([
+    ctx.db.query('credentials')
+      .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+        .eq('bindingRef', binding.bindingRef)
+        .eq('generation', binding.credentialGeneration)
+        .eq('lifecycle', 'active'))
+      .unique(),
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
+      .unique(),
+    ctx.db.query('agentAccessPrincipals')
+      .withIndex('by_credentialId', (query) => query.eq('credentialId', candidate.credentialId))
+      .unique(),
+  ])
+  if (credential === null
+    || credential.principalRef !== binding.principalRef
+    || credential.type !== 'api_key'
+    || credential.expiresAt <= now
+    || principal === null
+    || principal.kind !== 'agent'
+    || principal.lifecycle !== 'active'
+    || storedAgent === null
+    || storedAgent.principalId !== principal.principalRef
+    || storedAgent.credentialId !== candidate.credentialId
+    || storedAgent.applicationRef !== candidate.applicationRef
+    || storedAgent.environment !== candidate.environment
+    || storedAgent.authorityMode !== candidate.authorityMode
+    || storedAgent.lifecycle !== 'active'
+    || (storedAgent.expiresAt !== undefined && storedAgent.expiresAt <= now)
+    || !storedAgent.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+    || candidate.scopes.some((scope) => !storedAgent.scopes.includes(scope))) return null
+
+  const activeGrants = await ctx.db.query('agentAccessGrants')
+    .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+      .eq('credentialId', candidate.credentialId)
+      .eq('environment', candidate.environment)
+      .eq('lifecycle', 'active'))
+    .take(2)
+  if (activeGrants.length !== 1) return null
+  const grant = activeGrants[0]!
+  if (grant.principalId !== principal.principalRef
+    || grant.ownerId !== storedAgent.ownerId
+    || grant.applicationRef !== storedAgent.applicationRef
+    || grant.authorityMode !== storedAgent.authorityMode
+    || grant.generation !== storedAgent.grantGeneration
+    || grant.policyDigest !== storedAgent.policyDigest
+    || grant.expiresAt <= now) return null
+
+  const [delegation, account] = await Promise.all([
+    ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
+      .unique(),
+    ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', storedAgent.ownerId))
+      .unique(),
+  ])
+  if (delegation === null
+    || delegation.lifecycle !== 'active'
+    || delegation.subjectPrincipalRef !== principal.principalRef
+    || delegation.accountRef !== storedAgent.ownerId
+      || delegation.generation !== grant.generation
+      || delegation.expiresAt <= now
+      || !delegation.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
+      || candidate.scopes.some((scope) => !delegation.scopes.includes(scope))
+    || account === null
+    || account.lifecycle !== 'active') return null
+
+  return Object.freeze({
+    principal: Object.freeze({
+      principalId: principal.principalRef,
+      ownerId: account.accountRef,
+      credentialId: storedAgent.credentialId,
+      applicationRef: storedAgent.applicationRef,
+      environment: storedAgent.environment,
+      scopes: [...candidate.scopes].sort(),
+      authorityMode: storedAgent.authorityMode,
+    }),
+    grantRef: grant.grantRef,
+    grantGeneration: grant.generation,
+    policyDigest: grant.policyDigest,
+    expiresAt: grant.expiresAt,
+  })
+}
+
+async function validatePersistedInvocationDelegation(
+  ctx: MutationCtx,
+  input: Readonly<{
+    invocationRef: string
+    operationRef: string
+    principalId: string
+    accountRef: string
+    grantRef: string
+    grantGeneration: number
+  }>,
+): Promise<boolean> {
+  try {
+    const baseStore = createConvexDelegationStore(ctx)
+    const readOnlyStore: DelegationStore = {
+      transact: async (operation) => await baseStore.transact(
+        async (transaction) => await operation({
+          ...transaction,
+          getSnapshotByAdmissionIdempotency: async () => undefined,
+          getSnapshot: async () => undefined,
+          commit: async () => undefined,
+        }),
+      ),
+    }
+    const evidenceRef = canonicalDigest({
+      format: 'operation-workload-authority-validation:v1',
+      invocationRef: input.invocationRef,
+      operationRef: input.operationRef,
+      principalId: input.principalId,
+      accountRef: input.accountRef,
+      grantRef: input.grantRef,
+      grantGeneration: input.grantGeneration,
+    } as StableHashValue)
+    const snapshot = await new DelegationService(
+      readOnlyStore,
+      createConvexDelegationContextPort(ctx, principalRef(input.principalId)),
+      { randomUuid: () => '00000000-0000-4000-8000-000000000001' },
+    ).admitConsequence({
+      grantRef: delegationGrantRef(input.grantRef),
+      expectedGeneration: input.grantGeneration,
+      context: {
+        actorPrincipalRef: principalRef(input.principalId),
+        activeAccountRef: accountRef(input.accountRef),
+        correlationRef: evidenceRef,
+        idempotencyRef: evidenceRef,
+      },
+      requiredScopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+      resourceRefs: [input.operationRef],
+      budgetAmount: 0,
+    })
+    return snapshot.actorPrincipalRef === input.principalId
+      && snapshot.accountRef === input.accountRef
+      && snapshot.grantRef === input.grantRef
+      && snapshot.generation === input.grantGeneration
+  } catch {
+    return false
+  }
+}
+
+async function reconcilePersistedInvocationAuthority(
+  ctx: MutationCtx,
+  invocationRef: string,
+  now: number,
+): Promise<ReconciledInvocationAuthority | null> {
+  const row = await ctx.db.query('capabilityOperationInvocations')
+    .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+    .unique()
+  if (row === null) return null
+  const storedAgent = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', (query) => query.eq('credentialId', row.credentialId))
+    .unique()
+  if (storedAgent === null) return null
+  const current = await resolveCurrentAgentAuthority(ctx, {
+    principalId: storedAgent.principalId,
+    ownerId: storedAgent.ownerId,
+    credentialId: storedAgent.credentialId,
+    applicationRef: storedAgent.applicationRef,
+    environment: storedAgent.environment,
+    scopes: storedAgent.scopes,
+    authorityMode: storedAgent.authorityMode,
+  }, now)
+  if (current === null
+    || row.principalId !== current.principal.principalId
+    || row.ownerId !== current.principal.ownerId
+    || row.credentialId !== current.principal.credentialId
+    || row.applicationRef !== current.principal.applicationRef
+    || row.environment !== current.principal.environment
+    || row.grantRef !== current.grantRef
+    || row.grantGeneration !== current.grantGeneration
+    || row.policyDigest !== current.policyDigest
+    || row.grantExpiresAt !== current.expiresAt
+    || !await validatePersistedInvocationDelegation(ctx, {
+      invocationRef: row.invocationRef,
+      operationRef: row.operationRef,
+      principalId: current.principal.principalId,
+      accountRef: current.principal.ownerId,
+      grantRef: current.grantRef,
+      grantGeneration: current.grantGeneration,
+    })) return null
+  return Object.freeze({
+    principalId: current.principal.principalId,
+    accountRef: current.principal.ownerId,
+    credentialId: current.principal.credentialId,
+    grantRef: current.grantRef,
+    grantGeneration: current.grantGeneration,
+    policyDigest: current.policyDigest,
+    expiresAt: current.expiresAt,
+  })
+}
+
+async function refuseInvocationBeforeEffectForInvalidAuthority(
+  ctx: MutationCtx,
+  invocationRef: string,
+  now: number,
+): Promise<void> {
+  const [row, control] = await Promise.all([
+    ctx.db.query('capabilityOperationInvocations')
+      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+      .unique(),
+    ctx.db.query('actionInvocationControls')
+      .withIndex('by_invocationRef', (query) => query.eq('invocationRef', invocationRef))
+      .unique(),
+  ])
+  if (row === null || row.state !== 'pending' || control !== null) return
+  await ctx.db.patch(row._id, {
+    state: 'refused',
+    dispatchState: 'failed',
+    result: {
+      kind: 'refused',
+      operationRef: row.operationRef,
+      code: 'grant_not_found',
+      retryable: false,
+      nextAction: 'Refresh the agent grant and retry.',
+    },
+    updatedAt: now,
+  })
+}
+
+function agentRecoveryNotFound(invocationRef: string): Infer<typeof recoveryResultValue> {
+  return { kind: 'refused', invocationRef, code: 'invocation_not_found', retryable: false }
+}
+
+function agentStatusNotFound(invocationRef: string): Infer<typeof statusResultValue> {
+  return { kind: 'refused', invocationRef, code: 'invocation_not_found', retryable: false }
+}
+
+async function canonicalAgentInvokeHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof invokeHandler>[1],
+): Promise<Infer<typeof operationResultValue>> {
+  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  if (principal === null) {
+    return { kind: 'refused', operationRef: args.operationRef, code: 'grant_not_found', retryable: false }
+  }
+  return await invokeHandler(ctx, { ...args, principal })
+}
+
+async function canonicalAgentStatusHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof readInvocationStatusHandler>[1],
+): Promise<Infer<typeof statusResultValue>> {
+  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  if (principal === null) return agentStatusNotFound(args.invocationRef)
+  return await readInvocationStatusHandler(ctx, { ...args, principal })
+}
+
+async function canonicalAgentCancelHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof cancelInvocationHandler>[1],
+): Promise<Infer<typeof recoveryResultValue>> {
+  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  if (principal === null) return agentRecoveryNotFound(args.invocationRef)
+  return await cancelInvocationHandler(ctx, { ...args, principal })
+}
+
+async function canonicalAgentReconcileHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof reconcileInvocationHandler>[1],
+): Promise<Infer<typeof recoveryResultValue>> {
+  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  if (principal === null) return agentRecoveryNotFound(args.invocationRef)
+  return await reconcileInvocationHandler(ctx, { ...args, principal })
+}
+
+type CanonicalOwner = Extract<Awaited<ReturnType<typeof resolveBusinessActor>>, { kind: 'authenticated_owner' }>
+
+async function canonicalOwnerContext<T extends QueryCtx | MutationCtx | ActionCtx>(
+  ctx: T,
+  actor: CanonicalOwner,
+): Promise<T> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) throw new Error('canonical_owner_identity_missing')
+  const auth = new Proxy(ctx.auth, {
+    get(target, property, receiver) {
+      return property === 'getUserIdentity'
+        ? async () => ({
+            ...identity,
+            subject: actor.canonicalPrincipalRef,
+            tokenIdentifier: actor.canonicalAccountRef,
+          })
+        : Reflect.get(target, property, receiver)
+    },
+  })
+  return new Proxy(ctx, {
+    get(target, property, receiver) {
+      return property === 'auth' ? auth : Reflect.get(target, property, receiver)
+    },
+  })
+}
+
+async function canonicalOwnerActor<T extends QueryCtx | MutationCtx | ActionCtx>(
+  ctx: T,
+): Promise<{ actor: CanonicalOwner; ctx: T } | null> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return null
+  return { actor, ctx: await canonicalOwnerContext(ctx, actor) }
+}
+
+async function canonicalOwnerApprovalListHandler(ctx: QueryCtx) {
+  const canonical = await canonicalOwnerActor(ctx)
+  return canonical === null ? [] : await listPendingOperationApprovalsHandler(canonical.ctx)
+}
+
+async function canonicalOwnerApprovalDecisionHandler(
+  ctx: MutationCtx,
+  args: Parameters<typeof decideOperationApprovalHandler>[1],
+) {
+  const canonical = await canonicalOwnerActor(ctx)
+  return canonical === null
+    ? { kind: 'refused' as const, code: 'authentication_required' as const }
+    : await decideOperationApprovalHandler(canonical.ctx, args)
+}
+
+async function canonicalOwnerStatusHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof readOwnerInvocationStatusHandler>[1],
+) {
+  const canonical = await canonicalOwnerActor(ctx)
+  return canonical === null
+    ? agentStatusNotFound(args.invocationRef)
+    : await readOwnerInvocationStatusHandler(canonical.ctx, args)
+}
+
+async function canonicalOwnerCancelHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof cancelOwnerInvocationHandler>[1],
+) {
+  const canonical = await canonicalOwnerActor(ctx)
+  return canonical === null
+    ? agentRecoveryNotFound(args.invocationRef)
+    : await cancelOwnerInvocationHandler(canonical.ctx, args)
+}
+
+async function canonicalOwnerReconcileHandler(
+  ctx: ActionCtx,
+  args: Parameters<typeof reconcileOwnerInvocationHandler>[1],
+) {
+  const canonical = await canonicalOwnerActor(ctx)
+  return canonical === null
+    ? agentRecoveryNotFound(args.invocationRef)
+    : await reconcileOwnerInvocationHandler(canonical.ctx, args)
+}
+
+export const resolveInvocationAgentAuthority = internalMutation({
+  args: { principal: principalValue },
+  returns: v.union(principalValue, v.null()),
+  handler: async (ctx, args): Promise<OperationPrincipal | null> =>
+    (await resolveCurrentAgentAuthority(ctx, args.principal, Date.now()))?.principal ?? null,
+})
+
+export const reconcileInvocationWorkloadAuthority = internalMutation({
+  args: { invocationRef: v.string() },
+  returns: reconciledInvocationAuthorityResult,
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    const authority = await reconcilePersistedInvocationAuthority(ctx, args.invocationRef, now)
+    if (authority === null) {
+      await refuseInvocationBeforeEffectForInvalidAuthority(ctx, args.invocationRef, now)
+    }
+    return authority === null
+      ? { kind: 'refused' as const }
+      : { kind: 'authorized' as const, authority }
+  },
+})
+
 export const admit = internalMutation({
   args: { ...principalAndSourceArgs, operationRef: v.string(), input: jsonObject, idempotencyKey: v.string() },
   returns: v.object({ kind: v.literal('accepted') }),
@@ -619,13 +1063,13 @@ export const cancelBeforeClaim = internalMutation({
 export const listPendingOperationApprovals = query({
   args: {},
   returns: v.array(pendingApprovalView),
-  handler: listPendingOperationApprovalsHandler,
+  handler: canonicalOwnerApprovalListHandler,
 })
 
 export const decideOperationApproval = mutation({
   args: { invocationRef: v.string(), decision: approvalDecision },
   returns: approvalDecisionResult,
-  handler: decideOperationApprovalHandler,
+  handler: canonicalOwnerApprovalDecisionHandler,
 })
 
 export const openDispatch = internalQuery({
@@ -703,41 +1147,41 @@ export const completeWork = internalMutation({
 export const invoke = action({
   args: invokeArgs,
   returns: operationResultValue,
-  handler: invokeHandler,
+  handler: canonicalAgentInvokeHandler,
 })
 
 export const readInvocationStatus = action({
   args: { ...principalAndSourceArgs, invocationRef: v.string() },
   returns: statusResultValue,
-  handler: readInvocationStatusHandler,
+  handler: canonicalAgentStatusHandler,
 })
 
 export const cancelInvocation = action({
   args: { ...principalAndSourceArgs, invocationRef: v.string(), idempotencyKey: v.string() },
   returns: recoveryResultValue,
-  handler: cancelInvocationHandler,
+  handler: canonicalAgentCancelHandler,
 })
 
 export const reconcileInvocation = action({
   args: { ...principalAndSourceArgs, invocationRef: v.string(), idempotencyKey: v.string(), evidence: reconciliationEvidenceValue },
   returns: recoveryResultValue,
-  handler: reconcileInvocationHandler,
+  handler: canonicalAgentReconcileHandler,
 })
 
 export const readOwnerInvocationStatus = action({
   args: { invocationRef: v.string() },
   returns: statusResultValue,
-  handler: readOwnerInvocationStatusHandler,
+  handler: canonicalOwnerStatusHandler,
 })
 
 export const cancelOwnerInvocation = action({
   args: { invocationRef: v.string(), idempotencyKey: v.string() },
   returns: recoveryResultValue,
-  handler: cancelOwnerInvocationHandler,
+  handler: canonicalOwnerCancelHandler,
 })
 
 export const reconcileOwnerInvocation = action({
   args: { invocationRef: v.string(), idempotencyKey: v.string(), evidence: reconciliationEvidenceValue },
   returns: recoveryResultValue,
-  handler: reconcileOwnerInvocationHandler,
+  handler: canonicalOwnerReconcileHandler,
 })

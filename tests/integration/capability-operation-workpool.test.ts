@@ -115,7 +115,10 @@ async function seedKeylessLookup(backend: ConvexFixtureBackend): Promise<string>
     },
   ))
   expect(qualification).toMatchObject({ status: 'eligible', reasons: [] })
-  const executable = await backend.query(api.capabilitySupplyOperations.listKeylessExecutable, {})
+  const executable = await backend.query(api.capabilitySupplyOperations.listKeylessExecutable, {}) as Array<{
+    capabilityId: string
+    operationRef: string
+  }>
   const descriptor = executable.find((candidate) => candidate.capabilityId === publication.capabilityId)
   if (descriptor === undefined) throw new Error('workpool executable descriptor missing')
   return descriptor.operationRef
@@ -125,11 +128,17 @@ async function seedPrincipal(
   backend: ConvexFixtureBackend,
   suffix: string,
   now: number,
+  operationRef: string,
 ): Promise<{ principal: TestPrincipal; grantRef: string }> {
+  const ref = (kind: 'prn' | 'acc' | 'grt' | 'eid' | 'crd' | 'own', material: string) =>
+    `${kind}_${canonicalDigest({ kind, material }).slice(7, 39)}`
+  const principalId = ref('prn', suffix)
+  const ownerId = ref('acc', suffix)
+  const credentialId = `credential:operation-workpool:${suffix}`
   const principal = {
-    principalId: `principal:operation-workpool:${suffix}`,
-    ownerId: `owner:operation-workpool:${suffix}`,
-    credentialId: `credential:operation-workpool:${suffix}`,
+    principalId,
+    ownerId,
+    credentialId,
     applicationRef: 'agentic-economy',
     environment: 'production' as const,
     scopes: [MARKET_OPERATIONS_INVOKE_SCOPE] as const,
@@ -157,7 +166,7 @@ async function seedPrincipal(
       maximumCallsPerHour: 1000,
     },
   }
-  const grantRef = `grant:operation-workpool:${suffix}`
+  const grantRef = ref('grt', suffix)
   const grant = {
     format: 'ae.agent-access-grant:v1' as const,
     grantRef,
@@ -178,6 +187,92 @@ async function seedPrincipal(
     updatedAt: now,
     expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
   }
+  const bindingRef = ref('eid', suffix)
+  const canonicalCredentialRef = ref('crd', suffix)
+  const ownershipRef = ref('own', suffix)
+  const action = {
+    actorPrincipalRef: principalId,
+    activeAccountRef: ownerId,
+    correlationRef: `correlation:operation-workpool:${suffix}`,
+    idempotencyRef: `idempotency:operation-workpool:${suffix}`,
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('externalIdentityBindings', {
+      bindingRef,
+      principalRef: principalId,
+      providerNamespace: 'clerk/api-key',
+      providerIdentifier: credentialId,
+      providerState: { kind: 'known', value: 'active' },
+      lifecycle: 'active',
+      credentialGeneration: 1,
+      bindIdempotencyRef: `bind:operation-workpool:${suffix}`,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert('credentials', {
+      credentialRef: canonicalCredentialRef,
+      bindingRef,
+      principalRef: principalId,
+      type: 'api_key',
+      lifecycle: 'active',
+      generation: 1,
+      issueIdempotencyRef: `issue:operation-workpool:${suffix}`,
+      revision: 1,
+      issuedAt: now,
+      expiresAt: grant.expiresAt,
+      updatedAt: now,
+    })
+    await ctx.db.insert('principals', {
+      principalRef: principalId,
+      kind: 'agent',
+      displayName: `Operation worker ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await ctx.db.insert('accounts', {
+      accountRef: ownerId,
+      displayName: `Operation worker account ${suffix}`,
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: principalId,
+      creationIdempotencyRef: `account:operation-workpool:${suffix}`,
+      initialOwnershipRef: ownershipRef,
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastAction: action,
+    })
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef,
+      accountRef: ownerId,
+      ownerPrincipalRef: principalId,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: now,
+      createdBy: action,
+    })
+    await ctx.db.insert('authorityDelegationGrants', {
+      grantRef,
+      accountRef: ownerId,
+      actorPrincipalRef: principalId,
+      subjectPrincipalRef: principalId,
+      scopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+      resourceRefs: [operationRef, 'surface:http:agent-operation-invoke'].sort(),
+      budgetLimit: 1,
+      budgetUsed: 0,
+      expiresAt: grant.expiresAt,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: now,
+      createdBy: action,
+    })
+  })
   const recordedPrincipal = await backend.mutation(internal.agentAccessPrincipals.recordAgentPrincipal, {
     ...principal,
     scopes: [...principal.scopes],
@@ -287,12 +382,12 @@ describe('capability operation Workpool lifecycle', () => {
     const backend = convexTestWithWorkers()
     const operationRef = await seedKeylessLookup(backend)
     const now = Date.now()
-    const first = await seedPrincipal(backend, 'success', now)
+    const first = await seedPrincipal(backend, 'success', now, operationRef)
     await expect(backend.query(
       internal.capabilitySupplyOperations.readCurrentPublishedOperationSnapshot,
       { operationRef },
     )).resolves.toMatchObject({ operationJson: expect.any(String) })
-    const revoked = await seedPrincipal(backend, 'revoked', now)
+    const revoked = await seedPrincipal(backend, 'revoked', now, operationRef)
     await expect(backend.query(internal.agentAccessPolicy.readActiveGrant, {
       credentialId: first.principal.credentialId,
       environment: first.principal.environment,
@@ -326,13 +421,23 @@ describe('capability operation Workpool lifecycle', () => {
     })
     providerFetch.mockClear()
 
+    await expect(invokeOperation(backend, {
+      ...first.principal,
+      principalId: revoked.principal.principalId,
+      ownerId: revoked.principal.ownerId,
+    }, operationRef, 'operation-workpool-forged', 'forged')).rejects.toThrow(
+      'operation_invoke_source_write_rejected:source_write_command_mismatch',
+    )
+    expect(providerFetch).not.toHaveBeenCalled()
+
     const pending = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'success')
     expect(pending.kind).toBe('pending')
     if (pending.kind !== 'pending') throw new Error('successful operation did not enqueue')
-    pendingInvocationRef = pending.invocationRef
+    const successfulInvocationRef = pending.invocationRef
+    pendingInvocationRef = successfulInvocationRef
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
 
-    const completed = await readEvidence(backend, pendingInvocationRef, first.principal.principalId)
+    const completed = await readEvidence(backend, successfulInvocationRef, first.principal.principalId)
     const completedResult = completed.invocation?.result
     expect(completedResult).toMatchObject({ kind: 'completed' })
     if (completedResult?.kind !== 'completed') throw new Error('completed operation result missing')
@@ -382,7 +487,7 @@ describe('capability operation Workpool lifecycle', () => {
     const replay = await invokeOperation(backend, first.principal, operationRef, 'operation-workpool-success', 'replay')
     expect(replay).toEqual(completedResult)
     await backend.finishAllScheduledFunctions(() => vi.advanceTimersByTime(1))
-    const replayed = await readEvidence(backend, pendingInvocationRef, first.principal.principalId)
+    const replayed = await readEvidence(backend, successfulInvocationRef, first.principal.principalId)
     expect(replayed.invocation?.workId).toBe(workId)
     expect(replayed.history).toHaveLength(3)
     expect(replayed.transactions).toHaveLength(1)

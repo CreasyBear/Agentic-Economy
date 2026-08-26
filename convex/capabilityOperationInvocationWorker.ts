@@ -1,6 +1,7 @@
 "use node";
 
 import * as crypto from 'node:crypto'
+import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { recoveryResultValue } from '@/modules/capability-execution/convex'
 import type { WorkerResult } from '@/modules/capability-execution/invocation-worker/charge'
@@ -11,7 +12,7 @@ import {
   recoveryArgs,
 } from '@/modules/capability-execution/invocation-worker/recover'
 import { internal } from './_generated/api'
-import { internalAction } from './_generated/server'
+import { internalAction, type ActionCtx } from './_generated/server'
 import {
   bindWorkloadCronActionContext,
   parseWorkloadCronSnapshot,
@@ -48,6 +49,38 @@ const RECONCILIATION_SWEEP_LIMIT = 25
 const RECONCILIATION_SWEEP_DEADLINE_MS = 45_000
 
 type RecoveryResult = Infer<typeof recoveryResultValue>
+type ReconciledInvocationAuthority = Readonly<{
+  principalId: string
+  accountRef: string
+  credentialId: string
+  grantRef: string
+  grantGeneration: number
+  policyDigest: string
+  expiresAt: number
+}>
+type ReconciledInvocationAuthorityResult =
+  | Readonly<{ kind: 'authorized'; authority: ReconciledInvocationAuthority }>
+  | Readonly<{ kind: 'refused' }>
+
+const reconcileInvocationWorkloadAuthorityRef = makeFunctionReference<
+  'mutation',
+  { invocationRef: string },
+  ReconciledInvocationAuthorityResult
+>('capabilityOperationInvocations:reconcileInvocationWorkloadAuthority')
+
+async function reconcileInvocationWorkloadAuthority(
+  ctx: Pick<ActionCtx, 'runMutation'>,
+  invocationRef: string,
+  expected?: Readonly<{ principalId: string; credentialId: string }>,
+): Promise<ReconciledInvocationAuthority | null> {
+  const result = await ctx.runMutation(reconcileInvocationWorkloadAuthorityRef, { invocationRef })
+  if (result.kind !== 'authorized'
+    || (expected !== undefined && (
+      result.authority.principalId !== expected.principalId
+      || result.authority.credentialId !== expected.credentialId
+    ))) return null
+  return result.authority
+}
 
 function isTerminalRecoveryResult(result: RecoveryResult): boolean {
   if (result.kind === 'refused') return !result.retryable
@@ -59,8 +92,10 @@ export const run = internalAction({
   args: { invocationRef: v.string() },
   returns: workerResult,
   handler: async (ctx, args): Promise<WorkerResult> => {
+    if (await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef) === null) return { kind: 'none' }
     const prepared = await prepareInvocationRun(ctx, args)
     if (prepared.kind !== 'prepared') return prepared
+    if (await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef) === null) return { kind: 'none' }
     return await releaseInvocationRun(ctx, prepared)
   },
 })
@@ -69,6 +104,9 @@ export const recover = internalAction({
   args: recoveryArgs,
   returns: recoveryResultValue,
   handler: async (ctx, args): Promise<RecoveryResult> => {
+    if (await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef, args) === null) {
+      return { kind: 'refused', invocationRef: args.invocationRef, code: 'invocation_not_found', retryable: false }
+    }
     const result = await recoverCapabilityOperationInvocation(ctx, args)
     if ('expiryDisposition' in result) {
       return {
@@ -126,11 +164,13 @@ export const reconcileScheduled = internalAction({
       }
       if (ownerRecovery === null) continue
       try {
-        const result = await recoverCapabilityOperationInvocation(bindWorkloadCronActionContext(ctx, {
+        const invocationContext = bindWorkloadCronActionContext(ctx, {
           name: 'reconcile due facilitator invocations',
           snapshot: workload,
           resourceInvocationRef: candidate.dispatchRef,
-        }), {
+        })
+        if (await reconcileInvocationWorkloadAuthority(ctx, candidate.dispatchRef, ownerRecovery) === null) continue
+        const result = await recoverCapabilityOperationInvocation(invocationContext, {
           invocationRef: candidate.dispatchRef,
           principalId: ownerRecovery.principalId,
           credentialId: ownerRecovery.credentialId,
@@ -162,6 +202,7 @@ export const reconcileScheduled = internalAction({
         snapshot: workload,
         resourceInvocationRef: candidate.invocationRef,
       })
+      if (await reconcileInvocationWorkloadAuthority(ctx, candidate.invocationRef) === null) continue
       try {
         claim = await invocationContext.runMutation(
           internal.capabilityOperationInvocations.claimAutomaticReconciliationCandidate,

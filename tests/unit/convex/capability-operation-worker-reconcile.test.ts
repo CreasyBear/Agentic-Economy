@@ -178,6 +178,21 @@ function consequence(reference: unknown, args: Record<string, unknown>) {
     : { path: functionPath(reference), args }
 }
 
+function authorizedInvocation(invocationRef: unknown) {
+  return {
+    kind: 'authorized',
+    authority: {
+      principalId: `principal:${String(invocationRef)}`,
+      accountRef: `account:${String(invocationRef)}`,
+      credentialId: `credential:${String(invocationRef)}`,
+      grantRef: `grant:${String(invocationRef)}`,
+      grantGeneration: 1,
+      policyDigest: `policy:${String(invocationRef)}`,
+      expiresAt: 9_999_999,
+    },
+  }
+}
+
 afterEach(() => {
   recoverMock.mockReset()
   vi.restoreAllMocks()
@@ -301,6 +316,39 @@ describe('scheduled capability invocation reconciliation primitives', () => {
 })
 
 describe('scheduled capability invocation reconciliation worker', () => {
+  it('does not widen cron authority when persisted invocation authority is refused', async () => {
+    const expired = [{
+      dispatchRef: 'expired:refused', attemptRef: 'attempt:refused', effectGeneration: 1,
+      custodyRef: 'custody:refused', authorizationDigest: 'authorization:refused',
+      paymentAuthorizationExpiresAt: 999,
+    }]
+    const due = [{ invocationRef: 'due:refused', attemptCount: 0, nextAttemptAt: 1_000 }]
+    const ctx = {
+      runQuery: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = functionPath(reference)
+        if (path.endsWith(':reconcile')) return WORKLOAD
+        if (path.endsWith(':listExpiredPreparedX402PaymentAttempts')) return expired
+        if (path.endsWith(':readOwnerRecovery')) return {
+          principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}`,
+        }
+        if (path.endsWith(':listDueAutomaticReconciliationCandidates')) return due
+        throw new Error(`unexpected_query:${path}`)
+      }),
+      runMutation: vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+        const path = consequence(reference, args).path
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) return { kind: 'refused' }
+        throw new Error(`unexpected_mutation:${path}`)
+      }),
+    }
+
+    await expect(scheduledHandler(ctx as never, { workload: WORKLOAD })).resolves.toEqual({
+      selected: 1, claimed: 0, completed: 0, retried: 0, manualReview: 0,
+      expiredSelected: 1, expiredQueued: 0, expiredManualReview: 0,
+    })
+    expect(recoverMock).not.toHaveBeenCalled()
+    expect(ctx.runMutation).toHaveBeenCalledTimes(2)
+  })
+
   it('processes candidates serially and continues after one item fails', async () => {
     const candidates = [
       { invocationRef: 'first', attemptCount: 0, nextAttemptAt: 1_000 },
@@ -330,6 +378,9 @@ describe('scheduled capability invocation reconciliation worker', () => {
         const dispatched = consequence(reference, args)
         const path = dispatched.path
         args = dispatched.args
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}` }
         }
@@ -371,6 +422,9 @@ describe('scheduled capability invocation reconciliation worker', () => {
       )),
       runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
         const path = consequence(reference, _args).path
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(_args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: 'principal', credentialId: 'credential' }
         }
@@ -428,6 +482,9 @@ describe('scheduled capability invocation reconciliation worker', () => {
         const dispatched = consequence(reference, args)
         const path = dispatched.path
         args = dispatched.args
+        if (path.endsWith(':reconcileInvocationWorkloadAuthority')) {
+          return authorizedInvocation(args.invocationRef)
+        }
         if (path.endsWith(':claimAutomaticReconciliationCandidate')) {
           return { kind: 'claimed', principalId: `principal:${args.invocationRef}`, credentialId: `credential:${args.invocationRef}` }
         }

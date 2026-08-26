@@ -1087,6 +1087,19 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return args.environment === 'production'
             ? { kind: 'recorded' }
             : { kind: 'excluded', reason: 'non_production_environment' }
+        case 'capabilityOperationInvocations:reconcileInvocationWorkloadAuthority':
+          return {
+            kind: 'authorized',
+            authority: {
+              principalId: state.dispatch.principalId,
+              accountRef: state.dispatch.ownerId,
+              credentialId: state.dispatch.credentialId,
+              grantRef: state.dispatch.grantRef,
+              grantGeneration: state.dispatch.grantGeneration,
+              policyDigest: state.dispatch.policyDigest,
+              expiresAt: state.dispatch.grantExpiresAt,
+            },
+          }
         default: throw new Error(`unexpected_mutation:${path}:${JSON.stringify(args)}`)
       }
     }),
