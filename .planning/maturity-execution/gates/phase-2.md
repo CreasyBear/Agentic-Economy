@@ -2,8 +2,8 @@
 
 Scope: Integrate and prove every Phase 2 leaf.
 
-- [ ] G1: Every Phase 2 leaf is independently met.
-  CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status gates/leaf-P2-01.md gates/leaf-P2-02.md gates/leaf-P2-03.md gates/leaf-P2-04.md gates/leaf-P2-05.md
+- [ ] G1: Every Phase 2 leaf and the accepted authority-entry repair node are independently met.
+  CHECK: node /Users/joelchan/.agents/skills/unlazy/scripts/gate-check.mjs --status --timeout 120 gates/leaf-P2-01.md gates/leaf-P2-02.md gates/leaf-P2-03.md gates/leaf-P2-04.md gates/leaf-P2-05.md gates/repair-P2-authority-entry.md
   EXPECT: /ALL MET/
   EVIDENCE: pending
 

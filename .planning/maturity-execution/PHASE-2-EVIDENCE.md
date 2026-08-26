@@ -112,11 +112,23 @@ integration adapters.
 
 ## Execution log
 
-- Wave 0 preflight and inventories: in progress.
-- Wave 1 P2-01/P2-03/P2-04: pending typed executor dispatch.
-- Wave 1 driver integration: pending.
-- Wave 2 P2-02/P2-05: pending.
-- Phase integration, hostile verification, release and housekeeping: pending.
+- Original Wave 1 cores and subsequent source repairs are preserved in the current
+  worktree and commits; the earlier projected runtime-map evidence is not accepted
+  as phase proof.
+- Runtime/source repair was paused after the 27-sink projection and incomplete
+  registration inventory were refuted.
+- Skill-driven research and two independent design reviews accepted
+  `PHASE-2-RUNTIME-DOMINANCE-DESIGN.md` at final SHA-256
+  `a221d14315f1ec7446ae8d97002c61f2e69ba425df3dac3efde1094e89a30934`.
+  Design acceptance authorizes only the bounded migration sequence; nine
+  implementation/source gates remain red.
+- The new orchestrated Unlazy repair node is
+  `PHASE-2-AUTHORITY-ENTRY-MIGRATION.md` with root gate
+  `gates/repair-P2-authority-entry.md`. It is part of Phase 2 G1 and does not
+  replace the five frozen leaf ledgers.
+- Production migration remains withheld until the inventory/classification leaf
+  freezes every symbol-resolved registration, exemption, runtime/edge join,
+  selector/capability contract, disjoint owner, test and rollback unit.
 
 ## Phase 2 papercuts
 
@@ -143,6 +155,13 @@ owner, owning gate and follow-up.
   is preserved for product evidence and final disposition by the root program
   manager; the child ledger is not healthy. This is a tooling-continuity papercut,
   not a source blocker.
+- `AE-PAP-016`: deterministic sink projection reported surface-wide proof without
+  invoking 180 protected handlers. The exact design correction and actual-handler
+  evidence contract are preserved in the accepted runtime-dominance design.
+- `AE-PAP-017`: the installed Clerk router selected current TanStack/testing
+  subskills that are absent from the installed skill tree. Official current Clerk
+  docs plus installed types were used as the authorized fallback; genuine positive
+  Clerk issuance remains hosted P9-01 evidence and no fake token was introduced.
 
 ## Open external evidence
 
