@@ -1,0 +1,58 @@
+graph TD
+    Product["Narrow product<br/>an operation market for agents"]
+
+    Home["Website catalogue<br/>find an Operation"]
+    Chat["Thin chat wrapper<br/>transcript + composer + tool activity"]
+    CLI["CLI / agent client"]
+    Tools["One tool seam<br/>action registry + canonical contracts"]
+
+    Discover["Discover<br/>market + operation registry"]
+    Admit["Admit<br/>capability contract + supply"]
+    Authorize["Authorize<br/>agent access"]
+    Execute["Execute + recover<br/>capability execution + invocation ledger"]
+    Settle["Pay + receipt<br/>money"]
+
+    Cut["Delete or archive"]
+    Threads["Chat-as-platform<br/>durable threads, leases, checkpoints, shares"]
+    Harness["Generic harness platform<br/>phase machine, collector, journals, run viewer"]
+    Eval["Detached proof machinery<br/>eval + external-run"]
+    Compat["Compatibility residue<br/>old scopes + redirects"]
+
+    Shrink["Consolidate later"]
+    Services["Duplicate catalogue vocabulary<br/>business + services projections"]
+    Operator["Overlapping operator pages"]
+
+    Product --> Home
+    Home -->|"ask in natural language"| Chat
+    Product --> CLI
+    Chat --> Tools
+    CLI --> Tools
+    Tools --> Discover
+    Discover -->|"probe and validate"| Admit
+    Admit --> Authorize
+    Authorize --> Execute
+    Execute --> Settle
+
+    Product -.-> Cut
+    Cut --> Threads
+    Cut --> Harness
+    Cut --> Eval
+    Cut --> Compat
+
+    Product -.-> Shrink
+    Shrink --> Services
+    Shrink --> Operator
+
+    classDef keep fill:#dff5e6,stroke:#26734d,color:#173d2b,stroke-width:2px
+    classDef cut fill:#ffe3e3,stroke:#b42318,color:#641c16,stroke-width:2px
+    classDef shrink fill:#fff1cc,stroke:#a15c00,color:#5f3900,stroke-width:2px
+    classDef surface fill:#e5efff,stroke:#315aa8,color:#18345f,stroke-width:2px
+    classDef seam fill:#eee7ff,stroke:#6941c6,color:#3f277f,stroke-width:3px
+    classDef root fill:#dce8ff,stroke:#294b91,color:#172d59,stroke-width:3px
+
+    class Discover,Admit,Authorize,Execute,Settle keep
+    class Home,Chat,CLI surface
+    class Tools seam
+    class Cut,Threads,Harness,Eval,Compat cut
+    class Shrink,Services,Operator shrink
+    class Product root
