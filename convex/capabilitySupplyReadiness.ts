@@ -105,6 +105,9 @@ function logProbeTerminal(
 }
 
 async function readScheduledFunctionId(ctx: ActionCtx): Promise<string | null> {
+  if (typeof ctx.meta?.getRequestMetadata !== 'function') {
+    return null
+  }
   try {
     const { scheduledFunctionId } = await ctx.meta.getRequestMetadata()
     return scheduledFunctionId
