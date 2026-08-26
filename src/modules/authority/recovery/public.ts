@@ -37,6 +37,7 @@ export type {
   IsolationMatrixRow,
   IsolationProbe,
   IsolationProofErrorCode,
+  IsolationProtection,
   IsolationSurface,
 } from './isolation'
 
@@ -45,9 +46,28 @@ export {
   SecretCanaryError,
   proveSecretCanaryIsolation,
 } from './secret-canary'
+
+export { ProductionRecoveryService, createDurableRecoveryStore } from './production-support'
+export type {
+  DurableRecoveryPersistence,
+  DurableRecoverySession,
+  ProductionRecoveryServiceOptions,
+} from './production-support'
 export type {
   SecretCanaryArtifact,
   SecretCanaryErrorCode,
   SecretCanaryProof,
   SecretCanarySink,
 } from './secret-canary'
+
+export {
+  ProductionEvidenceError,
+  collectProductionEvidence,
+} from './production-evidence'
+export type {
+  ProductionEvidenceErrorCode,
+  ProductionEvidenceProof,
+  ProductionEvidenceRequest,
+  ProductionEvidenceSinkCollectors,
+  ProductionSinkEvidence,
+} from './production-evidence'

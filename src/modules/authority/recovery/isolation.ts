@@ -17,10 +17,13 @@ export type IsolationDecision =
   | Readonly<{ kind: 'allowed' }>
   | Readonly<{ kind: 'denied'; reason: string; externalState?: string }>
 
+export type IsolationProtection = 'protected' | 'tested_public_exemption'
+
 export type IsolationSurface = Readonly<{
   surfaceRef: string
   owningAccountRef: AccountRef
   resourceRef: string
+  protection?: IsolationProtection
 }>
 
 export type IsolationProbe = Readonly<{
@@ -32,6 +35,7 @@ export type IsolationProbe = Readonly<{
   activeAccountRef: AccountRef
   presentedGeneration: number
   currentGeneration: number
+  protection: IsolationProtection
 }>
 
 export type IsolationMatrixRow = IsolationProbe & Readonly<{
@@ -82,11 +86,14 @@ export async function generateIsolationMatrix(request: IsolationMatrixRequest): 
     for (const caseKind of ISOLATION_CASES) {
       const probe = probeFor(request, surface, caseKind)
       const decision = freezeDecision(await request.evaluate(probe))
-      const positive = caseKind === 'owner' || caseKind === 'member' || caseKind === 'workload'
-      if (positive && decision.kind !== 'allowed') {
+      const shouldAllow = probe.protection === 'tested_public_exemption'
+        || caseKind === 'owner'
+        || caseKind === 'member'
+        || caseKind === 'workload'
+      if (shouldAllow && decision.kind !== 'allowed') {
         throw new IsolationProofError('isolation_positive_case_denied')
       }
-      if (!positive && decision.kind !== 'denied') {
+      if (!shouldAllow && decision.kind !== 'denied') {
         throw new IsolationProofError('isolation_negative_case_allowed')
       }
       rows.push(Object.freeze({ ...probe, decision }))
@@ -102,7 +109,11 @@ export async function generateIsolationMatrix(request: IsolationMatrixRequest): 
 function assertInventory(request: IsolationMatrixRequest): void {
   if (request.surfaces.length === 0
     || new Set(request.surfaces.map((surface) => surface.surfaceRef)).size !== request.surfaces.length
-    || request.surfaces.some((surface) => surface.surfaceRef.length === 0 || surface.resourceRef.length === 0)) {
+    || request.surfaces.some((surface) => surface.surfaceRef.length === 0
+      || surface.resourceRef.length === 0
+      || (surface.protection !== undefined
+        && surface.protection !== 'protected'
+        && surface.protection !== 'tested_public_exemption'))) {
     throw new IsolationProofError('isolation_surface_inventory_invalid')
   }
   if (request.surfaces.some((surface) => surface.owningAccountRef === request.wrongAccountRef)) {
@@ -141,6 +152,7 @@ function probeFor(
       ? request.currentGeneration - 1
       : request.currentGeneration,
     currentGeneration: request.currentGeneration,
+    protection: surface.protection ?? 'protected',
   })
 }
 

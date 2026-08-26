@@ -52,6 +52,22 @@ export {
   createScopedSecretConsequenceRuntime,
   ProductionSecretGenerationValidator,
 } from './production-consumer'
+export {
+  ProductionSecretLifecycleService,
+  SecretLifecycleError,
+} from './production-lifecycle'
+export type {
+  ProductionSecretLifecycleServiceOptions,
+  SecretLifecycleErrorCode,
+  SecretLifecycleJournal,
+  SecretLifecycleOperation,
+  SecretLifecycleRecord,
+  SecretLifecycleReconcileRequest,
+  SecretLifecycleRequest,
+  SecretLifecycleResult,
+  SecretLifecycleState,
+  SecretPointerControl,
+} from './production-lifecycle'
 export type {
   ScopedSecretConsequenceInput,
   ScopedSecretConsequenceRuntime,
