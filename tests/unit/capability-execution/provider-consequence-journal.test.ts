@@ -975,6 +975,21 @@ describe('provider consequence durable journal', () => {
       .resolves.toHaveLength(0)
   })
 
+  it('rejects a non-payment ticket whose payment pointer appears after input validation', async () => {
+    const { backend, args } = await freshIssueAuthority('http-json:v1')
+    let reads = 0
+    Object.defineProperty(args, 'paymentSecretRef', {
+      configurable: true,
+      enumerable: true,
+      get: () => reads++ === 0 ? undefined : PAYMENT_SECRET_REF,
+    })
+
+    await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, args)))
+      .resolves.toEqual({ kind: 'unavailable', reason: 'payment_secret_pointer_unavailable' })
+    await expect(backend.run(async (ctx) => ctx.db.query('providerConsequenceJournal').collect()))
+      .resolves.toHaveLength(0)
+  })
+
   it('pins admitted payment pointer generation, revision, and platform account across live pointer changes', async () => {
     for (const substitution of [
       { activeGeneration: `sgn_${'0'.repeat(32)}` },

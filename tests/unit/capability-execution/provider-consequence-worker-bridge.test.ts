@@ -5,11 +5,14 @@ import {
   handler,
   invocationRef,
   mocks,
+  paymentSecretRef,
 } from '../convex/capability-operation-worker-harness'
 
 describe('provider consequence worker bridge', () => {
   beforeEach(() => {
+    vi.stubEnv('AE_X402_PAYMENT_SECRET_REF', paymentSecretRef)
     vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
+    vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '')
   })
 
   it('preserves sandbox provider-direct x402 commercial outcomes without an env signer or custody fields', async () => {
@@ -19,6 +22,9 @@ describe('provider consequence worker bridge', () => {
 
     expect(mocks.invokeProviderConsequenceViaVercel).toHaveBeenCalledOnce()
     expect(mocks.x402PaymentCredentialRefFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.credentialFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.cdpX402CustodyConfigurationFromEnvironment).not.toHaveBeenCalled()
+    expect(mocks.cdpX402CustodyBudgetRef).not.toHaveBeenCalled()
     expect(worker.state.transportCalls).toBe(1)
     const reserve = worker.state.mutationCalls.find(
       ({ path }) => path === 'moneyLedger:reserveExternalInvocationSpend',

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   const invokePreparedRouteTransport = vi.fn()
   const invokeProviderConsequenceViaVercel = vi.fn()
   const providerConsequenceX402PaymentCustodyAvailable = vi.fn(() => (
-    (process.env.AE_X402_PAYMENT_CREDENTIAL_REF?.trim().length ?? 0) > 0
+    /^sec_[0-9a-f]{32}$/u.test(process.env.AE_X402_PAYMENT_SECRET_REF?.trim() ?? '')
   ))
   const signRouteTransportCall = vi.fn<SignRouteTransportCall>(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
   const createCdpEvmX402PaymentSignature = vi.fn(async (
@@ -171,6 +171,7 @@ export const invocationRef = 'operation-invocation:test-worker'
 export const grantRef = 'grant:test-worker'
 const providerCredentialRef = 'env:AE_TEST_PROVIDER_CREDENTIAL'
 export const paymentCredentialRef = 'env:AE_TEST_PAYMENT_CREDENTIAL'
+export const paymentSecretRef = `sec_${'4'.repeat(32)}`
 export const attemptRef = `operation-attempt:${invocationRef}:1`
 export const digest = (digit: string) => `sha256:${digit.repeat(64)}`
 
@@ -1123,11 +1124,8 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         outputJson: successfulOutputJson,
       }
     }
-    const payerCredentialRef = mocks.x402PaymentCredentialRefFromEnvironment()
-    const payerCredential = payerCredentialRef === undefined
-      ? undefined
-      : mocks.credentialFromEnvironment(payerCredentialRef)
-    if (payerCredentialRef === undefined || payerCredential === undefined) {
+    const payerSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
+    if (payerSecretRef === undefined || !/^sec_[0-9a-f]{32}$/u.test(payerSecretRef)) {
       return {
         transport: 'x402',
         disposition: 'refused',
@@ -1189,19 +1187,19 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
         amountUnits: '1',
         currency: 'USD',
         exponent: 2,
-        credentialRef: payerCredentialRef,
+        credentialRef: payerSecretRef,
         reservationRef: reservation.reservation?.reservationRef,
       })
       const paymentSignature = await mocks.createSandboxEvmX402PaymentSignature({
         challenge,
         selectedRequirement: challenge.accepts[0],
         paymentIdentifier: input.invocation.authority.operationKeyDigest,
-        credential: payerCredential,
+        credential: 'callback-scoped-test-secret',
       })
       return await mocks.invokePreparedRouteTransport(
         { requestDigest: input.requestDigest },
         {
-          readX402PaymentCredentialRef: async () => payerCredentialRef,
+          readX402PaymentCredentialRef: async () => payerSecretRef,
           prepareX402PaymentAuthorization: async () => preparedAuthorization,
           readX402PaymentAuthorization: async () => paymentSignature,
           readX402PaymentAuthorizationByDigest: async () => paymentSignature,
@@ -1283,8 +1281,9 @@ beforeEach(() => {
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
   vi.stubEnv('AE_TEST_PROVIDER_CREDENTIAL', '0xprovider-secret')
-  vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', paymentCredentialRef)
-  vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '0xpayer-secret')
+  vi.stubEnv('AE_X402_PAYMENT_SECRET_REF', paymentSecretRef)
+  vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
+  vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '')
 })
 
 export { mocks }

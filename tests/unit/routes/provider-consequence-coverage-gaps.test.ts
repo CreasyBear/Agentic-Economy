@@ -241,6 +241,12 @@ describe('provider consequence route coverage gaps', () => {
         .resolves.toBeUndefined()
 
       const runtime = options.createCallbackScopedX402Runtime({ ticket: canonicalTicket, invocation: routeInvocation })
+      const ticketWithoutPayment = { ...canonicalTicket }
+      Reflect.deleteProperty(ticketWithoutPayment, 'paymentSecret')
+      expect(() => options.createCallbackScopedX402Runtime({
+        ticket: ticketWithoutPayment,
+        invocation: routeInvocation,
+      })).toThrow('payment_custody_unavailable')
       await expect(runtime.readX402PaymentCredentialRef()).resolves.toBe(PAYMENT_SECRET_REF)
       await expect(runtime.validateProviderConnectionAuthority({
         connectionRef: routeInvocation.binding.authority.connectionRef,

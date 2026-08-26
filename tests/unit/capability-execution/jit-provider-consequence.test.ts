@@ -879,6 +879,32 @@ describe('JIT provider consequence boundary', () => {
     }
   })
 
+  it('rejects a caller-injected payment pointer on a non-payment provider ticket', async () => {
+    const routeInvocation = invocation()
+    const canonical = ticket(routeInvocation)
+    const active = harness({
+      routeInvocation,
+      verifiedTicket: {
+        ...canonical,
+        paymentSecret: {
+          secretRef: PAYMENT_REF,
+          activeGeneration: PAYMENT_GENERATION,
+          pointerRevision: 8,
+        },
+      },
+    })
+
+    await expect(active.boundary.execute({ ticket: 'opaque-ticket', invocation: routeInvocation }))
+      .resolves.toMatchObject({
+        transport: 'http',
+        disposition: 'refused',
+        releaseStarted: false,
+        failureCode: 'provider_consequence_ticket_invalid',
+      })
+    expect(active.durableJournal.begin).not.toHaveBeenCalled()
+    expect(active.send).not.toHaveBeenCalled()
+  })
+
   it('runs the existing x402 custody, submission marker, and reconciliation ports inside the JIT callback without retry', async () => {
     const routeInvocation = x402Invocation()
     const challenge = x402Challenge()

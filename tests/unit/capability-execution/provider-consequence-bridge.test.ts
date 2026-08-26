@@ -5,6 +5,7 @@ import type { RouteTransportInvocation } from '@/modules/capability-supply/route
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   invokeProviderConsequenceViaVercel,
+  providerConsequenceX402PaymentCustodyAvailable,
 } from '@/modules/capability-execution/invocation-worker/providerConsequenceBridge'
 import {
   providerConsequenceInvocationDigest,
@@ -145,6 +146,15 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example'
     process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF = SIGNING_SECRET_REF
     process.env.AE_X402_PAYMENT_SECRET_REF = PAYMENT_SECRET_REF
+  })
+
+  it('accepts only canonical opaque SecretStore references for x402 payment custody', () => {
+    delete process.env.AE_X402_PAYMENT_SECRET_REF
+    expect(providerConsequenceX402PaymentCustodyAvailable()).toBe(false)
+    process.env.AE_X402_PAYMENT_SECRET_REF = 'env:AE_X402_PAYMENT_PRIVATE_KEY'
+    expect(providerConsequenceX402PaymentCustodyAvailable()).toBe(false)
+    process.env.AE_X402_PAYMENT_SECRET_REF = PAYMENT_SECRET_REF
+    expect(providerConsequenceX402PaymentCustodyAvailable()).toBe(true)
   })
 
   afterEach(() => {
