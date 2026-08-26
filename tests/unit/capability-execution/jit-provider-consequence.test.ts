@@ -34,6 +34,7 @@ const NOW = 2_000_000_000_000
 const REF = secretRef('sec_11111111111111111111111111111111')
 const GENERATION = secretGeneration('sgn_11111111111111111111111111111111')
 const CREDENTIAL = 'provider-secret-never-return'
+const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
 type ProviderRouteTransportInvocation = Extract<
   RouteTransportInvocation,
@@ -71,6 +72,7 @@ function invocation(): ProviderRouteTransportInvocation {
       callIdentity: { keyId: 'route-calls:2026-08', signature: 'hmac-sha256:signed-call' },
       authorityGeneration: 4,
       authorityDigest: canonicalDigest({ connection: 'test', generation: 4 }),
+      canonicalConnectionRef: CANONICAL_CONNECTION_REF,
       leaseRef: 'lease:test',
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
@@ -179,7 +181,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     operationRef,
     leaseRef,
     canonicalLeaseRef: 'lease_canonical_test',
-    canonicalConnectionRef: routeInvocation.binding.authority.connectionRef,
+    canonicalConnectionRef: routeInvocation.authority.canonicalConnectionRef!,
     canonicalConnectionGeneration: authority.authorityGeneration,
     providerRef: routeInvocation.binding.authority.providerRef,
     adapterId: routeInvocation.binding.adapterId,

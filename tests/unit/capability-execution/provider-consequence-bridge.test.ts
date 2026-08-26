@@ -17,6 +17,7 @@ const DIGEST = (character: string) => `sha256:${character.repeat(64)}`
 const SIGNING_SECRET_REF = `sec_${'9'.repeat(32)}`
 const CUSTOMER_SECRET_REF = `sec_${'1'.repeat(32)}`
 const GENERATION = `sgn_${'2'.repeat(32)}`
+const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -53,6 +54,7 @@ function invocation(): ProviderInvocation {
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
       authorityGeneration: 7,
       authorityDigest: DIGEST('7'),
+      canonicalConnectionRef: CANONICAL_CONNECTION_REF,
       leaseRef: 'lease:test',
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
@@ -80,7 +82,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     operationRef: 'operation:test',
     leaseRef: 'lease:test',
     canonicalLeaseRef: 'lease_canonical_test',
-    canonicalConnectionRef: 'connection:test',
+    canonicalConnectionRef: CANONICAL_CONNECTION_REF,
     canonicalConnectionGeneration: 7,
     providerRef: 'provider:test',
     adapterId: 'http-json:v1',
@@ -122,6 +124,12 @@ function context(result: unknown) {
   } as unknown as ActionCtx
 }
 
+const SIGNED_TICKET = `provider-ticket:test.${NOW + 10_000}.${'a'.repeat(64)}`
+
+function signingResponse(): Response {
+  return Response.json({ signedTicket: SIGNED_TICKET })
+}
+
 describe('provider consequence Convex-to-Vercel bridge', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -141,13 +149,16 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     const routeInvocation = invocation()
     const issue = issued(routeInvocation)
     const ctx = context(issue)
-    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => Response.json({
-      transport: 'http',
-      disposition: 'succeeded',
-      releaseStarted: true,
-      requestDigest: DIGEST('a'),
-      outputJson: JSON.stringify({ serviceReference: 'service:test' }),
-    }))
+    let fetchCount = 0
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => ++fetchCount === 1
+      ? signingResponse()
+      : Response.json({
+          transport: 'http',
+          disposition: 'succeeded',
+          releaseStarted: true,
+          requestDigest: DIGEST('a'),
+          outputJson: JSON.stringify({ serviceReference: 'service:test' }),
+        }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await invokeProviderConsequenceViaVercel(ctx, {
@@ -166,9 +177,13 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       signingSecretRef: SIGNING_SECRET_REF,
     })
     expect(mutationInput).not.toHaveProperty('journalToken')
-    const outbound = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
-    expect(outbound).toMatchObject({ ticket: issue.ticket, signingSecret: issue.signingSecret })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const signingOutbound = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+    const outbound = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as Record<string, unknown>
+    expect(signingOutbound).toMatchObject({ action: 'issue', ticket: issue.ticket, signingSecret: issue.signingSecret })
+    expect(outbound).toMatchObject({ action: 'execute', ticket: issue.ticket, signedTicket: SIGNED_TICKET })
     expect(typeof outbound.journalToken).toBe('string')
+    expect(signingOutbound.journalToken).toBe(outbound.journalToken)
     const tokenDigest = await crypto.subtle.digest(
       'SHA-256',
       new TextEncoder().encode(String(outbound.journalToken)),
@@ -181,7 +196,10 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
   })
 
   it('returns a reconciliation-required unknown after an ambiguous external result without retrying', async () => {
-    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => { throw new Error('connection_reset_after_submit') })
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => {
+      if (fetchMock.mock.calls.length === 1) return signingResponse()
+      throw new Error('connection_reset_after_submit')
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await invokeProviderConsequenceViaVercel(context(issued()), {
@@ -196,17 +214,20 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       requestDigest: DIGEST('a'),
       failureCode: 'provider_consequence_bridge_unknown',
     })
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('rejects a successful-looking Vercel response attributed to another request', async () => {
-    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => Response.json({
-      transport: 'http',
-      disposition: 'succeeded',
-      releaseStarted: true,
-      requestDigest: DIGEST('f'),
-      outputJson: '{}',
-    }))
+    let fetchCount = 0
+    const fetchMock = vi.fn<typeof globalThis.fetch>(async () => ++fetchCount === 1
+      ? signingResponse()
+      : Response.json({
+          transport: 'http',
+          disposition: 'succeeded',
+          releaseStarted: true,
+          requestDigest: DIGEST('f'),
+          outputJson: '{}',
+        }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(invokeProviderConsequenceViaVercel(context(issued()), {
@@ -219,7 +240,7 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       requestDigest: DIGEST('a'),
       failureCode: 'provider_consequence_bridge_unknown',
     })
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('does not re-invoke Vercel when the durable journal reports started or completed', async () => {
@@ -330,6 +351,11 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       invocation: invocation(), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
 
+    process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example:443'
+    await expect(invokeProviderConsequenceViaVercel(context(issued()), {
+      invocation: invocation(), requestDigest: DIGEST('a'),
+    })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
+
     process.env.AE_PROVIDER_CONSEQUENCE_ORIGIN = 'https://agentic-economy.example'
     const RealURL = URL
     class ThrowingURL extends RealURL {
@@ -350,6 +376,12 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_runtime_unavailable' })
     process.env.AE_PROVIDER_TICKET_SIGNING_SECRET_REF = SIGNING_SECRET_REF
 
+    const withoutReadinessDigest = invocation()
+    delete (withoutReadinessDigest.authority as { readinessDigest?: string }).readinessDigest
+    await expect(invokeProviderConsequenceViaVercel(context({ kind: 'unavailable' }), {
+      invocation: withoutReadinessDigest, requestDigest: DIGEST('a'),
+    })).resolves.toMatchObject({ failureCode: 'provider_consequence_ticket_unavailable' })
+
     await expect(invokeProviderConsequenceViaVercel(context({ kind: 'unavailable' }), {
       invocation: invocation(), requestDigest: DIGEST('a'),
     })).resolves.toMatchObject({ failureCode: 'provider_consequence_ticket_unavailable' })
@@ -361,7 +393,10 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
       new Response('unavailable', { status: 503 }),
       new Response('not-json', { status: 200 }),
     ]) {
-      const fetchMock = vi.fn<typeof globalThis.fetch>(async () => response)
+      let fetchCount = 0
+      const fetchMock = vi.fn<typeof globalThis.fetch>(async () => ++fetchCount === 1
+        ? signingResponse()
+        : response)
       vi.stubGlobal('fetch', fetchMock)
       await expect(invokeProviderConsequenceViaVercel(context(issued()), {
         invocation: invocation(),
@@ -372,6 +407,31 @@ describe('provider consequence Convex-to-Vercel bridge', () => {
         releaseStarted: true,
         requestDigest: DIGEST('a'),
         failureCode: 'provider_consequence_bridge_unknown',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    }
+  })
+
+  it('fails before release for every malformed or unavailable ticket-signing response', async () => {
+    for (const response of [
+      Response.json({ signedTicket: SIGNED_TICKET }, { status: 503 }),
+      Response.json('caller-shaped-ticket'),
+      Response.json(null),
+      Response.json({ signedTicket: SIGNED_TICKET, extra: true }),
+      Response.json({ signedTicket: 7 }),
+      new Response('not-json', { status: 200 }),
+    ]) {
+      const fetchMock = vi.fn<typeof globalThis.fetch>(async () => response)
+      vi.stubGlobal('fetch', fetchMock)
+      await expect(invokeProviderConsequenceViaVercel(context(issued()), {
+        invocation: invocation(),
+        requestDigest: DIGEST('a'),
+      })).resolves.toEqual({
+        transport: 'http',
+        disposition: 'refused',
+        releaseStarted: false,
+        requestDigest: DIGEST('a'),
+        failureCode: 'provider_consequence_ticket_signing_unavailable',
       })
       expect(fetchMock).toHaveBeenCalledOnce()
     }

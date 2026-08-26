@@ -1,4 +1,4 @@
-import { internalMutationGeneric } from 'convex/server'
+import { internalMutationGeneric, internalQueryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { parseRouteTransportObservationJson } from '@/modules/capability-supply/route-transport-runtime'
@@ -6,7 +6,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import { beginLeaseEffectHandler } from './capabilityProviderConnectionLeases'
 import type { Doc } from './_generated/dataModel'
-import type { MutationCtx } from './_generated/server'
+import type { MutationCtx, QueryCtx } from './_generated/server'
 
 const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const DIGEST = /^sha256:[0-9a-f]{64}$/u
@@ -282,7 +282,11 @@ function canonicalIssueInput(args: IssueArgs): boolean {
     && Number.isSafeInteger(args.requestedExpiresAt)
 }
 
-export async function issueProviderConsequenceTicketHandler(ctx: MutationCtx, args: IssueArgs) {
+export async function issueProviderConsequenceTicketHandler(
+  ctx: MutationCtx,
+  args: IssueArgs,
+  beginEffect: typeof beginLeaseEffectHandler = beginLeaseEffectHandler,
+) {
   const now = Date.now()
   if (!canonicalIssueInput(args)) return unavailable('ticket_input_invalid')
   const prior = await ctx.db.query('providerConsequenceJournal')
@@ -375,7 +379,7 @@ export async function issueProviderConsequenceTicketHandler(ctx: MutationCtx, ar
   )
   if (expiresAt - now < MIN_TICKET_LIFETIME_MS) return unavailable('ticket_lifetime_unavailable')
 
-  const admission = await beginLeaseEffectHandler(ctx, {
+  const admission = await beginEffect(ctx, {
     leaseRef: args.leaseRef,
     invocationRef: args.invocationRef,
     operationRef: args.operationRef,
@@ -513,6 +517,43 @@ export const issueProviderConsequenceTicket = internalMutationGeneric({
   args: issueProviderConsequenceTicketArgs,
   returns: issueProviderConsequenceTicketResult,
   handler: issueProviderConsequenceTicketHandler,
+})
+
+export const attestProviderConsequenceTicketArgs = {
+  ticketRef: v.string(),
+  journalTokenDigest: v.string(),
+  ticketClaimsDigest: v.string(),
+  expiresAt: v.number(),
+} as const
+
+export async function attestProviderConsequenceTicketHandler(
+  ctx: QueryCtx,
+  args: Readonly<{
+    ticketRef: string
+    journalTokenDigest: string
+    ticketClaimsDigest: string
+    expiresAt: number
+  }>,
+) {
+  const row = await ctx.db.query('providerConsequenceJournal')
+    .withIndex('by_ticketRef', (query) => query.eq('ticketRef', args.ticketRef)).unique()
+  return row !== null
+    && row.state === 'pending'
+    && row.journalTokenDigest === args.journalTokenDigest
+    && row.ticketClaimsDigest === args.ticketClaimsDigest
+    && row.expiresAt === args.expiresAt
+    && row.expiresAt > Date.now()
+    ? { kind: 'attested' as const }
+    : { kind: 'unavailable' as const }
+}
+
+export const attestProviderConsequenceTicket = internalQueryGeneric({
+  args: attestProviderConsequenceTicketArgs,
+  returns: v.union(
+    v.object({ kind: v.literal('attested') }),
+    v.object({ kind: v.literal('unavailable') }),
+  ),
+  handler: attestProviderConsequenceTicketHandler,
 })
 
 export const claimProviderConsequenceArgs = {

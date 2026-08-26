@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePaymentRequiredHeader } from '@x402/core/http'
 import { declarePaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
@@ -42,6 +43,7 @@ const SIGNING_GENERATION = `sgn_${'9'.repeat(32)}`
 const CUSTOMER_SECRET = `0x${'11'.repeat(32)}`
 const SIGNING_KEY = 'platform-ticket-signing-key-at-least-32-bytes'
 const JOURNAL_TOKEN = 'a'.repeat(43)
+const CANONICAL_CONNECTION_REF = `con_${'3'.repeat(32)}`
 
 type ProviderInvocation = Extract<
   RouteTransportInvocation,
@@ -78,6 +80,7 @@ function invocation(): ProviderInvocation {
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
       authorityGeneration: 7,
       authorityDigest: DIGEST('7'),
+      canonicalConnectionRef: CANONICAL_CONNECTION_REF,
       leaseRef: 'lease:test',
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
@@ -176,7 +179,7 @@ function ticket(routeInvocation = invocation()): CanonicalProviderConsequenceTic
     operationRef: 'operation:test',
     leaseRef: 'lease:test',
     canonicalLeaseRef: 'lease-canonical:test',
-    canonicalConnectionRef: 'connection:test',
+    canonicalConnectionRef: CANONICAL_CONNECTION_REF,
     canonicalConnectionGeneration: 7,
     providerRef: 'provider:test',
     adapterId: routeInvocation.binding.adapterId,
@@ -228,6 +231,7 @@ function consequenceRequest(
   overrides: Record<string, unknown> = {},
 ) {
   const body = {
+    action: 'execute',
     ticket: canonicalTicket,
     ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
     signingSecret: {
@@ -236,6 +240,7 @@ function consequenceRequest(
       pointerRevision: 2,
     },
     journalToken: JOURNAL_TOKEN,
+    signedTicket: signedTicketFor(canonicalTicket),
     invocation: invocation(),
     ...overrides,
   }
@@ -244,6 +249,31 @@ function consequenceRequest(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+function signingRequest(canonicalTicket = ticket()) {
+  return new Request('https://agentic-economy.example/api/internal/provider-consequence', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'issue',
+      ticket: canonicalTicket,
+      ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
+      signingSecret: {
+        secretRef: SIGNING_SECRET_REF,
+        activeGeneration: SIGNING_GENERATION,
+        pointerRevision: 2,
+      },
+      journalToken: JOURNAL_TOKEN,
+    }),
+  })
+}
+
+function signedTicketFor(canonicalTicket: CanonicalProviderConsequenceTicket): string {
+  const claimsDigest = providerConsequenceTicketClaimsDigest(canonicalTicket)
+  const message = `${canonicalTicket.ticketRef}:${claimsDigest}:${canonicalTicket.expiresAt}`
+  const signature = createHmac('sha256', SIGNING_KEY).update(message).digest('hex')
+  return `${canonicalTicket.ticketRef}.${canonicalTicket.expiresAt}.${signature}`
 }
 
 function vaultAndJournalFetch(convexBodies: string[]) {
@@ -274,6 +304,9 @@ function vaultAndJournalFetch(convexBodies: string[]) {
     if (url.hostname === 'test-deployment.convex.site') {
       const rawBody = String(init?.body)
       convexBodies.push(rawBody)
+      if (url.pathname.endsWith('/journal/attest')) {
+        return Response.json({ kind: 'attested' })
+      }
       if (url.pathname.endsWith('/journal/begin')) {
         return Response.json({ kind: 'claimed', claimRef: 'provider-claim:test' })
       }
@@ -302,6 +335,42 @@ describe('internal provider consequence route', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+
+  it('issues an AE-signed short-lived ticket only after durable pending-ticket attestation', async () => {
+    const convexBodies: string[] = []
+    vi.stubGlobal('fetch', vaultAndJournalFetch(convexBodies))
+    const canonicalTicket = ticket()
+    const response = await handleProviderConsequenceRequest(signingRequest(canonicalTicket), environment())
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ signedTicket: signedTicketFor(canonicalTicket) })
+    expect(convexBodies).toHaveLength(1)
+    expect(JSON.parse(convexBodies[0]!)).toEqual({
+      ticketRef: canonicalTicket.ticketRef,
+      ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
+      expiresAt: canonicalTicket.expiresAt,
+    })
+    expect(convexBodies[0]).not.toContain(CUSTOMER_SECRET)
+    expect(convexBodies[0]).not.toContain(SIGNING_KEY)
+  })
+
+  it('refuses signing when durable attestation is denied or the issuer boundary is unavailable', async () => {
+    const canonicalTicket = ticket()
+    const base = vaultAndJournalFetch([])
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const url = new URL(String(input))
+      return url.pathname.endsWith('/journal/attest')
+        ? Response.json({ kind: 'unavailable' })
+        : await base(input, init)
+    }))
+    const denied = await handleProviderConsequenceRequest(signingRequest(canonicalTicket), environment())
+    expect(denied.status).toBe(409)
+
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async () => {
+      throw new Error('attestation_unavailable')
+    }))
+    const unavailable = await handleProviderConsequenceRequest(signingRequest(canonicalTicket), environment())
+    expect(unavailable.status).toBe(503)
   })
 
   it('executes the provider consequence while keeping both vault secrets out of Convex and the response', async () => {

@@ -851,6 +851,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           kind: 'applied',
           lease: {
             leaseRef: 'lease:test-worker',
+            canonicalConnectionRef: `con_${'3'.repeat(32)}`,
             authorityGeneration: providerAuthority?.authorityGeneration ?? 1,
             authorityDigest: providerAuthority?.authorityDigest ?? digest('a'),
             grantedScopes: providerAuthority?.grantedScopes ?? [],

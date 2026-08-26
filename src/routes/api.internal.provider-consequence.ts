@@ -53,11 +53,20 @@ type PointerInput = Readonly<{
   pointerRevision: number
 }>
 
-type ConsequenceRequest = Readonly<{
+type TicketEnvelope = Readonly<{
   ticket: CanonicalProviderConsequenceTicket
   ticketClaimsDigest: string
   signingSecret: PointerInput
   journalToken: string
+}>
+
+type TicketSigningRequest = TicketEnvelope & Readonly<{
+  action: 'issue'
+}>
+
+type ConsequenceRequest = TicketEnvelope & Readonly<{
+  action: 'execute'
+  signedTicket: string
   invocation: ProviderInvocation
 }>
 
@@ -102,7 +111,7 @@ function pointerInput(value: unknown): PointerInput | undefined {
   }
 }
 
-async function readRequest(request: Request): Promise<ConsequenceRequest | undefined> {
+async function readRequest(request: Request): Promise<TicketSigningRequest | ConsequenceRequest | undefined> {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return undefined
   const declared = Number(request.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return undefined
@@ -114,12 +123,13 @@ async function readRequest(request: Request): Promise<ConsequenceRequest | undef
   } catch {
     return undefined
   }
-  if (!isRecord(value) || !exactKeys(value, [
-    'ticket', 'ticketClaimsDigest', 'signingSecret', 'journalToken', 'invocation',
-  ])) return undefined
+  if (!isRecord(value) || (value.action !== 'issue' && value.action !== 'execute')) return undefined
+  const expectedKeys = value.action === 'issue'
+    ? ['action', 'ticket', 'ticketClaimsDigest', 'signingSecret', 'journalToken']
+    : ['action', 'ticket', 'ticketClaimsDigest', 'signingSecret', 'journalToken', 'signedTicket', 'invocation']
+  if (!exactKeys(value, expectedKeys)) return undefined
   const signingSecret = pointerInput(value.signingSecret)
   if (!isRecord(value.ticket)
-    || !isRecord(value.invocation)
     || typeof value.ticketClaimsDigest !== 'string'
     || typeof value.journalToken !== 'string'
     || !JOURNAL_TOKEN.test(value.journalToken)
@@ -132,11 +142,20 @@ async function readRequest(request: Request): Promise<ConsequenceRequest | undef
     return undefined
   }
   if (digest !== value.ticketClaimsDigest) return undefined
-  return {
+  const envelope: TicketEnvelope = {
     ticket,
     ticketClaimsDigest: digest,
     signingSecret,
     journalToken: value.journalToken,
+  }
+  if (value.action === 'issue') return { action: 'issue', ...envelope }
+  if (!isRecord(value.invocation)
+    || typeof value.signedTicket !== 'string'
+    || !SIGNED_TICKET.test(value.signedTicket)) return undefined
+  return {
+    action: 'execute',
+    ...envelope,
+    signedTicket: value.signedTicket,
     invocation: value.invocation as ProviderInvocation,
   }
 }
@@ -178,7 +197,7 @@ const unusedRotationProbe: SecretGenerationProbe = Object.freeze({
 })
 
 function secretRuntimeOptions(
-  request: ConsequenceRequest,
+  request: TicketEnvelope,
   environment: StringEnvironment,
 ): ProductionSecretRuntimeOptions {
   return {
@@ -363,7 +382,7 @@ function x402RuntimeFactory(
     return {
       readX402PaymentCredentialRef: async () => credentialRef,
       validateProviderConnectionAuthority: async (lookup) => (
-        lookup.connectionRef === ticket.canonicalConnectionRef
+        lookup.connectionRef === invocation.binding.authority.connectionRef
         && lookup.providerRef === ticket.providerRef
         && lookup.adapterId === ticket.adapterId
         && lookup.authorityGeneration === ticket.canonicalConnectionGeneration
@@ -373,7 +392,7 @@ function x402RuntimeFactory(
         : { kind: 'unavailable' as const, reason: 'lease_identity_mismatch' as const }
       ),
       x402PaymentSigningAvailable: ({ credentialRef: connectionRef, maximumSpend }) => (
-        connectionRef === ticket.canonicalConnectionRef
+        connectionRef === invocation.binding.authority.connectionRef
         && exactAmount(maximumSpend)
         && exactAmount(invocation.authority.maximumSpend)
         && maximumSpend.currency === invocation.authority.maximumSpend.currency
@@ -456,7 +475,6 @@ async function hmac(material: Uint8Array, message: string): Promise<string> {
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false
   let difference = 0
   for (let index = 0; index < left.length; index += 1) {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index)
@@ -465,7 +483,7 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 async function signedTicket(
-  request: ConsequenceRequest,
+  request: TicketEnvelope,
   options: ProductionSecretRuntimeOptions,
 ): Promise<string> {
   const message = `${request.ticket.ticketRef}:${request.ticketClaimsDigest}:${request.ticket.expiresAt}`
@@ -483,6 +501,26 @@ async function signedTicket(
   return opaque
 }
 
+async function verifySignedTicket(
+  request: ConsequenceRequest,
+  options: ProductionSecretRuntimeOptions,
+): Promise<boolean> {
+  const prefix = `${request.ticket.ticketRef}.${request.ticket.expiresAt}.`
+  if (!request.signedTicket.startsWith(prefix)) return false
+  const candidate = request.signedTicket.slice(prefix.length)
+  if (!/^[0-9a-f]{64}$/u.test(candidate)) return false
+  const message = `${request.ticket.ticketRef}:${request.ticketClaimsDigest}:${request.ticket.expiresAt}`
+  let actual: string | undefined
+  const runtime = createProductionSecretRuntime(options)
+  await runtime.consequences.platform.execute({ secretRef: request.signingSecret.secretRef }, async (lease) => {
+    await lease.useBytes(async (material) => {
+      if (material.byteLength < 32) throw new TypeError('provider_consequence_signing_key_invalid')
+      actual = await hmac(material, message)
+    })
+  })
+  return actual !== undefined && constantTimeEqual(actual, candidate)
+}
+
 export async function handleProviderConsequenceRequest(
   rawRequest: Request,
   environment: StringEnvironment = process.env,
@@ -497,23 +535,35 @@ export async function handleProviderConsequenceRequest(
   } catch {
     return noStore({ kind: 'unavailable' }, 503)
   }
+  if (request.action === 'issue') {
+    try {
+      const attestation = await postConvex(
+        origin,
+        '/internal/provider-consequence/journal/attest',
+        request.journalToken,
+        {
+          ticketRef: request.ticket.ticketRef,
+          ticketClaimsDigest: request.ticketClaimsDigest,
+          expiresAt: request.ticket.expiresAt,
+        },
+      )
+      if (!isRecord(attestation) || attestation.kind !== 'attested') {
+        return noStore({ kind: 'unavailable' }, 409)
+      }
+      return noStore({ signedTicket: await signedTicket(request, options) }, 200)
+    } catch {
+      return noStore({ kind: 'unavailable' }, 503)
+    }
+  }
   const dispatcher = new Agent({ connect: { lookup: createGuardedLookup(defaultDnsResolver) } })
   const send: RouteTransportFetch = async (target, init) => {
     if (!await isPublicHttpTarget(target, defaultDnsResolver)) throw new Error('endpoint_not_public')
     return await guardedFetch(target, { ...init, dispatcher })
   }
   try {
-    const opaqueTicket = await signedTicket(request, options)
     const verifyTicket = async (candidate: string): Promise<CanonicalProviderConsequenceTicket | undefined> => {
-      if (candidate !== opaqueTicket) return undefined
-      const message = `${request.ticket.ticketRef}:${request.ticketClaimsDigest}:${request.ticket.expiresAt}`
-      const expected = candidate.slice(candidate.lastIndexOf('.') + 1)
-      let actual: string | undefined
-      const runtime = createProductionSecretRuntime(options)
-      await runtime.consequences.platform.execute({ secretRef: request.signingSecret.secretRef }, async (lease) => {
-        await lease.useBytes(async (material) => { actual = await hmac(material, message) })
-      })
-      return actual !== undefined && constantTimeEqual(actual, expected) ? request.ticket : undefined
+      if (candidate !== request.signedTicket) return undefined
+      return await verifySignedTicket(request, options) ? request.ticket : undefined
     }
     const boundary = createJitProviderConsequenceBoundary({
       verifyTicket,
@@ -522,7 +572,7 @@ export async function handleProviderConsequenceRequest(
       send,
       createCallbackScopedX402Runtime: x402RuntimeFactory(request, origin, options, dispatcher),
     })
-    const observation = await boundary.execute({ ticket: opaqueTicket, invocation: request.invocation })
+    const observation = await boundary.execute({ ticket: request.signedTicket, invocation: request.invocation })
     return noStore(observation, 200)
   } catch {
     return noStore({ kind: 'unavailable' }, 503)

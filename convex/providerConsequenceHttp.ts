@@ -84,6 +84,31 @@ export const beginProviderConsequenceJournal = httpActionGeneric(async (ctx, req
   }
 })
 
+export const attestProviderConsequenceTicket = httpActionGeneric(async (ctx, request) => {
+  const token = bearer(request)
+  const body = await boundedJson(request)
+  if (token === undefined || body === undefined || !exactKeys(body, [
+    'ticketRef', 'ticketClaimsDigest', 'expiresAt',
+  ])) return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
+  if (!canonicalRef(body.ticketRef)
+    || !canonicalDigest(body.ticketClaimsDigest)
+    || !Number.isSafeInteger(body.expiresAt)) return json({ kind: 'unavailable' }, 400)
+  try {
+    const result = await ctx.runQuery(
+      internal.capabilityProviderConsequenceJournal.attestProviderConsequenceTicket,
+      {
+        ticketRef: body.ticketRef,
+        journalTokenDigest: await tokenDigest(token),
+        ticketClaimsDigest: body.ticketClaimsDigest,
+        expiresAt: Number(body.expiresAt),
+      },
+    )
+    return json(result, result.kind === 'attested' ? 200 : 409)
+  } catch {
+    return json({ kind: 'unavailable' }, 503)
+  }
+})
+
 export const completeProviderConsequenceJournal = httpActionGeneric(async (ctx, request) => {
   const token = bearer(request)
   const body = await boundedJson(request)

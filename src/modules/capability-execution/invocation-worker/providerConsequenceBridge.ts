@@ -103,6 +103,7 @@ function providerInvocation(value: RouteTransportInvocation): value is AdmittedP
   if (value.binding.authority.kind !== 'provider_connection') return false
   const authority = value.authority as ProviderInvocation['authority']
   return authority.leaseRef !== undefined
+    && authority.canonicalConnectionRef !== undefined
     && authority.invocationRef !== undefined
     && authority.operationRef !== undefined
     && authority.attemptRef !== undefined
@@ -132,10 +133,7 @@ export async function invokeProviderConsequenceViaVercel(
   const journalToken = randomToken()
   const ticketRef = `provider-ticket:${crypto.randomUUID()}`
   const commandId = `provider-effect:${invocation.authority.invocationRef}:${invocation.authority.attemptRef}:${invocation.authority.effectGeneration}`
-  const invocationDigest = providerConsequenceInvocationDigest(invocation)
-  if (invocationDigest === undefined) {
-    return refused(invocation, input.requestDigest, 'provider_consequence_authority_invalid')
-  }
+  const invocationDigest = providerConsequenceInvocationDigest(invocation)!
   let issue: Awaited<ReturnType<ActionCtx['runMutation']>>
   try {
     issue = await ctx.runMutation(
@@ -182,19 +180,37 @@ export async function invokeProviderConsequenceViaVercel(
   if (issue.kind !== 'issued') {
     return refused(invocation, input.requestDigest, 'provider_consequence_ticket_unavailable')
   }
-  const body = {
+  const envelope = {
     ticket: issue.ticket as CanonicalProviderConsequenceTicket,
     ticketClaimsDigest: issue.ticketClaimsDigest,
     signingSecret: issue.signingSecret,
     journalToken,
-    invocation,
+  }
+  let signedTicket: string
+  try {
+    const signingResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'issue', ...envelope }),
+    })
+    const signingResult: unknown = await signingResponse.json()
+    if (!signingResponse.ok
+      || typeof signingResult !== 'object'
+      || signingResult === null
+      || Object.keys(signingResult).length !== 1
+      || typeof (signingResult as { signedTicket?: unknown }).signedTicket !== 'string') {
+      return refused(invocation, input.requestDigest, 'provider_consequence_ticket_signing_unavailable')
+    }
+    signedTicket = (signingResult as { signedTicket: string }).signedTicket
+  } catch {
+    return refused(invocation, input.requestDigest, 'provider_consequence_ticket_signing_unavailable')
   }
   let response: Response
   try {
     response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ action: 'execute', ...envelope, signedTicket, invocation }),
     })
   } catch {
     return unknown(invocation, input.requestDigest, 'provider_consequence_bridge_unknown')

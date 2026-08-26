@@ -7,12 +7,26 @@ import schema from '../../../convex/schema'
 import { beginLeaseEffectHandler } from '../../../convex/capabilityProviderConnectionLeases'
 import {
   abortProviderConsequenceHandler,
+  attestProviderConsequenceTicketHandler,
   authorizeProviderConsequenceX402RpcHandler,
   claimProviderConsequenceHandler,
   completeProviderConsequenceHandler,
   issueProviderConsequenceTicketHandler,
 } from '../../../convex/capabilityProviderConsequenceJournal'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+import {
+  createJitProviderConsequenceBoundary,
+  providerConsequenceInvocationDigest,
+  type ProviderConsequenceJournal,
+} from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
+import type { RouteTransportFetch, RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
+import {
+  secretGeneration,
+  secretRef,
+  type ProductionSecretRuntimeOptions,
+  type SecretPointer,
+} from '@/modules/secrets/public'
 import { issueProviderApprovalDecision } from '@/modules/capability-supply/provider-approval'
 import {
   convexModules,
@@ -33,6 +47,8 @@ const TICKET_REF = 'provider-ticket:test'
 const EFFECT_REF = 'connection-effect:test'
 const CLAIM_REF = `provider-claim:${TICKET_REF}`
 const SECRET_REF = `sec_${'5'.repeat(32)}`
+const { getVercelOidcToken } = vi.hoisted(() => ({ getVercelOidcToken: vi.fn() }))
+vi.mock('@vercel/oidc', () => ({ getVercelOidcToken }))
 type Backend = TestConvex<typeof schema>
 type CanonicalOwner = Readonly<{ principalRef: string; accountRef: string }>
 
@@ -177,6 +193,7 @@ async function freshIssueAuthority() {
     })
   })
   const readinessValidUntil = NOW + 120_000
+  const readinessDigest = DIGEST('e')
   const leaseResult = await backend.mutation(internal.capabilityProviderConnections.issueLease, {
     commandId: 'command:lease:journal',
     leaseRef: 'lease:journal',
@@ -194,6 +211,7 @@ async function freshIssueAuthority() {
     grantedResources: [...installed.connection.grantedResources],
     approvalDecisionRef: approval.decision.decisionRef,
     readinessValidUntil,
+    readinessDigest,
     leaseMs: 60_000,
     evidenceRefs: ['evidence:lease'],
     now: NOW,
@@ -252,10 +270,17 @@ async function freshIssueAuthority() {
     grantedScopes: [...installed.connection.grantedScopes],
     grantedResources: [...installed.connection.grantedResources],
     readinessValidUntil,
-    readinessDigest: undefined,
+    readinessDigest,
     signingSecretRef,
   })
-  return { backend, args, owner, signingSecretRef }
+  return {
+    backend,
+    args,
+    owner,
+    signingSecretRef,
+    connection: installed.connection,
+    lease: leaseResult.lease,
+  }
 }
 
 async function currentEffectFixture(primaryPatch: Record<string, unknown> = {}) {
@@ -396,10 +421,61 @@ async function readJournal(backend: Backend) {
     .withIndex('by_ticketRef', (query) => query.eq('ticketRef', TICKET_REF)).unique())
 }
 
+function testOidcJwt(): string {
+  const seconds = NOW / 1_000
+  return [
+    Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'test' })).toString('base64url'),
+    Buffer.from(JSON.stringify({ iat: seconds - 60, nbf: seconds - 60, exp: seconds + 3_540 })).toString('base64url'),
+    Buffer.from('signature').toString('base64url'),
+  ].join('.')
+}
+
+function vaultConfig(scope: 'platform' | 'customer') {
+  return {
+    scope,
+    baseUrl: 'https://app.infisical.com',
+    projectId: `project-${scope}`,
+    environment: 'production',
+    secretPath: `/agentic-economy/${scope}`,
+    machineIdentityId: `identity-${scope}`,
+  } as const
+}
+
+function fixedPointer(pointer: SecretPointer) {
+  return {
+    getActive: async () => pointer,
+    advanceActive: async () => { throw new Error('pointer_advance_forbidden') },
+  }
+}
+
+function testVaultFetch(secretValue: string): typeof globalThis.fetch {
+  return vi.fn(async (input: string | URL | Request) => {
+    const url = new URL(String(input))
+    if (url.pathname === '/api/v1/auth/oidc-auth/login') {
+      return Response.json({
+        accessToken: 'vault-access-token',
+        tokenType: 'Bearer',
+        expiresIn: 600,
+        accessTokenMaxTTL: 600,
+      })
+    }
+    return Response.json({
+      secret: {
+        secretKey: `${SECRET_REF}--${`sgn_${'3'.repeat(32)}`}`,
+        secretValue,
+        environment: 'production',
+        workspace: url.searchParams.get('projectId'),
+      },
+    })
+  }) as typeof globalThis.fetch
+}
+
 describe('provider consequence durable journal', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)
+    getVercelOidcToken.mockReset()
+    getVercelOidcToken.mockResolvedValue(testOidcJwt())
   })
 
   it('issues a fresh ticket only from exact current lease, invocation, connection, grant, and secret authority', async () => {
@@ -443,6 +519,200 @@ describe('provider consequence durable journal', () => {
       signingSecretRef,
     })
     expect(JSON.stringify(persisted)).not.toContain(JOURNAL_TOKEN)
+  })
+
+  it('executes one real installed legacy-to-canonical consequence and replays without a second provider send', async () => {
+    const fixture = await freshIssueAuthority()
+    const { connection, lease } = fixture
+    if (connection.canonicalConnectionRef === undefined || lease.canonicalConnectionRef === undefined) {
+      throw new Error('canonical_connection_fixture_missing')
+    }
+    expect(connection.connectionRef).not.toBe(connection.canonicalConnectionRef)
+    const config = { method: 'POST' as const, requestTimeoutMs: 5_000, credential: { kind: 'bearer' as const } }
+    const routeInvocation: Extract<RouteTransportInvocation, { binding: { authority: { kind: 'provider_connection' } } }> = {
+      binding: {
+        adapterId: connection.adapterId,
+        endpointUrl: 'https://provider.example/run',
+        authority: {
+          kind: 'provider_connection',
+          connectionRef: connection.connectionRef,
+          providerRef: connection.providerRef,
+        },
+        configJson: JSON.stringify(config),
+        configDigest: canonicalDigest(config),
+      },
+      authority: {
+        attemptRef: fixture.args.attemptRef,
+        effectGeneration: 1,
+        operationKeyDigest: fixture.args.operationKeyDigest,
+        mandateDigest: DIGEST('6'),
+        grantDigest: DIGEST('7'),
+        capabilityContractDigest: DIGEST('8'),
+        maximumSpend: { currency: 'USD', units: '0', exponent: 2 },
+        expiresAt: fixture.args.requestedExpiresAt,
+        callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
+        canonicalConnectionRef: connection.canonicalConnectionRef,
+        authorityGeneration: lease.authorityGeneration,
+        authorityDigest: lease.authorityDigest,
+        leaseRef: fixture.args.leaseRef,
+        invocationRef: fixture.args.invocationRef,
+        operationRef: fixture.args.operationRef,
+        grantedScopes: fixture.args.grantedScopes,
+        grantedResources: fixture.args.grantedResources,
+        readinessValidUntil: fixture.args.readinessValidUntil,
+        ...(fixture.args.readinessDigest === undefined ? {} : { readinessDigest: fixture.args.readinessDigest }),
+      },
+      inputJson: JSON.stringify({ destination: 'PER' }),
+    }
+    const requestDigest = canonicalDigest({
+      adapterId: routeInvocation.binding.adapterId,
+      endpointUrl: routeInvocation.binding.endpointUrl,
+      configDigest: routeInvocation.binding.configDigest,
+      attemptRef: routeInvocation.authority.attemptRef,
+      operationKeyDigest: routeInvocation.authority.operationKeyDigest,
+      mandateDigest: routeInvocation.authority.mandateDigest,
+      grantDigest: routeInvocation.authority.grantDigest,
+      capabilityContractDigest: routeInvocation.authority.capabilityContractDigest,
+      inputJson: routeInvocation.inputJson,
+    } as StableHashValue)
+    const invocationDigest = providerConsequenceInvocationDigest(routeInvocation)
+    if (invocationDigest === undefined) throw new Error('invocation_digest_fixture_missing')
+    const issued = await fixture.backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, {
+      ...fixture.args,
+      requestDigest,
+      invocationDigest,
+    }))
+    if (issued.kind !== 'issued') throw new Error('ticket_issue_fixture_failed')
+    expect(issued.ticket.canonicalConnectionRef).toBe(connection.canonicalConnectionRef)
+    expect(issued.ticket.canonicalConnectionRef).not.toBe(routeInvocation.binding.authority.connectionRef)
+
+    const durableJournal: ProviderConsequenceJournal = {
+      begin: async (input) => await fixture.backend.run(async (ctx) => claimProviderConsequenceHandler(ctx, {
+        ticketRef: input.ticketRef,
+        journalTokenDigest: TOKEN_DIGEST,
+        effectRef: input.effectRef,
+        requestDigest: input.requestDigest,
+        invocationDigest: input.invocationDigest,
+        ticketClaimsDigest: input.ticketClaimsDigest,
+        expiresAt: input.expiresAt,
+      })),
+      complete: async ({ claimRef, observation }) => {
+        const result = await fixture.backend.run(async (ctx) => completeProviderConsequenceHandler(ctx, {
+          ticketRef: issued.ticket.ticketRef,
+          journalTokenDigest: TOKEN_DIGEST,
+          claimRef,
+          observationJson: JSON.stringify(observation),
+        }))
+        if (result.kind !== 'completed') throw new Error('completion_fixture_failed')
+      },
+      abortBeforeRelease: async ({ claimRef }) => {
+        const result = await fixture.backend.run(async (ctx) => abortProviderConsequenceHandler(ctx, {
+          ticketRef: issued.ticket.ticketRef,
+          journalTokenDigest: TOKEN_DIGEST,
+          claimRef,
+        }))
+        if (result.kind !== 'aborted') throw new Error('abort_fixture_failed')
+      },
+    }
+    const customerPointer: SecretPointer = {
+      secretRef: secretRef(issued.ticket.secret.secretRef),
+      activeGeneration: secretGeneration(issued.ticket.secret.activeGeneration),
+      revision: issued.ticket.secret.pointerRevision,
+    }
+    const secretRuntime: ProductionSecretRuntimeOptions = {
+      configuration: {
+        platform: vaultConfig('platform'),
+        customer: vaultConfig('customer'),
+      },
+      platform: { pointerStore: fixedPointer(customerPointer), generationProbe: { validate: async () => undefined } },
+      customer: { pointerStore: fixedPointer(customerPointer), generationProbe: { validate: async () => undefined } },
+      fetch: testVaultFetch('provider-secret-never-return'),
+      now: () => NOW,
+    }
+    const send = vi.fn<RouteTransportFetch>(async () => Response.json({ serviceReference: 'service:real-path' }))
+    const boundary = createJitProviderConsequenceBoundary({
+      verifyTicket: async (candidate) => candidate === 'ae-signed-ticket' ? issued.ticket : undefined,
+      journal: durableJournal,
+      secretRuntime,
+      send,
+      now: () => NOW,
+    })
+    const first = await boundary.execute({ ticket: 'ae-signed-ticket', invocation: routeInvocation })
+    expect(first).toMatchObject({ disposition: 'succeeded', releaseStarted: true })
+    expect(send).toHaveBeenCalledOnce()
+    expect(JSON.stringify(first)).not.toContain('provider-secret-never-return')
+
+    const replay = await boundary.execute({ ticket: 'ae-signed-ticket', invocation: routeInvocation })
+    expect(replay).toEqual(first)
+    expect(send).toHaveBeenCalledOnce()
+    await expect(readJournal(fixture.backend)).resolves.toMatchObject({ state: 'completed' })
+  })
+
+  it('attests only the exact unexpired pending ticket without consuming it', async () => {
+    const backend = await backendWithJournal()
+    const exact = {
+      ticketRef: TICKET_REF,
+      journalTokenDigest: TOKEN_DIGEST,
+      ticketClaimsDigest: CLAIMS_DIGEST,
+      expiresAt: NOW + 10_000,
+    }
+    await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, exact)))
+      .resolves.toEqual({ kind: 'attested' })
+    for (const patch of [
+      { ticketRef: 'provider-ticket:missing' },
+      { journalTokenDigest: DIGEST('0') },
+      { ticketClaimsDigest: DIGEST('0') },
+      { expiresAt: NOW + 9_999 },
+    ]) {
+      await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, {
+        ...exact,
+        ...patch,
+      }))).resolves.toEqual({ kind: 'unavailable' })
+    }
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('providerConsequenceJournal')
+        .withIndex('by_ticketRef', (query) => query.eq('ticketRef', TICKET_REF)).unique()
+      if (row === null) throw new Error('journal_fixture_missing')
+      await ctx.db.patch(row._id, { state: 'started' })
+    })
+    await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, exact)))
+      .resolves.toEqual({ kind: 'unavailable' })
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('providerConsequenceJournal')
+        .withIndex('by_ticketRef', (query) => query.eq('ticketRef', TICKET_REF)).unique()
+      if (row === null) throw new Error('journal_fixture_missing')
+      await ctx.db.patch(row._id, { state: 'pending', expiresAt: NOW })
+    })
+    await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, {
+      ...exact,
+      expiresAt: NOW,
+    }))).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it.each([
+    ['not admitted', { kind: 'unavailable', reason: 'lease_inactive' }],
+    ['owning account drift', { owningAccountRef: `acc_${'0'.repeat(32)}` }],
+    ['active account drift', { activeAccountRef: `acc_${'0'.repeat(32)}` }],
+    ['canonical connection drift', { canonicalConnectionRef: `con_${'0'.repeat(32)}` }],
+    ['canonical generation drift', { canonicalConnectionGeneration: 999 }],
+    ['secret drift', { secretRef: `sec_${'0'.repeat(32)}` }],
+  ] as const)('rejects contradictory atomic effect admission: %s', async (_label, patch) => {
+    const { backend, args } = await freshIssueAuthority()
+    const admitted = await backend.run(async (ctx) => beginLeaseEffectHandler(ctx, {
+      leaseRef: args.leaseRef,
+      invocationRef: args.invocationRef,
+      operationRef: args.operationRef,
+      commandId: args.commandId,
+    }))
+    if (admitted.kind !== 'admitted') throw new Error('effect_admission_fixture_failed')
+    const contradiction = 'kind' in patch && patch.kind === 'unavailable'
+      ? patch
+      : { ...admitted, ...patch }
+    await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(
+      ctx,
+      args,
+      async () => contradiction as never,
+    ))).rejects.toThrow('provider_consequence_effect_admission_failed')
   })
 
   it('aborts an expired pending command and admits a fresh exact ticket from current authority', async () => {
@@ -702,6 +972,23 @@ describe('provider consequence durable journal', () => {
     })))).resolves.toEqual({ kind: 'unavailable', reason: 'effect_journal_unavailable' })
   })
 
+  it('preserves an intentionally absent optional readiness digest through issue and replay', async () => {
+    const { backend, args } = await freshIssueAuthority()
+    await backend.run(async (ctx) => {
+      const lease = await ctx.db.query('capabilityProviderConnectionLeases')
+        .withIndex('by_leaseRef', (query) => query.eq('leaseRef', args.leaseRef)).unique()
+      if (lease === null) throw new Error('lease_fixture_missing')
+      await ctx.db.patch(lease._id, { readinessDigest: undefined })
+    })
+    const { readinessDigest: _readinessDigest, ...absentArgs } = args
+    const issued = await backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, absentArgs))
+    expect(issued).toMatchObject({ kind: 'issued' })
+    if (issued.kind !== 'issued') throw new Error('ticket_fixture_missing')
+    expect(issued.ticket).not.toHaveProperty('readinessDigest')
+    await expect(backend.run(async (ctx) => issueProviderConsequenceTicketHandler(ctx, absentArgs)))
+      .resolves.toEqual(issued)
+  })
+
   it.each(['started', 'completed'] as const)(
     'replays %s after live authority rows disappear while denying stable-identity substitution',
     async (state) => {
@@ -825,7 +1112,7 @@ describe('provider consequence durable journal', () => {
       .resolves.toMatchObject({ kind: 'completed', observation })
     await expect(backend.run(async (ctx) => completeProviderConsequenceHandler(ctx, {
       ...completeArgs,
-      observationJson: JSON.stringify(succeededObservation(DIGEST('f'))),
+      observationJson: JSON.stringify({ ...observation, outputJson: '{"serviceReference":"other"}' }),
     }))).resolves.toEqual({ kind: 'unavailable' })
     await expect(backend.run(async (ctx) => abortProviderConsequenceHandler(ctx, {
       ticketRef: TICKET_REF,
@@ -848,6 +1135,12 @@ describe('provider consequence durable journal', () => {
     await expect(backend.run(async (ctx) => completeProviderConsequenceHandler(ctx, {
       ...args, claimRef: 'provider-claim:other',
     }))).resolves.toEqual({ kind: 'unavailable' })
+    for (const observationJson of ['{', JSON.stringify(succeededObservation(DIGEST('f')))]) {
+      await expect(backend.run(async (ctx) => completeProviderConsequenceHandler(ctx, {
+        ...args,
+        observationJson,
+      }))).resolves.toEqual({ kind: 'unavailable' })
+    }
   })
 
   it('aborts only before release and makes the abort exact-replay idempotent', async () => {
@@ -904,6 +1197,7 @@ describe('provider consequence durable journal', () => {
     })
     const exactArgs = {
       paymentIdentifier: OPERATION_KEY_DIGEST,
+      operationKeyDigest: OPERATION_KEY_DIGEST,
       invocationRef: 'invocation:test',
       operationRef: 'operation:test',
       attemptRef: 'attempt:test',
@@ -969,6 +1263,71 @@ describe('provider consequence durable journal', () => {
     await expect(backend.run(async (ctx) => authorizeProviderConsequenceX402RpcHandler(ctx, {
       ticketRef: TICKET_REF, journalTokenDigest: TOKEN_DIGEST,
       operation: 'observe_attempt', args: { custodyRef: 'missing', authorizationDigest: DIGEST('a') },
+    }))).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it.each([
+    ['authorization digest', { authorizationDigest: DIGEST('0') }],
+    ['dispatch', { dispatchRef: 'invocation:other' }],
+    ['attempt', { attemptRef: 'attempt:other' }],
+    ['effect generation', { effectGeneration: 2 }],
+    ['operation', { operationRef: 'operation:other' }],
+    ['credential', { credentialRef: `sec_${'0'.repeat(32)}` }],
+  ] as const)('rejects stored x402 attempt %s drift', async (_label, patch) => {
+    const backend = await backendWithJournal({ state: 'started', claimRef: CLAIM_REF, startedAt: NOW })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyX402PaymentAttempts', {
+        dispatchRef: 'invocation:test',
+        attemptRef: 'attempt:test',
+        effectGeneration: 1,
+        operationRef: 'operation:test',
+        paymentIdentifier: OPERATION_KEY_DIGEST,
+        operationKeyDigest: OPERATION_KEY_DIGEST,
+        challengeDigest: DIGEST('a'),
+        challengeJson: '{}',
+        selectedRequirementJson: '{}',
+        providerEndpoint: 'https://provider.example/pay',
+        credentialRef: SECRET_REF,
+        scheme: 'exact',
+        network: 'eip155:8453',
+        asset: 'asset:test',
+        payTo: 'payee:test',
+        amountUnits: '1',
+        currency: 'USD',
+        exponent: 2,
+        custodyRef: 'custody:test',
+        authorizationDigest: DIGEST('b'),
+        state: 'prepared',
+        preparedAt: NOW,
+        evidenceRefs: [],
+        ...patch,
+      })
+    })
+    await expect(backend.run(async (ctx) => authorizeProviderConsequenceX402RpcHandler(ctx, {
+      ticketRef: TICKET_REF,
+      journalTokenDigest: TOKEN_DIGEST,
+      operation: 'read_authorization',
+      args: { custodyRef: 'custody:test', authorizationDigest: DIGEST('b') },
+    }))).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it('accepts an exact stored x402 attempt before requiring the canonical invocation row', async () => {
+    const backend = await backendWithJournal({ state: 'started', claimRef: CLAIM_REF, startedAt: NOW })
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('moneyX402PaymentAttempts', {
+        dispatchRef: 'invocation:test', attemptRef: 'attempt:test', effectGeneration: 1,
+        operationRef: 'operation:test', paymentIdentifier: OPERATION_KEY_DIGEST,
+        operationKeyDigest: OPERATION_KEY_DIGEST, challengeDigest: DIGEST('a'),
+        challengeJson: '{}', selectedRequirementJson: '{}', providerEndpoint: 'https://provider.example/pay',
+        credentialRef: SECRET_REF, scheme: 'exact', network: 'eip155:8453', asset: 'asset:test',
+        payTo: 'payee:test', amountUnits: '1', currency: 'USD', exponent: 2,
+        custodyRef: 'custody:test', authorizationDigest: DIGEST('b'), state: 'prepared',
+        preparedAt: NOW, evidenceRefs: [],
+      })
+    })
+    await expect(backend.run(async (ctx) => authorizeProviderConsequenceX402RpcHandler(ctx, {
+      ticketRef: TICKET_REF, journalTokenDigest: TOKEN_DIGEST, operation: 'read_authorization',
+      args: { custodyRef: 'custody:test', authorizationDigest: DIGEST('b') },
     }))).resolves.toEqual({ kind: 'unavailable' })
   })
 

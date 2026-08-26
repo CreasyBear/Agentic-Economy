@@ -443,6 +443,7 @@ function canonicalTicket(
   if (invocationRef === undefined
     || operationRef === undefined
     || leaseRef === undefined
+    || authority.canonicalConnectionRef === undefined
     || grantedScopes === undefined
     || grantedResources === undefined
     || readinessValidUntil === undefined) return undefined
@@ -475,7 +476,7 @@ function canonicalTicket(
     || candidate.invocationRef !== invocationRef
     || candidate.operationRef !== operationRef
     || candidate.leaseRef !== leaseRef
-    || candidate.canonicalConnectionRef !== invocation.binding.authority.connectionRef
+    || candidate.canonicalConnectionRef !== authority.canonicalConnectionRef
     || candidate.providerRef !== invocation.binding.authority.providerRef
     || candidate.adapterId !== invocation.binding.adapterId
     || candidate.canonicalConnectionGeneration !== authority.authorityGeneration
@@ -510,6 +511,7 @@ export function providerConsequenceInvocationDigest(
   if (authority.invocationRef === undefined
     || authority.operationRef === undefined
     || authority.leaseRef === undefined
+    || authority.canonicalConnectionRef === undefined
     || authority.grantedScopes === undefined
     || authority.grantedResources === undefined
     || authority.readinessValidUntil === undefined) return undefined
@@ -520,6 +522,7 @@ export function providerConsequenceInvocationDigest(
       endpointUrl: invocation.binding.endpointUrl,
       configDigest: invocation.binding.configDigest,
       connectionRef: invocation.binding.authority.connectionRef,
+      canonicalConnectionRef: authority.canonicalConnectionRef,
       providerRef: invocation.binding.authority.providerRef,
     },
     authority: {

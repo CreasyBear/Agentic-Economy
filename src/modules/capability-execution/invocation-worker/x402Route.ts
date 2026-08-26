@@ -124,6 +124,7 @@ export function routeInvocation(
   }>,
   leaseRef: string | undefined,
   leaseAuthority: Readonly<{
+    canonicalConnectionRef: string
     authorityGeneration: number
     authorityDigest: string
     grantedScopes: readonly string[]
@@ -166,6 +167,7 @@ export function routeInvocation(
       ...common,
       authorityGeneration: leaseAuthority.authorityGeneration,
       authorityDigest: leaseAuthority.authorityDigest,
+      canonicalConnectionRef: leaseAuthority.canonicalConnectionRef,
       leaseRef,
       invocationRef,
       operationRef,

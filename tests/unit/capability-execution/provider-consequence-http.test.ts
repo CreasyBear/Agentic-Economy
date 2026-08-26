@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ActionCtx } from '../../../convex/_generated/server'
 import {
   abortProviderConsequenceJournal,
+  attestProviderConsequenceTicket,
   beginProviderConsequenceJournal,
   completeProviderConsequenceJournal,
   providerConsequenceX402Rpc,
@@ -15,6 +16,7 @@ type HttpHandler = (ctx: ActionCtx, request: Request) => Promise<Response>
 type HttpExport = { _handler: HttpHandler }
 
 const begin = (beginProviderConsequenceJournal as unknown as HttpExport)._handler
+const attest = (attestProviderConsequenceTicket as unknown as HttpExport)._handler
 const complete = (completeProviderConsequenceJournal as unknown as HttpExport)._handler
 const abort = (abortProviderConsequenceJournal as unknown as HttpExport)._handler
 const x402 = (providerConsequenceX402Rpc as unknown as HttpExport)._handler
@@ -89,6 +91,47 @@ describe('provider consequence Convex HTTP callbacks', () => {
     expect(args).toMatchObject(body)
     expect(args.journalTokenDigest).toMatch(/^sha256:[0-9a-f]{64}$/u)
     expect(JSON.stringify(args)).not.toContain(TOKEN)
+  })
+
+  it('attests only the exact pending ticket and contains malformed or unavailable reads', async () => {
+    const body = {
+      ticketRef: 'ticket:test',
+      ticketClaimsDigest: DIGEST('3'),
+      expiresAt: 2_000_000_010_000,
+    }
+    const runQuery = vi.fn<(
+      reference: unknown,
+      args: Record<string, unknown>
+    ) => Promise<unknown>>(async () => ({ kind: 'attested' }))
+    const success = await attest({ runQuery } as unknown as ActionCtx, request(body))
+    expect(success.status).toBe(200)
+    expect(runQuery).toHaveBeenCalledOnce()
+    expect(path(runQuery.mock.calls[0]?.[0])).toBe(
+      'capabilityProviderConsequenceJournal:attestProviderConsequenceTicket',
+    )
+    const args = runQuery.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(args).toMatchObject(body)
+    expect(args.journalTokenDigest).toMatch(/^sha256:[0-9a-f]{64}$/u)
+    expect(JSON.stringify(args)).not.toContain(TOKEN)
+
+    await expect(attest({ runQuery: vi.fn(async () => ({ kind: 'unavailable' })) } as unknown as ActionCtx, request(body)))
+      .resolves.toMatchObject({ status: 409 })
+    for (const candidate of [
+      request({ ...body, extra: true }),
+      request({ ...body, ticketRef: '' }),
+      request({ ...body, ticketClaimsDigest: 'caller-proof' }),
+      request({ ...body, expiresAt: 1.5 }),
+    ]) {
+      await expect(attest({ runQuery: vi.fn() } as unknown as ActionCtx, candidate))
+        .resolves.toMatchObject({ status: 400 })
+    }
+    const unauthenticated = request(body)
+    unauthenticated.headers.delete('authorization')
+    await expect(attest({ runQuery: vi.fn() } as unknown as ActionCtx, unauthenticated))
+      .resolves.toMatchObject({ status: 401 })
+    await expect(attest({
+      runQuery: vi.fn(async () => { throw new Error('journal_unavailable') }),
+    } as unknown as ActionCtx, request(body))).resolves.toMatchObject({ status: 503 })
   })
 
   it.each([

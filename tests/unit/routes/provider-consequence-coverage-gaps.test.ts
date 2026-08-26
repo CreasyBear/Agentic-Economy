@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { declarePaymentIdentifierExtension } from '@x402/extensions/payment-identifier'
 
@@ -156,7 +157,8 @@ describe('provider consequence route coverage gaps', () => {
       AE_INFISICAL_PLATFORM_ORGANIZATION_SLUG: 'platform-org',
       AE_INFISICAL_CUSTOMER_ORGANIZATION_SLUG: 'customer-org',
     }))
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ disposition: 'refused' })
     expect(visited.length).toBeGreaterThan(0)
     expect(mocks.guardedFetch).not.toHaveBeenCalled()
   })
@@ -216,7 +218,7 @@ describe('provider consequence route coverage gaps', () => {
     const probe = vi.fn(async (rawOptions: unknown, opaqueTicket: string) => {
       const options = rawOptions as ProbeOptions
       await expect(options.verifyTicket('attacker-ticket')).resolves.toBeUndefined()
-      await expect(options.verifyTicket(opaqueTicket)).resolves.toBeUndefined()
+      await expect(options.verifyTicket(opaqueTicket)).resolves.toEqual(canonicalTicket)
       const platformPointer = options.secretRuntime.platform.pointerStore
       expect(await platformPointer.getActive(SIGNING_SECRET_REF)).toMatchObject({ revision: 2 })
       expect(await platformPointer.getActive(`sec_${'0'.repeat(32)}`)).toBeUndefined()
@@ -238,7 +240,7 @@ describe('provider consequence route coverage gaps', () => {
       const runtime = options.createCallbackScopedX402Runtime({ ticket: canonicalTicket, invocation: routeInvocation })
       await expect(runtime.readX402PaymentCredentialRef()).resolves.toBe(CUSTOMER_SECRET_REF)
       await expect(runtime.validateProviderConnectionAuthority({
-        connectionRef: canonicalTicket.canonicalConnectionRef,
+        connectionRef: routeInvocation.binding.authority.connectionRef,
         providerRef: canonicalTicket.providerRef,
         adapterId: canonicalTicket.adapterId,
         authorityGeneration: canonicalTicket.canonicalConnectionGeneration,
@@ -251,11 +253,11 @@ describe('provider consequence route coverage gaps', () => {
         authorityDigest: canonicalTicket.authorityDigest, leaseRef: canonicalTicket.leaseRef,
       })).resolves.toMatchObject({ kind: 'unavailable' })
       expect(runtime.x402PaymentSigningAvailable({
-        credentialRef: canonicalTicket.canonicalConnectionRef,
+        credentialRef: routeInvocation.binding.authority.connectionRef,
         maximumSpend: routeInvocation.authority.maximumSpend,
       })).toBe(true)
       expect(runtime.x402PaymentSigningAvailable({
-        credentialRef: canonicalTicket.canonicalConnectionRef,
+        credentialRef: routeInvocation.binding.authority.connectionRef,
         maximumSpend: { currency: 'USD', units: '1', exponent: 1.5 },
       })).toBe(false)
 
@@ -360,18 +362,94 @@ describe('provider consequence route coverage gaps', () => {
   it('rejects a short signing key and always closes the callback dispatcher', async () => {
     vi.stubGlobal('fetch', scriptedFetch({ signingKey: 'short' }))
     const response = await handleProviderConsequenceRequest(consequenceRequest(), environment())
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ disposition: 'refused' })
     expect(mocks.guardedFetch).not.toHaveBeenCalled()
     expect(mocks.agents).toHaveLength(1)
     expect(mocks.agents[0]?.close).toHaveBeenCalledOnce()
   })
 
-  it('rejects an oversized opaque ticket and contains dispatcher close rejection', async () => {
+  it.each([
+    ['wrong signed-ticket prefix', `attacker-ticket.${NOW + 10_000}.${'a'.repeat(64)}`],
+    ['non-hex signed-ticket signature', `provider-ticket:test.${NOW + 10_000}.${'z'.repeat(64)}`],
+  ])('rejects %s before journal or provider release', async (_label, signedTicket) => {
+    vi.stubGlobal('fetch', scriptedFetch())
+    const response = await handleProviderConsequenceRequest(
+      consequenceRequest(ticket(), { signedTicket }),
+      environment(),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ disposition: 'refused', releaseStarted: false })
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+  })
+
+  it('contains issuer signing-key, callback, and opaque-ticket failures', async () => {
+    vi.stubGlobal('fetch', scriptedFetch({ signingKey: 'short' }))
+    await expect(handleProviderConsequenceRequest(signingRequest(), environment()))
+      .resolves.toMatchObject({ status: 503 })
+
     const oversized = { ...ticket(), ticketRef: `provider-ticket:${'x'.repeat(190)}` }
-    mocks.state.rejectClose = true
+    vi.stubGlobal('fetch', scriptedFetch())
+    await expect(handleProviderConsequenceRequest(signingRequest(oversized), environment()))
+      .resolves.toMatchObject({ status: 503 })
+
+    vi.resetModules()
+    vi.doMock('@/modules/secrets/public', async () => {
+      const actual = await vi.importActual<typeof import('@/modules/secrets/public')>('@/modules/secrets/public')
+      return {
+        ...actual,
+        createProductionSecretRuntime: () => ({
+          consequences: {
+            platform: { execute: async () => undefined },
+            customer: { execute: async () => undefined },
+          },
+        }),
+      }
+    })
+    const dynamicRoute = await import('@/routes/api.internal.provider-consequence')
+    vi.stubGlobal('fetch', scriptedFetch())
+    try {
+      await expect(dynamicRoute.handleProviderConsequenceRequest(signingRequest(), environment()))
+        .resolves.toMatchObject({ status: 503 })
+    } finally {
+      vi.doUnmock('@/modules/secrets/public')
+    }
+  })
+
+  it('contains an unexpected consequence-boundary construction failure', async () => {
+    vi.resetModules()
+    vi.doMock('@/modules/capability-execution/invocation-worker/jitProviderConsequence', async () => {
+      const actual = await vi.importActual<typeof import('@/modules/capability-execution/invocation-worker/jitProviderConsequence')>(
+        '@/modules/capability-execution/invocation-worker/jitProviderConsequence',
+      )
+      return {
+        ...actual,
+        createJitProviderConsequenceBoundary: () => { throw new Error('boundary_construction_failed') },
+      }
+    })
+    const dynamicRoute = await import('@/routes/api.internal.provider-consequence')
+    vi.stubGlobal('fetch', scriptedFetch())
+    try {
+      await expect(dynamicRoute.handleProviderConsequenceRequest(consequenceRequest(), environment()))
+        .resolves.toMatchObject({ status: 503 })
+    } finally {
+      vi.doUnmock('@/modules/capability-execution/invocation-worker/jitProviderConsequence')
+    }
+  })
+
+  it('rejects an oversized opaque ticket before allocating a dispatcher', async () => {
+    const oversized = { ...ticket(), ticketRef: `provider-ticket:${'x'.repeat(190)}` }
     vi.stubGlobal('fetch', scriptedFetch())
     const response = await handleProviderConsequenceRequest(consequenceRequest(oversized), environment())
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(400)
+    expect(mocks.agents).toHaveLength(0)
+  })
+
+  it('contains dispatcher close rejection after an otherwise valid consequence', async () => {
+    mocks.state.rejectClose = true
+    vi.stubGlobal('fetch', scriptedFetch())
+    const response = await handleProviderConsequenceRequest(consequenceRequest(), environment())
+    expect(response.status).toBe(200)
     expect(mocks.agents).toHaveLength(1)
     expect(mocks.agents[0]?.close).toHaveBeenCalledOnce()
   })
@@ -394,8 +472,8 @@ describe('provider consequence route coverage gaps', () => {
     vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>())
     try {
       const response = await dynamicRoute.handleProviderConsequenceRequest(consequenceRequest(), environment())
-      expect(response.status).toBe(503)
-      await expect(response.json()).resolves.toEqual({ kind: 'unavailable' })
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({ disposition: 'refused' })
       expect(mocks.guardedFetch).not.toHaveBeenCalled()
     } finally {
       vi.doUnmock('@/modules/secrets/public')
@@ -419,6 +497,7 @@ function invocation(): ProviderInvocation {
       maximumSpend: { currency: 'USD', units: '0', exponent: 2 }, expiresAt: NOW + 120_000,
       callIdentity: { keyId: 'route-calls:test', signature: 'hmac-sha256:test' },
       authorityGeneration: 7, authorityDigest: DIGEST('7'), leaseRef: 'lease:test', invocationRef: 'invocation:test',
+      canonicalConnectionRef: `con_${'3'.repeat(32)}`,
       operationRef: 'operation:test', grantedScopes: ['provider:invoke'], grantedResources: ['operation:test'],
       readinessValidUntil: NOW + 120_000, readinessDigest: DIGEST('8'),
     },
@@ -451,7 +530,7 @@ function ticket(routeInvocation: ProviderInvocation = invocation()): CanonicalPr
     version: 'provider-consequence:v1', ticketRef: 'provider-ticket:test', effectRef: 'connection-effect:test',
     requestDigest: requestDigest(routeInvocation), invocationDigest, issuedAt: NOW - 1_000, expiresAt: NOW + 10_000,
     invocationRef: 'invocation:test', operationRef: 'operation:test', leaseRef: 'lease:test',
-    canonicalLeaseRef: 'lease-canonical:test', canonicalConnectionRef: 'connection:test',
+    canonicalLeaseRef: 'lease-canonical:test', canonicalConnectionRef: routeInvocation.authority.canonicalConnectionRef!,
     canonicalConnectionGeneration: 7, providerRef: 'provider:test', adapterId: routeInvocation.binding.adapterId,
     authorityDigest: routeInvocation.authority.authorityDigest, grantedScopes: ['provider:invoke'],
     grantedResources: ['operation:test'], readinessValidUntil, readinessDigest,
@@ -467,14 +546,33 @@ function signingPointer() {
 
 function consequenceRequest(canonicalTicket = ticket(), overrides: Record<string, unknown> = {}) {
   const body = {
+    action: 'execute',
     ticket: canonicalTicket,
     ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
     signingSecret: signingPointer(),
     journalToken: JOURNAL_TOKEN,
+    signedTicket: signedTicketFor(canonicalTicket),
     invocation: invocation(),
     ...overrides,
   }
   return rawRequest(JSON.stringify(body))
+}
+
+function signingRequest(canonicalTicket = ticket()) {
+  return rawRequest(JSON.stringify({
+    action: 'issue',
+    ticket: canonicalTicket,
+    ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
+    signingSecret: signingPointer(),
+    journalToken: JOURNAL_TOKEN,
+  }))
+}
+
+function signedTicketFor(canonicalTicket: CanonicalProviderConsequenceTicket): string {
+  const claimsDigest = providerConsequenceTicketClaimsDigest(canonicalTicket)
+  const message = `${canonicalTicket.ticketRef}:${claimsDigest}:${canonicalTicket.expiresAt}`
+  const signature = createHmac('sha256', SIGNING_KEY).update(message).digest('hex')
+  return `${canonicalTicket.ticketRef}.${canonicalTicket.expiresAt}.${signature}`
 }
 
 function rawRequest(body: string, headers: Record<string, string> = {}) {
@@ -509,6 +607,7 @@ function jwt() {
 }
 
 function scriptedFetch(overrides: Readonly<{
+  attest?: Response
   begin?: Response
   complete?: Response
   abort?: Response
@@ -534,6 +633,9 @@ function scriptedFetch(overrides: Readonly<{
     }
     if (url.pathname.endsWith('/journal/begin')) {
       return overrides.begin ?? Response.json({ kind: 'claimed', claimRef: 'provider-claim:test' })
+    }
+    if (url.pathname.endsWith('/journal/attest')) {
+      return overrides.attest ?? Response.json({ kind: 'attested' })
     }
     if (url.pathname.endsWith('/journal/complete')) {
       return overrides.complete ?? Response.json({ kind: 'completed' })
