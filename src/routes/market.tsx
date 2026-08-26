@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AePublicShell } from "@/components/ae/layout/AePublicShell";
+import { AePageState } from "@/components/ae/layout/AePageState";
 import { AePublicRoutePending } from "@/components/ae/layout/AePublicRoutePending";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
+import { Button } from "@/components/ui/button";
 import {
   marketWindowSchema,
   type MarketWindow,
@@ -14,6 +16,7 @@ export type MarketSearch = Readonly<{
   query?: string;
   availability?: "routeable" | "integrated" | "unavailable";
   cursor?: string;
+  capability?: string;
 }>;
 
 export const Route = createFileRoute("/market")({
@@ -34,10 +37,16 @@ export const Route = createFileRoute("/market")({
     ...(typeof search.cursor === "string" && search.cursor.length <= 512
       ? { cursor: search.cursor }
       : {}),
+    ...(typeof search.capability === "string" &&
+    search.capability.length > 0 &&
+    search.capability.length <= 200
+      ? { capability: search.capability }
+      : {}),
   }),
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readMarketRouteServer({ data: deps }),
   pendingComponent: MarketPending,
+  errorComponent: MarketError,
   head: () => ({
     meta: [
       { title: "Agent tool market | Agentic Economy" },
@@ -52,7 +61,22 @@ export const Route = createFileRoute("/market")({
 });
 
 function MarketPending() {
-  return <AePublicRoutePending label="Updating market results…" />;
+  return <AePublicRoutePending label="Updating market results…" shape="market" />;
+}
+
+function MarketError() {
+  return (
+    <AePageState
+      tone="danger"
+      title="The catalog didn’t load"
+      description="Reload this page to fetch the current tools. No Operation was called."
+      action={
+        <Button asChild className="min-h-11">
+          <a href="/market?window=30d">Reload catalog</a>
+        </Button>
+      }
+    />
+  )
 }
 
 function MarketRoute() {

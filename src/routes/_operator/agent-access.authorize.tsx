@@ -3,7 +3,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Card } from '@/components/ui/card'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
@@ -135,7 +134,7 @@ function AgentAccessAuthorizeRoute() {
 
   return (
     <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
-      <Card className="grid max-w-2xl gap-4 p-5 shadow-none">
+      <div className="grid gap-6">
         {userCode === undefined ? (
           <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your agent.</AlertDescription></Alert>
         ) : status !== 'error' && (consentLoading || !consentReady) ? (
@@ -178,7 +177,7 @@ function AgentAccessAuthorizeRoute() {
             </fieldset>
             <div className="grid gap-1 text-sm text-muted-foreground">
               <p>Application: {clientName ?? 'Your agent'} · Development · Standard rate limits</p>
-              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Agent access.</p>
+              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Keys.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
@@ -192,7 +191,7 @@ function AgentAccessAuthorizeRoute() {
         ) : (
           <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
         )}
-      </Card>
+      </div>
     </AeOperatorShell>
   )
 }

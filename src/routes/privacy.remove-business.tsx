@@ -145,10 +145,10 @@ function RemoveBusinessRoute() {
         title="Supplier corrections"
         description="Send the supplier slug, your email, and the exact Operation or profile fact that should change."
       />
-      <div className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
-        <section className="grid gap-4 md:grid-cols-3">
+      <div className="ae-rail grid max-w-prose gap-10 pb-page">
+        <section className="grid gap-6">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
-            <Card key={title} className="grid h-full gap-1.5 p-5">
+            <Card key={title} className="grid gap-1.5 p-0 shadow-none">
               <div className="flex items-center justify-between gap-3">
                 <p className="flex items-center gap-2 text-lg font-semibold text-foreground">
                   <Icon className="size-4 text-foreground" aria-hidden="true" /> {title}

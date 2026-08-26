@@ -36,7 +36,7 @@ function SignInRoute() {
 
   return (
     <AePublicShell>
-      <div className="mx-auto grid min-h-[70vh] w-full max-w-lg place-items-center px-4 py-12 md:px-6">
+      <div className="ae-rail grid min-h-full w-full max-w-lg place-items-center py-page">
         <section className="grid w-full gap-6" aria-labelledby={isLocalE2E || (!isProviderFlow && !isAgentAccessFlow) ? undefined : 'sign-in-context-heading'}>
           {isLocalE2E ? (
             <div className="grid gap-4">
@@ -54,7 +54,7 @@ function SignInRoute() {
                   <p className="block text-muted-foreground">{contextText}</p>
                 </div>
               ) : null}
-              <SignIn fallbackRedirectUrl={redirect ?? '/owner/supply'} signUpUrl="/sign-up" />
+              <SignIn fallbackRedirectUrl={redirect ?? '/owner/offerings'} signUpUrl="/sign-up" />
             </>
           )}
         </section>

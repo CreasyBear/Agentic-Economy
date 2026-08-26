@@ -11,6 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { Separator } from '@/components/ui/separator'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 
 function AeFunnelAttributionBoot() {
@@ -54,26 +55,26 @@ export function AePublicShell({ children }: AePublicShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className="min-h-dvh">
+    <div className="relative flex min-h-dvh flex-col">
       <AeFunnelAttributionBoot />
       <AeSkipFocusBridge />
       <a
         data-testid="skip-to-content"
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-20 focus:rounded-md focus:bg-container focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground"
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 px-3 pt-3">
-        <div className="mx-auto flex min-h-13 w-full max-w-6xl items-center gap-3 rounded-nav border border-border bg-card/90 px-3 shadow-float backdrop-blur-md sm:px-4">
+      <header className="sticky top-0 z-30 pt-3">
+        <div className="ae-nav flex min-h-13 items-center gap-related rounded-nav border border-border bg-container px-3 shadow-float sm:px-gutter">
           <PublicBrandLink />
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <PublicNavActions mobileNavOpen={mobileNavOpen} onMobileNavOpenChange={setMobileNavOpen} />
           </div>
         </div>
       </header>
-      <div id="ae-app-shell-main" tabIndex={-1}>
-        <main id="main-content" tabIndex={-1}>
+      <div id="ae-app-shell-main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col">
+        <main id="main-content" tabIndex={-1} className="flex-1">
           {children}
         </main>
         <PublicFooter />
@@ -89,7 +90,7 @@ function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
       <Link to="/market" search={{ window: '30d' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
       <Link to="/for-agents" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
       <Link to="/activity" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
-      <div className="my-1 border-t" aria-hidden="true" />
+      <Separator className="my-1" aria-hidden="true" />
       <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
       <Button asChild className="min-h-11"><Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Create account</Link></Button>
     </nav>
@@ -154,19 +155,19 @@ function PublicBrandLink() {
 
 function PublicFooter() {
   return (
-    <footer className="mt-10 border-t border-border bg-card">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:px-6 md:text-sm">
+    <footer className="mt-auto border-t border-border bg-container">
+      <div className="ae-rail flex flex-col gap-related py-section text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:text-sm">
         <div className="flex items-center gap-2 font-mono text-foreground"><img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-7" /><span>agentic economy</span></div>
-        <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-1">
-          <Link to="/t/new" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
-          <Link to="/market" search={{ window: '30d' }} className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
-          <Link to="/for-agents" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
-          <Link to="/activity" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
-          <Link to="/for-providers" className="inline-flex min-h-11 items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a capability</Link>
-          <a href="/llms.txt" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">llms.txt</a>
-          <a href="/SKILL.md" className="inline-flex min-h-11 items-center font-mono text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">SKILL.md</a>
-          <Link to="/privacy" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>
-          <Link to="/terms" className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</Link>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-2">
+          <Link to="/t/new" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
+          <Link to="/market" search={{ window: '30d' }} className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
+          <Link to="/for-agents" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
+          <Link to="/activity" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
+          <Link to="/for-providers" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a capability</Link>
+          <a href="/llms.txt" className="inline-flex items-center font-mono text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">llms.txt</a>
+          <a href="/SKILL.md" className="inline-flex items-center font-mono text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">SKILL.md</a>
+          <Link to="/privacy" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>
+          <Link to="/terms" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</Link>
         </nav>
       </div>
     </footer>

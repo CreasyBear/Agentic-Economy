@@ -1,7 +1,7 @@
 /**
  * Brand-core voice strings for primary public surfaces.
  * Functional labels, accessibility copy, and machine descriptors stay with
- * their owning feature modules. Example asks can change independently.
+ * their owning feature modules.
  */
 
 /** Canonical category sentence, kept for public metadata rather than the person-facing hero. */
@@ -14,13 +14,91 @@ export const HOME = {
   metaDescription: CORE_SENTENCE,
   heroHeading: 'APIs your agent can discover and call.',
   heroSubhead:
-    'Search live tools for research, finance, compliance, commerce and more. Compare the price and evidence before your agent makes a call.',
-  exampleAsks: [
-    'weather forecast',
-    'financial market data',
-    'extract data from documents',
+    'Browse live tools for research, finance, compliance, commerce and more. Compare the price and evidence before your agent makes a call.',
+  claimsHeading: 'What you get',
+  catalogHeading: 'Tools in the catalog',
+  catalogBody:
+    'Current tools with exact price and readiness. Open one to compare Operations.',
+  catalogUnavailable:
+    'The tool catalog is temporarily unavailable. Open Discover to browse the catalog, or try again shortly.',
+  catalogEmpty:
+    'No tools are ready right now. Browse all tools, including those that require setup.',
+  heroPeek: 'Tools in the catalog',
+  faqHeading: 'Questions before you connect',
+  closeHeading: 'Set up your agent.',
+  closeBody:
+    'One instruction is enough. The catalog, the price, and the call sit behind it.',
+} as const
+
+/** Shared agent-paste instruction. Home and `/for-agents` must stay identical. */
+export const AGENT_INSTRUCTION = {
+  heading: 'Give this to your agent',
+  body: 'One instruction is enough. The agent searches the live catalog, compares real differences, shows you the total price and inputs, then calls only the Operation you approve.',
+  label: 'agent setup instruction',
+  code: 'Find viable capabilities for my task, compare the real differences, show me total price and inputs, then use the one I approve.',
+  copyText:
+    'Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, compare the real differences, show me total price and inputs, then use the one I approve. Connect only if that capability requires it.',
+} as const
+
+export const HOME_CLAIMS = [
+  {
+    number: '01',
+    title: 'One connection.',
+    body: 'Add one endpoint and every listed Operation is searchable from the same wallet. No per-tool provider accounts.',
+  },
+  {
+    number: '02',
+    title: 'Compare before you call.',
+    body: 'Price, readiness, and observed evidence sit on the Operation. The agent picks on facts, not a guess.',
+  },
+  {
+    number: '03',
+    title: 'Pay per Operation.',
+    body: 'Browse and inspect without a provider signup. Connect only when the selected Operation requires it.',
+  },
+] as const
+
+export const HOME_CLAIM_FIGURES = {
+  '01': [
+    { term: 'Search', detail: 'Every listed Operation, from one endpoint.' },
+    { term: 'Compare', detail: 'Live differences, not a guess.' },
+    { term: 'Call', detail: 'Only the Operation you approve.' },
+    { term: 'Pay', detail: 'From the same wallet.' },
+  ],
+  '02': [
+    { term: 'Price', detail: 'On the Operation, before the call.' },
+    { term: 'Readiness', detail: 'Ready now, or needs setup.' },
+    { term: 'Evidence', detail: 'Observed, not inferred.' },
+  ],
+  '03': [
+    { term: 'Browse', detail: 'Free.' },
+    { term: 'Inspect', detail: 'Free.' },
+    { term: 'Call', detail: 'Priced on the Operation.' },
   ],
 } as const
+
+export const HOME_FAQ = [
+  {
+    question: 'Do I need a provider account to browse?',
+    answer:
+      'No. Browse and inspect without a signup. Connect only when the selected Operation requires it.',
+  },
+  {
+    question: 'What does a call cost?',
+    answer:
+      'Price sits on the Operation before you call. You see the total before anything runs.',
+  },
+  {
+    question: 'How does my agent start?',
+    answer:
+      'Paste one instruction. The agent searches the live catalog, compares real differences, then calls only what you approve.',
+  },
+  {
+    question: 'Can I list my own API?',
+    answer:
+      'Yes. Publish the capability, price and access terms agents need to find and choose your tool.',
+  },
+] as const
 
 /** Agent/Runtime door on `/` (routes to /for-agents). */
 export const AGENT_DOOR = {
@@ -32,13 +110,13 @@ export const AGENT_DOOR = {
 
 /** Agent/Runtime landing (`/for-agents`) — the machine-facing expression of the market. */
 export const AGENT_PAGE = {
-  metaTitle: 'Connect your agent | Agentic Economy',
+  metaTitle: 'One connection, every capability | Agentic Economy',
   metaDescription:
-    'Connect once, find a live capability, inspect its total price and inputs, call it, and retain one durable receipt.',
+    'Add one MCP endpoint and your agent can search, compare, call, and pay for every listed Operation from a single wallet. No per-tool provider accounts.',
   eyebrow: 'Connections',
-  heading: 'Connect once. Use the whole market.',
+  heading: 'One connection. Every capability.',
   subhead:
-    'One command stores a bounded agent key and configures MCP. Search, inspect, call, and recover through one catalogue and one receipt.',
+    'Add one MCP endpoint and your agent sees a live catalog of Operations with one wallet that can pay for them. No per-tool provider accounts, no separate billing.',
 } as const
 
 /** Supplier door on `/` (routes to the existing supply mode). */

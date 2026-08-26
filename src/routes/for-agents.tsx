@@ -1,12 +1,15 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { ChevronDownIcon } from 'lucide-react'
 import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 
 import { Button } from '@/components/ui/button'
 import { AeAssistantInstallFunnel } from '@/components/ae/console/AeAssistantInstallFunnel'
+import { AeResolveWalkthrough } from '@/components/ae/console/AeResolveWalkthrough'
 import { AeAgentQuickstartStep, AeAgentReferenceList } from '@/components/ae/console/AeAgentQuickstart'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
+import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { AGENT_PAGE } from '@/content/brand-copy'
+import { AGENT_INSTRUCTION, AGENT_PAGE } from '@/content/brand-copy'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { AGENT_ACCESS_OAUTH_PATHS } from '@/modules/agent-access/oauth-state'
 import { OPERATION_INVOKE_ROUTE_CONTRACT } from '@/modules/capability-execution/operation-invoke-entry'
@@ -107,33 +110,32 @@ function ForAgentsRoute() {
 
   return (
     <AePublicShell>
-      <div className="mx-auto grid w-full max-w-[1080px] gap-8 px-4 py-10 sm:px-6 sm:py-14">
-        <header className="grid gap-5 border-b pb-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <div className="grid max-w-3xl gap-3">
-            <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{AGENT_PAGE.eyebrow}</p>
-            <h1 className="text-3xl font-semibold leading-tight tracking-[-0.03em] sm:text-4xl">{AGENT_PAGE.heading}</h1>
-            <p className="text-base leading-7 text-muted-foreground">{AGENT_PAGE.subhead}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <AePageHeader
+        eyebrow={AGENT_PAGE.eyebrow}
+        title={AGENT_PAGE.heading}
+        description={AGENT_PAGE.subhead}
+        actions={
+          <>
             <Button asChild><Link to="/market" search={{ window: '30d' }}>Browse tools</Link></Button>
             <Button asChild variant="outline"><Link to="/SKILL.md">Read the skill</Link></Button>
-          </div>
-        </header>
-
-        <section aria-labelledby="agent-instruction" className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)] sm:items-center sm:p-5">
+          </>
+        }
+      />
+      <div className="ae-rail grid gap-section pb-page sm:pb-16">
+        <section aria-labelledby="agent-instruction" className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,0.75fr)] sm:items-center sm:p-5">
           <div className="grid gap-1">
-            <h2 id="agent-instruction" className="font-semibold">Give this to your agent</h2>
-            <p className="text-sm leading-6 text-muted-foreground">It can preserve your task, find viable capabilities, inspect the exact terms, and call a free keyless read before asking you to connect.</p>
+            <h2 id="agent-instruction" className="font-semibold">{AGENT_INSTRUCTION.heading}</h2>
+            <p className="text-sm leading-6 text-muted-foreground">{AGENT_INSTRUCTION.body}</p>
           </div>
           <AeCopyCommand
             compact
-            label="agent setup instruction"
-            code="Find viable capabilities for my task, compare the real differences, show me total price and inputs, then use the one I approve."
-            copyText="Read $ORIGIN/llms.txt. Preserve my full task, find viable capabilities, compare the real differences, show me total price and inputs, then use the one I approve. Connect only if that capability requires it."
+            label={AGENT_INSTRUCTION.label}
+            code={AGENT_INSTRUCTION.code}
+            copyText={AGENT_INSTRUCTION.copyText}
           />
         </section>
 
-        <section aria-labelledby="agent-quickstart" className="grid overflow-hidden rounded-lg border bg-card md:grid-cols-4">
+        <section aria-labelledby="agent-quickstart" className="grid overflow-hidden rounded-lg border bg-card md:grid-cols-4 md:divide-x">
           <h2 id="agent-quickstart" className="sr-only">Four-step agent quickstart</h2>
           <AeAgentQuickstartStep number="01" title="Search" access="Public" command={`${CLI_ENTRYPOINT} search "weather forecast" --base-url "${canonicalBaseUrl}"`} body="Find current capabilities by the outcome you need." />
           <AeAgentQuickstartStep number="02" title="Inspect" access="Public" command={`${CLI_ENTRYPOINT} inspect "$AE_OPERATION_REF" --base-url "${canonicalBaseUrl}"`} body="Read exact inputs, total price, readiness, and provider." />
@@ -141,31 +143,52 @@ function ForAgentsRoute() {
           <AeAgentQuickstartStep number="04" title="Connect if asked" access="Once" command={`npx @agentic-economy/cli connect --base-url "${canonicalBaseUrl}" --mcp`} body="Required only for capabilities that cannot run anonymously." />
         </section>
 
-        <div className="grid gap-3 rounded-lg border bg-muted/30 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <AeResolveWalkthrough />
+
+        <section aria-labelledby="agent-one-wallet" className="grid gap-3 border-t pt-7 sm:flex sm:items-center sm:justify-between sm:gap-4">
+          <div>
+            <h2 id="agent-one-wallet" className="font-semibold">One wallet for everything</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Every call settles from the same balance, across every provider. Payments land instantly, with one receipt
+              and no per-provider billing.
+            </p>
+          </div>
+          <Button asChild variant="outline" className="justify-self-start sm:justify-self-end">
+            <Link to="/market" search={{ window: '30d' }}>Compare Operations</Link>
+          </Button>
+        </section>
+
+        <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div><p className="font-semibold">Try the public path first.</p><p className="text-sm leading-6 text-muted-foreground">Search, inspect, and call eligible free keyless reads without an account. Connect only when the selected capability requires it; provider credentials stay behind AE.</p></div>
           <Button asChild variant="outline"><Link to="/.well-known/ucp">Open machine manifest</Link></Button>
         </div>
 
-        <details className="group overflow-hidden rounded-lg border bg-card">
-          <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-5 font-semibold marker:content-none">Full installation and recovery guide <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">⌄</span></summary>
-          <div className="border-t p-4 sm:p-5"><AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} /></div>
+        <details className="group border-t border-border pt-6">
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
+            Full installation and recovery guide
+            <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform duration-base group-open:rotate-180" />
+          </summary>
+          <div className="pt-4"><AeAssistantInstallFunnel canonicalBaseUrl={canonicalBaseUrl} /></div>
         </details>
 
-        <details className="group overflow-hidden rounded-lg border bg-card">
-          <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-4 px-5 font-semibold marker:content-none">API and MCP reference <span aria-hidden="true" className="text-muted-foreground group-open:rotate-180">⌄</span></summary>
-          <div className="grid gap-7 border-t p-5">
+        <details className="group border-t border-border pt-6">
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 font-medium marker:content-none">
+            API and MCP reference
+            <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform duration-base group-open:rotate-180" />
+          </summary>
+          <div className="grid gap-7 pt-4">
             <AeAgentReferenceList title="Anonymous catalogue reads" items={anonymousReads(canonicalBaseUrl)} />
             <AeAgentReferenceList title="Authenticated calls" items={authenticatedCalls(canonicalBaseUrl)} />
-            <section aria-labelledby="mcp-lifecycle" className="grid gap-2 border-t pt-5">
-              <h2 id="mcp-lifecycle" className="font-semibold">MCP connection</h2>
+            <section aria-labelledby="mcp-lifecycle" className="grid gap-2 border-t border-border pt-5">
+              <h2 id="mcp-lifecycle" className="font-medium">MCP connection</h2>
               <p className="max-w-3xl text-sm leading-6 text-muted-foreground">Use the official MCP SDK with <code>{canonicalBaseUrl}/mcp</code> and protocol <code>{MCP_LATEST_PROTOCOL_VERSION}</code>. Client connect performs initialization; this server is stateless and may omit <code>Mcp-Session-Id</code>. List tools before calling one, then close the client transport. A malformed JSON-RPC request returns a top-level protocol error; valid <code>tools/call</code> requests with invalid tool arguments return a tool result with <code>isError</code>.</p>
             </section>
           </div>
         </details>
 
-        <section aria-labelledby="agent-supplier-next" className="flex flex-col gap-3 border-t pt-7 sm:flex-row sm:items-center sm:justify-between">
-          <div><h2 id="agent-supplier-next" className="font-semibold">Want agents to find your tool?</h2><p className="text-sm text-muted-foreground">Publish the capability, terms and access details once.</p></div>
-          <Button asChild variant="outline"><Link to="/for-providers">List a tool</Link></Button>
+        <section aria-labelledby="agent-supplier-next" className="grid gap-3 rounded-lg border p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div><h2 id="agent-supplier-next" className="font-semibold">Want agents to find your tool?</h2><p className="mt-1 text-sm text-muted-foreground">Publish the capability, terms and access details once.</p></div>
+          <Button asChild variant="outline" className="justify-self-start sm:justify-self-end"><Link to="/for-providers">List a tool</Link></Button>
         </section>
       </div>
     </AePublicShell>

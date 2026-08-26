@@ -38,9 +38,7 @@ export function AeFactList({
           <dt
             className={cn(
               "text-muted-foreground",
-              density === "compact"
-                ? "text-[0.6875rem] font-medium uppercase tracking-wide"
-                : "text-sm",
+              density === "compact" ? "text-xs" : "text-sm",
             )}
             aria-description={fact.definition}
           >
@@ -49,9 +47,7 @@ export function AeFactList({
           <dd
             className={cn(
               "min-w-0 font-medium tabular-nums",
-              density === "compact"
-                ? "mt-0.5 break-words text-xs"
-                : "text-sm",
+              density === "compact" ? "mt-0.5 break-words text-sm" : "text-sm",
               fact.mono && "font-mono",
               fact.muted ? "text-muted-foreground" : "text-foreground",
             )}

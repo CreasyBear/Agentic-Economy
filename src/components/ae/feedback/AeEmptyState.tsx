@@ -1,23 +1,26 @@
 import type { ReactNode } from 'react'
 
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty'
+import { cn } from '@/lib/utils'
 
-export function AeEmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description: string; action?: ReactNode }) {
+export function AeEmptyState({
+  title,
+  description,
+  action,
+  role,
+}: {
+  icon?: ReactNode
+  title: string
+  description: string
+  action?: ReactNode
+  role?: 'status' | 'alert'
+}) {
   return (
-    <Empty>
-      <EmptyHeader>
-        {icon === undefined ? null : <EmptyMedia variant="icon">{icon}</EmptyMedia>}
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
-      </EmptyHeader>
-      {action === undefined ? null : <EmptyContent>{action}</EmptyContent>}
-    </Empty>
+    <div {...(role === undefined ? {} : { role })} className={cn('grid max-w-xl gap-3 py-8')}>
+      <div className="grid gap-1">
+        <p className="font-medium text-foreground">{title}</p>
+        <p className="text-pretty text-sm text-muted-foreground">{description}</p>
+      </div>
+      {action === undefined ? null : <div>{action}</div>}
+    </div>
   )
 }

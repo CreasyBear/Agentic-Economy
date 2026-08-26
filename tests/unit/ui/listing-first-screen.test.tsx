@@ -31,9 +31,7 @@ describe('ListingFirstScreen', () => {
   it('puts literal market facts before any access path', () => {
     const markup = renderFirstScreen(catalogFixture())
 
-    expect(markup).toContain('Demo listed provider')
     expect(markup).toContain('Plumber')
-    expect(markup).toContain('Compare this supplier’s published Operations, exact prices, and access paths.')
     expect(markup).toContain('Operations')
     expect(markup).toContain('Ready now')
     expect(markup).toContain('Last indexed')
@@ -193,7 +191,8 @@ function renderListingToStaticMarkup(ui: ReactElement): string {
   const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
   const threadRoute = createRoute({ getParentRoute: () => rootRoute, path: '/t/$threadId' })
   const privacyRemoveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/privacy/remove-business' })
-  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, privacyRemoveRoute])
+  const marketRoute = createRoute({ getParentRoute: () => rootRoute, path: '/market' })
+  const routeTree = rootRoute.addChildren([homeRoute, slugRoute, threadRoute, privacyRemoveRoute, marketRoute])
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
   return renderToStaticMarkup(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

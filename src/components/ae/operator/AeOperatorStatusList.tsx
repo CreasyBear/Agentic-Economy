@@ -1,8 +1,13 @@
+import { useMemo } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import type { ReactNode } from 'react'
 
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import {
+  AeOperatorSortableHeader,
+  AeRecordTable,
+} from '@/components/ae/operator/AeOperatorDataTable'
 import { Badge } from '@/components/ui/badge'
-import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from '@/components/ui/item'
 
 export type AeOperatorStatusRow = {
   id: string
@@ -23,46 +28,52 @@ export function AeOperatorStatusList({
   scroll = false,
   maxHeight = 'min(24rem, 50vh)',
 }: AeOperatorStatusListProps) {
+  const columns = useMemo<ColumnDef<AeOperatorStatusRow, unknown>[]>(
+    () => [
+      {
+        id: 'label',
+        accessorKey: 'label',
+        header: ({ column }) => <AeOperatorSortableHeader label="Item" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid gap-0.5">
+            <span className="font-medium">{row.original.label}</span>
+            {row.original.description === undefined ? null : (
+              <span className="text-xs text-muted-foreground">{row.original.description}</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: 'state',
+        accessorKey: 'state',
+        header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
+        cell: ({ row }) => <Badge variant="secondary">{row.original.state}</Badge>,
+      },
+      {
+        id: 'meta',
+        header: 'Detail',
+        cell: ({ row }) => row.original.meta ?? <span className="text-muted-foreground">—</span>,
+      },
+    ],
+    [],
+  )
+
   if (rows.length === 0) {
     return (
-      <Empty className="border border-border bg-card p-5">
-        <EmptyHeader>
-          <EmptyTitle>No statuses recorded</EmptyTitle>
-          <EmptyDescription>There are no status rows to display.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <AeEmptyState
+        title="No statuses recorded"
+        description="There are no status rows to display."
+      />
     )
   }
 
-  const list = (
-    <ItemGroup className="gap-2">
-      {rows.map((row) => (
-        <Item asChild key={row.id} variant="outline" className="grid gap-2 bg-card">
-          <li>
-            <ItemContent className="gap-1">
-              <ItemTitle>{row.label}</ItemTitle>
-              {row.description === undefined && row.meta === undefined ? null : (
-                <div className="grid gap-1 text-xs text-muted-foreground">
-                  {row.description}
-                  {row.meta}
-                </div>
-              )}
-            </ItemContent>
-            <ItemActions>
-              <Badge variant="secondary">{row.state}</Badge>
-            </ItemActions>
-          </li>
-        </Item>
-      ))}
-    </ItemGroup>
-  )
-  if (!scroll || rows.length <= 4) {
-    return list
-  }
-
   return (
-    <div className="overflow-auto" style={{ maxHeight }}>
-      <div className="pr-3">{list}</div>
-    </div>
+    <AeRecordTable
+      columns={columns}
+      data={rows}
+      caption="Statuses"
+      hideFilter={rows.length <= 6}
+      {...(scroll ? { maxHeight } : {})}
+    />
   )
 }

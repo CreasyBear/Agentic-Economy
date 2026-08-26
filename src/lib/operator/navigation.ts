@@ -2,6 +2,7 @@ import {
   Activity,
   Bot,
   Boxes,
+  Building2,
   CircleHelp,
   Gauge,
   KeyRound,
@@ -10,6 +11,7 @@ import {
   Settings,
   Store,
   UploadCloud,
+  Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -23,10 +25,6 @@ export type OperatorNavItem = {
 }
 
 export type OperatorNavTier = 'core' | 'advanced'
-
-export type OperatorCommandDestination = OperatorNavItem & {
-  hint?: string
-}
 
 export type OperatorUtilityItem = {
   href: string
@@ -51,21 +49,27 @@ export type OperatorBreadcrumbItem = {
 
 const ownerNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'marketplace',
-    label: 'Marketplace',
+    id: 'records',
+    label: 'Records',
     items: [
-      { href: '/owner/status', label: 'Overview', icon: Gauge, tier: 'core' },
       { href: '/owner/offerings', label: 'Operations', icon: Boxes, tier: 'core' },
-      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
+      { href: '/activity', label: 'Calls', icon: Activity, tier: 'core' },
+      { href: '/agent-access', label: 'Keys', icon: KeyRound, tier: 'core' },
+      { href: '/owner/credit', label: 'Credit', icon: Wallet, tier: 'core' },
+      { href: '/owner/status', label: 'Supplier', icon: Building2, tier: 'core' },
     ],
   },
   {
-    id: 'manage',
-    label: 'Manage',
+    id: 'work',
+    label: 'Work',
     items: [
-      { href: '/owner/supply', label: 'Publishing', icon: UploadCloud, tier: 'core' },
-      { href: '/agent-access', label: 'Access & usage', icon: KeyRound, tier: 'core' },
-      { href: '/activity', label: 'Activity', icon: Activity, tier: 'core' },
+      { href: '/owner/supply', label: 'Publish', icon: UploadCloud, tier: 'core' },
+    ],
+  },
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
       { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
     ],
   },
@@ -73,45 +77,34 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
 
 const adminNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'marketplace',
-    label: 'Marketplace',
+    id: 'records',
+    label: 'Records',
     items: [
-      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
-    ],
-  },
-  {
-    id: 'administration',
-    label: 'Administration',
-    items: [
-      { href: '/admin/index-health', label: 'Marketplace health', icon: Activity, tier: 'core' },
-      { href: '/admin/audit-events', label: 'Activity', icon: ScrollText, tier: 'core' },
+      { href: '/admin/index-health', label: 'Catalog health', icon: Activity, tier: 'core' },
+      { href: '/admin/audit-events', label: 'Audit', icon: ScrollText, tier: 'core' },
     ],
   },
 ] as const
 
 const developerNavGroups: readonly OperatorNavGroup[] = [
   {
-    id: 'marketplace',
-    label: 'Marketplace',
+    id: 'records',
+    label: 'Records',
     items: [
-      { href: '/market', label: 'Browse marketplace', icon: Store, tier: 'core' },
-      { href: '/developers/discovery', label: 'API discovery', icon: SearchCode, tier: 'core' },
+      { href: '/developers/discovery', label: 'Discovery', icon: SearchCode, tier: 'core' },
     ],
   },
 ] as const
 
-const publicCommandDestinations: readonly OperatorCommandDestination[] = [
-  { href: '/', label: 'Agentic Economy home', icon: Gauge, tier: 'core', hint: 'Public' },
-] as const
-
 const operatorUtilityItems: readonly OperatorUtilityItem[] = [
+  { href: '/market', label: 'Catalog', icon: Store },
   { href: '/', label: 'Home', icon: Gauge },
   { href: '/for-agents', label: 'Agent setup', icon: Bot },
   { href: '/privacy/remove-business', label: 'Help & corrections', icon: CircleHelp },
 ] as const
 
 export const roleHomeHref: Record<OperatorRole, string> = {
-  owner: '/owner/status',
+  owner: '/owner/offerings',
   admin: '/admin/index-health',
   developer: '/developers/discovery',
 }
@@ -168,12 +161,16 @@ function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
 
 export function listOperatorCommandDestinations(role: OperatorRole): readonly OperatorNavGroup[] {
   const operatorGroups = navGroupsForRole(role)
+  const resourceItems: readonly OperatorNavItem[] = operatorUtilityItems.map((item) => ({
+    ...item,
+    tier: 'core',
+  }))
   return [
     ...operatorGroups,
     {
-      id: 'public',
-      label: 'Public',
-      items: publicCommandDestinations,
+      id: 'resources',
+      label: 'Resources',
+      items: resourceItems,
     },
   ]
 }

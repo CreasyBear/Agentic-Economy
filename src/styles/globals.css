@@ -24,6 +24,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-container: var(--container);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -93,6 +94,24 @@
   --duration-slow: var(--motion-duration-slow);
   --ease-standard: var(--motion-ease-standard);
   --ease-emphasized: var(--motion-ease-emphasized);
+
+  /* Layout: --container is a surface colour. These are widths and spaces. */
+  --max-width-nav: var(--ae-nav);
+  --max-width-rail: var(--ae-rail);
+  --spacing-gutter: var(--ae-gutter);
+  --spacing-gutter-lg: var(--ae-gutter-lg);
+  --spacing-intra: var(--ae-space-intra);
+  --spacing-related: var(--ae-space-related);
+  --spacing-section: var(--ae-space-section);
+  --spacing-page: var(--ae-space-page);
+  --spacing-hero: var(--ae-space-hero);
+  --spacing-touch: var(--ae-touch);
+  --spacing-band: var(--ae-space-band);
+  --spacing-fold-peek: var(--ae-fold-peek);
+  --spacing-nav-stack: var(--ae-nav-stack);
+  --spacing-anchor: var(--ae-anchor);
+  --min-height-fold: var(--ae-fold);
+  --min-height-chapter: var(--ae-chapter);
 }
 
 :root {
@@ -120,6 +139,8 @@
   --ae-surface: oklch(1 0 0);
   --ae-surface-sunken: oklch(0.9546 0.0027 106.45);
   --ae-surface-raised: var(--ae-surface);
+  /* Canvas vs work-well. Theme the well independently of page chrome. */
+  --ae-container: var(--ae-surface);
   --ae-border: oklch(0.215 0.004 106 / 0.12);
   --ae-border-strong: oklch(0.215 0.004 106 / 0.22);
 
@@ -150,6 +171,7 @@
 
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
+  --container: var(--ae-container);
   --card: var(--ae-surface);
   --card-foreground: var(--ae-fg);
   --popover: var(--ae-surface);
@@ -168,6 +190,25 @@
   --input: var(--ae-border-strong);
   --ring: var(--ae-ring);
   --radius: 0.625rem;
+
+  /* Public layout (DESIGN.md). px so the 14px root does not shrink the rail. */
+  --ae-nav: 1160px;
+  --ae-rail: 1080px;
+  --ae-gutter: 16px;
+  --ae-gutter-lg: 26px;
+  --ae-space-intra: 8px;
+  --ae-space-related: 16px;
+  --ae-space-section: 32px;
+  --ae-space-page: 48px;
+  --ae-space-hero: 72px;
+  --ae-space-band: 96px;
+  --ae-touch: 44px;
+  /* Measured sticky public header (pt-3 + nav pill). */
+  --ae-nav-stack: 56px;
+  --ae-fold-peek: 48px;
+  --ae-anchor: calc(var(--ae-nav-stack) + 16px);
+  --ae-fold: calc(100svh - var(--ae-nav-stack));
+  --ae-chapter: calc(100svh - var(--ae-nav-stack));
 
   --sidebar: var(--ae-bg);
   --sidebar-foreground: var(--ae-fg);
@@ -220,6 +261,46 @@
 
 @utility ease-emphasized {
   transition-timing-function: var(--motion-ease-emphasized);
+}
+
+@utility ae-nav {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--ae-nav);
+}
+
+@utility ae-rail {
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--ae-rail);
+  padding-inline: var(--ae-gutter);
+
+  @variant md {
+    padding-inline: var(--ae-gutter-lg);
+  }
+}
+
+/* Landing fold: remaining viewport after the sticky public nav. */
+@utility min-h-fold {
+  min-height: var(--ae-fold);
+}
+
+/* Hero fold leaves --ae-fold-peek of the next band visible (NN/G false-floor rule). */
+@utility min-h-fold-hero {
+  min-height: auto;
+
+  @variant md {
+    min-height: calc(var(--ae-fold) - var(--ae-fold-peek));
+  }
+}
+
+/* Below-the-fold chapters fill a viewport on md+, grow with content on small screens. */
+@utility min-h-chapter {
+  min-height: auto;
+
+  @variant md {
+    min-height: var(--ae-chapter);
+  }
 }
 
 @layer base {

@@ -1,10 +1,10 @@
 import { Outlet, Link, createFileRoute, notFound, useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from '@/components/ui/empty'
 
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { PublicBusinessNotFound } from '@/components/ae/listing/PublicBusinessNotFound'
+import { AePageState } from '@/components/ae/layout/AePageState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readPublicBusinessRouteServer, type PublicBusinessRouteDataResult } from '@/lib/server/public-business-route.functions'
 import { serializeJsonLd } from '@/modules/seo/public'
@@ -81,7 +81,7 @@ export const Route = createFileRoute('/$slug')({
 function ProviderListingPending() {
   return (
     <AePublicShell>
-      <article className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:px-6 md:py-8" aria-busy="true" aria-label="Loading supplier">
+      <article className="ae-rail grid gap-6 py-section" aria-busy="true" aria-label="Loading supplier">
         <Skeleton className="h-11 w-36" />
         <header className="grid gap-4 border-b border-border pb-6">
           <Skeleton className="h-5 w-20" />
@@ -106,22 +106,17 @@ function ProviderListingError() {
   const { pathname } = useLocation()
 
   return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
-        <Empty className="border border-border bg-card p-5">
-          <EmptyHeader>
-            <h1 className="text-lg font-medium tracking-tight">This supplier didn’t load</h1>
-            <EmptyDescription>Try again, or return to the catalogue.</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
-            </div>
-          </EmptyContent>
-        </Empty>
-      </section>
-    </AePublicShell>
+    <AePageState
+      tone="danger"
+      title="This supplier didn’t load"
+      description="Try again, or return to the catalogue."
+      action={
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+        </div>
+      }
+    />
   )
 }
 
@@ -129,22 +124,17 @@ export function PublicBusinessUnavailable() {
   const { pathname } = useLocation()
 
   return (
-    <AePublicShell>
-      <section className="mx-auto w-full max-w-3xl px-4 py-16 md:px-6">
-        <Empty className="border border-border bg-card p-5">
-          <EmptyHeader>
-            <h1 className="text-lg font-medium tracking-tight">Supplier temporarily unavailable</h1>
-            <EmptyDescription>The supplier catalogue source is unavailable right now. Try again in a moment.</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
-              <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
-            </div>
-          </EmptyContent>
-        </Empty>
-      </section>
-    </AePublicShell>
+    <AePageState
+      tone="warning"
+      title="Supplier temporarily unavailable"
+      description="The supplier catalogue source is unavailable right now. Try again in a moment."
+      action={
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button asChild variant="default" className="min-h-11"><a href={pathname}>Try again</a></Button>
+          <Button asChild variant="secondary" className="min-h-11"><Link to="/market" search={{ window: '30d' }} hash="operations">Back to catalog</Link></Button>
+        </div>
+      }
+    />
   )
 }
 

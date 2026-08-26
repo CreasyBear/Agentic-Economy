@@ -92,7 +92,7 @@ function PrivacyRoute() {
         title="Privacy"
         description="What the market handles when you browse, call, pay for, or publish Operations."
       />
-      <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <div className="ae-rail grid max-w-prose gap-12 pb-page">
         <section className="grid gap-4">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
             <div key={title} className="grid gap-1">

@@ -228,7 +228,8 @@ describe('assistant access components', () => {
       />,
     )
     expect(screen.getAllByText(/USD 12\.5/u).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: /balance/i })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Credit' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Credit' })).toBeTruthy()
     expect(screen.getByRole('list')).toBeTruthy()
     expect(screen.getByText('Lost, expired, or revoked agent key')).toBeTruthy()
     expect(screen.getByText('Provider reauthorization required')).toBeTruthy()

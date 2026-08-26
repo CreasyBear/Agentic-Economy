@@ -39,6 +39,6 @@ describe('homepage search error', () => {
 
     const backToSearch = screen.getByRole('link', { name: 'Try again' })
     expect(backToSearch.getAttribute('href')).toBe('/')
-    expect(backToSearch.classList.contains('min-h-11')).toBe(true)
+    expect(backToSearch.classList.contains('min-h-touch')).toBe(true)
   })
 })

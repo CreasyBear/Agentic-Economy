@@ -213,7 +213,7 @@ function StatusFound({
   const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <article id="receipt" className="mx-auto grid w-full max-w-5xl scroll-mt-6 gap-6 px-4 py-6 md:px-6 md:py-8">
+      <article id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
         <header className="grid gap-4">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">Receipt</Badge>
@@ -726,7 +726,7 @@ function StatusRefused({
   const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <section id="receipt" className="mx-auto grid w-full max-w-4xl scroll-mt-6 gap-6 px-4 py-10 md:px-6">
+      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
         <div className="grid gap-3">
           <Badge variant="warning" className="w-fit">{receiptView.statusLabel}</Badge>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
@@ -771,7 +771,7 @@ function StatusUnavailable({
   const receiptView = projectInvocationReceipt(result)
   return (
     <AePublicShell>
-      <section id="receipt" className="mx-auto grid w-full max-w-4xl scroll-mt-6 gap-6 px-4 py-10 md:px-6">
+      <section id="receipt" className="ae-rail grid scroll-mt-6 gap-8 pb-page">
         <div className="grid gap-3">
           <Badge variant="warning" className="w-fit">Receipt unavailable</Badge>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>

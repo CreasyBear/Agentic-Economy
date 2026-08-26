@@ -176,7 +176,7 @@ describe('CLI operation recovery projections', () => {
       referenceField: 'receipt.receiptRef',
     })
     expect(manifest.ownerContinuations).toMatchObject({
-      fund: { path: '/agent-access', anchor: '#fund', agentCredential: 'not_used' },
+      fund: { path: '/owner/credit', anchor: '#fund', agentCredential: 'not_used' },
       revoke: { path: '/agent-access', anchor: '#revoke', agentCredential: 'not_used' },
     })
     expect(manifest.gateway.idempotency).toMatchObject({

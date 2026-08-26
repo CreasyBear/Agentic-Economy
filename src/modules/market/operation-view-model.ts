@@ -5,6 +5,7 @@ import {
 import type { PublicOperationDescriptor } from "@/modules/capability-supply/public";
 import {
   emptyMarketListingEvidence,
+  marketCategories,
   type MarketCategory,
   type MarketLatencyProjection,
   type MarketListingEvidenceProjection,
@@ -42,6 +43,11 @@ export type CapabilityGroupViewModel = Readonly<{
   category: MarketCategory;
   providerCount: number;
   operations: readonly OperationCardViewModel[];
+}>;
+
+export type CategoryShelfViewModel = Readonly<{
+  category: MarketCategory;
+  capabilities: readonly CapabilityGroupViewModel[];
 }>;
 
 const readinessLabels = {
@@ -121,6 +127,37 @@ export function groupOperationCards(
     ).size,
     operations: groupedOperations,
   }));
+}
+
+export function groupCapabilitiesByCategory(
+  groups: readonly CapabilityGroupViewModel[],
+): readonly CategoryShelfViewModel[] {
+  return marketCategories.flatMap((category) => {
+    const capabilities = groups.filter(
+      (group) => group.category.id === category.id,
+    );
+    return capabilities.length === 0 ? [] : [{ category, capabilities }];
+  });
+}
+
+export function capabilityFromPrice(
+  operations: readonly OperationCardViewModel[],
+): string {
+  const prices = [...new Set(operations.map((operation) => operation.price))];
+  if (prices.length === 0) return "Price on request";
+  if (prices.includes("Free")) {
+    return prices.every(
+      (price) => price === "Free" || price === "Price on request",
+    ) && !prices.includes("Price on request")
+      ? "Free"
+      : "from Free";
+  }
+  const comparable = prices.filter((price) => price !== "Price on request");
+  const floor = [...comparable].sort((left, right) =>
+    left.localeCompare(right, undefined, { numeric: true }),
+  )[0];
+  if (floor === undefined) return "Price on request";
+  return `from ${floor}`;
 }
 
 const marketFallbackCategory: MarketCategory = {

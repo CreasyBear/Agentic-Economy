@@ -55,7 +55,7 @@ export function OperatorRouteNotFound() {
   const operatorRole = operatorRoleForPath(pathname) ?? 'owner'
   const isAssistantAccessPath = pathname.startsWith('/agent-access/')
   const recoveryHref = isAssistantAccessPath ? '/agent-access' : roleHomeHref[operatorRole]
-  const recoveryLabel = isAssistantAccessPath ? 'Back to access & usage' : 'Back to workspace'
+  const recoveryLabel = isAssistantAccessPath ? 'Back to Keys' : 'Back to workspace'
 
   return (
     <AeOperatorShell

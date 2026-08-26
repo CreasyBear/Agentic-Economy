@@ -62,6 +62,7 @@ import { Route as OperatorOwnerSupplyRouteImport } from './routes/_operator/owne
 import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
 import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
 import { Route as OperatorOwnerOfferingsRouteImport } from './routes/_operator/owner.offerings'
+import { Route as OperatorOwnerCreditRouteImport } from './routes/_operator/owner.credit'
 import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
 import { Route as OperatorAgentAccessAuthorizeRouteImport } from './routes/_operator/agent-access.authorize'
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
@@ -350,6 +351,11 @@ const OperatorOwnerOfferingsRoute = OperatorOwnerOfferingsRouteImport.update({
   path: '/owner/offerings',
   getParentRoute: () => OperatorRoute,
 } as any)
+const OperatorOwnerCreditRoute = OperatorOwnerCreditRouteImport.update({
+  id: '/owner/credit',
+  path: '/owner/credit',
+  getParentRoute: () => OperatorRoute,
+} as any)
 const OperatorDevelopersDiscoveryRoute =
   OperatorDevelopersDiscoveryRouteImport.update({
     id: '/developers/discovery',
@@ -491,6 +497,7 @@ export interface FileRoutesByFullPath {
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
@@ -562,6 +569,7 @@ export interface FileRoutesByTo {
   '/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/owner/credit': typeof OperatorOwnerCreditRoute
   '/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/owner/settings': typeof OperatorOwnerSettingsRoute
   '/owner/status': typeof OperatorOwnerStatusRoute
@@ -635,6 +643,7 @@ export interface FileRoutesById {
   '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
   '/_operator/agent-access/authorize': typeof OperatorAgentAccessAuthorizeRoute
   '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/_operator/owner/credit': typeof OperatorOwnerCreditRoute
   '/_operator/owner/offerings': typeof OperatorOwnerOfferingsRouteWithChildren
   '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
   '/_operator/owner/status': typeof OperatorOwnerStatusRoute
@@ -708,6 +717,7 @@ export interface FileRouteTypes {
     | '/admin/index-health'
     | '/agent-access/authorize'
     | '/developers/discovery'
+    | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
@@ -779,6 +789,7 @@ export interface FileRouteTypes {
     | '/admin/index-health'
     | '/agent-access/authorize'
     | '/developers/discovery'
+    | '/owner/credit'
     | '/owner/offerings'
     | '/owner/settings'
     | '/owner/status'
@@ -851,6 +862,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/index-health'
     | '/_operator/agent-access/authorize'
     | '/_operator/developers/discovery'
+    | '/_operator/owner/credit'
     | '/_operator/owner/offerings'
     | '/_operator/owner/settings'
     | '/_operator/owner/status'
@@ -1305,6 +1317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorOwnerOfferingsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/_operator/owner/credit': {
+      id: '/_operator/owner/credit'
+      path: '/owner/credit'
+      fullPath: '/owner/credit'
+      preLoaderRoute: typeof OperatorOwnerCreditRouteImport
+      parentRoute: typeof OperatorRoute
+    }
     '/_operator/developers/discovery': {
       id: '/_operator/developers/discovery'
       path: '/developers/discovery'
@@ -1482,6 +1501,7 @@ interface OperatorRouteChildren {
   OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
   OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
   OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
+  OperatorOwnerCreditRoute: typeof OperatorOwnerCreditRoute
   OperatorOwnerOfferingsRoute: typeof OperatorOwnerOfferingsRouteWithChildren
   OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
   OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
@@ -1494,6 +1514,7 @@ const OperatorRouteChildren: OperatorRouteChildren = {
   OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
   OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
   OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
+  OperatorOwnerCreditRoute: OperatorOwnerCreditRoute,
   OperatorOwnerOfferingsRoute: OperatorOwnerOfferingsRouteWithChildren,
   OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
   OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,

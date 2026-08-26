@@ -32,13 +32,19 @@ export function AeRouteCommandMenu({
   destinations,
   triggerClassName,
   mobile = false,
+  open: openProp,
+  onOpenChange,
 }: {
   label?: string
   destinations: readonly AeCommandDestination[]
   triggerClassName?: string
   mobile?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const setOpen = onOpenChange ?? setUncontrolledOpen
+  const open = onOpenChange === undefined ? uncontrolledOpen : (openProp ?? false)
   const commandContentId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const previousOpenRef = useRef(false)
@@ -109,16 +115,32 @@ export function AeRouteCommandMenu({
   }
 
   useEffect(() => {
+    function isTypingTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setOpen((current) => !current)
+        if (onOpenChange === undefined) {
+          setUncontrolledOpen((current) => !current)
+        } else {
+          onOpenChange(!(openProp ?? false))
+        }
+        return
+      }
+      if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target)) {
+        event.preventDefault()
+        setOpen(true)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [onOpenChange, openProp])
 
 
   return (
@@ -133,7 +155,7 @@ export function AeRouteCommandMenu({
         {...(open ? { 'aria-controls': commandContentId } : {})}
         data-route-command-trigger
         {...(triggerClassName === undefined
-          ? (mobile ? { className: 'min-h-11 min-w-11' } : {})
+          ? { className: 'min-h-11' }
           : { className: triggerClassName })}
         onClick={() => setOpen(true)}
       >
@@ -141,7 +163,7 @@ export function AeRouteCommandMenu({
         {mobile ? null : (
           <>
             <span>{label}</span>
-            <kbd className="ml-1 rounded border border-border px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground">⌘K</kbd>
+            <kbd className="ml-1 hidden rounded border border-border px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground sm:inline">/</kbd>
           </>
         )}
       </Button>

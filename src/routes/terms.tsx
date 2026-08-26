@@ -68,7 +68,7 @@ function TermsRoute() {
         title="Terms"
         description="Use Agentic Economy to find, inspect, pay for, and call published Operations."
       />
-      <div className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <div className="ae-rail grid max-w-prose gap-12 pb-page">
         <section className="grid gap-4">
           {canDoItems.map(({ icon: Icon, title, body }) => (
             <div key={title} className="grid gap-1">

@@ -13,7 +13,7 @@ test.describe('local auth boundary', () => {
   test('renders an empty local agent-access view without a source error', async ({ page }) => {
     await page.goto('/agent-access', { waitUntil: 'networkidle' })
 
-    await expect(page.getByRole('heading', { name: 'Agent access', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Keys', exact: true })).toBeVisible()
     await expect(page.getByText('Local preview — no agent is connected')).toBeVisible()
     await expect(page.getByText('No agent is connected yet.')).toBeVisible()
     await expect(page.getByText('Agent access unavailable')).toHaveCount(0)

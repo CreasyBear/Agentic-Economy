@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import '../../setup/jsdom-platform'
 
 import type { OperationCardViewModel } from '@/modules/market/operation-view-model'
-import { HomeCapabilityResults } from '@/routes/index'
+import { HomeCapabilityResults } from '@/components/ae/home/AeHomeLanding'
 
 const operation = {
   operationRef: 'operation:v1:invoice-extraction',
@@ -58,25 +58,26 @@ function renderResults() {
 afterEach(cleanup)
 
 describe('catalogue-first home', () => {
-  it('answers what, availability, total price, authentication, verification, and call path for every result', () => {
+  it('peeks capabilities as catalog tiles instead of Operation rows', () => {
     renderResults()
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Capabilities ready to use' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Tools in the catalog' })).toBeTruthy()
     const row = screen.getByRole('listitem')
-    expect(within(row).getByRole('link', { name: 'Invoice extraction' })).toBeTruthy()
+    expect(
+      within(row).getByRole('link', {
+        name: 'Invoice extract, 1 Operation, from USD 1.25',
+      }),
+    ).toBeTruthy()
     expect(within(row).getByText('Extract line items and totals from a supplier invoice.')).toBeTruthy()
-    expect(within(row).getByText('Ledger Labs')).toBeTruthy()
-    expect(within(row).getByText('Ready now')).toBeTruthy()
-    expect(within(row).getByText('Total price')).toBeTruthy()
-    expect(within(row).getByText('USD 1.25')).toBeTruthy()
-    expect(within(row).getByText('Authentication')).toBeTruthy()
-    expect(within(row).getByText('API key')).toBeTruthy()
-    expect(within(row).getByText('Last verified')).toBeTruthy()
-    expect(within(row).getByText(/UTC$/)).toBeTruthy()
-    expect(within(row).getByText('Call')).toBeTruthy()
-    expect(within(row).getAllByText('Use capability').length).toBeGreaterThan(0)
-    expect(within(row).getByRole('link', { name: 'Use Invoice extraction' }).getAttribute('href'))
-      .toBe('/operations/operation%3Av1%3Ainvoice-extraction')
+    expect(within(row).getByText('Data')).toBeTruthy()
+    expect(screen.queryByText('Ledger Labs')).toBeNull()
+    expect(screen.queryByText('Total price')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Use Invoice extraction' })).toBeNull()
+    expect(
+      within(row).getByRole('link', {
+        name: 'Invoice extract, 1 Operation, from USD 1.25',
+      }).getAttribute('href'),
+    ).toContain('capability=invoice.extract')
   })
 
   it('states unavailable and empty catalogue conditions without presenting stale capability facts', () => {
@@ -92,13 +93,13 @@ describe('catalogue-first home', () => {
       </RouterContextProvider>,
     )
 
-    expect(screen.getByRole('status').textContent).toContain('Capabilities are temporarily unavailable')
+    expect(screen.getByText(/The tool catalog is temporarily unavailable/)).toBeTruthy()
     view.rerender(
       <RouterContextProvider router={router}>
         <HomeCapabilityResults read={{ kind: 'ok', operations: [], matchedCount: 0 }} />
       </RouterContextProvider>,
     )
-    expect(screen.getByRole('status').textContent).toContain('No capabilities are ready right now')
-    expect(screen.queryByText('Invoice extraction')).toBeNull()
+    expect(screen.getByText(/No tools are ready right now/)).toBeTruthy()
+    expect(screen.queryByText('Invoice extract')).toBeNull()
   })
 })

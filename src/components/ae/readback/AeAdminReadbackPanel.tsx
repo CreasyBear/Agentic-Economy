@@ -61,10 +61,10 @@ export function AeAdminReadbackPanel({ title, description, readback }: AeAdminRe
         </AlertDescription>
       </Alert>
 
-      <Card aria-labelledby={titleId} aria-describedby={descriptionId} className="p-5">
-        <div className="border-b border-border pb-4">
-          <h2 className="text-lg font-semibold text-foreground" id={titleId}>{title}</h2>
-          <p className="text-sm leading-6 text-muted-foreground" id={descriptionId}>{description}</p>
+      <Card aria-labelledby={titleId} aria-describedby={descriptionId} className="border-0 p-0 shadow-none">
+        <div className="sr-only">
+          <h2 id={titleId}>{title}</h2>
+          <p id={descriptionId}>{description}</p>
         </div>
         <div className="pt-4">
           {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}

@@ -6,8 +6,6 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
-import { HOME } from '@/content/brand-copy'
-
 const routeState = vi.hoisted(() => ({
   components: new Map<string, ComponentType>(),
   location: { pathname: '/privacy' },
@@ -71,21 +69,14 @@ describe('public semantic comfort', () => {
     }
   })
 
-  it('gives homepage example asks a comfortable standalone target', () => {
+  it('gives homepage actions a comfortable standalone target', () => {
     renderRoute('/')
 
-    const examples = screen.getByRole('navigation', { name: 'Popular searches' })
-    const links = within(examples).getAllByRole('link')
-    expect(links).toHaveLength(HOME.exampleAsks.length)
-    for (const link of links) expect(link.classList.contains('min-h-11')).toBe(true)
-  })
-
-  it('gives the home catalogue action a comfortable standalone target', () => {
-    renderRoute('/')
-
-    const link = screen.getByRole('link', { name: 'Discover all capabilities' })
-    expect(link.classList.contains('min-h-11')).toBe(true)
-    expect(link.classList.contains('inline-flex')).toBe(true)
+    for (const name of ['Browse tools', 'Set up an agent', 'List a tool'] as const) {
+      const links = screen.getAllByRole('link', { name })
+      expect(links.length).toBeGreaterThan(0)
+      for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)
+    }
   })
 
 })

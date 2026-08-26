@@ -4,6 +4,7 @@ import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import {
   AccountSettingsSection,
   BusinessSettingsSection,
+  OwnerSettingsNav,
 } from '@/components/ae/settings/OwnerSettingsSections'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
@@ -28,6 +29,7 @@ function OwnerSettingsRoute() {
       currentPath="/owner/settings"
     >
       <div className="grid gap-6">
+        <OwnerSettingsNav current="account" />
         <AccountSettingsSection />
         <BusinessSettingsSection />
       </div>

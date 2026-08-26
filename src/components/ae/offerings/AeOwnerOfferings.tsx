@@ -1,13 +1,5 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Input } from '@/components/ui/input'
-import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import {
   BotIcon,
   CheckCircle2Icon,
@@ -15,6 +7,21 @@ import {
   FilePenLineIcon,
   Link2Icon,
 } from 'lucide-react'
+
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import {
+  AeOperatorSortableHeader,
+  AeRecordTable,
+} from '@/components/ae/operator/AeOperatorDataTable'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 
 import { cn } from '@/lib/utils'
 import {
@@ -111,80 +118,101 @@ export function AeOwnerOfferingsList({
   projectionState?: 'current' | 'projection_pending'
   onRetryProjection?: () => void
 }) {
-  const publishedCount = offerings.filter((item) => item.status === 'published').length
-  const reachableCount = offerings.filter((item) => item.accessPathCount > 0).length
-  const supportedCount = offerings.filter((item) => item.support?.routeable === true).length
+  const columns = useMemo<ColumnDef<OwnerOfferingSummary, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (item) => item.offering.name,
+        header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid min-w-[12rem] gap-0.5">
+            <span className="font-medium">{row.original.offering.name}</span>
+            <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.offering.summary}</span>
+          </div>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (item) => statusLabel(item.status),
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => <Badge variant="outline">{statusLabel(row.original.status)}</Badge>,
+      },
+      {
+        id: 'routes',
+        accessorFn: (item) => item.accessPathCount,
+        header: 'Access',
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Link2Icon className="size-3.5" aria-hidden="true" />
+            {row.original.accessPathCount === 0
+              ? 'No access route'
+              : `${row.original.accessPathCount} ${row.original.accessPathCount === 1 ? 'route' : 'routes'}`}
+          </span>
+        ),
+      },
+      {
+        id: 'ready',
+        accessorFn: (item) => item.support?.routeable === true,
+        header: 'Readiness',
+        cell: ({ row }) =>
+          row.original.support?.routeable === true ? (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+              <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="secondary" className="min-h-11">
+              <a href={`/owner/offerings/${encodeURIComponent(row.original.offering.offeringRef)}?preview=true`}>Inspect</a>
+            </Button>
+            <Button asChild className="min-h-11">
+              <a href={`/owner/offerings/${encodeURIComponent(row.original.offering.offeringRef)}`}>Edit</a>
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [],
+  )
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       {projectionState === 'current' ? null : (
         <Alert>
           <AlertTitle>Your public page is still updating</AlertTitle>
           <AlertDescription>
             <p>Your changes are saved. People still see the last safe page until this update finishes.</p>
             {onRetryProjection === undefined ? null : (
-              <Button type="button" variant="secondary" onClick={onRetryProjection}>Try publishing again</Button>
+              <Button type="button" variant="secondary" className="min-h-11" onClick={onRetryProjection}>Try publishing again</Button>
             )}
           </AlertDescription>
         </Alert>
       )}
-      <section className="grid gap-4 border-y border-border py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" aria-labelledby="operation-inventory-title">
-          <div className="grid gap-1">
-            <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Supplier inventory</p>
-            <h2 id="operation-inventory-title" className="text-lg font-semibold text-foreground">{offerings.length === 0 ? 'Publish your first Operation' : 'Operation inventory'}</h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">Each Operation is one exact tool agents can inspect and call.</p>
-          </div>
-          <dl className="grid grid-cols-3 gap-2" aria-label="Operation summary">
-            <OwnerSummaryStat value={publishedCount} label="Published" />
-            <OwnerSummaryStat value={reachableCount} label="Access routes" />
-            <OwnerSummaryStat value={supportedCount} label="Ready now" />
-          </dl>
-      </section>
       {offerings.length === 0 ? (
-        <Card className="grid gap-4 border-dashed p-5 shadow-none md:grid-cols-[1fr_auto] md:items-center">
-          <div className="grid gap-1">
-            <h2 className="text-base font-semibold text-foreground">No Operations yet</h2>
-            <p className="block max-w-2xl text-muted-foreground">
-              Describe one exact tool, then add its price and access route.
-            </p>
-          </div>
-          <Button asChild variant="default">
-            <a href="/owner/offerings/new">Add Operation</a>
-          </Button>
-        </Card>
+        <AeEmptyState
+          title="No Operations yet"
+          description="Describe one exact tool, then add its price and access route."
+          action={
+            <Button asChild className="min-h-11">
+              <a href="/owner/offerings/new">Add Operation</a>
+            </Button>
+          }
+        />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          {offerings.map((item) => (
-            <div key={item.offering.offeringRef} className="group grid gap-4 border-b border-border p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-              <div className="grid min-w-0 gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold text-foreground">{item.offering.name}</h2>
-                  <Badge variant="outline">{statusLabel(item.status)}</Badge>
-                </div>
-                <p className="line-clamp-2 text-muted-foreground">{item.offering.summary}</p>
-                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs">
-                    <Link2Icon className="size-3.5" aria-hidden="true" />
-                    {item.accessPathCount === 0 ? 'No access route' : `${item.accessPathCount} access ${item.accessPathCount === 1 ? 'route' : 'routes'}`}
-                  </span>
-                  {item.support?.routeable === true ? (
-                    <span className="inline-flex min-h-8 items-center gap-1.5 font-mono text-xs font-medium text-foreground">
-                      <BotIcon className="size-3.5" aria-hidden="true" /> Ready now
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:flex">
-                <Button asChild variant="secondary" size="sm" className="min-h-11">
-                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}?preview=true`}>Inspect</a>
-                </Button>
-                <Button asChild variant="default" size="sm" className="min-h-11">
-                  <a href={`/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}>Edit</a>
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <AeRecordTable
+          columns={columns}
+          data={offerings}
+          caption="Operations"
+          countLabel="Operations"
+          filterPlaceholder="Filter Operations…"
+          getRowHref={(item) => `/owner/offerings/${encodeURIComponent(item.offering.offeringRef)}`}
+        />
       )}
     </div>
   )
@@ -533,15 +561,6 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
         </Button>
       </FieldGroup>
     </Card>
-  )
-}
-
-function OwnerSummaryStat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="grid min-w-0 gap-1 rounded-lg border border-border bg-muted/40 p-3 text-center">
-      <dd className="m-0 text-2xl font-semibold tabular-nums text-foreground">{value}</dd>
-      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-    </div>
   )
 }
 

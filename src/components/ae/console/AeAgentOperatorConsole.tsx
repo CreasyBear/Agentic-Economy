@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,12 +10,8 @@ import {
 } from '@/components/ui/card'
 
 import type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
-import { addExactAmounts, type ExactAmount } from '@/modules/money/public'
-import type { AgentActivityView } from '@/modules/agent-access/agent-operator-view-model'
-
 import { formatTimestamp } from '@/lib/ui/format-time'
-import { formatCurrencyAmount } from '@/modules/money/public'
-import { AeCreditTopUpPanel, type CreditTopupPort, type CreditTopupTarget } from './AeCreditTopUpPanel'
+import { formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { PendingOperationApproval } from '@/modules/capability-execution/operation-approval.functions'
 
 export type { AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
@@ -34,8 +29,6 @@ export type AeAgentOperatorConsoleProps = Readonly<{
   onRetryApprovals: () => void
   onDecideApproval: (invocationRef: string, operationRef: string, decision: 'approve' | 'deny') => void
   accessUnavailable?: boolean
-  creditTopupPort?: CreditTopupPort
-  onCreditRefresh?: () => void | Promise<void>
 }>
 
 export function AeAgentOperatorConsole({
@@ -51,24 +44,7 @@ export function AeAgentOperatorConsole({
   onRetryApprovals,
   onDecideApproval,
   accessUnavailable = false,
-  creditTopupPort,
-  onCreditRefresh,
 }: AeAgentOperatorConsoleProps) {
-  const balanceAmounts = items.flatMap(({ account }) => account === undefined ? [] : [account.balance])
-  const balance = balanceAmounts.reduce<ExactAmount | undefined>((total, amount, index) => (
-    index === 0 ? amount : total === undefined ? undefined : addExactAmounts(total, amount)
-  ), undefined)
-  const activity = items.flatMap((item) => item.activity.map((entry) => ({ item, entry }))).sort((left, right) => right.entry.observedAt - left.entry.observedAt)
-  const hasUnavailableData = items.some((item) => item.dataState === 'unavailable')
-  const creditTopupTarget: CreditTopupTarget | undefined = (() => {
-    const item = items.find(({ account }) => account?.evidence === 'source')
-    if (item?.account === undefined) return undefined
-    return {
-      principalId: item.principalId,
-      currency: item.account.balance.currency,
-      exponent: item.account.balance.exponent,
-    }
-  })()
 
   const approvalsSection = (
     <WaitingApprovalsSection
@@ -86,61 +62,12 @@ export function AeAgentOperatorConsole({
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{approvalStatus ?? ''}</p>
       {accessUnavailable ? approvalsSection : (
         <>
-      <section id="fund" aria-labelledby="credit-title" className="grid scroll-mt-6 gap-4">
-        <div className="grid gap-1">
-          <h2 id="credit-title" className="text-lg font-semibold text-foreground">Balance</h2>
-          <p className="block text-sm text-muted-foreground">Browsing is free. Paid calls use the credit assigned to each agent.</p>
-        </div>
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Card className="border border-border bg-card shadow-none">
-            <CardContent className="grid gap-2">
-              <p className="text-sm font-semibold text-muted-foreground">AVAILABLE CREDIT</p>
-              <p className="text-lg font-semibold text-foreground">{hasUnavailableData ? 'Balance unavailable' : formatAmount(balance)}</p>
-              <p className="text-sm text-muted-foreground">{hasUnavailableData ? 'Some balance details are temporarily unavailable.' : 'Keep credit separate for each agent.'}</p>
-            </CardContent>
-          </Card>
-          <AeCreditTopUpPanel
-            {...(creditTopupTarget === undefined ? {} : { target: creditTopupTarget })}
-            {...(creditTopupPort === undefined ? {} : { port: creditTopupPort })}
-            {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="ledger-title" className="grid gap-4">
-        <div className="grid gap-1">
-          <h2 id="ledger-title" className="text-lg font-semibold text-foreground">Recent activity</h2>
-          <p className="block text-sm text-muted-foreground">See calls and credit changes for each agent.</p>
-        </div>
-        {loading ? (
-          <Card>
-            <CardContent>
-              <p className="text-muted-foreground">Loading recent activity…</p>
-            </CardContent>
-          </Card>
-        ) : hasUnavailableData ? (
-          <Card className="border border-border bg-card">
-            <CardContent className="grid gap-2">
-              <p className="font-semibold text-foreground">Activity unavailable</p>
-              <p className="text-muted-foreground">Some call details are temporarily unavailable.</p>
-            </CardContent>
-          </Card>
-        ) : activity.length === 0 ? (
-          <Card className="border border-border bg-card">
-            <CardContent className="grid gap-2">
-              <p className="font-semibold text-foreground">No calls yet</p>
-              <p className="text-muted-foreground">Browsing does not create paid-call charges.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="overflow-hidden border border-border bg-card">
-            <CardContent className="p-0">
-              <ol className="m-0 list-none divide-y divide-border p-0">
-                {activity.map(({ item, entry }) => <ActivityRow key={entry.activityRef} item={item} entry={entry} />)}
-              </ol>
-            </CardContent>
-          </Card>
-        )}
+      <section aria-labelledby="credit-pointer-title" className="grid gap-2">
+        <h2 id="credit-pointer-title" className="text-sm font-medium text-foreground">Credit</h2>
+        <p className="text-sm text-muted-foreground">Paid calls use the credit assigned to each agent.</p>
+        <Button asChild variant="secondary" className="w-fit min-h-11">
+          <a href="/owner/credit">Open Credit</a>
+        </Button>
       </section>
 
       {approvalsSection}
@@ -284,26 +211,6 @@ function consequenceLabel(consequence: PendingOperationApproval['authorityReques
   return 'Creates an external effect'
 }
 
-function ActivityRow({ item, entry }: Readonly<{ item: AgentOperatorKeyReadback; entry: AgentActivityView }>) {
-  return (
-    <li className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="grid gap-1">
-        <p className="font-semibold text-foreground">{entry.operation?.label ?? activityLabel(entry)}</p>
-        {entry.operation === undefined ? null : <p className="text-sm text-muted-foreground">{entry.operation.supplier} · {activityLabel(entry)}</p>}
-        <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
-        <Link
-          to="/operations/invocations/$invocationRef"
-          params={{ invocationRef: entry.invocationRef }}
-          className="w-fit text-sm font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          View invocation status
-        </Link>
-      </div>
-      <p className="font-semibold text-foreground">{formatAmount(entry.grossAmount)}</p>
-    </li>
-  )
-}
-
 function KeyCard({ item, revoking, disabled, onRevoke }: Readonly<{ item: AgentOperatorKeyReadback; revoking: boolean; disabled: boolean; onRevoke: (keyId: string) => void }>) {
   const usage = item.usage
   const accountBalance = item.account?.balance
@@ -376,14 +283,6 @@ function RecoveryItem({ title, children }: Readonly<{ title: string; children: s
       <p className="max-w-3xl text-sm text-muted-foreground">{children}</p>
     </li>
   )
-}
-
-function activityLabel(entry: AgentActivityView): string {
-  if (entry.chargeState === 'free_tier') return 'Free call'
-  if (entry.chargeState === 'paid') return 'Paid call'
-  if (entry.chargeState === 'refunded') return 'Refunded call'
-  if (entry.chargeState === 'outcome_unknown') return 'Paid call needs checking'
-  return 'Call declined for insufficient credit'
 }
 
 function scopeLabel(mode: AgentOperatorKeyReadback['key']['authorityMode']): string {

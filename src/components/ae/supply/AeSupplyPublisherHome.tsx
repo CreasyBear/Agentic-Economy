@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeSupplyEarningsCard } from './AeSupplyEarningsCard'
 import {
   connectOwnerX402Server,
@@ -79,36 +80,25 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
   const { liquidity } = readback
   const isProductionLiquidity = liquidity.environment === 'production'
   return (
-    <div className="grid gap-6">
-      <header className="grid gap-2">
-        <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Supplier operations</p>
-        <h2 className="text-xl font-semibold text-foreground">Publish and control Operations</h2>
-        <p className="block text-sm text-muted-foreground">Create an Operation, connect its source, check readiness, test it, and control publication. Every fact below comes from the current owner readback.</p>
-      </header>
-      <Card className="shadow-none">
-        <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-lg font-semibold text-foreground">Operations</h2></CardTitle>
-        </CardHeader>
-        <CardContent className="p-5">
-          {readback.offerings.length === 0 ? (
-            <Empty className="border border-dashed">
-              <EmptyHeader>
-                <EmptyTitle>No Operations yet</EmptyTitle>
-                <EmptyDescription>Create an Operation, then connect its source.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <ul className="m-0 grid list-none gap-3 p-0">
-              {readback.offerings.map((offering) => <OwnerOfferingRow key={offering.offeringRef} offering={offering} />)}
-            </ul>
-          )}
-        </CardContent>
-        <CardFooter className="p-5 pt-0">
-          <Button asChild variant="default" className="min-h-11">
+    <div className="grid gap-8">
+      <section className="grid gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Operations</h2>
+          <Button asChild className="min-h-11">
             <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Create Operation</Link>
           </Button>
-        </CardFooter>
-      </Card>
+        </div>
+        {readback.offerings.length === 0 ? (
+          <AeEmptyState
+            title="No Operations yet"
+            description="Create an Operation, then connect its source."
+          />
+        ) : (
+          <ul className="m-0 grid list-none divide-y border-y border-border p-0">
+            {readback.offerings.map((offering) => <OwnerOfferingRow key={offering.offeringRef} offering={offering} />)}
+          </ul>
+        )}
+      </section>
       <OwnerProviderConnections businessId={readback.businessId} connections={connections} />
       <Card className="shadow-none">
         <CardHeader className="p-5 pb-0">

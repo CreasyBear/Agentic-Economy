@@ -22,7 +22,7 @@ afterEach(cleanup)
 
 describe('operator shell nested chrome', () => {
   it('replaces actions, breadcrumbs, and badges when nested route chrome changes', async () => {
-    render(<OperatorShellHarness />)
+    renderAt(<OperatorShellHarness />, '/admin')
 
     expect(await screen.findByText('Action one')).toBeTruthy()
     expect(screen.getAllByText('First crumb').length).toBeGreaterThan(0)
@@ -60,7 +60,7 @@ describe('operator shell nested chrome', () => {
     expect(screen.getAllByRole('navigation', { name: 'Operator navigation' })).toHaveLength(1)
     expect(screen.queryByRole('navigation', { name: 'Public navigation' })).toBeNull()
 
-    const recovery = screen.getByRole('link', { name: 'Back to access & usage' })
+    const recovery = screen.getByRole('link', { name: 'Back to Keys' })
     expect(recovery.getAttribute('href')).toBe('/agent-access')
   })
 })
@@ -99,8 +99,12 @@ function OperatorShellHarness() {
 function renderAt(ui: ReactElement, pathname: string) {
   const rootRoute = createRootRoute()
   const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/admin/audit-events' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access' }),
     createRoute({ getParentRoute: () => rootRoute, path: '/agent-access/$' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/new' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/' }),
   ])
   const router = createRouter({
     routeTree,
