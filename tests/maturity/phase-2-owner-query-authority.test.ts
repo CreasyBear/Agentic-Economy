@@ -8,22 +8,29 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { accountRefForProvider } from '@/modules/money/public'
+import { accountRefForOwner, accountRefForProvider } from '@/modules/money/public'
 import {
   convexTestWithMarketComponents,
   publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import {
+  capabilityPublicationInput,
   installCanonicalProviderConnectionFixture,
+  preparedPublicationArgs,
   providerAuthority,
   seedCatalogOffering,
 } from '../integration/capability-publication-harness'
+import { withSourceWrite } from '../helpers/source-write-admission'
 
 const EXPECTED_QUERY_CALLERS = [
   'agentAccessPolicy:listOwnerGrantReadbacks',
+  'capabilityOperationInvocations:listPendingOperationApprovals',
   'capabilityProviderConnections:listOwner',
   'capabilityProviderConnections:readOwner',
+  'capabilitySupply:inspectBindingControlState',
+  'capabilitySupply:queryCapabilityGraph',
+  'capabilitySupply:readCapabilityPublication',
   'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel',
   'catalog:getCurrentOwnerOfferingSupply',
   'catalog:getCurrentOwnerPublicCatalog',
@@ -32,10 +39,16 @@ const EXPECTED_QUERY_CALLERS = [
   'chatThreads:getThread',
   'chatThreads:listThreads',
   'chatThreads:searchThreads',
+  'moneyLedger:listCreditActivity',
+  'moneyLedger:readCreditAccount',
+  'moneyLedger:readCreditTopupCommand',
+  'moneyLedger:readKeyUsage',
   'moneyLedger:readOwnerPayoutAccount',
   'moneyLedger:readOwnerPayoutTransfer',
   'moneyLedger:readOwnerProviderEarnings',
   'qualifiedUse:readOwnerQualifiedUse',
+  'security:readAdminAuditEvents',
+  'security:readAdminIndexHealth',
 ] as const
 
 const CURRENCY = 'USD'
@@ -47,7 +60,13 @@ type QueryFixture = Readonly<{
   backend: ConvexFixtureBackend
   businessId: Id<'businesses'>
   businessRef: string
+  bindingId: string
   connectionRef: string
+  publicationRef: string
+  agentPrincipalRef: string
+  agentCredentialRef: string
+  topupCommandRef: string
+  topupIdempotencyKey: string
   owner: OwnerClient
   otherBusinessId: Id<'businesses'>
   otherOwner: OwnerClient
@@ -65,18 +84,90 @@ type QueryClient = Pick<OwnerClient, 'query'>
 function ownerQueries(input: Readonly<{
   businessId: Id<'businesses'>
   businessRef: string
+  bindingId: string
   connectionRef: string
+  publicationRef: string
+  agentPrincipalRef: string
+  agentCredentialRef: string
+  topupCommandRef: string
+  topupIdempotencyKey: string
 }>) {
   return [
+    {
+      ref: 'capabilityOperationInvocations:listPendingOperationApprovals',
+      run: (client: QueryClient) =>
+        client.query(
+          api.capabilityOperationInvocations.listPendingOperationApprovals,
+          {},
+        ),
+    },
     {
       ref: 'agentAccessPolicy:listOwnerGrantReadbacks',
       run: (client: QueryClient) =>
         client.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {}),
     },
     {
+      ref: 'capabilitySupply:readCapabilityPublication',
+      run: (client: QueryClient) =>
+        client.query(api.capabilitySupply.readCapabilityPublication, {
+          publicationRef: input.publicationRef,
+        }),
+    },
+    {
+      ref: 'capabilitySupply:queryCapabilityGraph',
+      run: (client: QueryClient) =>
+        client.query(api.capabilitySupply.queryCapabilityGraph, {
+          networkId: 'ae:public',
+          includeInactive: true,
+          limit: 10,
+        }),
+    },
+    {
+      ref: 'capabilitySupply:inspectBindingControlState',
+      run: (client: QueryClient) =>
+        client.query(api.capabilitySupply.inspectBindingControlState, {
+          bindingId: input.bindingId,
+        }),
+    },
+    {
       ref: 'catalog:getCurrentOwnerPublicCatalog',
       run: (client: QueryClient) =>
         client.query(api.catalog.getCurrentOwnerPublicCatalog, {}),
+    },
+    {
+      ref: 'moneyLedger:readCreditAccount',
+      run: (client: QueryClient) =>
+        client.query(api.moneyLedger.readCreditAccount, {
+          principalId: input.agentPrincipalRef,
+          currency: CURRENCY,
+        }),
+    },
+    {
+      ref: 'moneyLedger:listCreditActivity',
+      run: (client: QueryClient) =>
+        client.query(api.moneyLedger.listCreditActivity, {
+          principalId: input.agentPrincipalRef,
+          credentialId: input.agentCredentialRef,
+          currency: CURRENCY,
+          paginationOpts: { numItems: 10, cursor: null },
+        }),
+    },
+    {
+      ref: 'moneyLedger:readKeyUsage',
+      run: (client: QueryClient) =>
+        client.query(api.moneyLedger.readKeyUsage, {
+          principalId: input.agentPrincipalRef,
+          credentialId: input.agentCredentialRef,
+          currency: CURRENCY,
+        }),
+    },
+    {
+      ref: 'moneyLedger:readCreditTopupCommand',
+      run: (client: QueryClient) =>
+        client.query(api.moneyLedger.readCreditTopupCommand, {
+          commandRef: input.topupCommandRef,
+          idempotencyKey: input.topupIdempotencyKey,
+        }),
     },
     {
       ref: 'catalog:getCurrentOwnerOfferingSupply',
@@ -130,6 +221,16 @@ function ownerQueries(input: Readonly<{
       run: (client: QueryClient) =>
         client.query(api.qualifiedUse.readOwnerQualifiedUse, { limit: 10 }),
     },
+    {
+      ref: 'security:readAdminAuditEvents',
+      run: (client: QueryClient) =>
+        client.query(api.security.readAdminAuditEvents, {}),
+    },
+    {
+      ref: 'security:readAdminIndexHealth',
+      run: (client: QueryClient) =>
+        client.query(api.security.readAdminIndexHealth, {}),
+    },
   ] as const
 }
 
@@ -138,13 +239,13 @@ describe('Phase 2 public owner-query authority', () => {
     vi.useRealTimers()
   })
 
-  it('mechanically inventories all fifteen public query callers of resolveBusinessActor', () => {
+  it('mechanically inventories all twenty-five public query callers of resolveBusinessActor', () => {
     expect(discoverPublicBusinessActorQueryCallers()).toEqual(
       EXPECTED_QUERY_CALLERS,
     )
   })
 
-  it('preserves current account-scoped reads through the original nine and grant readback callers', async () => {
+  it('preserves current account-scoped reads through every non-chat query caller', async () => {
     const fixture = await currentQueryFixture('current')
     const queries = ownerQueries(fixture)
     const results = Object.fromEntries(
@@ -155,12 +256,29 @@ describe('Phase 2 public owner-query authority', () => {
 
     expect(results).toMatchObject({
       'agentAccessPolicy:listOwnerGrantReadbacks': [
-        { credentialId: `credential:owner-query:current` },
+        { credentialId: fixture.agentCredentialRef },
+      ],
+      'capabilityOperationInvocations:listPendingOperationApprovals': [
+        {
+          invocationRef: 'operation-invocation:v1:owner-query:current',
+          operationRef: 'operation:v1:owner-query:current',
+        },
       ],
       'catalog:getCurrentOwnerPublicCatalog': { kind: 'available' },
       'catalog:getCurrentOwnerOfferingSupply': { kind: 'available' },
       'capabilityProviderConnections:readOwner': {
         connectionRef: fixture.connectionRef,
+      },
+      'capabilitySupply:readCapabilityPublication': {
+        publicationRef: fixture.publicationRef,
+        bindingId: fixture.bindingId,
+      },
+      'capabilitySupply:queryCapabilityGraph': {
+        kind: 'available',
+      },
+      'capabilitySupply:inspectBindingControlState': {
+        kind: 'available',
+        bindingId: fixture.bindingId,
       },
       'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel': {
         kind: 'available',
@@ -183,6 +301,32 @@ describe('Phase 2 public owner-query authority', () => {
         kind: 'found',
         businessId: fixture.businessRef,
       },
+      'moneyLedger:readCreditAccount': {
+        kind: 'ok',
+        principalId: fixture.agentPrincipalRef,
+      },
+      'moneyLedger:listCreditActivity': {
+        kind: 'ok',
+      },
+      'moneyLedger:readKeyUsage': {
+        kind: 'ok',
+        credentialId: fixture.agentCredentialRef,
+      },
+      'moneyLedger:readCreditTopupCommand': {
+        kind: 'accepted',
+        command: {
+          commandRef: fixture.topupCommandRef,
+          principalId: fixture.agentPrincipalRef,
+        },
+      },
+      'security:readAdminAuditEvents': {
+        kind: 'allowed',
+        surface: 'audit_events',
+      },
+      'security:readAdminIndexHealth': {
+        kind: 'allowed',
+        surface: 'index_health',
+      },
     })
     expect(results['capabilityProviderConnections:listOwner']).toEqual([
       expect.objectContaining({ connectionRef: fixture.connectionRef }),
@@ -198,7 +342,7 @@ describe('Phase 2 public owner-query authority', () => {
     await expect(
       fixture.owner.query(api.agentAccessPolicy.listOwnerGrantReadbacks, {}),
     ).resolves.toEqual([
-      expect.objectContaining({ credentialId: 'credential:owner-query:expired' }),
+      expect.objectContaining({ credentialId: fixture.agentCredentialRef }),
     ])
 
     vi.setSystemTime(fixture.credential.expiresAt)
@@ -253,15 +397,45 @@ describe('Phase 2 public owner-query authority', () => {
 
     expect(serialized).not.toContain(fixture.businessRef)
     expect(serialized).not.toContain(fixture.connectionRef)
+    expect(serialized).not.toContain(fixture.publicationRef)
+    expect(serialized).not.toContain(fixture.agentCredentialRef)
     expect(results).toMatchObject({
       'agentAccessPolicy:listOwnerGrantReadbacks': [],
+      'capabilityOperationInvocations:listPendingOperationApprovals': [],
       'catalog:getCurrentOwnerPublicCatalog': { kind: 'not_found' },
       'capabilityProviderConnections:readOwner': null,
       'capabilityProviderConnections:listOwner': [],
+      'capabilitySupply:readCapabilityPublication': null,
+      'capabilitySupply:queryCapabilityGraph': {
+        kind: 'unavailable',
+        reason: 'authorization_denied',
+      },
+      'capabilitySupply:inspectBindingControlState': {
+        kind: 'refused',
+        reason: 'authorization_denied',
+      },
       'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel': {
         kind: 'not_found',
       },
       'moneyLedger:readOwnerPayoutAccount': null,
+      'moneyLedger:readCreditAccount': {
+        kind: 'refused',
+        code: 'billing_identity_missing',
+      },
+      'moneyLedger:listCreditActivity': {
+        kind: 'refused',
+        code: 'billing_identity_missing',
+        items: [],
+      },
+      'moneyLedger:readKeyUsage': {
+        kind: 'refused',
+        code: 'billing_identity_missing',
+        items: [],
+      },
+      'moneyLedger:readCreditTopupCommand': {
+        kind: 'refused',
+        code: 'billing_identity_missing',
+      },
       'moneyLedger:readOwnerPayoutTransfer': {
         kind: 'refused',
         code: 'billing_identity_missing',
@@ -273,6 +447,16 @@ describe('Phase 2 public owner-query authority', () => {
       'qualifiedUse:readOwnerQualifiedUse': {
         kind: 'found',
         businessId: String(fixture.otherBusinessId),
+      },
+      'security:readAdminAuditEvents': {
+        kind: 'denied',
+        surface: 'audit_events',
+        rows: [],
+      },
+      'security:readAdminIndexHealth': {
+        kind: 'denied',
+        surface: 'index_health',
+        rows: [],
       },
     })
   })
@@ -295,7 +479,18 @@ describe('Phase 2 public owner-query authority', () => {
 
 async function expectAllOwnerQueriesDenied(
   owner: OwnerClient,
-  fixture: Pick<QueryFixture, 'businessId' | 'businessRef' | 'connectionRef'>,
+  fixture: Pick<
+    QueryFixture,
+    | 'businessId'
+    | 'businessRef'
+    | 'bindingId'
+    | 'connectionRef'
+    | 'publicationRef'
+    | 'agentPrincipalRef'
+    | 'agentCredentialRef'
+    | 'topupCommandRef'
+    | 'topupIdempotencyKey'
+  >,
 ) {
   const results = Object.fromEntries(
     await Promise.all(
@@ -304,6 +499,7 @@ async function expectAllOwnerQueriesDenied(
   )
   expect(results).toEqual({
     'agentAccessPolicy:listOwnerGrantReadbacks': [],
+    'capabilityOperationInvocations:listPendingOperationApprovals': [],
     'catalog:getCurrentOwnerPublicCatalog': {
       kind: 'not_found',
       reason: 'not_public',
@@ -314,11 +510,39 @@ async function expectAllOwnerQueriesDenied(
     },
     'capabilityProviderConnections:readOwner': null,
     'capabilityProviderConnections:listOwner': [],
+    'capabilitySupply:readCapabilityPublication': null,
+    'capabilitySupply:queryCapabilityGraph': {
+      kind: 'unavailable',
+      reason: 'authorization_denied',
+    },
+    'capabilitySupply:inspectBindingControlState': {
+      kind: 'refused',
+      reason: 'authorization_denied',
+    },
     'capabilitySupplyOwnerFunnel:readOwnerSupplyFunnel': {
       kind: 'error',
       code: 'unauthenticated',
     },
     'moneyLedger:readOwnerPayoutAccount': null,
+    'moneyLedger:readCreditAccount': {
+      kind: 'refused',
+      code: 'billing_identity_missing',
+    },
+    'moneyLedger:listCreditActivity': {
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      items: [],
+    },
+    'moneyLedger:readKeyUsage': {
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      items: [],
+    },
+    'moneyLedger:readCreditTopupCommand': {
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      retryable: false,
+    },
     'moneyLedger:readOwnerPayoutTransfer': {
       kind: 'refused',
       code: 'billing_identity_missing',
@@ -331,6 +555,24 @@ async function expectAllOwnerQueriesDenied(
     'qualifiedUse:readOwnerQualifiedUse': {
       kind: 'error',
       code: 'unauthenticated',
+    },
+    'security:readAdminAuditEvents': {
+      kind: 'denied',
+      httpStatus: 401,
+      reason: 'missing_membership',
+      surface: 'audit_events',
+      generatedAt: 0,
+      publicMessage: 'Admin readback requires active source-owned membership.',
+      rows: [],
+    },
+    'security:readAdminIndexHealth': {
+      kind: 'denied',
+      httpStatus: 401,
+      reason: 'missing_membership',
+      surface: 'index_health',
+      generatedAt: 0,
+      publicMessage: 'Admin readback requires active source-owned membership.',
+      rows: [],
     },
   })
 }
@@ -345,6 +587,17 @@ async function currentQueryFixture(
   const businessRef = String(primary.businessId)
   const authority = providerAuthority(`owner-query-${suffix}`)
   const providerAccountRef = `account:owner-query:${suffix}`
+  const agentPrincipalRef = `prn_${canonicalDigest({
+    kind: 'owner-query-agent:v1',
+    suffix,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)}`
+  const agentCredentialRef = `crd_${canonicalDigest({
+    kind: 'owner-query-agent-credential:v1',
+    suffix,
+  }).slice('sha256:'.length, 'sha256:'.length + 32)}`
+  const bindingId = `binding:owner-query-${suffix}:http`
+  const topupCommandRef = `money-command:owner-query:${suffix}`
+  const topupIdempotencyKey = `money-idempotency:owner-query:${suffix}`
   const installed = await installCanonicalProviderConnectionFixture(backend, {
     businessId: primary.businessId,
     ...authority,
@@ -360,6 +613,16 @@ async function currentQueryFixture(
     throw new Error(`owner_query_connection_fixture_${installed.kind}`)
   }
   await seedCatalogOffering(backend, primary.businessId, `owner-query-${suffix}`)
+  const published = await primary.owner.mutation(
+    api.capabilitySupply.publishPreparedCapability,
+    await preparedPublicationArgs(
+      backend,
+      capabilityPublicationInput(primary.businessId, `owner-query-${suffix}`),
+    ),
+  )
+  if ('reason' in published) {
+    throw new Error(`owner_query_publication_fixture_${published.reason}`)
+  }
   await backend.run(async (ctx) => {
     const exactAmount = {
       currency: CURRENCY,
@@ -368,13 +631,45 @@ async function currentQueryFixture(
     }
     const budgetPolicyRef = `budget-policy:owner-query:${suffix}`
     const ratePolicyRef = `rate-policy:owner-query:${suffix}`
+    await ctx.db.insert('adminMemberships', {
+      clerkUserId: `user_owner-query-${suffix}`,
+      tokenIdentifier: `https://identity.example|user_owner-query-${suffix}`,
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'owner-query-test',
+      grantedAt: 1,
+    })
+    await ctx.db.insert('principals', {
+      principalRef: agentPrincipalRef,
+      kind: 'agent',
+      displayName: `Owner query agent ${suffix}`,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('agentAccessPrincipals', {
+      principalId: agentPrincipalRef,
+      ownerId: primary.canonicalAccountRef,
+      credentialId: agentCredentialRef,
+      applicationRef: `application:owner-query:${suffix}`,
+      environment: 'production',
+      scopes: ['market_operations:invoke'],
+      authorityMode: 'approve_each',
+      grantGeneration: 1,
+      policyDigest: `sha256:owner-query-agent-policy:${suffix}`,
+      lifecycle: 'active',
+      expiresAt: 8_000_000_000_000,
+      recordedAt: 1,
+      lastSeenAt: 1,
+    })
     await ctx.db.insert('agentAccessGrants', {
       format: 'ae.agent-access-grant:v1',
       grantRef: `grant:owner-query:${suffix}`,
-      principalId: `principal:owner-query:${suffix}`,
+      principalId: agentPrincipalRef,
       ownerId: primary.canonicalAccountRef,
       applicationRef: `application:owner-query:${suffix}`,
-      credentialId: `credential:owner-query:${suffix}`,
+      credentialId: agentCredentialRef,
       environment: 'production',
       operationAccess: 'all_admitted',
       authorityMode: 'bounded_mandate',
@@ -434,7 +729,74 @@ async function currentQueryFixture(
       createdAt: 1,
       updatedAt: 1,
     })
+    await ctx.db.insert('moneyAccounts', {
+      accountRef: accountRefForOwner(primary.canonicalAccountRef, CURRENCY),
+      accountKind: 'operator_credit',
+      accountId: primary.canonicalAccountRef,
+      currency: CURRENCY,
+      exponent: 2,
+      balanceUnits: '0',
+      heldUnits: '0',
+      recoveryDueUnits: '0',
+      version: 0,
+      state: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const invocationRef = `operation-invocation:v1:owner-query:${suffix}`
+    const operationRef = `operation:v1:owner-query:${suffix}`
+    await ctx.db.insert('capabilityOperationInvocations', {
+      invocationRef,
+      principalId: agentPrincipalRef,
+      ownerId: primary.canonicalAccountRef,
+      credentialId: agentCredentialRef,
+      applicationRef: `application:owner-query:${suffix}`,
+      operationRef,
+      idempotencyKey: `idempotency:owner-query-approval:${suffix}`,
+      environment: 'production',
+      grantRef: `grant:owner-query:${suffix}`,
+      grantGeneration: 1,
+      policyDigest: `sha256:owner-query-policy:${suffix}`,
+      grantExpiresAt: 8_000_000_000_000,
+      operationJson: JSON.stringify({ operationRef }),
+      inputJson: JSON.stringify({ suffix }),
+      inputDigest: canonicalDigest({ suffix }),
+      requestDigest: canonicalDigest({ operationRef, suffix }),
+      state: 'pending',
+      result: {
+        kind: 'needs_authority',
+        invocationRef,
+        operationRef,
+        authorityRequest: {
+          kind: 'approve_each',
+          operationRef,
+          consequence: 'external_effect',
+          retryClass: 'reconcile_before_retry',
+          dataFields: ['/suffix'],
+        },
+      },
+      createdAt: 2,
+      updatedAt: 2,
+    })
   })
+
+  const topup = await primary.owner.mutation(
+    api.moneyLedger.reserveCreditTopup,
+    await withSourceWrite('billing', {
+      principalId: agentPrincipalRef,
+      accountRef: accountRefForOwner(primary.canonicalAccountRef, CURRENCY),
+      amount: { currency: CURRENCY, units: '1000', exponent: 2 },
+      commandRef: topupCommandRef,
+      idempotencyKey: topupIdempotencyKey,
+      inputDigest: `sha256:owner-query-topup:${suffix}`,
+      successReturnRef: 'https://ae.example/account/credits',
+      operationKey: 'moneyLedger:reserveCreditTopup',
+      correlationId: topupCommandRef,
+    }),
+  )
+  if (topup.kind !== 'accepted') {
+    throw new Error(`owner_query_topup_fixture_${topup.code}`)
+  }
 
   const credential = await backend.run(async (ctx) => {
     const business = await ctx.db.get(primary.businessId)
@@ -505,7 +867,13 @@ async function currentQueryFixture(
     backend,
     businessId: primary.businessId,
     businessRef,
+    bindingId,
     connectionRef: authority.connectionRef,
+    publicationRef: published.publicationRef,
+    agentPrincipalRef,
+    agentCredentialRef,
+    topupCommandRef,
+    topupIdempotencyKey,
     owner,
     otherBusinessId: other.businessId,
     otherOwner: other.owner,
@@ -524,6 +892,36 @@ function hostileOwnerQueries(
           api.agentAccessPolicy.listOwnerGrantReadbacks,
           hostile as never,
         ),
+    },
+    {
+      run: () =>
+        fixture.backend.query(
+          api.capabilityOperationInvocations.listPendingOperationApprovals,
+          hostile as never,
+        ),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.capabilitySupply.readCapabilityPublication, {
+          publicationRef: fixture.publicationRef,
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.capabilitySupply.queryCapabilityGraph, {
+          networkId: 'ae:public',
+          includeInactive: true,
+          limit: 10,
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.capabilitySupply.inspectBindingControlState, {
+          bindingId: fixture.bindingId,
+          ...hostile,
+        } as never),
     },
     {
       run: () =>
@@ -570,6 +968,41 @@ function hostileOwnerQueries(
     },
     {
       run: () =>
+        fixture.backend.query(api.moneyLedger.readCreditAccount, {
+          principalId: fixture.agentPrincipalRef,
+          currency: CURRENCY,
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.moneyLedger.listCreditActivity, {
+          principalId: fixture.agentPrincipalRef,
+          credentialId: fixture.agentCredentialRef,
+          currency: CURRENCY,
+          paginationOpts: { numItems: 10, cursor: null },
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.moneyLedger.readKeyUsage, {
+          principalId: fixture.agentPrincipalRef,
+          credentialId: fixture.agentCredentialRef,
+          currency: CURRENCY,
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.moneyLedger.readCreditTopupCommand, {
+          commandRef: fixture.topupCommandRef,
+          idempotencyKey: fixture.topupIdempotencyKey,
+          ...hostile,
+        } as never),
+    },
+    {
+      run: () =>
         fixture.backend.query(api.moneyLedger.readOwnerPayoutTransfer, {
           businessId: fixture.businessRef,
           currency: CURRENCY,
@@ -591,6 +1024,14 @@ function hostileOwnerQueries(
           limit: 10,
           ...hostile,
         } as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.security.readAdminAuditEvents, hostile as never),
+    },
+    {
+      run: () =>
+        fixture.backend.query(api.security.readAdminIndexHealth, hostile as never),
     },
   ]
 }
