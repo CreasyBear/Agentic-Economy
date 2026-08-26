@@ -60,6 +60,9 @@ const durableTables = [
   'connectionLifecycleCommands',
   'secretPointers',
   'secretPointerCommands',
+  'secretLifecycleJournal',
+  'recoveryBreakGlassApprovals',
+  'recoveryBreakGlassAdmissions',
   'owners',
   'businesses',
   'businessOfferings',
@@ -199,6 +202,16 @@ const requiredIndexes = {
     'by_accountRef_and_idempotencyRef',
     'by_secretRef_and_newRevision',
   ],
+  secretLifecycleJournal: ['by_idempotencyRef', 'by_operationRef'],
+  recoveryBreakGlassApprovals: [
+    'by_approvalRef',
+    'by_verificationRef',
+    'by_accountRef_and_lifecycle',
+  ],
+  recoveryBreakGlassAdmissions: [
+    'by_admissionRef',
+    'by_accountRef_and_operatorPrincipalRef_and_idempotencyRef',
+  ],
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
   moneyLedgerEntries: [
     'by_transactionRef',
@@ -328,7 +341,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(74)
+    expect(durableTables).toHaveLength(77)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 
