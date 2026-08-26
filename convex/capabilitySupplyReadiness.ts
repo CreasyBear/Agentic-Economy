@@ -114,7 +114,7 @@ const probeResultValue = v.union(
 export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<ProbeResult> {
     const result: ProbeTargetResult = await ctx.runQuery(
       internal.capabilitySupply.readCapabilityProbeTarget,
-      args,
+      { ...args, now: Date.now() },
     )
     if (result.kind !== 'available') {
       return {

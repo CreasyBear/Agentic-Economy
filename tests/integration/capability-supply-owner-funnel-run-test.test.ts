@@ -75,6 +75,7 @@ describe('owner supply test', () => {
       {
         publicationRef: published.publicationRef,
         expectedRevision: published.publicationRevision,
+        now: Date.now(),
       },
     )
     if (targetResult.kind !== 'available')
@@ -184,6 +185,7 @@ describe('owner supply test', () => {
     await expect(backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
       publicationRef: published.publicationRef,
       expectedRevision: published.publicationRevision,
+      now: Date.now(),
     })).resolves.toEqual({
       kind: 'unavailable',
       reason: 'authority_stale',

@@ -152,6 +152,7 @@ async function readCurrentCleanupTarget(
     expectedAuthorityDigest: args.expectedAuthorityDigest,
     requestDigest: args.requestDigest,
     cleanupAttempt: args.cleanupAttempt,
+    now: Date.now(),
   })
   return isCleanupTarget(target)
     && cleanupResourceAuthorityMatches(target.resourceAuthority, args.resourceAuthority)
