@@ -174,6 +174,7 @@ describe('Convex authz helpers', () => {
 
   it('reads current admin membership with complete durable provenance', async () => {
     const db = new FakeDb()
+    seedSamAuthority(db)
     db.seed('adminMemberships', row('admin:complete', {
       clerkUserId: 'user_sam',
       tokenIdentifier: 'clerk|user_sam',
@@ -314,5 +315,69 @@ function sam(): UserIdentity {
     issuer: 'https://clerk.example.test',
     name: 'Sam Owner',
     email: 'sam@example.test',
+    exp: 8_000_000_000,
   }
+}
+
+function seedSamAuthority(db: FakeDb): void {
+  const principalRef = `prn_${'1'.repeat(32)}`
+  const accountRef = `acc_${'2'.repeat(32)}`
+  const ownershipRef = `own_${'3'.repeat(32)}`
+  const bindingRef = `eib_${'4'.repeat(32)}`
+  const credentialRef = `crd_${'5'.repeat(32)}`
+  const expiresAt = 8_000_000_000_000
+  db.seed('externalIdentityBindings', row('binding:sam', {
+    bindingRef,
+    principalRef,
+    providerNamespace: 'clerk/user',
+    providerIdentifier: 'clerk|user_sam',
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+    revision: 1,
+  }))
+  db.seed('credentials', row('credential:sam', {
+    credentialRef,
+    bindingRef,
+    principalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation: 1,
+    revision: 1,
+    issuedAt: 1,
+    expiresAt,
+    expiryMaterialization: {
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt: expiresAt,
+      scheduleRef: 'schedule:sam',
+      scheduleNonce: 'nonce:sam',
+      materializedAt: 1,
+    },
+  }))
+  db.seed('principals', row('principal:sam', {
+    principalRef,
+    kind: 'human',
+    lifecycle: 'active',
+    revision: 1,
+  }))
+  db.seed('accounts', row('account:sam', {
+    accountRef,
+    lifecycle: 'active',
+    currentOwnershipRef: ownershipRef,
+    revision: 1,
+  }))
+  db.seed('accountOwnerships', row('ownership:sam', {
+    ownershipRef,
+    accountRef,
+    ownerPrincipalRef: principalRef,
+    lifecycle: 'active',
+    revision: 1,
+  }))
+  db.seed('owners', row('owners:canonical', {
+    clerkUserId: 'user_sam',
+    canonicalPrincipalRef: principalRef,
+    canonicalAccountRef: accountRef,
+    updatedAt: 1,
+  }))
 }

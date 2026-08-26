@@ -24,6 +24,7 @@ import {
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
+import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
 
 type PublishPreparedCapabilityArgs = FunctionArgs<typeof api.capabilitySupply.publishPreparedCapability>
 type PublicationFixtureInput = Parameters<typeof prepareCapabilityPublicationMutation>[1]
@@ -165,27 +166,23 @@ export async function publishAndObserveCapability(
 }
 
 export async function registerProviderConnection(
-  admin: ConvexFixtureAdmin,
+  backend: ConvexFixtureBackend,
   businessId: Id<'businesses'>,
   binding: CapabilityTransportBindingRegistration,
 ) {
   if (binding.authority.kind !== 'provider_connection') return
   const suffix = binding.authority.connectionRef.split(':').at(-1) ?? 'default'
-  const result = await admin.mutation(internal.capabilityProviderConnections.create, {
+  const result = await installCanonicalProviderConnectionFixture(backend, {
     commandId: `command:capability-supply:connection:${binding.authority.connectionRef}`,
     connectionRef: binding.authority.connectionRef,
     businessId,
     providerRef: binding.authority.providerRef,
     providerAccountRef: `account:ae-supply:${suffix}`,
     adapterId: binding.adapter.adapterId,
-    credentialRef: `env:AE_SUPPLY_${suffix.toUpperCase()}_SECRET`,
-    requestedScopes: ['capability:invoke'],
-    grantedScopes: ['capability:invoke'],
-    requestedResources: [`endpoint:${binding.endpointUrl}`],
-    grantedResources: [`endpoint:${binding.endpointUrl}`],
-    reasonCode: 'source_test_provider_connection',
+    secretRef: null,
+    scopes: ['capability:invoke'],
+    resources: [`endpoint:${binding.endpointUrl}`],
     evidenceRefs: ['test:capability-supply-provider-connection'],
-    now: Date.now(),
   })
   if (result.kind === 'refused') {
     throw new Error(`provider connection fixture failed: ${result.code}`)

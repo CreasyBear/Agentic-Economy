@@ -82,6 +82,7 @@ const durableTables = [
   'capabilityContractDocuments',
   'capabilityOfferings',
   'capabilityOperationInvocations',
+  'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
@@ -248,6 +249,13 @@ const requiredIndexes = {
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
+  providerConsequenceJournal: [
+    'by_ticketRef',
+    'by_effectRef',
+    'by_commandId',
+    'by_claimRef',
+    'by_state_and_expiresAt',
+  ],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
     'by_canonicalLeaseRef',
@@ -320,7 +328,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(73)
+    expect(durableTables).toHaveLength(74)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

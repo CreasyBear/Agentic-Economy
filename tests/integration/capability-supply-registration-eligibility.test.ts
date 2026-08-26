@@ -26,7 +26,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -99,7 +99,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -134,7 +134,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -148,7 +148,7 @@ describe('V2 capability supply registration — eligibility', () => {
       endpointUrl: 'https://second.example.test/capability',
       authority: providerAuthority('second'),
     }
-    await registerProviderConnection(admin, businessId, secondRegistration)
+    await registerProviderConnection(backend, businessId, secondRegistration)
     const second = await runBindingRegistration(backend, {
       registration: secondRegistration, ...operationContext('binding-two'),
     })
@@ -189,7 +189,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const sharedId = 'shared:supply-identity'
     const sharedOfferingRegistration = { ...offeringRegistration(businessId, ref), offeringId: sharedId }
     const offering = await runOfferingRegistration(backend, {
@@ -226,7 +226,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const second = await runOfferingRegistration(backend, {
       registration: secondOfferingRegistration, ...operationContext('offering-two'),
     })
-    await registerProviderConnection(admin, secondBusinessId, {
+    await registerProviderConnection(backend, secondBusinessId, {
       ...bindingRegistration(ref),
       offeringId: secondOfferingRegistration.offeringId,
       bindingId: 'binding:supply-two:http',
@@ -268,7 +268,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -312,7 +312,7 @@ describe('V2 capability supply registration — eligibility', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
