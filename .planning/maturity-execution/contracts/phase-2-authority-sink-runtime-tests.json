@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "9d52154eee346ecb2ed623d560bce1fd8d404239c40a56c5e1577d8af5e3f4f0",
+  "inventorySha256": "f6763f47d010eb535ded3db25bb9597e86f63d0ba45ec926b67f720aad960476",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",

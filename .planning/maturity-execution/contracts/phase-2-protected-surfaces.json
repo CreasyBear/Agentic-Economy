@@ -44,7 +44,7 @@
   },
   "frozenContract": {
     "sourceFile": ".planning/maturity-execution/contracts/public-surface-inventory.json",
-    "sha256": "0c6f979bddae226745b7757f4f53f455af8631bb2f29bf3e3adf34135c4f6c83",
+    "sha256": "31b549ff6b6ebe9928b0f192b1cad424b6728ba77c80c86917d9f8e8b3373b0b",
     "httpRefs": [
       "agent-skill",
       "anonymous-chat-convex",

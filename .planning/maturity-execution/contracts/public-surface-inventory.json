@@ -6,6 +6,14 @@
     {
       "source": "src/routes/api.$.ts",
       "reason": "Wildcard API 404 sentinel; it rejects unmatched routes and is not a callable public contract."
+    },
+    {
+      "source": "src/routes/api.internal.provider-consequence.ts",
+      "reason": "Authenticated internal machine boundary for provider consequences; it is not a public API contract."
+    },
+    {
+      "source": "src/routes/api.internal.secret-lifecycle.ts",
+      "reason": "Authenticated internal machine boundary for secret lifecycle operations; it is not a public API contract."
     }
   ],
   "http": [
