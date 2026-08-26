@@ -9,7 +9,12 @@ import {
 import { isCanonicalDigest } from '../src/modules/common/canonical-digest'
 import { isRecord } from '../src/modules/common/is-record'
 import { internal } from './_generated/api'
-import { internalAction, internalMutation } from './_generated/server'
+import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from './_generated/server'
+import {
+  cleanupResourceAuthorityMatches,
+  cleanupResourceAuthorityValue,
+  type CleanupResourceAuthority,
+} from './capabilityProviderConnectionLifecycle'
 
 const cleanupOutcome = v.union(
   v.literal('detached'),
@@ -38,6 +43,7 @@ const cleanupArgs = {
   requestDigest: v.string(),
   cleanupAttempt: v.number(),
   workKind,
+  resourceAuthority: cleanupResourceAuthorityValue,
 }
 const cleanupContext = v.object({
   connectionRef: v.string(),
@@ -47,6 +53,7 @@ const cleanupContext = v.object({
   requestDigest: v.string(),
   cleanupAttempt: v.number(),
   workKind,
+  resourceAuthority: cleanupResourceAuthorityValue,
 })
 
 type CleanupResult = Readonly<{
@@ -69,9 +76,10 @@ type CleanupTarget = Readonly<{
   lifecycle: 'revocation_pending' | 'cleanup_required'
   revocationRef?: string
   cleanupAttempt?: number
+  resourceAuthority: CleanupResourceAuthority
 }>
 
-function unknownResult(reasonCode: 'cleanup_target_unavailable' | 'cleanup_request_mismatch' | 'cleanup_action_failed'): CleanupResult {
+function unknownResult(reasonCode: 'cleanup_target_unavailable' | 'cleanup_request_mismatch' | 'cleanup_authority_changed' | 'cleanup_action_failed'): CleanupResult {
   return { outcome: 'outcome_unknown', reasonCode, evidenceRefs: [`provider_cleanup:${reasonCode}`] }
 }
 type ConvexCleanupResult = {
@@ -106,6 +114,49 @@ function isCleanupTarget(value: unknown): value is CleanupTarget {
     && 'lifecycle' in value && (value.lifecycle === 'revocation_pending' || value.lifecycle === 'cleanup_required')
     && (!('revocationRef' in value) || value.revocationRef === undefined || typeof value.revocationRef === 'string')
     && (!('cleanupAttempt' in value) || value.cleanupAttempt === undefined || typeof value.cleanupAttempt === 'number')
+    && 'resourceAuthority' in value
+    && isCleanupResourceAuthority(value.resourceAuthority)
+}
+
+function isCleanupResourceAuthority(value: unknown): value is CleanupResourceAuthority {
+  if (!isRecord(value)) return false
+  return typeof value.canonicalConnectionRef === 'string'
+    && typeof value.connectionGeneration === 'number'
+    && typeof value.owningAccountRef === 'string'
+    && typeof value.actorPrincipalRef === 'string'
+    && typeof value.accountRevision === 'number'
+    && typeof value.ownershipRef === 'string'
+    && typeof value.grantRef === 'string'
+    && typeof value.grantGeneration === 'number'
+    && typeof value.authorityExpiresAt === 'number'
+}
+
+type CleanupInvocation = Readonly<{
+  connectionRef: string
+  commandId: string
+  expectedAuthorityGeneration: number
+  expectedAuthorityDigest: string
+  requestDigest: string
+  cleanupAttempt: number
+  resourceAuthority: CleanupResourceAuthority
+}>
+
+async function readCurrentCleanupTarget(
+  ctx: Pick<ActionCtx, 'runQuery'> | Pick<MutationCtx, 'runQuery'>,
+  args: CleanupInvocation,
+): Promise<CleanupTarget | null> {
+  const target = await ctx.runQuery(internal.capabilityProviderConnections.readCleanupTarget, {
+    connectionRef: args.connectionRef,
+    commandId: args.commandId,
+    expectedAuthorityGeneration: args.expectedAuthorityGeneration,
+    expectedAuthorityDigest: args.expectedAuthorityDigest,
+    requestDigest: args.requestDigest,
+    cleanupAttempt: args.cleanupAttempt,
+  })
+  return isCleanupTarget(target)
+    && cleanupResourceAuthorityMatches(target.resourceAuthority, args.resourceAuthority)
+    ? target
+    : null
 }
 
 const cleanupOutcomeValues: Record<ProviderConnectionCleanupOutcome, true> = {
@@ -135,18 +186,15 @@ export const run = internalAction({
   args: cleanupArgs,
   returns: workerResult,
   handler: async (ctx, args) => {
-    if (args.workKind === 'lease_drain') return { kind: 'lease_drain' as const }
     try {
-      const targetValue = await ctx.runQuery(internal.capabilityProviderConnections.readCleanupTarget, {
-        connectionRef: args.connectionRef,
-        commandId: args.commandId,
-        expectedAuthorityGeneration: args.expectedAuthorityGeneration,
-        expectedAuthorityDigest: args.expectedAuthorityDigest,
-        requestDigest: args.requestDigest,
-        cleanupAttempt: args.cleanupAttempt,
-      })
-      if (!isCleanupTarget(targetValue)) {
+      const targetValue = await readCurrentCleanupTarget(ctx, args)
+      if (targetValue === null) {
         return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_target_unavailable')) }
+      }
+      if (args.workKind === 'lease_drain') {
+        return await readCurrentCleanupTarget(ctx, args) === null
+          ? { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_authority_changed')) }
+          : { kind: 'lease_drain' as const }
       }
       if (
         targetValue.revocationRef === undefined
@@ -160,6 +208,9 @@ export const run = internalAction({
           adapterId: targetValue.adapterId,
         }) !== args.requestDigest
       ) return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_request_mismatch')) }
+      if (await readCurrentCleanupTarget(ctx, args) === null) {
+        return { kind: 'cleanup' as const, result: convexCleanupResult(unknownResult('cleanup_authority_changed')) }
+      }
       if (isCanonicalCredentiallessX402ProviderConnection(targetValue)) {
         return {
           kind: 'cleanup' as const,
@@ -189,11 +240,13 @@ export const completeWork = internalMutation({
   returns: v.null(),
   handler: async (ctx, { workId, context, result }) => {
     try {
+      if (await readCurrentCleanupTarget(ctx, context) === null) return null
       if (context.workKind === 'lease_drain' && result.kind === 'success' && isRecord(result.returnValue) && result.returnValue.kind === 'lease_drain') {
         await ctx.runMutation(internal.capabilityProviderConnections.advanceLeaseDrain, {
           ...context,
           workId,
           now: Date.now(),
+          resourceAuthority: context.resourceAuthority,
         })
         return null
       }
@@ -213,6 +266,7 @@ export const completeWork = internalMutation({
         ...(cleanup.reasonCode === undefined ? {} : { reasonCode: cleanup.reasonCode }),
         evidenceRefs: [...cleanup.evidenceRefs],
         now: Date.now(),
+        resourceAuthority: context.resourceAuthority,
       })
     } catch {
       return null
@@ -220,4 +274,3 @@ export const completeWork = internalMutation({
     return null
   },
 })
-

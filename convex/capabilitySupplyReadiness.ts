@@ -10,6 +10,7 @@ import {
 } from '@/modules/capability-supply/public'
 import { credentialFromEnvironment, runCapabilityReadinessProbe } from '@/modules/capability-supply/server'
 import { internal } from './_generated/api'
+import type { Id } from './_generated/dataModel'
 import { internalAction, type ActionCtx } from './_generated/server'
 import {
   bindWorkloadCronActionContext,
@@ -36,8 +37,34 @@ type ProbeRecordResult =
   | { kind: 'observed'; publicationRef: string; revision: number; lifecycle: PublicationLifecycle }
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
-type ProbeTargetResult = ReadCapabilityProbeTargetResult
-type Target = Extract<ProbeTargetResult, { kind: 'available' }>['target']
+type CapabilityProbeAuthority = Readonly<{
+  publicationRef: string
+  publicationRevision: number
+  businessId: Id<'businesses'>
+  publisherPrincipalRef: string
+  ownerPrincipalRef: string
+  owningAccountRef: string
+  ownershipRef: string
+  accountRevision: number
+  authorityDigest: string
+}> & (
+  | Readonly<{ mode: 'human_owner'; publisherPrincipalRevision: number }>
+  | Readonly<{
+      mode: 'agent_grant'
+      grantRef: string
+      grantGeneration: number
+      grantPolicyDigest: string
+      authorityExpiresAt: number
+    }>
+)
+type ProbeTargetBase = Extract<ReadCapabilityProbeTargetResult, { kind: 'available' }>['target']
+type WithResourceAuthority<T> = T extends unknown
+  ? T & Readonly<{ resourceAuthority: CapabilityProbeAuthority }>
+  : never
+type Target = WithResourceAuthority<ProbeTargetBase>
+type ProbeTargetResult =
+  | Exclude<ReadCapabilityProbeTargetResult, { kind: 'available' }>
+  | Readonly<{ kind: 'available'; target: Target }>
 type ProbeResult = ProbeRecordResult | {
   kind: 'unavailable'
   reason: CapabilityProbeTargetUnavailableReason
@@ -144,6 +171,7 @@ export async function probeHandler(ctx: ActionCtx, args: ProbeArgs): Promise<Pro
         observedAt: observation.observedAt,
         validUntil: observation.validUntil,
         evidenceRefs: [...observation.evidenceRefs],
+        resourceAuthority: target.resourceAuthority,
       },
     )
     return recorded

@@ -6,7 +6,9 @@ import { issueProviderApprovalDecision } from '@/modules/capability-supply/provi
 import { beginProviderConnectionRevocation } from '@/modules/capability-supply/provider-connection'
 import { accountRef, principalRef } from '@/modules/principal-account/public'
 import {
+  advanceLeaseDrainHandler,
   installCanonicalProviderConnection,
+  enqueueCleanupWork,
   shareCanonicalProviderConnection,
   transitionCanonicalProviderConnection,
 } from '../../../convex/capabilityProviderConnectionLifecycle'
@@ -307,16 +309,284 @@ describe('canonical provider-connection driver', () => {
       requestDigest: cleanupRequestDigest,
       cleanupAttempt,
     }
-    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
-      .resolves.toMatchObject({ connectionRef: cleanup.connectionRef, credentialRef: 'redacted' })
-    await expect(backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, {
+    const cleanupTarget = await backend.query(
+      internal.capabilityProviderConnections.readCleanupTarget,
+      cleanupArgs,
+    )
+    expect(cleanupTarget).toMatchObject({
+      connectionRef: cleanup.connectionRef,
+      credentialRef: 'redacted',
+      resourceAuthority: {
+        canonicalConnectionRef: first.connection.canonicalConnectionRef,
+        connectionGeneration: 3,
+        owningAccountRef: owner.accountRef,
+        actorPrincipalRef: owner.principalRef,
+        grantRef: `grt_${'2'.repeat(32)}`,
+        grantGeneration: 1,
+      },
+    })
+    if (cleanupTarget === null) throw new Error('cleanup_target_missing')
+    const cleanupAuthority = cleanupTarget.resourceAuthority
+    await expect(backend.run(async (ctx) => await advanceLeaseDrainHandler(ctx, {
       ...cleanupArgs,
       workId: cleanupWorkId,
-      outcome: 'unsupported',
+      resourceAuthority: cleanupAuthority,
+      now: Date.now(),
+    }))).resolves.toBeNull()
+    await expect(backend.run(async (ctx) => await advanceLeaseDrainHandler(ctx, {
+      ...cleanupArgs,
+      workId: cleanupWorkId,
+      resourceAuthority: { ...cleanupAuthority, grantGeneration: cleanupAuthority.grantGeneration + 1 },
+      now: Date.now(),
+    }))).resolves.toBeNull()
+    const revokeGrant = await backend.run(async (ctx) => {
+      const row = await ctx.db.query('authorityDelegationGrants')
+        .withIndex('by_grantRef', (query) => query.eq('grantRef', cleanupAuthority.grantRef))
+        .unique()
+      if (row === null) throw new Error('cleanup_grant_missing')
+      return row
+    })
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(revokeGrant._id, { expiresAt: Date.now() - 1 })
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(revokeGrant._id, { expiresAt: revokeGrant.expiresAt, generation: 2, revision: 2 })
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      const foreignAccountRef = `acc_${'9'.repeat(32)}`
+      await ctx.db.patch(revokeGrant._id, {
+        generation: revokeGrant.generation,
+        revision: revokeGrant.revision,
+        accountRef: foreignAccountRef,
+        createdBy: { ...revokeGrant.createdBy, activeAccountRef: foreignAccountRef },
+      })
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      await ctx.db.patch(revokeGrant._id, {
+        accountRef: revokeGrant.accountRef,
+        createdBy: revokeGrant.createdBy,
+        generation: revokeGrant.generation,
+        revision: revokeGrant.revision,
+        lifecycle: 'revoked',
+        revokedAt: Date.now(),
+        revokedBy: {
+          actorPrincipalRef: owner.principalRef,
+          activeAccountRef: owner.accountRef,
+          correlationRef: 'test:cleanup:revoke',
+          idempotencyRef: 'test:cleanup:revoke',
+        },
+      })
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      await ctx.db.replace(revokeGrant._id, {
+        grantRef: revokeGrant.grantRef,
+        accountRef: revokeGrant.accountRef,
+        actorPrincipalRef: revokeGrant.actorPrincipalRef,
+        subjectPrincipalRef: revokeGrant.subjectPrincipalRef,
+        ...(revokeGrant.parentGrantRef === undefined ? {} : { parentGrantRef: revokeGrant.parentGrantRef }),
+        ...(revokeGrant.parentGeneration === undefined ? {} : { parentGeneration: revokeGrant.parentGeneration }),
+        scopes: revokeGrant.scopes,
+        resourceRefs: revokeGrant.resourceRefs,
+        budgetLimit: revokeGrant.budgetLimit,
+        budgetUsed: revokeGrant.budgetUsed,
+        expiresAt: revokeGrant.expiresAt,
+        generation: revokeGrant.generation,
+        revision: revokeGrant.revision,
+        lifecycle: revokeGrant.lifecycle,
+        createdAt: revokeGrant.createdAt,
+        createdBy: revokeGrant.createdBy,
+      })
+    })
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      subjectPrincipalRef: `prn_${'8'.repeat(32)}`,
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      subjectPrincipalRef: revokeGrant.subjectPrincipalRef,
+      scopes: ['connection:delete'],
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      scopes: revokeGrant.scopes,
+      resourceRefs: ['connection:wrong-resource'],
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      resourceRefs: revokeGrant.resourceRefs,
+    }))
+    const currentOwnerRows = await backend.run(async (ctx) => {
+      const principal = await ctx.db.query('principals')
+        .withIndex('by_principalRef', (query) => query.eq('principalRef', owner.principalRef as never)).unique()
+      const account = await ctx.db.query('accounts')
+        .withIndex('by_accountRef', (query) => query.eq('accountRef', owner.accountRef as never)).unique()
+      if (principal === null || account === null) throw new Error('cleanup_owner_rows_missing')
+      const ownership = await ctx.db.query('accountOwnerships')
+        .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef)).unique()
+      if (ownership === null) throw new Error('cleanup_ownership_missing')
+      return { principalId: principal._id, accountId: account._id, ownershipId: ownership._id }
+    })
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.accountId, { revision: 0 }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await expect(backend.run(async (ctx) => await advanceLeaseDrainHandler(ctx, {
+      ...cleanupArgs,
+      workId: cleanupWorkId,
+      resourceAuthority: cleanupAuthority,
+      now: Date.now(),
+    }))).resolves.toBeNull()
+    await expect(backend.run(async (ctx) => await enqueueCleanupWork(
+      ctx,
+      cleanup._id,
+      cleanup as never,
+      { ...cleanupArgs, workKind: 'cleanup' },
+      Date.now(),
+    ))).rejects.toThrow('provider_cleanup_resource_authority_invalid')
+    await expect(backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, {
+      ...cleanupArgs,
+      resourceAuthority: cleanupAuthority,
+      workId: cleanupWorkId,
+      outcome: 'unsupported' as const,
+      evidenceRefs: ['evidence:cleanup:stale-account'],
+      now: 0,
+    })).resolves.toEqual({ kind: 'refused', code: 'invalid_transition' })
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.accountId, { revision: 1 }))
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.ownershipId, {
+      ownerPrincipalRef: `prn_${'9'.repeat(32)}`,
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.ownershipId, {
+      ownerPrincipalRef: owner.principalRef,
+    }))
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.principalId, { lifecycle: 'suspended' }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(currentOwnerRows.principalId, { lifecycle: 'active' }))
+    const ancestry = await backend.run(async (ctx) => {
+      const parentIds: Array<Id<'authorityDelegationGrants'>> = []
+      const parentRefs = Array.from({ length: 32 }, (_, index) =>
+        `grt_${(100 + index).toString(16).padStart(32, '0')}`)
+      for (let index = 0; index < parentRefs.length; index += 1) {
+        const parentRef = parentRefs[index] as string
+        const nextRef = parentRefs[index + 1]
+        parentIds.push(await ctx.db.insert('authorityDelegationGrants', {
+          grantRef: parentRef,
+          accountRef: owner.accountRef,
+          actorPrincipalRef: owner.principalRef,
+          subjectPrincipalRef: owner.principalRef,
+          ...(nextRef === undefined ? {} : { parentGrantRef: nextRef, parentGeneration: 1 }),
+          scopes: ['connection:revoke'],
+          resourceRefs: [`connection:${first.connection.canonicalConnectionRef}`],
+          budgetLimit: 1,
+          budgetUsed: 0,
+          expiresAt: revokeGrant.expiresAt + (index + 1) * 1_000,
+          generation: 1,
+          revision: 1,
+          lifecycle: 'active',
+          createdAt: 1,
+          createdBy: {
+            actorPrincipalRef: owner.principalRef,
+            activeAccountRef: owner.accountRef,
+            correlationRef: `test:cleanup:parent:${index}`,
+            idempotencyRef: `test:cleanup:parent:${index}`,
+          },
+        }))
+      }
+      await ctx.db.patch(revokeGrant._id, {
+        parentGrantRef: parentRefs[0],
+        parentGeneration: 1,
+      })
+      return { parentIds, parentRefs }
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => {
+      const boundedRoot = ancestry.parentIds[30]
+      if (boundedRoot === undefined) throw new Error('cleanup_bounded_root_missing')
+      await ctx.db.patch(boundedRoot, { parentGrantRef: undefined, parentGeneration: undefined })
+    })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toMatchObject({ resourceAuthority: cleanupAuthority })
+
+    const firstParent = ancestry.parentIds[0]
+    if (firstParent === undefined) throw new Error('cleanup_parent_missing')
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, { scopes: ['connection:delete'] }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, { scopes: ['connection:revoke'] }))
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, {
+      subjectPrincipalRef: `prn_${'8'.repeat(32)}`,
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, {
+      subjectPrincipalRef: owner.principalRef,
+      resourceRefs: ['connection:wrong-resource'],
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, {
+      resourceRefs: [`connection:${first.connection.canonicalConnectionRef}`],
+    }))
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, { budgetLimit: 2 }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, { budgetLimit: 1 }))
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, { expiresAt: revokeGrant.expiresAt }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(firstParent, {
+      expiresAt: revokeGrant.expiresAt + 1_000,
+    }))
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      parentGrantRef: `grt_${'f'.repeat(32)}`,
+      parentGeneration: 1,
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      parentGrantRef: revokeGrant.grantRef,
+      parentGeneration: revokeGrant.generation,
+    }))
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
+      .resolves.toBeNull()
+    await backend.run(async (ctx) => await ctx.db.patch(revokeGrant._id, {
+      parentGrantRef: ancestry.parentRefs[0],
+      parentGeneration: 1,
+    }))
+    const cleanupResultArgs = {
+      ...cleanupArgs,
+      resourceAuthority: cleanupAuthority,
+      workId: cleanupWorkId,
+      outcome: 'unsupported' as const,
       reasonCode: 'cleanup_adapter_unsupported',
       evidenceRefs: ['evidence:cleanup'],
       now: 0,
-    })).resolves.toMatchObject({ kind: 'applied' })
+    }
+    const { resourceAuthority: _resourceAuthority, ...unboundCleanupResultArgs } = cleanupResultArgs
+    await expect(backend.mutation(
+      internal.capabilityProviderConnections.recordCleanupResult,
+      unboundCleanupResultArgs,
+    )).resolves.toEqual({ kind: 'refused', code: 'invalid_transition' })
+    await expect(backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, {
+      ...cleanupResultArgs,
+      resourceAuthority: { ...cleanupAuthority, grantGeneration: cleanupAuthority.grantGeneration + 1 },
+    })).resolves.toEqual({ kind: 'refused', code: 'invalid_transition' })
+    await expect(backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, cleanupResultArgs))
+      .resolves.toMatchObject({ kind: 'applied' })
+    await expect(backend.mutation(internal.capabilityProviderConnections.recordCleanupResult, cleanupResultArgs))
+      .resolves.toMatchObject({ kind: 'duplicate' })
   })
 
   it('denies authenticated owner reads of an unmapped legacy connection', async () => {

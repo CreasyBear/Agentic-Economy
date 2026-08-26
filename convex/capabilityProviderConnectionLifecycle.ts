@@ -16,8 +16,11 @@ import {
   type ProviderConnectionInvocationLease,
 } from '../src/modules/capability-supply/provider-connection'
 import {
+  DELEGATION_MAX_ANCESTRY_GRANTS,
   DelegationError,
   DelegationService,
+  parsePersistedDelegationGrant,
+  type DelegationGrant,
   type DelegationGrantRef,
 } from '../src/modules/authority/delegation/public'
 import {
@@ -119,7 +122,19 @@ export const cleanupTargetValue = v.object({
   lifecycle,
   revocationRef: v.optional(v.string()),
   cleanupAttempt: v.optional(v.number()),
+  resourceAuthority: v.object({
+    canonicalConnectionRef: v.string(),
+    connectionGeneration: v.number(),
+    owningAccountRef: v.string(),
+    actorPrincipalRef: v.string(),
+    accountRevision: v.number(),
+    ownershipRef: v.string(),
+    grantRef: v.string(),
+    grantGeneration: v.number(),
+    authorityExpiresAt: v.number(),
+  }),
 })
+export const cleanupResourceAuthorityValue = cleanupTargetValue.fields.resourceAuthority
 export const commandResult = v.union(
   v.object({ kind: v.literal('applied'), connection: connectionValue, commandDigest: v.string() }),
   v.object({ kind: v.literal('duplicate'), connection: connectionValue, commandDigest: v.string() }),
@@ -182,6 +197,7 @@ export const advanceLeaseDrainArgs = {
   requestDigest: v.string(),
   cleanupAttempt: v.number(),
   workId: v.string(),
+  resourceAuthority: v.optional(cleanupResourceAuthorityValue),
   now: v.number(),
 } as const
 export const recordCleanupResultArgs = {
@@ -203,6 +219,7 @@ export const recordCleanupResultArgs = {
   responseDigest: v.optional(v.string()),
   reasonCode: v.optional(v.string()),
   evidenceRefs: v.array(v.string()),
+  resourceAuthority: v.optional(cleanupResourceAuthorityValue),
   now: v.number(),
 } as const
 export const readArgs = {
@@ -252,6 +269,19 @@ export type CleanupWorkContext = Readonly<{
   requestDigest: string
   cleanupAttempt: number
   workKind: CleanupWorkKind
+  resourceAuthority: CleanupResourceAuthority
+}>
+
+export type CleanupResourceAuthority = Readonly<{
+  canonicalConnectionRef: string
+  connectionGeneration: number
+  owningAccountRef: string
+  actorPrincipalRef: string
+  accountRevision: number
+  ownershipRef: string
+  grantRef: string
+  grantGeneration: number
+  authorityExpiresAt: number
 }>
 
 type ProviderConnectionRow = {
@@ -360,6 +390,7 @@ type AdvanceLeaseDrainArgs = {
   requestDigest: string
   cleanupAttempt: number
   workId: string
+  resourceAuthority?: CleanupResourceAuthority
   now: number
 }
 
@@ -375,6 +406,7 @@ type RecordCleanupResultArgs = {
   responseDigest?: string
   reasonCode?: string
   evidenceRefs: string[]
+  resourceAuthority?: CleanupResourceAuthority
   now: number
 }
 
@@ -461,6 +493,144 @@ export async function resolveCanonicalBusinessOwner(
   } catch {
     return null
   }
+}
+
+function authorityValuesNarrowed(child: readonly string[], parent: readonly string[]): boolean {
+  return child.every((value) => parent.includes(value))
+}
+
+async function readCurrentCleanupGrantChain(
+  ctx: Pick<QueryCtx, 'db'>,
+  input: Readonly<{
+    grantRef: string
+    grantGeneration: number
+    accountRef: string
+    actorPrincipalRef: string
+    resourceRef: string
+    now: number
+  }>,
+): Promise<{ leaf: DelegationGrant; expiresAt: number } | null> {
+  let expectedRef = input.grantRef
+  let expectedGeneration = input.grantGeneration
+  let child: DelegationGrant | undefined
+  let leaf: DelegationGrant | undefined
+  let expiresAt = Number.MAX_SAFE_INTEGER
+  const seen = new Set<string>()
+  for (let position = 0; position < DELEGATION_MAX_ANCESTRY_GRANTS; position += 1) {
+    if (seen.has(expectedRef)) return null
+    seen.add(expectedRef)
+    const row = await ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', expectedRef as never))
+      .unique()
+    if (row === null) return null
+    let grant: DelegationGrant
+    try {
+      const { _id, _creationTime, ...stored } = row
+      void _id
+      void _creationTime
+      grant = parsePersistedDelegationGrant(stored)
+    } catch {
+      return null
+    }
+    if (grant.grantRef !== expectedRef
+      || grant.generation !== expectedGeneration
+      || grant.lifecycle !== 'active'
+      || grant.accountRef !== input.accountRef
+      || grant.expiresAt <= input.now) return null
+    if (child !== undefined && (
+      child.actorPrincipalRef !== grant.subjectPrincipalRef
+      || !authorityValuesNarrowed(child.scopes, grant.scopes)
+      || !authorityValuesNarrowed(child.resourceRefs, grant.resourceRefs)
+      || child.budgetLimit > grant.budgetLimit
+      || child.expiresAt >= grant.expiresAt
+    )) return null
+    leaf ??= grant
+    expiresAt = Math.min(expiresAt, grant.expiresAt)
+    if (grant.parentGrantRef === undefined) {
+      return leaf.subjectPrincipalRef === input.actorPrincipalRef
+        && leaf.scopes.includes('connection:revoke')
+        && leaf.resourceRefs.includes(input.resourceRef)
+        ? { leaf, expiresAt }
+        : null
+    }
+    child = grant
+    expectedRef = grant.parentGrantRef
+    // The persisted-grant parser rejects unpaired parent refs/generations.
+    expectedGeneration = grant.parentGeneration as number
+  }
+  return null
+}
+
+export async function readCurrentCleanupResourceAuthority(
+  ctx: Pick<QueryCtx, 'db'>,
+  legacy: ProviderConnection,
+  now = Date.now(),
+): Promise<CleanupResourceAuthority | null> {
+  const canonical = await readCanonicalConnectionForProjection(ctx, legacy)
+  if (canonical === null
+    || canonical.lifecycle !== 'revoked'
+    || canonical.action.operation !== 'revoke'
+    || legacy.canonicalConnectionRef !== canonical.connectionRef
+    || legacy.canonicalConnectionGeneration !== canonical.generation
+    || legacy.owningAccountRef !== canonical.owningAccountRef
+    || legacy.installedByPrincipalRef !== canonical.installedByPrincipalRef
+    || legacy.authorityGrantRef !== canonical.action.grantRef
+    || legacy.authorityGrantGeneration !== canonical.action.grantGeneration) return null
+  const [principal, account] = await Promise.all([
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', canonical.action.actorPrincipalRef as never))
+      .unique(),
+    ctx.db.query('accounts')
+      .withIndex('by_accountRef', (query) => query.eq('accountRef', canonical.owningAccountRef as never))
+      .unique(),
+  ])
+  if (principal === null || principal.lifecycle !== 'active'
+    || account === null || account.lifecycle !== 'active'
+    || !Number.isSafeInteger(account.revision) || account.revision <= 0) return null
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef))
+    .unique()
+  if (ownership === null || ownership.lifecycle !== 'active'
+    || ownership.accountRef !== canonical.owningAccountRef
+    || ownership.ownerPrincipalRef !== canonical.action.actorPrincipalRef) return null
+  const resourceRef = `connection:${canonical.connectionRef}`
+  const chain = await readCurrentCleanupGrantChain(ctx, {
+    grantRef: canonical.action.grantRef,
+    grantGeneration: canonical.action.grantGeneration,
+    accountRef: canonical.owningAccountRef,
+    actorPrincipalRef: canonical.action.actorPrincipalRef,
+    resourceRef,
+    now,
+  })
+  if (chain === null
+    || canonical.action.activeAccountRef !== canonical.owningAccountRef
+    || !canonical.action.resourceRefs.includes(resourceRef)) return null
+  return Object.freeze({
+    canonicalConnectionRef: canonical.connectionRef,
+    connectionGeneration: canonical.generation,
+    owningAccountRef: canonical.owningAccountRef,
+    actorPrincipalRef: canonical.action.actorPrincipalRef,
+    accountRevision: account.revision,
+    ownershipRef: ownership.ownershipRef,
+    grantRef: chain.leaf.grantRef,
+    grantGeneration: chain.leaf.generation,
+    authorityExpiresAt: chain.expiresAt,
+  })
+}
+
+export function cleanupResourceAuthorityMatches(
+  left: CleanupResourceAuthority,
+  right: CleanupResourceAuthority,
+): boolean {
+  return left.canonicalConnectionRef === right.canonicalConnectionRef
+    && left.connectionGeneration === right.connectionGeneration
+    && left.owningAccountRef === right.owningAccountRef
+    && left.actorPrincipalRef === right.actorPrincipalRef
+    && left.accountRevision === right.accountRevision
+    && left.ownershipRef === right.ownershipRef
+    && left.grantRef === right.grantRef
+    && left.grantGeneration === right.grantGeneration
+    && left.authorityExpiresAt === right.authorityExpiresAt
 }
 
 async function resolveUniqueCanonicalGrant(
@@ -749,9 +919,11 @@ export async function enqueueCleanupWork(
   ctx: MutationCtx,
   rowId: Id<'capabilityProviderConnections'>,
   connection: ProviderConnection,
-  context: Omit<CleanupWorkContext, 'workKind'> & { workKind: CleanupWorkKind },
+  context: Omit<CleanupWorkContext, 'workKind' | 'resourceAuthority'> & { workKind: CleanupWorkKind },
   now: number,
 ): Promise<ProviderConnection> {
+  const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, connection, now)
+  if (resourceAuthority === null) throw new Error('provider_cleanup_resource_authority_invalid')
   const workId = await marketDispatchWorkpool.enqueueAction(
     ctx,
     internal.capabilityProviderConnectionCleanup.run,
@@ -763,11 +935,12 @@ export async function enqueueCleanupWork(
       requestDigest: context.requestDigest,
       cleanupAttempt: context.cleanupAttempt,
       workKind: context.workKind,
+      resourceAuthority,
     },
     {
       retry: false,
       onComplete: internal.capabilityProviderConnectionCleanup.completeWork,
-      context,
+      context: { ...context, resourceAuthority },
     },
   )
   const next = {
@@ -786,7 +959,8 @@ export async function enqueueCleanupWork(
 
 async function cleanupWorkMatches(
   ctx: MutationCtx,
-  args: Pick<CleanupWorkContext, 'connectionRef' | 'commandId' | 'expectedAuthorityGeneration' | 'expectedAuthorityDigest' | 'requestDigest' | 'cleanupAttempt'> & { workId: string },
+  args: Pick<CleanupWorkContext, 'connectionRef' | 'commandId' | 'expectedAuthorityGeneration' | 'expectedAuthorityDigest' | 'requestDigest' | 'cleanupAttempt'>
+    & { workId: string; resourceAuthority?: CleanupResourceAuthority },
 ) {
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
@@ -801,8 +975,12 @@ async function cleanupWorkMatches(
     ? row
     : null
   if (matches === null) return null
-  const canonical = await readCanonicalConnectionForProjection(ctx, toDomain(matches))
-  return canonical !== null && canonical.lifecycle === 'revoked' ? matches : null
+  const currentAuthority = await readCurrentCleanupResourceAuthority(ctx, toDomain(matches))
+  return args.resourceAuthority !== undefined
+    && currentAuthority !== null
+    && cleanupResourceAuthorityMatches(currentAuthority, args.resourceAuthority)
+    ? matches
+    : null
 }
 
 export async function advanceLeaseDrainHandler(ctx: MutationCtx, args: AdvanceLeaseDrainArgs) {
@@ -952,8 +1130,10 @@ export async function recordCleanupResultHandler(ctx: MutationCtx, args: RecordC
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (existing === null) return { kind: 'refused' as const, code: 'invalid_transition' as const }
   const current = toDomain(existing)
-  const canonical = await readCanonicalConnectionForProjection(ctx, current)
-  if (canonical === null || canonical.lifecycle !== 'revoked') {
+  const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, current)
+  if (args.resourceAuthority === undefined
+    || resourceAuthority === null
+    || !cleanupResourceAuthorityMatches(resourceAuthority, args.resourceAuthority)) {
     return { kind: 'refused' as const, code: 'invalid_transition' as const }
   }
   const result = recordProviderConnectionCleanupResult(current, args, Date.now())
@@ -983,7 +1163,8 @@ export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupT
     || row.authorityGeneration !== args.expectedAuthorityGeneration
     || row.authorityDigest !== args.expectedAuthorityDigest
   ) return null
-  if (await readCanonicalConnectionForProjection(ctx, toDomain(row)) === null) return null
+  const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, toDomain(row))
+  if (resourceAuthority === null) return null
   return row === null ? null : {
     connectionRef: row.connectionRef,
     providerRef: row.providerRef,
@@ -997,6 +1178,7 @@ export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupT
     lifecycle: row.lifecycle,
     ...(row.revocationRef === undefined ? {} : { revocationRef: row.revocationRef }),
     ...(row.cleanupAttempt === undefined ? {} : { cleanupAttempt: row.cleanupAttempt }),
+    resourceAuthority,
   }
 }
 
