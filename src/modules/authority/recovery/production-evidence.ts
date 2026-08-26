@@ -83,22 +83,19 @@ export async function collectProductionEvidence(
   request: ProductionEvidenceRequest,
 ): Promise<ProductionEvidenceProof> {
   const measuredRows = measuredInventoryRows(request.measuredInventory)
-  const surfaces: IsolationSurface[] = []
-  for (const measured of measuredRows) {
+  const surfaces = await Promise.all(measuredRows.map(async (measured): Promise<IsolationSurface> => {
     const protection = protectionFor(measured)
     const resolved = await request.resolveSurface(measured)
     if (resolved.surfaceRef !== measured.ref) throw inventoryError()
-    surfaces.push(Object.freeze({ ...resolved, protection }))
-  }
+    return Object.freeze({ ...resolved, protection })
+  }))
 
   const sinkKeys = Object.keys(request.sinkCollectors)
   if (sinkKeys.length !== SECRET_CANARY_SINKS.length
     || SECRET_CANARY_SINKS.some((sink) => !sinkKeys.includes(sink))) {
     throw sinkError()
   }
-  const artifacts = []
-  const sourceRefs: string[] = []
-  for (const sink of SECRET_CANARY_SINKS) {
+  const collected = await Promise.all(SECRET_CANARY_SINKS.map(async (sink) => {
     let evidence: ProductionSinkEvidence
     try {
       evidence = await request.sinkCollectors[sink]()
@@ -111,8 +108,9 @@ export async function collectProductionEvidence(
         && !(evidence.byteFragments?.some((fragment) => fragment.byteLength > 0) ?? false))) {
       throw sinkError()
     }
-    sourceRefs.push(evidence.sourceRef)
-    artifacts.push(Object.freeze({
+    return Object.freeze({
+      sourceRef: evidence.sourceRef,
+      artifact: Object.freeze({
       sink,
       ...(evidence.textFragments === undefined
         ? {}
@@ -120,8 +118,11 @@ export async function collectProductionEvidence(
       ...(evidence.byteFragments === undefined
         ? {}
         : { byteFragments: Object.freeze(evidence.byteFragments.map((value) => Uint8Array.from(value))) }),
-    }))
-  }
+      }),
+    })
+  }))
+  const sourceRefs = collected.map(({ sourceRef }) => sourceRef)
+  const artifacts = collected.map(({ artifact }) => artifact)
   if (new Set(sourceRefs).size !== SECRET_CANARY_SINKS.length) throw sinkError()
 
   const isolation = await generateIsolationMatrix({

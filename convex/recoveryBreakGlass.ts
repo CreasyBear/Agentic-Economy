@@ -206,11 +206,12 @@ async function commitRecovery(ctx: MutationCtx, change: RecoveryCommit): Promise
     .withIndex('by_admissionRef', (query) => query.eq('admissionRef', admission.admissionRef)).unique() !== null) {
     throw new RecoveryError('recovery_admission_ref_conflict')
   }
-  const replacements = []
   const seen = new Set<string>()
   for (const replacement of change.approvalReplacements) {
     if (seen.has(replacement.value.approvalRef)) throw new RecoveryError('recovery_approval_duplicate')
     seen.add(replacement.value.approvalRef)
+  }
+  const replacements = await Promise.all(change.approvalReplacements.map(async (replacement) => {
     const row = await ctx.db.query('recoveryBreakGlassApprovals')
       .withIndex('by_approvalRef', (query) => query.eq('approvalRef', replacement.value.approvalRef)).unique()
     if (row === null
@@ -219,13 +220,15 @@ async function commitRecovery(ctx: MutationCtx, change: RecoveryCommit): Promise
       || replacement.value.consumedByAdmissionRef !== admission.admissionRef) {
       throw new RecoveryError('recovery_approval_unavailable')
     }
-    replacements.push({ row, value: approvalForStorage(replacement.value) })
-  }
+    return { row, value: approvalForStorage(replacement.value) }
+  }))
+  const admissionApprovalRefs = new Set(admission.approvalRefs)
   if (replacements.length !== admission.approvalRefs.length
-    || replacements.some(({ value }) => !admission.approvalRefs.includes(value.approvalRef))) {
+    || replacements.some(({ value }) => !admissionApprovalRefs.has(value.approvalRef))) {
     throw new RecoveryError('recovery_approval_unavailable')
   }
-  for (const replacement of replacements) await ctx.db.replace(replacement.row._id, replacement.value)
+  await Promise.all(replacements.map(async (replacement) =>
+    await ctx.db.replace(replacement.row._id, replacement.value)))
   await ctx.db.insert('recoveryBreakGlassAdmissions', admissionForStorage(admission))
 }
 

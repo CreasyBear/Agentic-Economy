@@ -81,9 +81,8 @@ export class IsolationProofError extends Error {
 
 export async function generateIsolationMatrix(request: IsolationMatrixRequest): Promise<IsolationMatrix> {
   assertInventory(request)
-  const rows: IsolationMatrixRow[] = []
-  for (const surface of request.surfaces) {
-    for (const caseKind of ISOLATION_CASES) {
+  const rows = await Promise.all(request.surfaces.flatMap((surface) =>
+    ISOLATION_CASES.map(async (caseKind): Promise<IsolationMatrixRow> => {
       const probe = probeFor(request, surface, caseKind)
       const decision = freezeDecision(await request.evaluate(probe))
       const shouldAllow = probe.protection === 'tested_public_exemption'
@@ -96,9 +95,8 @@ export async function generateIsolationMatrix(request: IsolationMatrixRequest): 
       if (!shouldAllow && decision.kind !== 'denied') {
         throw new IsolationProofError('isolation_negative_case_allowed')
       }
-      rows.push(Object.freeze({ ...probe, decision }))
-    }
-  }
+      return Object.freeze({ ...probe, decision })
+    })))
   return Object.freeze({
     surfaceCount: request.surfaces.length,
     caseCount: rows.length,
