@@ -27,6 +27,7 @@ export type {
 export {
   ISOLATION_CASES,
   IsolationProofError,
+  evaluateCanonicalIsolationProbe,
   generateIsolationMatrix,
 } from './isolation'
 export type {

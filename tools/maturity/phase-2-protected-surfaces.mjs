@@ -31,6 +31,8 @@ const AUTHORITY_SINKS = Object.freeze({
   interactive_account: Object.freeze(['convex/authz.ts:resolveBusinessActor']),
   canonical_agent: Object.freeze([
     'convex/authorityBoundary.ts:resolveCanonicalAgentBinding',
+    'convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext',
+    'convex/lib/canonicalAgentAuthority.ts:validateCanonicalAgentDelegation',
     'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal',
     'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority',
   ]),

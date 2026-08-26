@@ -274,7 +274,7 @@
       "consequential": true
     },
     "convex/agentAccessPrincipals.ts:registerAgentPrincipal": {
-      "binding": "interactive_account",
+      "binding": "canonical_agent",
       "consequential": true
     },
     "convex/authorityBoundary.ts:resolveAgentBinding": {
