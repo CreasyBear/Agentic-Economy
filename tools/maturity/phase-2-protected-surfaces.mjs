@@ -725,7 +725,7 @@ function addDiscoveredFamily(rows, kind, target, site, fallback) {
     symbol: target.slice(target.lastIndexOf(':') + 1),
     declarationRef: target,
   }
-  const ref = `${kind}:${target ?? `${fallback.declarationRef}@${site.line}`}`
+  const ref = `${kind}:${target ?? fallback.declarationRef}`
   const existing = rows.get(ref)
   if (existing === undefined) {
     rows.set(ref, { ref, discoveryKind: kind, ...declaration, callSites: [site] })
@@ -1604,23 +1604,23 @@ function checkSurfaceAuthorityMap(inventory, registry) {
   return actual
 }
 
-export function writeProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
+export function writeProtectedSurfaceInventory(output = DEFAULT_OUTPUT, options = {}) {
   const inventory = collectProtectedSurfaces()
   writeFileSync(output, `${JSON.stringify(inventory, null, 2)}\n`)
-  if (output === DEFAULT_OUTPUT) {
+  if (output === DEFAULT_OUTPUT && options.writeDerived !== false) {
     const registry = writeSinkTestRegistry(inventory)
     writeSurfaceAuthorityMap(inventory, registry)
   }
   return inventory
 }
 
-export function checkProtectedSurfaceInventory(output = DEFAULT_OUTPUT) {
+export function checkProtectedSurfaceInventory(output = DEFAULT_OUTPUT, options = {}) {
   if (!existsSync(output)) throw new Error('protected_surface_inventory_missing')
   const expected = JSON.parse(readFileSync(output, 'utf8'))
   validateProtectedSurfaceInventory(expected)
   const actual = collectProtectedSurfaces()
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('protected_surface_inventory_drift')
-  if (output === DEFAULT_OUTPUT) {
+  if (output === DEFAULT_OUTPUT && options.checkDerived !== false) {
     const registry = checkSinkTestRegistry(actual)
     checkSurfaceAuthorityMap(actual, registry)
   }
@@ -1643,16 +1643,25 @@ function registryArgument(argv) {
   return resolve(ROOT, value)
 }
 
-if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+function writeStandardOutput(value) {
+  return new Promise((resolveWrite, rejectWrite) => {
+    process.stdout.write(value, (error) => {
+      if (error === undefined || error === null) resolveWrite()
+      else rejectWrite(error)
+    })
+  })
+}
+
+async function runCli() {
   if (process.argv.includes('--discover-refs')) {
-    process.stdout.write(`${JSON.stringify(discoverProtectedSurfaceRefs(), null, 2)}\n`)
-    process.exit(0)
+    await writeStandardOutput(`${JSON.stringify(discoverProtectedSurfaceRefs(), null, 2)}\n`)
+    return
   }
   if (process.argv.includes('--audit-dominance')) {
     const audit = auditProtectedSurfaceDominance()
-    process.stdout.write(`${JSON.stringify(audit, null, 2)}\n`)
+    await writeStandardOutput(`${JSON.stringify(audit, null, 2)}\n`)
     if (process.argv.includes('--require-dominance') && audit.red > 0) process.exitCode = 1
-    process.exit()
+    return
   }
   const output = outputArgument(process.argv)
   if (process.argv.includes('--validate-sink-registry')) {
@@ -1666,7 +1675,7 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
     )
     const redSinks = Object.entries(registry.rows)
       .filter(([, row]) => row.status === 'red').map(([sink]) => sink)
-    process.stdout.write(`${JSON.stringify({
+    await writeStandardOutput(`${JSON.stringify({
       validated: true,
       total: Object.keys(registry.rows).length,
       covered: Object.keys(registry.rows).length - redSinks.length,
@@ -1674,7 +1683,18 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
       redSinks,
     })}\n`)
     if (process.argv.includes('--require-runtime-tests') && redSinks.length > 0) process.exitCode = 1
-    process.exit()
+    return
+  }
+  if (process.argv.includes('--write-legacy-sink-registry')) {
+    if (!existsSync(output)) throw new Error('protected_surface_inventory_missing')
+    const inventory = validateProtectedSurfaceInventory(JSON.parse(readFileSync(output, 'utf8')))
+    const registry = writeSinkTestRegistry(inventory)
+    await writeStandardOutput(`${JSON.stringify({
+      analysisScope: 'legacy_sink_reference_only',
+      sinks: Object.keys(registry.rows).length,
+      registrySha256: digest(`${JSON.stringify(registry, null, 2)}\n`),
+    })}\n`)
+    return
   }
   if (process.argv.includes('--validate-only')) {
     if (!existsSync(output)) throw new Error('protected_surface_inventory_missing')
@@ -1683,19 +1703,34 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
       && allRows(inventory).some((row) => row.status === 'blocked')) {
       throw new Error('protected_surface_unbound')
     }
-    process.stdout.write('{"validated":true}\n')
-    process.exit(0)
+    await writeStandardOutput('{"validated":true}\n')
+    return
   }
   const snapshotOnly = process.argv.includes('--check-snapshot')
   const check = process.argv.includes('--check') || snapshotOnly || process.argv.includes('--require-bound')
-  const inventory = check ? checkProtectedSurfaceInventory(output) : writeProtectedSurfaceInventory(output)
+  const inventory = check
+    ? checkProtectedSurfaceInventory(output, { checkDerived: !snapshotOnly })
+    : writeProtectedSurfaceInventory(output, {
+        writeDerived: !process.argv.includes('--inventory-snapshot-only'),
+      })
+  if (process.argv.includes('--inventory-snapshot-only') || snapshotOnly) {
+    await writeStandardOutput(`${JSON.stringify({
+      analysisScope: 'runtime_identity_only',
+      counts: inventory.actualCounts,
+      inventorySha256: digest(`${JSON.stringify(inventory, null, 2)}\n`),
+      runAdmittedActionRefs: inventory.backgroundFamilies
+        .map((row) => row.ref)
+        .filter((ref) => ref.includes('runAdmittedAction')),
+    }, null, 2)}\n`)
+    return
+  }
   const blocked = allRows(inventory).filter((row) => row.status === 'blocked')
   const sinkRegistry = output === DEFAULT_OUTPUT
     ? JSON.parse(readFileSync(SINK_TEST_REGISTRY, 'utf8'))
     : buildSinkTestRegistry(inventory)
   const redSinks = Object.entries(sinkRegistry.rows)
     .filter(([, row]) => row.status === 'red').map(([sink]) => sink)
-  process.stdout.write(`${JSON.stringify({
+  await writeStandardOutput(`${JSON.stringify({
     counts: inventory.actualCounts,
     bound: allRows(inventory).length - blocked.length,
     blocked: blocked.length,
@@ -1711,3 +1746,5 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--require-bound') && blocked.length > 0) process.exitCode = 1
   if (process.argv.includes('--require-runtime-tests') && redSinks.length > 0) process.exitCode = 1
 }
+
+if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) await runCli()

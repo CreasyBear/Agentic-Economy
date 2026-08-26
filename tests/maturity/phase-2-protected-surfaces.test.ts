@@ -101,15 +101,12 @@ function expectSinkRegistryRejected(candidate: unknown): void {
 }
 
 describe('Phase 2 generated protected-surface manifest', () => {
-  it('indexes every authority sink by an exact runtime-handler test or an explicit RED gap', () => {
+  it('keeps the legacy sink registry identity-bound without treating sink projection as surface coverage', () => {
     const sinks = [...new Set(measuredRows()
       .map((row) => row.authoritySink)
       .filter((sink): sink is string => typeof sink === 'string'))].sort()
     expect(Object.keys(sinkTestRegistry.rows).sort()).toEqual(sinks)
     expect(sinks).toHaveLength(27)
-    expect(Object.entries(sinkTestRegistry.rows)
-      .filter(([, row]) => row.status === 'red')
-      .map(([sink]) => sink).sort()).toEqual([])
     expect(() => execFileSync(
       '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
       ['tools/maturity/phase-2-protected-surfaces.mjs', '--validate-sink-registry'],
@@ -202,6 +199,8 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(discovered).toContain('scheduler:convex/marketRegistryGraduation.ts:sweep')
     expect(discovered).toContain('scheduler:convex/interactiveCredentialLifecycle.ts:expireInteractiveCredential')
     expect(discovered).toContain('run_action:convex/capabilityOperationInvocationWorker.ts:recover')
+    expect(discovered).toContain('run_action:convex/workloadCron.ts:runAdmittedAction')
+    expect(discovered.some((ref) => ref.includes('runAdmittedAction@'))).toBe(false)
     expect(discovered).toContain('workpool:convex/capabilityOperationInvocationWorker.ts:run')
     expect(discovered).toContain('continuation:convex/capabilityOperationInvocations.ts:completeWork')
     expect(discovered.some((ref) => ref.startsWith('reconciliation:'))).toBe(true)
@@ -238,7 +237,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
   it('preserves source identity and rejects omissions, duplicates, and unchanged-count replacements', () => {
     expect(() => execFileSync(
       '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
-      ['tools/maturity/phase-2-protected-surfaces.mjs', '--require-bound'],
+      ['tools/maturity/phase-2-protected-surfaces.mjs', '--check-snapshot'],
       { cwd: process.cwd(), stdio: 'pipe' },
     )).not.toThrow()
     for (const rows of [

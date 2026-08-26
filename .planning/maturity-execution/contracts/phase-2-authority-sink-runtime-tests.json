@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "597df302b11bad267106e285fcf2688dd1ca2c72453833edaf24a67a58aff65c",
+  "inventorySha256": "c8bd3f987e02923f55966f1fc3000148dc8efdfacc9e4016532f1ad11784f16e",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -92,7 +92,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "f727116efeee5c8b336ba0c2542a0004ecb708abec1cebf703c7b1823f43dfcb"
+      "authorityPathSha256": "de3909f7e7f867ca9362ec852cdf5e455049d004b0d58ee7545302c31f58c9e0"
     },
     "convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority": {
       "status": "covered",
@@ -115,7 +115,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "31b1c99a4a9be6b16914bb4d28750256f8c3d0db896ff6d486ed6627d1d6bbd1"
+      "authorityPathSha256": "923f7587d6fc90f66c1067f1987d69e6ffac50b58d7adcc308289b37e7cd02c6"
     },
     "convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority": {
       "status": "covered",
@@ -161,7 +161,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "426d4f9e26ccac32257a379ea2079394178b1463228c78eb966d380288761688"
+      "authorityPathSha256": "64b59983d872a128b101978c7b02d5a6013560d3426d47e083ba923ffd9992e9"
     },
     "convex/capabilityProviderConsequenceJournal.ts:attestProviderConsequenceTicketHandler": {
       "status": "covered",
@@ -184,7 +184,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "b1bc4355f1875ea6e5942a5f7e7ad05b94689f11c3543596ec46f52073a1853e"
+      "authorityPathSha256": "aea4612550ffedc5a03f05152095d5c5431b316a9adae6c4633045ebb8df4efd"
     },
     "convex/capabilityProviderConsequenceJournal.ts:authorizeProviderConsequenceX402RpcHandler": {
       "status": "covered",
@@ -207,7 +207,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "3a6a7f2f5da954a83ae4273f9539e7e6ea1299fceda6dbee92288d61719466e1"
+      "authorityPathSha256": "8f3fa1b2d17b5799bb56b95fe1014309d6c8a3e1b7d4b20f78329b68637d10de"
     },
     "convex/capabilityProviderConsequenceJournal.ts:claimProviderConsequenceHandler": {
       "status": "covered",
@@ -230,7 +230,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a2a89c31f7a9f4158a3a95243c530b7b20170ac4dde81aa55177828c16f6918c"
+      "authorityPathSha256": "cc5694ab76651a870a856835bb709ff311d6e6375609cd27270aeab70817a32f"
     },
     "convex/capabilityProviderConsequenceJournal.ts:completeProviderConsequenceHandler": {
       "status": "covered",
@@ -253,7 +253,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "e415684c673ff6acfa5773b2648f547f2cbbc7cd68d7c629be83051aaae19a9f"
+      "authorityPathSha256": "0b0b8945bc6134fecce0887b8a9a1e047a4444a774e4363296024b5d488a39e4"
     },
     "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority": {
       "status": "covered",
@@ -299,7 +299,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "9f03585c4271e1e50a5e8f640727be00afa817ea181d831abef63b7ce145c409"
+      "authorityPathSha256": "ede4806214cd581ca227a4e2c69c9129e5a71101013229911c1d458867879c22"
     },
     "convex/interactiveAuthority.ts:currentContextAtTrustedServerTime": {
       "status": "covered",
@@ -322,7 +322,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "cef1190c6412281d2f0de609345f121c2f30d417d2b301cba4c1cf37ee42c38a"
+      "authorityPathSha256": "5c7be385c630172f6a72e060af1b49da3344f58cd4a9270711d0ab8e7ce73dd6"
     },
     "convex/interactiveAuthority.ts:resolveInteractiveAuthorityContext": {
       "status": "covered",
@@ -368,7 +368,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "3208201cb9d80809d9cee2049679967805e54e15e2c1b87dce6f5500adc7ce3a"
+      "authorityPathSha256": "c3ca37a58a75137473a5d4d77045f56e1f6219874dd876819ba1c48719860335"
     },
     "convex/lib/canonicalAgentAuthority.ts:resolveCanonicalAgentContext": {
       "status": "covered",
@@ -414,7 +414,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "6cd2c8b43d54c6af7b1ac8d4ce458b4d933c44dbb18386b7ee7e21d4f00a75f3"
+      "authorityPathSha256": "fe644ce124ac75245eebb6be1bf35cbc62f0969b94f27866798624e21bd8ddc7"
     },
     "convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent": {
       "status": "covered",
@@ -529,7 +529,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "3b5a176d3bf987ddadf4272221f7c1c562a7b898d17363c9d7d5b7e4562e97fc"
+      "authorityPathSha256": "a776925149e04940bad5c16bd3a3d81972ab9587fb0401e5605e0dbc9f273685"
     },
     "convex/workloadCron.ts:bindWorkloadCronActionContext": {
       "status": "covered",
@@ -552,7 +552,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "bf28910e686cf8c684d461d8bfec463212fc310e5ac1c72a98c0e8569a25e1e0"
+      "authorityPathSha256": "3245d910409998356b1a59109cad4fb6c844224520238376e13c884dd4a4fe3f"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
@@ -575,7 +575,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "47776fd5babb01bd71c00c9b513bb7513e9a0fab3e3b0d3c71298f2f445ffbb4"
+      "authorityPathSha256": "d6c095dcc1b209c4c1fce9b6bd9e62cd951c83b5a2e6e99b97f834cd40d73c57"
     },
     "src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook": {
       "status": "covered",

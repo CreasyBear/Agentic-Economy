@@ -1,0 +1,88 @@
+{
+  "format": "phase-2-authority-entry-migration-plan:v1",
+  "acceptedDesignSha256": "a221d14315f1ec7446ae8d97002c61f2e69ba425df3dac3efde1094e89a30934",
+  "registrationContract": ".planning/maturity-execution/contracts/phase-2-convex-registration-migration.json",
+  "ownerGroupsSource": ".planning/maturity-execution/contracts/phase-2-convex-registration-classifications.json",
+  "ownerGroups": {
+    "repair-P2-authority-entry-convex-a": { "files": 13, "registrations": 108 },
+    "repair-P2-authority-entry-convex-b": { "files": 17, "registrations": 68 },
+    "repair-P2-authority-entry-convex-c": { "files": 19, "registrations": 115 },
+    "repair-P2-authority-entry-http": { "files": 3, "registrations": 7 }
+  },
+  "runtimeFamilies": {
+    "convex": {
+      "seam": "convex-helpers custom functions in convex/lib/authorityRegistrars.ts",
+      "registrationRows": 298,
+      "tests": "tests/maturity/phase-2-authority-entry-convex-*.test.ts"
+    },
+    "convexHttp": {
+      "seam": "thin registered HTTP adapters plus convex-test t.fetch actual routes",
+      "registrationRows": 7,
+      "tests": "tests/maturity/phase-2-authority-entry-http.test.ts"
+    },
+    "tanstackStart": {
+      "seam": "documented fixed TanStack server middleware before production handlers",
+      "runtimeRows": 47,
+      "tests": "tests/integration/drivers/phase-2-start-runtime.ts"
+    },
+    "mcp": {
+      "seam": "existing MCP request dispatcher and operation service composition",
+      "edgeRows": 14,
+      "tests": "tests/integration/drivers/phase-2-mcp-runtime.ts"
+    },
+    "cli": {
+      "seam": "existing packaged CLI command dispatcher and operation service composition",
+      "edgeRows": 12,
+      "tests": "tests/integration/drivers/phase-2-cli-runtime.ts"
+    },
+    "httpRoutes": {
+      "seam": "actual TanStack Route handlers and Convex HTTP router registrations",
+      "edgeRows": 39,
+      "tests": "tests/integration/drivers/phase-2-start-runtime.ts"
+    },
+    "background": {
+      "seam": "registered cron/job/callback/worker source plus target-time durable workload revalidation",
+      "runtimeRows": 62,
+      "tests": "tests/maturity/phase-2-authority-entry-background.test.ts"
+    }
+  },
+  "driverOnly": [
+    "convex/http.ts",
+    "convex/crons.ts",
+    "convex/_generated/**",
+    "src/start.ts",
+    "package.json",
+    "package-lock.json",
+    "eslint.config.mjs",
+    "tools/eslint-rules/**",
+    ".github/workflows/**",
+    "src/modules/authority/recovery/production-evidence.ts",
+    "tests/integration/drivers/phase-2-convex-runtime.ts",
+    "tests/integration/drivers/phase-2-start-runtime.ts",
+    "tests/integration/drivers/phase-2-mcp-runtime.ts",
+    "tests/integration/drivers/phase-2-cli-runtime.ts"
+  ],
+  "impactGates": {
+    "type": ["npm run typecheck"],
+    "imports": ["npm run test:imports", "npm run test:ts-standards"],
+    "bundle": ["npm run build", "npm run test:phase2:start-bundle"],
+    "codegen": ["npm run check:convex-codegen", "npm run generate:convex"],
+    "release": ["npm run test:maturity:coverage", "npm run test:release:source"]
+  },
+  "compatibility": [
+    "preserve exported names and generated function references",
+    "preserve public arguments, validators, returns, paths, methods, MCP schemas and CLI outputs",
+    "preserve transaction, idempotency, commercial, chat, market, x402 and money behavior",
+    "forbid raw/wrapped dual registrations and bypass feature flags"
+  ],
+  "rollback": {
+    "unit": "one atomic owner wave",
+    "method": "targeted git revert of the wave followed by restoration of its generated and manifest versions",
+    "stopConditions": [
+      "negative authority test failure",
+      "unresolved registration",
+      "unsupported framework seam",
+      "authorized result or public wire drift"
+    ]
+  }
+}

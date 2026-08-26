@@ -862,7 +862,7 @@
     "run_action:convex/chatExecute.ts:execute": { "binding": "interactive_account", "consequential": true },
     "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
     "run_action:convex/marketRegistryGraduation.ts:run": { "binding": "workload_account", "consequential": true },
-    "run_action:convex/workloadCron.ts:runAdmittedAction@545": { "binding": "workload_account", "consequential": true },
+    "run_action:convex/workloadCron.ts:runAdmittedAction": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron": { "binding": "workload_account", "consequential": true },
     "scheduler:convex/chatGenerate.ts:generate": { "binding": "interactive_account", "consequential": true },
