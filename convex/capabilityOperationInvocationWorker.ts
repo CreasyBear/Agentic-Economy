@@ -7,10 +7,9 @@ import { recoveryResultValue } from '@/modules/capability-execution/convex'
 import {
   recoverCapabilityOperationInvocation,
   recoveryArgs,
+  runCapabilityOperationInvocationWithAuthority,
   type WorkerResult,
 } from '@/modules/capability-execution/invocation-runtime'
-import { prepareInvocationRun } from '@/modules/capability-execution/invocation-worker/runPreparation'
-import { releaseInvocationRun } from '@/modules/capability-execution/invocation-worker/runRelease'
 import { internal } from './_generated/api'
 import { internalAction, type ActionCtx } from './_generated/server'
 import {
@@ -92,11 +91,11 @@ export const run = internalAction({
   args: { invocationRef: v.string() },
   returns: workerResult,
   handler: async (ctx, args): Promise<WorkerResult> => {
-    if (await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef) === null) return { kind: 'none' }
-    const prepared = await prepareInvocationRun(ctx, args)
-    if (prepared.kind !== 'prepared') return prepared
-    if (await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef) === null) return { kind: 'none' }
-    return await releaseInvocationRun(ctx, prepared)
+    return await runCapabilityOperationInvocationWithAuthority(
+      ctx,
+      args,
+      async () => await reconcileInvocationWorkloadAuthority(ctx, args.invocationRef) !== null,
+    )
   },
 })
 

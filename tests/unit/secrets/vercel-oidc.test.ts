@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   VercelOidcIdentityTokenProvider,
   type VercelOidcTokenSource,
-} from '../../../src/modules/secrets/vercel-oidc'
+} from '../../../src/modules/secrets/public'
 
 const NOW = 2_000_000_000_000
 

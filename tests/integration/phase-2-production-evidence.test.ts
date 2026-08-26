@@ -11,7 +11,7 @@ import {
   providerConsequenceInvocationDigest,
   type CanonicalProviderConsequenceTicket,
   type ProviderConsequenceJournal,
-} from '../../src/modules/capability-execution/invocation-worker/jitProviderConsequence'
+} from '../../src/modules/capability-execution/invocation-runtime'
 import type {
   RouteTransportFetch,
   RouteTransportInvocation,

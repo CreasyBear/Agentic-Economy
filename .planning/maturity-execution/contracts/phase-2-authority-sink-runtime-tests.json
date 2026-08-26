@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "51f651e05c992ff095c53c051ce6bf4ddb9f729906411e46bcdef2a8f830aa46",
+  "inventorySha256": "9d52154eee346ecb2ed623d560bce1fd8d404239c40a56c5e1577d8af5e3f4f0",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -92,7 +92,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "de3909f7e7f867ca9362ec852cdf5e455049d004b0d58ee7545302c31f58c9e0"
+      "authorityPathSha256": "8c3d9d34dceb55bb3a7bd98fd320aad8f5e8ed81dcad815937e5d55f7578ffe6"
     },
     "convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority": {
       "status": "covered",

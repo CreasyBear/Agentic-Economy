@@ -14,7 +14,7 @@ import {
   type ProviderConsequenceJournal,
   type ProviderConsequenceJournalBeginResult,
   type ProviderConsequenceTicketVerifier,
-} from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
+} from '@/modules/capability-execution/invocation-runtime'
 import {
   secretGeneration,
   secretRef,

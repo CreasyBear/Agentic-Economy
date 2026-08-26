@@ -23,12 +23,12 @@ import {
   createJitProviderConsequenceBoundary,
   ProviderConsequencePreReleaseRefusal,
   providerConsequenceTicketClaimsDigest,
+  readX402EvmReceipt,
   type CanonicalProviderConsequenceTicket,
   type JitProviderX402RuntimeFactory,
   type ProviderConsequenceJournal,
   type ProviderConsequenceJsonValue,
-} from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
-import { readX402EvmReceipt } from '@/modules/capability-execution/invocation-worker/x402Settlement'
+} from '@/modules/capability-execution/invocation-runtime'
 import {
   createProductionSecretRuntime,
   secretGeneration,

@@ -12,7 +12,7 @@ import {
 // This domain model is shared by Convex's default runtime. Import the pure
 // secret value model directly so the Node-only production vault adapter cannot
 // enter a Convex bundle through the broad server-facing secrets barrel.
-import { secretRef, type SecretRef } from '../../secrets/secret-plane'
+import { secretRef, type SecretRef } from '../../secrets/public'
 
 const CONNECTION_REF_PATTERN = /^con_[0-9a-f]{32}$/u
 const CONNECTION_SHARE_REF_PATTERN = /^csh_[0-9a-f]{32}$/u

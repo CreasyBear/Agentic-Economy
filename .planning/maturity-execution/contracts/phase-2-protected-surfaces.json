@@ -8992,7 +8992,7 @@
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 123,
+          "line": 122,
           "column": 14,
           "via": "function_reference"
         },
@@ -9919,11 +9919,11 @@
       "registrar": "job",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
+      "sha256": "97b4450c63a83c039d2eed0ae3f762d1dec2033b3512cbfefcd222e804103831",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "reconcileScheduled",
-        "line": 123,
+        "line": 122,
         "column": 14,
         "sha256": "b66adb469e4c5fadd706d6b71451c96af1393e220e57ef406104d7fb58d18939"
       },
@@ -9934,7 +9934,7 @@
         {
           "ref": "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 123,
+          "line": 122,
           "column": 14,
           "via": "declaration"
         },
@@ -10477,11 +10477,11 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
+      "sha256": "97b4450c63a83c039d2eed0ae3f762d1dec2033b3512cbfefcd222e804103831",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "reconcileScheduled",
-        "line": 123,
+        "line": 122,
         "column": 14,
         "sha256": "b66adb469e4c5fadd706d6b71451c96af1393e220e57ef406104d7fb58d18939"
       },
@@ -10492,7 +10492,7 @@
         {
           "ref": "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 123,
+          "line": 122,
           "column": 14,
           "via": "declaration"
         },
@@ -10522,7 +10522,7 @@
       "callSites": [
         {
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 123,
+          "line": 122,
           "column": 14,
           "expression": "reconcileScheduled"
         }
@@ -10994,7 +10994,7 @@
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 123,
+          "line": 122,
           "column": 14,
           "via": "function_reference"
         },
@@ -11118,11 +11118,11 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
+      "sha256": "97b4450c63a83c039d2eed0ae3f762d1dec2033b3512cbfefcd222e804103831",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "recover",
-        "line": 103,
+        "line": 102,
         "column": 14,
         "sha256": "8f62273337f754764c9ea027572073b85d666a2d4f0625b1373f118fd174c69b"
       },
@@ -11133,21 +11133,21 @@
         {
           "ref": "run_action:convex/capabilityOperationInvocationWorker.ts:recover",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 103,
+          "line": 102,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 71,
+          "line": 70,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 65,
+          "line": 64,
           "column": 7,
           "via": "function_reference"
         },
@@ -12070,13 +12070,13 @@
       "registrar": "workpool",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
+      "sha256": "97b4450c63a83c039d2eed0ae3f762d1dec2033b3512cbfefcd222e804103831",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "run",
-        "line": 91,
+        "line": 90,
         "column": 14,
-        "sha256": "a948dbf69fd1c44276fbc13c3e180f3d5611c48c522b318c0e3bbbcce86e4126"
+        "sha256": "c0700b9b229f7475c1f4942e1bc09088616b94740f030b36684167a3c1d5097e"
       },
       "status": "bound",
       "marker": "transitive_authority_path:workpool:convex/capabilityOperationInvocationWorker.ts:run=>convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority",
@@ -12085,21 +12085,21 @@
         {
           "ref": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 91,
+          "line": 90,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 71,
+          "line": 70,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
           "file": "convex/capabilityOperationInvocationWorker.ts",
-          "line": 65,
+          "line": 64,
           "column": 7,
           "via": "function_reference"
         },

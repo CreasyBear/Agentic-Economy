@@ -30,7 +30,7 @@ import {
   createJitProviderConsequenceBoundary,
   providerConsequenceInvocationDigest,
   type ProviderConsequenceJournal,
-} from '@/modules/capability-execution/invocation-worker/jitProviderConsequence'
+} from '@/modules/capability-execution/invocation-runtime'
 import type { RouteTransportFetch, RouteTransportInvocation } from '@/modules/capability-supply/route-transport-runtime'
 import {
   secretGeneration,

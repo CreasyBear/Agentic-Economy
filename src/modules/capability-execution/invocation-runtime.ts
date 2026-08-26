@@ -17,10 +17,19 @@ export async function runCapabilityOperationInvocation(
   ctx: ActionCtx,
   args: Readonly<{ invocationRef: string }>,
 ): Promise<WorkerResult> {
+  return await runCapabilityOperationInvocationWithAuthority(ctx, args, async () => true)
+}
+
+export async function runCapabilityOperationInvocationWithAuthority(
+  ctx: ActionCtx,
+  args: Readonly<{ invocationRef: string }>,
+  admitCurrentAuthority: () => Promise<boolean>,
+): Promise<WorkerResult> {
+  if (!await admitCurrentAuthority()) return { kind: 'none' }
   const prepared = await prepareInvocationRun(ctx, args)
-  return prepared.kind === 'prepared'
-    ? await releaseInvocationRun(ctx, prepared)
-    : prepared
+  if (prepared.kind !== 'prepared') return prepared
+  if (!await admitCurrentAuthority()) return { kind: 'none' }
+  return await releaseInvocationRun(ctx, prepared)
 }
 
 export {
@@ -28,3 +37,22 @@ export {
   recoveryArgs,
 }
 export type { WorkerResult }
+export {
+  createJitProviderConsequenceBoundary,
+  ProviderConsequencePreReleaseRefusal,
+  providerConsequenceInvocationDigest,
+  providerConsequenceTicketClaimsDigest,
+} from './invocation-worker/jitProviderConsequence'
+export type {
+  CanonicalProviderConsequenceTicket,
+  JitProviderConsequenceBoundary,
+  JitProviderConsequenceBoundaryOptions,
+  JitProviderX402Runtime,
+  JitProviderX402RuntimeFactory,
+  ProviderConsequenceJournal,
+  ProviderConsequenceJournalBegin,
+  ProviderConsequenceJournalBeginResult,
+  ProviderConsequenceJsonValue,
+  ProviderConsequenceTicketVerifier,
+} from './invocation-worker/jitProviderConsequence'
+export { readX402EvmReceipt } from './invocation-worker/x402Settlement'

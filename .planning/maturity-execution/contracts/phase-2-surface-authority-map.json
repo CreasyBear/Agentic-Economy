@@ -1,6 +1,6 @@
 {
   "format": "phase-2-surface-authority-map:v1",
-  "inventorySha256": "51f651e05c992ff095c53c051ce6bf4ddb9f729906411e46bcdef2a8f830aa46",
+  "inventorySha256": "9d52154eee346ecb2ed623d560bce1fd8d404239c40a56c5e1577d8af5e3f4f0",
   "total": 242,
   "protected": 207,
   "exemptions": 35,
@@ -7861,7 +7861,7 @@
       "surfaceRef": "cron:reconcile due facilitator invocations",
       "runtimeHandlerRef": "convex/workloadCron.ts:reconcileDueFacilitatorInvocations",
       "authoritySink": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
-      "authorityPathSha256": "ba4182d48aec483e66d5417a41308d9e1576df6052a75cec79006b4e7f2c3a80",
+      "authorityPathSha256": "b6854eeb7e81f85fd3cd3d3e0fef737df35d6272ff4a2e49283e84a457c16dc6",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -7884,7 +7884,7 @@
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
             "to": "convex/workloadCron.ts:reconcile",
             "via": "function_reference",
-            "callSiteSha256": "339032155257f8507af641b91038d6a6f0e610d93d597818d2b803d2fb62c9b6",
+            "callSiteSha256": "b70575f5524e5ba0b0450794dbc7ef99329593fd27b0964ca91ff1c2c23b222f",
             "consequencePrimitiveCount": 2
           },
           {
@@ -7902,7 +7902,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "061933dfd9cf610e90f73e0efdc000ae74f533eb67dca7c6396fc6c9289926e2"
+        "sha256": "abe320d5803c73987199509eb5328bc123c0a46c7720fb64eb6eb36c4d1c3ee1"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/workload-cron.test.ts",
@@ -8635,7 +8635,7 @@
       "surfaceRef": "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
       "authoritySink": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
-      "authorityPathSha256": "2372ae314ed1ee4248852dfa9115c4b3905baf7889556ec252d0411c14979d26",
+      "authorityPathSha256": "23a5750ac7d3347bb969edbea36d1351aa78677caf6b0362e35432af0fed4ae1",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -8644,7 +8644,7 @@
             "from": "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
             "to": "convex/workloadCron.ts:reconcile",
             "via": "function_reference",
-            "callSiteSha256": "339032155257f8507af641b91038d6a6f0e610d93d597818d2b803d2fb62c9b6",
+            "callSiteSha256": "b70575f5524e5ba0b0450794dbc7ef99329593fd27b0964ca91ff1c2c23b222f",
             "consequencePrimitiveCount": 2
           },
           {
@@ -8662,7 +8662,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "fbcf7256d72fe105a560e28279cc6686d0f17abdd0c36137874583aa6eb24298"
+        "sha256": "72a21f3924b7e65b1fbf57d9d8ac2d99e4196aba8302fc3fcb85bf4c43dc98d7"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/workload-cron.test.ts",
@@ -9072,7 +9072,7 @@
       "surfaceRef": "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
       "authoritySink": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
-      "authorityPathSha256": "861d1832994eb2edda5eb036cd5cac462f6b06a84f8d9d0e6b681e4190e93811",
+      "authorityPathSha256": "63ad64b0755024310412815816aea493836d15ac33aa94e4cd172f699a69f4ee",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9081,7 +9081,7 @@
             "from": "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
             "to": "convex/workloadCron.ts:reconcile",
             "via": "function_reference",
-            "callSiteSha256": "339032155257f8507af641b91038d6a6f0e610d93d597818d2b803d2fb62c9b6",
+            "callSiteSha256": "b70575f5524e5ba0b0450794dbc7ef99329593fd27b0964ca91ff1c2c23b222f",
             "consequencePrimitiveCount": 2
           },
           {
@@ -9099,7 +9099,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "ba89501c4ce8a8d4b5a3e2fae0fcbb810630dbcf5575ef4c69b550396ae940e8"
+        "sha256": "033904534eacb3ca3edd3240a7a54024fe19bf4f6e710b22a1f834e5a43c8b7f"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/workload-cron.test.ts",
@@ -9434,7 +9434,7 @@
       "surfaceRef": "reconciliation:convex/workloadCron.ts:reconcileDueFacilitatorInvocations",
       "runtimeHandlerRef": "convex/workloadCron.ts:reconcileDueFacilitatorInvocations",
       "authoritySink": "convex/workloadCron.ts:reconcileWorkloadCronSnapshot",
-      "authorityPathSha256": "53679ae18b1250e3c2fe530960be7fabbf7aa508acf074b6df7bd015a4c07f0f",
+      "authorityPathSha256": "4dc3491606bb123d31038e40ba3fc300b691964d498f9de7a6fae467b3b6e906",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9457,7 +9457,7 @@
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileScheduled",
             "to": "convex/workloadCron.ts:reconcile",
             "via": "function_reference",
-            "callSiteSha256": "339032155257f8507af641b91038d6a6f0e610d93d597818d2b803d2fb62c9b6",
+            "callSiteSha256": "b70575f5524e5ba0b0450794dbc7ef99329593fd27b0964ca91ff1c2c23b222f",
             "consequencePrimitiveCount": 2
           },
           {
@@ -9475,7 +9475,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "1e23014515f0839ac2965c5ee379382ca9dc0629188e3bf6d45258bfed907ddc"
+        "sha256": "762979beb59e9065a80304e590015c22075b7c88949d79651cdbf79db6214c0d"
       },
       "runtimeIsolation": {
         "testFile": "tests/unit/convex/workload-cron.test.ts",
@@ -9565,7 +9565,7 @@
       "surfaceRef": "run_action:convex/capabilityOperationInvocationWorker.ts:recover",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:recover",
       "authoritySink": "convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "48ee6bec288d4860885b7589a39bdd2b60c1c9ceebff5c607fa1f0b5ef84e1c5",
+      "authorityPathSha256": "010eb7e696e4dbfa2f3acda69d3c038e8c304b9267b0818eeaa155804b4a32fd",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -9574,21 +9574,21 @@
             "from": "run_action:convex/capabilityOperationInvocationWorker.ts:recover",
             "to": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
             "via": "call",
-            "callSiteSha256": "40c204cb7b4d3f8c4d93f87c936228bdec79e430cc7726a17f2788dfa6175051",
+            "callSiteSha256": "c393db870e3830a6b588734719444b3f3ae8a9bb1b1569d67862495d83c87182",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
             "to": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f167695c171eb1bf5493d9ab2b2c4c9e47511c3a013d07635d2ba23ab50bdfe6",
+            "callSiteSha256": "6660e18e88d9430febd6519f8d4f0bdea221f84510035ed32139ce95abf418f4",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
             "via": "function_reference",
-            "callSiteSha256": "60835732fba7e38ce7f9823edeb4dde77ef13a75f71c0c0b912ce29344661194",
+            "callSiteSha256": "f5fad229000c5fe78edbfc41dbc82f02d2d3a35cf2f49943cc515826376f90ad",
             "consequencePrimitiveCount": 0
           },
           {
@@ -9599,7 +9599,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "b89e170190250e71604783d866e8bdd35266f6eec7b3a561b31e7b9a3a285e8a"
+        "sha256": "a040c8b66738c3c32f386b47833a87a03e56ba96dfc87e7be5477013a58499b3"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
@@ -10250,7 +10250,7 @@
       "surfaceRef": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
       "runtimeHandlerRef": "convex/capabilityOperationInvocationWorker.ts:run",
       "authoritySink": "convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority",
-      "authorityPathSha256": "de3909f7e7f867ca9362ec852cdf5e455049d004b0d58ee7545302c31f58c9e0",
+      "authorityPathSha256": "8c3d9d34dceb55bb3a7bd98fd320aad8f5e8ed81dcad815937e5d55f7578ffe6",
       "dominance": {
         "status": "proved",
         "method": "ordered_recursive_authority_dominance:v1",
@@ -10259,21 +10259,21 @@
             "from": "workpool:convex/capabilityOperationInvocationWorker.ts:run",
             "to": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
             "via": "call",
-            "callSiteSha256": "c61023b48852ebccd851e0e3864910a3ddc2dc71e6621e6d18353cad97ba3877",
+            "callSiteSha256": "933bb3007f3a68cab5ca906c05682a9642d6acf68fcaafc5e65456f114178ebb",
             "consequencePrimitiveCount": 0
           },
           {
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthority",
             "to": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
             "via": "function_reference",
-            "callSiteSha256": "f167695c171eb1bf5493d9ab2b2c4c9e47511c3a013d07635d2ba23ab50bdfe6",
+            "callSiteSha256": "6660e18e88d9430febd6519f8d4f0bdea221f84510035ed32139ce95abf418f4",
             "consequencePrimitiveCount": 1
           },
           {
             "from": "convex/capabilityOperationInvocationWorker.ts:reconcileInvocationWorkloadAuthorityRef",
             "to": "convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority",
             "via": "function_reference",
-            "callSiteSha256": "60835732fba7e38ce7f9823edeb4dde77ef13a75f71c0c0b912ce29344661194",
+            "callSiteSha256": "f5fad229000c5fe78edbfc41dbc82f02d2d3a35cf2f49943cc515826376f90ad",
             "consequencePrimitiveCount": 0
           },
           {
@@ -10284,7 +10284,7 @@
             "consequencePrimitiveCount": 0
           }
         ],
-        "sha256": "c0bb61c8ca7661e3bb00595888720a45ddb4e1c165ca3f71cecf07b9b8f81838"
+        "sha256": "c00a80cbbe399485f1bdf0e66e347e1128a051c9212bbd86f01fe8028f9e153b"
       },
       "runtimeIsolation": {
         "testFile": "tests/integration/phase-2-runtime-sink-handlers.test.ts",
