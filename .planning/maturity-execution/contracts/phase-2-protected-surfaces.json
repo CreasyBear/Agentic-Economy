@@ -240,86 +240,36 @@
       ]
     },
     {
-      "ref": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer",
+      "ref": "src/lib/server/agent-access-console.functions.ts:readAgentAccessConsoleServer",
       "kind": "server_function",
-      "file": "src/lib/server/canonical-url.functions.ts",
-      "symbol": "readCanonicalBaseUrlServer",
-      "registrar": "createServerFn",
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "sha256": "193cecce1f5d6b3417b87cbc92994488bdafd7523399a5811b183490ab80cf00",
-      "declaration": {
-        "file": "src/lib/server/canonical-url.functions.ts",
-        "symbol": "readCanonicalBaseUrlServer",
-        "line": 6,
-        "column": 14,
-        "sha256": "dc95b0a1edefae871880f8cc13f747d36316a45dfe1c455ddf11d8bd14cb6c89"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin",
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin",
-        "sourceRef": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
-      }
-    },
-    {
-      "ref": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer",
-      "kind": "server_function",
-      "file": "src/lib/server/require-operator-session.ts",
-      "symbol": "admitOperatorSessionServer",
-      "registrar": "createServerFn",
-      "binding": "narrow_system_non_consequential",
-      "consequential": false,
-      "sha256": "f432a9da91b9707ad751290278f7d435155455b1e1fb86570abcec43387adef3",
-      "declaration": {
-        "file": "src/lib/server/require-operator-session.ts",
-        "symbol": "admitOperatorSessionServer",
-        "line": 10,
-        "column": 7,
-        "sha256": "5b7aa9fb4bfd33fb616bc75e26a46eaa1dd17666e36429b995ec14342839cfe5"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
-        "sourceRef": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
-      }
-    },
-    {
-      "ref": "src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer",
-      "kind": "server_function",
-      "file": "src/modules/agent-access/agent-access-console.ts",
+      "file": "src/lib/server/agent-access-console.functions.ts",
       "symbol": "readAgentAccessConsoleServer",
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "4df426f26321f99d35046536a3d6a1e46d445ff6968b089bbae062345e7b1bda",
+      "sha256": "4972e31529f9e36d5af18348401edd3e66b9373dc26795e4619d6a7c5785bfcf",
       "declaration": {
-        "file": "src/modules/agent-access/agent-access-console.ts",
+        "file": "src/lib/server/agent-access-console.functions.ts",
         "symbol": "readAgentAccessConsoleServer",
-        "line": 18,
+        "line": 7,
         "column": 14,
-        "sha256": "7cae7c90f83a98403a47a21d9487bfd81374b264834f29f2ff744b715f9a385c"
+        "sha256": "660deb6d2e9323a447c47abf7656e8deb9a3133b592989bbf4a662dc6f74ad47"
       },
       "status": "bound",
-      "marker": "transitive_authority_path:src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer=>convex/authz.ts:resolveBusinessActor",
+      "marker": "transitive_authority_path:src/lib/server/agent-access-console.functions.ts:readAgentAccessConsoleServer=>convex/authz.ts:resolveBusinessActor",
       "authoritySink": "convex/authz.ts:resolveBusinessActor",
       "authorityPath": [
         {
-          "ref": "src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer",
-          "file": "src/modules/agent-access/agent-access-console.ts",
-          "line": 18,
+          "ref": "src/lib/server/agent-access-console.functions.ts:readAgentAccessConsoleServer",
+          "file": "src/lib/server/agent-access-console.functions.ts",
+          "line": 7,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "src/modules/agent-access/agent-access-console.ts:loadAgentAccessConsoleReadback",
           "file": "src/modules/agent-access/agent-access-console.ts",
-          "line": 21,
+          "line": 15,
           "column": 1,
           "via": "call"
         },
@@ -359,6 +309,195 @@
           "via": "call"
         }
       ]
+    },
+    {
+      "ref": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer",
+      "kind": "server_function",
+      "file": "src/lib/server/canonical-url.functions.ts",
+      "symbol": "readCanonicalBaseUrlServer",
+      "registrar": "createServerFn",
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "sha256": "193cecce1f5d6b3417b87cbc92994488bdafd7523399a5811b183490ab80cf00",
+      "declaration": {
+        "file": "src/lib/server/canonical-url.functions.ts",
+        "symbol": "readCanonicalBaseUrlServer",
+        "line": 6,
+        "column": 14,
+        "sha256": "dc95b0a1edefae871880f8cc13f747d36316a45dfe1c455ddf11d8bd14cb6c89"
+      },
+      "status": "bound",
+      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin",
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin",
+        "sourceRef": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer",
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
+      }
+    },
+    {
+      "ref": "src/lib/server/owner-status.functions.ts:readOwnerStatusServer",
+      "kind": "server_function",
+      "file": "src/lib/server/owner-status.functions.ts",
+      "symbol": "readOwnerStatusServer",
+      "registrar": "createServerFn",
+      "binding": "interactive_account",
+      "consequential": true,
+      "sha256": "29a1b64868934b3e81f0b89a1246fe874b4085b607308a54b4b6151b578584ea",
+      "declaration": {
+        "file": "src/lib/server/owner-status.functions.ts",
+        "symbol": "readOwnerStatusServer",
+        "line": 37,
+        "column": 14,
+        "sha256": "4fa560abddaa9598cc4aa30bc7d181ae94940b656676ca63398124860aea5553"
+      },
+      "status": "bound",
+      "marker": "transitive_authority_path:src/lib/server/owner-status.functions.ts:readOwnerStatusServer=>convex/authz.ts:resolveBusinessActor",
+      "authoritySink": "convex/authz.ts:resolveBusinessActor",
+      "authorityPath": [
+        {
+          "ref": "src/lib/server/owner-status.functions.ts:readOwnerStatusServer",
+          "file": "src/lib/server/owner-status.functions.ts",
+          "line": 37,
+          "column": 14,
+          "via": "declaration"
+        },
+        {
+          "ref": "src/lib/server/owner-status.functions.ts:readOwnerStatusThroughSource",
+          "file": "src/lib/server/owner-status.functions.ts",
+          "line": 45,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "src/lib/server/owner-status.functions.ts:currentOwnerCatalogQuery",
+          "file": "src/lib/server/owner-status.functions.ts",
+          "line": 33,
+          "column": 7,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/catalog.ts:getCurrentOwnerPublicCatalog",
+          "file": "convex/catalog.ts",
+          "line": 96,
+          "column": 14,
+          "via": "function_reference"
+        },
+        {
+          "ref": "convex/catalogPublicReads.ts:getCurrentOwnerPublicCatalogHandler",
+          "file": "convex/catalogPublicReads.ts",
+          "line": 226,
+          "column": 1,
+          "via": "call"
+        },
+        {
+          "ref": "convex/authz.ts:resolveBusinessActor",
+          "file": "convex/authz.ts",
+          "line": 42,
+          "column": 1,
+          "via": "call"
+        }
+      ]
+    },
+    {
+      "ref": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer",
+      "kind": "server_function",
+      "file": "src/lib/server/owner-status.functions.ts",
+      "symbol": "readPublicBusinessPageServer",
+      "registrar": "createServerFn",
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "sha256": "29a1b64868934b3e81f0b89a1246fe874b4085b607308a54b4b6151b578584ea",
+      "declaration": {
+        "file": "src/lib/server/owner-status.functions.ts",
+        "symbol": "readPublicBusinessPageServer",
+        "line": 41,
+        "column": 14,
+        "sha256": "31b9de1384d3f1d608ba86ecf0f829236d5490fa8ff2a613401d741c5775c052"
+      },
+      "status": "bound",
+      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug",
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug",
+        "sourceRef": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer",
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
+      }
+    },
+    {
+      "ref": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer",
+      "kind": "server_function",
+      "file": "src/lib/server/public-business-route.functions.ts",
+      "symbol": "readPublicBusinessRouteServer",
+      "registrar": "createServerFn",
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "sha256": "d25ab8e2f8fb511278fe9bb647c1e7e13ec36d1532139e472e593a9a24623748",
+      "declaration": {
+        "file": "src/lib/server/public-business-route.functions.ts",
+        "symbol": "readPublicBusinessRouteServer",
+        "line": 27,
+        "column": 14,
+        "sha256": "a1202d6a90993215388995f0dc1b4be694f1634da7403b8afaec5f90cf306d31"
+      },
+      "status": "bound",
+      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect",
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect",
+        "sourceRef": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer",
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
+      }
+    },
+    {
+      "ref": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer",
+      "kind": "server_function",
+      "file": "src/lib/server/require-operator-session.ts",
+      "symbol": "admitOperatorSessionServer",
+      "registrar": "createServerFn",
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "sha256": "f432a9da91b9707ad751290278f7d435155455b1e1fb86570abcec43387adef3",
+      "declaration": {
+        "file": "src/lib/server/require-operator-session.ts",
+        "symbol": "admitOperatorSessionServer",
+        "line": 10,
+        "column": 7,
+        "sha256": "5b7aa9fb4bfd33fb616bc75e26a46eaa1dd17666e36429b995ec14342839cfe5"
+      },
+      "status": "bound",
+      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
+        "sourceRef": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer",
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
+      }
+    },
+    {
+      "ref": "src/lib/server/supply-landing.functions.ts:loadSupplyLandingReadbackServer",
+      "kind": "server_function",
+      "file": "src/lib/server/supply-landing.functions.ts",
+      "symbol": "loadSupplyLandingReadbackServer",
+      "registrar": "createServerFn",
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "sha256": "8a4662cfd21cd2f99cccfaeab8f8e4fcba32f05e83beb76333c0e82754fa0f89",
+      "declaration": {
+        "file": "src/lib/server/supply-landing.functions.ts",
+        "symbol": "loadSupplyLandingReadbackServer",
+        "line": 7,
+        "column": 14,
+        "sha256": "2ce9b0f77dbd344935487589c16a82f2f52c6e6f7c2ba833afd3ef6683be4801"
+      },
+      "status": "bound",
+      "marker": "tested_exemption:tests/unit/capability-supply/supply-landing-authority.test.ts:loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections",
+      "exemption": {
+        "testFile": "tests/unit/capability-supply/supply-landing-authority.test.ts",
+        "testName": "loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections",
+        "sourceRef": "src/lib/server/supply-landing.functions.ts:loadSupplyLandingReadbackServer",
+        "sha256": "c1fe683c765ba9b70d57841ec770167beaf85d3001343741fb7f659156f88ec8"
+      }
     },
     {
       "ref": "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer",
@@ -873,11 +1012,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "admitOwnerCapabilityServer",
-        "line": 123,
+        "line": 120,
         "column": 14,
         "sha256": "27aecc52082692ab5e6a5a52de1a516aa9c8bfc3e6f3ac9f2c66c9220e217748"
       },
@@ -888,7 +1027,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:admitOwnerCapabilityServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 123,
+          "line": 120,
           "column": 14,
           "via": "declaration"
         },
@@ -937,11 +1076,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "connectOwnerX402Server",
-        "line": 85,
+        "line": 82,
         "column": 14,
         "sha256": "893ebe43af8370925c6f4b62b951d0202b9b823b2087dabcaa1040f2dc2f8471"
       },
@@ -952,7 +1091,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:connectOwnerX402Server",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 85,
+          "line": 82,
           "column": 14,
           "via": "declaration"
         },
@@ -1001,31 +1140,6 @@
       ]
     },
     {
-      "ref": "src/modules/capability-supply/supply-funnel.functions.ts:loadSupplyLandingReadbackServer",
-      "kind": "server_function",
-      "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-      "symbol": "loadSupplyLandingReadbackServer",
-      "registrar": "createServerFn",
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
-      "declaration": {
-        "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-        "symbol": "loadSupplyLandingReadbackServer",
-        "line": 73,
-        "column": 14,
-        "sha256": "aafed9fd54e97b0a9891a69fb1b3dd752e6e03403ac30fdc1f7610eeb13812de"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/unit/capability-supply/supply-landing-authority.test.ts:loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections",
-      "exemption": {
-        "testFile": "tests/unit/capability-supply/supply-landing-authority.test.ts",
-        "testName": "loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections",
-        "sourceRef": "src/modules/capability-supply/supply-funnel.functions.ts:loadSupplyLandingReadbackServer",
-        "sha256": "b23713c23202d8e21cbffa74f4b31b5f9a8060dad6448d852577eade9db4fcc7"
-      }
-    },
-    {
       "ref": "src/modules/capability-supply/supply-funnel.functions.ts:preflightOwnerCapabilityServer",
       "kind": "server_function",
       "file": "src/modules/capability-supply/supply-funnel.functions.ts",
@@ -1033,11 +1147,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "preflightOwnerCapabilityServer",
-        "line": 119,
+        "line": 116,
         "column": 14,
         "sha256": "530e730dacc56010487e27cbe096ddfd4237595457ce80b7b9e457784dae1ce5"
       },
@@ -1048,7 +1162,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:preflightOwnerCapabilityServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 119,
+          "line": 116,
           "column": 14,
           "via": "declaration"
         },
@@ -1104,11 +1218,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "preflightOwnerOpenApiDocumentServer",
-        "line": 113,
+        "line": 110,
         "column": 14,
         "sha256": "5a57db709fc74b1219ca2bbcae9e710acaa0c1389ff850ecbffa5e4034ba5614"
       },
@@ -1119,7 +1233,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:preflightOwnerOpenApiDocumentServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 113,
+          "line": 110,
           "column": 14,
           "via": "declaration"
         },
@@ -1168,11 +1282,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "readOwnerProviderConnectionsServer",
-        "line": 81,
+        "line": 78,
         "column": 14,
         "sha256": "ea766674bfd3d2c5cbd858db127793dbb6c2ebc8c616df108a2cf4283e4a57a8"
       },
@@ -1183,7 +1297,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderConnectionsServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 81,
+          "line": 78,
           "column": 14,
           "via": "declaration"
         },
@@ -1232,11 +1346,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "readOwnerProviderEarningsServer",
-        "line": 109,
+        "line": 106,
         "column": 14,
         "sha256": "ef1023a00f0d9d89a5c4f96b4124724b22bb26c4d8c75140a7089814e6a1c791"
       },
@@ -1247,7 +1361,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderEarningsServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 109,
+          "line": 106,
           "column": 14,
           "via": "declaration"
         },
@@ -1296,11 +1410,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "readOwnerSupplyFunnelServer",
-        "line": 77,
+        "line": 74,
         "column": 14,
         "sha256": "9fd9d0d223e716f0c4fd66f90cccd05e6251a2b02e11e490bf1815f85579a8a3"
       },
@@ -1311,7 +1425,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerSupplyFunnelServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 77,
+          "line": 74,
           "column": 14,
           "via": "declaration"
         },
@@ -1360,11 +1474,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "recheckOwnerCapabilityServer",
-        "line": 135,
+        "line": 132,
         "column": 14,
         "sha256": "84b98e81f9abf0526cba1992017f7e938bc1d04c0810a34e8aa72a8baab07f69"
       },
@@ -1375,7 +1489,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:recheckOwnerCapabilityServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 135,
+          "line": 132,
           "column": 14,
           "via": "declaration"
         },
@@ -1431,11 +1545,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "reconnectOwnerProviderConnectionServer",
-        "line": 89,
+        "line": 86,
         "column": 14,
         "sha256": "88238788f8d884b6426cae0fd136484239fd14aeeadcf82d5afe8113692e29ae"
       },
@@ -1446,7 +1560,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:reconnectOwnerProviderConnectionServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 89,
+          "line": 86,
           "column": 14,
           "via": "declaration"
         },
@@ -1509,11 +1623,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "republishOwnerCapabilityServer",
-        "line": 143,
+        "line": 140,
         "column": 14,
         "sha256": "3653b13e6b80db53aa6d235ad9b6b2594db3e70b713d67a631ea56bf239231a4"
       },
@@ -1524,7 +1638,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:republishOwnerCapabilityServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 143,
+          "line": 140,
           "column": 14,
           "via": "declaration"
         },
@@ -1573,11 +1687,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "retryOwnerProviderConnectionCleanupServer",
-        "line": 101,
+        "line": 98,
         "column": 14,
         "sha256": "73f4bdbbac2efbc608867cdeacf0f00fe5a7222c7791b13b8183e847f7cf216c"
       },
@@ -1588,7 +1702,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:retryOwnerProviderConnectionCleanupServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 101,
+          "line": 98,
           "column": 14,
           "via": "declaration"
         },
@@ -1644,11 +1758,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "revokeOwnerProviderConnectionServer",
-        "line": 95,
+        "line": 92,
         "column": 14,
         "sha256": "56d3933b0c8b55022c63607e42bcdd5a8a84fef56b1039f3afd750b51eefcf8e"
       },
@@ -1659,7 +1773,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:revokeOwnerProviderConnectionServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 95,
+          "line": 92,
           "column": 14,
           "via": "declaration"
         },
@@ -1715,11 +1829,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "runOwnerSupplyReadinessServer",
-        "line": 127,
+        "line": 124,
         "column": 14,
         "sha256": "f8c8a272edef2dda842a24b7acd20b9c8cc94322e08835b2e946a9aa912ae586"
       },
@@ -1730,7 +1844,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:runOwnerSupplyReadinessServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 127,
+          "line": 124,
           "column": 14,
           "via": "declaration"
         },
@@ -1779,11 +1893,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "runOwnerSupplyTestServer",
-        "line": 131,
+        "line": 128,
         "column": 14,
         "sha256": "87cd4128f246990ae53a75783ca77cdc37d9fd1080cfdab0eccd3e8c23318bbc"
       },
@@ -1794,7 +1908,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:runOwnerSupplyTestServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 131,
+          "line": 128,
           "column": 14,
           "via": "declaration"
         },
@@ -1843,11 +1957,11 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "c6ecb2c261222df1981511590d13db674d47c1bb8a9953f3a0fceb4fa57bdd31",
+      "sha256": "49aec20e7fbacbfe0416ad168b298d39e1b6c24d96b7239646de801a4851b502",
       "declaration": {
         "file": "src/modules/capability-supply/supply-funnel.functions.ts",
         "symbol": "withdrawOwnerCapabilityServer",
-        "line": 139,
+        "line": 136,
         "column": 14,
         "sha256": "a63a69c5ddfc600e376530cdca243378f45ca680e7247674c9708f0de41133e7"
       },
@@ -1858,7 +1972,7 @@
         {
           "ref": "src/modules/capability-supply/supply-funnel.functions.ts:withdrawOwnerCapabilityServer",
           "file": "src/modules/capability-supply/supply-funnel.functions.ts",
-          "line": 139,
+          "line": 136,
           "column": 14,
           "via": "declaration"
         },
@@ -1907,120 +2021,6 @@
       ]
     },
     {
-      "ref": "src/modules/catalog/owner-status.functions.ts:readOwnerStatusServer",
-      "kind": "server_function",
-      "file": "src/modules/catalog/owner-status.functions.ts",
-      "symbol": "readOwnerStatusServer",
-      "registrar": "createServerFn",
-      "binding": "interactive_account",
-      "consequential": true,
-      "sha256": "e5f67c7e70eabd9f436b95f1071974bc5d8717531b22cb28fc630cbf6767b4b9",
-      "declaration": {
-        "file": "src/modules/catalog/owner-status.functions.ts",
-        "symbol": "readOwnerStatusServer",
-        "line": 38,
-        "column": 14,
-        "sha256": "4fa560abddaa9598cc4aa30bc7d181ae94940b656676ca63398124860aea5553"
-      },
-      "status": "bound",
-      "marker": "transitive_authority_path:src/modules/catalog/owner-status.functions.ts:readOwnerStatusServer=>convex/authz.ts:resolveBusinessActor",
-      "authoritySink": "convex/authz.ts:resolveBusinessActor",
-      "authorityPath": [
-        {
-          "ref": "src/modules/catalog/owner-status.functions.ts:readOwnerStatusServer",
-          "file": "src/modules/catalog/owner-status.functions.ts",
-          "line": 38,
-          "column": 14,
-          "via": "declaration"
-        },
-        {
-          "ref": "src/modules/catalog/owner-status.functions.ts:readOwnerStatusThroughSource",
-          "file": "src/modules/catalog/owner-status.functions.ts",
-          "line": 46,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "src/modules/catalog/owner-status.functions.ts:currentOwnerCatalogQuery",
-          "file": "src/modules/catalog/owner-status.functions.ts",
-          "line": 34,
-          "column": 7,
-          "via": "function_reference"
-        },
-        {
-          "ref": "convex/catalog.ts:getCurrentOwnerPublicCatalog",
-          "file": "convex/catalog.ts",
-          "line": 96,
-          "column": 14,
-          "via": "function_reference"
-        },
-        {
-          "ref": "convex/catalogPublicReads.ts:getCurrentOwnerPublicCatalogHandler",
-          "file": "convex/catalogPublicReads.ts",
-          "line": 226,
-          "column": 1,
-          "via": "call"
-        },
-        {
-          "ref": "convex/authz.ts:resolveBusinessActor",
-          "file": "convex/authz.ts",
-          "line": 42,
-          "column": 1,
-          "via": "call"
-        }
-      ]
-    },
-    {
-      "ref": "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer",
-      "kind": "server_function",
-      "file": "src/modules/catalog/owner-status.functions.ts",
-      "symbol": "readPublicBusinessPageServer",
-      "registrar": "createServerFn",
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "sha256": "e5f67c7e70eabd9f436b95f1071974bc5d8717531b22cb28fc630cbf6767b4b9",
-      "declaration": {
-        "file": "src/modules/catalog/owner-status.functions.ts",
-        "symbol": "readPublicBusinessPageServer",
-        "line": 42,
-        "column": 14,
-        "sha256": "31b9de1384d3f1d608ba86ecf0f829236d5490fa8ff2a613401d741c5775c052"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug",
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug",
-        "sourceRef": "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
-      }
-    },
-    {
-      "ref": "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer",
-      "kind": "server_function",
-      "file": "src/modules/catalog/public-route.functions.ts",
-      "symbol": "readPublicBusinessRouteServer",
-      "registrar": "createServerFn",
-      "binding": "public_non_consequential",
-      "consequential": false,
-      "sha256": "732521d3b87f271c25def6216293d70c9222de96c9f93dd87cf4ac7d351d8981",
-      "declaration": {
-        "file": "src/modules/catalog/public-route.functions.ts",
-        "symbol": "readPublicBusinessRouteServer",
-        "line": 27,
-        "column": 14,
-        "sha256": "965beb49b9a2c36a40c90dd1e31448870c94d3edb88e361f5b3a2df24cc29aec"
-      },
-      "status": "bound",
-      "marker": "tested_exemption:tests/maturity/phase-2-public-exemptions.test.ts:src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect",
-      "exemption": {
-        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect",
-        "sourceRef": "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
-      }
-    },
-    {
       "ref": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer",
       "kind": "server_function",
       "file": "src/modules/discovery/developer-discovery-route.ts",
@@ -2042,7 +2042,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer fixes its public request context instead of accepting caller authority",
         "sourceRef": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -2067,7 +2067,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/market/market.functions.ts:readMarketRouteServer passes only bounded public filters and performs no consequence",
         "sourceRef": "src/modules/market/market.functions.ts:readMarketRouteServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -2078,7 +2078,7 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "a95f9b76d15856c21471f22cd72dddeea71122bcd2ba24fd9520036353d98ff3",
+      "sha256": "b58938435bb37ef76a1cfd88a59ae9ae2d9d3de6306641428d26cb9f050cf23b",
       "declaration": {
         "file": "src/modules/money/internal/credit-topup-http.ts",
         "symbol": "beginCreditTopupServer",
@@ -2142,7 +2142,7 @@
       "registrar": "createServerFn",
       "binding": "interactive_account",
       "consequential": true,
-      "sha256": "a95f9b76d15856c21471f22cd72dddeea71122bcd2ba24fd9520036353d98ff3",
+      "sha256": "b58938435bb37ef76a1cfd88a59ae9ae2d9d3de6306641428d26cb9f050cf23b",
       "declaration": {
         "file": "src/modules/money/internal/credit-topup-http.ts",
         "symbol": "readCreditPaymentServer",
@@ -2242,14 +2242,14 @@
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusiness",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 116,
+          "line": 130,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusinessQuery",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 61,
+          "line": 75,
           "column": 14,
           "via": "function_reference"
         },
@@ -2441,14 +2441,14 @@
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusiness",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 116,
+          "line": 130,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusinessQuery",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 61,
+          "line": 75,
           "column": 14,
           "via": "function_reference"
         },
@@ -2576,14 +2576,14 @@
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusiness",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 116,
+          "line": 130,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/money/internal/payout-http-runtime.ts:ownerBusinessQuery",
           "file": "src/modules/money/internal/payout-http-runtime.ts",
-          "line": 61,
+          "line": 75,
           "column": 14,
           "via": "function_reference"
         },
@@ -2657,7 +2657,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer treats the operation ref as lookup data, never authority",
         "sourceRef": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -2824,7 +2824,7 @@
       "registrar": "createServerFn",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "35c180842203ce7daf409154d4a98dde4a20105069ca1ace5ab05b02e79d6466",
+      "sha256": "a915461fd077e4d989ddbadcaf0d3e38622dad9bf197710a0b00005c0bb6bc09",
       "declaration": {
         "file": "src/routes/privacy.remove-business.tsx",
         "symbol": "openRemovalServer",
@@ -2846,14 +2846,14 @@
         {
           "ref": "src/modules/security/removal-dispute.functions.ts:openRemovalDisputeThroughSource",
           "file": "src/modules/security/removal-dispute.functions.ts",
-          "line": 60,
+          "line": 59,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/modules/security/removal-dispute.functions.ts:openRemovalDisputeMutation",
           "file": "src/modules/security/removal-dispute.functions.ts",
-          "line": 56,
+          "line": 55,
           "column": 7,
           "via": "function_reference"
         },
@@ -3205,7 +3205,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps OAuth client metadata public while grants remain source-admitted",
         "sourceRef": "convex/agentAccessOAuth.ts:getClient",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4717,11 +4717,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "compare",
-        "line": 42,
+        "line": 64,
         "column": 14,
         "sha256": "f61757c76df1bfc68246d61545304893b2a8d9d719bc70ea706e3fa034dbe442"
       },
@@ -4731,7 +4731,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:compare",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4742,11 +4742,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "detail",
-        "line": 37,
+        "line": 59,
         "column": 14,
         "sha256": "1df678635eab3a70397ffc752d6d5282e614dd1024ef09c854359d691e23dd58"
       },
@@ -4756,7 +4756,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:detail",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4767,11 +4767,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "inspectPlan",
-        "line": 47,
+        "line": 69,
         "column": 14,
         "sha256": "e659c8ad24647df5a2ba74fff541b3a346e67b1b895d0f7e4aa36ee28d38e9da"
       },
@@ -4781,7 +4781,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:inspectPlan",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4792,11 +4792,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "listKeylessExecutable",
-        "line": 70,
+        "line": 167,
         "column": 14,
         "sha256": "977ca420123e8ce1bbca2ad019ba3bac50cce436eddeed5ad12a2d12bec8b42d"
       },
@@ -4806,7 +4806,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:listKeylessExecutable",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4817,11 +4817,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "offeringOperationMap",
-        "line": 53,
+        "line": 75,
         "column": 14,
         "sha256": "4ce8f13a28b0051377df91edb52ecedaead5d7394ff927961f8a88f023ee8fea"
       },
@@ -4831,7 +4831,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "keeps public operation projections identity-invariant and consequence-free",
         "sourceRef": "convex/capabilitySupplyOperations.ts:offeringOperationMap",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -4842,11 +4842,11 @@
       "registrar": "queryGeneric",
       "binding": "signed_callback",
       "consequential": true,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "readKeylessExecutable",
-        "line": 64,
+        "line": 161,
         "column": 14,
         "sha256": "ea320168155198df77c27840e17d51a5ebac852433d160f312b24966f6ee3f1c"
       },
@@ -4857,21 +4857,21 @@
         {
           "ref": "convex/capabilitySupplyOperations.ts:readKeylessExecutable",
           "file": "convex/capabilitySupplyOperations.ts",
-          "line": 64,
+          "line": 161,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilitySupplyOperationKeyless.ts:readKeylessExecutableHandler",
           "file": "convex/capabilitySupplyOperationKeyless.ts",
-          "line": 359,
+          "line": 363,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilitySupplyOperationKeyless.ts:serverFunctionAuthorized",
           "file": "convex/capabilitySupplyOperationKeyless.ts",
-          "line": 333,
+          "line": 337,
           "column": 1,
           "via": "call"
         },
@@ -4892,11 +4892,11 @@
       "registrar": "queryGeneric",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "ec7dccbc69413309959bd8ccc913049901bc226dfbcae6aad54bdf72bb1bc968",
+      "sha256": "dcc102c802e1234a261893231752560298e747ec930f8c3f7a3d5c937253cfe7",
       "declaration": {
         "file": "convex/capabilitySupplyOperations.ts",
         "symbol": "search",
-        "line": 32,
+        "line": 54,
         "column": 14,
         "sha256": "21ba4d5dfc9913720403bd06179a90bfe006771b9a06ba2bbdb8c2a539f2529a"
       },
@@ -4906,7 +4906,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/capabilitySupplyOperations.ts:search is identity-invariant, bounded, and cannot disclose cross-account private state",
         "sourceRef": "convex/capabilitySupplyOperations.ts:search",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -5475,7 +5475,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/catalog.ts:getPublicBusinessCatalogBySlug denies unpublished cross-account rows without trusting caller identity",
         "sourceRef": "convex/catalog.ts:getPublicBusinessCatalogBySlug",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -6342,7 +6342,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/discovery.ts:readDiscoveryBusinessSlugPage returns only public offering slugs and no cross-account private detail",
         "sourceRef": "convex/discovery.ts:readDiscoveryBusinessSlugPage",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -6414,11 +6414,11 @@
       "registrar": "query",
       "binding": "public_non_consequential",
       "consequential": false,
-      "sha256": "a9a1f3554570338f9a4da6a94c1bc331ed4e9daae916e92cf5151674ddbca671",
+      "sha256": "ffa5483bbb5df7772854d2085081741784fc761ab42463874aca3914da1542a3",
       "declaration": {
         "file": "convex/marketExternalRegistry.ts",
         "symbol": "search",
-        "line": 390,
+        "line": 410,
         "column": 14,
         "sha256": "2e61e6d0a5f8f2569a3ab7fc690e198f53433f23a0630e84cc1cc34fbdd27fb4"
       },
@@ -6428,7 +6428,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketExternalRegistry.ts:search exposes source metadata only and is invariant across caller identities",
         "sourceRef": "convex/marketExternalRegistry.ts:search",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -6453,7 +6453,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketExternalSnapshots.ts:read returns aggregate public evidence without account-scoped disclosure or writes",
         "sourceRef": "convex/marketExternalSnapshots.ts:read",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -6514,7 +6514,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/marketListingEvidence.ts:read returns bounded public operation evidence and ignores caller-shaped identity",
         "sourceRef": "convex/marketListingEvidence.ts:read",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -6810,7 +6810,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect",
         "sourceRef": "convex/moneyLedger.ts:finalizeConnectAccount",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -7493,7 +7493,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect",
         "sourceRef": "convex/moneyLedger.ts:reserveConnectAccount",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -8128,7 +8128,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
         "sourceRef": "convex/chatAnonymous.ts:anonymousChat",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       }
     },
     {
@@ -8427,7 +8427,7 @@
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
         "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers",
         "sourceRef": "convex_http_route:POST /chat/anonymous",
-        "sha256": "1d5720f20498a27324a7766fce73e98b628193d1f365aad4cb85de4d8f1ca43e"
+        "sha256": "3383ca2e77c5b68ffb2e5e4f50fec32563aa5a7d5dc1a720102d8932b8d6a44b"
       },
       "handlerRef": "convex/chatAnonymous.ts:anonymousChat",
       "method": "POST",
@@ -9064,7 +9064,7 @@
         {
           "ref": "convex/marketExternalRegistryRefresh.ts:run",
           "file": "convex/marketExternalRegistryRefresh.ts",
-          "line": 23,
+          "line": 27,
           "column": 14,
           "via": "function_reference"
         },
@@ -9919,7 +9919,7 @@
       "registrar": "job",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "30d138b5c5bf75f2b894b106273f1a6f03ace6c9c851693e3ca088709eb0c033",
+      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "reconcileScheduled",
@@ -10113,13 +10113,13 @@
       "registrar": "job",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "c6b4936c4416fc091371fb915c900842d02a9568abccc776b3ae7b0911f47586",
+      "sha256": "b113453c3ebf7b651bc037079daaa747668919d48bd3dd2ac36697ef92b6dc39",
       "declaration": {
         "file": "convex/marketExternalRegistryRefresh.ts",
         "symbol": "run",
-        "line": 23,
+        "line": 27,
         "column": 14,
-        "sha256": "58fc7e00423fbeb5fe1f077f0fc1fb3d5df20bec4bca5e19d05127de62a93467"
+        "sha256": "c0d86ae791903bd5eebef15eae9d3905586945a2818b333b189270199c1e2485"
       },
       "status": "bound",
       "marker": "transitive_authority_path:job:convex/marketExternalRegistryRefresh.ts:run=>convex/workloadCron.ts:bindWorkloadCronActionContext",
@@ -10128,7 +10128,7 @@
         {
           "ref": "job:convex/marketExternalRegistryRefresh.ts:run",
           "file": "convex/marketExternalRegistryRefresh.ts",
-          "line": 23,
+          "line": 27,
           "column": 14,
           "via": "declaration"
         },
@@ -10477,7 +10477,7 @@
       "registrar": "reconciliation",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "30d138b5c5bf75f2b894b106273f1a6f03ace6c9c851693e3ca088709eb0c033",
+      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "reconcileScheduled",
@@ -11060,14 +11060,14 @@
         {
           "ref": "src/lib/server/operation-invoke-api.ts:handleOperationInvokeReconcilePost",
           "file": "src/lib/server/operation-invoke-api.ts",
-          "line": 632,
+          "line": 628,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "src/lib/server/operation-invoke-api.ts:authenticateOperationGateway",
           "file": "src/lib/server/operation-invoke-api.ts",
-          "line": 338,
+          "line": 334,
           "column": 1,
           "via": "call"
         },
@@ -11118,7 +11118,7 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "30d138b5c5bf75f2b894b106273f1a6f03ace6c9c851693e3ca088709eb0c033",
+      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "recover",
@@ -11170,37 +11170,37 @@
       "callSites": [
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 408,
+          "line": 412,
           "column": 24,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 429,
+          "line": 437,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 450,
+          "line": 462,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 465,
+          "line": 477,
           "column": 24,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 497,
+          "line": 509,
           "column": 16,
           "expression": "ctx.runAction"
         },
         {
           "file": "convex/capabilityOperationInvokeActions.ts",
-          "line": 512,
+          "line": 524,
           "column": 16,
           "expression": "ctx.runAction"
         }
@@ -11214,11 +11214,11 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b143d92b35eb55e0ebc05cb3ab337ddf5abecb0f8dcd2fd7114bf3e4afd9d958",
+      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probe",
-        "line": 195,
+        "line": 261,
         "column": 14,
         "sha256": "0c8687288d66f60667fac897416b747dceade3e961b7be3ba7def9a1a232c939"
       },
@@ -11229,14 +11229,14 @@
         {
           "ref": "run_action:convex/capabilitySupplyReadiness.ts:probe",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 195,
+          "line": 261,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilitySupplyReadiness.ts:probeHandler",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 114,
+          "line": 163,
           "column": 1,
           "via": "call"
         },
@@ -11250,14 +11250,14 @@
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCapabilityProbeTargetHandler",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 427,
+          "line": 433,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 84,
+          "line": 85,
           "column": 1,
           "via": "call"
         }
@@ -11383,13 +11383,13 @@
       "registrar": "run_action",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "59d96b66414beeb18d8c7666bb34349a0a2cf06169a3cfaf950208d0c1af0253",
+      "sha256": "c598a10b1b54e8459c2e73435bc5a05e06d531c87d59ba8967d8ed4b25505ed6",
       "declaration": {
         "file": "convex/marketRegistryGraduation.ts",
         "symbol": "run",
-        "line": 44,
+        "line": 52,
         "column": 14,
-        "sha256": "947437874f1a345a885283ac26487121317cc17b43c43d598e6d12ce17ef270a"
+        "sha256": "03ba19d2771242c77c75f62e539f459c7ce1230a980c2b4aba58f98e28df8a9a"
       },
       "status": "bound",
       "marker": "transitive_authority_path:run_action:convex/marketRegistryGraduation.ts:run=>convex/workloadCron.ts:bindWorkloadCronActionContext",
@@ -11398,7 +11398,7 @@
         {
           "ref": "run_action:convex/marketRegistryGraduation.ts:run",
           "file": "convex/marketRegistryGraduation.ts",
-          "line": 44,
+          "line": 52,
           "column": 14,
           "via": "declaration"
         },
@@ -11414,8 +11414,8 @@
       "callSites": [
         {
           "file": "convex/marketRegistryGraduation.ts",
-          "line": 146,
-          "column": 46,
+          "line": 175,
+          "column": 24,
           "expression": "ctx.runAction"
         }
       ]
@@ -11487,11 +11487,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b143d92b35eb55e0ebc05cb3ab337ddf5abecb0f8dcd2fd7114bf3e4afd9d958",
+      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probe",
-        "line": 195,
+        "line": 261,
         "column": 14,
         "sha256": "0c8687288d66f60667fac897416b747dceade3e961b7be3ba7def9a1a232c939"
       },
@@ -11502,14 +11502,14 @@
         {
           "ref": "scheduler:convex/capabilitySupplyReadiness.ts:probe",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 195,
+          "line": 261,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilitySupplyReadiness.ts:probeHandler",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 114,
+          "line": 163,
           "column": 1,
           "via": "call"
         },
@@ -11523,14 +11523,14 @@
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCapabilityProbeTargetHandler",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 427,
+          "line": 433,
           "column": 1,
           "via": "call"
         },
         {
           "ref": "convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority",
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 84,
+          "line": 85,
           "column": 1,
           "via": "call"
         }
@@ -11539,7 +11539,7 @@
       "callSites": [
         {
           "file": "convex/capabilitySupplyPublicationPorts.ts",
-          "line": 164,
+          "line": 180,
           "column": 13,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11553,11 +11553,11 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "b143d92b35eb55e0ebc05cb3ab337ddf5abecb0f8dcd2fd7114bf3e4afd9d958",
+      "sha256": "8378264e71ce3100dc644da8aaaf3992759bb6cab781e8a3cac099d3edaa49da",
       "declaration": {
         "file": "convex/capabilitySupplyReadiness.ts",
         "symbol": "probeFromCron",
-        "line": 201,
+        "line": 267,
         "column": 14,
         "sha256": "d9c0b0bb9c31523f834ea1150920f1a73f5802358b782d7f7b885d2888e0f2da"
       },
@@ -11568,14 +11568,14 @@
         {
           "ref": "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 201,
+          "line": 267,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/capabilitySupplyReadiness.ts:probeFromCronHandler",
           "file": "convex/capabilitySupplyReadiness.ts",
-          "line": 180,
+          "line": 246,
           "column": 1,
           "via": "call"
         },
@@ -11591,7 +11591,7 @@
       "callSites": [
         {
           "file": "convex/capabilitySupplyProbes.ts",
-          "line": 596,
+          "line": 608,
           "column": 7,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11736,11 +11736,11 @@
       "registrar": "scheduler",
       "binding": "narrow_system_non_consequential",
       "consequential": false,
-      "sha256": "a9a1f3554570338f9a4da6a94c1bc331ed4e9daae916e92cf5151674ddbca671",
+      "sha256": "ffa5483bbb5df7772854d2085081741784fc761ab42463874aca3914da1542a3",
       "declaration": {
         "file": "convex/marketExternalRegistry.ts",
         "symbol": "deleteGenerationBatch",
-        "line": 360,
+        "line": 380,
         "column": 14,
         "sha256": "8d7d66893717d4c68ad48417802e068bb3e871ce46f8902e80e186cccb03771d"
       },
@@ -11756,7 +11756,7 @@
       "callSites": [
         {
           "file": "convex/marketExternalRegistry.ts",
-          "line": 635,
+          "line": 665,
           "column": 9,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -11770,13 +11770,13 @@
       "registrar": "scheduler",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "59d96b66414beeb18d8c7666bb34349a0a2cf06169a3cfaf950208d0c1af0253",
+      "sha256": "c598a10b1b54e8459c2e73435bc5a05e06d531c87d59ba8967d8ed4b25505ed6",
       "declaration": {
         "file": "convex/marketRegistryGraduation.ts",
         "symbol": "sweep",
-        "line": 117,
+        "line": 135,
         "column": 14,
-        "sha256": "19b5929f51c7afdd9b0ae444f517687297d7a35e65d7d9e214969d54f95da652"
+        "sha256": "a4e9aa07b691bbc22b878c8f6302e2930e705e0d2a2036684d00e9ae44a3f7d3"
       },
       "status": "bound",
       "marker": "transitive_authority_path:scheduler:convex/marketRegistryGraduation.ts:sweep=>convex/workloadCron.ts:bindWorkloadCronActionContext",
@@ -11785,14 +11785,14 @@
         {
           "ref": "scheduler:convex/marketRegistryGraduation.ts:sweep",
           "file": "convex/marketRegistryGraduation.ts",
-          "line": 117,
+          "line": 135,
           "column": 14,
           "via": "declaration"
         },
         {
           "ref": "convex/marketRegistryGraduation.ts:run",
           "file": "convex/marketRegistryGraduation.ts",
-          "line": 44,
+          "line": 52,
           "column": 14,
           "via": "function_reference"
         },
@@ -11808,13 +11808,19 @@
       "callSites": [
         {
           "file": "convex/marketExternalRegistryRefresh.ts",
-          "line": 101,
+          "line": 111,
+          "column": 15,
+          "expression": "ctx.scheduler.runAfter"
+        },
+        {
+          "file": "convex/marketRegistryGraduation.ts",
+          "line": 200,
           "column": 13,
           "expression": "ctx.scheduler.runAfter"
         },
         {
           "file": "convex/marketRegistryGraduation.ts",
-          "line": 157,
+          "line": 207,
           "column": 13,
           "expression": "ctx.scheduler.runAfter"
         }
@@ -12064,7 +12070,7 @@
       "registrar": "workpool",
       "binding": "workload_account",
       "consequential": true,
-      "sha256": "30d138b5c5bf75f2b894b106273f1a6f03ace6c9c851693e3ca088709eb0c033",
+      "sha256": "e6a7c9641d45f61be9ca0c9a3144d1ec71288734e5d61a18d8ee4794792ac18e",
       "declaration": {
         "file": "convex/capabilityOperationInvocationWorker.ts",
         "symbol": "run",
@@ -12199,7 +12205,7 @@
       "scheduler",
       "workpool"
     ],
-    "callSiteCount": 59
+    "callSiteCount": 60
   },
   "blockedByKind": {
     "callback": 0,

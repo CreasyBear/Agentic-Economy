@@ -175,7 +175,7 @@ describe('Phase 2 public server read exemptions', () => {
     expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
   })
 
-  it('src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug', async () => {
+  it('src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug', async () => {
     const result = await readPublicBusinessPageServer({ data: { slug: 'cross-account-private' } })
 
     expect(result).toEqual({ kind: 'available', catalog: publicCatalog })
@@ -187,7 +187,7 @@ describe('Phase 2 public server read exemptions', () => {
     expect(serverMocks.callSourceMutation).not.toHaveBeenCalled()
   })
 
-  it('src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect', async () => {
+  it('src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect', async () => {
     const result = await readPublicBusinessRouteServer({ data: { slug: 'cross-account-private' } })
 
     expect(result).toEqual({ kind: 'not_found', reason: 'not_public' })

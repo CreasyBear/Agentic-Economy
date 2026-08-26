@@ -26,7 +26,7 @@
           "testSymbol": "requireOperatorBeforeLoad"
         }
       },
-    "src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer": {
+    "src/lib/server/agent-access-console.functions.ts:readAgentAccessConsoleServer": {
       "binding": "interactive_account",
       "consequential": true
     },
@@ -70,7 +70,7 @@
       "binding": "interactive_account",
       "consequential": true
     },
-    "src/modules/capability-supply/supply-funnel.functions.ts:loadSupplyLandingReadbackServer": {
+    "src/lib/server/supply-landing.functions.ts:loadSupplyLandingReadbackServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
@@ -130,24 +130,24 @@
       "binding": "interactive_account",
       "consequential": true
     },
-    "src/modules/catalog/owner-status.functions.ts:readOwnerStatusServer": {
+    "src/lib/server/owner-status.functions.ts:readOwnerStatusServer": {
       "binding": "interactive_account",
       "consequential": true
     },
-    "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer": {
+    "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug"
+        "testName": "src/lib/server/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug"
       }
     },
-    "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer": {
+    "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer": {
       "binding": "public_non_consequential",
       "consequential": false,
       "exemption": {
         "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
-        "testName": "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect"
+        "testName": "src/lib/server/public-business-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect"
       }
     },
     "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer": {

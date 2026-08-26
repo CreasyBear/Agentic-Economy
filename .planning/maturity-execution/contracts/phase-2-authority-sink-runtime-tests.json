@@ -1,6 +1,6 @@
 {
   "format": "phase-2-authority-sink-runtime-tests:v2",
-  "inventorySha256": "c8bd3f987e02923f55966f1fc3000148dc8efdfacc9e4016532f1ad11784f16e",
+  "inventorySha256": "51f651e05c992ff095c53c051ce6bf4ddb9f729906411e46bcdef2a8f830aa46",
   "rows": {
     "convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal": {
       "status": "covered",
@@ -276,7 +276,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "a636da7d9e532eaa6719d248049b05f8ad70d3741440a59468c56ba0cd08d10d"
+      "authorityPathSha256": "421586d6624ab93bd463ac3539a8893e3091ccf1f7a8f409063e62a038f036db"
     },
     "convex/catalogOfferingMutations.ts:admitDevSeedCatalogAuthority": {
       "status": "covered",
@@ -552,7 +552,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "3245d910409998356b1a59109cad4fb6c844224520238376e13c884dd4a4fe3f"
+      "authorityPathSha256": "6bdcf23cf73eb406f0dcf610b29a725887eaf522fe10625cfb7edd0cae95ae0f"
     },
     "convex/workloadCron.ts:reconcileWorkloadCronSnapshot": {
       "status": "covered",
@@ -621,7 +621,7 @@
         "wrong_account",
         "stale_generation"
       ],
-      "authorityPathSha256": "c79ae9d25367c8877c771969a97088c90a9301a693f24b475d18e92006254b8b"
+      "authorityPathSha256": "fe27593b5f322f8ff1baa5e3032ce2f99ae5e0f49064202199a3a37761ffbc8c"
     }
   }
 }
