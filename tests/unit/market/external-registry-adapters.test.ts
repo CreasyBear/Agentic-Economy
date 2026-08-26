@@ -7,6 +7,21 @@ import {
 
 import { run as refreshExternalRegistry } from "../../../convex/marketExternalRegistryRefresh";
 
+const WORKLOAD = {
+  name: "refresh Agentic Economy API registry" as const,
+  workloadKind: "cron" as const,
+  actorPrincipalRef: "prn_f2000000000000000000000000000001",
+  activeAccountRef: "acc_f2000000000000000000000000000001",
+  correlationRef: "cron:external-registry-refresh:test",
+  idempotencyRef: "cron:external-registry-refresh:test",
+  purpose: "refresh Agentic Economy API registry",
+  source: "convex/workloadCron:refreshAgenticEconomyApiRegistry",
+  principalRevision: 1,
+  activeAccountRevision: 1,
+  accessVia: "membership" as const,
+  admittedAt: 1,
+};
+
 function json(document: unknown): Response {
   return Response.json(document);
 }
@@ -304,9 +319,10 @@ describe("registry origin adapters", () => {
     });
     const writes: number[] = [];
     const runMutation = vi.fn(async (_reference: unknown, args: Record<string, unknown>) => {
-      if (Array.isArray(args.entries)) {
-        writes.push(args.entries.length);
-        return { inserted: args.entries.length, replayed: 0 };
+      const payload = args.payload as Record<string, unknown> | undefined;
+      if (Array.isArray(payload?.entries)) {
+        writes.push(payload.entries.length);
+        return { inserted: payload.entries.length, replayed: 0 };
       }
       return null;
     });
@@ -319,9 +335,10 @@ describe("registry origin adapters", () => {
 
     try {
       const result = await handler({
+        runQuery: vi.fn(async () => WORKLOAD),
         runMutation,
         scheduler: { runAfter },
-      });
+      }, { workload: WORKLOAD });
       expect(result).toMatchObject({ kind: "refreshed", entries: 150 });
       expect(writes.reduce((total, count) => total + count, 0)).toBe(150);
       expect(runAfter).toHaveBeenCalledOnce();
@@ -357,9 +374,10 @@ describe("registry origin adapters", () => {
 
     try {
       await expect(handler({
+        runQuery: vi.fn(async () => WORKLOAD),
         runMutation,
         scheduler: { runAfter },
-      })).resolves.toMatchObject({
+      }, { workload: WORKLOAD })).resolves.toMatchObject({
         kind: "preserved",
         entries: 0,
         reason: "agentic_market:source_count_mismatch",
@@ -375,6 +393,10 @@ function refreshHandler() {
   const handler = (refreshExternalRegistry as unknown as {
     _handler: (
       ctx: {
+        runQuery: (
+          reference: unknown,
+          args: Record<string, unknown>,
+        ) => Promise<unknown>;
         runMutation: (
           reference: unknown,
           args: Record<string, unknown>,
@@ -387,11 +409,15 @@ function refreshHandler() {
           ) => Promise<void>;
         };
       },
-      args: Record<string, never>,
+      args: { workload: unknown },
     ) => Promise<unknown>;
   })._handler;
   return (
     ctx: {
+      runQuery: (
+        reference: unknown,
+        args: Record<string, unknown>,
+      ) => Promise<unknown>;
       runMutation: (
         reference: unknown,
         args: Record<string, unknown>,
@@ -404,7 +430,8 @@ function refreshHandler() {
         ) => Promise<void>;
       };
     },
-  ) => handler(ctx, {});
+    args: { workload: unknown },
+  ) => handler(ctx, args);
 }
 
 function agenticMarketPage(

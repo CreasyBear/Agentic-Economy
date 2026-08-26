@@ -14,7 +14,7 @@ describe("supply landing", () => {
     ).toBeDefined();
     expect(
       screen
-        .getByRole("link", { name: "Manage listings" })
+        .getByRole("link", { name: "Open supplier dashboard" })
         .getAttribute("href"),
     ).toBe("/owner/supply");
     expect(screen.getByRole("heading", { name: "What agents can inspect" })).toBeDefined();

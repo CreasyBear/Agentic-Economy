@@ -18,9 +18,8 @@ afterEach(cleanup)
 describe('Offering market surfaces', () => {
   it('teaches the owner the first useful action without requiring a contact route', () => {
     render(<AeOwnerOfferingsList offerings={[]} />)
-    expect(screen.getByRole('heading', { name: 'Publish your first Operation' })).toBeTruthy()
-    expect(screen.getByLabelText('Operation summary').textContent).toContain('Published')
-    expect(screen.getByRole('heading', { name: 'No Operations yet' })).toBeTruthy()
+    expect(screen.getByText('No Operations yet')).toBeTruthy()
+    expect(screen.getByText('Describe one exact tool, then add its price and access route.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add Operation' }).getAttribute('href')).toBe('/owner/offerings/new')
   })
 

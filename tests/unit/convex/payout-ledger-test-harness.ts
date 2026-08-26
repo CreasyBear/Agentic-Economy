@@ -262,6 +262,12 @@ export function seedPayout(
     correlationRef: 'payout:test:authority',
     idempotencyRef: 'payout:test:authority',
   }
+  const workloadActionContext = {
+    actorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    correlationRef: 'payout:test:workload-account',
+    idempotencyRef: 'payout:test:workload-account',
+  }
   const workloadOwnershipRef = 'own_55555555555555555555555555555555'
   const payoutOwnershipRef = 'own_66666666666666666666666666666666'
   db.seed('principals', {
@@ -287,16 +293,32 @@ export function seedPayout(
   db.seed('accounts', {
     _id: 'accounts:payout-authority',
     accountRef: payoutOwningAccountRef,
+    displayName: 'Payout authority account',
     lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: payoutAuthorityPrincipalRef,
+    creationIdempotencyRef: authorityContext.idempotencyRef,
+    initialOwnershipRef: payoutOwnershipRef,
     revision: 1,
     currentOwnershipRef: payoutOwnershipRef,
+    createdAt: 1,
+    updatedAt: 1,
+    lastAction: authorityContext,
   })
   db.seed('accounts', {
     _id: 'accounts:cron-workload',
     accountRef: PHASE_2_CRON_ACCOUNT_REF,
+    displayName: 'Phase 2 scheduled workload account',
     lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+    creationIdempotencyRef: workloadActionContext.idempotencyRef,
+    initialOwnershipRef: workloadOwnershipRef,
     revision: 1,
     currentOwnershipRef: workloadOwnershipRef,
+    createdAt: 1,
+    updatedAt: 1,
+    lastAction: workloadActionContext,
   })
   db.seed('accountOwnerships', {
     _id: 'accountOwnerships:payout-authority',
@@ -304,7 +326,10 @@ export function seedPayout(
     accountRef: payoutOwningAccountRef,
     ownerPrincipalRef: payoutAuthorityPrincipalRef,
     lifecycle: 'active',
+    changeKind: 'creation',
     revision: 1,
+    createdAt: 1,
+    createdBy: authorityContext,
   })
   db.seed('accountOwnerships', {
     _id: 'accountOwnerships:cron-workload',
@@ -312,13 +337,20 @@ export function seedPayout(
     accountRef: PHASE_2_CRON_ACCOUNT_REF,
     ownerPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
     lifecycle: 'active',
+    changeKind: 'creation',
     revision: 1,
+    createdAt: 1,
+    createdBy: workloadActionContext,
   })
   db.seed('memberships', {
     _id: 'memberships:cron-workload',
+    membershipRef: 'mem_99999999999999999999999999999999',
     accountRef: PHASE_2_CRON_ACCOUNT_REF,
     memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
     lifecycle: 'active',
+    revision: 1,
+    createdAt: 1,
+    createdBy: workloadActionContext,
   })
   db.seed('authorityDelegationGrants', {
     _id: 'authorityDelegationGrants:payout-authority',
