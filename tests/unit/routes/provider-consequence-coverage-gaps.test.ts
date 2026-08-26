@@ -383,6 +383,46 @@ describe('provider consequence route coverage gaps', () => {
     expect(mocks.guardedFetch).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['secret ref', { secretRef: `sec_${'7'.repeat(32)}` }],
+    ['generation', { activeGeneration: `sgn_${'6'.repeat(32)}` }],
+    ['pointer revision', { pointerRevision: 3 }],
+  ] as const)('rejects caller-shaped signing-pointer substitution: %s', async (_label, patch) => {
+    const visited: string[] = []
+    const substitutedPointer = { ...signingPointer(), ...patch }
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = new URL(String(input))
+      visited.push(url.pathname)
+      if (url.hostname === 'app.infisical.com' && url.pathname === '/api/v1/auth/oidc-auth/login') {
+        return Response.json({ accessToken: 'vault-token', tokenType: 'Bearer', expiresIn: 600, accessTokenMaxTTL: 600 })
+      }
+      if (url.hostname === 'app.infisical.com' && url.pathname.startsWith('/api/v4/secrets/')) {
+        const platform = url.searchParams.get('projectId') === 'project-platform'
+        return Response.json({
+          secret: {
+            secretKey: platform
+              ? `${substitutedPointer.secretRef}--${substitutedPointer.activeGeneration}`
+              : `${CUSTOMER_SECRET_REF}--${CUSTOMER_GENERATION}`,
+            secretValue: platform ? SIGNING_KEY : CUSTOMER_SECRET,
+            environment: 'production',
+            workspace: platform ? 'project-platform' : 'project-customer',
+          },
+        })
+      }
+      throw new Error(`unexpected_fetch:${url}`)
+    }))
+
+    const response = await handleProviderConsequenceRequest(
+      consequenceRequest(ticket(), { signingSecret: substitutedPointer }),
+      environment(),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ disposition: 'refused', releaseStarted: false })
+    expect(visited).not.toContain('/internal/provider-consequence/journal/begin')
+    expect(mocks.guardedFetch).not.toHaveBeenCalled()
+  })
+
   it('contains issuer signing-key, callback, and opaque-ticket failures', async () => {
     vi.stubGlobal('fetch', scriptedFetch({ signingKey: 'short' }))
     await expect(handleProviderConsequenceRequest(signingRequest(), environment()))
@@ -570,7 +610,14 @@ function signingRequest(canonicalTicket = ticket()) {
 
 function signedTicketFor(canonicalTicket: CanonicalProviderConsequenceTicket): string {
   const claimsDigest = providerConsequenceTicketClaimsDigest(canonicalTicket)
-  const message = `${canonicalTicket.ticketRef}:${claimsDigest}:${canonicalTicket.expiresAt}`
+  const message = [
+    canonicalTicket.ticketRef,
+    claimsDigest,
+    canonicalTicket.expiresAt,
+    SIGNING_SECRET_REF,
+    SIGNING_GENERATION,
+    2,
+  ].join(':')
   const signature = createHmac('sha256', SIGNING_KEY).update(message).digest('hex')
   return `${canonicalTicket.ticketRef}.${canonicalTicket.expiresAt}.${signature}`
 }

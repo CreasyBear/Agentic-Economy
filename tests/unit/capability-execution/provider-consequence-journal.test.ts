@@ -650,11 +650,29 @@ describe('provider consequence durable journal', () => {
 
   it('attests only the exact unexpired pending ticket without consuming it', async () => {
     const backend = await backendWithJournal()
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('secretPointers', {
+        secretRef: `sec_${'8'.repeat(32)}`,
+        owningAccountRef: `acc_${'9'.repeat(32)}`,
+        activeGeneration: `sgn_${'9'.repeat(32)}`,
+        revision: 2,
+        createdAt: NOW,
+        updatedAt: NOW,
+        lastAction: {
+          operation: 'provision', snapshotRef: 'snapshot:signing', accountRef: `acc_${'9'.repeat(32)}`,
+          actorPrincipalRef: `prn_${'9'.repeat(32)}`, grantRef: 'grant:signing', grantGeneration: 1,
+          correlationRef: 'correlation:signing', idempotencyRef: 'idempotency:signing', occurredAt: NOW,
+        },
+      })
+    })
     const exact = {
       ticketRef: TICKET_REF,
       journalTokenDigest: TOKEN_DIGEST,
       ticketClaimsDigest: CLAIMS_DIGEST,
       expiresAt: NOW + 10_000,
+      signingSecretRef: `sec_${'8'.repeat(32)}`,
+      signingSecretGeneration: `sgn_${'9'.repeat(32)}`,
+      signingSecretPointerRevision: 2,
     }
     await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, exact)))
       .resolves.toEqual({ kind: 'attested' })
@@ -663,6 +681,9 @@ describe('provider consequence durable journal', () => {
       { journalTokenDigest: DIGEST('0') },
       { ticketClaimsDigest: DIGEST('0') },
       { expiresAt: NOW + 9_999 },
+      { signingSecretRef: `sec_${'0'.repeat(32)}` },
+      { signingSecretGeneration: `sgn_${'0'.repeat(32)}` },
+      { signingSecretPointerRevision: 3 },
     ]) {
       await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, {
         ...exact,
@@ -686,6 +707,38 @@ describe('provider consequence durable journal', () => {
     await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, {
       ...exact,
       expiresAt: NOW,
+    }))).resolves.toEqual({ kind: 'unavailable' })
+  })
+
+  it.each([
+    ['missing pointer', null],
+    ['owning account', { owningAccountRef: `acc_${'0'.repeat(32)}` }],
+    ['generation', { activeGeneration: `sgn_${'0'.repeat(32)}` }],
+    ['revision', { revision: 3 }],
+  ] as const)('rejects stale current signing pointer provenance: %s', async (_label, patch) => {
+    const backend = await backendWithJournal()
+    if (patch !== null) {
+      await backend.run(async (ctx) => {
+        await ctx.db.insert('secretPointers', {
+          secretRef: `sec_${'8'.repeat(32)}`,
+          owningAccountRef: `acc_${'9'.repeat(32)}`,
+          activeGeneration: `sgn_${'9'.repeat(32)}`,
+          revision: 2,
+          createdAt: NOW,
+          updatedAt: NOW,
+          lastAction: {
+            operation: 'provision', snapshotRef: 'snapshot:signing', accountRef: `acc_${'9'.repeat(32)}`,
+            actorPrincipalRef: `prn_${'9'.repeat(32)}`, grantRef: 'grant:signing', grantGeneration: 1,
+            correlationRef: 'correlation:signing', idempotencyRef: 'idempotency:signing', occurredAt: NOW,
+          },
+          ...patch,
+        })
+      })
+    }
+    await expect(backend.run(async (ctx) => attestProviderConsequenceTicketHandler(ctx, {
+      ticketRef: TICKET_REF, journalTokenDigest: TOKEN_DIGEST, ticketClaimsDigest: CLAIMS_DIGEST,
+      expiresAt: NOW + 10_000, signingSecretRef: `sec_${'8'.repeat(32)}`,
+      signingSecretGeneration: `sgn_${'9'.repeat(32)}`, signingSecretPointerRevision: 2,
     }))).resolves.toEqual({ kind: 'unavailable' })
   })
 

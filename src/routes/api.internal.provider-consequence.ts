@@ -486,7 +486,7 @@ async function signedTicket(
   request: TicketEnvelope,
   options: ProductionSecretRuntimeOptions,
 ): Promise<string> {
-  const message = `${request.ticket.ticketRef}:${request.ticketClaimsDigest}:${request.ticket.expiresAt}`
+  const message = signingMessage(request)
   let signature: string | undefined
   const runtime = createProductionSecretRuntime(options)
   await runtime.consequences.platform.execute({ secretRef: request.signingSecret.secretRef }, async (lease) => {
@@ -501,6 +501,17 @@ async function signedTicket(
   return opaque
 }
 
+function signingMessage(request: TicketEnvelope): string {
+  return [
+    request.ticket.ticketRef,
+    request.ticketClaimsDigest,
+    request.ticket.expiresAt,
+    request.signingSecret.secretRef,
+    request.signingSecret.activeGeneration,
+    request.signingSecret.pointerRevision,
+  ].join(':')
+}
+
 async function verifySignedTicket(
   request: ConsequenceRequest,
   options: ProductionSecretRuntimeOptions,
@@ -509,7 +520,7 @@ async function verifySignedTicket(
   if (!request.signedTicket.startsWith(prefix)) return false
   const candidate = request.signedTicket.slice(prefix.length)
   if (!/^[0-9a-f]{64}$/u.test(candidate)) return false
-  const message = `${request.ticket.ticketRef}:${request.ticketClaimsDigest}:${request.ticket.expiresAt}`
+  const message = signingMessage(request)
   let actual: string | undefined
   const runtime = createProductionSecretRuntime(options)
   await runtime.consequences.platform.execute({ secretRef: request.signingSecret.secretRef }, async (lease) => {
@@ -545,6 +556,9 @@ export async function handleProviderConsequenceRequest(
           ticketRef: request.ticket.ticketRef,
           ticketClaimsDigest: request.ticketClaimsDigest,
           expiresAt: request.ticket.expiresAt,
+          signingSecretRef: request.signingSecret.secretRef,
+          signingSecretGeneration: request.signingSecret.activeGeneration,
+          signingSecretPointerRevision: request.signingSecret.pointerRevision,
         },
       )
       if (!isRecord(attestation) || attestation.kind !== 'attested') {

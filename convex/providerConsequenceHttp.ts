@@ -7,6 +7,8 @@ const MAX_BODY_BYTES = 128 * 1024
 const JOURNAL_TOKEN = /^[A-Za-z0-9_-]{43,128}$/u
 const OPAQUE_REF = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/u
 const DIGEST = /^sha256:[0-9a-f]{64}$/u
+const SECRET_REF = /^sec_[0-9a-f]{32}$/u
+const SECRET_GENERATION = /^sgn_[0-9a-f]{32}$/u
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -89,10 +91,17 @@ export const attestProviderConsequenceTicket = httpActionGeneric(async (ctx, req
   const body = await boundedJson(request)
   if (token === undefined || body === undefined || !exactKeys(body, [
     'ticketRef', 'ticketClaimsDigest', 'expiresAt',
+    'signingSecretRef', 'signingSecretGeneration', 'signingSecretPointerRevision',
   ])) return json({ kind: 'unavailable' }, token === undefined ? 401 : 400)
   if (!canonicalRef(body.ticketRef)
     || !canonicalDigest(body.ticketClaimsDigest)
-    || !Number.isSafeInteger(body.expiresAt)) return json({ kind: 'unavailable' }, 400)
+    || !Number.isSafeInteger(body.expiresAt)
+    || typeof body.signingSecretRef !== 'string'
+    || !SECRET_REF.test(body.signingSecretRef)
+    || typeof body.signingSecretGeneration !== 'string'
+    || !SECRET_GENERATION.test(body.signingSecretGeneration)
+    || !Number.isSafeInteger(body.signingSecretPointerRevision)
+    || Number(body.signingSecretPointerRevision) < 1) return json({ kind: 'unavailable' }, 400)
   try {
     const result = await ctx.runQuery(
       internal.capabilityProviderConsequenceJournal.attestProviderConsequenceTicket,
@@ -101,6 +110,9 @@ export const attestProviderConsequenceTicket = httpActionGeneric(async (ctx, req
         journalTokenDigest: await tokenDigest(token),
         ticketClaimsDigest: body.ticketClaimsDigest,
         expiresAt: Number(body.expiresAt),
+        signingSecretRef: body.signingSecretRef,
+        signingSecretGeneration: body.signingSecretGeneration,
+        signingSecretPointerRevision: Number(body.signingSecretPointerRevision),
       },
     )
     return json(result, result.kind === 'attested' ? 200 : 409)

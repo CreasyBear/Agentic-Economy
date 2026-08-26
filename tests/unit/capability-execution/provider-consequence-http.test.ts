@@ -98,6 +98,9 @@ describe('provider consequence Convex HTTP callbacks', () => {
       ticketRef: 'ticket:test',
       ticketClaimsDigest: DIGEST('3'),
       expiresAt: 2_000_000_010_000,
+      signingSecretRef: `sec_${'8'.repeat(32)}`,
+      signingSecretGeneration: `sgn_${'9'.repeat(32)}`,
+      signingSecretPointerRevision: 2,
     }
     const runQuery = vi.fn<(
       reference: unknown,
@@ -121,6 +124,10 @@ describe('provider consequence Convex HTTP callbacks', () => {
       request({ ...body, ticketRef: '' }),
       request({ ...body, ticketClaimsDigest: 'caller-proof' }),
       request({ ...body, expiresAt: 1.5 }),
+      request({ ...body, signingSecretRef: 'credential:caller' }),
+      request({ ...body, signingSecretGeneration: 'latest' }),
+      request({ ...body, signingSecretPointerRevision: 0 }),
+      request({ ...body, signingSecretPointerRevision: 1.5 }),
     ]) {
       await expect(attest({ runQuery: vi.fn() } as unknown as ActionCtx, candidate))
         .resolves.toMatchObject({ status: 400 })

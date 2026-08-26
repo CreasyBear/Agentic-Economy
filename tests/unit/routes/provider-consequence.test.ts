@@ -271,7 +271,14 @@ function signingRequest(canonicalTicket = ticket()) {
 
 function signedTicketFor(canonicalTicket: CanonicalProviderConsequenceTicket): string {
   const claimsDigest = providerConsequenceTicketClaimsDigest(canonicalTicket)
-  const message = `${canonicalTicket.ticketRef}:${claimsDigest}:${canonicalTicket.expiresAt}`
+  const message = [
+    canonicalTicket.ticketRef,
+    claimsDigest,
+    canonicalTicket.expiresAt,
+    SIGNING_SECRET_REF,
+    SIGNING_GENERATION,
+    2,
+  ].join(':')
   const signature = createHmac('sha256', SIGNING_KEY).update(message).digest('hex')
   return `${canonicalTicket.ticketRef}.${canonicalTicket.expiresAt}.${signature}`
 }
@@ -349,6 +356,9 @@ describe('internal provider consequence route', () => {
       ticketRef: canonicalTicket.ticketRef,
       ticketClaimsDigest: providerConsequenceTicketClaimsDigest(canonicalTicket),
       expiresAt: canonicalTicket.expiresAt,
+      signingSecretRef: SIGNING_SECRET_REF,
+      signingSecretGeneration: SIGNING_GENERATION,
+      signingSecretPointerRevision: 2,
     })
     expect(convexBodies[0]).not.toContain(CUSTOMER_SECRET)
     expect(convexBodies[0]).not.toContain(SIGNING_KEY)
