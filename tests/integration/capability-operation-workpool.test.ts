@@ -310,6 +310,7 @@ async function invokeOperation(
   operationRef: string,
   idempotencyKey: string,
   suffix: string,
+  sourcePrincipal: TestPrincipal = principal,
 ) {
   const command = {
     operationKey: `test:operation-workpool:invoke:${suffix}`,
@@ -319,9 +320,13 @@ async function invokeOperation(
     input: INPUT,
     idempotencyKey,
   }
+  const signed = await withSourceWrite('protected_action', {
+    ...command,
+    principal: { ...sourcePrincipal, scopes: [...sourcePrincipal.scopes] },
+  })
   return await backend.action(
     api.capabilityOperationInvocations.invoke,
-    await withSourceWrite('protected_action', command),
+    { ...signed, principal: command.principal },
   )
 }
 
@@ -421,11 +426,18 @@ describe('capability operation Workpool lifecycle', () => {
     })
     providerFetch.mockClear()
 
-    await expect(invokeOperation(backend, {
-      ...first.principal,
+    await expect(invokeOperation(
+      backend,
+      first.principal,
+      operationRef,
+      'operation-workpool-forged',
+      'forged',
+      {
+        ...first.principal,
       principalId: revoked.principal.principalId,
       ownerId: revoked.principal.ownerId,
-    }, operationRef, 'operation-workpool-forged', 'forged')).rejects.toThrow(
+      },
+    )).rejects.toThrow(
       'operation_invoke_source_write_rejected:source_write_command_mismatch',
     )
     expect(providerFetch).not.toHaveBeenCalled()

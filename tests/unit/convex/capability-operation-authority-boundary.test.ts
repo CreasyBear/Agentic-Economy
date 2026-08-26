@@ -78,6 +78,8 @@ import {
   reconcileInvocationWorkloadAuthority,
   resolveInvocationAgentAuthority,
 } from '../../../convex/capabilityOperationInvocations'
+import { registerAgentPrincipal } from '../../../convex/agentAccessPrincipals'
+import { validateCanonicalAgentDelegation } from '../../../convex/lib/canonicalAgentAuthority'
 
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 const invokeBoundary = (invoke as unknown as { _handler: Handler })._handler
@@ -91,10 +93,11 @@ const listApprovalBoundary = (listPendingOperationApprovals as unknown as { _han
 const decideApprovalBoundary = (decideOperationApproval as unknown as { _handler: Handler })._handler
 const resolveAgentBoundary = (resolveInvocationAgentAuthority as unknown as { _handler: Handler })._handler
 const reconcileWorkloadBoundary = (reconcileInvocationWorkloadAuthority as unknown as { _handler: Handler })._handler
+const registerAgentBoundary = (registerAgentPrincipal as unknown as { _handler: Handler })._handler
 
 const callerPrincipal = {
-  principalId: 'caller-principal',
-  ownerId: 'caller-owner',
+  principalId: `prn_${'3'.repeat(32)}`,
+  ownerId: `acc_${'4'.repeat(32)}`,
   credentialId: 'ak_live_locator',
   applicationRef: 'agentic-economy',
   environment: 'production' as const,
@@ -103,8 +106,6 @@ const callerPrincipal = {
 }
 const canonicalPrincipal = {
   ...callerPrincipal,
-  principalId: `prn_${'3'.repeat(32)}`,
-  ownerId: `acc_${'4'.repeat(32)}`,
 }
 
 function path(reference: unknown): string {
@@ -113,7 +114,7 @@ function path(reference: unknown): string {
 
 function agentContext(result: typeof canonicalPrincipal | null = canonicalPrincipal) {
   return {
-    runMutation: vi.fn(async (reference: unknown) => {
+    runMutation: vi.fn(async (reference: unknown, _args: Record<string, unknown>) => {
       if (path(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') return result
       throw new Error(`unexpected_mutation:${path(reference)}`)
     }),
@@ -166,6 +167,12 @@ class AuthorityMemoryDb {
       if (row !== undefined) Object.assign(row, value)
     }
   }
+
+  async insert(table: string, value: Record<string, unknown>) {
+    const rows = (this.tables as Record<string, Row[]>)[table]
+    if (rows === undefined) throw new Error(`missing_table:${table}`)
+    rows.push({ _id: `${table}:${rows.length + 1}`, ...value })
+  }
 }
 
 const NOW = 2_000_000
@@ -176,6 +183,7 @@ const ACCOUNT_REF = canonicalPrincipal.ownerId
 const GRANT_REF = `grt_${'7'.repeat(32)}`
 const OWNERSHIP_REF = `own_${'8'.repeat(32)}`
 const OPERATION_REF = 'operation:test'
+const PARENT_GRANT_REF = `grt_${'9'.repeat(32)}`
 
 function authorityRows(overrides: Readonly<{
   binding?: Record<string, unknown>
@@ -184,6 +192,7 @@ function authorityRows(overrides: Readonly<{
   storedAgent?: Record<string, unknown>
   accessGrant?: Record<string, unknown>
   delegation?: Record<string, unknown>
+  parentDelegation?: Record<string, unknown> | null
   account?: Record<string, unknown>
   invocation?: Record<string, unknown>
 }> = {}) {
@@ -197,7 +206,7 @@ function authorityRows(overrides: Readonly<{
     credentials: [{
       _id: 'credentials:1', credentialRef: CREDENTIAL_REF, bindingRef: BINDING_REF,
       principalRef: PRINCIPAL_REF, type: 'api_key', lifecycle: 'active', generation: 3,
-      expiresAt: NOW + 60_000, ...overrides.credential,
+      issuedAt: NOW - 10_000, expiresAt: NOW + 60_000, ...overrides.credential,
     }],
     principals: [{
       _id: 'principals:1', principalRef: PRINCIPAL_REF, kind: 'agent', lifecycle: 'active',
@@ -214,7 +223,22 @@ function authorityRows(overrides: Readonly<{
       authorityMode: 'bounded_mandate', generation: 4, policyDigest: 'sha256:policy',
       lifecycle: 'active', expiresAt: NOW + 50_000, ...overrides.accessGrant,
     }],
-    authorityDelegationGrants: [{
+    authorityDelegationGrants: [
+      ...(overrides.parentDelegation === undefined || overrides.parentDelegation === null ? [] : [{
+        _id: 'authorityDelegationGrants:parent', grantRef: PARENT_GRANT_REF,
+        accountRef: ACCOUNT_REF, actorPrincipalRef: `prn_${'a'.repeat(32)}`,
+        subjectPrincipalRef: PRINCIPAL_REF, generation: 2, revision: 2,
+        lifecycle: 'active', expiresAt: NOW + 80_000,
+        scopes: ['market_operations:invoke', 'market_supply:manage'],
+        resourceRefs: ['operation:other', OPERATION_REF], budgetLimit: 2, budgetUsed: 0,
+        createdAt: NOW - 2_000,
+        createdBy: {
+          actorPrincipalRef: `prn_${'a'.repeat(32)}`, activeAccountRef: ACCOUNT_REF,
+          correlationRef: 'correlation:parent', idempotencyRef: 'idempotency:parent',
+        },
+        ...overrides.parentDelegation,
+      }]),
+      {
       _id: 'authorityDelegationGrants:1', grantRef: GRANT_REF, subjectPrincipalRef: PRINCIPAL_REF,
       accountRef: ACCOUNT_REF, actorPrincipalRef: PRINCIPAL_REF,
       generation: 4, revision: 4, lifecycle: 'active', expiresAt: NOW + 40_000,
@@ -225,7 +249,8 @@ function authorityRows(overrides: Readonly<{
         correlationRef: 'correlation:test', idempotencyRef: 'idempotency:test',
       },
       ...overrides.delegation,
-    }],
+      },
+    ],
     accounts: [{
       _id: 'accounts:1', accountRef: ACCOUNT_REF, lifecycle: 'active', revision: 1,
       currentOwnershipRef: OWNERSHIP_REF, ...overrides.account,
@@ -234,6 +259,7 @@ function authorityRows(overrides: Readonly<{
       _id: 'accountOwnerships:1', ownershipRef: OWNERSHIP_REF, accountRef: ACCOUNT_REF,
       ownerPrincipalRef: PRINCIPAL_REF, lifecycle: 'active',
     }],
+    memberships: [] as Row[],
     capabilityOperationInvocations: [{
       _id: 'capabilityOperationInvocations:1', invocationRef: 'invocation:canonical',
       principalId: PRINCIPAL_REF, ownerId: ACCOUNT_REF, credentialId: callerPrincipal.credentialId,
@@ -241,6 +267,23 @@ function authorityRows(overrides: Readonly<{
       grantRef: GRANT_REF, grantGeneration: 4, policyDigest: 'sha256:policy',
       grantExpiresAt: NOW + 50_000, operationRef: OPERATION_REF, ...overrides.invocation,
     }],
+  }
+}
+
+function registrationArgs(overrides: Record<string, unknown> = {}) {
+  return {
+    principalId: callerPrincipal.principalId,
+    credentialId: callerPrincipal.credentialId,
+    applicationRef: callerPrincipal.applicationRef,
+    environment: callerPrincipal.environment,
+    scopes: callerPrincipal.scopes,
+    authorityMode: callerPrincipal.authorityMode,
+    grantGeneration: 4,
+    policyDigest: 'sha256:policy',
+    lifecycle: 'active',
+    expiresAt: NOW + 50_000,
+    seenAt: NOW,
+    ...overrides,
   }
 }
 
@@ -266,9 +309,65 @@ describe('capability operation canonical authority boundary', () => {
   it('derives agent provenance from the current credential, Principal, Account, and exact Grant generation', async () => {
     const result = await resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows()) },
-      { principal: callerPrincipal },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
     )
     expect(result).toEqual(canonicalPrincipal)
+  })
+
+  it('accepts a generation-bound, monotonically narrowed multi-hop delegation chain', async () => {
+    const rows = authorityRows({
+      parentDelegation: {},
+      delegation: {
+        parentGrantRef: PARENT_GRANT_REF,
+        parentGeneration: 2,
+        expiresAt: NOW + 40_000,
+      },
+    })
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(rows) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toEqual(canonicalPrincipal)
+  })
+
+  it.each([
+    ['revoked parent', {
+      parentDelegation: {
+        lifecycle: 'revoked', generation: 3, revision: 3, revokedAt: NOW - 1,
+        revokedBy: {
+          actorPrincipalRef: PRINCIPAL_REF, activeAccountRef: ACCOUNT_REF,
+          correlationRef: 'correlation:revoke', idempotencyRef: 'idempotency:revoke',
+        },
+      },
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 3 },
+    }],
+    ['expired parent', {
+      parentDelegation: { expiresAt: NOW },
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 2 },
+    }],
+    ['cyclic ancestry', {
+      delegation: { parentGrantRef: GRANT_REF, parentGeneration: 4 },
+    }],
+    ['stale parent generation', {
+      parentDelegation: {},
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 1 },
+    }],
+    ['cross-account parent', {
+      parentDelegation: { accountRef: `acc_${'b'.repeat(32)}` },
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 2 },
+    }],
+    ['scope widening', {
+      parentDelegation: { scopes: ['market_supply:manage'] },
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 2 },
+    }],
+    ['resource widening', {
+      parentDelegation: { resourceRefs: ['operation:other'] },
+      delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 2 },
+    }],
+  ])('denies %s before public operation admission', async (_case, overrides) => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows(overrides)) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
   })
 
   it.each([
@@ -283,15 +382,275 @@ describe('capability operation canonical authority boundary', () => {
   ])('denies %s at current server time', async (_case, overrides) => {
     await expect(resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows(overrides)) },
-      { principal: callerPrincipal },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
     )).resolves.toBeNull()
   })
 
   it('denies a caller that omits the required operation scope', async () => {
     await expect(resolveAgentBoundary(
       { db: new AuthorityMemoryDb(authorityRows()) },
-      { principal: { ...callerPrincipal, scopes: [] } },
+      { principal: { ...callerPrincipal, scopes: [] }, operationRef: OPERATION_REF },
     )).resolves.toBeNull()
+  })
+
+  it('denies duplicate requested scope expectations and ambiguous durable agent projections', async () => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows()) },
+      { principal: { ...callerPrincipal, scopes: [...callerPrincipal.scopes, ...callerPrincipal.scopes] }, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const ambiguous = authorityRows()
+    ambiguous.agentAccessPrincipals.push({
+      ...ambiguous.agentAccessPrincipals[0]!, _id: 'agentAccessPrincipals:2',
+    })
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(ambiguous) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+  })
+
+  it.each([
+    ['Principal', { principalId: `prn_${'c'.repeat(32)}` }],
+    ['Account', { ownerId: `acc_${'d'.repeat(32)}` }],
+    ['Credential', { credentialId: 'forged-api-key' }],
+    ['application', { applicationRef: 'forged-application' }],
+  ])('treats caller %s only as an expectation and denies a forged value', async (_case, forged) => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows()) },
+      { principal: { ...callerPrincipal, ...forged }, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+  })
+
+  it('denies ambiguous or missing active Account access for the resolved agent Principal', async () => {
+    const ambiguous = authorityRows()
+    ambiguous.memberships = [{
+      _id: 'memberships:1', membershipRef: 'membership:1', accountRef: ACCOUNT_REF,
+      memberPrincipalRef: PRINCIPAL_REF, lifecycle: 'active', revision: 1,
+    }]
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(ambiguous) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const missing = authorityRows()
+    missing.accountOwnerships = []
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(missing) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+  })
+
+  it('denies missing or stale canonical identity and Account ownership facts', async () => {
+    const missingPrincipal = authorityRows()
+    missingPrincipal.principals = []
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(missingPrincipal) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const missingAccount = authorityRows()
+    missingAccount.accounts = []
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(missingAccount) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const missingCurrentOwnership = authorityRows()
+    missingCurrentOwnership.accounts[0]!.currentOwnershipRef = 'ownership:missing'
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(missingCurrentOwnership) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const staleAgentOwnership = authorityRows()
+    const currentOwnerRef = `prn_${'e'.repeat(32)}`
+    staleAgentOwnership.principals.push({
+      _id: 'principals:owner', principalRef: currentOwnerRef, kind: 'human', lifecycle: 'active',
+    })
+    staleAgentOwnership.accountOwnerships.push({
+      _id: 'accountOwnerships:current', ownershipRef: 'ownership:current', accountRef: ACCOUNT_REF,
+      ownerPrincipalRef: currentOwnerRef, lifecycle: 'active',
+    })
+    staleAgentOwnership.accounts[0]!.currentOwnershipRef = 'ownership:current'
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(staleAgentOwnership) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+
+    const inactiveCurrentOwner = authorityRows()
+    inactiveCurrentOwner.accountOwnerships = [{
+      _id: 'accountOwnerships:current', ownershipRef: OWNERSHIP_REF, accountRef: ACCOUNT_REF,
+      ownerPrincipalRef: currentOwnerRef, lifecycle: 'active',
+    }]
+    inactiveCurrentOwner.memberships = [{
+      _id: 'memberships:1', membershipRef: 'membership:1', accountRef: ACCOUNT_REF,
+      memberPrincipalRef: PRINCIPAL_REF, lifecycle: 'active', revision: 1,
+    }]
+    inactiveCurrentOwner.principals.push({
+      _id: 'principals:owner', principalRef: currentOwnerRef, kind: 'human', lifecycle: 'retired',
+    })
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(inactiveCurrentOwner) },
+      { principal: callerPrincipal, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+  })
+
+  it('denies malformed server-time inputs before resolving identity or delegation', async () => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows()) },
+      { principal: { ...callerPrincipal, credentialId: '' }, operationRef: OPERATION_REF },
+    )).resolves.toBeNull()
+    await expect(validateCanonicalAgentDelegation(
+      { db: new AuthorityMemoryDb(authorityRows()) } as never,
+      {
+        evidenceKind: 'test', evidenceRef: 'test', principalRef: PRINCIPAL_REF,
+        accountRef: ACCOUNT_REF, grantRef: GRANT_REF, grantGeneration: 4,
+        requiredScopes: ['market_operations:invoke'], resourceRefs: [OPERATION_REF], now: -1,
+      },
+    )).resolves.toBeNull()
+  })
+
+  it('binds status, cancel, and reconcile admission to the persisted invocation operation and authority snapshot', async () => {
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows()) },
+      { principal: callerPrincipal, invocationRef: 'invocation:canonical' },
+    )).resolves.toEqual(canonicalPrincipal)
+
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows({
+        invocation: { grantGeneration: 3 },
+      })) },
+      { principal: callerPrincipal, invocationRef: 'invocation:canonical' },
+    )).resolves.toBeNull()
+
+    await expect(resolveAgentBoundary(
+      { db: new AuthorityMemoryDb(authorityRows({
+        parentDelegation: {
+          lifecycle: 'revoked', generation: 3, revision: 3, revokedAt: NOW - 1,
+          revokedBy: {
+            actorPrincipalRef: PRINCIPAL_REF, activeAccountRef: ACCOUNT_REF,
+            correlationRef: 'correlation:revoke', idempotencyRef: 'idempotency:revoke',
+          },
+        },
+        delegation: { parentGrantRef: PARENT_GRANT_REF, parentGeneration: 3 },
+      })) },
+      { principal: callerPrincipal, invocationRef: 'invocation:canonical' },
+    )).resolves.toBeNull()
+  })
+
+  it('rejects an absent or ambiguous public operation authority target', async () => {
+    const ctx = { db: new AuthorityMemoryDb(authorityRows()) }
+    await expect(resolveAgentBoundary(ctx, { principal: callerPrincipal })).resolves.toBeNull()
+    await expect(resolveAgentBoundary(ctx, {
+      principal: callerPrincipal,
+      operationRef: OPERATION_REF,
+      invocationRef: 'invocation:canonical',
+    })).resolves.toBeNull()
+    await expect(resolveAgentBoundary(ctx, {
+      principal: callerPrincipal,
+      invocationRef: 'invocation:missing',
+    })).resolves.toBeNull()
+  })
+
+  it('registers only current server-resolved agent provenance and canonical grant facts', async () => {
+    const rows = authorityRows()
+    rows.agentAccessPrincipals = []
+    const db = new AuthorityMemoryDb(rows)
+    await expect(registerAgentBoundary({
+      db,
+      auth: { getUserIdentity: async () => ({ tokenIdentifier: callerPrincipal.credentialId }) },
+    }, registrationArgs({ seenAt: 1 }))).resolves.toEqual({ kind: 'recorded' })
+    expect(rows.agentAccessPrincipals).toEqual([
+      expect.objectContaining({
+        principalId: PRINCIPAL_REF,
+        ownerId: ACCOUNT_REF,
+        ownerTokenIdentifier: callerPrincipal.credentialId,
+        credentialId: callerPrincipal.credentialId,
+        grantGeneration: 4,
+        policyDigest: 'sha256:policy',
+        scopes: ['market_operations:invoke'],
+        recordedAt: NOW,
+        lastSeenAt: NOW,
+      }),
+    ])
+  })
+
+  it('fails closed before registration when the authenticated API-key identity has no canonical binding', async () => {
+    const rows = authorityRows()
+    rows.agentAccessPrincipals = []
+    await expect(registerAgentBoundary({
+      db: new AuthorityMemoryDb(rows),
+      auth: { getUserIdentity: async () => ({ tokenIdentifier: 'unknown-api-key' }) },
+    }, registrationArgs())).resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+    expect(rows.agentAccessPrincipals).toEqual([])
+  })
+
+  it('fails closed before registration when no authenticated identity exists', async () => {
+    const rows = authorityRows()
+    rows.agentAccessPrincipals = []
+    await expect(registerAgentBoundary({
+      db: new AuthorityMemoryDb(rows),
+      auth: { getUserIdentity: async () => null },
+    }, registrationArgs())).resolves.toEqual({ kind: 'refused', code: 'authentication_required' })
+    expect(rows.agentAccessPrincipals).toEqual([])
+  })
+
+  it.each([
+    ['forged Principal', { principalId: `prn_${'c'.repeat(32)}` }],
+    ['forged Credential', { credentialId: 'forged-api-key' }],
+    ['forged generation', { grantGeneration: 99 }],
+    ['forged digest', { policyDigest: 'sha256:forged' }],
+  ])('refuses public registration with %s and performs no write', async (_case, forged) => {
+    const rows = authorityRows()
+    rows.agentAccessPrincipals = []
+    await expect(registerAgentBoundary({
+      db: new AuthorityMemoryDb(rows),
+      auth: { getUserIdentity: async () => ({ tokenIdentifier: callerPrincipal.credentialId }) },
+    }, registrationArgs(forged))).resolves.not.toEqual({ kind: 'recorded' })
+    expect(rows.agentAccessPrincipals).toEqual([])
+  })
+
+  it.each([
+    ['no active access grant', (rows: ReturnType<typeof authorityRows>) => { rows.agentAccessGrants = [] }],
+    ['ambiguous active access grant', (rows: ReturnType<typeof authorityRows>) => {
+      rows.agentAccessGrants.push({ ...rows.agentAccessGrants[0]!, _id: 'agentAccessGrants:2', environment: 'sandbox' })
+    }],
+    ['missing delegation', (rows: ReturnType<typeof authorityRows>) => { rows.authorityDelegationGrants = [] }],
+    ['revoked parent delegation', (rows: ReturnType<typeof authorityRows>) => {
+      rows.authorityDelegationGrants.unshift({
+        ...rows.authorityDelegationGrants[0]!, _id: 'authorityDelegationGrants:parent',
+        grantRef: PARENT_GRANT_REF, generation: 3, revision: 3, lifecycle: 'revoked',
+        revokedAt: NOW - 1,
+        revokedBy: {
+          actorPrincipalRef: PRINCIPAL_REF, activeAccountRef: ACCOUNT_REF,
+          correlationRef: 'correlation:revoke', idempotencyRef: 'idempotency:revoke',
+        },
+      } as never)
+      Object.assign(rows.authorityDelegationGrants[1]!, {
+        parentGrantRef: PARENT_GRANT_REF, parentGeneration: 3,
+      })
+    }],
+    ['cross-account access grant', (rows: ReturnType<typeof authorityRows>) => {
+      rows.agentAccessGrants[0]!.ownerId = `acc_${'d'.repeat(32)}`
+    }],
+    ['cross-principal access grant', (rows: ReturnType<typeof authorityRows>) => {
+      rows.agentAccessGrants[0]!.principalId = `prn_${'c'.repeat(32)}`
+    }],
+    ['cross-credential access grant', (rows: ReturnType<typeof authorityRows>) => {
+      rows.agentAccessGrants[0]!.credentialId = 'forged-api-key'
+    }],
+    ['grant beyond credential expiry', (rows: ReturnType<typeof authorityRows>) => {
+      rows.agentAccessGrants[0]!.expiresAt = NOW + 70_000
+    }],
+  ])('refuses registration for %s without persisting a projection', async (_case, mutate) => {
+    const rows = authorityRows()
+    rows.agentAccessPrincipals = []
+    mutate(rows)
+    await expect(registerAgentBoundary({
+      db: new AuthorityMemoryDb(rows),
+      auth: { getUserIdentity: async () => ({ tokenIdentifier: callerPrincipal.credentialId }) },
+    }, registrationArgs())).resolves.not.toEqual({ kind: 'recorded' })
+    expect(rows.agentAccessPrincipals).toEqual([])
   })
 
   it('reconciles a worker only from its persisted invocation-bound canonical authority', async () => {
@@ -338,7 +697,7 @@ describe('capability operation canonical authority boundary', () => {
     )).resolves.toEqual({ kind: 'refused' })
   })
 
-  it('replaces caller-shaped agent provenance with the current canonical binding on every public agent action', async () => {
+  it('requires canonical agent expectations and exact authority targets on every public agent action', async () => {
     const ctx = agentContext()
     await expect(invokeBoundary(ctx, agentArgs())).resolves.toEqual(canonicalPrincipal)
     await expect(statusBoundary(ctx, { ...agentArgs(), invocationRef: 'invocation:1' })).resolves.toMatchObject({ kind: 'found' })
@@ -352,6 +711,13 @@ describe('capability operation canonical authority boundary', () => {
       expect(call).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ principal: canonicalPrincipal }))
     }
     expect(ctx.runMutation).toHaveBeenCalledTimes(4)
+    expect(ctx.runMutation).toHaveBeenNthCalledWith(1, expect.anything(), {
+      principal: canonicalPrincipal,
+      operationRef: OPERATION_REF,
+    })
+    for (const call of ctx.runMutation.mock.calls.slice(1)) {
+      expect(call[1]).toEqual({ principal: canonicalPrincipal, invocationRef: 'invocation:1' })
+    }
   })
 
   it('fails closed before any operation handler when the canonical agent binding is absent', async () => {

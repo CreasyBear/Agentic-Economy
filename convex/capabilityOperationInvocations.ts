@@ -2,6 +2,7 @@ import { vOnCompleteArgs } from '@convex-dev/workpool'
 import { makeFunctionReference } from 'convex/server'
 import { v, type Infer } from 'convex/values'
 import { action, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from './_generated/server'
+import type { Doc } from './_generated/dataModel'
 import { sourceWriteArgs } from './sourceWriteAdmission'
 import { actionInvocationTransactArgs } from './actionInvocationControl'
 import {
@@ -46,18 +47,11 @@ import {
 } from './capabilityOperationInvokeActions'
 import { resolveBusinessActor } from './authz'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '@/modules/agent-access/contract'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import type { StableHashValue } from '@/modules/common/stable-hash'
+import { uniqueSorted } from '@/modules/common/unique-sorted'
 import {
-  DelegationService,
-  delegationGrantRef,
-  type DelegationStore,
-} from '@/modules/authority/delegation/public'
-import { accountRef, principalRef } from '@/modules/principal-account/public'
-import {
-  createConvexDelegationContextPort,
-  createConvexDelegationStore,
-} from './lib/delegationPersistence'
+  resolveCanonicalAgentContext,
+  validateCanonicalAgentDelegation,
+} from './lib/canonicalAgentAuthority'
 
 const RECONCILIATION_MAX_CANDIDATES = 25
 const RECONCILIATION_LEASE_MS = 60_000
@@ -618,61 +612,41 @@ const reconciledInvocationAuthorityResult = v.union(
 
 const resolveInvocationAgentAuthorityRef = makeFunctionReference<
   'mutation',
-  { principal: OperationPrincipal },
+  { principal: OperationPrincipal; operationRef?: string; invocationRef?: string },
   OperationPrincipal | null
 >('capabilityOperationInvocations:resolveInvocationAgentAuthority')
 
 async function canonicalAgentPrincipal(
   ctx: ActionCtx,
   principal: OperationPrincipal,
+  target: Readonly<{ operationRef: string } | { invocationRef: string }>,
 ): Promise<OperationPrincipal | null> {
-  return await ctx.runMutation(resolveInvocationAgentAuthorityRef, { principal })
+  return await ctx.runMutation(resolveInvocationAgentAuthorityRef, { principal, ...target })
 }
 
 async function resolveCurrentAgentAuthority(
   ctx: MutationCtx,
   candidate: OperationPrincipal,
   now: number,
+  operationRef: string,
 ): Promise<CurrentAgentAuthority | null> {
   if (!Number.isSafeInteger(now)
     || now < 0
+    || operationRef.trim().length === 0
     || !candidate.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)) return null
 
-  const binding = await ctx.db.query('externalIdentityBindings')
-    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
-      .eq('providerNamespace', 'clerk/api-key')
-      .eq('providerIdentifier', candidate.credentialId))
-    .unique()
-  if (binding === null
-    || binding.lifecycle !== 'active'
-    || binding.providerState.kind !== 'known'
-    || binding.providerState.value !== 'active'
-    || !Number.isSafeInteger(binding.credentialGeneration)
-    || binding.credentialGeneration < 0) return null
+  const canonical = await resolveCanonicalAgentContext(ctx, candidate.credentialId, now)
+  if (canonical === null
+    || candidate.principalId !== canonical.principalRef
+    || candidate.ownerId !== canonical.accountRef) return null
 
-  const [credential, principal, storedAgent] = await Promise.all([
-    ctx.db.query('credentials')
-      .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
-        .eq('bindingRef', binding.bindingRef)
-        .eq('generation', binding.credentialGeneration)
-        .eq('lifecycle', 'active'))
-      .unique(),
-    ctx.db.query('principals')
-      .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
-      .unique(),
-    ctx.db.query('agentAccessPrincipals')
-      .withIndex('by_credentialId', (query) => query.eq('credentialId', candidate.credentialId))
-      .unique(),
-  ])
-  if (credential === null
-    || credential.principalRef !== binding.principalRef
-    || credential.type !== 'api_key'
-    || credential.expiresAt <= now
-    || principal === null
-    || principal.kind !== 'agent'
-    || principal.lifecycle !== 'active'
-    || storedAgent === null
-    || storedAgent.principalId !== principal.principalRef
+  const storedAgents = await ctx.db.query('agentAccessPrincipals')
+    .withIndex('by_credentialId', (query) => query.eq('credentialId', canonical.credentialLocator))
+    .take(2)
+  if (storedAgents.length !== 1) return null
+  const storedAgent = storedAgents[0]!
+  if (storedAgent.principalId !== canonical.principalRef
+    || storedAgent.ownerId !== canonical.accountRef
     || storedAgent.credentialId !== candidate.credentialId
     || storedAgent.applicationRef !== candidate.applicationRef
     || storedAgent.environment !== candidate.environment
@@ -682,49 +656,56 @@ async function resolveCurrentAgentAuthority(
     || !storedAgent.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
     || candidate.scopes.some((scope) => !storedAgent.scopes.includes(scope))) return null
 
-  const activeGrants = await ctx.db.query('agentAccessGrants')
-    .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
-      .eq('credentialId', candidate.credentialId)
-      .eq('environment', candidate.environment)
-      .eq('lifecycle', 'active'))
-    .take(2)
+  const [sandboxGrants, productionGrants] = await Promise.all([
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', canonical.credentialLocator)
+        .eq('environment', 'sandbox')
+        .eq('lifecycle', 'active'))
+      .take(2),
+    ctx.db.query('agentAccessGrants')
+      .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+        .eq('credentialId', canonical.credentialLocator)
+        .eq('environment', 'production')
+        .eq('lifecycle', 'active'))
+      .take(2),
+  ])
+  const activeGrants = [...sandboxGrants, ...productionGrants]
   if (activeGrants.length !== 1) return null
   const grant = activeGrants[0]!
-  if (grant.principalId !== principal.principalRef
+  if (grant.principalId !== canonical.principalRef
     || grant.ownerId !== storedAgent.ownerId
     || grant.applicationRef !== storedAgent.applicationRef
+    || grant.environment !== storedAgent.environment
     || grant.authorityMode !== storedAgent.authorityMode
     || grant.generation !== storedAgent.grantGeneration
     || grant.policyDigest !== storedAgent.policyDigest
-    || grant.expiresAt <= now) return null
+    || grant.expiresAt <= now
+    || grant.expiresAt > canonical.credentialExpiresAt) return null
 
-  const [delegation, account] = await Promise.all([
-    ctx.db.query('authorityDelegationGrants')
-      .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
-      .unique(),
-    ctx.db.query('accounts')
-      .withIndex('by_accountRef', (query) => query.eq('accountRef', storedAgent.ownerId))
-      .unique(),
-  ])
-  if (delegation === null
-    || delegation.lifecycle !== 'active'
-    || delegation.subjectPrincipalRef !== principal.principalRef
-    || delegation.accountRef !== storedAgent.ownerId
-      || delegation.generation !== grant.generation
-      || delegation.expiresAt <= now
-      || !delegation.scopes.includes(MARKET_OPERATIONS_INVOKE_SCOPE)
-      || candidate.scopes.some((scope) => !delegation.scopes.includes(scope))
-    || account === null
-    || account.lifecycle !== 'active') return null
+  const scopes = uniqueSorted(candidate.scopes)
+  if (scopes.length !== candidate.scopes.length) return null
+  const delegation = await validateCanonicalAgentDelegation(ctx, {
+    evidenceKind: 'operation-public-admission',
+    evidenceRef: operationRef,
+    principalRef: canonical.principalRef,
+    accountRef: canonical.accountRef,
+    grantRef: grant.grantRef,
+    grantGeneration: grant.generation,
+    requiredScopes: scopes,
+    resourceRefs: [operationRef],
+    now,
+  })
+  if (delegation === null) return null
 
   return Object.freeze({
     principal: Object.freeze({
-      principalId: principal.principalRef,
-      ownerId: account.accountRef,
+      principalId: canonical.principalRef,
+      ownerId: canonical.accountRef,
       credentialId: storedAgent.credentialId,
       applicationRef: storedAgent.applicationRef,
       environment: storedAgent.environment,
-      scopes: [...candidate.scopes].sort(),
+      scopes,
       authorityMode: storedAgent.authorityMode,
     }),
     grantRef: grant.grantRef,
@@ -745,51 +726,17 @@ async function validatePersistedInvocationDelegation(
     grantGeneration: number
   }>,
 ): Promise<boolean> {
-  try {
-    const baseStore = createConvexDelegationStore(ctx)
-    const readOnlyStore: DelegationStore = {
-      transact: async (operation) => await baseStore.transact(
-        async (transaction) => await operation({
-          ...transaction,
-          getSnapshotByAdmissionIdempotency: async () => undefined,
-          getSnapshot: async () => undefined,
-          commit: async () => undefined,
-        }),
-      ),
-    }
-    const evidenceRef = canonicalDigest({
-      format: 'operation-workload-authority-validation:v1',
-      invocationRef: input.invocationRef,
-      operationRef: input.operationRef,
-      principalId: input.principalId,
-      accountRef: input.accountRef,
-      grantRef: input.grantRef,
-      grantGeneration: input.grantGeneration,
-    } as StableHashValue)
-    const snapshot = await new DelegationService(
-      readOnlyStore,
-      createConvexDelegationContextPort(ctx, principalRef(input.principalId)),
-      { randomUuid: () => '00000000-0000-4000-8000-000000000001' },
-    ).admitConsequence({
-      grantRef: delegationGrantRef(input.grantRef),
-      expectedGeneration: input.grantGeneration,
-      context: {
-        actorPrincipalRef: principalRef(input.principalId),
-        activeAccountRef: accountRef(input.accountRef),
-        correlationRef: evidenceRef,
-        idempotencyRef: evidenceRef,
-      },
-      requiredScopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
-      resourceRefs: [input.operationRef],
-      budgetAmount: 0,
-    })
-    return snapshot.actorPrincipalRef === input.principalId
-      && snapshot.accountRef === input.accountRef
-      && snapshot.grantRef === input.grantRef
-      && snapshot.generation === input.grantGeneration
-  } catch {
-    return false
-  }
+  return await validateCanonicalAgentDelegation(ctx, {
+    evidenceKind: 'operation-workload-reconciliation',
+    evidenceRef: input.invocationRef,
+    principalRef: input.principalId,
+    accountRef: input.accountRef,
+    grantRef: input.grantRef,
+    grantGeneration: input.grantGeneration,
+    requiredScopes: [MARKET_OPERATIONS_INVOKE_SCOPE],
+    resourceRefs: [input.operationRef],
+    now: Date.now(),
+  }) !== null
 }
 
 async function reconcilePersistedInvocationAuthority(
@@ -813,7 +760,7 @@ async function reconcilePersistedInvocationAuthority(
     environment: storedAgent.environment,
     scopes: storedAgent.scopes,
     authorityMode: storedAgent.authorityMode,
-  }, now)
+  }, now, row.operationRef)
   if (current === null
     || row.principalId !== current.principal.principalId
     || row.ownerId !== current.principal.ownerId
@@ -883,7 +830,7 @@ async function canonicalAgentInvokeHandler(
   ctx: ActionCtx,
   args: Parameters<typeof invokeHandler>[1],
 ): Promise<Infer<typeof operationResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { operationRef: args.operationRef })
   if (principal === null) {
     return { kind: 'refused', operationRef: args.operationRef, code: 'grant_not_found', retryable: false }
   }
@@ -894,7 +841,7 @@ async function canonicalAgentStatusHandler(
   ctx: ActionCtx,
   args: Parameters<typeof readInvocationStatusHandler>[1],
 ): Promise<Infer<typeof statusResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { invocationRef: args.invocationRef })
   if (principal === null) return agentStatusNotFound(args.invocationRef)
   return await readInvocationStatusHandler(ctx, { ...args, principal })
 }
@@ -903,7 +850,7 @@ async function canonicalAgentCancelHandler(
   ctx: ActionCtx,
   args: Parameters<typeof cancelInvocationHandler>[1],
 ): Promise<Infer<typeof recoveryResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { invocationRef: args.invocationRef })
   if (principal === null) return agentRecoveryNotFound(args.invocationRef)
   return await cancelInvocationHandler(ctx, { ...args, principal })
 }
@@ -912,7 +859,7 @@ async function canonicalAgentReconcileHandler(
   ctx: ActionCtx,
   args: Parameters<typeof reconcileInvocationHandler>[1],
 ): Promise<Infer<typeof recoveryResultValue>> {
-  const principal = await canonicalAgentPrincipal(ctx, args.principal)
+  const principal = await canonicalAgentPrincipal(ctx, args.principal, { invocationRef: args.invocationRef })
   if (principal === null) return agentRecoveryNotFound(args.invocationRef)
   return await reconcileInvocationHandler(ctx, { ...args, principal })
 }
@@ -997,10 +944,42 @@ async function canonicalOwnerReconcileHandler(
 }
 
 export const resolveInvocationAgentAuthority = internalMutation({
-  args: { principal: principalValue },
+  args: {
+    principal: principalValue,
+    operationRef: v.optional(v.string()),
+    invocationRef: v.optional(v.string()),
+  },
   returns: v.union(principalValue, v.null()),
-  handler: async (ctx, args): Promise<OperationPrincipal | null> =>
-    (await resolveCurrentAgentAuthority(ctx, args.principal, Date.now()))?.principal ?? null,
+  handler: async (ctx, args): Promise<OperationPrincipal | null> => {
+    if ((args.operationRef === undefined) === (args.invocationRef === undefined)) return null
+    let operationRef: string
+    let invocation: Doc<'capabilityOperationInvocations'> | null = null
+    if (args.operationRef !== undefined) {
+      operationRef = args.operationRef
+    } else {
+      const rows = await ctx.db.query('capabilityOperationInvocations')
+        .withIndex('by_invocationRef', (query) => query.eq('invocationRef', args.invocationRef as string))
+        .take(2)
+      if (rows.length !== 1) return null
+      invocation = rows[0]!
+      operationRef = rows[0]!.operationRef
+    }
+    const current = await resolveCurrentAgentAuthority(ctx, args.principal, Date.now(), operationRef)
+    if (current === null) return null
+    if (invocation !== null) {
+      const row = invocation
+      if (row.principalId !== current.principal.principalId
+        || row.ownerId !== current.principal.ownerId
+        || row.credentialId !== current.principal.credentialId
+        || row.applicationRef !== current.principal.applicationRef
+        || row.environment !== current.principal.environment
+        || row.grantRef !== current.grantRef
+        || row.grantGeneration !== current.grantGeneration
+        || row.policyDigest !== current.policyDigest
+        || row.grantExpiresAt !== current.expiresAt) return null
+    }
+    return current.principal
+  },
 })
 
 export const reconcileInvocationWorkloadAuthority = internalMutation({

@@ -2,7 +2,10 @@ import { v, type Infer } from 'convex/values'
 import { mutation, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
-import { resolveBusinessActor } from './authz'
+import {
+  resolveCanonicalAgentContext,
+  validateCanonicalAgentDelegation,
+} from './lib/canonicalAgentAuthority'
 
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
@@ -168,15 +171,78 @@ export const registerAgentPrincipal = mutation({
   ),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    const actor = await resolveBusinessActor(ctx)
-    if (identity === null
-      || identity.tokenIdentifier.trim().length === 0
-      || actor.kind !== 'authenticated_owner') {
+    const now = Date.now()
+    if (identity === null || identity.tokenIdentifier.trim().length === 0) {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
+    const canonical = await resolveCanonicalAgentContext(ctx, identity.tokenIdentifier, now)
+    if (canonical === null) {
+      return { kind: 'refused' as const, code: 'authentication_required' as const }
+    }
+    const [sandboxGrants, productionGrants] = await Promise.all([
+      ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', canonical.credentialLocator)
+          .eq('environment', 'sandbox')
+          .eq('lifecycle', 'active'))
+        .take(2),
+      ctx.db.query('agentAccessGrants')
+        .withIndex('by_credentialId_and_environment_and_lifecycle', (query) => query
+          .eq('credentialId', canonical.credentialLocator)
+          .eq('environment', 'production')
+          .eq('lifecycle', 'active'))
+        .take(2),
+    ])
+    const grants = [...sandboxGrants, ...productionGrants]
+    if (grants.length !== 1) return { kind: 'conflict' as const }
+    const grant = grants[0]!
+    const delegation = await ctx.db.query('authorityDelegationGrants')
+      .withIndex('by_grantRef', (query) => query.eq('grantRef', grant.grantRef))
+      .take(2)
+    if (delegation.length !== 1) return { kind: 'conflict' as const }
+    const liveDelegation = await validateCanonicalAgentDelegation(ctx, {
+      evidenceKind: 'agent-principal-registration',
+      evidenceRef: identity.tokenIdentifier,
+      principalRef: canonical.principalRef,
+      accountRef: canonical.accountRef,
+      grantRef: grant.grantRef,
+      grantGeneration: grant.generation,
+      requiredScopes: delegation[0]!.scopes,
+      resourceRefs: delegation[0]!.resourceRefs,
+      now,
+    })
+    const expectedScopes = uniqueSorted(args.scopes)
+    if (liveDelegation === null
+      || args.principalId !== canonical.principalRef
+      || args.credentialId !== canonical.credentialLocator
+      || args.applicationRef !== grant.applicationRef
+      || args.environment !== grant.environment
+      || args.authorityMode !== grant.authorityMode
+      || args.grantGeneration !== grant.generation
+      || args.policyDigest !== grant.policyDigest
+      || args.lifecycle !== grant.lifecycle
+      || args.expiresAt !== grant.expiresAt
+      || grant.principalId !== canonical.principalRef
+      || grant.ownerId !== canonical.accountRef
+      || grant.credentialId !== canonical.credentialLocator
+      || grant.expiresAt > canonical.credentialExpiresAt
+      || expectedScopes.length !== liveDelegation.scopes.length
+      || expectedScopes.some((scope, index) => scope !== liveDelegation.scopes[index])) {
+      return { kind: 'conflict' as const }
+    }
     return await writeAgentPrincipal(ctx, {
-      ...args,
-      ownerId: actor.canonicalAccountRef,
+      principalId: canonical.principalRef,
+      ownerId: canonical.accountRef,
+      credentialId: canonical.credentialLocator,
+      applicationRef: grant.applicationRef,
+      environment: grant.environment,
+      scopes: liveDelegation.scopes,
+      authorityMode: grant.authorityMode,
+      grantGeneration: grant.generation,
+      policyDigest: grant.policyDigest,
+      lifecycle: grant.lifecycle,
+      expiresAt: grant.expiresAt,
+      seenAt: now,
       ownerTokenIdentifier: identity.tokenIdentifier,
     })
   },
