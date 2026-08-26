@@ -68,6 +68,10 @@ not satisfied by a roadmap, schema sketch or implementation-looking test list.
 - Each phase task sets one phase-only goal before repository work.
 - Architecture tasks are planning-only and own only explicit context, ADR, design,
   gate and launch artifacts. They do not edit production source or tests.
+- Architecture tasks use named architecture, domain, framework-documentation,
+  research and gate-enforcement skills. They do not substitute a bespoke review
+  checklist or freestyle a platform pattern that already has authoritative
+  documentation or a mature first-party reference.
 - The phase driver delegates discrete leaves with non-overlapping owned paths,
   explicit outcomes and explicit stop conditions.
 - Only the phase integration driver edits shared composition surfaces named in the
@@ -83,6 +87,14 @@ runtime proof model. A gate that projects one canonical sink over many labelled
 surfaces is insufficient unless it proves identical composition and effect-path
 dominance for every actual registered handler. Tests may not reimplement policy in
 a parallel evaluator and call that runtime coverage.
+
+Every load-bearing design decision must appear in a source-to-decision matrix that
+names the existing AE contract, version-pinned framework documentation, primary
+standard or mature first-party reference it follows. The matrix records the adopted
+pattern, AE-specific adaptation, rejected alternative and verification consequence.
+An unsupported decision is a `FIRST-PRINCIPLES EXCEPTION`; it requires an ADR that
+proves the established patterns are unsuitable and must survive fresh design
+acceptance. Unmarked or uncited invention blocks implementation.
 
 Each leaf performs the four Unlazy passes:
 
