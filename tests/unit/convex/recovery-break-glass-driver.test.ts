@@ -1,12 +1,11 @@
 import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { internal } from '../../../convex/_generated/api'
+import { api } from '../../../convex/_generated/api'
 import schema from '../../../convex/schema'
 import {
   authorizeRecoveryHandler,
   createConvexRecoveryPersistence,
-  recordVerifiedRecoveryApprovalHandler,
 } from '../../../convex/recoveryBreakGlass'
 import {
   accountRef,
@@ -137,6 +136,58 @@ async function seed(backend: TestConvex<typeof schema>) {
         idempotencyRef: 'operator:add',
       },
     })
+    await ctx.db.insert('memberships', {
+      membershipRef: 'mem_00000000000040008000000000000042',
+      accountRef: ACCOUNT,
+      memberPrincipalRef: OPERATOR_TWO,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 900,
+      createdBy: {
+        actorPrincipalRef: OWNER,
+        activeAccountRef: ACCOUNT,
+        correlationRef: 'operator:add:two',
+        idempotencyRef: 'operator:add:two',
+      },
+    })
+    for (const [suffix, operator] of [['41', OPERATOR_ONE], ['42', OPERATOR_TWO]] as const) {
+      const bindingRef = `ext_000000000000400080000000000000${suffix}`
+      const credentialRef = `crd_000000000000400080000000000000${suffix}`
+      await ctx.db.insert('externalIdentityBindings', {
+        bindingRef,
+        providerNamespace: 'clerk/user',
+        providerIdentifier: `recovery|operator:${suffix}`,
+        principalRef: operator,
+        providerState: { kind: 'known', value: 'active' },
+        lifecycle: 'active',
+        credentialGeneration: 1,
+        revision: 1,
+        bindIdempotencyRef: `binding:${suffix}`,
+        createdAt: 900,
+        updatedAt: 900,
+      })
+      await ctx.db.insert('credentials', {
+        credentialRef,
+        bindingRef,
+        principalRef: operator,
+        type: 'provider_token',
+        generation: 1,
+        lifecycle: 'active',
+        issueIdempotencyRef: `credential:${suffix}`,
+        issuedAt: 900,
+        expiresAt: 2_000,
+        expiryMaterialization: {
+          state: 'scheduled',
+          credentialGeneration: 1,
+          credentialExpiresAt: 2_000,
+          scheduleNonce: `nonce:${suffix}`,
+          scheduleRef: `schedule:${suffix}`,
+          materializedAt: 900,
+        },
+        revision: 1,
+        updatedAt: 900,
+      })
+    }
     await ctx.db.insert('authorityDelegationGrants', {
       grantRef: GRANT,
       accountRef: ACCOUNT,
@@ -161,6 +212,24 @@ async function seed(backend: TestConvex<typeof schema>) {
   })
 }
 
+async function seedTrustedApprovals(
+  backend: TestConvex<typeof schema>,
+  action: VerifiedBreakGlassApproval['action'] = 'isolate',
+) {
+  await backend.run(async (ctx) => {
+    await createConvexRecoveryPersistence(ctx).transact(async (session) => {
+      await session.insertVerifiedApproval(approval('approval:one', OPERATOR_ONE, action))
+      await session.insertVerifiedApproval(approval('approval:two', OPERATOR_TWO, action))
+    })
+  })
+}
+
+const identity = (suffix: '41' | '42') => ({
+  subject: `operator:${suffix}`,
+  issuer: 'https://recovery.test',
+  tokenIdentifier: `recovery|operator:${suffix}`,
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
 })
@@ -172,10 +241,7 @@ describe('recovery break-glass Convex driver', () => {
       .mockReturnValue('00000000-0000-4000-8000-000000000041')
     const backend = convexTest(schema, convexModules)
     await seed(backend)
-    await backend.run(async (ctx) => {
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:one', OPERATOR_ONE))
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:two', OPERATOR_TWO))
-    })
+    await seedTrustedApprovals(backend)
     const request = {
       action: 'isolate' as const,
       accountRef: ACCOUNT,
@@ -221,13 +287,13 @@ describe('recovery break-glass Convex driver', () => {
       .mockReturnValue('00000000-0000-4000-8000-000000000042')
     const backend = convexTest(schema, convexModules)
     await seed(backend)
+    await seedTrustedApprovals(backend)
     await backend.run(async (ctx) => {
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:one', OPERATOR_ONE))
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:two', OPERATOR_TWO))
-      await expect(recordVerifiedRecoveryApprovalHandler(ctx, {
-        ...approval('approval:other', OPERATOR_TWO),
-        verificationRef: 'verification:approval:one',
-      })).rejects.toMatchObject({ code: 'recovery_approval_duplicate' })
+      await expect(createConvexRecoveryPersistence(ctx).transact(async (session) =>
+        await session.insertVerifiedApproval({
+          ...approval('approval:other', OPERATOR_TWO),
+          verificationRef: 'verification:approval:one',
+        }))).rejects.toMatchObject({ code: 'recovery_approval_duplicate' })
     })
     const base = {
       action: 'isolate' as const,
@@ -272,16 +338,20 @@ describe('recovery break-glass Convex driver', () => {
     const backend = convexTest(schema, convexModules)
     await seed(backend)
 
-    await expect(backend.mutation(internal.recoveryBreakGlass.recordVerifiedRecoveryApproval, {
-      approval: approval('approval:one', OPERATOR_ONE),
+    await expect(backend.withIdentity(identity('41')).mutation(api.recoveryBreakGlass.submitRecoveryApproval, {
+      approvalRef: 'approval:one', accountRef: ACCOUNT, action: 'isolate',
     })).resolves.toMatchObject({ lifecycle: 'verified' })
-    await expect(backend.mutation(internal.recoveryBreakGlass.recordVerifiedRecoveryApproval, {
-      approval: approval('approval:two', OPERATOR_TWO),
+    await expect(backend.withIdentity(identity('42')).mutation(api.recoveryBreakGlass.submitRecoveryApproval, {
+      approvalRef: 'approval:two', accountRef: ACCOUNT, action: 'isolate',
     })).resolves.toMatchObject({ lifecycle: 'verified' })
 
-    const admitted = await backend.mutation(
-      internal.recoveryBreakGlass.authorizeRecovery,
-      recoveryRequest(),
+    const admitted = await backend.withIdentity(identity('41')).mutation(
+      api.recoveryBreakGlass.authorizeRecoveryOperation,
+      {
+        action: 'isolate', accountRef: ACCOUNT, grantRef: GRANT,
+        expectedGrantGeneration: 4, approvalRefs: ['approval:one', 'approval:two'],
+        correlationRef: 'recovery:isolate', idempotencyRef: 'recovery:isolate:one',
+      },
     )
     expect(admitted).toMatchObject({
       accountRef: ACCOUNT,
@@ -301,8 +371,8 @@ describe('recovery break-glass Convex driver', () => {
           consumedAt: NOW,
           consumedByAdmissionRef: admitted.admissionRef,
         })
-        await expect(session.getApprovalByVerification('verification:approval:one'))
-          .resolves.toEqual(consumed)
+        const byVerification = await session.getApprovalByVerification(consumed?.verificationRef ?? '')
+        expect(byVerification).toEqual(consumed)
         await expect(session.getAdmission(admitted.admissionRef)).resolves.toEqual(admitted)
       })
     })
@@ -355,9 +425,8 @@ describe('recovery break-glass Convex driver', () => {
       if (account === null || grant === null) throw new Error('seed_rows_missing')
       await ctx.db.patch(account._id, { lifecycle: 'active' })
       await ctx.db.patch(grant._id, { scopes: ['recovery:freeze'] })
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:one', OPERATOR_ONE, 'freeze'))
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:two', OPERATOR_TWO, 'freeze'))
     })
+    await seedTrustedApprovals(backend, 'freeze')
 
     await expect(backend.run(async (ctx) => await authorizeRecoveryHandler(ctx, {
       ...recoveryRequest(),
@@ -376,10 +445,7 @@ describe('recovery break-glass Convex driver', () => {
       .mockReturnValue('00000000-0000-4000-8000-000000000045')
     const backend = convexTest(schema, convexModules)
     await seed(backend)
-    await backend.run(async (ctx) => {
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:one', OPERATOR_ONE))
-      await recordVerifiedRecoveryApprovalHandler(ctx, approval('approval:two', OPERATOR_TWO))
-    })
+    await seedTrustedApprovals(backend)
     const admitted = await backend.run(async (ctx) => await authorizeRecoveryHandler(
       ctx,
       recoveryRequest(),

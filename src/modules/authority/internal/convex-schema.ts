@@ -43,6 +43,7 @@ export const authorityDelegationTables = {
   authorityDelegationGrants: defineTable(delegationGrantFields)
     .index('by_grantRef', ['grantRef'])
     .index('by_subjectPrincipalRef_and_lifecycle', ['subjectPrincipalRef', 'lifecycle'])
+    .index('by_accountRef_and_lifecycle', ['accountRef', 'lifecycle'])
     .index('by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef', [
       'accountRef',
       'actorPrincipalRef',

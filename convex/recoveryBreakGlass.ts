@@ -1,6 +1,11 @@
 import { v } from 'convex/values'
 
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { mutation, type MutationCtx } from './_generated/server'
+import { canonicalDigest } from '../src/modules/common/canonical-digest'
+import {
+  type RecoveryApprovalIntent,
+  type RecoveryApprovalVerificationRequest,
+} from '../src/modules/authority/recovery/public'
 import type { Doc } from './_generated/dataModel'
 import {
   ProductionRecoveryService,
@@ -32,33 +37,42 @@ import {
 } from '../src/modules/authority/delegation/public'
 import { createConvexDelegationStore } from './lib/delegationPersistence'
 
-const authorizeRecoveryArgs = {
+const submitRecoveryApprovalArgs = {
+  approvalRef: v.string(),
+  accountRef: v.string(),
+  action: recoveryActionValue,
+} as const
+
+const authorizeRecoveryOperationArgs = {
   action: recoveryActionValue,
   accountRef: v.string(),
-  subjectPrincipalRef: v.string(),
   grantRef: v.string(),
   expectedGrantGeneration: v.number(),
   approvalRefs: v.array(v.string()),
-  context: v.object({
-    actorPrincipalRef: v.string(),
-    activeAccountRef: v.string(),
-    correlationRef: v.string(),
-    idempotencyRef: v.string(),
-  }),
+  correlationRef: v.string(),
+  idempotencyRef: v.string(),
 } as const
 
-export async function recordVerifiedRecoveryApprovalHandler(
+export async function submitRecoveryApprovalHandler(
   ctx: MutationCtx,
-  approval: VerifiedBreakGlassApproval,
+  intent: RecoveryApprovalIntent,
 ): Promise<VerifiedBreakGlassApproval> {
-  const unavailable = async (): Promise<never> => {
-    throw new RecoveryError('recovery_approval_unavailable')
-  }
+  const now = Date.now()
+  const facts = await resolveRecoveryAccountFacts(ctx, intent.accountRef)
+  const operator = await resolveRecoveryOperator(ctx, intent.accountRef, now)
   return await new ProductionRecoveryService({
     persistence: createConvexRecoveryPersistence(ctx),
-    accountFacts: { resolve: unavailable },
-    authority: { admitConsequence: unavailable },
-  }).recordVerifiedApproval(approval)
+    accountFacts: { resolve: async () => facts },
+    approvalVerifier: {
+      verify: async (request) => trustedRecoveryApprovalAttestation(request, operator),
+    },
+    authority: {
+      admitConsequence: async () => {
+        throw new RecoveryError('recovery_approval_unavailable')
+      },
+    },
+    now: () => now,
+  }).recordApproval(intent)
 }
 
 export async function authorizeRecoveryHandler(
@@ -74,39 +88,135 @@ export async function authorizeRecoveryHandler(
   )
   return await new ProductionRecoveryService({
     persistence: createConvexRecoveryPersistence(ctx),
-    accountFacts: {
-      resolve: async (selectedAccountRef) => {
-        const selected = accountRef(selectedAccountRef)
-        const account = await ctx.db.query('accounts')
-          .withIndex('by_accountRef', (query) => query.eq('accountRef', selected)).unique()
-        if (account === null || account.currentOwnershipRef.length === 0) {
-          throw new RecoveryError('recovery_account_facts_invalid')
-        }
-        const ownership = await ctx.db.query('accountOwnerships')
-          .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef)).unique()
-        if (ownership === null) throw new RecoveryError('recovery_account_facts_invalid')
-        return Object.freeze({
-          account: Object.freeze({
-            accountRef: selected,
-            lifecycle: account.lifecycle,
-            recoveryPolicy: Object.freeze({ ...account.recoveryPolicy }) as RecoveryPolicy,
-            revision: account.revision,
-            updatedAt: account.updatedAt,
-            currentOwnershipRef: ownershipRef(account.currentOwnershipRef),
-          }),
-          ownership: Object.freeze({
-            ownershipRef: ownershipRef(ownership.ownershipRef),
-            accountRef: accountRef(ownership.accountRef),
-            ownerPrincipalRef: principalRef(ownership.ownerPrincipalRef),
-            lifecycle: ownership.lifecycle,
-            revision: ownership.revision,
-          }),
-        })
-      },
-    },
+    accountFacts: { resolve: async (selectedAccountRef) =>
+      await resolveRecoveryAccountFacts(ctx, selectedAccountRef) },
     authority: delegation,
     now: () => now,
   }).authorize(input)
+}
+
+async function resolveRecoveryAccountFacts(
+  ctx: MutationCtx,
+  selectedAccountRef: string,
+) {
+  const selected = accountRef(selectedAccountRef)
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', selected)).unique()
+  if (account === null || account.currentOwnershipRef.length === 0) {
+    throw new RecoveryError('recovery_account_facts_invalid')
+  }
+  const ownership = await ctx.db.query('accountOwnerships')
+    .withIndex('by_ownershipRef', (query) => query.eq('ownershipRef', account.currentOwnershipRef)).unique()
+  if (ownership === null) throw new RecoveryError('recovery_account_facts_invalid')
+  return Object.freeze({
+    account: Object.freeze({
+      accountRef: selected,
+      lifecycle: account.lifecycle,
+      recoveryPolicy: Object.freeze({ ...account.recoveryPolicy }) as RecoveryPolicy,
+      revision: account.revision,
+      updatedAt: account.updatedAt,
+      currentOwnershipRef: ownershipRef(account.currentOwnershipRef),
+    }),
+    ownership: Object.freeze({
+      ownershipRef: ownershipRef(ownership.ownershipRef),
+      accountRef: accountRef(ownership.accountRef),
+      ownerPrincipalRef: principalRef(ownership.ownerPrincipalRef),
+      lifecycle: ownership.lifecycle,
+      revision: ownership.revision,
+    }),
+  })
+}
+
+type RecoveryOperator = Readonly<{
+  principalRef: ReturnType<typeof principalRef>
+  credentialRef: string
+  credentialGeneration: number
+  membershipRef: string
+  membershipRevision: number
+}>
+
+async function resolveRecoveryOperator(
+  ctx: MutationCtx,
+  selectedAccountRef: string,
+  now: number,
+): Promise<RecoveryOperator> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null || typeof identity.tokenIdentifier !== 'string'
+    || identity.tokenIdentifier.length === 0) {
+    throw new RecoveryError('recovery_approval_unavailable')
+  }
+  const selected = accountRef(selectedAccountRef)
+  const binding = await ctx.db.query('externalIdentityBindings')
+    .withIndex('by_providerNamespace_and_providerIdentifier', (query) => query
+      .eq('providerNamespace', 'clerk/user')
+      .eq('providerIdentifier', identity.tokenIdentifier))
+    .unique()
+  if (binding === null || binding.lifecycle !== 'active'
+    || binding.providerState.kind !== 'known' || binding.providerState.value !== 'active'
+    || !Number.isSafeInteger(binding.credentialGeneration)
+    || binding.credentialGeneration < 1) {
+    throw new RecoveryError('recovery_approval_unavailable')
+  }
+  const [credential, principal, membership] = await Promise.all([
+    ctx.db.query('credentials')
+      .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+        .eq('bindingRef', binding.bindingRef)
+        .eq('generation', binding.credentialGeneration)
+        .eq('lifecycle', 'active'))
+      .unique(),
+    ctx.db.query('principals')
+      .withIndex('by_principalRef', (query) => query.eq('principalRef', binding.principalRef))
+      .unique(),
+    ctx.db.query('memberships')
+      .withIndex('by_accountRef_and_memberPrincipalRef_and_lifecycle', (query) => query
+        .eq('accountRef', selected)
+        .eq('memberPrincipalRef', binding.principalRef)
+        .eq('lifecycle', 'active'))
+      .unique(),
+  ])
+  if (credential === null || principal === null || membership === null
+    || credential.principalRef !== binding.principalRef
+    || credential.type !== 'provider_token'
+    || credential.expiresAt <= now
+    || credential.expiryMaterialization?.state !== 'scheduled'
+    || credential.expiryMaterialization.credentialGeneration !== credential.generation
+    || credential.expiryMaterialization.credentialExpiresAt !== credential.expiresAt
+    || principal.lifecycle !== 'active'
+    || !Number.isSafeInteger(membership.revision) || membership.revision < 1) {
+    throw new RecoveryError('recovery_approval_unavailable')
+  }
+  return Object.freeze({
+    principalRef: principalRef(principal.principalRef),
+    credentialRef: credential.credentialRef,
+    credentialGeneration: credential.generation,
+    membershipRef: membership.membershipRef,
+    membershipRevision: membership.revision,
+  })
+}
+
+function trustedRecoveryApprovalAttestation(
+  request: RecoveryApprovalVerificationRequest,
+  operator: RecoveryOperator,
+) {
+  return Object.freeze({
+    operatorPrincipalRef: operator.principalRef,
+    verificationRef: `recovery-verification:${canonicalDigest({
+      domain: 'ae/recovery-approval/v1',
+      approvalRef: request.approvalRef,
+      accountRef: request.accountRef,
+      subjectPrincipalRef: request.subjectPrincipalRef,
+      operatorPrincipalRef: operator.principalRef,
+      credentialRef: operator.credentialRef,
+      credentialGeneration: operator.credentialGeneration,
+      membershipRef: operator.membershipRef,
+      membershipRevision: operator.membershipRevision,
+      action: request.action,
+      recoveryPolicyRevision: request.recoveryPolicyRevision,
+      frozenAccountRevision: request.frozenAccountRevision,
+      verifiedAt: request.verifiedAt,
+      expiresAt: request.expiresAt,
+    })}`,
+  })
 }
 
 function createRecoveryDelegationContextPort(
@@ -298,27 +408,77 @@ function admissionFromRow(row: Doc<'recoveryBreakGlassAdmissions'> | null): Reco
   })
 }
 
-export const recordVerifiedRecoveryApproval = internalMutation({
-  args: { approval: recoveryApprovalValue },
+export const submitRecoveryApproval = mutation({
+  args: submitRecoveryApprovalArgs,
   returns: recoveryApprovalValue,
-  handler: async (ctx, args) => approvalForStorage(await recordVerifiedRecoveryApprovalHandler(
-    ctx,
-    canonicalApprovalInput(args.approval),
-  )),
-})
-
-export const authorizeRecovery = internalMutation({
-  args: authorizeRecoveryArgs,
-  returns: recoveryAdmissionValue,
-  handler: async (ctx, args) => admissionForStorage(await authorizeRecoveryHandler(ctx, {
-    ...args,
+  handler: async (ctx, args) => approvalForStorage(await submitRecoveryApprovalHandler(ctx, {
+    approvalRef: args.approvalRef,
     accountRef: accountRef(args.accountRef),
-    subjectPrincipalRef: principalRef(args.subjectPrincipalRef),
-    grantRef: delegationGrantRef(args.grantRef),
-    context: {
-      ...args.context,
-      actorPrincipalRef: principalRef(args.context.actorPrincipalRef),
-      activeAccountRef: accountRef(args.context.activeAccountRef),
-    },
+    action: args.action,
   })),
 })
+
+export const authorizeRecoveryOperation = mutation({
+  args: authorizeRecoveryOperationArgs,
+  returns: recoveryAdmissionValue,
+  handler: async (ctx, args) => {
+    const selectedAccountRef = accountRef(args.accountRef)
+    const now = Date.now()
+    const [operator, facts] = await Promise.all([
+      resolveRecoveryOperator(ctx, selectedAccountRef, now),
+      resolveRecoveryAccountFacts(ctx, selectedAccountRef),
+    ])
+    const admission = await authorizeRecoveryHandler(ctx, {
+      action: args.action,
+      accountRef: selectedAccountRef,
+      subjectPrincipalRef: facts.ownership.ownerPrincipalRef,
+      grantRef: delegationGrantRef(args.grantRef),
+      expectedGrantGeneration: args.expectedGrantGeneration,
+      approvalRefs: args.approvalRefs,
+      context: {
+        actorPrincipalRef: operator.principalRef,
+        activeAccountRef: selectedAccountRef,
+        correlationRef: args.correlationRef,
+        idempotencyRef: args.idempotencyRef,
+      },
+    })
+    await applyRecoveryEffect(ctx, admission)
+    return admissionForStorage(admission)
+  },
+})
+
+async function applyRecoveryEffect(ctx: MutationCtx, admission: RecoveryAdmission): Promise<void> {
+  const account = await ctx.db.query('accounts')
+    .withIndex('by_accountRef', (query) => query.eq('accountRef', admission.accountRef))
+    .unique()
+  if (account === null) throw new RecoveryError('recovery_account_facts_invalid')
+  if (admission.action === 'freeze') {
+    if (account.lifecycle !== 'active') throw new RecoveryError('recovery_account_facts_invalid')
+    await ctx.db.patch(account._id, {
+      lifecycle: 'suspended',
+      revision: account.revision + 1,
+      updatedAt: admission.admittedAt,
+    })
+    return
+  }
+  if (account.lifecycle !== 'suspended') throw new RecoveryError('recovery_account_facts_invalid')
+  if (admission.action === 'inspect_secret_canary') return
+  const activeGrants = await ctx.db.query('authorityDelegationGrants')
+    .withIndex('by_accountRef_and_lifecycle', (query) => query
+      .eq('accountRef', admission.accountRef)
+      .eq('lifecycle', 'active'))
+    .take(65)
+  if (activeGrants.length > 64) throw new RecoveryError('recovery_approval_unavailable')
+  await Promise.all(activeGrants.map(async (grant) => await ctx.db.patch(grant._id, {
+    lifecycle: 'revoked',
+    generation: grant.generation + 1,
+    revision: grant.revision + 1,
+    revokedAt: admission.admittedAt,
+    revokedBy: {
+      actorPrincipalRef: admission.operatorPrincipalRef,
+      activeAccountRef: admission.accountRef,
+      correlationRef: admission.context.correlationRef,
+      idempotencyRef: admission.context.idempotencyRef,
+    },
+  })))
+}

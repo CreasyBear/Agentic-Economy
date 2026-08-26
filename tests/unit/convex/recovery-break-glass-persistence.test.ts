@@ -16,8 +16,8 @@ import type {
   ProductionRecoveryServiceOptions,
   RecoveryAccountFactsPort,
   RecoveryAdmission,
+  RecoveryApprovalIntent,
   RecoveryAuthorityPort,
-  VerifiedBreakGlassApproval,
 } from '../../../src/modules/authority/recovery/public'
 import { convexModules } from '../../helpers/convex-fixtures'
 
@@ -84,9 +84,9 @@ vi.mock('../../../src/modules/authority/recovery/public', async (importOriginal)
       this.#authority = options.authority
     }
 
-    async recordVerifiedApproval(input: VerifiedBreakGlassApproval): Promise<VerifiedBreakGlassApproval> {
+    async recordApproval(input: RecoveryApprovalIntent): Promise<never> {
       await this.#accountFacts.resolve(input.accountRef)
-      return input
+      throw new Error('adapter_probe_complete')
     }
 
     async authorize(input: AuthorizeRecoveryRequest): Promise<RecoveryAdmission> {
@@ -124,18 +124,10 @@ const request: AuthorizeRecoveryRequest = {
   },
 }
 
-const verifiedApproval: VerifiedBreakGlassApproval = {
+const approvalIntent: RecoveryApprovalIntent = {
   approvalRef: 'approval:one',
   accountRef: ACCOUNT,
-  subjectPrincipalRef: OWNER,
-  operatorPrincipalRef: OPERATOR_ONE,
   action: 'isolate',
-  recoveryPolicyRevision: 7,
-  frozenAccountRevision: 12,
-  verificationRef: 'verification:approval:one',
-  lifecycle: 'verified',
-  verifiedAt: 1_050,
-  expiresAt: 2_000,
 }
 
 async function seededBackend() {
@@ -169,14 +161,14 @@ afterEach(() => {
 })
 
 describe('recovery break-glass private adapter defenses', () => {
-  it('keeps approval recording isolated from account-fact and authority callbacks', async () => {
+  it('fails before trusting approval identity when canonical account facts are absent', async () => {
     adapterProbe.mode = 'record-unavailable'
     const backend = await seededBackend()
-    const { recordVerifiedRecoveryApprovalHandler } = await import('../../../convex/recoveryBreakGlass')
+    const { submitRecoveryApprovalHandler } = await import('../../../convex/recoveryBreakGlass')
 
     await expect(backend.run(async (ctx) =>
-      await recordVerifiedRecoveryApprovalHandler(ctx, verifiedApproval)))
-      .rejects.toMatchObject({ code: 'recovery_approval_unavailable' })
+      await submitRecoveryApprovalHandler(ctx, approvalIntent)))
+      .rejects.toMatchObject({ code: 'recovery_account_facts_invalid' })
   })
 
   it.each([
