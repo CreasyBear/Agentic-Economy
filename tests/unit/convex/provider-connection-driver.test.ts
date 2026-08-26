@@ -308,6 +308,7 @@ describe('canonical provider-connection driver', () => {
       expectedAuthorityDigest: cleanup.authorityDigest,
       requestDigest: cleanupRequestDigest,
       cleanupAttempt,
+      now: Date.now(),
     }
     const cleanupTarget = await backend.query(
       internal.capabilityProviderConnections.readCleanupTarget,
@@ -327,6 +328,10 @@ describe('canonical provider-connection driver', () => {
     })
     if (cleanupTarget === null) throw new Error('cleanup_target_missing')
     const cleanupAuthority = cleanupTarget.resourceAuthority
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, {
+      ...cleanupArgs,
+      now: -1,
+    })).resolves.toBeNull()
     await expect(backend.run(async (ctx) => await advanceLeaseDrainHandler(ctx, {
       ...cleanupArgs,
       workId: cleanupWorkId,
@@ -346,8 +351,12 @@ describe('canonical provider-connection driver', () => {
       if (row === null) throw new Error('cleanup_grant_missing')
       return row
     })
+    await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, {
+      ...cleanupArgs,
+      now: revokeGrant.expiresAt,
+    })).resolves.toBeNull()
     await backend.run(async (ctx) => {
-      await ctx.db.patch(revokeGrant._id, { expiresAt: Date.now() - 1 })
+      await ctx.db.patch(revokeGrant._id, { expiresAt: cleanupArgs.now - 1 })
     })
     await expect(backend.query(internal.capabilityProviderConnections.readCleanupTarget, cleanupArgs))
       .resolves.toBeNull()
@@ -805,6 +814,7 @@ describe('canonical provider-connection driver', () => {
       expectedAuthorityDigest: `sha256:${'a'.repeat(64)}`,
       requestDigest: `sha256:${'b'.repeat(64)}`,
       cleanupAttempt: 1,
+      now: Date.now(),
     })).resolves.toBeNull()
     await expect(backend.query(internal.capabilityProviderConnections.listByBusinessLifecycle, {
       businessId: fixture.businessId,
@@ -1161,6 +1171,7 @@ describe('canonical provider-connection driver', () => {
       expectedAuthorityDigest: activeLegacy.authorityDigest,
       requestDigest: cleanupIdentity.requestDigest,
       cleanupAttempt: cleanupIdentity.cleanupAttempt,
+      now: Date.now(),
     })).resolves.toBeNull()
 
     await grant(backend, owner, '6', 'connection:install', ['connection-provider:provider/no-locator'])

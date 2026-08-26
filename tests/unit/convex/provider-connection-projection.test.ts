@@ -165,6 +165,7 @@ function scriptedContext(options: ScriptedDbOptions) {
       return value ?? null
     },
     collect: async () => collects.shift() ?? [],
+    take: async () => collects.shift() ?? [],
   }
   return {
     db: {
@@ -267,6 +268,14 @@ describe('canonical adapter helper boundaries', () => {
       commandId: 'share:no-grant',
       connection: canonicalConnection as never,
       granteeAccountRef: 'acc_00000000000000000000000000000002' as never,
+    })).resolves.toBeNull()
+    await expect(installCanonicalProviderConnection(scriptedContext({
+      collects: [Array.from({ length: 33 }, () => ({}))],
+    }) as never, {
+      actor,
+      commandId: 'install:ambiguous-grant-set',
+      providerNamespace: 'provider/test',
+      credentialRef: null,
     })).resolves.toBeNull()
   })
 

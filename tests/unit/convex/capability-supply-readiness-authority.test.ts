@@ -272,6 +272,8 @@ describe('capability supply readiness authority', () => {
     expect(capabilityProbeAuthorityMatches(pinned, pinned)).toBe(true)
 
     await expect(read(now + 400_000)).resolves.toBeNull()
+    await expect(read(Number.NaN)).resolves.toBeNull()
+    await expect(read(-1)).resolves.toBeNull()
     await backend.run(async (ctx) => await ctx.db.patch(seeded.agentId, { expiresAt: now + 100_000 }))
     await expect(read(now + 150_000)).resolves.toBeNull()
     await backend.run(async (ctx) => await ctx.db.patch(seeded.agentId, { expiresAt: undefined }))

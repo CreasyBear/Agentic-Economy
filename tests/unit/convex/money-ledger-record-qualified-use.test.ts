@@ -212,6 +212,47 @@ describe('exact invocation money reconciliation', () => {
       providerNetUnits: '99',
     })
   })
+
+  it.each([17, 32])(
+    'preserves the exact valid Qualified Use outcome through %i canonical delegation grants',
+    async (grantCount) => {
+      const db = new MemoryDb()
+      seedBudget(db)
+      seedPaidCharge(db)
+      settleSeededChargeBudget(db, credentialId, credentialId, true)
+      extendQualifiedUseDelegationAncestry(db, grantCount)
+
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'recorded' })
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'replayed' })
+      expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+      expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+      expect(db.rows('moneyPayouts')).toHaveLength(1)
+      expect(db.rows('moneyPayouts')[0]).toMatchObject({
+        grossAccrualUnits: '100',
+        rakeUnits: '1',
+        providerNetUnits: '99',
+      })
+    },
+  )
+
+  it('holds Qualified Use through a 33-grant ancestry before any monetary effect', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    extendQualifiedUseDelegationAncestry(db, 33)
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
   it.each([
     { name: 'transfer_pending', payoutState: 'transfer_pending' },
     { name: 'outcome_unknown', payoutState: 'outcome_unknown' },
@@ -1268,3 +1309,44 @@ describe('exact invocation money reconciliation', () => {
     expect(db.rows('moneyPayouts')).toHaveLength(0)
   })
 })
+
+function extendQualifiedUseDelegationAncestry(
+  db: MemoryDb,
+  grantCount: number,
+): void {
+  if (!Number.isSafeInteger(grantCount) || grantCount < 1) {
+    throw new Error('delegation_grant_count_invalid')
+  }
+  const leaf = db.rows('authorityDelegationGrants')[0]
+  if (leaf === undefined) throw new Error('authority_fixture_missing')
+  let child = leaf
+  for (let index = 1; index < grantCount; index += 1) {
+    const grantRef = `grt_${index.toString(16).padStart(32, '0')}`
+    const parent = {
+      _id: `authority-grant:${grantRef}`,
+      grantRef,
+      accountRef: canonicalQualifiedUseAccountRef,
+      actorPrincipalRef: principalId,
+      subjectPrincipalRef: principalId,
+      scopes: ['market_operations:invoke'],
+      resourceRefs: ['operation:money'],
+      budgetLimit: 1_000,
+      budgetUsed: 1,
+      expiresAt: 8_000_000_000_000_000 + index,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 0,
+      createdBy: {
+        actorPrincipalRef: principalId,
+        activeAccountRef: canonicalQualifiedUseAccountRef,
+        correlationRef: `correlation:${grantRef}`,
+        idempotencyRef: `create:${grantRef}`,
+      },
+    }
+    child.parentGrantRef = grantRef
+    child.parentGeneration = 1
+    db.seed('authorityDelegationGrants', parent)
+    child = parent
+  }
+}

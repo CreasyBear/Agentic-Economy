@@ -85,6 +85,7 @@ export async function readCurrentCapabilityProbeAuthority(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   args: CapabilityProbeAuthorityReadArgs,
 ): Promise<CapabilityProbeAuthority | null> {
+  if (!Number.isSafeInteger(args.now) || args.now < 0) return null
   const publication = await ctx.db
     .query('capabilityPublications')
     .withIndex('by_publicationRef_and_revision', (index) =>
@@ -278,6 +279,7 @@ export const observeCapabilityReadinessReturns = v.union(
 export const readCapabilityProbeTargetArgs = {
   publicationRef: v.string(),
   expectedRevision: v.number(),
+  now: v.number(),
 } as const
 export const readCapabilityProbeTargetReturns = v.union(
   v.object({
@@ -424,7 +426,7 @@ export async function observeCapabilityReadinessHandler(
 
 export async function readCapabilityProbeTargetHandler(
   ctx: QueryCtx,
-  args: { publicationRef: string; expectedRevision: number },
+  args: { publicationRef: string; expectedRevision: number; now: number },
 ) {
   const result = await readCapabilityProbeTargetFromModule(
     capabilitySupplyGraphPorts(ctx.db),
@@ -442,7 +444,7 @@ export async function readCapabilityProbeTargetHandler(
   const resourceAuthority = await readCurrentCapabilityProbeAuthority(ctx, {
     publicationRef: args.publicationRef,
     expectedRevision: args.expectedRevision,
-    now: Date.now(),
+    now: args.now,
   })
   if (resourceAuthority === null) {
     return {

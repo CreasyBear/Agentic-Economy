@@ -2,6 +2,7 @@ import type { MutationCtx, QueryCtx } from './_generated/server'
 import { resolveBusinessActor } from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
 import { MARKET_OPERATIONS_INVOKE_SCOPE } from '../src/modules/agent-access/contract'
+import { DELEGATION_MAX_ANCESTRY_GRANTS } from '../src/modules/authority/delegation/public'
 
 export type BillingSourceWriteArgs = {
   operationKey: string
@@ -63,7 +64,12 @@ export async function canonicalBillingPrincipalContext<
 ): Promise<Context | null> {
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return null
-  const now = Date.now()
+  // Public queries are authorized by the materialized interactive credential
+  // lifecycle resolved above. Reading wall-clock time inside a cached query
+  // can freeze a once-valid result, so the agent's time window is rechecked
+  // only by mutation consequence contexts. Lifecycle revocation remains a DB
+  // fact and therefore denies both reads and consequences immediately.
+  const consequenceNow = 'scheduler' in ctx ? Date.now() : undefined
   const [agentPrincipal, principal, account] = await Promise.all([
     ctx.db
       .query('agentAccessPrincipals')
@@ -86,7 +92,9 @@ export async function canonicalBillingPrincipalContext<
     agentPrincipal.ownerId !== actor.canonicalAccountRef ||
     (credentialId !== undefined && agentPrincipal.credentialId !== credentialId) ||
     agentPrincipal.lifecycle !== 'active' ||
-    (agentPrincipal.expiresAt !== undefined && agentPrincipal.expiresAt <= now) ||
+    (consequenceNow !== undefined &&
+      agentPrincipal.expiresAt !== undefined &&
+      agentPrincipal.expiresAt <= consequenceNow) ||
     principal === null ||
     principal.principalRef !== principalId ||
     principal.kind !== 'agent' ||
@@ -367,7 +375,7 @@ async function currentInvocationDelegationAncestryIsValid(
   const visited = new Set<string>()
   let nextRef: string | undefined = input.leafGrantRef
   while (nextRef !== undefined) {
-    if (reverse.length >= 16 || visited.has(nextRef)) return false
+    if (reverse.length >= DELEGATION_MAX_ANCESTRY_GRANTS || visited.has(nextRef)) return false
     visited.add(nextRef)
     const row = await ctx.db
       .query('authorityDelegationGrants')

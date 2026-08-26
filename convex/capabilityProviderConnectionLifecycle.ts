@@ -232,6 +232,7 @@ export const readCleanupTargetArgs = {
   expectedAuthorityDigest: v.string(),
   requestDigest: v.string(),
   cleanupAttempt: v.number(),
+  now: v.number(),
 } as const
 export const listByBusinessLifecycleArgs = {
   businessId: v.id('businesses'),
@@ -417,6 +418,7 @@ type ReadCleanupTargetArgs = {
   expectedAuthorityDigest: string
   requestDigest: string
   cleanupAttempt: number
+  now: number
 }
 
 type ListByBusinessLifecycleArgs = {
@@ -644,7 +646,8 @@ async function resolveUniqueCanonicalGrant(
     .withIndex('by_subjectPrincipalRef_and_lifecycle', (query) => query
       .eq('subjectPrincipalRef', actor.principalRef)
       .eq('lifecycle', 'active'))
-    .collect()
+    .take(DELEGATION_MAX_ANCESTRY_GRANTS + 1)
+  if (candidates.length > DELEGATION_MAX_ANCESTRY_GRANTS) return null
   const matching = candidates.filter((grant) => grant.accountRef === actor.accountRef
     && grant.expiresAt > now
     && Number.isSafeInteger(grant.generation)
@@ -1152,6 +1155,7 @@ export async function readHandler(ctx: QueryCtx, args: { connectionRef: string }
 }
 
 export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupTargetArgs) {
+  if (!Number.isSafeInteger(args.now) || args.now < 0) return null
   const row = await ctx.db.query('capabilityProviderConnections')
     .withIndex('by_connectionRef', (query) => query.eq('connectionRef', args.connectionRef)).unique()
   if (
@@ -1163,7 +1167,7 @@ export async function readCleanupTargetHandler(ctx: QueryCtx, args: ReadCleanupT
     || row.authorityGeneration !== args.expectedAuthorityGeneration
     || row.authorityDigest !== args.expectedAuthorityDigest
   ) return null
-  const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, toDomain(row))
+  const resourceAuthority = await readCurrentCleanupResourceAuthority(ctx, toDomain(row), args.now)
   if (resourceAuthority === null) return null
   return row === null ? null : {
     connectionRef: row.connectionRef,

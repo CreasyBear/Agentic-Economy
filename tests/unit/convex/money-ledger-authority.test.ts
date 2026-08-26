@@ -196,6 +196,36 @@ describe('money ledger canonical authority', () => {
     )
     expect(commands).toHaveLength(1)
     expect(commands[0]).toMatchObject({ state: 'outcome_unknown' })
+
+    await backend.run(async (ctx) => {
+      const row = await ctx.db
+        .query('agentAccessPrincipals')
+        .withIndex('by_principalId', (query) =>
+          query.eq('principalId', agentPrincipalRef),
+        )
+        .unique()
+      if (row === null) throw new Error('missing agent principal')
+      await ctx.db.patch(row._id, { expiresAt: 1 })
+    })
+    const expiredConsequenceArgs = await withSourceWrite('billing', {
+      ...command,
+      commandRef: 'money-command:expired-agent',
+      idempotencyKey: 'money-idempotency:expired-agent',
+      correlationId: 'money-command:expired-agent',
+    })
+    await expect(
+      fixture.owner.mutation(
+        api.moneyLedger.reserveCreditTopup,
+        expiredConsequenceArgs,
+      ),
+    ).resolves.toEqual({
+      kind: 'refused',
+      code: 'billing_identity_missing',
+      retryable: false,
+    })
+    await expect(backend.run(async (ctx) =>
+      await ctx.db.query('moneyTopupCommands').collect(),
+    )).resolves.toHaveLength(1)
   })
 
   it('returns the current canonical account credit balance to its owner', async () => {
@@ -338,9 +368,11 @@ describe('money ledger canonical authority', () => {
     })
     await expect(
       fixture.owner.query(api.moneyLedger.readCreditAccount, creditRead),
-    ).resolves.toEqual({
-      kind: 'refused',
-      code: 'billing_identity_missing',
+    ).resolves.toMatchObject({
+      kind: 'ok',
+      principalId: agentPrincipalRef,
+      accountId: fixture.canonicalAccountRef,
+      balance: { currency: 'USD', units: '4321', exponent: 2 },
     })
 
     await backend.run(async (ctx) => {
