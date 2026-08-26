@@ -150,15 +150,92 @@ Deferred differentiators require a measured trigger and explicit roadmap amendme
 
 ## Traceability
 
-Populated by the roadmapper. Every v1 requirement must map to exactly one phase; cross-cutting requirements are owned by the phase that establishes their acceptance contract and then inherited as phase success criteria.
+Every v1 requirement maps to exactly one phase. Cross-cutting execution controls are owned by Phase 1, which establishes their acceptance contract; Phases 2–7 inherit those controls in their success criteria without duplicate requirement mappings.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| AUTH-04 | Phase 2 | Pending |
+| AUTH-05 | Phase 2 | Pending |
+| AUTH-06 | Phase 2 | Pending |
+| AUTH-07 | Phase 2 | Pending |
+| AUTH-08 | Phase 2 | Pending |
+| AUTH-09 | Phase 2 | Pending |
+| AUTH-10 | Phase 2 | Pending |
+| DELG-01 | Phase 3 | Pending |
+| DELG-02 | Phase 3 | Pending |
+| DELG-03 | Phase 3 | Pending |
+| DELG-04 | Phase 3 | Pending |
+| DELG-05 | Phase 3 | Pending |
+| DELG-06 | Phase 3 | Pending |
+| DELG-07 | Phase 3 | Pending |
+| DISC-01 | Phase 6 | Pending |
+| DISC-02 | Phase 6 | Pending |
+| DISC-03 | Phase 6 | Pending |
+| SUPP-01 | Phase 6 | Pending |
+| SUPP-02 | Phase 6 | Pending |
+| SUPP-03 | Phase 6 | Pending |
+| SUPP-04 | Phase 6 | Pending |
+| SUPP-05 | Phase 6 | Pending |
+| INVK-01 | Phase 2 | Pending |
+| INVK-02 | Phase 2 | Pending |
+| INVK-03 | Phase 2 | Pending |
+| INVK-04 | Phase 2 | Pending |
+| INVK-05 | Phase 2 | Pending |
+| INVK-06 | Phase 2 | Pending |
+| INVK-07 | Phase 2 | Pending |
+| INVK-08 | Phase 2 | Pending |
+| INVK-09 | Phase 5 | Pending |
+| INVK-10 | Phase 5 | Pending |
+| POLI-01 | Phase 2 | Pending |
+| POLI-02 | Phase 2 | Pending |
+| POLI-03 | Phase 2 | Pending |
+| POLI-04 | Phase 2 | Pending |
+| SECR-01 | Phase 4 | Pending |
+| SECR-02 | Phase 4 | Pending |
+| SECR-03 | Phase 4 | Pending |
+| SECR-04 | Phase 4 | Pending |
+| SECR-05 | Phase 4 | Pending |
+| SECR-06 | Phase 4 | Pending |
+| COMM-01 | Phase 5 | Pending |
+| COMM-02 | Phase 5 | Pending |
+| COMM-03 | Phase 5 | Pending |
+| COMM-04 | Phase 5 | Pending |
+| COMM-05 | Phase 5 | Pending |
+| COMM-06 | Phase 5 | Pending |
+| OPER-01 | Phase 6 | Pending |
+| OPER-02 | Phase 6 | Pending |
+| OPER-03 | Phase 5 | Pending |
+| OPER-04 | Phase 6 | Pending |
+| OPER-05 | Phase 6 | Pending |
+| OPER-06 | Phase 7 | Pending |
+| OPER-07 | Phase 7 | Pending |
+| OPER-08 | Phase 6 | Pending |
+| OPER-09 | Phase 6 | Pending |
+| EVID-01 | Phase 2 | Pending |
+| EVID-02 | Phase 1 | Pending |
+| EVID-03 | Phase 1 | Pending |
+| EVID-04 | Phase 7 | Pending |
+| EVID-05 | Phase 7 | Pending |
+| EVID-06 | Phase 7 | Pending |
+| GATE-01 | Phase 1 | Pending |
+| GATE-02 | Phase 1 | Pending |
+| GATE-03 | Phase 1 | Pending |
+| GATE-04 | Phase 1 | Pending |
+| GATE-05 | Phase 1 | Pending |
+| GATE-06 | Phase 1 | Pending |
+| GATE-07 | Phase 1 | Pending |
+| GATE-08 | Phase 1 | Pending |
+| GATE-09 | Phase 1 | Pending |
+| GATE-10 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 76 total
-- Mapped to phases: 0
-- Unmapped: 76 ⚠️
+- Mapped to phases: 76
+- Unmapped: 0
+- Duplicate mappings: 0
 
 ---
 *Requirements defined: 2026-08-26*
