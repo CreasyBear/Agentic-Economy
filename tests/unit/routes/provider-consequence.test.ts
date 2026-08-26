@@ -10,7 +10,7 @@ import {
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
-} from '@/modules/capability-execution/invocation-runtime'
+} from '@/modules/capability-execution/provider-consequence-runtime'
 
 const mocks = vi.hoisted(() => {
   class FakeAgent {

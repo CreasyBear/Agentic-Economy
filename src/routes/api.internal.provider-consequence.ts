@@ -28,7 +28,7 @@ import {
   type JitProviderX402RuntimeFactory,
   type ProviderConsequenceJournal,
   type ProviderConsequenceJsonValue,
-} from '@/modules/capability-execution/invocation-runtime'
+} from '@/modules/capability-execution/provider-consequence-runtime'
 import {
   createProductionSecretRuntime,
   secretGeneration,

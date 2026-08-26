@@ -11,7 +11,7 @@ import {
   providerConsequenceInvocationDigest,
   providerConsequenceTicketClaimsDigest,
   type CanonicalProviderConsequenceTicket,
-} from '@/modules/capability-execution/invocation-runtime'
+} from '@/modules/capability-execution/provider-consequence-runtime'
 
 vi.mock('@/modules/network-guard/server', () => ({
   sendGuardedHttpRequest: async (request: Request) => await fetch(request.url, {
