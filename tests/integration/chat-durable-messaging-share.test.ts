@@ -3,18 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { api, components, internal } from '../../convex/_generated/api'
 import { streamDurableChatResponse } from '../../convex/chatGenerate'
-import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
+import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 const SHARE_SECRET = 'chat-share-integration-secret-with-at-least-32-characters'
 const SHARE_KEY_ID = 'chat-share:integration'
 const previousShareSecret = process.env.AE_CHAT_SHARE_SECRET
 const previousShareKeyId = process.env.AE_CHAT_SHARE_KEY_ID
-
-const identity = (name: string) => ({
-  subject: `user_${name}`,
-  issuer: 'https://identity.example',
-  tokenIdentifier: `token_${name}`,
-})
 
 function restoreEnvironment(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name]
@@ -45,8 +39,8 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('atomically creates an owned thread, saves the normalized prompt, and derives its title', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
-    const other = backend.withIdentity(identity('other'))
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
 
     const sent = await owner.mutation(api.chatMessages.sendMessage, {
       prompt: '  Find\n\t the best   weather operations  ',
@@ -63,7 +57,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
     ]))
 
     expect(row).toMatchObject({
-      ownerId: 'token_owner',
+      ownerId: canonicalAccountRef,
       title: 'Find the best weather operations',
       activePromptMessageId: sent.promptMessageId,
     })
@@ -107,7 +101,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('rejects active concurrency, admits stale state, and only matching cleanup clears it', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('busy-owner'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-busy-owner')
     const first = await owner.mutation(api.chatMessages.sendMessage, {
       prompt: 'First prompt',
     })
@@ -148,14 +142,14 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('persists a fake-model response and settles saved stream deltas without network access', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('model-owner'))
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-model-owner')
     const created = await owner.mutation(api.chatThreads.createThread, {
       title: 'Find an exchange-rate operation',
     })
     const promptMessageId = await backend.run(async (ctx) => {
       const saved = await saveMessage(ctx, components.agent, {
         threadId: created.threadId,
-        userId: 'token_model-owner',
+        userId: canonicalAccountRef,
         prompt: 'Find an exchange-rate operation',
       })
       const row = await ctx.db.query('chatThreads')
@@ -172,7 +166,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
     await backend.action(async (ctx) => {
       await streamDurableChatResponse(ctx, {
         threadId: created.threadId,
-        ownerId: 'token_model-owner',
+        ownerId: canonicalAccountRef,
         promptMessageId,
       }, mockModel({
         content: [{ type: 'text', text: 'One current exchange-rate operation is available.' }],
@@ -202,7 +196,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('enforces thirty durable submissions per identity each hour', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('rate-owner'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-rate-owner')
     const created = await owner.mutation(api.chatThreads.createThread, { title: 'Rate thread' })
 
     for (let index = 0; index < 30; index += 1) {
@@ -230,8 +224,8 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('issues one opaque grant, hides ownership publicly, revokes, and reissues by generation', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('share-owner'))
-    const other = backend.withIdentity(identity('share-other'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-share-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'chat-share-other')
     const sent = await owner.mutation(api.chatMessages.sendMessage, {
       prompt: 'Compare current weather operations',
     })
@@ -300,7 +294,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
 
   it('projects settled shared messages into allowlisted text and operation cards only', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('projection-owner'))
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-projection-owner')
     const created = await owner.mutation(api.chatThreads.createThread, {
       title: 'Public projection',
     })
@@ -311,7 +305,7 @@ describe.sequential('durable operation chat messaging and shares', () => {
     await backend.run(async (ctx) => {
       await saveMessages(ctx, components.agent, {
         threadId: created.threadId,
-        userId: 'token_projection-owner',
+        userId: canonicalAccountRef,
         messages: [
           {
             role: 'user',

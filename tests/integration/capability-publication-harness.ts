@@ -416,24 +416,18 @@ export async function registerProviderConnection(
   adapterId = 'http-json:v1',
 ) {
   const { connectionRef, providerRef } = providerAuthority(suffix)
-  const result = await backend.mutation(
-    internal.capabilityProviderConnections.create,
-    {
-      commandId: `command:create:capability-publication:${suffix}`,
-      connectionRef,
-      businessId,
-      providerRef,
-      providerAccountRef: `account:capability-publication:${suffix}`,
-      adapterId,
-      credentialRef: null,
-      requestedScopes: [`capability:capability-publication:${suffix}`],
-      grantedScopes: [`capability:capability-publication:${suffix}`],
-      requestedResources: [`resource:capability-publication:${suffix}`],
-      grantedResources: [`resource:capability-publication:${suffix}`],
-      evidenceRefs: [`test:provider-connection:${suffix}`],
-      now: 1,
-    },
-  )
+  const result = await installCanonicalProviderConnectionFixture(backend, {
+    commandId: `command:create:capability-publication:${suffix}`,
+    connectionRef,
+    businessId,
+    providerRef,
+    providerAccountRef: `account:capability-publication:${suffix}`,
+    adapterId,
+    secretRef: null,
+    scopes: [`capability:capability-publication:${suffix}`],
+    resources: [`resource:capability-publication:${suffix}`],
+    evidenceRefs: [`test:provider-connection:${suffix}`],
+  })
   if (result.kind !== 'applied') {
     throw new Error(`provider_connection_fixture_${result.kind}`)
   }

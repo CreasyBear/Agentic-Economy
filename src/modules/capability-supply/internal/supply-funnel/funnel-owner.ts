@@ -102,11 +102,10 @@ export async function runOwnerSupplyTest({
   return callSourceAction(testAction, data);
 }
 
-async function writeOwnerSupplyMaintenance(
+async function admitOwnerSupplyMaintenance(
   context: unknown,
   command: OwnerSupplyMaintenanceCommand,
-  mutation: typeof refreshMutation,
-): Promise<OwnerSupplyCommandResult> {
+): Promise<OwnerSupplyMaintenanceSourceInput> {
   const sourceWrite = await sourceWriteAdmissionFromContext({
     context,
     command,
@@ -114,11 +113,11 @@ async function writeOwnerSupplyMaintenance(
     operationKey: command.operationKey,
     correlationId: command.correlationId,
   });
-  return await callSourceMutation(mutation, {
+  return {
     ...command,
     sourceWriteRequest: sourceWriteRequestFromAdmission(sourceWrite),
     sourceWrite,
-  });
+  };
 }
 
 export async function recheckOwnerCapability({
@@ -128,7 +127,10 @@ export async function recheckOwnerCapability({
   data: z.infer<typeof ownerSupplyMaintenanceInputSchema>;
   context: unknown;
 }): Promise<OwnerSupplyCommandResult> {
-  return writeOwnerSupplyMaintenance(context, data, refreshMutation);
+  return await callSourceMutation(
+    refreshMutation,
+    await admitOwnerSupplyMaintenance(context, data),
+  );
 }
 
 export async function withdrawOwnerCapability({
@@ -138,7 +140,10 @@ export async function withdrawOwnerCapability({
   data: z.infer<typeof ownerSupplyMaintenanceInputSchema>;
   context: unknown;
 }): Promise<OwnerSupplyCommandResult> {
-  return writeOwnerSupplyMaintenance(context, data, withdrawMutation);
+  return await callSourceMutation(
+    withdrawMutation,
+    await admitOwnerSupplyMaintenance(context, data),
+  );
 }
 
 export async function republishOwnerCapability({
@@ -148,5 +153,8 @@ export async function republishOwnerCapability({
   data: z.infer<typeof ownerSupplyMaintenanceInputSchema>;
   context: unknown;
 }): Promise<OwnerSupplyCommandResult> {
-  return writeOwnerSupplyMaintenance(context, data, republishMutation);
+  return await callSourceMutation(
+    republishMutation,
+    await admitOwnerSupplyMaintenance(context, data),
+  );
 }

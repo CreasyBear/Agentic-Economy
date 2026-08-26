@@ -218,6 +218,31 @@ describe('Phase 2 public server read exemptions', () => {
 })
 
 describe('Phase 2 public Convex exemptions', () => {
+  it('keeps OAuth client metadata public while grants remain source-admitted', async () => {
+    const backend = convexTest(schema, convexModules)
+    const client = {
+      clientId: 'public-oauth-client',
+      clientName: 'Public OAuth client',
+      redirectUris: ['https://public.example/oauth/callback'],
+      grantTypes: ['authorization_code' as const],
+      tokenEndpointAuthMethod: 'none' as const,
+      createdAt: 1,
+    }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('agentAccessOAuthClients', client)
+    })
+
+    const anonymous = await backend.query(api.agentAccessOAuth.getClient, {
+      clientId: client.clientId,
+    })
+    const identified = await backend.withIdentity(callerIdentity)
+      .query(api.agentAccessOAuth.getClient, { clientId: client.clientId })
+
+    expect(identified).toEqual(anonymous)
+    expect(anonymous).toEqual(client)
+    expect(JSON.stringify(anonymous)).not.toMatch(/grantRef|deviceCode|authorizationCode|secret/u)
+  })
+
   it('convex/capabilitySupplyOperations.ts:search is identity-invariant, bounded, and cannot disclose cross-account private state', async () => {
     const backend = convexTest(schema, convexModules)
     await seedPrivateBusinesses(backend)
@@ -230,6 +255,37 @@ describe('Phase 2 public Convex exemptions', () => {
 
     expect(identified).toEqual(anonymous)
     expect(anonymous).toMatchObject({ matchedCount: 0 })
+    expect(JSON.stringify(anonymous)).not.toContain(MUST_NOT_LEAK)
+    expect(await consequenceState(backend)).toEqual(before)
+  })
+
+  it('keeps public operation projections identity-invariant and consequence-free', async () => {
+    const backend = convexTest(schema, convexModules)
+    await seedPrivateBusinesses(backend)
+    const before = await consequenceState(backend)
+    const operationRef = `operation:v1:${'f'.repeat(64)}`
+    const read = async (client: Pick<Backend, 'query'>) => ({
+      compare: await client.query(api.capabilitySupplyOperations.compare, {
+        operationRefs: [operationRef],
+      }),
+      detail: await client.query(api.capabilitySupplyOperations.detail, { operationRef }),
+      inspectPlan: await client.query(api.capabilitySupplyOperations.inspectPlan, {
+        operationRefs: [operationRef],
+      }),
+      listKeylessExecutable: await client.query(
+        api.capabilitySupplyOperations.listKeylessExecutable,
+        {},
+      ),
+      offeringOperationMap: await client.query(
+        api.capabilitySupplyOperations.offeringOperationMap,
+        { businessIds: [MUST_NOT_LEAK] },
+      ),
+    })
+
+    const anonymous = await read(backend)
+    const identified = await read(backend.withIdentity(callerIdentity))
+
+    expect(identified).toEqual(anonymous)
     expect(JSON.stringify(anonymous)).not.toContain(MUST_NOT_LEAK)
     expect(await consequenceState(backend)).toEqual(before)
   })
@@ -364,6 +420,52 @@ describe('Phase 2 public Convex exemptions', () => {
     expect(responses[0]).toEqual(responses[1])
     expect([404, 503]).toContain(responses[0]?.status)
     expect(runMutation).not.toHaveBeenCalled()
+  })
+
+  it('convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect', async () => {
+    const backend = convexTest(schema, convexModules)
+    const reserveArgs = {
+      businessId: MUST_NOT_LEAK,
+      currency: 'AUD',
+      exponent: 2,
+      idempotencyKey: 'caller-shaped-idempotency',
+      commandRef: 'caller-shaped-command',
+      inputDigest: 'caller-shaped-input',
+      providerRequestDigest: 'caller-shaped-provider-request',
+      recoveryLeaseOwner: 'caller-shaped-lease-owner',
+      operationKey: 'caller-shaped-operation',
+      correlationId: 'caller-shaped-correlation',
+    }
+    const finalizeArgs = {
+      ...reserveArgs,
+      recoveryLeaseGeneration: 1,
+      outcome: {
+        state: 'succeeded' as const,
+        stripeAccountId: 'acct_caller_shaped',
+        providerEvidenceRef: MUST_NOT_LEAK,
+      },
+    }
+    const before = await backend.run(async (ctx) => ({
+      accounts: await ctx.db.query('moneyPayoutAccounts').collect(),
+      ledger: await ctx.db.query('moneyLedgerEntries').collect(),
+    }))
+    const invoke = async (client: Pick<Backend, 'mutation'>) => ({
+      reserve: await client.mutation(api.moneyLedger.reserveConnectAccount, reserveArgs),
+      finalize: await client.mutation(api.moneyLedger.finalizeConnectAccount, finalizeArgs),
+    })
+
+    const anonymous = await invoke(backend)
+    const identified = await invoke(backend.withIdentity(callerIdentity))
+
+    expect(identified).toEqual(anonymous)
+    expect(anonymous).toEqual({
+      reserve: { kind: 'refused', code: 'connect_account_unlisted', retryable: false },
+      finalize: { kind: 'refused', code: 'connect_account_unlisted', retryable: false },
+    })
+    expect(await backend.run(async (ctx) => ({
+      accounts: await ctx.db.query('moneyPayoutAccounts').collect(),
+      ledger: await ctx.db.query('moneyLedgerEntries').collect(),
+    }))).toEqual(before)
   })
 })
 

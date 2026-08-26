@@ -291,6 +291,7 @@ export function verifyProtectedSurfaceManifest(
       || new Set(measured.serverFunctions.map((row) => row.ref)).size !== measured.serverFunctions.length
       || new Set(measured.publicConvex.map((row) => row.ref)).size !== measured.publicConvex.length
       || new Set(measuredRows.map((row) => row.ref)).size !== measuredRows.length
+      || blockedRows.length !== 0
       || Object.values(measured.blockedByKind).reduce((total, value) => total + value, 0) !== blockedRows.length
       || Object.entries(measured.blockedByKind).some(([kind, value]) =>
         value !== blockedRows.filter((row) => row.kind === kind).length)

@@ -432,9 +432,16 @@ export async function retryBusinessSupplyProjectionHandler(ctx: MutationCtx, arg
 }
 
 async function requireCatalogSupplyAdmin(ctx: MutationCtx) {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return { kind: 'error' as const, code: 'admin_denied' as const, reason: 'missing_membership' as const }
+  }
   const identity = await ctx.auth.getUserIdentity()
   const membership = identity === null ? undefined : await readActiveAdminMembership(ctx.db, identity)
-  const authority = requireAdminAuthority(membership, 'register_capability_supply')
+  const authority = requireAdminAuthority(
+    membership?.clerkUserId === actor.clerkUserId ? membership : undefined,
+    'register_capability_supply',
+  )
   return authority.kind === 'allowed' ? ctx.db : { kind: 'error' as const, code: 'admin_denied' as const, reason: authority.reason }
 }
 

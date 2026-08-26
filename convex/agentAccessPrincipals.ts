@@ -2,6 +2,7 @@ import { v, type Infer } from 'convex/values'
 import { mutation, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { uniqueSorted } from '@/modules/common/unique-sorted'
 import { MARKET_SUPPLY_MANAGE_SCOPE } from '@/modules/agent-access/contract'
+import { resolveBusinessActor } from './authz'
 
 
 const environment = v.union(v.literal('sandbox'), v.literal('production'))
@@ -96,7 +97,7 @@ async function writeAgentPrincipal(ctx: Pick<MutationCtx, 'db'>, args: AgentPrin
   return { kind: 'recorded' as const }
 }
 export type AgentSupplyPrincipalAdmission =
-  | Readonly<{ kind: 'allowed'; grantRef: string; ownerId: string }>
+  | Readonly<{ kind: 'allowed'; grantRef: string; ownerId: string; principalId: string }>
   | Readonly<{ kind: 'refused'; reason: 'authorization_denied' }>
 
 export async function verifySupplyAgentPrincipal(
@@ -141,7 +142,12 @@ export async function verifySupplyAgentPrincipal(
     && candidate.expiresAt > Date.now())
   return grant === undefined
     ? { kind: 'refused', reason: 'authorization_denied' }
-    : { kind: 'allowed', grantRef: grant.grantRef, ownerId: stored.ownerId }
+    : {
+        kind: 'allowed',
+        grantRef: grant.grantRef,
+        ownerId: stored.ownerId,
+        principalId: stored.principalId,
+      }
 }
 
 export const recordAgentPrincipal = internalMutation({
@@ -162,12 +168,15 @@ export const registerAgentPrincipal = mutation({
   ),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
-    if (identity === null || identity.tokenIdentifier.trim().length === 0) {
+    const actor = await resolveBusinessActor(ctx)
+    if (identity === null
+      || identity.tokenIdentifier.trim().length === 0
+      || actor.kind !== 'authenticated_owner') {
       return { kind: 'refused' as const, code: 'authentication_required' as const }
     }
     return await writeAgentPrincipal(ctx, {
       ...args,
-      ownerId: identity.tokenIdentifier,
+      ownerId: actor.canonicalAccountRef,
       ownerTokenIdentifier: identity.tokenIdentifier,
     })
   },

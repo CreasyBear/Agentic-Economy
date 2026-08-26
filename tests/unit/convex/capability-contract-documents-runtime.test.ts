@@ -25,6 +25,11 @@ describe('V2 capability contract Convex registry', () => {
     if (first.kind !== 'registered') throw new Error('capability contract registration failed')
 
     const persisted = await backend.run(async (ctx) => {
+      const compatibilityOwner = await ctx.db.query('owners')
+        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_capability_admin'))
+        .unique()
+      const actorRef = compatibilityOwner?.canonicalPrincipalRef
+      if (actorRef === undefined) throw new Error('canonical capability admin missing')
       const contract = await ctx.db.query('capabilityContractDocuments')
         .withIndex('by_capabilityId_and_version', (query) => (
           query.eq('capabilityId', first.ref.capabilityId).eq('version', first.ref.version)
@@ -32,7 +37,7 @@ describe('V2 capability contract Convex registry', () => {
         .unique()
       const operation = await ctx.db.query('operationKeys')
         .withIndex('by_actor_operation_key', (query) => (
-          query.eq('actorRef', 'user_capability_admin')
+          query.eq('actorRef', actorRef)
             .eq('operationName', 'registerCapabilityContract')
             .eq('key', args.operationKey)
         ))
@@ -44,7 +49,7 @@ describe('V2 capability contract Convex registry', () => {
         .withIndex('by_eventId', (query) => query.eq('eventId', auditEventId))
         .unique()
       if (contract === null || audit === null) throw new Error('capability contract audit rows missing')
-      return { contract, audit, operation }
+      return { contract, audit, operation, actorRef }
     })
     const redactedPayload = {
       capabilityId: first.ref.capabilityId,
@@ -57,12 +62,12 @@ describe('V2 capability contract Convex registry', () => {
         targetType: 'capability_contract',
         targetRef,
         actorKind: 'admin',
-        actorRef: 'user_capability_admin',
+        actorRef: persisted.actorRef,
         operationKey: args.operationKey,
       })}`,
       eventType: 'capability_contract.registered',
       actorKind: 'admin',
-      actorRef: 'user_capability_admin',
+      actorRef: persisted.actorRef,
       targetType: 'capability_contract',
       targetRef,
       beforeState: 'unregistered',
@@ -78,7 +83,7 @@ describe('V2 capability contract Convex registry', () => {
     expect(JSON.parse(persisted.audit.redactedPayloadJson)).toEqual(redactedPayload)
     expect(persisted.operation).toMatchObject({
       actorKind: 'admin',
-      actorRef: 'user_capability_admin',
+      actorRef: persisted.actorRef,
       operationName: 'registerCapabilityContract',
       key: args.operationKey,
       status: 'succeeded',
@@ -195,17 +200,24 @@ describe('V2 capability contract Convex registry', () => {
     )).resolves.toMatchObject({
       kind: 'registered', ref: { capabilityId: 'reference.lookup', version: 1 },
     })
-    const ownerRows = await ownerBackend.run(async (ctx) => ({
-      contracts: await ctx.db.query('capabilityContractDocuments').take(2),
-      audits: await ctx.db.query('auditEvents').take(2),
-      operations: await ctx.db.query('operationKeys').take(2),
-    }))
+    const ownerRows = await ownerBackend.run(async (ctx) => {
+      const compatibilityOwner = await ctx.db.query('owners')
+        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_owner'))
+        .unique()
+      return {
+        actorRef: compatibilityOwner?.canonicalPrincipalRef,
+        contracts: await ctx.db.query('capabilityContractDocuments').take(2),
+        audits: await ctx.db.query('auditEvents').take(2),
+        operations: await ctx.db.query('operationKeys').take(2),
+      }
+    })
+    expect(ownerRows.actorRef).toMatch(/^prn_/u)
     expect(ownerRows.contracts).toHaveLength(1)
     expect(ownerRows.audits[0]).toMatchObject({
-      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: 'user_owner',
+      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: ownerRows.actorRef,
     })
     expect(ownerRows.operations[0]).toMatchObject({
-      actorRef: 'user_owner', operationName: 'registerCapabilityContract', status: 'succeeded',
+      actorRef: ownerRows.actorRef, operationName: 'registerCapabilityContract', status: 'succeeded',
     })
 
     await expect(owner.mutation(

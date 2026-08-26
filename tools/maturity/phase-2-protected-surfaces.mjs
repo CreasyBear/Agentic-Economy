@@ -29,12 +29,22 @@ const PUBLIC_CONVEX_REGISTRARS = new Set([
 ])
 const AUTHORITY_SINKS = Object.freeze({
   interactive_account: Object.freeze(['convex/authz.ts:resolveBusinessActor']),
-  canonical_agent: Object.freeze(['convex/authorityBoundary.ts:resolveCanonicalAgentBinding']),
+  canonical_agent: Object.freeze([
+    'convex/authorityBoundary.ts:resolveCanonicalAgentBinding',
+    'convex/agentAccessPrincipals.ts:verifySupplyAgentPrincipal',
+    'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority',
+  ]),
   signed_callback: Object.freeze([
+    'src/modules/agent-access/service-auth-envelope.ts:verifyCustomerRequestServiceAssertion',
     'src/lib/server/stripe-money-webhook.ts:verifyStripeMoneyWebhook',
+    'convex/sourceWriteAdmission.ts:requireSourceRead',
     'convex/sourceWriteAdmission.ts:requireSourceWrite',
   ]),
   workload_account: Object.freeze([
+    'convex/capabilityOperationInvocations.ts:reconcilePersistedInvocationAuthority',
+    'convex/capabilityProviderConnectionLifecycle.ts:readCurrentCleanupResourceAuthority',
+    'convex/capabilitySupplyProbes.ts:readCurrentCapabilityProbeAuthority',
+    'convex/moneyBillingAuthorization.ts:persistedInvocationAuthorityIsCurrent',
     'convex/workloadCron.ts:admitWorkloadCron',
     'convex/workloadCron.ts:reconcileWorkloadCronSnapshot',
     'convex/workloadCron.ts:bindWorkloadCronActionContext',
@@ -51,6 +61,9 @@ const SOURCE_CALLERS = new Set([
   'callPublicSourceQuery',
   'callPublicSourceMutation',
   'callPublicSourceAction',
+  'runQuery',
+  'runMutation',
+  'runAction',
 ])
 const FUNCTION_REFERENCE_FACTORIES = new Set([
   'sourceQuery',

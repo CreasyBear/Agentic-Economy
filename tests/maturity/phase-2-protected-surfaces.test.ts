@@ -33,13 +33,13 @@ function refs(kind: ProtectedSurfaceManifestRow['kind']): readonly string[] {
     .sort()
 }
 
-function measuredRows() {
+function measuredRows(inventory: MeasuredProtectedSurfaceInventory = measuredInventory) {
   return [
-    ...measuredInventory.serverFunctions,
-    ...measuredInventory.publicConvex,
-    ...measuredInventory.convexHttpActions,
-    ...measuredInventory.crons,
-    ...measuredInventory.backgroundFamilies,
+    ...inventory.serverFunctions,
+    ...inventory.publicConvex,
+    ...inventory.convexHttpActions,
+    ...inventory.crons,
+    ...inventory.backgroundFamilies,
   ]
 }
 
@@ -47,7 +47,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
   it('preserves source identity and rejects omissions, duplicates, and unchanged-count replacements', () => {
     expect(() => execFileSync(
       '/Users/joelchan/.nvm/versions/node/v22.22.0/bin/node',
-      ['tools/maturity/phase-2-protected-surfaces.mjs', '--check-snapshot'],
+      ['tools/maturity/phase-2-protected-surfaces.mjs', '--require-bound'],
       { cwd: process.cwd(), stdio: 'pipe' },
     )).not.toThrow()
     for (const rows of [
@@ -127,7 +127,7 @@ describe('Phase 2 generated protected-surface manifest', () => {
     })
   })
 
-  it('requires exact measured counts while preserving an explicit blocked inventory', () => {
+  it('requires exact measured counts with no blocked production surface', () => {
     expect(measuredInventory.actualCounts.serverFunctions).toBe(43)
     expect(measuredInventory.actualCounts.publicConvex).toBe(116)
     expect(measuredInventory.actualCounts.convexHttpActions).toBe(1)
@@ -136,6 +136,8 @@ describe('Phase 2 generated protected-surface manifest', () => {
     expect(measuredInventory.actualCounts.frozenHttp).toBe(39)
     expect(measuredInventory.actualCounts.frozenMcp).toBe(14)
     expect(measuredInventory.actualCounts.frozenCli).toBe(12)
+    expect(measuredRows().filter((row) => row.status === 'blocked')).toEqual([])
+    expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)
     expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, measuredInventory)).not.toThrow()
   })
 
@@ -163,15 +165,29 @@ describe('Phase 2 generated protected-surface manifest', () => {
       'convex/authorityBoundary.ts:resolveCanonicalAgentBinding',
     ])
 
-    const sameFileMarkerOnly = measuredInventory.publicConvex
+    const signedRead = measuredInventory.publicConvex
       .find((row) => row.ref === 'convex/actionInvocationControl.ts:readAttemptSource')
     expect(readFileSync(resolve(process.cwd(), 'convex/actionInvocationControl.ts'), 'utf8'))
       .toContain('requireSourceWrite')
-    expect(sameFileMarkerOnly).toMatchObject({
-      status: 'blocked',
-      blocker: { code: 'missing_transitive_authority_path' },
+    expect(signedRead).toMatchObject({
+      status: 'bound',
+      authoritySink: 'convex/sourceWriteAdmission.ts:requireSourceRead',
     })
-    expect(sameFileMarkerOnly?.authorityPath).toBeUndefined()
+    expect(signedRead?.authorityPath?.map((hop) => hop.ref)).toEqual([
+      'convex/actionInvocationControl.ts:readAttemptSource',
+      'convex/actionInvocationControl.ts:requireActionInvocationSourceRead',
+      'convex/sourceWriteAdmission.ts:requireSourceRead',
+    ])
+
+    const storedFunctionReference = measuredInventory.publicConvex
+      .find((row) => row.ref === 'convex/capabilityOperationInvocations.ts:cancelInvocation')
+    expect(storedFunctionReference).toMatchObject({
+      status: 'bound',
+      authoritySink: 'convex/capabilityOperationInvocations.ts:resolveCurrentAgentAuthority',
+    })
+    expect(storedFunctionReference?.authorityPath?.some((hop) =>
+      hop.ref === 'convex/capabilityOperationInvocations.ts:resolveInvocationAgentAuthorityRef'
+      && hop.via === 'function_reference')).toBe(true)
   })
 
   it('validates every exemption against an independent behavior test, never self-attestation', () => {
@@ -211,18 +227,10 @@ describe('Phase 2 generated protected-surface manifest', () => {
       .toThrowError('protected_surface_measured_gate_failed')
   }, 30_000)
 
-  it('reports every unproven surface in the blocked list grouped by family', () => {
+  it('rejects every unproven surface instead of accepting an open blocked list', () => {
     const blocked = measuredRows().filter((row) => row.status === 'blocked')
-    expect(blocked.length).toBeGreaterThan(0)
-    expect(blocked.every((row) => row.blocker !== undefined
-      && row.blocker.code.length > 0
-      && row.blocker.detail.length > 0
-      && row.authorityPath === undefined
-      && row.exemption === undefined)).toBe(true)
-    expect(Object.values(measuredInventory.blockedByKind)
-      .reduce((total, count) => total + count, 0)).toBe(blocked.length)
-    expect(Object.entries(measuredInventory.blockedByKind)
-      .every(([kind, count]) => count === blocked.filter((row) => row.kind === kind).length)).toBe(true)
+    expect(blocked).toEqual([])
+    expect(Object.values(measuredInventory.blockedByKind).every((count) => count === 0)).toBe(true)
   })
 
   it('has no ambient internal, fallback, unknown, or superuser binding', () => {
@@ -261,14 +269,44 @@ describe('Phase 2 generated protected-surface manifest', () => {
       .toThrowError('protected_surface_inventory_invalid')
 
     const dishonest = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
-    const blocked = measuredRows().find((row) => row.status === 'blocked')
-    expect(blocked).toBeDefined()
-    const target = dishonest.serverFunctions.find((row) => row.ref === blocked!.ref)
-      ?? dishonest.publicConvex.find((row) => row.ref === blocked!.ref)
-      ?? dishonest.backgroundFamilies.find((row) => row.ref === blocked!.ref)
+    const target = measuredRows(dishonest).find((row) => row.status === 'bound'
+      && row.binding !== 'public_non_consequential'
+      && row.binding !== 'narrow_system_non_consequential')
     expect(target).toBeDefined()
-    Object.assign(target!, { status: 'bound', blocker: undefined })
+    Object.assign(target!, {
+      status: 'blocked',
+      authorityPath: undefined,
+      authoritySink: undefined,
+      blocker: { code: 'missing_transitive_authority_path', detail: 'hostile fixture' },
+    })
+    Object.assign(dishonest.blockedByKind, { [target!.kind]: 1 })
     expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, dishonest))
+      .toThrowError('protected_surface_measured_gate_failed')
+  })
+
+  it('rejects malformed blocker, status, and transitive-path evidence rows', () => {
+    const malformedBlocker = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const blocked = measuredRows(malformedBlocker).find((row) => row.status === 'bound')
+    expect(blocked).toBeDefined()
+    Object.assign(blocked!, { status: 'blocked', authorityPath: undefined, authoritySink: undefined, blocker: undefined })
+    Object.assign(malformedBlocker.blockedByKind, { [blocked!.kind]: 1 })
+    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedBlocker))
+      .toThrowError('protected_surface_measured_gate_failed')
+
+    const malformedStatus = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const bound = measuredRows(malformedStatus).find((row) => row.status === 'bound')
+    expect(bound).toBeDefined()
+    Object.assign(bound!, { status: 'future' })
+    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedStatus))
+      .toThrowError('protected_surface_measured_gate_failed')
+
+    const malformedPath = structuredClone(measuredInventory) as MeasuredProtectedSurfaceInventory
+    const authorityBound = measuredRows(malformedPath).find((row) => row.status === 'bound'
+      && row.binding !== 'public_non_consequential'
+      && row.binding !== 'narrow_system_non_consequential')
+    expect(authorityBound).toBeDefined()
+    Object.assign(authorityBound!, { authorityPath: [] })
+    expect(() => verifyProtectedSurfaceManifest(PROTECTED_SURFACE_MANIFEST, malformedPath))
       .toThrowError('protected_surface_measured_gate_failed')
   })
 })

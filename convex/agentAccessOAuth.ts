@@ -8,9 +8,7 @@ import {
   workloadCronSnapshotValue,
 } from './workloadCron'
 import type { DataModel, Doc } from './_generated/dataModel'
-import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
-import { sourceWriteCommandDigest, verifySourceWriteAdmission, type SourceWriteAdmission, type SourceWriteAdmissionRequest } from '../src/modules/security/source-write-admission'
-import { isRecord } from '../src/modules/common/is-record'
+import { requireSourceRead, requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 
 const OAUTH_SOURCE_WRITE_SCOPE = 'agent_identity' as const
 const flow = v.union(v.literal('device_code'), v.literal('authorization_code'))
@@ -351,32 +349,8 @@ async function requireOAuthSourceWrite(
 async function requireOAuthSourceRead(
   args: SourceWriteArgs & { operationKey: string; correlationId: string },
 ): Promise<void> {
-  const admission = args.sourceWrite as SourceWriteAdmission | undefined
-  const sourceWriteRequest = args.sourceWriteRequest
-  if (!isSourceWriteRequest(sourceWriteRequest)) {
-    throw new ConvexError({ code: 'oauth_source_read_rejected', reason: 'missing_source_write_request' })
-  }
-  const verification = await verifySourceWriteAdmission({
-    ...(admission === undefined ? {} : { admission }),
-    expected: {
-      scope: OAUTH_SOURCE_WRITE_SCOPE,
-      operationKey: args.operationKey,
-      correlationId: args.correlationId,
-      commandDigest: sourceWriteCommandDigest(args),
-      request: sourceWriteRequest,
-    },
-  })
+  const verification = await requireSourceRead(args, OAUTH_SOURCE_WRITE_SCOPE)
   if (verification.kind === 'rejected') {
     throw new ConvexError({ code: 'oauth_source_read_rejected', reason: verification.reason })
   }
-}
-
-function isSourceWriteRequest(value: unknown): value is SourceWriteAdmissionRequest {
-  return isRecord(value)
-    && typeof value.method === 'string'
-    && typeof value.initiatorOrigin === 'string'
-    && typeof value.targetOrigin === 'string'
-    && typeof value.targetPath === 'string'
-    && typeof value.targetQuery === 'string'
-    && typeof value.bodyDigest === 'string'
 }

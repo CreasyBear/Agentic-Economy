@@ -276,6 +276,33 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       ...(await sourceArgs(conflictingClient)),
     })).rejects.toThrow('agent_access_oauth_client_conflict')
   })
+
+  it('keeps OAuth client metadata public while grants remain source-admitted', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      client,
+      operationKey: 'oauth:test:public-client-metadata',
+      correlationId: 'oauth:test:public-client-metadata',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand)),
+    })
+
+    const anonymous = await backend.query(api.agentAccessOAuth.getClient, {
+      clientId: client.clientId,
+    })
+    const identified = await backend.withIdentity({
+      subject: 'caller-shaped-owner',
+      issuer: 'https://identity.example',
+      tokenIdentifier: 'https://identity.example|caller-shaped-owner',
+    }).query(api.agentAccessOAuth.getClient, { clientId: client.clientId })
+
+    expect(identified).toEqual(anonymous)
+    expect(anonymous).toEqual(client)
+    expect(JSON.stringify(anonymous)).not.toMatch(/grantRef|deviceCode|authorizationCode|secret/u)
+  })
 })
 
 describe('Agent Access OAuth grant cleanup', () => {

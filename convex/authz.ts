@@ -100,13 +100,20 @@ export async function readCanonicalCompatibilityOwner(
 }
 
 export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction): Promise<AdminAuthorityResult> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return requireAdminAuthority(undefined, action)
+  }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
     return requireAdminAuthority(undefined, action)
   }
 
   const membership = await readActiveAdminMembership(ctx.db, identity)
-  return requireAdminAuthority(membership, action)
+  return requireAdminAuthority(
+    membership?.clerkUserId === actor.clerkUserId ? membership : undefined,
+    action,
+  )
 }
 
 export async function readCurrentActiveAdminMembership(
@@ -115,8 +122,12 @@ export async function readCurrentActiveAdminMembership(
     auth: QueryCtx['auth']
   }>,
 ): Promise<AdminMembership | undefined> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return undefined
   const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(ctx.db, identity)
+  if (identity === null) return undefined
+  const membership = await readActiveAdminMembership(ctx.db, identity)
+  return membership?.clerkUserId === actor.clerkUserId ? membership : undefined
 }
 
 export async function readActiveAdminMembership(

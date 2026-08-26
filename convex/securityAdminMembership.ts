@@ -1,6 +1,9 @@
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { Doc } from './_generated/dataModel'
-import { readCurrentActiveAdminMembership as readCurrentActiveMembership } from './authz'
+import {
+  readCurrentActiveAdminMembership as readCurrentActiveMembership,
+  resolveBusinessActor,
+} from './authz'
 import { requireSourceWrite } from './sourceWriteAdmission'
 import {
   bootstrapOwnerAdmin as bootstrapOwnerAdminModule,
@@ -57,13 +60,22 @@ export async function bootstrapOwnerAdminHandler(ctx: MutationCtx, args: Bootstr
     return adminSourceWriteDenied(sourceWrite.reason)
   }
 
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return summarizeAdminMutation({
+      kind: 'error',
+      code: 'admin_bootstrap_denied',
+      retryable: false,
+      reason: 'canonical_owner_authority_required',
+    })
+  }
   const identity = await ctx.auth.getUserIdentity()
   const source = await loadAdminAuthoritySource(ctx.db, {
     includeActiveOwnerAdmins: true,
     ...(identity?.subject === undefined ? {} : { clerkUserIds: [identity.subject] }),
     ...(identity?.tokenIdentifier === undefined ? {} : { tokenIdentifiers: [identity.tokenIdentifier] }),
   })
-  const clerkUserId = typeof identity?.subject === 'string' ? identity.subject : 'anonymous'
+  const clerkUserId = actor.clerkUserId
   const tokenIdentifier = typeof identity?.tokenIdentifier === 'string' ? identity.tokenIdentifier : ''
   if (
     bootstrapPrincipalIds().includes(clerkUserId)

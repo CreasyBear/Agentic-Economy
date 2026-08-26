@@ -7,6 +7,7 @@ import {
 } from './capabilitySupplyProjection'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 
 export const contractRefValue = v.object({
   capabilityId: v.string(),
@@ -138,13 +139,13 @@ export async function ownsPublishedBusiness(
   ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
   businessId: Id<'businesses'>,
 ): Promise<boolean> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return false
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return false
   const business = await publishedBusiness(ctx.db, businessId)
   if (business === null) return false
 
-  const owner = await ctx.db.get(business.ownerId)
-  return owner !== null && owner.clerkUserId === identity.subject
+  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
+  return owner !== null && owner._id === business.ownerId
 }
 
 export async function ownsPublishedBusinessForOwnerId(
@@ -156,7 +157,7 @@ export async function ownsPublishedBusinessForOwnerId(
   if (business === null) return false
   const owner = await ctx.db
     .query('owners')
-    .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', ownerId))
+    .withIndex('by_canonicalAccountRef', (q) => q.eq('canonicalAccountRef', ownerId))
     .unique()
   return owner !== null && business.ownerId === owner._id
 }
