@@ -118,3 +118,12 @@ is independently met.
   whitespace after review; implementation/source gates remain red.
 - 2026-08-26: repair node written; production work remains withheld pending the
   inventory/classification leaf and driver verification.
+- 2026-08-26: the integration driver explicitly amended Start-bundle G3 after
+  the credential-free built dispatcher reached unchanged production Clerk and
+  correctly failed closed without development credentials. The original gate
+  required a successful public serverFn response; official positive Clerk
+  issuance requires hosted development-instance state and remains P9-01 evidence
+  bound to candidate/deployed revision and freshness. The source replacement is
+  exact handler load, no unbound Clerk call, unchanged middleware reachability,
+  caller-context exclusion and missing/invalid-credential fail-closure; no fake
+  token, bypass or success claim was introduced.

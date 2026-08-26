@@ -273,6 +273,21 @@ generic ctx/capability, move no semantics to a parallel wrapper: keep the row re
 until the helper can be structurally bounded through a separately reviewed
 same-file composition.
 
+The bounded ESLint adaptation enforces a fail-closed supported-syntax grammar; it
+does not infer authority or capability flow. Protected registrations use a literal
+named registrar import and an inline function handler. Inside that handler, raw
+capabilities appear only as direct `ctx.db.<literal operation>`,
+`ctx.runQuery(<static ref>)`, `ctx.runMutation(<static ref>)`,
+`ctx.runAction(<static ref>)`, `ctx.scheduler.<literal operation>(..., <static
+ref>)`, or the separately declared direct network expression. Each capability and
+static registered target must be present in the row manifest. Local aliases,
+destructuring, casts, conditional/logical registrar expressions, registrar
+namespaces, non-inline handlers, dynamic targets, global/aliased network calls and
+passing `ctx` or a raw capability to another function are unsupported syntax and
+receive one rejection diagnostic. A migration worker must refactor such a row into
+the supported local shape or leave it red. The rule performs no cross-file
+inference, recursive alias tracking or general data/control-flow analysis.
+
 Migrate all ordinary and Generic q/m/a/iQ/iM/iA declarations. Each of the 298 rows
 must be classified; the seven HTTP declarations use section B. Raw registrars are
 then forbidden everywhere except `authorityRegistrars.ts` and the exact HTTP files.

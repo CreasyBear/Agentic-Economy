@@ -78,6 +78,7 @@ import type * as facilitatorDiscoveryAction from "../facilitatorDiscoveryAction.
 import type * as http from "../http.js";
 import type * as interactiveAuthority from "../interactiveAuthority.js";
 import type * as interactiveCredentialLifecycle from "../interactiveCredentialLifecycle.js";
+import type * as lib_authorityRegistrars from "../lib/authorityRegistrars.js";
 import type * as lib_canonicalAgentAuthority from "../lib/canonicalAgentAuthority.js";
 import type * as lib_connectionLifecyclePersistence from "../lib/connectionLifecyclePersistence.js";
 import type * as lib_delegationPersistence from "../lib/delegationPersistence.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interactiveAuthority: typeof interactiveAuthority;
   interactiveCredentialLifecycle: typeof interactiveCredentialLifecycle;
+  "lib/authorityRegistrars": typeof lib_authorityRegistrars;
   "lib/canonicalAgentAuthority": typeof lib_canonicalAgentAuthority;
   "lib/connectionLifecyclePersistence": typeof lib_connectionLifecyclePersistence;
   "lib/delegationPersistence": typeof lib_delegationPersistence;

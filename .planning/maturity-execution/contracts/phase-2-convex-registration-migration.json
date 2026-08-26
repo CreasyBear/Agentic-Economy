@@ -4,8 +4,8 @@
   "inventoryDigest": "b56eeebf9d3aad6f12f8f7a81a3e4973493eadb76c1bd2eae90f3c81822a1a77",
   "classificationInventoryDigest": "b56eeebf9d3aad6f12f8f7a81a3e4973493eadb76c1bd2eae90f3c81822a1a77",
   "sourceDigests": {
-    ".planning/maturity-execution/PHASE-2-AUTHORITY-ENTRY-MIGRATION.md": "33076503337a02d46c9bb634af008b0be3a556a350252a268a89d06e939aca85",
-    ".planning/maturity-execution/PHASE-2-RUNTIME-DOMINANCE-DESIGN.md": "a221d14315f1ec7446ae8d97002c61f2e69ba425df3dac3efde1094e89a30934",
+    ".planning/maturity-execution/PHASE-2-AUTHORITY-ENTRY-MIGRATION.md": "b08d156bf962f631c148c979236b7dbf77bea28edfc6f619be999d784070236d",
+    ".planning/maturity-execution/PHASE-2-RUNTIME-DOMINANCE-DESIGN.md": "86f7db152560d381a07a6079fac7ee42f59b0b07ce1f400d43866be44eca46fd",
     ".planning/maturity-execution/contracts/phase-2-protected-surfaces.classifications.json": "85b5a51981a47cb8e053de9ee98e36a3d69fe64df4bcdaad8722413e6fa7ba71",
     ".planning/maturity-execution/contracts/phase-2-protected-surfaces.json": "c8bd3f987e02923f55966f1fc3000148dc8efdfacc9e4016532f1ad11784f16e",
     ".planning/maturity-execution/contracts/public-surface-inventory.json": "0c6f979bddae226745b7757f4f53f455af8631bb2f29bf3e3adf34135c4f6c83",
@@ -42887,5 +42887,5 @@
       "migrationObligations": []
     }
   ],
-  "digest": "9233e7045cac0c2988eb3aee35efff154bb584ab57249f4b53894a0c21e0e848"
+  "digest": "b67d7613d0689a3ceb21c0b42a94c415b80ec1dd98e486f2307c6ff15252a70f"
 }
