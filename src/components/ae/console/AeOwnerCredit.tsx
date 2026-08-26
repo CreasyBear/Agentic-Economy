@@ -1,6 +1,16 @@
-import { Link } from '@tanstack/react-router'
+'use client'
+
+import { useMemo, useState } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeRecordSheet } from '@/components/ae/layout/AeRecordSheet'
+import { AeSection } from '@/components/ae/layout/AeSection'
+import {
+  AeOperatorSortableHeader,
+  AeRecordTable,
+} from '@/components/ae/operator/AeOperatorDataTable'
 import { Button } from '@/components/ui/button'
 import { addExactAmounts, formatCurrencyAmount, type ExactAmount } from '@/modules/money/public'
 import type { AgentActivityView, AgentOperatorKeyReadback } from '@/modules/agent-access/agent-operator-view-model'
@@ -12,6 +22,11 @@ export type AeOwnerCreditProps = Readonly<{
   loading: boolean
   creditTopupPort?: CreditTopupPort
   onCreditRefresh?: () => void | Promise<void>
+}>
+
+type CreditChargeRow = Readonly<{
+  item: AgentOperatorKeyReadback
+  entry: AgentActivityView
 }>
 
 export function creditTopupTargetFromItems(
@@ -47,14 +62,54 @@ export function AeOwnerCredit({
   const activity = items
     .flatMap((item) => item.activity.map((entry) => ({ item, entry })))
     .sort((left, right) => right.entry.observedAt - left.entry.observedAt)
+  const [selected, setSelected] = useState<CreditChargeRow>()
+  const columns = useMemo<ColumnDef<CreditChargeRow, unknown>[]>(
+    () => [
+      {
+        id: 'task',
+        accessorFn: (row) => row.entry.operation?.label ?? activityLabel(row.entry),
+        header: ({ column }) => <AeOperatorSortableHeader label="Task" column={column} />,
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">
+            {row.original.entry.operation?.label ?? activityLabel(row.original.entry)}
+          </span>
+        ),
+      },
+      {
+        id: 'agent',
+        accessorFn: (row) => row.item.key.name,
+        header: ({ column }) => <AeOperatorSortableHeader label="Agent" column={column} />,
+        cell: ({ row }) => row.original.item.key.name,
+      },
+      {
+        id: 'amount',
+        accessorFn: (row) => formatCreditAmount(row.entry.grossAmount),
+        header: ({ column }) => <AeOperatorSortableHeader label="Amount" column={column} />,
+        cell: ({ row }) => (
+          <span className="font-medium tabular-nums">{formatCreditAmount(row.original.entry.grossAmount)}</span>
+        ),
+      },
+      {
+        id: 'when',
+        accessorFn: (row) => row.entry.observedAt,
+        header: ({ column }) => <AeOperatorSortableHeader label="When" column={column} />,
+        cell: ({ row }) => (
+          <time className="font-mono text-xs tabular-nums text-muted-foreground">
+            {formatTimestamp(row.original.entry.observedAt)}
+          </time>
+        ),
+      },
+    ],
+    [],
+  )
 
   return (
     <div className="grid gap-8">
-      <section id="fund" aria-labelledby="credit-title" className="grid scroll-mt-6 gap-4">
-        <div className="grid gap-1">
-          <h2 id="credit-title" className="text-sm font-medium text-foreground">Balance</h2>
-          <p className="text-sm text-muted-foreground">Browsing is free. Paid calls use the credit assigned to each agent.</p>
-        </div>
+      <AeSection
+        id="fund"
+        title="Balance"
+        description="Browsing is free. Paid calls use the credit assigned to each agent."
+      >
         <AeFactList
           facts={[
             {
@@ -75,55 +130,65 @@ export function AeOwnerCredit({
           {...(creditTopupPort === undefined ? {} : { port: creditTopupPort })}
           {...(onCreditRefresh === undefined ? {} : { onRefresh: onCreditRefresh })}
         />
-      </section>
+      </AeSection>
 
-      <section aria-labelledby="ledger-title" className="grid gap-4">
-        <div className="grid gap-1">
-          <h2 id="ledger-title" className="text-sm font-medium text-foreground">Recent charges</h2>
-          <p className="text-sm text-muted-foreground">Calls and credit changes for each agent. Open Calls for the full table.</p>
-        </div>
+      <AeSection
+        title="Recent charges"
+        description="Calls and credit changes for each agent. Open Calls for the full table."
+      >
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading recent charges…</p>
         ) : hasUnavailableData ? (
           <p className="text-sm text-muted-foreground">Some charge details are temporarily unavailable.</p>
         ) : activity.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No charges yet. Browsing does not create paid-call charges.</p>
+          <AeEmptyState
+            title="No charges yet"
+            description="Browsing does not create paid-call charges."
+          />
         ) : (
-          <ol className="m-0 list-none divide-y divide-border border-y border-border p-0">
-            {activity.map(({ item, entry }) => (
-              <CreditActivityRow key={entry.activityRef} item={item} entry={entry} />
-            ))}
-          </ol>
+          <AeRecordTable
+            columns={columns}
+            data={activity}
+            caption="Recent charges"
+            countLabel="charges"
+            filterPlaceholder="Filter charges…"
+            hideFilter={activity.length <= 1}
+            onRowClick={setSelected}
+          />
         )}
-      </section>
+      </AeSection>
+
+      <AeRecordSheet
+        open={selected !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setSelected(undefined)
+        }}
+        title={selected === undefined ? 'Charge' : (selected.entry.operation?.label ?? activityLabel(selected.entry))}
+        {...(selected === undefined ? {} : { facts: chargeFacts(selected) })}
+        {...(selected === undefined
+          ? {}
+          : {
+              action: (
+                <Button asChild className="min-h-11">
+                  <a href={`/operations/invocations/${selected.entry.invocationRef}`}>View receipt</a>
+                </Button>
+              ),
+            })}
+      />
     </div>
   )
 }
 
-function CreditActivityRow({
-  item,
-  entry,
-}: Readonly<{ item: AgentOperatorKeyReadback; entry: AgentActivityView }>) {
-  return (
-    <li className="grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="grid gap-1">
-        <p className="font-medium text-foreground">{entry.operation?.label ?? activityLabel(entry)}</p>
-        {entry.operation === undefined ? null : (
-          <p className="text-sm text-muted-foreground">{entry.operation.supplier} · {activityLabel(entry)}</p>
-        )}
-        <p className="text-sm text-muted-foreground">{item.key.name} · {formatTimestamp(entry.observedAt)}</p>
-        <Button asChild variant="link" className="h-auto min-h-0 w-fit px-0">
-          <Link
-            to="/operations/invocations/$invocationRef"
-            params={{ invocationRef: entry.invocationRef }}
-          >
-            View receipt
-          </Link>
-        </Button>
-      </div>
-      <p className="font-medium tabular-nums text-foreground">{formatCreditAmount(entry.grossAmount)}</p>
-    </li>
-  )
+function chargeFacts(row: CreditChargeRow): readonly { label: string; value: string; muted?: boolean }[] {
+  return [
+    { label: 'Outcome', value: activityLabel(row.entry) },
+    { label: 'Agent', value: row.item.key.name },
+    { label: 'Amount', value: formatCreditAmount(row.entry.grossAmount) },
+    ...(row.entry.operation === undefined
+      ? []
+      : [{ label: 'Supplier', value: row.entry.operation.supplier }]),
+    { label: 'When', value: formatTimestamp(row.entry.observedAt) },
+  ]
 }
 
 function activityLabel(entry: AgentActivityView): string {

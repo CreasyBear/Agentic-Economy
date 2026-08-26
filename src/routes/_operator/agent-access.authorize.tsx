@@ -7,6 +7,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeSection, AeSettingsStack } from '@/components/ae/layout/AeSection'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 type PublicAuthorityMode = 'inspect_only' | 'approve_each' | 'bounded_mandate'
@@ -134,51 +136,58 @@ function AgentAccessAuthorizeRoute() {
 
   return (
     <AeOperatorShell operatorRole="owner" title="Review agent access" description="Choose what this agent may do, then approve or decline." currentPath="/agent-access">
-      <div className="grid gap-6">
+      <AeSettingsStack>
         {userCode === undefined ? (
           <Alert variant="destructive"><AlertTitle>This access request is missing a code</AlertTitle><AlertDescription>Start a new request from your agent.</AlertDescription></Alert>
         ) : status !== 'error' && (consentLoading || !consentReady) ? (
           <Alert aria-live="polite"><AlertTitle>Loading access request</AlertTitle><AlertDescription>Retrieving the agent name and exact permission before you decide.</AlertDescription></Alert>
         ) : status === 'idle' ? (
           <>
-            <h2>{clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}</h2>
-            <fieldset className="grid gap-3" disabled={pending}>
-              <legend className="text-base font-semibold text-foreground">How much may this agent do without asking you?</legend>
-              <RadioGroup
-                aria-describedby="consent-expiry"
-                value={selectedMode}
-                onValueChange={(value) => setSelectedMode(value as PublicAuthorityMode)}
-                className="grid gap-2"
-              >
-                {authorityOptions.map((option) => {
-                  const disabled = !canSelectAuthority(option.value, mode)
-                  return (
-                    <Label
-                      key={option.value}
-                      htmlFor={`authority-${option.value}`}
-                      className="grid min-h-11 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border border-border bg-card p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent"
-                    >
-                      <RadioGroupItem
-                        id={`authority-${option.value}`}
-                        value={option.value}
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                      <span className="grid gap-1">
-                        <span className="font-medium text-foreground">{option.label}</span>
-                        <span className="text-sm font-normal text-muted-foreground">
-                          {disabled ? 'This agent requested narrower access.' : option.description}
+            <AeSection
+              title={clientName === undefined ? 'Connect your agent' : `Connect ${clientName}`}
+              description="How much may this agent do without asking you?"
+            >
+              <fieldset className="grid gap-3" disabled={pending}>
+                <legend className="sr-only">Authority</legend>
+                <RadioGroup
+                  aria-describedby="consent-expiry"
+                  value={selectedMode}
+                  onValueChange={(value) => setSelectedMode(value as PublicAuthorityMode)}
+                  className="grid gap-2"
+                >
+                  {authorityOptions.map((option) => {
+                    const disabled = !canSelectAuthority(option.value, mode)
+                    return (
+                      <Label
+                        key={option.value}
+                        htmlFor={`authority-${option.value}`}
+                        className="grid min-h-11 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-md border border-border px-3 py-3 has-[[data-state=checked]]:border-foreground"
+                      >
+                        <RadioGroupItem
+                          id={`authority-${option.value}`}
+                          value={option.value}
+                          disabled={disabled}
+                          className="mt-1"
+                        />
+                        <span className="grid gap-1">
+                          <span className="font-medium text-foreground">{option.label}</span>
+                          <span className="text-sm font-normal text-muted-foreground">
+                            {disabled ? 'This agent requested narrower access.' : option.description}
+                          </span>
                         </span>
-                      </span>
-                    </Label>
-                  )
-                })}
-              </RadioGroup>
-            </fieldset>
-            <div className="grid gap-1 text-sm text-muted-foreground">
-              <p>Application: {clientName ?? 'Your agent'} · Development · Standard rate limits</p>
-              <p id="consent-expiry">Access expires in seven days. You can revoke it at any time from Keys.</p>
-            </div>
+                      </Label>
+                    )
+                  })}
+                </RadioGroup>
+              </fieldset>
+              <AeFactList
+                facts={[
+                  { label: 'Application', value: `${clientName ?? 'Your agent'} · Development · Standard rate limits` },
+                  { label: 'Expiry', value: 'Access expires in seven days. You can revoke it at any time from Keys.' },
+                ]}
+              />
+              <p id="consent-expiry" className="sr-only">Access expires in seven days. You can revoke it at any time from Keys.</p>
+            </AeSection>
             <div className="flex flex-wrap gap-3">
               <Button aria-describedby="consent-expiry" variant="default" onClick={() => void decide('approve')} disabled={pending}>{pending ? 'Approving…' : 'Approve access'}</Button>
               <Button aria-describedby="consent-expiry" variant="secondary" onClick={() => void decide('deny')} disabled={pending}>{pending ? 'Working…' : 'Decline'}</Button>
@@ -191,7 +200,7 @@ function AgentAccessAuthorizeRoute() {
         ) : (
           <Alert variant="destructive"><AlertTitle>Access request unavailable</AlertTitle><AlertDescription>It may have expired. Start a new request from your agent.</AlertDescription></Alert>
         )}
-      </div>
+      </AeSettingsStack>
     </AeOperatorShell>
   )
 }

@@ -11,7 +11,7 @@ const routeState = vi.hoisted(() => {
   const state = {
     HomeComponent: null as (() => ReactNode) | null,
     search: { q: undefined as string | undefined },
-    loaderData: { kind: 'ok' as const, operations: [], matchedCount: 0 },
+    loaderData: { read: { kind: 'ok' as const, operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' },
     navigate: vi.fn(async () => undefined),
   }
   return state
@@ -50,7 +50,7 @@ describe('catalogue-first home', () => {
     cleanup()
     routeState.search = { q: undefined }
     routeState.navigate.mockClear()
-    routeState.loaderData = { kind: 'ok', operations: [], matchedCount: 0 }
+    routeState.loaderData = { read: { kind: 'ok', operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
   })
 
   it('leads with the tool market and an agent instruction, with no network work', () => {
@@ -63,6 +63,7 @@ describe('catalogue-first home', () => {
     expect(screen.getByText(HOME.heroSubhead)).toBeTruthy()
     expect(screen.getByRole('heading', { name: AGENT_INSTRUCTION.heading })).toBeTruthy()
     expect(screen.getByRole('button', { name: `Copy ${AGENT_INSTRUCTION.label}` })).toBeTruthy()
+    expect(document.querySelector('[data-slot="ae-site-browser"]')?.textContent).toContain('/llms.txt')
     expect(screen.getAllByRole('link', { name: 'Browse tools' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Set up an agent' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'List a tool' })).toBeTruthy()
@@ -97,6 +98,7 @@ describe('catalogue-first home', () => {
     expect(headings.indexOf(HOME_CLAIMS[0].title)).toBeLessThan(headings.indexOf(HOME_CLAIMS[1].title))
     expect(headings.indexOf(HOME_CLAIMS[1].title)).toBeLessThan(headings.indexOf(HOME_CLAIMS[2].title))
     expect(headings).toContain(HOME.faqHeading)
+    expect(headings).toContain(HOME.doorsHeading)
     expect(headings.at(-1)).toBe(HOME.closeHeading)
   })
 

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeOwnerOfferingEditor, type OwnerOfferingEditorValue, type OwnerOfferingSaveResult } from '@/components/ae/offerings/AeOwnerOfferings'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AeOwnerOperationFacts } from './AeSupplyPublisherHome'
@@ -215,31 +216,17 @@ export function AeSupplyFunnel({
 function SupplyTruthCard({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
   const publication = offering.publication
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle><h2 className="text-xl font-semibold text-foreground">Operation control</h2></CardTitle>
-        <CardDescription><p>Canonical identifiers and states from the current owner readback. Credentials are never shown here.</p></CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4 p-5">
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <TruthItem label="Admission" value={offering.admission.state} {...(offering.admission.reason === undefined ? {} : { reason: offering.admission.reason })} />
-          <TruthItem label="Publication" value={publication?.state ?? 'not published'} />
-          <TruthItem label="Readiness" value={offering.readiness.outcome} />
-          <TruthItem label="Live" value={offering.live.available ? 'available' : 'unavailable'} {...(offering.live.reason === undefined ? {} : { reason: offering.live.reason })} />
-        </dl>
-        <AeOwnerOperationFacts offering={offering} detail />
-      </CardContent>
-    </Card>
-  )
-}
-
-function TruthItem({ label, value, reason }: Readonly<{ label: string; value: string; reason?: string }>) {
-  return (
-    <div className="grid gap-1">
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="m-0 font-semibold text-foreground">{value}</dd>
-      {reason === undefined ? null : <dd className="m-0 break-words text-xs text-muted-foreground">{reason}</dd>}
-    </div>
+    <AeSection title="Operation control" description="Canonical identifiers and states from the current owner readback. Credentials are never shown here.">
+      <AeFactList
+        facts={[
+          { label: 'Admission', value: offering.admission.state },
+          { label: 'Publication', value: publication?.state ?? 'not published' },
+          { label: 'Readiness', value: offering.readiness.outcome },
+          { label: 'Live', value: offering.live.available ? 'available' : 'unavailable' },
+        ]}
+      />
+      <AeOwnerOperationFacts offering={offering} detail />
+    </AeSection>
   )
 }
 
@@ -275,12 +262,8 @@ function MaintenanceActions({
     }
   }
   return (
-    <Card>
-      <CardHeader className="p-5 pb-0">
-        <CardTitle><h2 className="text-lg font-semibold text-foreground">Publication maintenance</h2></CardTitle>
-        <CardDescription><p>Each action rechecks the current Operation and publication revision before it changes anything.</p></CardDescription>
-      </CardHeader>
-      <CardFooter className="flex flex-wrap gap-3 p-5 pt-0">
+    <AeSection title="Publication maintenance" description="Each action rechecks the current Operation and publication revision before it changes anything.">
+      <div className="flex flex-wrap gap-3">
         {publicationState === 'current' && recheck !== undefined ? <MaintenanceButton label="Recheck readiness" callback={recheck} context={context} onResult={onResult} /> : null}
         {publicationState === 'current' && withdraw !== undefined ? (
           <>
@@ -300,8 +283,8 @@ function MaintenanceActions({
           </>
         ) : null}
         {publicationState === 'withdrawn' && republish !== undefined ? <MaintenanceButton label="Republish" callback={republish} context={context} onResult={onResult} /> : null}
-      </CardFooter>
-    </Card>
+      </div>
+    </AeSection>
   )
 }
 
@@ -319,7 +302,7 @@ function MaintenanceButton({ label, callback, context, onResult, variant = 'defa
   return <Button type="button" variant={variant} disabled={pending || callback === undefined} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11">{pending ? 'Working' : label}</Button>
 }
 
-function ActionStep({ title, heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
+function ActionStep({ heading, detail, actionLabel, onAction, disabled = false }: Readonly<{ title: string; heading: string; detail: string; actionLabel: string; onAction: () => Promise<void>; disabled?: boolean }>) {
   const [pending, setPending] = useState(false)
   async function run() {
     setPending(true)
@@ -330,20 +313,11 @@ function ActionStep({ title, heading, detail, actionLabel, onAction, disabled = 
     }
   }
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle>
-          <p className="block text-sm font-semibold text-muted-foreground">{title}</p>
-          <h2 className="mt-1 text-xl font-semibold text-foreground">{heading}</h2>
-        </CardTitle>
-        <CardDescription><p>{detail}</p></CardDescription>
-      </CardHeader>
-      <CardFooter className="p-5 pt-0">
-        <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11">
-          {pending ? 'Working' : actionLabel}
-        </Button>
-      </CardFooter>
-    </Card>
+    <AeSection title={heading} description={detail}>
+      <Button type="button" variant="default" disabled={pending || disabled} aria-busy={pending || undefined} onClick={() => void run()} className="min-h-11 w-fit">
+        {pending ? 'Working' : actionLabel}
+      </Button>
+    </AeSection>
   )
 }
 

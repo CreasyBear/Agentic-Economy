@@ -6,7 +6,7 @@ import {
   CodeBlockHeader,
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block'
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
 
 export type AeAssistantInstallFunnelProps = Readonly<{
@@ -66,18 +66,13 @@ export function AeAssistantInstallFunnel({
   }
 
   return (
-    <Card className="gap-5 border-border bg-card shadow-none">
-      <CardHeader>
-        <h2 className="text-lg font-semibold text-foreground">Connect once. Call any listed capability.</h2>
-        <CardDescription>
-          One setup command, one catalogue, one call shape, and one receipt. Search and inspection remain public.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        <ol className="m-0 grid list-none gap-0 p-0">
+    <AeSection
+      title="Connect once. Call any listed capability."
+      description="One setup command, one catalogue, one call shape, and one receipt. Search and inspection remain public."
+    >
+      <ol className="m-0 grid list-none divide-y divide-border p-0">
           {steps.map(({ id, title, access, description, code }, index) => (
-            <li key={id} className="grid min-w-0 gap-3 border-t border-border py-5 first:border-t-0 first:pt-0 last:pb-0">
+            <li key={id} className="grid min-w-0 gap-3 py-5 first:pt-0 last:pb-0">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="font-semibold text-foreground">{index + 1}. {title}</h3>
                 <span className="text-sm font-medium text-muted-foreground">{access}</span>
@@ -101,7 +96,6 @@ export function AeAssistantInstallFunnel({
           ))}
         </ol>
         {copyNotice === undefined ? null : <p role="status" aria-live="polite" className="mt-3 block text-sm text-muted-foreground">{copyNotice}</p>}
-      </CardContent>
-    </Card>
+    </AeSection>
   )
 }

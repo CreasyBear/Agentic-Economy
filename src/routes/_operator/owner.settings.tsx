@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import {
   AccountSettingsSection,
   BusinessSettingsSection,
@@ -27,12 +28,12 @@ function OwnerSettingsRoute() {
       title="Settings"
       description="Manage your account, supplier profile, and Operations."
       currentPath="/owner/settings"
+      secondaryBar={<OwnerSettingsNav current="account" />}
     >
-      <div className="grid gap-6">
-        <OwnerSettingsNav current="account" />
+      <AeSettingsStack>
         <AccountSettingsSection />
         <BusinessSettingsSection />
-      </div>
+      </AeSettingsStack>
     </AeOperatorShell>
   )
 }

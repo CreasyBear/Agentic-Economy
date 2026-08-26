@@ -1,10 +1,11 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
+import { createFileRoute } from '@tanstack/react-router'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
+import { Button } from '@/components/ui/button'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import { readOwnerStatusServer } from '@/lib/server/owner-status.functions'
 import { recordServerFunnelEventServer } from '@/modules/observability/funnel.functions'
@@ -74,19 +75,41 @@ function OwnerStatusRoute() {
       description="Preview the Operations agents can find, then keep their access and public facts current."
       currentPath="/owner/status"
     >
-      <div className="grid gap-6">
-        {readback === undefined ? (
-          <AeOwnerStatusEmptyState kind={result.kind === 'not_found' ? 'not_found' : 'unavailable'} />
+      {readback === undefined ? (
+        result.kind === 'not_found' ? (
+          <AeEmptyState
+            title="No supplier profile yet"
+            description="Set up your supplier profile to publish Operations agents can inspect."
+            role="status"
+            action={
+              <Button asChild className="min-h-11">
+                <a href="/for-providers">Review supplier setup</a>
+              </Button>
+            }
+          />
         ) : (
-          <>
-            <AeStatusCard readback={readback} />
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="default"><Link to="/owner/offerings">Manage Operations</Link></Button>
-            </div>
+          <AeEmptyState
+            title="Status unavailable"
+            description="Try again in a moment. If this keeps happening, contact support through corrections."
+            role="alert"
+            action={
+              <Button asChild variant="secondary" className="min-h-11">
+                <a href="/owner/status">Try again</a>
+              </Button>
+            }
+          />
+        )
+      ) : (
+        <div className="grid gap-8">
+          <AeStatusCard readback={readback} />
+          <AeSection
+            title="Operations"
+            description="Published tools on this supplier. Open a row to edit."
+          >
             <AeCapabilityList catalog={readback.catalog} />
-          </>
-        )}
-      </div>
+          </AeSection>
+        </div>
+      )}
     </AeOperatorShell>
   )
 }

@@ -23,10 +23,11 @@ export function OperatorRoutePending() {
       description="Fetching the latest marketplace and account details."
       currentPath={pathname}
     >
-      <div className="grid gap-3">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
+      <div className="grid gap-2" aria-busy="true" aria-label="Loading workspace">
+        <Skeleton className="h-10 w-full" />
+        {Array.from({ length: 6 }, (_, index) => (
+          <Skeleton key={index} className="h-12 w-full" />
+        ))}
       </div>
     </AeOperatorShell>
   )

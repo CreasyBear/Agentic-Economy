@@ -8,16 +8,18 @@ export function AeEmptyState({
   action,
   role,
 }: {
-  icon?: ReactNode
   title: string
   description: string
   action?: ReactNode
   role?: 'status' | 'alert'
 }) {
   return (
-    <div {...(role === undefined ? {} : { role })} className={cn('grid max-w-xl gap-3 py-8')}>
-      <div className="grid gap-1">
-        <p className="font-medium text-foreground">{title}</p>
+    <div
+      {...(role === undefined ? {} : { role })}
+      className={cn('grid min-h-64 place-content-center justify-items-center gap-4 py-12 text-center')}
+    >
+      <div className="grid max-w-md gap-1">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
         <p className="text-pretty text-sm text-muted-foreground">{description}</p>
       </div>
       {action === undefined ? null : <div>{action}</div>}

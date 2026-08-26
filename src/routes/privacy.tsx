@@ -15,14 +15,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/privacy')({
-  head: () => ({
-    meta: [
-      { title: 'Privacy | Agentic Economy' },
-      { name: 'robots', content: 'noindex' },
-      { name: 'description', content: 'What Agentic Economy handles when you browse, call, pay for, or publish Operations.' },
-    ],
+  head: () => buildPublicPageHead({
+    path: '/privacy',
+    title: 'Privacy | Agentic Economy',
+    description: 'What Agentic Economy handles when you browse, call, pay for, or publish Operations.',
   }),
   component: PrivacyRoute,
 })

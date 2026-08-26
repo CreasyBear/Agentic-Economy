@@ -13,14 +13,13 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { buildPublicPageHead } from '@/modules/seo/public'
 
 export const Route = createFileRoute('/terms')({
-  head: () => ({
-    meta: [
-      { title: 'Terms | Agentic Economy' },
-      { name: 'robots', content: 'noindex' },
-      { name: 'description', content: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.' },
-    ],
+  head: () => buildPublicPageHead({
+    path: '/terms',
+    title: 'Terms | Agentic Economy',
+    description: 'Plain-language terms for finding, comparing, paying for, and calling Agentic Economy Operations.',
   }),
   component: TermsRoute,
 })

@@ -28,6 +28,8 @@ export const HOME = {
   closeHeading: 'Set up your agent.',
   closeBody:
     'One instruction is enough. The catalog, the price, and the call sit behind it.',
+  doorsHeading: 'Two ways in',
+  aboutLink: 'What Agentic Economy is',
 } as const
 
 /** Shared agent-paste instruction. Home and `/for-agents` must stay identical. */
@@ -125,4 +127,24 @@ export const BUSINESS_DOOR = {
   body: 'Publish the capability, price and access terms agents need to find and choose your tool.',
   cta: 'Supplier setup',
   href: '/for-providers',
+} as const
+
+/** Company page (`/about`). No team roster, logos, or invented customers. */
+export const ABOUT = {
+  metaTitle: 'About | Agentic Economy',
+  metaDescription: CORE_SENTENCE,
+  eyebrow: 'About',
+  heading: 'A market for agent-callable work.',
+  subhead:
+    'Agents discover, compare, and call admitted Operations. Suppliers publish the capability, the price, and the access terms, and are paid after contract-valid delivery.',
+  doorsHeading: 'Two ways in',
+  settlementHeading: 'Pay per Operation',
+  settlementBody:
+    'Browse and inspect without a provider signup. Price sits on the Operation before a call. Suppliers are paid after the contract for that Operation is met.',
+  suppliersHeading: 'Listed suppliers',
+  suppliersBody:
+    'There is no partner logo wall. A supplier is listed when it publishes an Operation agents can inspect in the live catalog.',
+  machinesHeading: 'What machines read',
+  machinesBody:
+    'The same facts the site shows are published as an index, a skill file, and a machine handshake. Start there instead of guessing a private API.',
 } as const

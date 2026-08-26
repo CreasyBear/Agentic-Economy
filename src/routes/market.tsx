@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AePublicShell } from "@/components/ae/layout/AePublicShell";
-import { AePageState } from "@/components/ae/layout/AePageState";
-import { AePublicRoutePending } from "@/components/ae/layout/AePublicRoutePending";
+import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { AeMarketPage } from "@/components/ae/market/AeMarketPage";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +9,7 @@ import {
   type MarketWindow,
 } from "@/modules/market/contracts";
 import { readMarketRouteServer } from "@/modules/market/market.functions";
+import { buildPublicPageHead } from "@/modules/seo/public";
 
 export type MarketSearch = Readonly<{
   window: MarketWindow;
@@ -47,21 +47,18 @@ export const Route = createFileRoute("/market")({
   loader: ({ deps }) => readMarketRouteServer({ data: deps }),
   pendingComponent: MarketPending,
   errorComponent: MarketError,
-  head: () => ({
-    meta: [
-      { title: "Agent tool market | Agentic Economy" },
-      {
-        name: "description",
-        content:
-          "Find tools your agent can call, compare admitted providers by price and observed performance, and choose an Operation.",
-      },
-    ],
-  }),
+  head: () =>
+    buildPublicPageHead({
+      path: "/market",
+      title: "Agent tool market | Agentic Economy",
+      description:
+        "Find tools your agent can call, compare admitted providers by price and observed performance, and choose an Operation.",
+    }),
   component: MarketRoute,
 });
 
 function MarketPending() {
-  return <AePublicRoutePending label="Updating market results…" shape="market" />;
+  return <AePageSkeleton title="Updating market results…" description="Updating market results…" shape="market" />;
 }
 
 function MarketError() {

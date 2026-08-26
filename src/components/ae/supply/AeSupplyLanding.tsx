@@ -1,8 +1,16 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowRightIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
+import {
+  AeSiteBody,
+  AeSiteButton,
+  AeSiteEyebrow,
+  AeSiteHeading,
+  AeSiteHeadingPair,
+  AeSiteHeroIntro,
+  AeSiteSection,
+  AeSiteStack,
+} from '@/components/ae/website'
 
 import type { SupplyLandingTool } from '@/modules/capability-supply/supply-funnel.functions'
 import type { ServiceDto } from '@/modules/registry/public'
@@ -10,6 +18,12 @@ import type { ServiceDto } from '@/modules/registry/public'
 import { AeSupplyAgentProof } from './AeSupplyAgentProof'
 
 export const SUPPLY_OFFER_SENTENCE = 'Publish the capability, price and access terms agents need to discover, compare and call your tool.'
+
+const SUPPLY_STEPS = [
+  { number: '01', title: 'Describe the tool', detail: 'Publish the job it does, its exact inputs and the outcome it returns.' },
+  { number: '02', title: 'Set access and price', detail: 'Make availability, price and payment terms clear before any call.' },
+  { number: '03', title: 'Test and publish', detail: 'Confirm the route works, then make the Operation discoverable in the market.' },
+] as const
 
 export function AeSupplyLanding({
   tools,
@@ -24,17 +38,27 @@ export function AeSupplyLanding({
 }>) {
   return (
     <>
-      <AePageHeader
-        title="List your tool or API."
-        description={SUPPLY_OFFER_SENTENCE}
-        actions={
-          <Button asChild className="min-h-11">
+      <AeSiteSection labelledBy="supply-hero" rhythm="hero" scheme="muted">
+        <AeSiteHeroIntro>
+          <AeSiteHeadingPair>
+            <div className="mx-auto w-full max-w-xl">
+              <AeSiteHeading as="h1" size="md" id="supply-hero">
+                List your tool or API.
+              </AeSiteHeading>
+            </div>
+            <div className="mx-auto w-full max-w-lg">
+              <AeSiteBody muted size="sm" className="mx-auto">
+                {SUPPLY_OFFER_SENTENCE}
+              </AeSiteBody>
+            </div>
+          </AeSiteHeadingPair>
+          <AeSiteButton asChild>
             <Link to="/owner/supply">List a tool</Link>
-          </Button>
-        }
-      />
-      <div className="ae-rail grid gap-section pb-page">
-        {sourceError === undefined ? null : (
+          </AeSiteButton>
+        </AeSiteHeroIntro>
+      </AeSiteSection>
+      {sourceError === undefined ? null : (
+        <AeSiteSection ariaLabel="Supplier recovery" scheme="canvas">
           <Alert variant="destructive">
             <AlertTitle>Supplier information is unavailable</AlertTitle>
             <AlertDescription>
@@ -46,36 +70,37 @@ export function AeSupplyLanding({
               )}
             </AlertDescription>
           </Alert>
-        )}
-
-        <ol className="m-0 grid list-decimal gap-6 border-y border-border py-8 pl-6 marker:font-mono marker:text-sm marker:text-muted-foreground">
-          <SupplierStep title="Describe the tool" detail="Publish the job it does, its exact inputs and the outcome it returns." />
-          <SupplierStep title="Set access and price" detail="Make availability, price and payment terms clear before any call." />
-          <SupplierStep title="Test and publish" detail="Confirm the route works, then make the Operation discoverable in the market." />
-        </ol>
-
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          You control the listing and the route. Agents see your published facts before choosing. Setup and test calls do not create settled earnings or payouts.
-        </p>
-
-        <Link
-          to="/owner/supply"
-          className="inline-flex min-h-11 items-center gap-1 justify-self-start text-sm font-medium underline-offset-4 hover:underline"
-        >
-          Open supplier dashboard <ArrowRightIcon aria-hidden="true" className="size-3.5" />
-        </Link>
-
+        </AeSiteSection>
+      )}
+      <AeSiteSection ariaLabel="How to list a tool" scheme="surface">
+        <AeSiteStack>
+          <ol className="m-0 grid list-none gap-page p-0">
+            {SUPPLY_STEPS.map((step) => (
+              <li key={step.number} className="grid gap-intra border-b border-border pb-page last:border-b-0 last:pb-0">
+                <AeSiteEyebrow>{step.number}</AeSiteEyebrow>
+                <h2 className="font-display text-2xl font-medium tracking-tight sm:text-3xl">{step.title}</h2>
+                <AeSiteBody muted size="sm">{step.detail}</AeSiteBody>
+              </li>
+            ))}
+          </ol>
+        </AeSiteStack>
+      </AeSiteSection>
+      <AeSiteSection ariaLabel="Listing control" scheme="canvas">
+        <div className="grid max-w-3xl gap-section">
+          <AeSiteBody muted>
+            You control the listing and the route. Agents see your published facts before choosing. Setup and test calls do not create settled earnings or payouts.
+          </AeSiteBody>
+          <Link
+            to="/owner/supply"
+            className="inline-flex min-h-11 items-center justify-self-start text-sm font-medium underline underline-offset-4"
+          >
+            Manage listings
+          </Link>
+        </div>
+      </AeSiteSection>
+      <AeSiteSection ariaLabel="What agents can inspect" scheme="surface">
         <AeSupplyAgentProof tools={tools} services={services} />
-      </div>
+      </AeSiteSection>
     </>
-  )
-}
-
-function SupplierStep({ title, detail }: Readonly<{ title: string; detail: string }>) {
-  return (
-    <li className="grid gap-1 pl-2">
-      <h2 className="text-base font-medium">{title}</h2>
-      <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
-    </li>
   )
 }

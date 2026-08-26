@@ -235,10 +235,11 @@ describe('assistant access components', () => {
     expect(screen.getByText('Provider reauthorization required')).toBeTruthy()
     expect(screen.getByText('Outcome uncertain')).toBeTruthy()
     expect(screen.getByText(/USD 5\.005/u)).toBeTruthy()
+    expect(screen.getByText('Browse only')).toBeTruthy()
+    fireEvent.click(screen.getByText('UI assistant'))
     expect(screen.getByText('Development')).toBeTruthy()
     expect(screen.getByText('30/min · 300/hour')).toBeTruthy()
     expect(screen.getByText('USD 25.00')).toBeTruthy()
-    expect(screen.getByText('Browse only')).toBeTruthy()
     expect(screen.queryByText(/scope:|data:|principal|clerk_api_key/u)).toBeNull()
   })
 

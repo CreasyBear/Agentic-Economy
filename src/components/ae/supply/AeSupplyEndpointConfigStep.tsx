@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -229,16 +229,11 @@ export function AeSupplyEndpointConfigStep({
   }
 
   return (
-    <Card className="shadow-none">
-      <CardHeader className="p-5 pb-0">
-        <CardTitle>
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">02 · Connection</p>
-          <h2 className="mt-1 text-lg font-semibold text-foreground">Connect the Operation</h2>
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">Choose the interface this Operation exposes. AE validates the source before publication changes.</p>
-      </CardHeader>
-      <CardContent className="grid gap-5 p-5">
-        <FieldGroup className="gap-4">
+    <AeSection
+      title="Connect the Operation"
+      description="Choose the interface this Operation exposes. AE validates the source before publication changes."
+    >
+      <FieldGroup className="gap-4">
           <Field {...(formDisabled ? { 'data-disabled': true } : {})}>
             <FieldLabel htmlFor="supply-source-kind">Connection type</FieldLabel>
             <Select value={value.sourceKind} disabled={formDisabled} onValueChange={(next) => changeSourceKind(sourceKindFromValue(next))}>
@@ -276,13 +271,10 @@ export function AeSupplyEndpointConfigStep({
           <p className="text-sm text-muted-foreground">Keyless access is supported. For keyed OpenAPI or MCP, choose an existing compatible provider connection; this form never asks for or stores a raw key. x402 authority is non-secret and checked on the server.</p>
           <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">{announcement}</div>
         </FieldGroup>
-      </CardContent>
-      <CardFooter className="p-5 pt-0">
-        <Button type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-11">
-          {pending ? 'Checking source' : 'Check and continue'}
-        </Button>
-      </CardFooter>
-    </Card>
+      <Button type="button" variant="default" disabled={formDisabled} aria-busy={pending || undefined} onClick={() => void submit()} className="min-h-11">
+        {pending ? 'Checking source' : 'Check and continue'}
+      </Button>
+    </AeSection>
   )
 }
 

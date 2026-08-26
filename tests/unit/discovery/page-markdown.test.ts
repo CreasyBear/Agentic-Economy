@@ -5,6 +5,7 @@ import {
   buildBusinessMarkdown,
   buildCatalogMarkdown,
   buildForAgentsMarkdown,
+  buildAboutMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,
@@ -88,6 +89,16 @@ describe('site brief markdown', () => {
     expect(guide).toContain('may omit `Mcp-Session-Id`')
   })
 
+  it('projects About as the same two doors the HTML page shows', () => {
+    const about = buildAboutMarkdown(options)
+    expect(about).toContain('# About Agentic Economy')
+    expect(about).toContain('https://ae.example/for-agents')
+    expect(about).toContain('https://ae.example/for-providers')
+    expect(about).toContain('https://ae.example/market')
+    expect(about).toContain('no partner logo wall')
+    expect(about).not.toMatch(/\/api\/answer|\/api\/chat\/anonymous/u)
+  })
+
   it('trims the trailing slash off the canonical base', () => {
     expect(body).not.toContain('https://ae.example//')
   })
@@ -159,8 +170,8 @@ describe('refusal documents', () => {
   })
 
   it('points an unprojectable page only at canonical Operation surfaces', () => {
-    const body = buildUnknownPageMarkdown('/about', options)
-    expect(body).toContain('`/about` is served as HTML only')
+    const body = buildUnknownPageMarkdown('/careers', options)
+    expect(body).toContain('`/careers` is served as HTML only')
     expect(body).toContain('https://ae.example/llms.txt')
     expect(body).toContain('https://ae.example/market')
     expect(body).toContain('https://ae.example/api/v1/market-operations/search')

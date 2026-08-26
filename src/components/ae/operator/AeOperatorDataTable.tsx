@@ -37,6 +37,7 @@ type AeRecordTableProps<TData> = {
   action?: ReactNode
   onRowClick?: (row: TData) => void
   getRowHref?: (row: TData) => string | undefined
+  loading?: boolean
 }
 
 export function AeRecordTable<TData>({
@@ -51,6 +52,7 @@ export function AeRecordTable<TData>({
   action,
   onRowClick,
   getRowHref,
+  loading = false,
 }: AeRecordTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
@@ -117,7 +119,17 @@ export function AeRecordTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {rowCount === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <TableRow key={`skeleton-${String(index)}`} className="hover:bg-transparent">
+                  {columns.map((column, cellIndex) => (
+                    <TableCell key={`${String(column.id ?? cellIndex)}-skeleton`}>
+                      <span className="block h-4 w-24 max-w-full animate-pulse rounded-sm bg-muted" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : rowCount === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={columns.length} className="h-24 text-muted-foreground">
                   {emptyMessage}
@@ -126,12 +138,21 @@ export function AeRecordTable<TData>({
             ) : (
               table.getRowModel().rows.map((row) => {
                 const href = getRowHref?.(row.original)
+                if (href === undefined) {
+                  return (
+                    <RecordTableRow
+                      key={row.id}
+                      row={row}
+                      interactive={interactive}
+                      {...(onRowClick === undefined ? {} : { onRowClick })}
+                    />
+                  )
+                }
                 return (
-                  <RecordTableRow
+                  <RecordTableLinkRow
                     key={row.id}
                     row={row}
-                    interactive={interactive}
-                    {...(href === undefined ? {} : { href })}
+                    href={href}
                     {...(onRowClick === undefined ? {} : { onRowClick })}
                   />
                 )
@@ -144,25 +165,56 @@ export function AeRecordTable<TData>({
   )
 }
 
+function isControlTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('a, button, input, select, textarea, [role="button"]') !== null
+}
+
 function RecordTableRow<TData>({
   row,
   interactive,
-  href,
   onRowClick,
 }: {
   row: Row<TData>
   interactive: boolean
-  href?: string
+  onRowClick?: (row: TData) => void
+}) {
+  function handleClick(event: MouseEvent<HTMLTableRowElement>) {
+    if (!interactive || isControlTarget(event.target)) return
+    onRowClick?.(row.original)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
+    if (!interactive) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onRowClick?.(row.original)
+  }
+
+  return (
+    <TableRow
+      {...(interactive ? { className: 'cursor-pointer', tabIndex: 0, onClick: handleClick, onKeyDown: handleKeyDown } : {})}
+    >
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id} className="whitespace-normal">
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  )
+}
+
+function RecordTableLinkRow<TData>({
+  row,
+  href,
+  onRowClick,
+}: {
+  row: Row<TData>
+  href: string
   onRowClick?: (row: TData) => void
 }) {
   const router = useRouter()
 
-  function activate() {
-    onRowClick?.(row.original)
-  }
-
   function followHref(event?: MouseEvent<HTMLTableRowElement>) {
-    if (href === undefined) return
     if (event !== undefined && (event.metaKey || event.ctrlKey)) {
       window.open(href, '_blank', 'noopener,noreferrer')
       return
@@ -171,24 +223,20 @@ function RecordTableRow<TData>({
   }
 
   function handleClick(event: MouseEvent<HTMLTableRowElement>) {
-    if (!interactive) return
-    const target = event.target
-    if (!(target instanceof Element)) return
-    if (target.closest('a, button, input, select, textarea, [role="button"]')) return
+    if (isControlTarget(event.target)) return
     if (onRowClick !== undefined) {
       event.preventDefault()
-      activate()
+      onRowClick(row.original)
       return
     }
     followHref(event)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
-    if (!interactive) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     if (onRowClick !== undefined) {
-      activate()
+      onRowClick(row.original)
       return
     }
     followHref()
@@ -196,8 +244,11 @@ function RecordTableRow<TData>({
 
   return (
     <TableRow
-      {...(interactive ? { className: 'cursor-pointer', tabIndex: 0, onClick: handleClick, onKeyDown: handleKeyDown } : {})}
-      {...(href === undefined ? {} : { 'data-href': href })}
+      className="cursor-pointer"
+      tabIndex={0}
+      data-href={href}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
     >
       {row.getVisibleCells().map((cell) => (
         <TableCell key={cell.id} className="whitespace-normal">

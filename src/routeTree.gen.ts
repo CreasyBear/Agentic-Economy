@@ -20,6 +20,7 @@ import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as ForProvidersRouteImport } from './routes/for-providers'
 import { Route as ForAgentsRouteImport } from './routes/for-agents'
 import { Route as EngineRouteImport } from './routes/engine'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
 import { Route as SKILLDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as SlugRouteImport } from './routes/$slug'
@@ -136,6 +137,11 @@ const ForAgentsRoute = ForAgentsRouteImport.update({
 const EngineRoute = EngineRouteImport.update({
   id: '/engine',
   path: '/engine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OperatorRoute = OperatorRouteImport.update({
@@ -474,6 +480,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
+  '/about': typeof AboutRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
@@ -548,6 +555,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
+  '/about': typeof AboutRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
@@ -624,6 +632,7 @@ export interface FileRoutesById {
   '/$slug': typeof SlugRouteWithChildren
   '/SKILL.md': typeof SKILLDotmdRoute
   '/_operator': typeof OperatorRouteWithChildren
+  '/about': typeof AboutRoute
   '/engine': typeof EngineRoute
   '/for-agents': typeof ForAgentsRoute
   '/for-providers': typeof ForProvidersRoute
@@ -700,6 +709,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/SKILL.md'
+    | '/about'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
@@ -774,6 +784,7 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/SKILL.md'
+    | '/about'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
@@ -849,6 +860,7 @@ export interface FileRouteTypes {
     | '/$slug'
     | '/SKILL.md'
     | '/_operator'
+    | '/about'
     | '/engine'
     | '/for-agents'
     | '/for-providers'
@@ -925,6 +937,7 @@ export interface RootRouteChildren {
   SlugRoute: typeof SlugRouteWithChildren
   SKILLDotmdRoute: typeof SKILLDotmdRoute
   OperatorRoute: typeof OperatorRouteWithChildren
+  AboutRoute: typeof AboutRoute
   EngineRoute: typeof EngineRoute
   ForAgentsRoute: typeof ForAgentsRoute
   ForProvidersRoute: typeof ForProvidersRoute
@@ -1049,6 +1062,13 @@ declare module '@tanstack/react-router' {
       path: '/engine'
       fullPath: '/engine'
       preLoaderRoute: typeof EngineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_operator': {
@@ -1644,6 +1664,7 @@ const rootRouteChildren: RootRouteChildren = {
   SlugRoute: SlugRouteWithChildren,
   SKILLDotmdRoute: SKILLDotmdRoute,
   OperatorRoute: OperatorRouteWithChildren,
+  AboutRoute: AboutRoute,
   EngineRoute: EngineRoute,
   ForAgentsRoute: ForAgentsRoute,
   ForProvidersRoute: ForProvidersRoute,

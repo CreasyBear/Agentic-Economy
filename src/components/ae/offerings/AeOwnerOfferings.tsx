@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import {
   AeOperatorSortableHeader,
   AeRecordTable,
@@ -16,7 +17,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Field as UiField, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -162,20 +162,6 @@ export function AeOwnerOfferingsList({
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
           ),
-      },
-      {
-        id: 'actions',
-        header: 'Actions',
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="secondary" className="min-h-11">
-              <a href={`/owner/offerings/${encodeURIComponent(row.original.offering.offeringRef)}?preview=true`}>Inspect</a>
-            </Button>
-            <Button asChild className="min-h-11">
-              <a href={`/owner/offerings/${encodeURIComponent(row.original.offering.offeringRef)}`}>Edit</a>
-            </Button>
-          </div>
-        ),
       },
     ],
     [],
@@ -337,12 +323,7 @@ export function AeOwnerOfferingEditor({
           <p className="text-sm text-muted-foreground">Fills the details below. You can change every field.</p>
         </div>
       )}
-      <Card className="grid gap-5 p-5 shadow-none">
-        <div className="grid gap-1">
-          <p className="font-mono text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">01 · Operation</p>
-          <h2 className="text-lg font-semibold text-foreground">Public details</h2>
-          <p className="block max-w-2xl text-muted-foreground">Describe the exact tool and outcome agents can inspect before calling it.</p>
-        </div>
+      <AeSection title="Public details" description="Describe the exact tool and outcome agents can inspect before calling it.">
         <FieldGroup className="gap-4">
           <TextInput label="Name" value={value.name} onChange={(name) => update({ name })} disabled={editorDisabled} inputRef={firstFieldRef} {...(invalidField === 'name' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
           <TextInput label="Category" value={value.category} onChange={(category) => update({ category })} disabled={editorDisabled} inputRef={categoryFieldRef} {...(invalidField === 'category' && invalidMessage !== undefined ? { error: invalidMessage } : {})} />
@@ -424,11 +405,11 @@ export function AeOwnerOfferingEditor({
             </Select>
           </Field>
         </FieldGroup>
-      </Card>
+      </AeSection>
 
       <OwnerAccessPathsEditor paths={value.accessPaths} disabled={editorDisabled} onChange={(accessPaths) => update({ accessPaths })} />
 
-      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-canvas/95 py-4 backdrop-blur sm:flex-row sm:justify-end">
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-border bg-card py-4 sm:flex-row sm:justify-end">
         <Button asChild variant="secondary" className="min-h-11">
           <a href="/owner/offerings">Back to Operations</a>
         </Button>
@@ -449,12 +430,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
   const [websiteUrlError, setWebsiteUrlError] = useState<string | undefined>()
 
   return (
-    <Card className="grid gap-5 p-5">
-      <div className="grid gap-1">
-        <p className="block text-sm font-semibold text-muted-foreground">2 · WAYS TO BEGIN</p>
-        <h2 className="text-lg font-semibold text-foreground">Access routes</h2>
-        <p className="block max-w-2xl text-muted-foreground">Give agents a clear route to call the Operation. Each route stands on its own.</p>
-      </div>
+    <AeSection title="Access routes" description="Give agents a clear route to call the Operation. Each route stands on its own.">
       {paths.length === 0 ? <p className="text-muted-foreground">Add a phone, website, or message route.</p> : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {paths.map((path) => (
@@ -560,7 +536,7 @@ function OwnerAccessPathsEditor({ paths, disabled, onChange }: { paths: readonly
           Add this way
         </Button>
       </FieldGroup>
-    </Card>
+    </AeSection>
   )
 }
 

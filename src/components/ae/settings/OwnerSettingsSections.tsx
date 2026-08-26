@@ -1,24 +1,38 @@
-import { UserProfile } from '@clerk/tanstack-react-start'
+import { SignOutButton, UserProfile } from '@clerk/tanstack-react-start'
 import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 
+import { AeSection, AeSettingsRow } from '@/components/ae/layout/AeSection'
+import { AeSiteAuthPanel, AeSiteAuthSubmit } from '@/components/ae/website'
+import { cn } from '@/lib/utils'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 
 export type OwnerSettingsNavCurrent = 'account' | 'workspace' | 'credit'
 
+const settingsTabs = [
+  { id: 'account' as const, label: 'Account', to: '/owner/settings' },
+  { id: 'workspace' as const, label: 'Workspace', to: '/owner/settings', hash: 'workspace' },
+  { id: 'credit' as const, label: 'Credit', to: '/owner/credit' },
+] as const
+
 export function OwnerSettingsNav({ current }: { current: OwnerSettingsNavCurrent }) {
   return (
-    <nav aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-border pb-4">
-      <Button asChild variant={current === 'account' ? 'secondary' : 'ghost'} className="min-h-11">
-        <Link to="/owner/settings">Account</Link>
-      </Button>
-      <Button asChild variant={current === 'workspace' ? 'secondary' : 'ghost'} className="min-h-11">
-        <Link to="/owner/settings" hash="workspace">Workspace</Link>
-      </Button>
-      <Button asChild variant={current === 'credit' ? 'secondary' : 'ghost'} className="min-h-11">
-        <Link to="/owner/credit">Credit</Link>
-      </Button>
+    <nav aria-label="Settings sections" className="flex min-h-10 flex-wrap gap-1 border-b border-border">
+      {settingsTabs.map((tab) => (
+        <Link
+          key={tab.id}
+          to={tab.to}
+          {...('hash' in tab ? { hash: tab.hash } : {})}
+          className={cn(
+            'inline-flex min-h-11 items-center border-b-2 px-3 text-sm transition-colors',
+            current === tab.id
+              ? 'border-foreground font-medium text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {tab.label}
+        </Link>
+      ))}
     </nav>
   )
 }
@@ -27,45 +41,64 @@ export function AccountSettingsSection() {
   const localPreview = isLocalE2EAuthBypassEnabled()
 
   return (
-    <section className="grid gap-4 border-b border-border pb-8">
-      <SectionHeader
-        title="Account"
-        description="Update your Clerk profile, email addresses, security settings, and active sessions."
-      />
+    <AeSection
+      title="Profile"
+      description="Name, email, security, and active sessions for this owner."
+    >
       {localPreview ? (
         <Alert>
           <AlertTitle>Account settings are unavailable in local preview</AlertTitle>
           <AlertDescription>This browser journey does not connect a Clerk account. Sign in outside local preview to manage your profile and sessions.</AlertDescription>
         </Alert>
       ) : (
-        <UserProfile />
+        <div className="grid gap-section">
+          <UserProfile />
+          <AeSiteAuthPanel
+            eyebrow="Session"
+            title="Sign out"
+            titleId="owner-sign-out"
+            titleAs="h3"
+            body="This browser returns to the public site. Operations, credit, and listed tools stay as they are."
+          >
+            <SignOutButton redirectUrl="/">
+              <AeSiteAuthSubmit>Sign out</AeSiteAuthSubmit>
+            </SignOutButton>
+          </AeSiteAuthPanel>
+        </div>
       )}
-    </section>
+    </AeSection>
   )
 }
 
 export function BusinessSettingsSection() {
   return (
-    <section id="workspace" className="grid scroll-mt-6 gap-4 pt-2">
-      <SectionHeader
-        title="Supplier workspace"
-        description="Manage the supplier profile, Operations, credit, and publication setup."
-      />
-      <div className="flex flex-wrap gap-3">
-        <Button asChild variant="default" className="min-h-11"><Link to="/owner/status">Supplier profile</Link></Button>
-        <Button asChild variant="secondary" className="min-h-11"><Link to="/owner/offerings">Operations</Link></Button>
-        <Button asChild variant="secondary" className="min-h-11"><Link to="/owner/credit">Credit</Link></Button>
-        <Button asChild variant="secondary" className="min-h-11"><Link to="/for-providers">Review supplier setup</Link></Button>
+    <AeSection
+      id="workspace"
+      title="Workspace"
+      description="Supplier profile, Operations, credit, and publication setup."
+    >
+      <div className="grid gap-2">
+        <AeSettingsRow
+          title="Supplier"
+          description="The public supplier agents find."
+          href="/owner/status"
+        />
+        <AeSettingsRow
+          title="Operations"
+          description="Operations this workspace lists."
+          href="/owner/offerings"
+        />
+        <AeSettingsRow
+          title="Credit"
+          description="Credit assigned to agents that make paid calls."
+          href="/owner/credit"
+        />
+        <AeSettingsRow
+          title="Setup"
+          description="Publication setup for this supplier."
+          href="/for-providers"
+        />
       </div>
-    </section>
-  )
-}
-
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="grid gap-1">
-      <h2 className="text-sm font-medium">{title}</h2>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </div>
+    </AeSection>
   )
 }

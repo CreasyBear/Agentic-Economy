@@ -3,7 +3,7 @@ import type { ErrorBoundary as SentryErrorBoundary } from '@sentry/react'
 import { useEffect, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 
 /**
  * A dead end is the failure mode here: telling someone to "refresh" without a
@@ -12,22 +12,19 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '
  */
 function AeObservabilityErrorFallback() {
   return (
-    <Empty className="mx-auto my-12 max-w-lg border border-border bg-card p-6">
-      <EmptyHeader>
-        <EmptyTitle>Something went wrong</EmptyTitle>
-        <EmptyDescription>
-          This page hit an unexpected error. Nothing you sent was lost. Try again, or pick up from another view.
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
+    <AeEmptyState
+      title="Something went wrong"
+      description="This page hit an unexpected error. Nothing you sent was lost. Try again, or pick up from another view."
+      role="alert"
+      action={
         <div className="flex flex-wrap justify-center gap-3">
           <Button type="button" variant="default" className="min-h-11" onClick={() => window.location.reload()}>
             Try again
           </Button>
           <Button asChild variant="secondary" className="min-h-11"><a href="/t/new">Start a new chat</a></Button>
         </div>
-      </EmptyContent>
-    </Empty>
+      }
+    />
   )
 }
 

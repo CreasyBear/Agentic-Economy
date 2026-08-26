@@ -4,11 +4,17 @@ import { AeHomeLanding } from "@/components/ae/home/AeHomeLanding";
 import { AePublicShell } from "@/components/ae/layout/AePublicShell";
 import { AePageSkeleton, AePageState } from "@/components/ae/layout/AePageState";
 import { Button } from "@/components/ui/button";
-import { HOME } from "@/content/brand-copy";
+import { HOME, HOME_FAQ } from "@/content/brand-copy";
+import { readCanonicalBaseUrlServer } from "@/lib/server/canonical-url.functions";
 import {
   readHomeCapabilities,
   validateRootSearch,
 } from "@/modules/market/home-catalogue";
+import {
+  buildFaqPageJsonLd,
+  buildPublicPageHead,
+  buildSiteJsonLd,
+} from "@/modules/seo/public";
 
 export { HomeCapabilityResults } from "@/components/ae/home/AeHomeLanding";
 
@@ -19,20 +25,34 @@ export const Route = createFileRoute("/")({
       throw redirect({ to: "/t/new", search: { q: search.q } });
     }
   },
-  loader: readHomeCapabilities,
+  loader: async () => {
+    const [read, canonicalBaseUrl] = await Promise.all([
+      readHomeCapabilities(),
+      readCanonicalBaseUrlServer(),
+    ]);
+    return { read, canonicalBaseUrl };
+  },
   pendingComponent: HomePending,
   errorComponent: HomeError,
-  head: () => ({
-    meta: [
-      { title: HOME.metaTitle },
-      { name: "description", content: HOME.metaDescription },
-    ],
-  }),
+  head: ({ loaderData }) =>
+    buildPublicPageHead({
+      path: "/",
+      title: HOME.metaTitle,
+      description: HOME.metaDescription,
+      canonicalBaseUrl: loaderData?.canonicalBaseUrl,
+      jsonLd:
+        loaderData === undefined
+          ? undefined
+          : [
+              ...buildSiteJsonLd(loaderData.canonicalBaseUrl),
+              buildFaqPageJsonLd(HOME_FAQ),
+            ],
+    }),
   component: ServicesRoute,
 });
 
 function ServicesRoute() {
-  const read = Route.useLoaderData();
+  const { read } = Route.useLoaderData();
 
   return (
     <AePublicShell>

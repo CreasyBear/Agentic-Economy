@@ -1,7 +1,4 @@
-import { cva } from 'class-variance-authority'
 import { useId, type ReactNode } from 'react'
-
-type AePageHeaderDensity = 'public' | 'operator'
 
 type AePageHeaderProps = {
   eyebrow?: string
@@ -14,31 +11,7 @@ type AePageHeaderProps = {
    * number reads like a spec-sheet datum rather than prose.
    */
   meta?: ReactNode
-  density?: AePageHeaderDensity
 }
-
-const headerContainer = cva('w-full', {
-  variants: {
-    density: {
-      public: 'ae-rail py-section md:py-page',
-      operator: 'py-5 md:py-6',
-    },
-  },
-})
-const headerLayout = cva('grid', {
-  variants: {
-    density: {
-      public: 'gap-5 border-b border-border pb-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end',
-      operator: 'gap-3',
-    },
-  },
-})
-const headerTitle = cva('font-display font-medium tracking-tight text-balance text-foreground', {
-  variants: { density: { public: 'text-3xl leading-[1.08] sm:text-4xl', operator: 'text-2xl' } },
-})
-const headerDescription = cva('block text-pretty text-muted-foreground', {
-  variants: { density: { public: 'max-w-2xl text-base', operator: 'text-sm' } },
-})
 
 export function AePageHeader({
   eyebrow,
@@ -46,24 +19,23 @@ export function AePageHeader({
   description,
   actions,
   meta,
-  density = 'public',
 }: AePageHeaderProps) {
   const titleId = useId()
   const descriptionId = useId()
 
   return (
-    <section aria-labelledby={titleId} aria-describedby={descriptionId} className={headerContainer({ density })}>
-      <div className={headerLayout({ density })}>
+    <section aria-labelledby={titleId} aria-describedby={descriptionId} className="ae-rail w-full py-section md:py-page">
+      <div className="grid gap-5 border-b border-border pb-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="grid max-w-4xl gap-2">
           {eyebrow ? (
             <p className="block font-mono text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {eyebrow}
             </p>
           ) : null}
-          <h1 id={titleId} className={headerTitle({ density })}>
+          <h1 id={titleId} className="text-balance font-display text-3xl font-medium leading-[1.08] tracking-tight text-foreground sm:text-4xl">
             {title}
           </h1>
-          <p id={descriptionId} className={headerDescription({ density })}>
+          <p id={descriptionId} className="block max-w-2xl text-pretty text-base text-muted-foreground">
             {description}
           </p>
         </div>

@@ -213,8 +213,10 @@ const businessManifestPath = '/{slug}/ucp' as const
 
 const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/': 'Human entry point',
+  '/market': 'Operation catalogue',
   '/for-agents': 'Agent setup guide',
   '/for-providers': 'Guide for operation providers',
+  '/about': 'What Agentic Economy is',
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',
   [PublicAgentSkillPath]: 'Assistant setup instructions',

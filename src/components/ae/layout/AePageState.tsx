@@ -8,7 +8,6 @@ type AePageStateTone = 'neutral' | 'warning' | 'danger'
 type AePageStateProps = {
   title: string
   description: string
-  icon?: ReactNode
   tone?: AePageStateTone
   action?: ReactNode
 }
@@ -18,18 +17,13 @@ type AePageStateProps = {
  * public surfaces. The title is a real `<h1>` and the container carries the
  * semantic role (`status` for empty/unavailable, `alert` for failures).
  */
-export function AePageState({ title, description, icon, tone = 'neutral', action }: AePageStateProps) {
+export function AePageState({ title, description, tone = 'neutral', action }: AePageStateProps) {
   return (
     <AePublicShell>
       <section
         role={tone === 'danger' ? 'alert' : 'status'}
         className="ae-rail grid max-w-xl gap-3 py-page"
       >
-        {icon === undefined ? null : (
-          <div className="text-muted-foreground" aria-hidden="true">
-            {icon}
-          </div>
-        )}
         <div className="grid gap-1">
           <h1 className="text-lg font-medium tracking-tight">{title}</h1>
           <p className="text-pretty text-sm text-muted-foreground">{description}</p>

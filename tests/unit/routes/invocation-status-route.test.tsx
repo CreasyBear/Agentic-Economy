@@ -370,7 +370,7 @@ describe('/operations/invocations/$invocationRef', () => {
       nextAction: 'Use the invocation environment recorded at creation.',
     }, { onRefresh: vi.fn() })
 
-    const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal' }).closest('[data-slot="card"]')
+    const refusal = screen.getByRole('heading', { level: 2, name: 'Refusal' }).closest('section')
     expect(refusal).not.toBeNull()
     expect(within(refusal as HTMLElement).getByText('Use the invocation environment recorded at creation.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Refresh current status' })).toBeNull()

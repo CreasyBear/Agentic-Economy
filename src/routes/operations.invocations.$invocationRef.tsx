@@ -5,8 +5,10 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
+import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -19,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { formatUtcTimestamp, timestampIso } from '@/lib/ui/format-time'
 import {
   cancelOwnerInvocationServer,
@@ -223,22 +224,27 @@ function StatusFound({
             <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Invocation receipt</h1>
             <p className="max-w-3xl text-muted-foreground">{receiptView.statusDetail}</p>
           </div>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <Fact label="Invocation reference"><Ref value={result.invocationRef} /></Fact>
-            <Fact label="Current Operation">
-              <Link
-                to="/operations/$operationRef"
-                params={{ operationRef: result.operationRef }}
-                className="break-all font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {result.operationRef}
-              </Link>
-            </Fact>
-            <Fact label="State" value={machineLabel(result.state)} />
-            {result.attemptRef === undefined ? null : <Fact label="Attempt reference"><Ref value={result.attemptRef} /></Fact>}
-            {result.effectGeneration === undefined ? null : <Fact label="Effect generation" value={String(result.effectGeneration)} />}
-            {result.evidenceHash === undefined ? null : <Fact label="Evidence hash"><Ref value={result.evidenceHash} /></Fact>}
-          </dl>
+          <AeFactList
+            facts={[
+              { label: "Invocation reference", value: <Ref value={result.invocationRef} />, mono: true },
+              {
+                label: "Current Operation",
+                value: (
+                  <Link
+                    to="/operations/$operationRef"
+                    params={{ operationRef: result.operationRef }}
+                    className="break-all font-medium text-brand underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {result.operationRef}
+                  </Link>
+                ),
+              },
+              { label: "State", value: machineLabel(result.state) },
+              ...(result.attemptRef === undefined ? [] : [{ label: "Attempt reference", value: <Ref value={result.attemptRef} />, mono: true }]),
+              ...(result.effectGeneration === undefined ? [] : [{ label: "Effect generation", value: String(result.effectGeneration) }]),
+              ...(result.evidenceHash === undefined ? [] : [{ label: "Evidence hash", value: <Ref value={result.evidenceHash} />, mono: true }]),
+            ]}
+          />
         </header>
         <ReceiptTimeline stages={receiptView.stages} />
         {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
@@ -303,13 +309,15 @@ function InvocationIssue({ issue }: Readonly<{ issue: InvocationIssueView }>) {
       <AlertTriangleIcon aria-hidden="true" />
       <AlertTitle>{issue.title}</AlertTitle>
       <AlertDescription>
-        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Fact label="What happened" value={issue.whatHappened} />
-          <Fact label="Did money move?" value={issue.moneyMovement} />
-          <Fact label="What happens automatically" value={issue.automaticNext} />
-          <Fact label="What you can do" value={issue.userNext} />
-          <Fact label="Reference kept"><Ref value={issue.retainedReference} /></Fact>
-        </dl>
+        <AeFactList
+          facts={[
+            { label: "What happened", value: issue.whatHappened },
+            { label: "Did money move?", value: issue.moneyMovement },
+            { label: "What happens automatically", value: issue.automaticNext },
+            { label: "What you can do", value: issue.userNext },
+            { label: "Reference kept", value: <Ref value={issue.retainedReference} />, mono: true },
+          ]}
+        />
       </AlertDescription>
     </Alert>
   )
@@ -317,47 +325,40 @@ function InvocationIssue({ issue }: Readonly<{ issue: InvocationIssueView }>) {
 
 function ReceiptMoneyFacts({ view }: Readonly<{ view: InvocationReceiptView }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="receipt-money-title">
-      <div className="grid gap-1">
-        <h2 id="receipt-money-title" className="text-xl font-semibold tracking-tight text-foreground">Money before and after the call</h2>
-        <p className="text-sm text-muted-foreground">Authorization is the pre-call ceiling. Usage is the post-call recorded amount. Missing facts stay missing.</p>
+    <AeSection
+      title="Money before and after the call"
+      description="Authorization is the pre-call ceiling. Usage is the post-call recorded amount. Missing facts stay missing."
+    >
+      <div className="grid gap-8">
+        <div className="grid gap-3">
+          <h3 className="text-sm font-medium text-foreground">Before</h3>
+          <p className="text-sm text-muted-foreground">Quoted components and buyer authorization.</p>
+          {view.receipt === undefined ? (
+            <p className="text-sm text-muted-foreground">No public pre-call money receipt is attached to this record.</p>
+          ) : <ReceiptAuthorizationFacts receipt={view.receipt} />}
+        </div>
+        <div className="grid gap-3">
+          <h3 className="text-sm font-medium text-foreground">After</h3>
+          <p className="text-sm text-muted-foreground">Recorded settlement, refund, or uncertainty.</p>
+          {view.usage === undefined && view.receipt === undefined ? (
+            <p className="text-sm text-muted-foreground">No post-call money fact is recorded yet.</p>
+          ) : <ReceiptSettlementFacts usage={view.usage} receipt={view.receipt} />}
+        </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="shadow-none">
-          <CardHeader>
-            <h3 className="font-semibold text-foreground">Before</h3>
-            <CardDescription>Quoted components and buyer authorization.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {view.receipt === undefined ? (
-              <p className="text-sm text-muted-foreground">No public pre-call money receipt is attached to this record.</p>
-            ) : <ReceiptAuthorizationFacts receipt={view.receipt} />}
-          </CardContent>
-        </Card>
-        <Card className="shadow-none">
-          <CardHeader>
-            <h3 className="font-semibold text-foreground">After</h3>
-            <CardDescription>Recorded settlement, refund, or uncertainty.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {view.usage === undefined && view.receipt === undefined ? (
-              <p className="text-sm text-muted-foreground">No post-call money fact is recorded yet.</p>
-            ) : <ReceiptSettlementFacts usage={view.usage} receipt={view.receipt} />}
-          </CardContent>
-        </Card>
-      </div>
-    </section>
+    </AeSection>
   )
 }
 
 function ReceiptAuthorizationFacts({ receipt }: Readonly<{ receipt: OperationInvokeReceipt }>) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      <Fact label="Provider quote" value={formatCurrencyAmount(receipt.providerQuotedAmount)} />
-      <Fact label="Agentic Economy fee" value={formatCurrencyAmount(receipt.agenticEconomyFee)} />
-      <Fact label="Buyer authorized up to" value={formatCurrencyAmount(receipt.totalBuyerAuthorization)} />
-      <Fact label="Price digest"><Ref value={receipt.priceDigest} /></Fact>
-    </dl>
+    <AeFactList
+      facts={[
+        { label: "Provider quote", value: formatCurrencyAmount(receipt.providerQuotedAmount) },
+        { label: "Agentic Economy fee", value: formatCurrencyAmount(receipt.agenticEconomyFee) },
+        { label: "Buyer authorized up to", value: formatCurrencyAmount(receipt.totalBuyerAuthorization) },
+        { label: "Price digest", value: <Ref value={receipt.priceDigest} />, mono: true },
+      ]}
+    />
   )
 }
 
@@ -366,27 +367,25 @@ function ReceiptSettlementFacts({
   receipt,
 }: Readonly<{ usage: OperationInvokeUsageSummary | undefined; receipt: OperationInvokeReceipt | undefined }>) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      {usage === undefined ? null : (
-        <>
-          <Fact label="Recorded outcome" value={machineLabel(usage.chargeState)} />
-          <Fact label="Exact amount" value={formatCurrencyAmount(usage.amount)} />
-          <Fact label="Observed"><time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time></Fact>
-          <Fact label="Usage reference"><Ref value={usage.usageRef} /></Fact>
-          {usage.transactionRef === undefined ? null : <Fact label="Transaction reference"><Ref value={usage.transactionRef} /></Fact>}
-          {usage.durationMs === undefined ? null : <Fact label="Duration" value={`${usage.durationMs} ms`} />}
-        </>
-      )}
-      {receipt === undefined ? null : (
-        <>
-          <Fact label="Receipt state" value={machineLabel(receipt.state)} />
-          <Fact label="Receipt reference"><Ref value={receipt.receiptRef} /></Fact>
-          <Fact label="Refund state" value={machineLabel(receipt.refundState ?? 'not recorded')} />
-          <Fact label="Loss state" value={machineLabel(receipt.lossState ?? 'not recorded')} />
-          {receipt.settlementTransactionHash === undefined ? null : <Fact label="Settlement transaction"><Ref value={receipt.settlementTransactionHash} /></Fact>}
-        </>
-      )}
-    </dl>
+    <AeFactList
+      facts={[
+        ...(usage === undefined ? [] : [
+          { label: "Recorded outcome", value: machineLabel(usage.chargeState) },
+          { label: "Exact amount", value: formatCurrencyAmount(usage.amount) },
+          { label: "Observed", value: <time dateTime={timestampIso(usage.observedAt)}>{formatUtcTimestamp(usage.observedAt)} UTC</time> },
+          { label: "Usage reference", value: <Ref value={usage.usageRef} />, mono: true },
+          ...(usage.transactionRef === undefined ? [] : [{ label: "Transaction reference", value: <Ref value={usage.transactionRef} />, mono: true }]),
+          ...(usage.durationMs === undefined ? [] : [{ label: "Duration", value: `${usage.durationMs} ms` }]),
+        ]),
+        ...(receipt === undefined ? [] : [
+          { label: "Receipt state", value: machineLabel(receipt.state) },
+          { label: "Receipt reference", value: <Ref value={receipt.receiptRef} />, mono: true },
+          { label: "Refund state", value: machineLabel(receipt.refundState ?? 'not recorded') },
+          { label: "Loss state", value: machineLabel(receipt.lossState ?? 'not recorded') },
+          ...(receipt.settlementTransactionHash === undefined ? [] : [{ label: "Settlement transaction", value: <Ref value={receipt.settlementTransactionHash} />, mono: true }]),
+        ]),
+      ]}
+    />
   )
 }
 
@@ -407,11 +406,10 @@ function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView
   const mcp = `Connect to $ORIGIN/mcp, initialize the session, list tools, then call ae_operation_invoke with operationRef=${operationRef}, ${inputInstruction}, and a new idempotencyKey.`
   const prompt = `Use Agentic Economy to inspect ${operationRef}. Reconfirm current terms and ${inputInstruction}. Ask me for any required approval. Create a new idempotency key, invoke the Operation once, follow its invocation reference to a terminal result, and return the output with its receipt. Do not replay ${view.invocationRef} as a new call.`
   return (
-    <section className="grid gap-4 border-t border-border pt-6" aria-labelledby="reuse-title">
-      <div className="grid gap-1">
-        <h2 id="reuse-title" className="text-xl font-semibold tracking-tight text-foreground">Use this capability again</h2>
-        <p className="text-sm text-muted-foreground">A new run needs fresh input and a new idempotency key. The completed receipt above never becomes the identity for another call.</p>
-      </div>
+    <AeSection
+      title="Use this capability again"
+      description="A new run needs fresh input and a new idempotency key. The completed receipt above never becomes the identity for another call."
+    >
       <div className="flex flex-wrap gap-2">
         <Button asChild className="min-h-11">
           <Link to="/operations/$operationRef" params={{ operationRef }}>Run again</Link>
@@ -419,45 +417,39 @@ function InvocationReuseActions({ view }: Readonly<{ view: InvocationReceiptView
         <Button asChild variant="outline" className="min-h-11"><a href="#receipt">View receipt</a></Button>
       </div>
       {priorInputJson === undefined ? null : (
-        <Card className="shadow-none">
-          <CardHeader>
-            <h3 className="font-semibold text-foreground">Previous input</h3>
-            <CardDescription>Owner-visible input from this invocation. Reconfirm current terms before running it again.</CardDescription>
-          </CardHeader>
-          <CardContent><pre className="overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre></CardContent>
-        </Card>
+        <div className="grid gap-2">
+          <h3 className="text-sm font-medium text-foreground">Previous input</h3>
+          <p className="text-sm text-muted-foreground">Owner-visible input from this invocation. Reconfirm current terms before running it again.</p>
+          <pre className="overflow-auto whitespace-pre-wrap break-words text-xs"><code>{JSON.stringify(view.previousInput, null, 2)}</code></pre>
+        </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-6">
         <ReuseCopy title="Copy as CLI" description="Run with the installed Agentic Economy CLI." label="CLI command" code={cli} />
         <ReuseCopy title="Copy as API request" description="Call the canonical authenticated HTTP boundary." label="API request" code={api} />
         <ReuseCopy title="Add to MCP" description="Give an MCP-capable agent the exact endpoint and Operation." label="MCP setup instruction" code={mcp} />
         <ReuseCopy title="Copy agent prompt" description="Hand the task to an agent without reusing this receipt identity." label="agent prompt" code={prompt} />
       </div>
-    </section>
+    </AeSection>
   )
 }
 
 function ReuseCopy({ title, description, label, code }: Readonly<{ title: string; description: string; label: string; code: string }>) {
   return (
-    <Card className="shadow-none">
-      <CardHeader>
-        <h3 className="font-semibold text-foreground">{title}</h3>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent><AeCopyCommand compact label={label} code={code} /></CardContent>
-    </Card>
+    <div className="grid gap-2">
+      <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      <p className="text-sm text-muted-foreground">{description}</p>
+      <AeCopyCommand compact label={label} code={code} />
+    </div>
   )
 }
 
 function MachineReadableReceipt({ view }: Readonly<{ view: InvocationReceiptView }>) {
   return (
-    <details className="rounded-lg border bg-card">
-      <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+    <details>
+      <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-foreground">
         Machine-readable receipt
       </summary>
-      <div className="border-t p-4">
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
-      </div>
+      <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground"><code>{JSON.stringify(view, null, 2)}</code></pre>
     </details>
   )
 }
@@ -658,11 +650,10 @@ function recoveryRefusalMessage(code: string): string {
 
 function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) {
   return (
-    <section className="grid gap-5 border-t border-border pt-6" aria-labelledby="current-result-title">
-      <div className="grid gap-1">
-        <h2 id="current-result-title" className="text-xl font-semibold tracking-tight text-foreground">Current result</h2>
-        <p className="text-sm text-muted-foreground">Canonical result facts as recorded, without changing the current state above.</p>
-      </div>
+    <AeSection
+      title="Current result"
+      description="Canonical result facts as recorded, without changing the current state above."
+    >
       <dl className="grid gap-3 sm:grid-cols-2">
         <Fact label="Result kind" value={machineLabel(result.kind)} />
         {'invocationRef' in result ? <Fact label="Result invocation reference"><Ref value={result.invocationRef} /></Fact> : null}
@@ -711,7 +702,7 @@ function ResultDetails({ result }: Readonly<{ result: OperationInvokeResult }>) 
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-4 text-xs text-foreground"><code>{JSON.stringify(result.output, null, 2)}</code></pre>
         </div>
       ) : null}
-    </section>
+    </AeSection>
   )
 }
 
@@ -742,19 +733,15 @@ function StatusRefused({
         <ReceiptTimeline stages={receiptView.stages} />
         {receiptView.issue === undefined ? null : <InvocationIssue issue={receiptView.issue} />}
         <ReceiptMoneyFacts view={receiptView} />
-        <Card>
-          <CardHeader>
-            <h2 className="text-xl font-semibold text-foreground">Refusal</h2>
-            <CardDescription>The server response is shown without inventing invocation state.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <Fact label="Code" value={machineLabel(result.code)} />
-              <Fact label="Retryable" value={result.retryable ? 'Yes' : 'No'} />
-              {result.nextAction === undefined ? null : <Fact label="Next action" value={result.nextAction} />}
-            </dl>
-          </CardContent>
-        </Card>
+        <AeSection title="Refusal" description="The server response is shown without inventing invocation state.">
+          <AeFactList
+            facts={[
+              { label: "Code", value: machineLabel(result.code) },
+              { label: "Retryable", value: result.retryable ? 'Yes' : 'No' },
+              ...(result.nextAction === undefined ? [] : [{ label: "Next action", value: result.nextAction }]),
+            ]}
+          />
+        </AeSection>
         <MachineReadableReceipt view={receiptView} />
       </section>
     </AePublicShell>

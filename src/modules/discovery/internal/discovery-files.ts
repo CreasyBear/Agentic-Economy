@@ -15,7 +15,9 @@ export {
   DiscoveryPublicSurfacePaths,
 }
 
-const staticSitemapPaths = ['/', '/for-agents', '/for-providers', '/privacy/remove-business'] as const
+import { indexedPublicPagePaths } from '@/modules/seo/internal/indexed-public-paths'
+
+const staticSitemapPaths = indexedPublicPagePaths
 const robotDisallowPaths = [
   '/admin/',
   '/owner/',
@@ -51,6 +53,8 @@ export function buildLlmsTxt(
     `- Skill: ${canonicalBaseUrl}/SKILL.md`,
     `- Deployment manifest: ${canonicalBaseUrl}/.well-known/ucp`,
     `- Human guide: ${canonicalBaseUrl}/for-agents`,
+    `- About: ${canonicalBaseUrl}/about`,
+    `- Catalog: ${canonicalBaseUrl}/market`,
     `- MCP: ${canonicalBaseUrl}/mcp`,
     '',
     'Published businesses (business catalog; never Agent Services):',

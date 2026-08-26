@@ -1,25 +1,29 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 
-import { AeCopyCommand } from "@/components/ae/data/AeCopyCommand";
-import { AeLandingBand } from "@/components/ae/layout/AeLandingBand";
 import { AeCapabilityTile } from "@/components/ae/market/AeCapabilityTile";
-import { Button } from "@/components/ui/button";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
+  AeAgentInstructionCard,
+  AeConnectingFrame,
+  AeCornerMarks,
+  AeSiteBody,
+  AeSiteBrowser,
+  AeSiteButton,
+  AeSiteEntrance,
+  AeSiteEyebrow,
+  AeSiteFaq,
+  AeSiteHeading,
+  AeSiteHeadingPair,
+  AeSiteHeroIntro,
+  AeSiteIntro,
+  AeSiteSection,
+  AeSiteSignoff,
+  AeSiteSplitPair,
+  AeSiteStack,
+} from "@/components/ae/website";
 import { ItemGroup } from "@/components/ui/item";
 import {
-  AGENT_INSTRUCTION,
+  AGENT_DOOR,
   BUSINESS_DOOR,
   HOME,
   HOME_CLAIM_FIGURES,
@@ -47,12 +51,9 @@ export function AeHomeLanding({ read }: AeHomeLandingProps) {
       <HomeHero meta={meta} showMeta={read.kind === "ok"} />
       <HomeCapabilityResults read={read} />
       {HOME_CLAIMS.map((claim, index) => (
-        <HomeClaimChapter
-          key={claim.number}
-          claim={claim}
-          reverse={index % 2 === 1}
-        />
+        <HomeClaimChapter key={claim.number} claim={claim} reverse={index % 2 === 1} />
       ))}
+      <HomeDoors />
       <HomeFaq />
       <HomeClose />
     </div>
@@ -64,73 +65,46 @@ function HomeHero({
   showMeta,
 }: Readonly<{ meta: string; showMeta: boolean }>) {
   return (
-    <AeLandingBand
-      labelledBy="home-hero"
-      height="fold"
-      tone="canvas"
-      footer={
+    <AeSiteSection labelledBy="home-hero" rhythm="hero" scheme="muted">
+      <AeSiteHeroIntro>
+        <AeSiteHeadingPair>
+          {showMeta ? <AeSiteEyebrow>{meta}</AeSiteEyebrow> : null}
+          <div className="mx-auto w-full max-w-xl">
+            <AeSiteHeading as="h1" size="lg" id="home-hero">
+              {HOME.heroHeading}
+            </AeSiteHeading>
+          </div>
+          <div className="mx-auto w-full max-w-lg">
+            <AeSiteBody muted size="sm" className="mx-auto">
+              {HOME.heroSubhead}
+            </AeSiteBody>
+          </div>
+        </AeSiteHeadingPair>
+        <div className="flex flex-wrap items-center justify-center gap-related">
+          <AeSiteButton asChild>
+            <Link to="/for-agents">Set up an agent</Link>
+          </AeSiteButton>
+          <AeSiteButton asChild variant="outlined">
+            <Link to="/market" search={{ window: "30d" }}>
+              Browse tools
+            </Link>
+          </AeSiteButton>
+        </div>
+      </AeSiteHeroIntro>
+      <div className="mx-auto mt-hero w-full max-w-3xl">
+        <AeSiteBrowser url="/llms.txt">
+          <AeAgentInstructionCard framed />
+        </AeSiteBrowser>
+      </div>
+      <div className="mt-section text-center">
         <a
           href="#home-catalog"
           className="inline-flex min-h-touch items-center font-display text-xl font-medium tracking-tight underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-2xl"
         >
           {HOME.heroPeek}
         </a>
-      }
-    >
-      <div className="grid items-center gap-hero lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="grid gap-section">
-          {showMeta ? (
-            <p className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
-              {meta}
-            </p>
-          ) : null}
-          <div className="grid gap-related">
-            <h1
-              id="home-hero"
-              className="max-w-2xl font-display text-6xl font-medium leading-[1.04] tracking-tight text-balance sm:text-7xl"
-            >
-              {HOME.heroHeading}
-            </h1>
-            <p className="max-w-prose text-pretty text-lg leading-7 text-muted-foreground sm:text-xl sm:leading-8">
-              {HOME.heroSubhead}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-related">
-            <Button asChild size="lg" className="min-h-touch px-6">
-              <Link to="/for-agents">Set up an agent</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="min-h-touch px-6">
-              <Link to="/market" search={{ window: "30d" }}>
-                Browse tools
-              </Link>
-            </Button>
-          </div>
-        </div>
-        <aside aria-labelledby="agent-instruction" className="min-w-0">
-          <Card className="gap-section py-page">
-            <CardHeader className="gap-related">
-              <h2
-                id="agent-instruction"
-                className="font-display text-2xl font-medium tracking-tight sm:text-3xl"
-              >
-                {AGENT_INSTRUCTION.heading}
-              </h2>
-              <CardDescription className="text-pretty text-base leading-7">
-                {AGENT_INSTRUCTION.body}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AeCopyCommand
-                comfortable
-                label={AGENT_INSTRUCTION.label}
-                code={AGENT_INSTRUCTION.code}
-                copyText={AGENT_INSTRUCTION.copyText}
-              />
-            </CardContent>
-          </Card>
-        </aside>
       </div>
-    </AeLandingBand>
+    </AeSiteSection>
   );
 }
 
@@ -143,58 +117,50 @@ export function HomeCapabilityResults({
   );
 
   return (
-    <AeLandingBand
+    <AeSiteSection
       id="home-catalog"
       labelledBy="home-catalog-heading"
-      height={groups.length > 0 ? "chapter" : "strip"}
-      tone="surface"
-      align="start"
+      scheme="muted"
+      rhythm="flush"
+      connectsUp
+      background={<AeConnectingFrame />}
       className="scroll-mt-anchor"
     >
-      <div className="grid gap-section">
-        <div className="flex flex-col gap-related sm:flex-row sm:items-end sm:justify-between">
-          <h2
-            id="home-catalog-heading"
-            className="max-w-2xl font-display text-4xl font-medium tracking-tight text-balance sm:text-5xl"
-          >
-            {HOME.catalogHeading}
-          </h2>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="min-h-touch self-start px-6 sm:self-auto"
-          >
-            <Link to="/market" search={{ window: "30d" }}>
-              Browse tools
-            </Link>
-          </Button>
-        </div>
-
-        {read.kind === "unavailable" ? (
-          <p className="max-w-prose text-pretty text-lg leading-7 text-muted-foreground">
-            {HOME.catalogUnavailable}
-          </p>
-        ) : groups.length === 0 ? (
-          <p className="max-w-prose text-pretty text-lg leading-7 text-muted-foreground">
-            {HOME.catalogEmpty}
-          </p>
-        ) : (
-          <div className="grid gap-section">
-            <p className="max-w-prose text-pretty text-lg leading-7 text-muted-foreground">
-              {HOME.catalogBody}
-            </p>
-            <ItemGroup className="grid gap-related sm:grid-cols-2">
-              {groups.map((group) => (
-                <li key={group.capabilityId}>
-                  <AeCapabilityTile group={group} window="30d" />
-                </li>
-              ))}
-            </ItemGroup>
-          </div>
-        )}
+      <div className="py-page md:pb-hero">
+        <AeSiteStack>
+          <AeSiteIntro>
+            <div className="flex flex-col gap-related sm:flex-row sm:items-end sm:justify-between">
+              <AeSiteHeading as="h2" size="md" id="home-catalog-heading">
+                {HOME.catalogHeading}
+              </AeSiteHeading>
+              <AeSiteButton asChild variant="outlined" className="self-start sm:self-auto">
+                <Link to="/market" search={{ window: "30d" }}>
+                  Browse tools
+                </Link>
+              </AeSiteButton>
+            </div>
+          </AeSiteIntro>
+          {read.kind === "unavailable" ? (
+            <AeSiteBody muted>{HOME.catalogUnavailable}</AeSiteBody>
+          ) : groups.length === 0 ? (
+            <AeSiteBody muted>{HOME.catalogEmpty}</AeSiteBody>
+          ) : (
+            <div className="grid gap-section">
+              <AeSiteBody muted>{HOME.catalogBody}</AeSiteBody>
+              <AeSiteEntrance>
+                <ItemGroup className="grid gap-related sm:grid-cols-2">
+                  {groups.map((group) => (
+                    <li key={group.capabilityId}>
+                      <AeCapabilityTile group={group} window="30d" />
+                    </li>
+                  ))}
+                </ItemGroup>
+              </AeSiteEntrance>
+            </div>
+          )}
+        </AeSiteStack>
       </div>
-    </AeLandingBand>
+    </AeSiteSection>
   );
 }
 
@@ -208,31 +174,22 @@ function HomeClaimChapter({
   const headingId = `home-claim-${claim.number}`;
 
   return (
-    <AeLandingBand
-      labelledBy={headingId}
-      height="chapter"
-      tone={reverse ? "surface" : "canvas"}
-    >
-      <div className="grid items-center gap-hero lg:grid-cols-2">
-        <div className={cn("grid max-w-xl gap-related", reverse && "lg:order-2")}>
-          <p className="font-display text-7xl font-medium leading-none tracking-tight sm:text-8xl">
-            {claim.number}
-          </p>
-          <div className="grid gap-intra">
-            <h2
-              id={headingId}
-              className="font-display text-4xl font-medium tracking-tight text-balance sm:text-6xl"
-            >
+    <AeSiteSection labelledBy={headingId} scheme="canvas" keepTopRhythm>
+      <div className="grid items-start gap-hero lg:grid-cols-2 lg:gap-page">
+        <div className={cn("grid gap-10 md:gap-20 lg:p-page", reverse && "lg:order-2")}>
+          <AeSiteIntro>
+            <AeSiteEyebrow>{claim.number}</AeSiteEyebrow>
+            <AeSiteHeading as="h2" size="md" id={headingId}>
               {claim.title}
-            </h2>
-            <p className="max-w-prose text-pretty text-lg leading-7 text-muted-foreground sm:text-xl sm:leading-8">
-              {claim.body}
-            </p>
-          </div>
+            </AeSiteHeading>
+            <AeSiteBody muted>{claim.body}</AeSiteBody>
+          </AeSiteIntro>
         </div>
-        <ClaimFigure number={claim.number} {...(reverse ? { className: "lg:order-1" } : {})} />
+        <AeSiteEntrance>
+          <ClaimFigure number={claim.number} {...(reverse ? { className: "lg:order-1" } : {})} />
+        </AeSiteEntrance>
       </div>
-    </AeLandingBand>
+    </AeSiteSection>
   );
 }
 
@@ -248,25 +205,22 @@ function ClaimFigure({
   switch (number) {
     case "01":
       return (
-        <Card className={cn("gap-section py-page", className)}>
-          <CardContent>
-            <dl className="grid gap-section">
-              {rows.map((row) => (
-                <div
-                  key={row.term}
-                  className="grid gap-intra border-b border-border pb-section last:border-b-0 last:pb-0"
-                >
-                  <dt className="font-display text-2xl font-medium tracking-tight sm:text-3xl">
-                    {row.term}
-                  </dt>
-                  <dd className="text-base leading-7 text-muted-foreground">
-                    {row.detail}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </CardContent>
-        </Card>
+        <div className={cn("relative border border-border bg-container p-page", className)}>
+          <AeCornerMarks />
+          <dl className="grid gap-section">
+            {rows.map((row) => (
+              <div
+                key={row.term}
+                className="grid gap-intra border-b border-border pb-section last:border-b-0 last:pb-0"
+              >
+                <dt className="font-display text-2xl font-medium tracking-tight sm:text-3xl">
+                  {row.term}
+                </dt>
+                <dd className="text-base leading-7 text-muted-foreground">{row.detail}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       );
     case "02":
       return (
@@ -274,14 +228,12 @@ function ClaimFigure({
           {rows.map((row) => (
             <div
               key={row.term}
-              className="grid gap-intra border-b border-border pb-page last:border-b-0 last:pb-0"
+              className="grid gap-intra border-b border-dashed border-border pb-page last:border-b-0 last:pb-0"
             >
               <dt className="font-display text-4xl font-medium tracking-tight sm:text-5xl">
                 {row.term}
               </dt>
-              <dd className="text-lg leading-7 text-muted-foreground">
-                {row.detail}
-              </dd>
+              <dd className="text-lg leading-7 text-muted-foreground">{row.detail}</dd>
             </div>
           ))}
         </dl>
@@ -291,9 +243,7 @@ function ClaimFigure({
         <dl className={cn("grid gap-page", className)}>
           {rows.map((row) => (
             <div key={row.term} className="grid gap-intra">
-              <dt className="font-mono text-sm text-muted-foreground">
-                {row.term}
-              </dt>
+              <dt className="font-mono text-sm text-muted-foreground">{row.term}</dt>
               <dd className="font-display text-5xl font-medium tracking-tight sm:text-6xl">
                 {row.detail}
               </dd>
@@ -323,72 +273,105 @@ function claimFigureRows(number: (typeof HOME_CLAIMS)[number]["number"]) {
   }
 }
 
+function HomeDoors() {
+  return (
+    <AeSiteSection labelledBy="home-doors" scheme="surface">
+      <AeSiteStack>
+        <AeSiteIntro>
+          <AeSiteHeading as="h2" size="lg" id="home-doors">
+            {HOME.doorsHeading}
+          </AeSiteHeading>
+        </AeSiteIntro>
+        <AeSiteSplitPair
+          left={
+            <HomeDoor
+              headingId="home-agent-door"
+              heading={AGENT_DOOR.heading}
+              body={AGENT_DOOR.body}
+              href="/for-agents"
+              cta={AGENT_DOOR.cta}
+            />
+          }
+          right={
+            <HomeDoor
+              headingId="home-supplier-door"
+              heading={BUSINESS_DOOR.heading}
+              body={BUSINESS_DOOR.body}
+              href="/for-providers"
+              cta={BUSINESS_DOOR.cta}
+            />
+          }
+        />
+      </AeSiteStack>
+    </AeSiteSection>
+  );
+}
+
+function HomeDoor({
+  headingId,
+  heading,
+  body,
+  href,
+  cta,
+}: Readonly<{
+  headingId: string
+  heading: string
+  body: string
+  href: "/for-agents" | "/for-providers"
+  cta: string
+}>) {
+  return (
+    <div className="grid content-start gap-related">
+      <div className="grid gap-intra">
+        <h3 id={headingId} className="font-display text-2xl font-medium tracking-tight sm:text-3xl">
+          {heading}
+        </h3>
+        <AeSiteBody muted size="sm">
+          {body}
+        </AeSiteBody>
+      </div>
+      <Link
+        to={href}
+        className="inline-flex min-h-touch w-fit items-center text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {cta}
+      </Link>
+    </div>
+  );
+}
+
 function HomeFaq() {
   return (
-    <AeLandingBand
-      labelledBy="home-faq"
-      height="chapter"
-      tone="muted"
-      align="start"
-    >
-      <div className="grid max-w-3xl gap-page">
-        <h2
-          id="home-faq"
-          className="font-display text-4xl font-medium tracking-tight text-balance sm:text-5xl"
-        >
-          {HOME.faqHeading}
-        </h2>
-        <Accordion type="single" collapsible className="w-full">
-          {HOME_FAQ.map((item) => (
-            <AccordionItem key={item.question} value={item.question}>
-              <AccordionTrigger className="min-h-touch py-section text-start text-lg font-medium">
-                {item.question}
-              </AccordionTrigger>
-              <AccordionContent className="text-pretty text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
-                {item.answer}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      </div>
-    </AeLandingBand>
+    <AeSiteSection labelledBy="home-faq" rhythm="spacious" scheme="ink">
+      <AeSiteStack>
+        <AeSiteIntro>
+          <div className="max-w-2xl">
+            <AeSiteHeading as="h2" size="lg" id="home-faq">
+              {HOME.faqHeading}
+            </AeSiteHeading>
+          </div>
+        </AeSiteIntro>
+        <AeSiteFaq labelledBy="home-faq" questions={HOME_FAQ} />
+      </AeSiteStack>
+    </AeSiteSection>
   );
 }
 
 function HomeClose() {
   return (
-    <AeLandingBand labelledBy="home-close" height="fold" tone="ink">
-      <div className="grid max-w-3xl gap-section">
-        <div className="grid gap-related">
-          <h2
-            id="home-close"
-            className="font-display text-6xl font-medium leading-[1.04] tracking-tight text-balance sm:text-7xl"
-          >
-            {HOME.closeHeading}
-          </h2>
-          <p className="max-w-prose text-pretty text-xl leading-8 tracking-wide text-background/80">
-            {HOME.closeBody}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-related">
-          <Button
-            asChild
-            size="lg"
-            variant="secondary"
-            className="min-h-touch px-6 focus-visible:ring-background"
-          >
-            <Link to="/for-agents">Set up an agent</Link>
-          </Button>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="min-h-touch border-background bg-transparent px-6 text-background hover:bg-background hover:text-foreground focus-visible:ring-background"
-          >
-            <Link to={BUSINESS_DOOR.href}>List a tool</Link>
-          </Button>
-        </div>
-      </div>
-    </AeLandingBand>
+    <AeSiteSignoff heading={HOME.closeHeading} headingId="home-close" body={HOME.closeBody}>
+      <AeSiteButton asChild>
+        <Link to="/for-agents">Set up an agent</Link>
+      </AeSiteButton>
+      <AeSiteButton asChild variant="outlined">
+        <Link to={BUSINESS_DOOR.href}>List a tool</Link>
+      </AeSiteButton>
+      <a
+        href="/about"
+        className="inline-flex min-h-touch items-center underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {HOME.aboutLink}
+      </a>
+    </AeSiteSignoff>
   );
 }

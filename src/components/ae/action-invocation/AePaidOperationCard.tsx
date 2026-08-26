@@ -12,7 +12,6 @@ import {
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 
 import type {
   PaidOperationContinuation,
@@ -48,8 +47,8 @@ export function AePaidOperationCard({
   const continuation = preferredContinuation(semantics.continuations)
 
   return (
-    <Card
-      className="grid w-full max-w-2xl gap-5 border border-border bg-card p-5"
+    <section
+      className="grid w-full max-w-2xl gap-5"
       aria-labelledby={`paid-operation-${semantics.identity.invocationRef}`}
       data-paid-operation-state={presentation.label.toLowerCase().replaceAll(' ', '_')}
     >
@@ -81,7 +80,7 @@ export function AePaidOperationCard({
       <BlockList label="Operation details" blocks={semantics.presentation.blocks} />
 
       <section
-        className="grid gap-2 rounded-md border border-border bg-card p-4"
+        className="grid gap-2"
         aria-labelledby={`current-truth-${semantics.identity.invocationRef}`}
       >
         <div className="flex items-start gap-3">
@@ -120,11 +119,11 @@ export function AePaidOperationCard({
         ) : null}
       </section>
 
-      <details className="rounded-md border border-border bg-card">
-        <summary className="flex min-h-11 cursor-pointer items-center px-4 py-3 font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2">
+      <details>
+        <summary className="flex min-h-11 cursor-pointer items-center font-medium text-foreground">
           Technical details
         </summary>
-        <dl className="grid gap-3 border-t border-border p-4 text-sm sm:grid-cols-2">
+        <dl className="grid gap-3 pt-3 text-sm sm:grid-cols-2">
           <Fact label="Environment" value={semantics.environment.name} />
           <Fact label="Evidence" value={semantics.environment.evidenceClass} />
           <Fact label="Claim limit" value={semantics.environment.claimCeiling} />
@@ -136,7 +135,7 @@ export function AePaidOperationCard({
           <Fact label="Result evidence" value={resultDeliveryLabel(semantics)} />
         </dl>
       </details>
-    </Card>
+    </section>
   )
 }
 

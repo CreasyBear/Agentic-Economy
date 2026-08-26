@@ -12,6 +12,7 @@ import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { bootClientObservability } from '@/lib/observability/boot-client-observability'
 import appCss from '../styles/globals.css?url'
+import { clerkAppearance } from '@/components/ae/website/clerk-appearance'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
 import { HOME } from '@/content/brand-copy'
 import { api } from '../../convex/_generated/api'
@@ -36,6 +37,8 @@ export const Route = createRootRoute({
         name: 'description',
         content: HOME.metaDescription,
       },
+      { name: 'theme-color', content: '#f4f4f1' },
+      { name: 'color-scheme', content: 'light' },
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
@@ -52,34 +55,6 @@ function RootComponent() {
       <Outlet />
     </RootDocument>
   )
-}
-
-/**
- * One global appearance for every Clerk component. Clerk merges component-level
- * `appearance` over this, so sign-in and sign-up cannot drift apart, and the
- * 44px interaction floor AE enforces everywhere applies to Clerk's own controls.
- * Docs: https://clerk.com/docs/tanstack-react-start/guides/customizing-clerk/appearance-prop/overview
- */
-const clerkAppearance = {
-  variables: {
-    fontSize: '0.875rem',
-    spacing: '0.875rem',
-    borderRadius: '0.625rem',
-    colorPrimary: 'oklch(0.215 0.004 106)',
-    colorBackground: 'oklch(1 0 0)',
-    colorText: 'oklch(0.215 0.004 106)',
-  },
-  elements: {
-    formFieldRow__password: 'aria-hidden:!hidden',
-    identityPreviewEditButton: '!min-h-11 !min-w-11',
-    socialButtonsBlockButton: 'min-h-11',
-    formButtonPrimary: 'min-h-11',
-    formFieldInput: 'min-h-11',
-    formFieldInputShowPasswordButton: 'min-h-11 min-w-11',
-  },
-  options: {
-    unsafe_disableDevelopmentModeWarnings: true,
-  },
 }
 
 function RootDocument({ children }: { children: ReactNode }) {

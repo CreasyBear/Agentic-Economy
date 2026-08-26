@@ -8,7 +8,6 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
@@ -157,12 +156,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
   const showSetupRefusal = target !== undefined && stripePromise === null && session === undefined
 
   return (
-    <Card className="border border-border bg-card">
-      <CardHeader>
-        <CardTitle>Add credit for paid calls</CardTitle>
-        <CardDescription>Paid calls use this credit. The server fixes the exact credit amount, fee, and charge before payment.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
+    <div className="grid gap-3">
         {target === undefined ? (
           <Alert>
             <AlertTitle>Credit is unavailable for this account</AlertTitle>
@@ -216,8 +210,7 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
             <p id="credit-topup-amount-help" className="text-xs text-muted-foreground">The configured minimum and maximum are enforced by the authenticated server.</p>
           </div>
         ) : null}
-      </CardContent>
-      <CardFooter className="gap-2">
+      <div className="flex flex-wrap gap-2">
         {session === undefined && recovery === undefined ? (
           <Button
             variant="secondary"
@@ -234,8 +227,8 @@ export function AeCreditTopUpPanel({ target, port, publishableKey, onRefresh }: 
             {checking ? 'Checking payment…' : 'Refresh payment status'}
           </Button>
         ) : null}
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   )
 }
 

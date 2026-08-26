@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildOfferingLlmsTxt,
   buildOfferingLlmsUrlsFromSlugs,
+  DiscoveryPublicSurfacePaths,
 } from '@/modules/discovery/internal/discovery-files'
 import { PublicBusinessCatalogApiSchemaVersion } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiV2Dto } from '@/modules/registry/public'
@@ -38,16 +39,16 @@ describe('Offering llms.txt index', () => {
       expect(result.urls).toContain(`${canonicalBaseUrl}/${business.slug}/ucp`)
       expect(result.urls).toContain(`${canonicalBaseUrl}/api/businesses/${business.slug}`)
     }
-    // 10 shared surfaces; each business keeps page, UCP, and business detail.
+    // Shared public surfaces; each business keeps page, UCP, and business detail.
     expect(result.urls).not.toContain(`${canonicalBaseUrl}/registry`)
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    expect(result.urls).toHaveLength(DiscoveryPublicSurfacePaths.length + 50 * 3)
   })
 
   it('deduplicates repeated slugs in the complete URL inventory', () => {
     const urls = buildOfferingLlmsUrlsFromSlugs(['same-business', 'same-business'], { canonicalBaseUrl })
 
     expect(urls).toEqual([...new Set(urls)])
-    expect(urls).toHaveLength(10 + 3)
+    expect(urls).toHaveLength(DiscoveryPublicSurfacePaths.length + 3)
   })
 
   /** Pathological slugs, not just large catalogs, are what push an index past a
@@ -63,7 +64,7 @@ describe('Offering llms.txt index', () => {
     expect(lines.length).toBeGreaterThan(0)
     expect(lines.length).toBeLessThanOrEqual(12)
     expect(result.body).toContain('- total=50;')
-    expect(result.urls).toHaveLength(10 + 50 * 3)
+    expect(result.urls).toHaveLength(DiscoveryPublicSurfacePaths.length + 50 * 3)
   })
 
   it('teaches the ordered Operation path before the published business catalog', () => {
@@ -109,7 +110,7 @@ describe('Offering llms.txt index', () => {
     expect(buildOfferingLlmsUrlsFromSlugs(
       Array.from({ length: 50 }, (_unused, index) => `business-${index}`),
       { canonicalBaseUrl },
-    )).toHaveLength(10 + 50 * 3)
+    )).toHaveLength(DiscoveryPublicSurfacePaths.length + 50 * 3)
   })
 
   it('keeps the boundary and correction sections and says none for an empty directory', () => {

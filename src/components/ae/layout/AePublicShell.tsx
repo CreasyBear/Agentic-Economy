@@ -3,16 +3,10 @@ import { Link } from '@tanstack/react-router'
 import { MenuIcon, XIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { emitFunnelEventOnce } from '@/lib/observability/funnel-client'
+import { AeSiteButton, AeSiteFooter } from '@/components/ae/website'
 
 function AeFunnelAttributionBoot() {
   useEffect(() => {
@@ -77,7 +71,7 @@ export function AePublicShell({ children }: AePublicShellProps) {
         <main id="main-content" tabIndex={-1} className="flex-1">
           {children}
         </main>
-        <PublicFooter />
+        <AeSiteFooter />
       </div>
     </div>
   )
@@ -92,7 +86,9 @@ function PublicMobileNav({ onNavigate }: { onNavigate: () => void }) {
       <Link to="/activity" onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
       <Separator className="my-1" aria-hidden="true" />
       <Link to="/sign-in/$" params={{ _splat: '' }} onClick={onNavigate} className="flex min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Sign in</Link>
-      <Button asChild className="min-h-11"><Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Create account</Link></Button>
+      <AeSiteButton asChild>
+        <Link to="/sign-up/$" params={{ _splat: '' }} onClick={onNavigate}>Create account</Link>
+      </AeSiteButton>
     </nav>
   )
 }
@@ -115,16 +111,15 @@ function PublicNavActions({
       <Link to="/sign-in/$" params={{ _splat: '' }} className="hidden min-h-11 items-center rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex">
         Sign in
       </Link>
-      <Button asChild size="sm" className="hidden md:inline-flex">
+      <AeSiteButton asChild className="hidden md:inline-flex">
         <Link to="/sign-up/$" params={{ _splat: '' }}>Create account</Link>
-      </Button>
+      </AeSiteButton>
       <SheetTrigger asChild>
         <Button type="button" variant="ghost" className="min-h-11 min-w-11 px-2 sm:min-w-20 sm:px-3 md:hidden" aria-label="Open public menu">
           <MenuIcon data-icon="inline-start" aria-hidden="true" />
           <span className="hidden sm:inline">Menu</span>
         </Button>
       </SheetTrigger>
-      {mobileNavOpen ? (
       <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)] p-0" showCloseButton={false}>
         <SheetHeader className="border-b border-border">
           <div className="flex items-center justify-between gap-3">
@@ -137,7 +132,6 @@ function PublicNavActions({
         </SheetHeader>
         <PublicMobileNav onNavigate={() => onMobileNavOpenChange(false)} />
       </SheetContent>
-      ) : null}
     </Sheet>
   )
 }
@@ -150,26 +144,5 @@ function PublicBrandLink() {
         <span className="font-mono text-sm font-medium tracking-[-0.02em] text-foreground">agentic economy</span>
       </span>
     </Link>
-  )
-}
-
-function PublicFooter() {
-  return (
-    <footer className="mt-auto border-t border-border bg-container">
-      <div className="ae-rail flex flex-col gap-related py-section text-xs leading-5 text-muted-foreground sm:flex-row sm:items-center sm:justify-between md:text-sm">
-        <div className="flex items-center gap-2 font-mono text-foreground"><img src="/brand/logo/ae-favicon.svg" alt="" aria-hidden="true" className="size-7" /><span>agentic economy</span></div>
-        <nav aria-label="Footer" className="flex flex-wrap gap-x-4 gap-y-2">
-          <Link to="/t/new" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Ask</Link>
-          <Link to="/market" search={{ window: '30d' }} className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Discover</Link>
-          <Link to="/for-agents" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Connections</Link>
-          <Link to="/activity" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Activity</Link>
-          <Link to="/for-providers" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">List a capability</Link>
-          <a href="/llms.txt" className="inline-flex items-center font-mono text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">llms.txt</a>
-          <a href="/SKILL.md" className="inline-flex items-center font-mono text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">SKILL.md</a>
-          <Link to="/privacy" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Privacy</Link>
-          <Link to="/terms" className="inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Terms</Link>
-        </nav>
-      </div>
-    </footer>
   )
 }

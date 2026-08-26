@@ -870,12 +870,6 @@
       "functions": 0,
       "branches": 2
     },
-    "src/components/ae/layout/AePublicRoutePending.tsx": {
-      "lines": 1,
-      "statements": 1,
-      "functions": 1,
-      "branches": 0
-    },
     "src/components/ae/layout/AePublicShell.tsx": {
       "lines": 7,
       "statements": 8,
@@ -996,12 +990,6 @@
       "functions": 8,
       "branches": 18
     },
-    "src/components/ae/operator/AeOperatorStatusList.tsx": {
-      "lines": 7,
-      "statements": 7,
-      "functions": 2,
-      "branches": 12
-    },
     "src/components/ae/primitives/AeOfferingCard.tsx": {
       "lines": 7,
       "statements": 7,
@@ -1043,12 +1031,6 @@
       "statements": 4,
       "functions": 2,
       "branches": 2
-    },
-    "src/components/ae/status/AeOwnerStatusEmptyState.tsx": {
-      "lines": 2,
-      "statements": 2,
-      "functions": 1,
-      "branches": 6
     },
     "src/components/ae/status/AeStatusBadge.tsx": {
       "lines": 0,

@@ -1,14 +1,20 @@
 import { Link, useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeFactList } from '@/components/ae/data/AeFactList'
+import { AeSection } from '@/components/ae/layout/AeSection'
+import {
+  AeOperatorSortableHeader,
+  AeRecordTable,
+} from '@/components/ae/operator/AeOperatorDataTable'
 import { AeSupplyEarningsCard } from './AeSupplyEarningsCard'
+import { Badge } from '@/components/ui/badge'
 import {
   connectOwnerX402Server,
   reconnectOwnerProviderConnectionServer,
@@ -32,36 +38,29 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
 }>) {
   if (readback.kind === 'error') {
     return (
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-2xl font-semibold text-foreground">Your operations are unavailable</h2></CardTitle>
-        </CardHeader>
-        <CardContent className="p-5">
-          <p className="text-muted-foreground">We could not load your operation controls. Try again to continue.</p>
-        </CardContent>
-        <CardFooter className="p-5 pt-0">
-          <Button asChild variant="default" className="min-h-11">
+      <AeEmptyState
+        title="Your operations are unavailable"
+        description="We could not load your operation controls. Try again to continue."
+        role="alert"
+        action={
+          <Button asChild className="min-h-11">
             <Link to="/owner/supply">Reload Operations</Link>
           </Button>
-        </CardFooter>
-      </Card>
+        }
+      />
     )
   }
   if (readback.kind === 'not_found') {
     return (
-      <Card>
-        <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-2xl font-semibold text-foreground">No supplier identity is available</h2></CardTitle>
-        </CardHeader>
-        <CardContent className="p-5">
-          <p className="text-muted-foreground">Review the supplier requirements before publishing Operations.</p>
-        </CardContent>
-        <CardFooter className="p-5 pt-0">
-          <Button asChild variant="default" className="min-h-11">
+      <AeEmptyState
+        title="No supplier identity is available"
+        description="Review the supplier requirements before publishing Operations."
+        action={
+          <Button asChild className="min-h-11">
             <Link to="/for-providers">Review supplier setup</Link>
           </Button>
-        </CardFooter>
-      </Card>
+        }
+      />
     )
   }
   if (readback.kind === 'incomplete') {
@@ -81,47 +80,50 @@ export function AeSupplyPublisherHome({ readback, earnings, connect, connections
   const isProductionLiquidity = liquidity.environment === 'production'
   return (
     <div className="grid gap-8">
-      <section className="grid gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 className="text-sm font-medium text-muted-foreground">Operations</h2>
-          <Button asChild className="min-h-11">
-            <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Create Operation</Link>
-          </Button>
-        </div>
+      <AeSection
+        title="Operations"
+        description="Connect a source, then keep publication current. Open a row to continue setup."
+      >
         {readback.offerings.length === 0 ? (
           <AeEmptyState
             title="No Operations yet"
             description="Create an Operation, then connect its source."
+            action={
+              <Button asChild className="min-h-11">
+                <Link to="/owner/offerings/new" search={{ next: 'supply' }}>Create Operation</Link>
+              </Button>
+            }
           />
         ) : (
-          <ul className="m-0 grid list-none divide-y border-y border-border p-0">
-            {readback.offerings.map((offering) => <OwnerOfferingRow key={offering.offeringRef} offering={offering} />)}
-          </ul>
+          <SupplyOfferingsTable offerings={readback.offerings} />
         )}
-      </section>
+      </AeSection>
       <OwnerProviderConnections businessId={readback.businessId} connections={connections} />
-      <Card className="shadow-none">
-        <CardHeader className="p-5 pb-0">
-          <CardTitle><h2 className="text-lg font-semibold text-foreground">Operational usage{isProductionLiquidity ? '' : ` · ${liquidity.environment}`}</h2></CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 p-5">
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">Environment</dt><dd className="m-0 text-foreground">{liquidity.environment}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">Observed calls</dt><dd className="m-0 text-foreground">{readback.callLog.length}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">Filled observations</dt><dd className="m-0 text-foreground">{liquidity.fillCount}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">Zero-result observations</dt><dd className="m-0 text-foreground">{liquidity.zeroCount}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">First-success p50</dt><dd className="m-0 text-foreground">{liquidity.firstSuccessP50Ms === undefined ? 'Not observed' : `${liquidity.firstSuccessP50Ms} ms`}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">First-success p95</dt><dd className="m-0 text-foreground">{liquidity.firstSuccessP95Ms === undefined ? 'Not observed' : `${liquidity.firstSuccessP95Ms} ms`}</dd></div>
-            <div className="grid gap-1"><dt className="text-sm font-medium text-muted-foreground">Depth samples</dt><dd className="m-0 text-foreground">{liquidity.depthSamples}</dd></div>
-          </dl>
-          {readback.activityTruncated ? <p className="text-sm text-muted-foreground">Showing the 50 most recent activity records.</p> : null}
-          <p className="text-sm text-muted-foreground">{isProductionLiquidity ? 'These are operational observations only. They are not Qualified Use or revenue, and setup or test calls do not create earnings.' : `These are ${liquidity.environment} operational observations only. They are not production proof, Qualified Use, or revenue, and setup or test calls do not create earnings.`}</p>
-        </CardContent>
-      </Card>
-      <OwnerEarningsCard
-        earnings={earnings}
-        {...(connect === undefined ? {} : { connect })}
-      />
+      <AeSection
+        title={isProductionLiquidity ? 'Operational usage' : `Operational usage · ${liquidity.environment}`}
+        description={isProductionLiquidity
+          ? 'These are operational observations only. They are not Qualified Use or revenue, and setup or test calls do not create earnings.'
+          : `These are ${liquidity.environment} operational observations only. They are not production proof, Qualified Use, or revenue, and setup or test calls do not create earnings.`}
+      >
+        <AeFactList
+          facts={[
+            { label: 'Environment', value: liquidity.environment },
+            { label: 'Observed calls', value: String(readback.callLog.length) },
+            { label: 'Filled observations', value: String(liquidity.fillCount) },
+            { label: 'Zero-result observations', value: String(liquidity.zeroCount) },
+            { label: 'First-success p50', value: liquidity.firstSuccessP50Ms === undefined ? 'Not observed' : `${liquidity.firstSuccessP50Ms} ms` },
+            { label: 'First-success p95', value: liquidity.firstSuccessP95Ms === undefined ? 'Not observed' : `${liquidity.firstSuccessP95Ms} ms` },
+            { label: 'Depth samples', value: String(liquidity.depthSamples) },
+          ]}
+        />
+        {readback.activityTruncated ? <p className="text-sm text-muted-foreground">Showing the 50 most recent activity records.</p> : null}
+      </AeSection>
+      <AeSection title="Earnings and payouts" description="Source-recorded supplier earnings. Setup or test calls do not create earnings.">
+        <OwnerEarningsCard
+          earnings={earnings}
+          {...(connect === undefined ? {} : { connect })}
+        />
+      </AeSection>
     </div>
   )
 }
@@ -235,103 +237,89 @@ function OwnerProviderConnections({ businessId, connections }: Readonly<{
 
 
   return (
-    <Card>
-      <CardHeader className="grid gap-2 p-5 pb-0">
-        <CardTitle><h2 className="text-lg font-semibold text-foreground">Supplier connections</h2></CardTitle>
-        <p className="text-sm text-muted-foreground">Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority.</p>
-      </CardHeader>
-      <CardContent className="grid gap-5 p-5">
-        {connections.length === 0 ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyTitle>No provider connection yet</EmptyTitle>
-              <EmptyDescription>Add the public HTTPS endpoint that returns the x402 payment challenge for your operation.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {connections.map((connection) => (
-              <li key={connection.connectionRef} className="grid min-w-0 gap-3 rounded-md border border-border p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="grid min-w-0 gap-1">
-                    <p className="font-semibold text-foreground">{providerConnectionStatus(connection)}</p>
-                    <p className="break-all text-sm text-muted-foreground">{connection.grantedResources[0] ?? connection.providerAccountRef}</p>
-                  </div>
-                  {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        className="min-h-11"
-                        disabled={busy !== undefined}
-                        onClick={() => void updateConnection('reconnect', connection)}
-                      >
-                        {connection.lifecycle === 'active' ? 'Refresh authority' : 'Reconnect'}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11"
-                        disabled={busy !== undefined}
-                        onClick={() => void updateConnection('revoke', connection)}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  ) : connection.lifecycle === 'cleanup_required' ? (
+    <AeSection
+      title="Supplier connections"
+      description="Connect a hosted x402 endpoint so Agentic Economy can route paid calls without collecting an API key or wallet secret. Then open an operation and select this connection as its access authority."
+    >
+      {connections.length === 0 ? (
+        <AeEmptyState
+          title="No provider connection yet"
+          description="Add the public HTTPS endpoint that returns the x402 payment challenge for your operation."
+        />
+      ) : (
+        <ul className="m-0 grid list-none divide-y divide-border border-y border-border p-0">
+          {connections.map((connection) => (
+            <li key={connection.connectionRef} className="grid min-w-0 gap-3 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="grid min-w-0 gap-1">
+                  <p className="font-medium text-foreground">{providerConnectionStatus(connection)}</p>
+                  <p className="break-all text-sm text-muted-foreground">{connection.grantedResources[0] ?? connection.providerAccountRef}</p>
+                </div>
+                {(connection.lifecycle === 'active' || connection.lifecycle === 'reauthorization_required') ? (
+                  <div className="flex flex-wrap gap-2">
                     <Button
-                      type="button"
                       variant="secondary"
                       className="min-h-11"
                       disabled={busy !== undefined}
-                      onClick={() => void retryConnectionCleanup(connection)}
+                      onClick={() => void updateConnection('reconnect', connection)}
                     >
-                      Retry cleanup
+                      {connection.lifecycle === 'active' ? 'Refresh authority' : 'Reconnect'}
                     </Button>
-                  ) : null}
-                </div>
-                <details className="text-sm text-muted-foreground">
-                  <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
-                  <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div><dt className="font-medium">Connection</dt><dd className="m-0 break-all">{connection.connectionRef}</dd></div>
-                    <div><dt className="font-medium">Authority generation</dt><dd className="m-0">{connection.authorityGeneration}</dd></div>
-                    <div><dt className="font-medium">Adapter</dt><dd className="m-0">{connection.adapterId}</dd></div>
-                    <div><dt className="font-medium">Last updated</dt><dd className="m-0">{new Date(connection.updatedAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC</dd></div>
-                  </dl>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form className="grid gap-3" onSubmit={submitConnection}>
-          <div className="grid gap-1.5">
-            <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
-            <Input
-              id="provider-x402-resource-url"
-              name="resourceUrl"
-              type="url"
-              inputMode="url"
-              autoComplete="url"
-              maxLength={2_048}
-              placeholder="https://api.example.com/paid-operation"
-              value={resourceUrl}
-              onChange={(event) => setResourceUrl(event.target.value)}
-              aria-describedby="provider-x402-resource-url-hint"
-              required
-            />
-            <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
-          </div>
-          <Button type="submit" className="min-h-11 justify-self-start" disabled={busy !== undefined}>
-            {busy === 'new' ? 'Connecting…' : 'Connect supplier'}
-          </Button>
-        </form>
-        <p
-          role={notice?.kind === 'error' ? 'alert' : 'status'}
-          className={notice?.kind === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
-        >
-          {notice?.text ?? ''}
-        </p>
-      </CardContent>
-    </Card>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={busy !== undefined}
+                      onClick={() => void updateConnection('revoke', connection)}
+                    >
+                      Revoke
+                    </Button>
+                  </div>
+                ) : connection.lifecycle === 'cleanup_required' ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="min-h-11"
+                    disabled={busy !== undefined}
+                    onClick={() => void retryConnectionCleanup(connection)}
+                  >
+                    Retry cleanup
+                  </Button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className="grid gap-3" onSubmit={submitConnection}>
+        <div className="grid gap-1.5">
+          <label htmlFor="provider-x402-resource-url" className="text-sm font-medium text-foreground">x402 resource URL</label>
+          <Input
+            id="provider-x402-resource-url"
+            name="resourceUrl"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            maxLength={2_048}
+            placeholder="https://api.example.com/paid-operation"
+            value={resourceUrl}
+            onChange={(event) => setResourceUrl(event.target.value)}
+            aria-describedby="provider-x402-resource-url-hint"
+            required
+          />
+          <p id="provider-x402-resource-url-hint" className="text-sm text-muted-foreground">Use the exact public route that returns HTTP 402 when called without payment.</p>
+        </div>
+        <Button type="submit" className="min-h-11 justify-self-start" disabled={busy !== undefined}>
+          {busy === 'new' ? 'Connecting…' : 'Connect supplier'}
+        </Button>
+      </form>
+      <p
+        role={notice?.kind === 'error' ? 'alert' : 'status'}
+        className={notice?.kind === 'error' ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}
+      >
+        {notice?.text ?? ''}
+      </p>
+    </AeSection>
   )
 }
 
@@ -353,20 +341,45 @@ function connectionRefusalCopy(code: string): string {
 }
 
 
-function OwnerOfferingRow({ offering }: Readonly<{ offering: OwnerSupplyOfferingReadback }>) {
+function SupplyOfferingsTable({ offerings }: { offerings: readonly OwnerSupplyOfferingReadback[] }) {
+  const columns = useMemo<ColumnDef<OwnerSupplyOfferingReadback, unknown>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (item) => item.name,
+        header: ({ column }) => <AeOperatorSortableHeader label="Operation" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid min-w-[12rem] gap-0.5">
+            <span className="font-medium">{row.original.name}</span>
+            <span className="line-clamp-2 text-xs text-muted-foreground">{row.original.summary}</span>
+          </div>
+        ),
+      },
+      {
+        id: 'status',
+        accessorFn: (item) => item.status,
+        header: ({ column }) => <AeOperatorSortableHeader label="Status" column={column} />,
+        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
+      },
+      {
+        id: 'live',
+        accessorFn: (item) => item.live.available,
+        header: 'Live',
+        cell: ({ row }) => (row.original.live.available ? 'Available' : 'Unavailable'),
+      },
+    ],
+    [],
+  )
+
   return (
-    <li className="grid gap-4 rounded-md border border-border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <p className="block font-semibold text-foreground">{offering.name}</p>
-          <p className="block text-sm text-muted-foreground">{offering.summary}</p>
-        </div>
-        <Button asChild variant="secondary" className="min-h-11">
-          <Link to="/owner/supply/$offeringRef" params={{ offeringRef: offering.offeringRef }}>Open operation</Link>
-        </Button>
-      </div>
-      <AeOwnerOperationFacts offering={offering} />
-    </li>
+    <AeRecordTable
+      columns={columns}
+      data={offerings}
+      caption="Operations"
+      countLabel="Operations"
+      filterPlaceholder="Filter Operations…"
+      getRowHref={(item) => `/owner/supply/${encodeURIComponent(item.offeringRef)}`}
+    />
   )
 }
 
@@ -412,14 +425,5 @@ export function AeOwnerOperationFacts({
     { label: 'Live status', value: offering.live.available ? 'available' : `unavailable${offering.live.reason === undefined ? '' : ` · ${offering.live.reason}`}` },
   ] as const
 
-  return (
-    <dl className={`grid gap-x-4 gap-y-3 border-t border-border pt-4 text-sm ${detail ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
-      {facts.map((fact) => (
-        <div key={fact.label} className="grid min-w-0 gap-0.5">
-          <dt className="font-medium text-muted-foreground">{fact.label}</dt>
-          <dd className="m-0 break-all text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+  return <AeFactList facts={facts} density={detail ? 'default' : 'compact'} />
 }

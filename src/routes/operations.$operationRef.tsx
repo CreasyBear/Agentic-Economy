@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePageState } from '@/components/ae/layout/AePageState'
-import { AePublicRoutePending } from '@/components/ae/layout/AePublicRoutePending'
+import { AePageSkeleton, AePageState } from '@/components/ae/layout/AePageState'
+import { AeSection } from '@/components/ae/layout/AeSection'
 import { AeCopyCommand } from '@/components/ae/data/AeCopyCommand'
 import { AeFactList } from '@/components/ae/data/AeFactList'
 import { AeOperationPrice } from '@/components/ae/market/AeOperationPrice'
@@ -102,7 +102,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
           <div className="grid min-w-0 gap-6">
-            <Section id="parameters" title="Parameters" description="The fields your agent needs before it calls this Operation.">
+            <AeSection id="parameters" title="Parameters" description="The fields your agent needs before it calls this Operation.">
               {operation.parameters === undefined ? (
                 <p className="text-sm text-muted-foreground">No flat parameter list is published. <a href="#technical-contract" className="font-medium text-foreground underline underline-offset-4">Read the input JSON Schema</a> before calling.</p>
               ) : (
@@ -111,9 +111,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   <ParameterList title="Optional parameters" parameters={optionalParameters} empty="No optional parameters." />
                 </div>
               )}
-            </Section>
+            </AeSection>
 
-            <Section title="Example input and output" description="Published examples only. Missing examples are never inferred.">
+            <AeSection title="Example input and output" description="Published examples only. Missing examples are never inferred.">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Example
                   title="Example input"
@@ -125,9 +125,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   empty="No example output is published. Validate the response against the output schema below."
                 />
               </div>
-            </Section>
+            </AeSection>
 
-            <Section id="price-and-terms" title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
+            <AeSection id="price-and-terms" title="Price and terms" description="The exact buyer authorization and published commercial terms for this capability.">
               <PriceBreakdown operation={operation} />
               <dl className="grid gap-3 sm:grid-cols-2">
                 {operation.commercial.priceEvidence?.observedAt === undefined ? null : (
@@ -140,9 +140,9 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                 <Fact label="Provider"><BusinessLink operation={operation} /></Fact>
               </dl>
               <TermList terms={operation.commercial.materialTerms} />
-            </Section>
+            </AeSection>
 
-            <Section title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
+            <AeSection title="Readiness and reliability" description="Current readiness, named completion evidence, and recovery behavior. Publication alone is not usage evidence.">
               <dl className="grid gap-3 sm:grid-cols-2">
                 <Fact label="Status" value={label(operation.availability.posture)} />
                 <TimeFact label="Readiness verified" value={operation.availability.observedAt} />
@@ -160,7 +160,7 @@ function CurrentOperationDetail({ operation }: Readonly<{ operation: PublicOpera
                   </li>
                 ))}
               </ul>
-            </Section>
+            </AeSection>
           </div>
 
           <OperationAccessSidecard operation={operation} accessMode={accessMode} invokeInput={invokeInput} mcpInput={mcpInput} />
@@ -363,23 +363,11 @@ function OperationUnavailable({ result }: Readonly<{ result: Exclude<PublicOpera
 }
 
 function OperationDetailPending() {
-  return <AePublicRoutePending label="Checking the current capability…" shape="detail" />
+  return <AePageSkeleton title="Checking the current capability…" description="Checking the current capability…" shape="detail" />
 }
 
 function OperationDetailError() {
   return <OperationUnavailable result={{ kind: 'source_unavailable', operationRef: 'Requested reference' }} />
-}
-
-function Section({ id, title, description, children }: Readonly<{ id?: string; title: string; description: string; children: ReactNode }>) {
-  return (
-    <section id={id} className="scroll-mt-6 grid gap-4 border-t border-border pt-6">
-      <div className="grid gap-1">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      {children}
-    </section>
-  )
 }
 
 function Fact({ label: factLabel, value, children }: Readonly<{ label: string; value?: string; children?: ReactNode }>) {

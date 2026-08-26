@@ -11,8 +11,10 @@ import {
 
 export const DiscoveryPublicSurfacePaths = [
   '/',
+  '/market',
   '/for-agents',
   '/for-providers',
+  '/about',
   '/privacy/remove-business',
   '/.well-known/ucp',
   '/api/businesses',

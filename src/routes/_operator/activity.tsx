@@ -69,20 +69,6 @@ function ActivityRoute() {
           </time>
         ),
       },
-      {
-        id: 'receipt',
-        header: 'Receipt',
-        cell: ({ row }) => (
-          <Button asChild variant="outline" className="min-h-11">
-            <Link
-              to="/operations/invocations/$invocationRef"
-              params={{ invocationRef: row.original.invocationRef }}
-            >
-              View receipt
-            </Link>
-          </Button>
-        ),
-      },
     ],
     [],
   )

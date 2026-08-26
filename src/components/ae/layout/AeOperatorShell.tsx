@@ -36,8 +36,8 @@ export type AeOperatorShellProps = {
   operatorRole: OperatorRole
   title: string
   description: string
-  eyebrow?: string
   actions?: ReactNode
+  secondaryBar?: ReactNode
   currentPath: string
   mainContentId?: string
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
@@ -60,8 +60,8 @@ function NestedOperatorShell({
   operatorRole,
   title,
   description,
-  eyebrow,
   actions,
+  secondaryBar,
   currentPath,
   mainContentId,
   breadcrumbs,
@@ -74,13 +74,13 @@ function NestedOperatorShell({
       title,
       description,
       currentPath,
-      ...(eyebrow === undefined ? {} : { eyebrow }),
       ...(actions === undefined ? {} : { actions }),
+      ...(secondaryBar === undefined ? {} : { secondaryBar }),
       ...(mainContentId === undefined ? {} : { mainContentId }),
       ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
       ...(navBadges === undefined ? {} : { navBadges }),
     }),
-    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges],
+    [operatorRole, title, description, actions, secondaryBar, currentPath, mainContentId, breadcrumbs, navBadges],
   )
 
   useLayoutEffect(() => {
@@ -136,6 +136,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
     title,
     description,
     actions,
+    secondaryBar,
     currentPath,
     mainContentId,
     breadcrumbs: providedBreadcrumbs,
@@ -188,7 +189,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
             Skip to content
           </a>
           <AeOperatorSidebar operatorRole={operatorRole} currentPath={currentPath} navBadges={navBadges ?? {}} />
-          <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-container">
+          <SidebarInset id={resolvedMainContentId} tabIndex={-1} className="bg-card">
             <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border">
               <div className="flex min-w-0 items-center gap-2 px-4">
                 <OperatorSidebarToggle />
@@ -213,6 +214,7 @@ function RootOperatorShell(props: AeOperatorShellProps) {
                 description={description}
                 {...(actions === undefined ? {} : { actions })}
               />
+              {secondaryBar === undefined ? null : secondaryBar}
               <div className="min-h-0 flex-1 pt-3">{children}</div>
             </div>
           </SidebarInset>

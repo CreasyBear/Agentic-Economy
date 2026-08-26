@@ -29,7 +29,7 @@ export function AeViewBar({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-3 border-b border-border py-2',
+        'flex min-h-10 flex-wrap items-center gap-3 border-b border-border py-2',
         className,
       )}
     >

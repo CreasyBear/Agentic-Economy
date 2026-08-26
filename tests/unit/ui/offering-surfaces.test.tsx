@@ -1,5 +1,13 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import {
+  RouterContextProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../setup/jsdom-platform'
 
@@ -18,17 +26,20 @@ afterEach(cleanup)
 describe('Offering market surfaces', () => {
   it('teaches the owner the first useful action without requiring a contact route', () => {
     render(<AeOwnerOfferingsList offerings={[]} />)
-    expect(screen.getByText('No Operations yet')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'No Operations yet' })).toBeTruthy()
     expect(screen.getByText('Describe one exact tool, then add its price and access route.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Add Operation' }).getAttribute('href')).toBe('/owner/offerings/new')
   })
 
   it('renders compact owner service rows and an explicit page-update recovery', () => {
     const projection = projectionFixture()
-    render(<AeOwnerOfferingsList offerings={[toOwnerOfferingSummary(projection)]} projectionState="projection_pending" onRetryProjection={vi.fn()} />)
+    renderAt(
+      <AeOwnerOfferingsList offerings={[toOwnerOfferingSummary(projection)]} projectionState="projection_pending" onRetryProjection={vi.fn()} />,
+      '/owner/offerings',
+    )
     expect(screen.getByText('Your public page is still updating')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try publishing again' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Edit' })).toBeTruthy()
+    expect(screen.getByText('Blockchain data query')).toBeTruthy()
   })
   it('uses progressive disclosure for request fields and blocks duplicate saves', async () => {
     let resolveSave: ((value: unknown) => void) | undefined
@@ -131,4 +142,17 @@ function projectionFixture(): PublicOfferingSupplyProjection {
     }],
     support: { integrated: true, routeable: true, reasons: [], observedAt: 1_900_000_000_000 },
   }
+}
+
+function renderAt(ui: ReactElement, pathname: string) {
+  const rootRoute = createRootRoute()
+  const routeTree = rootRoute.addChildren([
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings' }),
+    createRoute({ getParentRoute: () => rootRoute, path: '/owner/offerings/$offeringRef' }),
+  ])
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [pathname] }),
+  })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

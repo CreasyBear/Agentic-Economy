@@ -73,6 +73,8 @@ export function buildSiteBriefMarkdown(options: AgentPageMarkdownOptions): strin
     `- \`${base}/SKILL.md\` — the full Operation procedure`,
     `- \`${base}/.well-known/ucp\` — the raw machine contract`,
     `- \`${base}/for-agents\` — the machine guide when requested as markdown`,
+    `- \`${base}/about\` — what AE is, for people`,
+    `- \`${base}/market\` — the live Operation catalogue`,
     '',
   ].join('\n')
 }
@@ -117,6 +119,30 @@ export function buildForAgentsMarkdown(options: AgentPageMarkdownOptions): strin
     '## Safe recovery',
     '',
     `Use \`${cli} cancel\` only when the current receipt offers cancellation. Use \`${cli} recover\` only when that receipt requires reconciliation.`,
+    '',
+  ].join('\n')
+}
+
+export function buildAboutMarkdown(options: AgentPageMarkdownOptions): string {
+  const base = trimTrailingSlashes(options.canonicalBaseUrl)
+  return [
+    '# About Agentic Economy',
+    '',
+    'Agentic Economy is the market and controlled transaction layer where authorized agents discover, buy and invoke admitted third-party Market Operations, and suppliers are paid after contract-valid delivery.',
+    '',
+    '## Two ways in',
+    '',
+    `- Agents: \`${base}/for-agents\``,
+    `- Suppliers: \`${base}/for-providers\``,
+    `- Live catalog: \`${base}/market\``,
+    '',
+    'There is no partner logo wall. A supplier is listed when it publishes an Operation agents can inspect.',
+    '',
+    '## Machine files',
+    '',
+    `- \`${base}/llms.txt\``,
+    `- \`${base}/SKILL.md\``,
+    `- \`${base}/.well-known/ucp\``,
     '',
   ].join('\n')
 }

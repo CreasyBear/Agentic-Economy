@@ -6,6 +6,7 @@ import { AeOwnerCredit } from '@/components/ae/console/AeOwnerCredit'
 import type { CreditTopupPort } from '@/components/ae/console/AeCreditTopUpPanel'
 import { OwnerSettingsNav } from '@/components/ae/settings/OwnerSettingsSections'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeSettingsStack } from '@/components/ae/layout/AeSection'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/client/local-e2e-auth'
@@ -71,9 +72,9 @@ function OwnerCreditRoute() {
           <Link to="/agent-access">Open Keys</Link>
         </Button>
       }
+      secondaryBar={<OwnerSettingsNav current="credit" />}
     >
-      <div className="grid gap-6">
-        <OwnerSettingsNav current="credit" />
+      <AeSettingsStack>
         {localE2E ? (
           <Alert>
             <AlertTitle>Local preview — credit is not connected</AlertTitle>
@@ -100,7 +101,7 @@ function OwnerCreditRoute() {
           creditTopupPort={creditTopupPort}
           onCreditRefresh={load}
         />
-      </div>
+      </AeSettingsStack>
     </AeOperatorShell>
   )
 }

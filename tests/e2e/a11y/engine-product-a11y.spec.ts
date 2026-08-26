@@ -49,6 +49,26 @@ test.describe('market product accessibility', () => {
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   })
+
+  test('about is reachable from the footer and keeps public nav', async ({ page }) => {
+    await gotoSettled(page, '/')
+    const footer = page.getByRole('contentinfo')
+    await expect(footer.getByRole('link', { name: 'About' })).toBeVisible()
+    await expect(footer.getByRole('link', { name: 'Activity' })).toBeVisible()
+    await footer.getByRole('link', { name: 'About' }).click()
+    await page.waitForURL('**/about', { timeout: 15_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'A market for agent-callable work.' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Listed suppliers' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Browse the live catalog' })).toBeVisible()
+    const compact = (page.viewportSize()?.width ?? 1280) < 768
+    if (compact) {
+      await page.getByRole('button', { name: 'Open public menu' }).click()
+    }
+    const primary = page.getByRole('navigation', {
+      name: compact ? 'Public navigation' : 'Primary',
+    })
+    await expect(primary.getByRole('link', { name: 'Activity' })).toBeVisible()
+  })
 })
 
 async function gotoSettled(page: Page, path: string) {

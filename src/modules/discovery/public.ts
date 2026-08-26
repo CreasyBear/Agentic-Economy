@@ -38,6 +38,7 @@ export {
   buildBusinessMarkdown,
   buildCatalogMarkdown,
   buildForAgentsMarkdown,
+  buildAboutMarkdown,
   buildMissingBusinessMarkdown,
   buildSiteBriefMarkdown,
   buildUnknownPageMarkdown,

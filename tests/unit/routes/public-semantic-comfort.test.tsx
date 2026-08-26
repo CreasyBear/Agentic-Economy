@@ -19,8 +19,10 @@ vi.mock('@tanstack/react-router', () => ({
       options,
       useSearch: () => ({}),
       useLoaderData: () => path === '/'
-        ? { kind: 'ok', operations: [], matchedCount: 0 }
-        : undefined,
+        ? { read: { kind: 'ok', operations: [], matchedCount: 0 }, canonicalBaseUrl: 'https://ae.example' }
+        : path === '/about'
+          ? 'https://ae.example'
+          : undefined,
       useNavigate: () => vi.fn(),
     }
   },
@@ -41,9 +43,11 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <main>{children}</main>,
 }))
 
+import { ABOUT, HOME } from '@/content/brand-copy'
 import '@/routes/index'
 import '@/routes/privacy'
 import '@/routes/terms'
+import '@/routes/about'
 
 afterEach(cleanup)
 
@@ -77,11 +81,25 @@ describe('public semantic comfort', () => {
       expect(links.length).toBeGreaterThan(0)
       for (const link of links) expect(link.classList.contains('min-h-touch')).toBe(true)
     }
+    expect(screen.getByRole('link', { name: HOME.aboutLink }).classList.contains('min-h-touch')).toBe(true)
+  })
+
+  it('keeps About sequential and its door actions comfortable', () => {
+    renderRoute('/about')
+
+    expect(screen.getByRole('heading', { level: 1, name: ABOUT.heading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.doorsHeading })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: ABOUT.suppliersHeading })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Browse the live catalog' }).classList.contains('min-h-touch')).toBe(true)
+    const machines = screen.getByRole('navigation', { name: 'Machine-readable files' })
+    expect(within(machines).getByRole('link', { name: /llms\.txt/ }).getAttribute('href')).toBe('/llms.txt')
+    expect(within(machines).getByRole('link', { name: /SKILL\.md/ }).getAttribute('href')).toBe('/SKILL.md')
+    expect(within(machines).getByRole('link', { name: /well-known\/ucp/ }).getAttribute('href')).toBe('/.well-known/ucp')
   })
 
 })
 
-function renderRoute(path: '/' | '/privacy' | '/terms') {
+function renderRoute(path: '/' | '/privacy' | '/terms' | '/about') {
   const Component = routeState.components.get(path)
   if (Component === undefined) throw new Error(`Route component ${path} was not captured.`)
   render(<Component />)

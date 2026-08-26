@@ -10,8 +10,7 @@ type AeRecordHeaderProps = {
 }
 
 /**
- * Compact operator page bar: title + trailing actions.
- * Description stays available to assistive tech without a marketing block.
+ * Compact operator page bar: title, visible description, trailing actions.
  */
 export function AeRecordHeader({
   title,
@@ -25,17 +24,17 @@ export function AeRecordHeader({
   return (
     <div
       className={cn(
-        'flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border py-3',
+        'flex min-h-12 flex-wrap items-start justify-between gap-3 border-b border-border py-3',
         className,
       )}
       {...(description === undefined ? {} : { 'aria-describedby': descriptionId })}
     >
-      <div className="min-w-0">
-        <h1 id={titleId} className="truncate text-base font-medium tracking-tight text-foreground">
+      <div className="grid min-w-0 gap-1">
+        <h1 id={titleId} className="truncate text-base font-semibold tracking-tight text-foreground">
           {title}
         </h1>
         {description === undefined ? null : (
-          <p id={descriptionId} className="sr-only">
+          <p id={descriptionId} className="text-pretty text-sm text-muted-foreground">
             {description}
           </p>
         )}
