@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { handleOperationInvokePost } from '@/lib/server/operation-invoke-api'
+import {
+  handleOperationInvokePost as handleOperationInvokePostImpl,
+  type OperationInvokeHandlerOptions,
+} from '@/lib/server/operation-invoke-api'
+import type { AgentAccessPrincipalResolver } from '@/lib/server/agent-access-auth'
 
 const operationRef = `operation:v1:${'a'.repeat(64)}`
 const authenticate = async (scopes: readonly string[] = ['market_operations:invoke']) => ({
@@ -10,6 +14,23 @@ const authenticate = async (scopes: readonly string[] = ['market_operations:invo
   subject: 'user_test',
   scopes,
 })
+const resolveCanonicalPrincipal: AgentAccessPrincipalResolver = async (projection) => ({
+  ...projection,
+  principalId: 'prn_00000000000040008000000000000043',
+  ownerId: 'acc_00000000000040008000000000000043',
+})
+
+async function handleOperationInvokePost(
+  request: Request,
+  options: OperationInvokeHandlerOptions = {},
+): Promise<Response> {
+  return await handleOperationInvokePostImpl(request, {
+    ...(options.authenticate === undefined || options.resolvePrincipal !== undefined
+      ? {}
+      : { resolvePrincipal: resolveCanonicalPrincipal }),
+    ...options,
+  })
+}
 
 function service(result: Record<string, unknown>) {
   return {
@@ -29,6 +50,52 @@ function post(body: unknown, path = '/api/v1/operations/call'): Request {
 }
 
 describe('operation.invoke HTTP adapter', () => {
+  it('passes the protected operation scope into canonical production-style resolution', async () => {
+    const executor = service({
+      kind: 'completed',
+      invocationRef: 'invocation:canonical-scope',
+      operationRef,
+      output: { ok: true },
+      evidenceHash: 'evidence:canonical-scope',
+      usage: {
+        usageRef: 'usage:canonical-scope',
+        observedAt: 1_700_000_000_000,
+        chargeState: 'free_tier',
+        priceDigest: 'price:canonical-scope',
+        amount: { currency: 'USD', units: '0', exponent: 2 },
+      },
+    })
+    const resolvedScopes: Array<readonly string[]> = []
+    const resolvedResources: string[] = []
+    const response = await handleOperationInvokePost(post({
+      operationRef,
+      input: {},
+      idempotencyKey: 'canonical-scope',
+    }), {
+      authenticate,
+      resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
+        resolvedScopes.push(requiredScopes)
+        resolvedResources.push(consequenceResource)
+        return {
+          ...projection,
+          principalId: 'prn_00000000000040008000000000000043',
+          ownerId: 'acc_00000000000040008000000000000043',
+        }
+      },
+      operationInvokeService: executor,
+    })
+
+    expect(response.status).toBe(200)
+    expect(resolvedScopes).toEqual([['market_operations:invoke']])
+    expect(resolvedResources).toEqual(['surface:http:operations-call'])
+    expect(executor.invokeOperation).toHaveBeenCalledWith(expect.objectContaining({
+      principal: expect.objectContaining({
+        principalId: 'prn_00000000000040008000000000000043',
+        ownerId: 'acc_00000000000040008000000000000043',
+      }),
+    }))
+  })
+
   it('returns a canonical bearer challenge for missing authentication', async () => {
     const executor = service({ kind: 'completed' })
     const response = await handleOperationInvokePost(post({ operationRef, input: {}, idempotencyKey: 'key-1' }), {

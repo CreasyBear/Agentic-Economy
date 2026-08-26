@@ -28,6 +28,7 @@ import {
 } from './capabilitySupply'
 import { agentAccessPrincipalValue, verifySupplyAgentPrincipal } from './agentAccessPrincipals'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
+import { resolveBusinessActor } from './authz'
 
 export const ownerSupplyCommandArgsValue = v.object({
   businessId: v.id('businesses'),
@@ -113,7 +114,7 @@ export async function reserveOwnerCapabilityPublicationHandler(
     const now = Date.now()
     const operation = await beginOperation(
       publicationPorts(ctx),
-      { kind: 'owner', ref: admission.ownerId },
+      { kind: 'owner', ref: admission.principalId },
       'reserveOwnerCapabilityPublication',
       {
         operationKey: args.operationKey,
@@ -347,11 +348,12 @@ async function beginOwnerMaintenanceOperation(
   const agentAdmission = args.agentPrincipal === undefined
     ? undefined
     : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
-  const identity = args.agentPrincipal === undefined
-    ? await ctx.auth.getUserIdentity()
-    : null
+  const ownerActor = args.agentPrincipal === undefined
+    ? await resolveBusinessActor(ctx)
+    : undefined
   const owned = args.agentPrincipal === undefined
-    ? identity !== null && await ownsPublishedBusiness(ctx, args.businessId)
+    ? ownerActor?.kind === 'authenticated_owner'
+      && await ownsPublishedBusiness(ctx, args.businessId)
     : agentAdmission?.kind === 'allowed'
       && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
   if (!owned) {
@@ -359,7 +361,14 @@ async function beginOwnerMaintenanceOperation(
   }
   const operation = await beginOperation(
     publicationPorts(ctx),
-    { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
+    {
+      kind: 'owner',
+      ref: agentAdmission?.kind === 'allowed'
+        ? agentAdmission.principalId
+        : ownerActor?.kind === 'authenticated_owner'
+          ? ownerActor.canonicalPrincipalRef
+          : '',
+    },
     operationName,
     {
       operationKey: args.operationKey,
@@ -479,8 +488,14 @@ export async function republishOwnerCapabilityHandler(
     if (loaded.publication.disposition !== 'withdrawn') {
       return { kind: 'refused', reason: 'revision_changed' }
     }
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null)
+    const agentAdmission = args.agentPrincipal === undefined
+      ? undefined
+      : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+    const ownerActor = args.agentPrincipal === undefined
+      ? await resolveBusinessActor(ctx)
+      : undefined
+    if (agentAdmission?.kind !== 'allowed'
+      && ownerActor?.kind !== 'authenticated_owner')
       return { kind: 'refused', reason: 'authorization_denied' }
     const reconstructed = await reconstructPreparedRepublishMaterial(
       ctx,
@@ -496,7 +511,14 @@ export async function republishOwnerCapabilityHandler(
         publication: loaded.publication,
         prepared: reconstructed.prepared,
         origin: reconstructed.origin,
-        actor: { kind: 'owner', ref: identity.subject },
+        actor: {
+          kind: 'owner',
+          ref: agentAdmission?.kind === 'allowed'
+            ? agentAdmission.principalId
+            : ownerActor?.kind === 'authenticated_owner'
+              ? ownerActor.canonicalPrincipalRef
+              : '',
+        },
         operationKey: args.operationKey,
         correlationId: args.correlationId,
         reasonCode: args.reasonCode,

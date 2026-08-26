@@ -2,6 +2,11 @@ import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 import { recordMarketEvidenceFact } from './marketEvidence'
 import { syncMarketOperationPresence } from './marketPresence'
 
@@ -16,9 +21,14 @@ const projections: readonly Projection[] = ['invocations', 'qualified_uses', 'x4
 const PAGE_SIZE = 20
 
 export const run = internalMutation({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: v.object({ projection: v.union(projectionValue, v.null()), processed: v.number(), complete: v.boolean() }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'continue market aggregate backfill',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const states = await ctx.db.query('marketAggregateBackfills').take(projections.length)
     const stateByProjection = new Map(states.map((state) => [state.projection, state]))
     const projection = projections.find((candidate) => stateByProjection.get(candidate)?.completedAt === undefined)
@@ -40,7 +50,7 @@ export const run = internalMutation({
       })
     }
     if (!result.isDone || projection !== projections.at(-1)) {
-      await ctx.scheduler.runAfter(0, internal.marketAggregateBackfill.run, {})
+      await ctx.scheduler.runAfter(0, internal.workloadCron.continueMarketAggregateBackfill, {})
     }
     return { projection, processed: result.processed, complete: result.isDone && projection === projections.at(-1) }
   },

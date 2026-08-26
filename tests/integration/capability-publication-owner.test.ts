@@ -11,14 +11,54 @@ import { withSourceWrite } from '../helpers/source-write-admission'
 import {
   admitPublication,
   capabilityPublicationInput,
+  installCanonicalProviderConnectionFixture,
   operationContext,
   ownerMaintenanceArgs,
   preparedPublicationArgs,
-  registerProviderConnection,
+  providerAuthority,
   seedCatalogOffering,
 } from './capability-publication-harness'
 
+async function installCurrentProviderConnection(
+  backend: ReturnType<typeof convexTestWithMarketComponents>,
+  businessId: Parameters<typeof installCanonicalProviderConnectionFixture>[1]['businessId'],
+  suffix: string,
+) {
+  const authority = providerAuthority(suffix)
+  const result = await installCanonicalProviderConnectionFixture(backend, {
+    businessId,
+    ...authority,
+    providerAccountRef: `account:capability-publication:${suffix}`,
+    adapterId: 'http-json:v1',
+    secretRef: null,
+    scopes: [`capability:capability-publication:${suffix}`],
+    resources: [`resource:capability-publication:${suffix}`],
+    evidenceRefs: [`test:provider-connection:${suffix}`],
+    commandId: `command:create:capability-publication:${suffix}`,
+  })
+  if (result.kind !== 'applied') {
+    throw new Error(`provider_connection_fixture_${result.kind}`)
+  }
+  return result.connection
+}
+
 describe('capability publication owner', () => {
+  it('preserves canonical owner catalog and editor reads', async () => {
+    const backend = convexTestWithMarketComponents()
+    const { businessId, owner } = await publishedBusinessOwner(
+      backend,
+      'canonical-owner-reads',
+    )
+    await seedCatalogOffering(backend, businessId, 'canonical-owner-reads')
+
+    await expect(
+      owner.query(api.catalog.getCurrentOwnerPublicCatalog, {}),
+    ).resolves.toMatchObject({ kind: 'available' })
+    await expect(
+      owner.query(api.catalog.getCurrentOwnerOfferingSupply, {}),
+    ).resolves.not.toMatchObject({ kind: 'error', code: 'unauthenticated' })
+  })
+
   it('fails closed across readiness, stale health, and withdrawal transitions', async () => {
     const backend = convexTestWithMarketComponents()
     const { businessId, owner } = await publishedBusinessOwner(
@@ -31,7 +71,7 @@ describe('capability publication owner', () => {
       'user_capability_publication_observer',
     )
     const input = capabilityPublicationInput(businessId, 'lifecycle-one')
-    await registerProviderConnection(backend, businessId, 'lifecycle-one')
+    await installCurrentProviderConnection(backend, businessId, 'lifecycle-one')
     const published = await owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(backend, input),
@@ -138,7 +178,7 @@ describe('capability publication owner', () => {
       'maintenance-replay',
     )
     await seedCatalogOffering(backend, businessId, 'maintenance-replay')
-    await registerProviderConnection(backend, businessId, 'maintenance-replay')
+    await installCurrentProviderConnection(backend, businessId, 'maintenance-replay')
     const published = await owner.mutation(
       api.capabilitySupply.publishPreparedCapability,
       await preparedPublicationArgs(

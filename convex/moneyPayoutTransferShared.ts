@@ -1,7 +1,6 @@
 import type { Doc } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
-import { principalAllowed } from './moneyBillingAuthorization'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 import { canonicalDigest } from '../src/modules/common/canonical-digest'
 import {
   addExactAmounts,
@@ -139,25 +138,21 @@ export function payoutFromRow(row: Doc<'moneyPayouts'>): MoneyPayout | undefined
 }
 
 export async function payoutAuthorityAllowed(
-  ctx: Pick<MutationCtx, 'auth' | 'db'>,
+  ctx: Pick<MutationCtx, 'auth' | 'db' | 'scheduler'>,
   businessId: string,
   principalId: string,
 ): Promise<boolean> {
-  const identity = await ctx.auth.getUserIdentity()
-  if (principalAllowed(identity, principalId)) return true
   const actor = await resolveBusinessActor(ctx)
   if (actor.kind !== 'authenticated_owner') return false
-  const owner = await ctx.db
-    .query('owners')
-    .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', actor.clerkUserId))
-    .unique()
+  if (principalId !== actor.canonicalPrincipalRef) return false
+  const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
   if (owner === null) return false
-  const businesses = await ctx.db
-    .query('businesses')
-    .withIndex('by_owner_updatedAt', (q) => q.eq('ownerId', owner._id))
-    .order('desc')
-    .take(20)
-  return businesses.some((business) => String(business._id) === businessId)
+  const canonicalBusinessId = ctx.db.normalizeId('businesses', businessId)
+  if (canonicalBusinessId === null) return false
+  const business = await ctx.db.get(canonicalBusinessId)
+  return business !== null &&
+    String(business._id) === businessId &&
+    business.ownerId === owner._id
 }
 
 type PayoutTransferRowInput = Readonly<{

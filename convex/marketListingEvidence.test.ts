@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "./_generated/api";
 import { recordMarketEvidenceFact } from "./marketEvidence";
 import schema from "./schema";
+import { publishedBusinessOwner } from "../tests/helpers/convex-fixtures";
 
 const modules = import.meta.glob("./**/*.ts");
 const operationRef = `operation:v1:${"a".repeat(64)}`;
@@ -21,11 +22,10 @@ function backendWithAggregates() {
 describe("market listing evidence Convex seam", () => {
   it("updates one authenticated rating transactionally instead of double-counting", async () => {
     const backend = backendWithAggregates();
-    const reviewer = backend.withIdentity({
-      subject: "reviewer-1",
-      tokenIdentifier: "clerk|reviewer-1",
-      issuer: "https://identity.example",
-    });
+    const { owner: reviewer, canonicalPrincipalRef } = await publishedBusinessOwner(
+      backend,
+      "market-rating-reviewer",
+    );
 
     await reviewer.mutation(api.marketListingEvidence.rate, {
       operationRef,
@@ -42,6 +42,9 @@ describe("market listing evidence Convex seam", () => {
       since: 0,
     });
     expect(evidence).toMatchObject({ ratingCount: 1, ratingSum: 5 });
+    const [rating] = await backend.run((ctx) => ctx.db.query("marketOperationRatings").collect());
+    expect(rating?.reviewerRef).toBe(canonicalPrincipalRef);
+    expect(rating?.reviewerRef).not.toContain("clerk");
   });
 
   it("joins canonical categories with completed-call counts and bounded latency", async () => {

@@ -38,6 +38,8 @@ import {
   validateAuthorityHandler,
 } from './capabilityProviderConnectionLifecycle'
 import {
+  beginLeaseEffectArgs,
+  beginLeaseEffectHandler,
   consumeLeaseArgs,
   consumeLeaseHandler,
   expireLeaseArgs,
@@ -47,6 +49,7 @@ import {
   issueLeaseArgs,
   issueLeaseHandler,
   leaseAuthorityValidation,
+  leaseEffectAdmission,
   leaseCredentialResolution,
   leaseResult,
   leaseValue,
@@ -72,6 +75,9 @@ import {
   reauthorizeOwnerHandler,
   retryOwnerCleanupArgs,
   retryOwnerCleanupHandler,
+  shareOwnerArgs,
+  shareOwnerHandler,
+  ownerShareResult,
   revokeOwnerArgs,
   revokeOwnerHandler,
 } from './capabilityProviderConnectionOwner'
@@ -152,6 +158,12 @@ export const issueLease = internalMutationGeneric({
   args: issueLeaseArgs,
   returns: leaseResult,
   handler: issueLeaseHandler,
+})
+
+export const beginLeaseEffect = internalMutationGeneric({
+  args: beginLeaseEffectArgs,
+  returns: leaseEffectAdmission,
+  handler: beginLeaseEffectHandler,
 })
 
 export const readLease = internalQueryGeneric({
@@ -236,4 +248,10 @@ export const connectX402Owner = mutationGeneric({
   args: connectX402OwnerArgs,
   returns: ownerCommandResult,
   handler: connectX402OwnerHandler,
+})
+
+export const shareOwner = internalMutationGeneric({
+  args: shareOwnerArgs,
+  returns: ownerShareResult,
+  handler: shareOwnerHandler,
 })

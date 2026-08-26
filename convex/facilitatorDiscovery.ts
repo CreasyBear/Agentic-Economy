@@ -31,6 +31,11 @@ import {
   publishBootstrapCapability,
 } from './capabilitySupplyPublish'
 import { rebuildCapabilityOriginSupplyProjection } from './capabilitySupplyShared'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 const SOURCE_EVIDENCE = 'source:facilitator-discovery'
 const BUSINESS_OWNER_PREFIX = 'system:facilitator-discovery:'
 const BUSINESS_SOURCE_KIND = 'facilitator-discovery-business:v1'
@@ -182,9 +187,15 @@ export const reconcile = internalMutation({
     complete: v.boolean(),
     seenPublicationRefs: v.optional(v.array(v.string())),
     deadlineAt: v.number(),
+    workload: workloadCronSnapshotValue,
   },
   returns: reconcileResult,
   handler: async (ctx, args) => {
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      args.workload.name,
+      parseWorkloadCronSnapshot(args.workload),
+    )
     if (
       args.items.length > MAX_RECONCILE_ITEMS
       || args.items.some((item) => {

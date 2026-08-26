@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => {
   const persistCanonicalTerminalOutcome = vi.fn()
   const prepareRegisteredRouteTransportInvocation = vi.fn()
   const invokePreparedRouteTransport = vi.fn()
+  const invokeProviderConsequenceViaVercel = vi.fn()
+  const providerConsequenceX402PaymentCustodyAvailable = vi.fn(() => (
+    /^sec_[0-9a-f]{32}$/u.test(process.env.AE_X402_PAYMENT_SECRET_REF?.trim() ?? '')
+  ))
   const signRouteTransportCall = vi.fn<SignRouteTransportCall>(() => ({ keyId: 'route-calls:test', signature: 'hmac-sha256:test' }))
   const createCdpEvmX402PaymentSignature = vi.fn(async (
     _request: unknown,
@@ -31,7 +35,7 @@ const mocks = vi.hoisted(() => {
     }
     return 'signed:payment'
   })
-  const createSandboxEvmX402PaymentSignature = vi.fn(async () => 'signed:payment')
+  const createSandboxEvmX402PaymentSignature = vi.fn(async (_request: unknown) => 'signed:payment')
   const cdpX402RequestFingerprint = vi.fn(() => `sha256:${'f'.repeat(64)}`)
   const readCdpX402PaymentAuthorization = vi.fn((
     _paymentSignature: string,
@@ -82,6 +86,8 @@ const mocks = vi.hoisted(() => {
     persistCanonicalTerminalOutcome,
     prepareRegisteredRouteTransportInvocation,
     invokePreparedRouteTransport,
+    invokeProviderConsequenceViaVercel,
+    providerConsequenceX402PaymentCustodyAvailable,
     signRouteTransportCall,
     createCdpEvmX402PaymentSignature,
     createSandboxEvmX402PaymentSignature,
@@ -110,6 +116,10 @@ vi.mock('@/modules/action-invocation/runtime', async (importOriginal) => {
 vi.mock('@/modules/capability-supply/route-transport-runtime', () => ({
   prepareRegisteredRouteTransportInvocation: mocks.prepareRegisteredRouteTransportInvocation,
   invokePreparedRouteTransport: mocks.invokePreparedRouteTransport,
+}))
+vi.mock('@/modules/capability-execution/invocation-worker/providerConsequenceBridge', () => ({
+  invokeProviderConsequenceViaVercel: mocks.invokeProviderConsequenceViaVercel,
+  providerConsequenceX402PaymentCustodyAvailable: mocks.providerConsequenceX402PaymentCustodyAvailable,
 }))
 vi.mock('@/modules/capability-supply/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/capability-supply/server')>()),
@@ -166,6 +176,7 @@ export const invocationRef = 'operation-invocation:test-worker'
 export const grantRef = 'grant:test-worker'
 const providerCredentialRef = 'env:AE_TEST_PROVIDER_CREDENTIAL'
 export const paymentCredentialRef = 'env:AE_TEST_PAYMENT_CREDENTIAL'
+export const paymentSecretRef = `sec_${'4'.repeat(32)}`
 export const attemptRef = `operation-attempt:${invocationRef}:1`
 export const digest = (digit: string) => `sha256:${digit.repeat(64)}`
 
@@ -891,6 +902,7 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           kind: 'applied',
           lease: {
             leaseRef: 'lease:test-worker',
+            canonicalConnectionRef: `con_${'3'.repeat(32)}`,
             authorityGeneration: providerAuthority?.authorityGeneration ?? 1,
             authorityDigest: providerAuthority?.authorityDigest ?? digest('a'),
             grantedScopes: providerAuthority?.grantedScopes ?? [],
@@ -1126,10 +1138,168 @@ export function createWorker(kind: WorkerKind, options: WorkerOptions = {}): { c
           return args.environment === 'production'
             ? { kind: 'recorded' }
             : { kind: 'excluded', reason: 'non_production_environment' }
+        case 'capabilityOperationInvocations:reconcileInvocationWorkloadAuthority':
+          return {
+            kind: 'authorized',
+            authority: {
+              principalId: state.dispatch.principalId,
+              accountRef: state.dispatch.ownerId,
+              credentialId: state.dispatch.credentialId,
+              grantRef: state.dispatch.grantRef,
+              grantGeneration: state.dispatch.grantGeneration,
+              policyDigest: state.dispatch.policyDigest,
+              expiresAt: state.dispatch.grantExpiresAt,
+            },
+          }
         default: throw new Error(`unexpected_mutation:${path}:${JSON.stringify(args)}`)
       }
     }),
   }
+  mocks.invokeProviderConsequenceViaVercel.mockImplementation(async (bridgeCtx: unknown, input: {
+    invocation: RouteTransportInvocation
+    requestDigest: string
+  }) => {
+    if (kind !== 'x402') {
+      state.transportCalls += 1
+      return options.observation ?? {
+        transport: 'http',
+        disposition: 'succeeded',
+        releaseStarted: true,
+        requestDigest: input.requestDigest,
+        outputJson: successfulOutputJson,
+      }
+    }
+    const payerSecretRef = process.env.AE_X402_PAYMENT_SECRET_REF?.trim()
+    if (payerSecretRef === undefined || !/^sec_[0-9a-f]{32}$/u.test(payerSecretRef)) {
+      return {
+        transport: 'x402',
+        disposition: 'refused',
+        releaseStarted: false,
+        requestDigest: input.requestDigest,
+        failureCode: 'payment_custody_unavailable',
+      }
+    }
+    const runMutation = (bridgeCtx as { runMutation: (reference: string, args: Record<string, unknown>) => Promise<unknown> }).runMutation
+    const connection = input.invocation.binding.authority
+    const providerRef = connection.kind === 'provider_connection' ? connection.providerRef : 'provider:test-worker'
+    const reserved = await runMutation('moneyLedger:reserveExternalInvocationSpend', {
+      principalId: dispatch.principalId,
+      credentialId: dispatch.credentialId,
+      grantRef: dispatch.grantRef,
+      grantGeneration: dispatch.grantGeneration,
+      environment: dispatch.environment,
+      invocationRef: dispatch.invocationRef,
+      operationRef: dispatch.operationRef,
+      attemptRef,
+      effectGeneration: 1,
+      providerRef,
+      paymentIdentifier: input.invocation.authority.operationKeyDigest,
+      challengeDigest: digest('a'),
+      amount: { currency: 'USD', units: '1', exponent: 2 },
+      observedAt: now,
+    })
+    const reservation = reserved as { reservation?: { reservationRef?: string } }
+    const challenge = {
+      x402Version: 2,
+      resource: { url: input.invocation.binding.endpointUrl },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        amount: '10000',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider-recipient',
+        maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    try {
+      const preparedAuthorization = await runMutation('moneyX402PaymentAttempts:prepareX402PaymentAuthorization', {
+        dispatchRef: dispatch.invocationRef,
+        operationRef: dispatch.operationRef,
+        inputDigest: dispatch.inputDigest,
+        attemptRef,
+        effectGeneration: 1,
+        paymentIdentifier: input.invocation.authority.operationKeyDigest,
+        operationKeyDigest: input.invocation.authority.operationKeyDigest,
+        challengeDigest: digest('a'),
+        challengeJson: JSON.stringify(challenge),
+        selectedRequirementJson: JSON.stringify(challenge.accepts[0]),
+        providerEndpoint: input.invocation.binding.endpointUrl,
+        scheme: 'exact',
+        network: 'eip155:8453',
+        asset: '0xmock-usdc',
+        payTo: '0xmock-provider-recipient',
+        amountUnits: '1',
+        currency: 'USD',
+        exponent: 2,
+        credentialRef: payerSecretRef,
+        reservationRef: reservation.reservation?.reservationRef,
+      })
+      const paymentSignature = await mocks.createSandboxEvmX402PaymentSignature({
+        challenge,
+        selectedRequirement: challenge.accepts[0],
+        paymentIdentifier: input.invocation.authority.operationKeyDigest,
+        credential: 'callback-scoped-test-secret',
+      })
+      return await mocks.invokePreparedRouteTransport(
+        { requestDigest: input.requestDigest },
+        {
+          readX402PaymentCredentialRef: async () => payerSecretRef,
+          prepareX402PaymentAuthorization: async () => preparedAuthorization,
+          readX402PaymentAuthorization: async () => paymentSignature,
+          readX402PaymentAuthorizationByDigest: async () => paymentSignature,
+          markX402PaymentPossiblySubmitted: async (event: Record<string, unknown>) => {
+            await runMutation('moneyX402PaymentAttempts:markX402PaymentPossiblySubmitted', {
+              ...event,
+              dispatchRef: dispatch.invocationRef,
+              effectGeneration: 1,
+            })
+          },
+          observeX402PaymentAttempt: async (event: Record<string, unknown>) => {
+            await runMutation('moneyX402PaymentAttempts:observeX402PaymentAttempt', {
+              ...event,
+              dispatchRef: dispatch.invocationRef,
+              effectGeneration: 1,
+            })
+          },
+          verifyX402Settlement: async () => true,
+          send: async () => new Response('{}', { status: 200 }),
+        },
+      )
+    } catch {
+      if (options.preparePaymentErrorState !== 'possibly_submitted') throw new Error('unexpected_prepare_failure')
+      await runMutation('moneyLedger:finalizeExternalInvocationSpend', {
+        principalId: dispatch.principalId,
+        credentialId: dispatch.credentialId,
+        grantRef: dispatch.grantRef,
+        grantGeneration: dispatch.grantGeneration,
+        environment: dispatch.environment,
+        invocationRef: dispatch.invocationRef,
+        operationRef: dispatch.operationRef,
+        attemptRef,
+        effectGeneration: 1,
+        providerRef,
+        paymentIdentifier: input.invocation.authority.operationKeyDigest,
+        challengeDigest: digest('a'),
+        amount: { currency: 'USD', units: '1', exponent: 2 },
+        reservationRef: reservation.reservation?.reservationRef,
+        submissionStatus: 'unknown',
+        settlementStatus: 'unknown',
+        evidenceRefs: ['evidence:test-worker:bridge-unknown'],
+        observedAt: now,
+      })
+      return {
+        transport: 'x402',
+        disposition: 'unknown',
+        releaseStarted: true,
+        requestDigest: input.requestDigest,
+        paymentAuthorizationStatus: 'unknown',
+        paymentSubmissionStatus: 'unknown',
+        settlementEvidence: { kind: 'unknown', reason: 'payment_attempt_reconciliation_required' },
+        failureCode: 'payment_attempt_reconciliation_required',
+      }
+    }
+  })
   return { ctx, state }
 }
 
@@ -1139,6 +1309,8 @@ beforeEach(() => {
   mocks.persistCanonicalTerminalOutcome.mockReset()
   mocks.prepareRegisteredRouteTransportInvocation.mockReset()
   mocks.invokePreparedRouteTransport.mockReset()
+  mocks.invokeProviderConsequenceViaVercel.mockReset()
+  mocks.providerConsequenceX402PaymentCustodyAvailable.mockClear()
   mocks.signRouteTransportCall.mockClear()
   mocks.createCdpEvmX402PaymentSignature.mockClear()
   mocks.createSandboxEvmX402PaymentSignature.mockClear()
@@ -1154,8 +1326,9 @@ beforeEach(() => {
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
   vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
   vi.stubEnv('AE_TEST_PROVIDER_CREDENTIAL', '0xprovider-secret')
-  vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', paymentCredentialRef)
-  vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '0xpayer-secret')
+  vi.stubEnv('AE_X402_PAYMENT_SECRET_REF', paymentSecretRef)
+  vi.stubEnv('AE_X402_PAYMENT_CREDENTIAL_REF', '')
+  vi.stubEnv('AE_TEST_PAYMENT_CREDENTIAL', '')
 })
 
 export { mocks }

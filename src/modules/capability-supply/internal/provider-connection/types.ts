@@ -22,13 +22,22 @@ export const PROVIDER_CONNECTION_CLEANUP_WORK_KINDS = ['lease_drain', 'cleanup']
 export type ProviderConnectionCleanupWorkKind = (typeof PROVIDER_CONNECTION_CLEANUP_WORK_KINDS)[number]
 
 const PRIVATE_CREDENTIAL_REF = /^env:[A-Z][A-Z0-9_]{1,199}$/
+const SECRET_POINTER_REF = /^sec_[0-9a-f]{32}$/u
 
 export function isProviderConnectionCredentialRef(value: unknown): value is string {
-  return typeof value === 'string' && PRIVATE_CREDENTIAL_REF.test(value)
+  return typeof value === 'string' && (PRIVATE_CREDENTIAL_REF.test(value) || SECRET_POINTER_REF.test(value))
 }
 
 export type ProviderConnection = Readonly<{
   connectionRef: string
+  /** Staged compatibility mapping. Absence is never inferred from legacy IDs. */
+  canonicalConnectionRef?: string
+  owningAccountRef?: string
+  installedByPrincipalRef?: string
+  authorityGrantRef?: string
+  authorityGrantGeneration?: number
+  canonicalConnectionGeneration?: number
+  secretRef?: string
   businessId: string
   providerRef: string
   providerAccountRef: string

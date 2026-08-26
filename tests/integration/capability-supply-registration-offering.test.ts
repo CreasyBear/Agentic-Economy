@@ -39,7 +39,7 @@ describe('V2 capability supply registration — offering', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref),
       ...operationContext('offering'),

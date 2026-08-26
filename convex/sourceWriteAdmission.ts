@@ -2,6 +2,11 @@ import { v } from 'convex/values'
 
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
+import {
+  parseWorkloadCronSnapshot,
+  reconcileWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+} from './workloadCron'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
   isSourceWriteBodyDigest,
@@ -62,6 +67,42 @@ export type SourceWriteArgs = {
 export type SourceWriteCheck =
   | { kind: 'accepted'; csrf: CsrfCheckInput }
   | { kind: 'rejected'; reason: SourceWriteAdmissionFailureReason | 'source_write_nonce_replayed' }
+
+export async function requireSourceRead(
+  args: SourceWriteArgs & { operationKey: string; correlationId: string },
+  scope: SourceWriteAdmissionScope,
+): Promise<Exclude<SourceWriteCheck, { kind: 'rejected'; reason: 'source_write_nonce_replayed' }>> {
+  const admission = isSourceWriteAdmission(args.sourceWrite) ? args.sourceWrite : undefined
+  if (admission === undefined) return { kind: 'rejected', reason: 'missing_source_write_admission' }
+  const expectedRequest = isSourceWriteRequest(args.sourceWriteRequest) ? args.sourceWriteRequest : undefined
+  if (expectedRequest === undefined) return { kind: 'rejected', reason: 'missing_source_write_request' }
+
+  let commandDigest: string
+  try {
+    commandDigest = sourceWriteCommandDigest(args)
+  } catch (error) {
+    return { kind: 'rejected', reason: sourceWriteErrorReason(error) }
+  }
+
+  const verification = await verifyAdmission({
+    admission,
+    expected: {
+      scope,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      commandDigest,
+      request: expectedRequest,
+    },
+  })
+  if (verification.kind === 'rejected') return verification
+  return {
+    kind: 'accepted',
+    csrf: {
+      origin: verification.admission.initiatorOrigin,
+      allowedOrigins: [verification.admission.initiatorOrigin],
+    },
+  }
+}
 
 export async function requireSourceWrite(
   ctx: SourceWriteMutationCtx,
@@ -225,9 +266,15 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
   args: {
     now: v.optional(v.number()),
     batchSize: v.optional(v.number()),
+    workload: workloadCronSnapshotValue,
   },
   returns: sourceWriteNonceCleanupResult,
   handler: async (ctx, args) => {
+    await reconcileWorkloadCronSnapshot(
+      ctx,
+      'cleanup expired source write nonces',
+      parseWorkloadCronSnapshot(args.workload),
+    )
     const cutoff = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
     const batchSize = args.batchSize !== undefined && Number.isFinite(args.batchSize)
       ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)
@@ -243,7 +290,7 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
     const deleted = expiredNonces.length
     const rescheduled = deleted >= batchSize
     if (rescheduled) {
-      await ctx.scheduler.runAfter(0, internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
+      await ctx.scheduler.runAfter(0, internal.workloadCron.cleanupExpiredSourceWriteNonces, {
         now: cutoff,
         batchSize,
       })

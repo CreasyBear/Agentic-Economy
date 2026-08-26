@@ -5,6 +5,7 @@ import { accountRefForProvider } from '@/modules/money/public'
 import {
   MemoryDb,
   type Row,
+  authorityBoundReconcileHandler,
   attemptRef,
   credentialId,
   invocationRef,
@@ -17,11 +18,35 @@ import {
 } from './money-ledger-test-harness'
 import {
   seedBudget,
+  seedCurrentMoneyInvocationAuthority,
   seedPaidCharge,
   settleSeededChargeBudget,
 } from './money-ledger-test-fixtures'
 
 describe('exact invocation money reconciliation', () => {
+  it('rechecks persisted invocation authority before applying a reconciliation consequence', async () => {
+    const activeDb = new MemoryDb()
+    seedBudget(activeDb)
+    seedPaidCharge(activeDb)
+    seedCurrentMoneyInvocationAuthority(activeDb)
+    await expect(
+      authorityBoundReconcileHandler({ db: activeDb }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'settled' })
+
+    const revokedDb = new MemoryDb()
+    seedBudget(revokedDb)
+    seedPaidCharge(revokedDb)
+    seedCurrentMoneyInvocationAuthority(revokedDb, 'revoked')
+    const before = structuredClone(revokedDb.rows('moneyTransactions'))
+    await expect(
+      authorityBoundReconcileHandler({ db: revokedDb }, reconciliationArgs()),
+    ).resolves.toEqual({ kind: 'reconciliation_required' })
+    expect(revokedDb.rows('moneyTransactions')).toEqual(before)
+    expect(
+      revokedDb.rows('moneyTransactions').filter((row) => row.kind === 'refund'),
+    ).toHaveLength(0)
+  })
+
   it('refunds an accepted charge, releases budget, and replays without a second refund', async () => {
     const db = new MemoryDb()
     seedBudget(db)

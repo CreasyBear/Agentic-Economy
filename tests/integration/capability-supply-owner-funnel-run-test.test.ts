@@ -12,6 +12,7 @@ import {
   seedCatalogOffering,
   x402Source,
 } from './capability-supply-owner-funnel-harness'
+import { installCanonicalProviderConnectionFixture } from './capability-publication-harness'
 
 describe('owner supply test', () => {
   it('completes x402 Test only from the exact fresh no-payment challenge', async () => {
@@ -33,20 +34,17 @@ describe('owner supply test', () => {
     )
     const now = Date.now()
     await expect(
-      backend.mutation(internal.capabilityProviderConnections.create, {
+      installCanonicalProviderConnectionFixture(backend, {
         connectionRef: 'connection:owner:x402',
         businessId,
         providerRef: 'provider:owner:x402',
         providerAccountRef: 'account:owner:x402',
         adapterId: 'x402-fetch:v2',
-        credentialRef: null,
-        requestedScopes: ['payment:challenge'],
-        grantedScopes: ['payment:challenge'],
-        requestedResources: [endpoint],
-        grantedResources: [endpoint],
+        secretRef: null,
+        scopes: ['payment:challenge'],
+        resources: [endpoint],
         evidenceRefs: ['connection:owner:x402'],
         commandId: 'connection:owner:x402:create',
-        now,
       }),
     ).resolves.toMatchObject({ kind: 'applied' })
     const prepared = await prepareOwnerPublicationCommand(
@@ -77,6 +75,7 @@ describe('owner supply test', () => {
       {
         publicationRef: published.publicationRef,
         expectedRevision: published.publicationRevision,
+        now: Date.now(),
       },
     )
     if (targetResult.kind !== 'available')
@@ -98,6 +97,7 @@ describe('owner supply test', () => {
         'probe:target_public',
         'probe:x402_payment_required_valid',
       ],
+      resourceAuthority: targetResult.target.resourceAuthority,
     }
     await expect(
       backend.mutation(
@@ -105,6 +105,16 @@ describe('owner supply test', () => {
         observation,
       ),
     ).resolves.toMatchObject({ kind: 'observed' })
+    await expect(
+      backend.mutation(
+        internal.capabilitySupply.recordCapabilityProbeResult,
+        observation,
+      ),
+    ).resolves.toMatchObject({
+      kind: 'observed',
+      publicationRef: published.publicationRef,
+      revision: published.publicationRevision,
+    })
 
     const readTestState = async () => {
       const readback = await owner.query(
@@ -171,5 +181,15 @@ describe('owner supply test', () => {
       readinessValidUntil: now - 1,
     })
     await expect(readTestState()).resolves.toBe('not_started')
+    await patchReadiness({ publisherRef: 'credential:forged-readiness-publisher' })
+    await expect(backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
+      publicationRef: published.publicationRef,
+      expectedRevision: published.publicationRevision,
+      now: Date.now(),
+    })).resolves.toEqual({
+      kind: 'unavailable',
+      reason: 'authority_stale',
+      evidenceRefs: ['probe-target:authority-stale'],
+    })
   })
 })

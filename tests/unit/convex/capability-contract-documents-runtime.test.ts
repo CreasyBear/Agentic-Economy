@@ -2,6 +2,7 @@ import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
 import { api, internal } from '../../../convex/_generated/api'
+import { interactiveCredentialExpiryNonce } from '../../../convex/interactiveCredentialLifecycle'
 import schema from '../../../convex/schema'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -25,6 +26,11 @@ describe('V2 capability contract Convex registry', () => {
     if (first.kind !== 'registered') throw new Error('capability contract registration failed')
 
     const persisted = await backend.run(async (ctx) => {
+      const compatibilityOwner = await ctx.db.query('owners')
+        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_capability_admin'))
+        .unique()
+      const actorRef = compatibilityOwner?.canonicalPrincipalRef
+      if (actorRef === undefined) throw new Error('canonical capability admin missing')
       const contract = await ctx.db.query('capabilityContractDocuments')
         .withIndex('by_capabilityId_and_version', (query) => (
           query.eq('capabilityId', first.ref.capabilityId).eq('version', first.ref.version)
@@ -32,7 +38,7 @@ describe('V2 capability contract Convex registry', () => {
         .unique()
       const operation = await ctx.db.query('operationKeys')
         .withIndex('by_actor_operation_key', (query) => (
-          query.eq('actorRef', 'user_capability_admin')
+          query.eq('actorRef', actorRef)
             .eq('operationName', 'registerCapabilityContract')
             .eq('key', args.operationKey)
         ))
@@ -44,7 +50,7 @@ describe('V2 capability contract Convex registry', () => {
         .withIndex('by_eventId', (query) => query.eq('eventId', auditEventId))
         .unique()
       if (contract === null || audit === null) throw new Error('capability contract audit rows missing')
-      return { contract, audit, operation }
+      return { contract, audit, operation, actorRef }
     })
     const redactedPayload = {
       capabilityId: first.ref.capabilityId,
@@ -57,12 +63,12 @@ describe('V2 capability contract Convex registry', () => {
         targetType: 'capability_contract',
         targetRef,
         actorKind: 'admin',
-        actorRef: 'user_capability_admin',
+        actorRef: persisted.actorRef,
         operationKey: args.operationKey,
       })}`,
       eventType: 'capability_contract.registered',
       actorKind: 'admin',
-      actorRef: 'user_capability_admin',
+      actorRef: persisted.actorRef,
       targetType: 'capability_contract',
       targetRef,
       beforeState: 'unregistered',
@@ -78,7 +84,7 @@ describe('V2 capability contract Convex registry', () => {
     expect(JSON.parse(persisted.audit.redactedPayloadJson)).toEqual(redactedPayload)
     expect(persisted.operation).toMatchObject({
       actorKind: 'admin',
-      actorRef: 'user_capability_admin',
+      actorRef: persisted.actorRef,
       operationName: 'registerCapabilityContract',
       key: args.operationKey,
       status: 'succeeded',
@@ -195,17 +201,24 @@ describe('V2 capability contract Convex registry', () => {
     )).resolves.toMatchObject({
       kind: 'registered', ref: { capabilityId: 'reference.lookup', version: 1 },
     })
-    const ownerRows = await ownerBackend.run(async (ctx) => ({
-      contracts: await ctx.db.query('capabilityContractDocuments').take(2),
-      audits: await ctx.db.query('auditEvents').take(2),
-      operations: await ctx.db.query('operationKeys').take(2),
-    }))
+    const ownerRows = await ownerBackend.run(async (ctx) => {
+      const compatibilityOwner = await ctx.db.query('owners')
+        .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', 'user_owner'))
+        .unique()
+      return {
+        actorRef: compatibilityOwner?.canonicalPrincipalRef,
+        contracts: await ctx.db.query('capabilityContractDocuments').take(2),
+        audits: await ctx.db.query('auditEvents').take(2),
+        operations: await ctx.db.query('operationKeys').take(2),
+      }
+    })
+    expect(ownerRows.actorRef).toMatch(/^prn_/u)
     expect(ownerRows.contracts).toHaveLength(1)
     expect(ownerRows.audits[0]).toMatchObject({
-      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: 'user_owner',
+      eventType: 'capability_contract.registered', actorKind: 'admin', actorRef: ownerRows.actorRef,
     })
     expect(ownerRows.operations[0]).toMatchObject({
-      actorRef: 'user_owner', operationName: 'registerCapabilityContract', status: 'succeeded',
+      actorRef: ownerRows.actorRef, operationName: 'registerCapabilityContract', status: 'succeeded',
     })
 
     await expect(owner.mutation(
@@ -235,6 +248,64 @@ describe('V2 capability contract Convex registry', () => {
       await ctx.db.query('capabilityContractDocuments').take(2)
     ))
     expect(finalContracts).toHaveLength(1)
+  })
+
+  it.each([
+    'expired_credential',
+    'revoked_binding',
+    'credential_principal_drift',
+    'cross_account_compatibility_drift',
+  ] as const)('denies %s through the public registration handler without effects', async (scenario) => {
+    const backend = convexTest(schema, modules)
+    const owner = await ownerAdmin(backend, `user_capability_admin_${scenario}`)
+
+    await backend.run(async (ctx) => {
+      const [binding] = await ctx.db.query('externalIdentityBindings').take(1)
+      const [credential] = await ctx.db.query('credentials').take(1)
+      const [compatibilityOwner] = await ctx.db.query('owners').take(1)
+      if (binding === undefined || credential === undefined || compatibilityOwner === undefined) {
+        throw new Error('canonical authority fixture missing')
+      }
+
+      if (scenario === 'expired_credential') {
+        const expiresAt = Date.now() - 1
+        const expiredCredential = { ...credential, expiresAt }
+        const scheduleNonce = interactiveCredentialExpiryNonce(expiredCredential)
+        await ctx.db.patch(credential._id, {
+          expiresAt,
+          expiryMaterialization: {
+            state: 'scheduled',
+            credentialGeneration: credential.generation,
+            credentialExpiresAt: expiresAt,
+            scheduleNonce,
+            scheduleRef: `scheduled:expired:${credential.credentialRef}`,
+            materializedAt: Date.now() - 2,
+          },
+        })
+        return
+      }
+      if (scenario === 'revoked_binding') {
+        await ctx.db.patch(binding._id, { lifecycle: 'revoked' })
+        return
+      }
+      if (scenario === 'credential_principal_drift') {
+        await ctx.db.patch(credential._id, { principalRef: `prn_${'f'.repeat(32)}` })
+        return
+      }
+      await ctx.db.patch(compatibilityOwner._id, {
+        canonicalAccountRef: `acc_${'f'.repeat(32)}`,
+      })
+    })
+
+    await expect(owner.mutation(
+      api.capabilityContractDocuments.register,
+      publicArgs(JSON.stringify(capabilityContractV2()), scenario),
+    )).resolves.toEqual({ kind: 'refused', reason: 'authorization_denied' })
+    await expect(backend.run(async (ctx) => ({
+      contracts: await ctx.db.query('capabilityContractDocuments').take(1),
+      audits: await ctx.db.query('auditEvents').take(1),
+      operations: await ctx.db.query('operationKeys').take(1),
+    }))).resolves.toEqual({ contracts: [], audits: [], operations: [] })
   })
 
   it('rejects oversized raw registration material before parsing it', async () => {
@@ -279,11 +350,11 @@ type PublicRegistrationArgs = Readonly<{
   evidenceRefs: string[]
 }>
 
-function publicArgs(documentJson: string): PublicRegistrationArgs {
+function publicArgs(documentJson: string, suffix = 'register'): PublicRegistrationArgs {
   return {
     documentJson,
-    operationKey: 'op:capability-contract:register',
-    correlationId: 'corr:capability-contract:register',
+    operationKey: `op:capability-contract:${suffix}`,
+    correlationId: `corr:capability-contract:${suffix}`,
     reasonCode: 'source_test_registration',
     evidenceRefs: ['test:capability-contract-registry'],
   }

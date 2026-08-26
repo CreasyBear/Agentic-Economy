@@ -27,7 +27,7 @@ describe('V2 capability supply registration — quarantine', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })
@@ -112,7 +112,7 @@ describe('V2 capability supply registration — quarantine', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offering = await runOfferingRegistration(backend, {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     })

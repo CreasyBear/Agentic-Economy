@@ -17,6 +17,10 @@ import { moneyTables } from '../src/modules/money/schema'
 import { marketTables } from '../src/modules/market/schema'
 import { chatTables } from '../src/modules/chat/schema'
 import { principalAccountTables } from '../src/modules/principal-account/public'
+import { authorityDelegationTables } from '../src/modules/authority/internal/convex-schema'
+import { connectionTables } from '../src/modules/connections/internal/convex-schema'
+import { secretReferenceTables } from '../src/modules/secrets/internal/convex-schema'
+import { recoveryProductionTables } from '../src/modules/authority/recovery/public'
 
 export default defineSchema({
   ...chatTables,
@@ -35,4 +39,8 @@ export default defineSchema({
   ...moneyTables,
   ...marketTables,
   ...principalAccountTables,
+  ...authorityDelegationTables,
+  ...connectionTables,
+  ...secretReferenceTables,
+  ...recoveryProductionTables,
 })

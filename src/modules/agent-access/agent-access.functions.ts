@@ -3,7 +3,12 @@ import type { ClerkClient } from '@clerk/backend'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { callSourceMutation, sourceMutation } from '@/lib/server/convex-source'
+import {
+  callSourceMutation,
+  callSourceQuery,
+  sourceMutation,
+  sourceQuery,
+} from '@/lib/server/convex-source'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { readTrimmedEnv } from '@/lib/server/read-trimmed-env'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -186,6 +191,13 @@ type RegisterAgentPrincipalResult =
 const registerAgentPrincipalMutation = sourceMutation<RegisterAgentPrincipalArgs, RegisterAgentPrincipalResult>(
   'agentAccessPrincipals:registerAgentPrincipal',
 )
+const listOwnerGrantReadbacksQuery = sourceQuery<{ requireAuthority: true }, readonly unknown[]>(
+  'agentAccessPolicy:listOwnerGrantReadbacks',
+)
+
+async function requireCanonicalOwnerAuthorityServer(): Promise<void> {
+  await callSourceQuery(listOwnerGrantReadbacksQuery, { requireAuthority: true })
+}
 
 export function createClerkAgentAccessKeyApi(apiKeys: ClerkApiKeysClient): ClerkAgentAccessKeyApi {
   return {
@@ -273,6 +285,11 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
     if (tokenIdentifier === undefined) {
       return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
     }
+    try {
+      await requireCanonicalOwnerAuthorityServer()
+    } catch {
+      return { kind: 'error' as const, code: 'missing_auth' as const, retryable: false }
+    }
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     return await issueAgentAccessKey({
       principal,
@@ -307,6 +324,7 @@ export const issueAgentAccessKeyServer = createServerFn({ method: 'POST' })
 export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
   .handler(async () => {
     if (isLocalE2EAuthBypassEnabled()) return []
+    await requireCanonicalOwnerAuthorityServer()
     const principal = await owner()
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     return await listAgentAccessKeys({ principal, api })
@@ -315,6 +333,7 @@ export const listAgentAccessKeysServer = createServerFn({ method: 'GET' })
 export const revokeAgentAccessKeyServer = createServerFn({ method: 'POST' })
   .validator((data) => z.strictObject({ keyId: z.string().trim().min(1).max(200) }).parse(data))
   .handler(async ({ data }) => {
+    await requireCanonicalOwnerAuthorityServer()
     const principal = await owner()
     const api = createClerkAgentAccessKeyApi(clerkClient().apiKeys)
     return await revokeAgentAccessKey({

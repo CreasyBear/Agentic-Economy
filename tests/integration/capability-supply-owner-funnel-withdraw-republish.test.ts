@@ -93,16 +93,78 @@ describe('owner capability withdraw and republish', () => {
       evidenceRefs: ['owner-test:evidence:r1'],
       environment: 'development' as const,
     }
+    const fullOwnerTestEvent = {
+      ...ownerTestEventBase,
+      publicationRevision: first.publicationRevision,
+      operationRef: first.operationRef,
+      taskDigest: 'owner-test-task:hostile',
+    }
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: ' ',
+    })).rejects.toThrow('capability_call_event_invalid')
+    await expect(backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: 'owner-supply-test:anonymous',
+    })).rejects.toThrow('capability_call_event_authorization_denied')
+    const other = await createPublishedBusinessOwner(backend, 'owner-test-substitution')
+    await expect(other.owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: 'owner-supply-test:cross-owner',
+    })).rejects.toThrow('capability_call_event_authorization_denied')
+    await backend.run(async (ctx) => ctx.db.delete(other.businessId))
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      businessId: other.businessId,
+      eventRef: 'owner-supply-test:deleted-business',
+    })).rejects.toThrow('capability_call_event_authorization_denied')
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: 'owner-supply-test:missing-publication',
+      publicationRef: 'publication:missing',
+    })).rejects.toThrow('capability_call_event_publication_identity_invalid')
+    const publicationRow = await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => query
+          .eq('publicationRef', first.publicationRef)
+          .eq('revision', first.publicationRevision))
+        .unique()
+      if (publication === null) throw new Error('owner_test_publication_missing')
+      return { id: publication._id, offeringId: publication.offeringId }
+    })
+    await backend.run(async (ctx) => ctx.db.patch(publicationRow.id, { offeringId: 'offering:missing' }))
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: 'owner-supply-test:missing-offering',
+    })).rejects.toThrow('capability_call_event_publication_identity_invalid')
+    await backend.run(async (ctx) => ctx.db.patch(publicationRow.id, {
+      offeringId: publicationRow.offeringId,
+      credentialState: 'unavailable',
+    }))
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      ...fullOwnerTestEvent,
+      eventRef: 'owner-supply-test:stale-readiness',
+    })).rejects.toThrow('capability_call_event_publication_stale')
+    await backend.run(async (ctx) => ctx.db.patch(publicationRow.id, { credentialState: 'ready' }))
     await expect(
-      backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1:missing-identity',
         operationRef: first.operationRef,
         taskDigest: 'owner-test-task:r1:missing-identity',
       }),
-    ).resolves.toEqual({ kind: 'replayed' })
+    ).rejects.toThrow('capability_call_event_publication_identity_invalid')
     await expect(
-      backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+        ...ownerTestEventBase,
+        eventRef: 'owner-supply-test:r1',
+        publicationRevision: first.publicationRevision,
+        operationRef: first.operationRef,
+        taskDigest: 'owner-test-task:r1',
+      }),
+    ).resolves.toEqual({ kind: 'recorded' })
+    await expect(
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r1',
         publicationRevision: first.publicationRevision,
@@ -110,6 +172,33 @@ describe('owner capability withdraw and republish', () => {
         taskDigest: 'owner-test-task:r1',
       }),
     ).resolves.toEqual({ kind: 'replayed' })
+    await expect(
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+        ...ownerTestEventBase,
+        eventRef: 'owner-supply-test:r1',
+        publicationRevision: first.publicationRevision,
+        operationRef: first.operationRef,
+        taskDigest: 'owner-test-task:r1:forged-replay',
+      }),
+    ).rejects.toThrow('capability_call_event_identity_conflict')
+    await expect(callReceipts(backend)).resolves.toHaveLength(1)
+    await expect(owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      businessId,
+      offeringRef,
+      publicationRef: first.publicationRef,
+      eventRef: 'owner-supply-test:zero-depth',
+      publicationRevision: first.publicationRevision,
+      operationRef: first.operationRef,
+      taskDigest: 'owner-test-task:zero-depth',
+      eventKind: 'supply_liquidity_depth_observed',
+      outcome: 'zero',
+      zeroReason: 'no_routeable_supply',
+      eligibleDepth: 0,
+      observedAt: 2,
+      evidenceRefs: ['owner-test:evidence:zero-depth'],
+      environment: 'development',
+    })).resolves.toEqual({ kind: 'recorded' })
+    await expect(callReceipts(backend)).resolves.toHaveLength(2)
     const firstReadback = await owner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
       { businessId },
@@ -170,7 +259,16 @@ describe('owner capability withdraw and republish', () => {
 
     await observeReadiness(first.publicationRef, republished.revision, 'r2')
     await expect(
-      backend.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
+        ...ownerTestEventBase,
+        eventRef: 'owner-supply-test:r1:stale-after-republish',
+        publicationRevision: first.publicationRevision,
+        operationRef: first.operationRef,
+        taskDigest: 'owner-test-task:r1:stale-after-republish',
+      }),
+    ).rejects.toThrow('capability_call_event_publication_stale')
+    await expect(
+      owner.mutation(internal.capabilitySupply.recordCapabilityCallEvent, {
         ...ownerTestEventBase,
         eventRef: 'owner-supply-test:r2',
         publicationRevision: republished.revision,
@@ -178,7 +276,8 @@ describe('owner capability withdraw and republish', () => {
         taskDigest: 'owner-test-task:r2',
         evidenceRefs: ['owner-test:evidence:r2'],
       }),
-    ).resolves.toEqual({ kind: 'replayed' })
+    ).resolves.toEqual({ kind: 'recorded' })
+    await expect(callReceipts(backend)).resolves.toHaveLength(3)
     const afterSecondTest = await owner.query(
       api.capabilitySupplyOwnerFunnel.readOwnerSupplyFunnel,
       { businessId },
@@ -193,3 +292,10 @@ describe('owner capability withdraw and republish', () => {
     expect(afterSecondTest.callLog).toEqual([])
   })
 })
+
+async function callReceipts(backend: ReturnType<typeof convexTestWithWorkers>) {
+  return await backend.run(async (ctx) => await ctx.db
+    .query('auditEvents')
+    .filter((query) => query.eq(query.field('eventType'), 'protected_action.receipt_recorded'))
+    .collect())
+}

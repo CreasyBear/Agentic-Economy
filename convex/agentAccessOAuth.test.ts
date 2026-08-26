@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { convexTest } from 'convex-test'
+import { convexTest, type TestConvex } from 'convex-test'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -10,6 +10,11 @@ import {
 } from '../src/modules/security/source-write-admission'
 import { api, internal } from './_generated/api'
 import schema from './schema'
+import {
+  PHASE_2_CRON_ACCOUNT_REF,
+  PHASE_2_CRON_PRINCIPAL_REF,
+  type WorkloadCronSnapshot,
+} from './workloadCron'
 
 const modules = import.meta.glob('./**/*.ts')
 const SOURCE_WRITE_SECRET = 'oauth-local-source-write-secret-material-32'
@@ -276,11 +281,39 @@ describe('Agent Access OAuth Convex persistence adapter', () => {
       ...(await sourceArgs(conflictingClient)),
     })).rejects.toThrow('agent_access_oauth_client_conflict')
   })
+
+  it('keeps OAuth client metadata public while grants remain source-admitted', async () => {
+    process.env.AE_SOURCE_WRITE_SECRET = SOURCE_WRITE_SECRET
+    const backend = convexTest(schema, modules)
+    const insertCommand = {
+      client,
+      operationKey: 'oauth:test:public-client-metadata',
+      correlationId: 'oauth:test:public-client-metadata',
+    }
+    await backend.mutation(api.agentAccessOAuth.insertClient, {
+      ...insertCommand,
+      ...(await sourceArgs(insertCommand)),
+    })
+
+    const anonymous = await backend.query(api.agentAccessOAuth.getClient, {
+      clientId: client.clientId,
+    })
+    const identified = await backend.withIdentity({
+      subject: 'caller-shaped-owner',
+      issuer: 'https://identity.example',
+      tokenIdentifier: 'https://identity.example|caller-shaped-owner',
+    }).query(api.agentAccessOAuth.getClient, { clientId: client.clientId })
+
+    expect(identified).toEqual(anonymous)
+    expect(anonymous).toEqual(client)
+    expect(JSON.stringify(anonymous)).not.toMatch(/grantRef|deviceCode|authorizationCode|secret/u)
+  })
 })
 
 describe('Agent Access OAuth grant cleanup', () => {
   it('deletes expired grants across statuses while preserving the one-hour grace window', async () => {
     const backend = convexTest(schema, modules)
+    const workload = await admitOAuthCleanupWorkload(backend)
     const now = 10_000_000
     const cutoff = now - 60 * 60 * 1_000
     const statuses = ['pending', 'approved', 'denied', 'delivery_claimed', 'consumed', 'expired'] as const
@@ -311,7 +344,23 @@ describe('Agent Access OAuth grant cleanup', () => {
       })
     })
 
-    const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 10 })
+    await expect(backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 10,
+    } as never)).rejects.toThrow(/Missing required field `workload`/u)
+    await expect(backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 10,
+      workload: { ...workload, actorPrincipalRef: 'prn_ffffffffffffffffffffffffffffffff' },
+    })).rejects.toThrow('workload_snapshot_invalid')
+    expect(await backend.run((ctx) => ctx.db.query('agentAccessOAuthGrants').collect()))
+      .toHaveLength(7)
+
+    const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 10,
+      workload,
+    })
     expect(result).toEqual({ deleted: 6, cutoff, rescheduled: false })
     const remaining = await backend.run((ctx) => ctx.db.query('agentAccessOAuthGrants').collect())
     expect(remaining).toHaveLength(1)
@@ -320,6 +369,7 @@ describe('Agent Access OAuth grant cleanup', () => {
 
   it('caps cleanup batches at 200 rows', async () => {
     const backend = convexTest(schema, modules)
+    const workload = await admitOAuthCleanupWorkload(backend)
     const now = 20_000_000
     const cutoff = now - 60 * 60 * 1_000
     await backend.run(async (ctx) => {
@@ -338,12 +388,17 @@ describe('Agent Access OAuth grant cleanup', () => {
       }
     })
 
-    const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 999 })
+    const result = await backend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 999,
+      workload,
+    })
     expect(result).toEqual({ deleted: 200, cutoff, rescheduled: true })
   })
 
   it('reschedules only when a cleanup batch is full', async () => {
     const fullBackend = convexTest(schema, modules)
+    const fullWorkload = await admitOAuthCleanupWorkload(fullBackend)
     const now = 30_000_000
     const cutoff = now - 60 * 60 * 1_000
     await fullBackend.run(async (ctx) => {
@@ -361,10 +416,15 @@ describe('Agent Access OAuth grant cleanup', () => {
         })
       }
     })
-    await expect(fullBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 2 }))
+    await expect(fullBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 2,
+      workload: fullWorkload,
+    }))
       .resolves.toMatchObject({ deleted: 2, rescheduled: true })
 
     const partialBackend = convexTest(schema, modules)
+    const partialWorkload = await admitOAuthCleanupWorkload(partialBackend)
     await partialBackend.run(async (ctx) => {
       await ctx.db.insert('agentAccessOAuthGrants', {
         grantRef: 'cleanup:partial',
@@ -378,7 +438,71 @@ describe('Agent Access OAuth grant cleanup', () => {
         displayName: 'Cleanup partial',
       })
     })
-    await expect(partialBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, { now, batchSize: 2 }))
+    await expect(partialBackend.mutation(internal.agentAccessOAuth.cleanupExpiredOAuthGrants, {
+      now,
+      batchSize: 2,
+      workload: partialWorkload,
+    }))
       .resolves.toMatchObject({ deleted: 1, rescheduled: false })
   })
 })
+
+async function admitOAuthCleanupWorkload(
+  backend: TestConvex<typeof schema>,
+): Promise<WorkloadCronSnapshot> {
+  const ownerPrincipalRef = 'prn_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const ownershipRef = 'own_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  const action = {
+    actorPrincipalRef: ownerPrincipalRef,
+    activeAccountRef: PHASE_2_CRON_ACCOUNT_REF,
+    correlationRef: 'oauth-cleanup-test:account',
+    idempotencyRef: 'oauth-cleanup-test:account',
+  }
+  await backend.run(async (ctx) => {
+    await ctx.db.insert('principals', {
+      principalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      kind: 'workload',
+      displayName: 'OAuth cleanup workload',
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await ctx.db.insert('accounts', {
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      displayName: 'Phase 2 operations',
+      lifecycle: 'active',
+      recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+      creationActorPrincipalRef: ownerPrincipalRef,
+      creationIdempotencyRef: action.idempotencyRef,
+      initialOwnershipRef: ownershipRef,
+      currentOwnershipRef: ownershipRef,
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      lastAction: action,
+    })
+    await ctx.db.insert('accountOwnerships', {
+      ownershipRef,
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      ownerPrincipalRef,
+      lifecycle: 'active',
+      changeKind: 'creation',
+      revision: 1,
+      createdAt: 1,
+      createdBy: action,
+    })
+    await ctx.db.insert('memberships', {
+      membershipRef: 'mem_cccccccccccccccccccccccccccccccc',
+      accountRef: PHASE_2_CRON_ACCOUNT_REF,
+      memberPrincipalRef: PHASE_2_CRON_PRINCIPAL_REF,
+      lifecycle: 'active',
+      revision: 1,
+      createdAt: 1,
+      createdBy: action,
+    })
+  })
+  return await backend.query(internal.workloadCron.admit, {
+    name: 'cleanup expired agent access oauth grants',
+  })
+}

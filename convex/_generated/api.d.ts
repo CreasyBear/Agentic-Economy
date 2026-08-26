@@ -12,6 +12,7 @@ import type * as actionInvocationControl from "../actionInvocationControl.js";
 import type * as agentAccessOAuth from "../agentAccessOAuth.js";
 import type * as agentAccessPolicy from "../agentAccessPolicy.js";
 import type * as agentAccessPrincipals from "../agentAccessPrincipals.js";
+import type * as authorityBoundary from "../authorityBoundary.js";
 import type * as authz from "../authz.js";
 import type * as businessSupplyProjectionSnapshot from "../businessSupplyProjectionSnapshot.js";
 import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
@@ -30,6 +31,7 @@ import type * as capabilityProviderConnectionLeases from "../capabilityProviderC
 import type * as capabilityProviderConnectionLifecycle from "../capabilityProviderConnectionLifecycle.js";
 import type * as capabilityProviderConnectionOwner from "../capabilityProviderConnectionOwner.js";
 import type * as capabilityProviderConnections from "../capabilityProviderConnections.js";
+import type * as capabilityProviderConsequenceJournal from "../capabilityProviderConsequenceJournal.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
 import type * as capabilitySupplyCommands from "../capabilitySupplyCommands.js";
 import type * as capabilitySupplyEligiblePorts from "../capabilitySupplyEligiblePorts.js";
@@ -75,7 +77,15 @@ import type * as discovery from "../discovery.js";
 import type * as facilitatorDiscovery from "../facilitatorDiscovery.js";
 import type * as facilitatorDiscoveryAction from "../facilitatorDiscoveryAction.js";
 import type * as http from "../http.js";
+import type * as interactiveAuthority from "../interactiveAuthority.js";
+import type * as interactiveCredentialLifecycle from "../interactiveCredentialLifecycle.js";
+import type * as lib_authorityRegistrars from "../lib/authorityRegistrars.js";
+import type * as lib_canonicalAgentAuthority from "../lib/canonicalAgentAuthority.js";
+import type * as lib_connectionLifecyclePersistence from "../lib/connectionLifecyclePersistence.js";
+import type * as lib_delegationPersistence from "../lib/delegationPersistence.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as lib_secretLifecyclePersistence from "../lib/secretLifecyclePersistence.js";
+import type * as lib_secretPointerPersistence from "../lib/secretPointerPersistence.js";
 import type * as marketAggregateBackfill from "../marketAggregateBackfill.js";
 import type * as marketDispatchWorkpool from "../marketDispatchWorkpool.js";
 import type * as marketEvidence from "../marketEvidence.js";
@@ -124,9 +134,13 @@ import type * as moneyX402PaymentAttemptsShared from "../moneyX402PaymentAttempt
 import type * as moneyX402PaymentAuthorization from "../moneyX402PaymentAuthorization.js";
 import type * as moneyX402PaymentObservation from "../moneyX402PaymentObservation.js";
 import type * as moneyX402PaymentRead from "../moneyX402PaymentRead.js";
+import type * as providerConsequenceHttp from "../providerConsequenceHttp.js";
 import type * as qualifiedUse from "../qualifiedUse.js";
 import type * as rateLimit from "../rateLimit.js";
+import type * as recoveryBreakGlass from "../recoveryBreakGlass.js";
 import type * as registry from "../registry.js";
+import type * as secretLifecycleHttp from "../secretLifecycleHttp.js";
+import type * as secretLifecycleOperations from "../secretLifecycleOperations.js";
 import type * as security from "../security.js";
 import type * as securityAdminMembership from "../securityAdminMembership.js";
 import type * as securityAdminReadbacks from "../securityAdminReadbacks.js";
@@ -134,6 +148,7 @@ import type * as securityRemovalDisputes from "../securityRemovalDisputes.js";
 import type * as securityShared from "../securityShared.js";
 import type * as serviceAssertion from "../serviceAssertion.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
+import type * as workloadCron from "../workloadCron.js";
 
 import type {
   ApiFromModules,
@@ -146,6 +161,7 @@ declare const fullApi: ApiFromModules<{
   agentAccessOAuth: typeof agentAccessOAuth;
   agentAccessPolicy: typeof agentAccessPolicy;
   agentAccessPrincipals: typeof agentAccessPrincipals;
+  authorityBoundary: typeof authorityBoundary;
   authz: typeof authz;
   businessSupplyProjectionSnapshot: typeof businessSupplyProjectionSnapshot;
   capabilityContractDocuments: typeof capabilityContractDocuments;
@@ -164,6 +180,7 @@ declare const fullApi: ApiFromModules<{
   capabilityProviderConnectionLifecycle: typeof capabilityProviderConnectionLifecycle;
   capabilityProviderConnectionOwner: typeof capabilityProviderConnectionOwner;
   capabilityProviderConnections: typeof capabilityProviderConnections;
+  capabilityProviderConsequenceJournal: typeof capabilityProviderConsequenceJournal;
   capabilitySupply: typeof capabilitySupply;
   capabilitySupplyCommands: typeof capabilitySupplyCommands;
   capabilitySupplyEligiblePorts: typeof capabilitySupplyEligiblePorts;
@@ -209,7 +226,15 @@ declare const fullApi: ApiFromModules<{
   facilitatorDiscovery: typeof facilitatorDiscovery;
   facilitatorDiscoveryAction: typeof facilitatorDiscoveryAction;
   http: typeof http;
+  interactiveAuthority: typeof interactiveAuthority;
+  interactiveCredentialLifecycle: typeof interactiveCredentialLifecycle;
+  "lib/authorityRegistrars": typeof lib_authorityRegistrars;
+  "lib/canonicalAgentAuthority": typeof lib_canonicalAgentAuthority;
+  "lib/connectionLifecyclePersistence": typeof lib_connectionLifecyclePersistence;
+  "lib/delegationPersistence": typeof lib_delegationPersistence;
   "lib/rateLimit": typeof lib_rateLimit;
+  "lib/secretLifecyclePersistence": typeof lib_secretLifecyclePersistence;
+  "lib/secretPointerPersistence": typeof lib_secretPointerPersistence;
   marketAggregateBackfill: typeof marketAggregateBackfill;
   marketDispatchWorkpool: typeof marketDispatchWorkpool;
   marketEvidence: typeof marketEvidence;
@@ -258,9 +283,13 @@ declare const fullApi: ApiFromModules<{
   moneyX402PaymentAuthorization: typeof moneyX402PaymentAuthorization;
   moneyX402PaymentObservation: typeof moneyX402PaymentObservation;
   moneyX402PaymentRead: typeof moneyX402PaymentRead;
+  providerConsequenceHttp: typeof providerConsequenceHttp;
   qualifiedUse: typeof qualifiedUse;
   rateLimit: typeof rateLimit;
+  recoveryBreakGlass: typeof recoveryBreakGlass;
   registry: typeof registry;
+  secretLifecycleHttp: typeof secretLifecycleHttp;
+  secretLifecycleOperations: typeof secretLifecycleOperations;
   security: typeof security;
   securityAdminMembership: typeof securityAdminMembership;
   securityAdminReadbacks: typeof securityAdminReadbacks;
@@ -268,6 +297,7 @@ declare const fullApi: ApiFromModules<{
   securityShared: typeof securityShared;
   serviceAssertion: typeof serviceAssertion;
   sourceWriteAdmission: typeof sourceWriteAdmission;
+  workloadCron: typeof workloadCron;
 }>;
 
 /**

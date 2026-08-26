@@ -24,6 +24,11 @@ export const recordServerFunnelEventServer = createServerFn({ method: 'POST' })
   .validator((data) => recordFunnelEventSchema.parse(data))
   .handler(async ({ data }) => {
     const { captureServerFunnelEvent } = await import('@/lib/observability/posthog.server')
-    captureServerFunnelEvent(data)
+    const {
+      actorRef: _callerShapedActorRef,
+      businessId: _callerShapedBusinessId,
+      ...publicEvent
+    } = data
+    captureServerFunnelEvent(publicEvent)
     return { ok: true as const }
   })

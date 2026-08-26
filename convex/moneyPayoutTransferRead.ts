@@ -1,5 +1,5 @@
 import type { QueryCtx } from './_generated/server'
-import { resolveBusinessActor } from './authz'
+import { readCanonicalCompatibilityOwner, resolveBusinessActor } from './authz'
 import { accountFromRow } from './moneyCanonicalAccounts'
 import { amountFromParts } from '../src/modules/money/public'
 import {
@@ -27,12 +27,7 @@ export async function readOwnerPayoutTransferHandler(
     const actor = await resolveBusinessActor(ctx)
     if (actor.kind !== 'authenticated_owner')
       return refusedPayout('billing_identity_missing', false)
-    const owner = await ctx.db
-      .query('owners')
-      .withIndex('by_clerkUserId', (q) =>
-        q.eq('clerkUserId', actor.clerkUserId),
-      )
-      .unique()
+    const owner = await readCanonicalCompatibilityOwner(ctx.db, actor)
     if (owner === null) return refusedPayout('billing_identity_missing', false)
     const businesses = await ctx.db
       .query('businesses')

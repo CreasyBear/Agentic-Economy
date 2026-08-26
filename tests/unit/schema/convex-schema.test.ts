@@ -50,6 +50,19 @@ const durableTables = [
   'accountSuccessionAuthorizationParticipants',
   'externalIdentityBindings',
   'credentials',
+  'authorityDelegationGrants',
+  'authorityDelegationSnapshots',
+  'authorityDelegationSnapshotAncestors',
+  'connections',
+  'connectionShares',
+  'connectionLeases',
+  'connectionEffectAdmissions',
+  'connectionLifecycleCommands',
+  'secretPointers',
+  'secretPointerCommands',
+  'secretLifecycleJournal',
+  'recoveryBreakGlassApprovals',
+  'recoveryBreakGlassAdmissions',
   'owners',
   'businesses',
   'businessOfferings',
@@ -76,6 +89,7 @@ const durableTables = [
   'capabilityCurrentOperationMismatchExplanations',
   'capabilityOfferings',
   'capabilityOperationInvocations',
+  'providerConsequenceJournal',
   'capabilityPublications',
   'capabilityTransportBindings',
   'capabilityProviderConnections',
@@ -157,6 +171,51 @@ const requiredIndexes = {
     'by_principalRef_and_issueIdempotencyRef',
     'by_predecessorCredentialRef',
   ],
+  authorityDelegationGrants: [
+    'by_grantRef',
+    'by_subjectPrincipalRef_and_lifecycle',
+    'by_accountRef_and_actorPrincipalRef_and_createdBy_idempotencyRef',
+  ],
+  authorityDelegationSnapshots: [
+    'by_snapshotRef',
+    'by_accountRef_and_actorPrincipalRef_and_idempotencyRef',
+  ],
+  authorityDelegationSnapshotAncestors: ['by_snapshotRef_and_position'],
+  connections: [
+    'by_connectionRef',
+    'by_owningAccountRef_and_installAction_idempotencyRef',
+  ],
+  connectionShares: [
+    'by_shareRef',
+    'by_connectionRef_and_granteeAccountRef_and_lifecycle',
+    'by_owningAccountRef_and_action_idempotencyRef',
+  ],
+  connectionLeases: [
+    'by_leaseRef',
+    'by_activeAccountRef_and_action_idempotencyRef',
+  ],
+  connectionEffectAdmissions: [
+    'by_effectRef',
+    'by_activeAccountRef_and_action_idempotencyRef',
+  ],
+  connectionLifecycleCommands: [
+    'by_action_activeAccountRef_and_action_idempotencyRef',
+  ],
+  secretPointers: ['by_secretRef'],
+  secretPointerCommands: [
+    'by_accountRef_and_idempotencyRef',
+    'by_secretRef_and_newRevision',
+  ],
+  secretLifecycleJournal: ['by_idempotencyRef', 'by_operationRef'],
+  recoveryBreakGlassApprovals: [
+    'by_approvalRef',
+    'by_verificationRef',
+    'by_accountRef_and_lifecycle',
+  ],
+  recoveryBreakGlassAdmissions: [
+    'by_admissionRef',
+    'by_accountRef_and_operatorPrincipalRef_and_idempotencyRef',
+  ],
   moneyAccounts: ['by_accountRef', 'by_accountId_and_currency', 'by_businessId_and_currency'],
   moneyLedgerEntries: [
     'by_transactionRef',
@@ -181,7 +240,12 @@ const requiredIndexes = {
   moneyPayouts: ['by_businessId_and_currency_and_state', 'by_businessId_and_currency_and_state_and_updatedAt', 'by_periodStart_and_state', 'by_stripeTransferId', 'by_payoutRef', 'by_businessId_and_currency_and_updatedAt', 'by_businessId_and_currency_and_cadence_and_updatedAt'],
   moneyPayoutAllocations: ['by_allocationRef', 'by_qualifiedUseRef', 'by_transactionRef', 'by_payoutRef_and_qualifiedAt', 'by_businessId_and_currency_and_qualifiedAt'],
   qualifiedUseReceipts: ['by_qualifiedUseRef', 'by_businessId_and_qualifiedAt', 'by_invocationRef', 'by_operationRef_and_qualifiedAt'],
-  owners: ['by_clerkUserId'],
+  owners: [
+    'by_canonicalAccountRef',
+    'by_canonicalPrincipalRef',
+    'by_canonicalPrincipalRef_and_canonicalAccountRef',
+    'by_clerkUserId',
+  ],
   businesses: ['by_slug', 'by_owner_updatedAt', 'by_publicStatus_slug'],
   businessOfferings: ['by_offeringRef', 'by_businessId_and_status'],
   businessOfferingRevisions: ['by_offeringRef_and_revision', 'by_businessId_and_createdAt'],
@@ -202,8 +266,16 @@ const requiredIndexes = {
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_offering', 'by_publicStatus_updatedAt'],
   disputes: ['by_business_status'],
   capabilityOperationInvocations: ['by_invocationRef', 'by_credentialId_and_idempotencyKey', 'by_credentialId_and_createdAt', 'by_credentialId_and_state', 'by_credentialId_and_state_and_grantExpiresAt', 'by_principalId_and_invocationRef', 'by_ownerId_and_state_and_createdAt'],
+  providerConsequenceJournal: [
+    'by_ticketRef',
+    'by_effectRef',
+    'by_commandId',
+    'by_claimRef',
+    'by_state_and_expiresAt',
+  ],
   capabilityProviderConnectionLeases: [
     'by_leaseRef',
+    'by_canonicalLeaseRef',
     'by_connectionRef_and_state',
     'by_invocationRef',
     'by_connectionRef_and_authorityGeneration',
@@ -267,6 +339,7 @@ const requiredIndexes = {
   ],
   capabilityProviderConnections: [
     'by_connectionRef',
+    'by_canonicalConnectionRef',
     'by_businessId_and_lifecycle',
     'by_providerRef_and_lifecycle',
     'by_connectionRef_and_authorityGeneration',
@@ -287,7 +360,7 @@ describe('Convex schema', () => {
   const exported = SchemaExport.parse(JSON.parse(String(exportSchema.call(schema))))
 
   it('contains exactly the source-owned durable tables', () => {
-    expect(durableTables).toHaveLength(67)
+    expect(durableTables).toHaveLength(81)
     expect(exported.tables.map((table) => table.tableName).sort()).toEqual([...durableTables].sort())
   })
 

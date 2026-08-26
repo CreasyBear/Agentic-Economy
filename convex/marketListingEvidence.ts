@@ -5,6 +5,7 @@ import { isMarketCategoryId } from '../src/modules/market/listing-evidence'
 import { components } from './_generated/api'
 import type { DataModel } from './_generated/dataModel'
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 
 const MAX_OPERATION_REFS = 20
 const MAX_LATENCY_SAMPLES = 48
@@ -64,8 +65,8 @@ export const rate = mutation({
   },
   returns: v.object({ kind: v.literal('recorded'), operationRef: v.string() }),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null || identity.tokenIdentifier.trim().length === 0) {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
       throw new Error('market_rating_authentication_required')
     }
     if (!Number.isInteger(args.score) || args.score < 1 || args.score > 5) {
@@ -81,13 +82,13 @@ export const rate = mutation({
     const now = Date.now()
     const existing = await ctx.db.query('marketOperationRatings')
       .withIndex('by_operationRef_and_reviewerRef', (index) => (
-        index.eq('operationRef', args.operationRef).eq('reviewerRef', identity.tokenIdentifier)
+        index.eq('operationRef', args.operationRef).eq('reviewerRef', actor.canonicalPrincipalRef)
       ))
       .unique()
     if (existing === null) {
       const id = await ctx.db.insert('marketOperationRatings', {
         operationRef: args.operationRef,
-        reviewerRef: identity.tokenIdentifier,
+        reviewerRef: actor.canonicalPrincipalRef,
         score: args.score,
         ...(review === undefined ? {} : { review }),
         createdAt: now,

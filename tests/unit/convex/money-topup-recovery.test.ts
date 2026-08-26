@@ -6,11 +6,11 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 }))
 
 import {
-  applyCreditTopup,
-  markCreditTopupOutcomeUnknown,
-  readCreditTopupCommand,
-  reserveCreditTopup,
-} from '../../../convex/moneyLedger'
+  applyCreditTopupHandler,
+  markCreditTopupOutcomeUnknownHandler,
+  readCreditTopupCommandHandler,
+  reserveCreditTopupHandler,
+} from '../../../convex/moneyCreditTopup'
 import { accountRefForOwner } from '@/modules/money/public'
 
 type Row = Record<string, unknown> & { _id: string }
@@ -99,12 +99,10 @@ type Handler = (
   },
   args: Record<string, unknown>,
 ) => Promise<unknown>
-type HandlerExport = { _handler: Handler }
-const reserve = (reserveCreditTopup as unknown as HandlerExport)._handler
-const markUnknown = (markCreditTopupOutcomeUnknown as unknown as HandlerExport)
-  ._handler
-const read = (readCreditTopupCommand as unknown as HandlerExport)._handler
-const apply = (applyCreditTopup as unknown as HandlerExport)._handler
+const reserve = reserveCreditTopupHandler as unknown as Handler
+const markUnknown = markCreditTopupOutcomeUnknownHandler as unknown as Handler
+const read = readCreditTopupCommandHandler as unknown as Handler
+const apply = applyCreditTopupHandler as unknown as Handler
 
 const principalId = 'principal:topup'
 const ownerId = 'owner:topup'

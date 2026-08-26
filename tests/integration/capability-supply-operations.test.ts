@@ -4,6 +4,8 @@ import { executeKeylessOperation } from '@/modules/capability-execution/operatio
 import type { KeylessExecutableSourcePort } from '@/modules/capability-execution'
 import type { CapabilityTransportAuthority } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { createConvexServerFunctionAssertion } from '@/lib/server/convex-source'
+import { createCustomerRequestServiceAssertion } from '@/modules/agent-access/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import { capabilityContractV2 } from '../fixtures/capability-contract-v2'
@@ -54,6 +56,7 @@ async function publishKeyless(
     method: 'GET' | 'POST'
     effectClass: EffectClass
     endpointPath?: string
+    fixedQuery?: readonly Readonly<{ parameter: string; value: string }>[]
     pathParameter?: boolean
     priceUnits?: string
   }>,
@@ -115,6 +118,7 @@ function publicationInput(
     method: 'GET' | 'POST'
     effectClass: EffectClass
     endpointPath?: string
+    fixedQuery?: readonly Readonly<{ parameter: string; value: string }>[]
     pathParameter?: boolean
     priceUnits?: string
   }>,
@@ -177,6 +181,7 @@ function publicationInput(
         config: {
           method: options.method,
           ...(path === undefined ? {} : { path }),
+          ...(options.fixedQuery === undefined ? {} : { fixedQuery: [...options.fixedQuery] }),
           requestTimeoutMs: 5_000,
         },
       },
@@ -242,7 +247,85 @@ function sourceFor(backend: ConvexFixtureBackend): KeylessExecutableSourcePort {
 }
 
 describe('keyless operation projection', () => {
-  it('excludes effectful POST from listing and read, so direct execution cannot fetch it', async () => {
+  it.each([
+    'owner',
+    'member',
+    'workload',
+    'missing_workload',
+    'stranger',
+    'wrong_account',
+    'stale_generation',
+  ] as const)(
+    'drives the %s isolation case through the registered fixed-query descriptor handler',
+    async (caseKind) => {
+      const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+      const serviceKey = 'capability-operations-isolation-key-32-bytes'
+      process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+      try {
+        const backend = convexTestWithMarketComponents()
+        const published = await publishKeyless(backend, `fixed-query-isolation-${caseKind.replaceAll('_', '-')}`, {
+          method: 'GET',
+          effectClass: 'data_release',
+          priceUnits: '0',
+          fixedQuery: [{ parameter: 'format', value: 'json' }],
+        })
+        const command = { operationRef: published.operationRef }
+        let serviceAuth
+        if (caseKind === 'workload') {
+          serviceAuth = await createConvexServerFunctionAssertion({
+            operation: 'capabilitySupplyOperations:readKeylessExecutable',
+            scope: 'capability_supply:read_executable',
+            command,
+          })
+        } else if (caseKind === 'stranger') {
+          const valid = await createConvexServerFunctionAssertion({
+            operation: 'capabilitySupplyOperations:readKeylessExecutable',
+            scope: 'capability_supply:read_executable',
+            command,
+          })
+          serviceAuth = { ...valid, signature: `${valid.signature}forged` }
+        } else if (caseKind === 'stale_generation') {
+          serviceAuth = await createConvexServerFunctionAssertion({
+            operation: 'capabilitySupplyOperations:readKeylessExecutable',
+            scope: 'capability_supply:read_executable',
+            command,
+            now: Date.now() - 31_000,
+          })
+        } else if (caseKind !== 'missing_workload') {
+          serviceAuth = await createCustomerRequestServiceAssertion({
+            key: serviceKey,
+            operation: 'capabilitySupplyOperations:readKeylessExecutable',
+            command,
+            principal: {
+              principalId: `principal:${caseKind}`,
+              ownerId: caseKind === 'wrong_account' ? 'account:other' : `account:${caseKind}`,
+              credentialId: `credential:${caseKind}`,
+              scopes: ['capability_supply:read_executable'],
+            },
+            issuedAt: Date.now(),
+          })
+        }
+
+        const result = await backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
+          ...command,
+          ...(serviceAuth === undefined ? {} : { serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] } }),
+        })
+        if (caseKind === 'workload') {
+          expect(result).toMatchObject({
+            operationRef: published.operationRef,
+            fixedQuery: [{ parameter: 'format', value: 'json' }],
+          })
+        } else {
+          expect(result).toBeNull()
+        }
+      } finally {
+        if (previousServerKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+        else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerKey
+      }
+    },
+  )
+
+  it('runs the registered keyless read query and excludes effectful POST before provider transport', async () => {
     const backend = convexTestWithMarketComponents()
     for (const [suffix, effectClass] of [
       ['effectful-post-state', 'external_state_change'],
@@ -293,6 +376,69 @@ describe('keyless operation projection', () => {
     )).resolves.toMatchObject({ kind: 'ok', operationRef: published.operationRef })
     expect(providerFetch).toHaveBeenCalledTimes(1)
   })
+
+  it('requires an exact AE-signed service assertion before releasing fixed-query descriptors through the registered query', async () => {
+    const previousServerKey = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+    const serviceKey = 'capability-operations-server-function-key-32-bytes'
+    process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = serviceKey
+    try {
+      const backend = convexTestWithMarketComponents()
+      const published = await publishKeyless(backend, 'fixed-query-service-auth', {
+        method: 'GET',
+        effectClass: 'data_release',
+        priceUnits: '0',
+        fixedQuery: [{ parameter: 'format', value: 'json' }],
+      })
+      const command = { operationRef: published.operationRef }
+      const valid = await createConvexServerFunctionAssertion({
+        operation: 'capabilitySupplyOperations:readKeylessExecutable',
+        scope: 'capability_supply:read_executable',
+        command,
+      })
+      const validQueryAuth = { ...valid, scopes: [...valid.scopes] }
+
+      await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, command))
+        .resolves.toBeNull()
+      await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
+        ...command,
+        serviceAuth: { ...validQueryAuth, signature: 'forged' },
+      })).resolves.toBeNull()
+
+      const expired = await createConvexServerFunctionAssertion({
+        operation: 'capabilitySupplyOperations:readKeylessExecutable',
+        scope: 'capability_supply:read_executable',
+        command,
+        now: Date.now() - 31_000,
+      })
+      await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
+        ...command,
+        serviceAuth: { ...expired, scopes: [...expired.scopes] },
+      })).resolves.toBeNull()
+
+      const wrongCommand = await createConvexServerFunctionAssertion({
+        operation: 'capabilitySupplyOperations:readKeylessExecutable',
+        scope: 'capability_supply:read_executable',
+        command: { operationRef: `${published.operationRef}:wrong` },
+      })
+      await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
+        ...command,
+        serviceAuth: { ...wrongCommand, scopes: [...wrongCommand.scopes] },
+      })).resolves.toBeNull()
+
+      await expect(backend.query(api.capabilitySupplyOperations.readKeylessExecutable, {
+        ...command,
+        serviceAuth: validQueryAuth,
+      })).resolves.toMatchObject({
+        operationRef: published.operationRef,
+        method: 'GET',
+        fixedQuery: [{ parameter: 'format', value: 'json' }],
+      })
+    } finally {
+      if (previousServerKey === undefined) delete process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN
+      else process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN = previousServerKey
+    }
+  })
+
   it('omits a current keyless publication when its stored operation ref drifts', async () => {
     const backend = convexTestWithMarketComponents()
     const published = await publishKeyless(backend, 'operation-ref-drift', {

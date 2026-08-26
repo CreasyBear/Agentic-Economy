@@ -7,10 +7,10 @@ vi.mock('../../../convex/sourceWriteAdmission', () => ({
 }))
 
 import {
-  applyCreditTopup,
-  bindCreditPaymentSession,
-  reserveCreditTopup,
-} from '../../../convex/moneyLedger'
+  applyCreditTopupHandler,
+  bindCreditPaymentSessionHandler,
+  reserveCreditTopupHandler,
+} from '../../../convex/moneyCreditTopup'
 import {
   accountRefForOwner,
   type CreditPaymentRequest,
@@ -104,10 +104,9 @@ type Handler = (
   },
   args: Record<string, unknown>,
 ) => Promise<unknown>
-type HandlerExport = { _handler: Handler }
-const reserve = (reserveCreditTopup as unknown as HandlerExport)._handler
-const bind = (bindCreditPaymentSession as unknown as HandlerExport)._handler
-const apply = (applyCreditTopup as unknown as HandlerExport)._handler
+const reserve = reserveCreditTopupHandler as unknown as Handler
+const bind = bindCreditPaymentSessionHandler as unknown as Handler
+const apply = applyCreditTopupHandler as unknown as Handler
 
 const config: StripeMoneyProviderConfig = {
   secretKey: 'sk_test_topup',

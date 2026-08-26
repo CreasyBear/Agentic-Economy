@@ -54,13 +54,21 @@ export function withBillingIdentity(
 
 export async function createSupplierMoneyOwner(slug: string) {
   const backend = createSupplierMoneyBackend()
-  const { businessId, owner } = await publishedBusinessOwner(backend, slug)
+  const {
+    businessId,
+    owner,
+    canonicalPrincipalRef,
+    canonicalAccountRef,
+  } =
+    await publishedBusinessOwner(backend, slug)
   const businessRef = String(businessId)
   return {
     backend,
     businessId,
     owner,
     businessRef,
+    principalId: canonicalPrincipalRef,
+    accountRef: canonicalAccountRef,
     providerAccountRef: accountRefForProvider(businessRef, 'USD'),
   }
 }

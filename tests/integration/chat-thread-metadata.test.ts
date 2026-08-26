@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { api, components } from '../../convex/_generated/api'
-import { convexTestWithMarketComponents } from '../helpers/convex-fixtures'
-
-const identity = (name: string) => ({
-  subject: `user_${name}`,
-  issuer: 'https://identity.example',
-  tokenIdentifier: `token_${name}`,
-})
+import { convexTestWithMarketComponents, publishedBusinessOwner } from '../helpers/convex-fixtures'
 
 describe('durable chat thread metadata', () => {
   it('creates an owned Agent component thread and normalizes its title', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
+    const { owner, canonicalAccountRef } = await publishedBusinessOwner(backend, 'chat-owner')
 
     const created = await owner.mutation(api.chatThreads.createThread, {
       title: '  Find\n\t useful   operations  ',
@@ -28,7 +22,7 @@ describe('durable chat thread metadata', () => {
     ))
     expect(componentThread).toMatchObject({
       _id: created.threadId,
-      userId: 'token_owner',
+      userId: canonicalAccountRef,
       title: 'Find useful operations',
     })
 
@@ -40,8 +34,8 @@ describe('durable chat thread metadata', () => {
 
   it('keeps missing and foreign thread reads indistinguishable', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
-    const other = backend.withIdentity(identity('other'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
     const created = await owner.mutation(api.chatThreads.createThread, {
       title: 'Private thread',
     })
@@ -70,10 +64,44 @@ describe('durable chat thread metadata', () => {
     })).rejects.toThrow('thread_not_found')
   })
 
+  it.each(['expired credential', 'revoked binding'] as const)(
+    'fails closed when canonical chat authority is %s',
+    async (mode) => {
+      const backend = convexTestWithMarketComponents()
+      const { owner, canonicalPrincipalRef } = await publishedBusinessOwner(backend, `chat-${mode.replace(' ', '-')}`)
+      const created = await owner.mutation(api.chatThreads.createThread, { title: 'Current authority only' })
+
+      await backend.run(async (ctx) => {
+        const binding = (await ctx.db.query('externalIdentityBindings').collect())
+          .find((candidate) => candidate.principalRef === canonicalPrincipalRef) ?? null
+        if (binding === null) throw new Error('test_binding_missing')
+        if (mode === 'revoked binding') {
+          await ctx.db.patch(binding._id, { lifecycle: 'revoked' })
+          return
+        }
+        const credential = await ctx.db.query('credentials')
+          .withIndex('by_bindingRef_and_generation_and_lifecycle', (query) => query
+            .eq('bindingRef', binding.bindingRef)
+            .eq('generation', binding.credentialGeneration)
+            .eq('lifecycle', 'active'))
+          .unique()
+        if (credential === null) throw new Error('test_credential_missing')
+        await ctx.db.patch(credential._id, { lifecycle: 'stale' })
+      })
+
+      await expect(owner.query(api.chatThreads.getThread, {
+        threadId: created.threadId,
+        now: Date.now(),
+      })).rejects.toThrow('unauthenticated')
+      await expect(owner.query(api.chatThreads.listThreads, { now: Date.now() }))
+        .rejects.toThrow('unauthenticated')
+    },
+  )
+
   it('lists only the owner threads in updated order with native bounded pagination', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
-    const other = backend.withIdentity(identity('other'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
     const first = await owner.mutation(api.chatThreads.createThread, { title: 'First' })
     const second = await owner.mutation(api.chatThreads.createThread, { title: 'Second' })
     const third = await owner.mutation(api.chatThreads.createThread, { title: 'Third' })
@@ -118,8 +146,8 @@ describe('durable chat thread metadata', () => {
 
   it('searches titles within the authenticated owner only', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
-    const other = backend.withIdentity(identity('other'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
+    const { owner: other } = await publishedBusinessOwner(backend, 'chat-other')
     await owner.mutation(api.chatThreads.createThread, { title: 'Alpha accounting helper' })
     await owner.mutation(api.chatThreads.createThread, { title: 'Travel planning' })
     await other.mutation(api.chatThreads.createThread, { title: 'Alpha private record' })
@@ -133,7 +161,7 @@ describe('durable chat thread metadata', () => {
 
   it('renames app and component metadata together and rejects an empty title', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
     const created = await owner.mutation(api.chatThreads.createThread, { title: 'Old title' })
 
     const renamed = await owner.mutation(api.chatThreads.renameThread, {
@@ -155,7 +183,7 @@ describe('durable chat thread metadata', () => {
 
   it('rejects active deletion, permits stale deletion, cleans shares, and deletes the component thread', async () => {
     const backend = convexTestWithMarketComponents()
-    const owner = backend.withIdentity(identity('owner'))
+    const { owner } = await publishedBusinessOwner(backend, 'chat-owner')
     const created = await owner.mutation(api.chatThreads.createThread, { title: 'Delete me' })
     const now = Date.now()
 

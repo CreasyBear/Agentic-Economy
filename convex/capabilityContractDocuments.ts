@@ -11,7 +11,7 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import { validateAuditEvent } from '@/modules/observability/public'
 
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'
-import { resolveAdminAuthority } from './authz'
+import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { persistAuditEvent } from './securityShared'
 
 const capabilityContractRefValue = v.object({
@@ -61,6 +61,10 @@ export const register = mutation({
     v.object({ kind: v.literal('refused'), reason: v.literal('authorization_denied') }),
   ),
   handler: async (ctx, args) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
     const authority = await resolveAdminAuthority(
       { db: ctx.db, auth: ctx.auth },
       'register_capability_contract',
@@ -78,7 +82,7 @@ export const register = mutation({
     } catch (error) {
       return invalidContractResult(error)
     }
-    const actorRef = authority.membership.clerkUserId
+    const actorRef = actor.canonicalPrincipalRef
     const requestHash = canonicalDigest({
       documentJson: encoded.documentJson,
       correlationId: args.correlationId,

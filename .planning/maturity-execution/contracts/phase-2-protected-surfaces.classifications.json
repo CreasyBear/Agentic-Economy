@@ -1,0 +1,934 @@
+{
+  "format": "phase-2-protected-surface-classifications:v1",
+  "rows": {
+    "src/components/ae/offerings/owner-offering.functions.ts:readOwnerOfferingSupplyServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/components/ae/offerings/owner-offering.functions.ts:saveOwnerOfferingServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+      "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/lib/server/canonical-url.functions.ts:readCanonicalBaseUrlServer ignores caller-shaped identity headers and returns only the public origin"
+        }
+      },
+      "src/lib/server/require-operator-session.ts:admitOperatorSessionServer": {
+        "binding": "narrow_system_non_consequential",
+        "consequential": false,
+        "exemption": {
+          "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+          "testName": "src/lib/server/require-operator-session.ts:admitOperatorSessionServer establishes only a Clerk session and cannot establish Account or resource authority",
+          "testSymbol": "requireOperatorBeforeLoad"
+        }
+      },
+    "src/modules/agent-access/agent-access-console.ts:readAgentAccessConsoleServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/agent-access/agent-access.functions.ts:issueAgentAccessKeyServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/agent-access/agent-access.functions.ts:listAgentAccessKeysServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/agent-access/agent-access.functions.ts:revokeAgentAccessKeyServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-execution/operation-approval.functions.ts:decideOperationApprovalServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-execution/operation-approval.functions.ts:listPendingOperationApprovalsServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-execution/operation-recovery.functions.ts:cancelOwnerInvocationServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-execution/operation-recovery.functions.ts:readOwnerInvocationStatusServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-execution/operation-recovery.functions.ts:reconcileOwnerInvocationServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:admitOwnerCapabilityServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:connectOwnerX402Server": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:loadSupplyLandingReadbackServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/unit/capability-supply/supply-landing-authority.test.ts",
+        "testName": "loadSupplyLandingReadbackServer returns only credential-free public tools and registry projections"
+      }
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:preflightOwnerCapabilityServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:preflightOwnerOpenApiDocumentServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderConnectionsServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerProviderEarningsServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:readOwnerSupplyFunnelServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:recheckOwnerCapabilityServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:reconnectOwnerProviderConnectionServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:republishOwnerCapabilityServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:retryOwnerProviderConnectionCleanupServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:revokeOwnerProviderConnectionServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:runOwnerSupplyReadinessServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:runOwnerSupplyTestServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/capability-supply/supply-funnel.functions.ts:withdrawOwnerCapabilityServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/catalog/owner-status.functions.ts:readOwnerStatusServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/modules/catalog/owner-status.functions.ts:readPublicBusinessPageServer returns only public catalog data for a cross-account slug"
+      }
+    },
+    "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/modules/catalog/public-route.functions.ts:readPublicBusinessRouteServer cannot turn a public slug into a provider, money, or secret effect"
+      }
+    },
+    "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/modules/discovery/developer-discovery-route.ts:loadDeveloperDiscoveryRouteServer fixes its public request context instead of accepting caller authority"
+      }
+    },
+    "src/modules/market/market.functions.ts:readMarketRouteServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/modules/market/market.functions.ts:readMarketRouteServer passes only bounded public filters and performs no consequence"
+      }
+    },
+    "src/modules/money/internal/credit-topup-http.ts:beginCreditTopupServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/credit-topup-http.ts:readCreditPaymentServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-connect-http.ts:createOwnerConnectAccountServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-connect-http.ts:createOwnerOnboardingLinkServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-connect-http.ts:readOwnerConnectReadinessServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-transfer-http.ts:beginOwnerPayoutTransferServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-transfer-http.ts:readOwnerPayoutTransferServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/money/internal/payout-transfer-http.ts:recoverOwnerPayoutTransferServer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "src/modules/observability/funnel.functions.ts:recordServerFunnelEventServer": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/unit/observability/funnel-authority.test.ts",
+        "testName": "recordServerFunnelEventServer discards caller-shaped actor and business provenance before analytics release"
+      }
+    },
+      "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "src/modules/registry/operation-detail-route.functions.ts:readPublicOperationDetailRouteServer treats the operation ref as lookup data, never authority"
+        }
+      },
+      "src/routes/_operator/admin.audit-events.tsx:readAdminAuditEventsServer": {
+        "binding": "interactive_account",
+        "consequential": true
+      },
+      "src/routes/_operator/admin.index-health.tsx:readAdminIndexHealthServer": {
+        "binding": "interactive_account",
+        "consequential": true
+      },
+      "src/routes/privacy.remove-business.tsx:openRemovalServer": {
+        "binding": "signed_callback",
+        "consequential": true
+      },
+    "convex/actionInvocationControl.ts:readAttemptSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:readAttemptsSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:readControlSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:readHistoryCommandSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:readHistorySource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:recordLateObservationSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/actionInvocationControl.ts:transactSource": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessOAuth.ts:getClient": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps OAuth client metadata public while grants remain source-admitted"
+      }
+    },
+    "convex/agentAccessOAuth.ts:getGrantByHash": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessOAuth.ts:getGrantByRef": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessOAuth.ts:insertClient": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessOAuth.ts:insertGrant": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessOAuth.ts:updateGrant": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessPolicy.ts:listOwnerGrantReadbacks": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/agentAccessPolicy.ts:registerGrantForServer": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessPolicy.ts:revokeGrantForServer": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/agentAccessPrincipals.ts:registerAgentPrincipal": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/authorityBoundary.ts:resolveAgentBinding": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityContractDocuments.ts:register": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:cancelInvocation": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:cancelOwnerInvocation": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:decideOperationApproval": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:invoke": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:listPendingOperationApprovals": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:readInvocationStatus": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:readOwnerInvocationStatus": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:reconcileInvocation": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:connectX402Owner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:listOwner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:readOwner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:reconnectOwner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:retryOwnerCleanup": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:revokeOwner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilityProviderConnections.ts:rotateOwner": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupply.ts:inspectBindingControlState": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupply.ts:publishPreparedCapability": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupply.ts:queryCapabilityGraph": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupply.ts:readCapabilityPublication": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOperations.ts:compare": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps public operation projections identity-invariant and consequence-free"
+      }
+    },
+    "convex/capabilitySupplyOperations.ts:detail": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps public operation projections identity-invariant and consequence-free"
+      }
+    },
+    "convex/capabilitySupplyOperations.ts:inspectPlan": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps public operation projections identity-invariant and consequence-free"
+      }
+    },
+    "convex/capabilitySupplyOperations.ts:listKeylessExecutable": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps public operation projections identity-invariant and consequence-free"
+      }
+    },
+    "convex/capabilitySupplyOperations.ts:offeringOperationMap": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "keeps public operation projections identity-invariant and consequence-free"
+      }
+    },
+    "convex/capabilitySupplyOperations.ts:readKeylessExecutable": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOperations.ts:search": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/capabilitySupplyOperations.ts:search is identity-invariant, bounded, and cannot disclose cross-account private state"
+      }
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:readAgentOwnerSupplyFunnel": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:readOwnerSupplyFunnel": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:refreshOwnerCapability": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:republishOwnerCapability": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:reserveOwnerCapabilityPublication": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerFunnel.ts:withdrawOwnerCapability": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyReadiness": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/capabilitySupplyOwnerSupply.ts:runOwnerSupplyTest": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:changeBusinessOfferingStatus": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:createBusinessOffering": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:getCurrentOwnerOfferingSupply": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:getCurrentOwnerPublicCatalog": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:getPublicBusinessCatalogBySlug": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/catalog.ts:getPublicBusinessCatalogBySlug denies unpublished cross-account rows without trusting caller identity"
+      }
+    },
+    "convex/catalog.ts:retryBusinessSupplyProjection": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:reviseBusinessOffering": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:upsertOfferingAccessPath": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/catalog.ts:withdrawOfferingAccessPath": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatAdmission.ts:admitAnonymousEdge": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/integration/chat-anonymous-transport.test.ts",
+        "testName": "keeps the edge and Convex backstop admissions in independent hourly buckets"
+      }
+    },
+    "convex/chatAnonymous.ts:anonymousChat": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers"
+      }
+    },
+    "convex/chatMessages.ts:listMessages": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatMessages.ts:sendMessage": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatShares.ts:getShareState": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatShares.ts:issueShare": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatShares.ts:listSharedMessages": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/integration/chat-durable-messaging-share.test.ts",
+        "testName": "issues one opaque grant, hides ownership publicly, revokes, and reissues by generation"
+      }
+    },
+    "convex/chatShares.ts:revokeShare": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:createThread": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:deleteThread": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:getThread": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:listThreads": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:renameThread": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/chatThreads.ts:searchThreads": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/discovery.ts:readDiscoveryBusinessSlugPage": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/discovery.ts:readDiscoveryBusinessSlugPage returns only public offering slugs and no cross-account private detail"
+      }
+    },
+    "convex/discovery.ts:readLlmsTxt": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/integration/discovery-llms-offering-parity.test.ts",
+        "testName": "excludes businesses without offerings and private detail"
+      }
+    },
+    "convex/marketExternalRegistry.ts:search": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/marketExternalRegistry.ts:search exposes source metadata only and is invariant across caller identities"
+      }
+    },
+    "convex/marketExternalSnapshots.ts:read": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/marketExternalSnapshots.ts:read returns aggregate public evidence without account-scoped disclosure or writes"
+      }
+    },
+    "convex/marketListingEvidence.ts:rate": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/marketListingEvidence.ts:read": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/marketListingEvidence.ts:read returns bounded public operation evidence and ignores caller-shaped identity"
+      }
+    },
+    "convex/moneyLedger.ts:applyVerifiedStripeEvent": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:beginPayoutTransfer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:bindConnectAccount": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:bindCreditPaymentSession": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:completePayoutTransfer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:finalizeConnectAccount": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect"
+      }
+    },
+    "convex/moneyLedger.ts:listCreditActivity": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:markCreditTopupOutcomeUnknown": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:markPayoutTransferOutcomeUnknown": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readAgentProviderEarnings": {
+      "binding": "canonical_agent",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readCreditAccount": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readCreditTopupCommand": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readCreditTopupWebhookCommand": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readKeyUsage": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readOwnerPayoutAccount": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readOwnerPayoutTransfer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readOwnerProviderEarnings": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:readPayoutAccountByStripeId": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:reconcilePayoutTransfer": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:recordConnectAccountEvent": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/moneyLedger.ts:reserveConnectAccount": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/moneyLedger.ts:reserveConnectAccount and finalizeConnectAccount remain identity-invariant fail-closed compatibility surfaces with no money effect"
+      }
+    },
+    "convex/moneyLedger.ts:reserveCreditTopup": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/qualifiedUse.ts:readOwnerQualifiedUse": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/rateLimit.ts:admitHttp": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/integration/chat-anonymous-transport.test.ts",
+        "testName": "keeps the edge and Convex backstop admissions in independent hourly buckets"
+      }
+    },
+    "convex/registry.ts:getPublicBusinessOfferingSupplyBySlug": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/unit/convex/registry-runtime.test.ts",
+        "testName": "returns detail by slug with the current canonical offering identity"
+      }
+    },
+    "convex/registry.ts:listPublicBusinessOfferingSupply": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/unit/convex/registry-runtime.test.ts",
+        "testName": "returns every eligible public business exactly once across native cursors"
+      }
+    },
+    "convex/registry.ts:searchPublicBusinessOfferingSupply": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/unit/convex/registry-runtime.test.ts",
+        "testName": "returns a bounded full-text search result for the canonical business"
+      }
+    },
+    "convex/security.ts:bootstrapOwnerAdmin": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/security.ts:closeRemovalDispute": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/security.ts:grantAdminMembership": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/security.ts:openRemovalDispute": {
+      "binding": "signed_callback",
+      "consequential": true
+    },
+    "convex/security.ts:readAdminAuditEvents": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/security.ts:readAdminIndexHealth": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/security.ts:revokeAdminMembership": {
+      "binding": "interactive_account",
+      "consequential": true
+    },
+    "convex/interactiveAuthority.ts:materializeCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
+    "convex/recoveryBreakGlass.ts:authorizeRecoveryOperation": { "binding": "interactive_account", "consequential": true },
+    "convex/recoveryBreakGlass.ts:submitRecoveryApproval": { "binding": "interactive_account", "consequential": true },
+    "convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": { "binding": "canonical_agent", "consequential": true },
+    "convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": { "binding": "canonical_agent", "consequential": true },
+    "convex/secretLifecycleHttp.ts:secretLifecycleRpc": { "binding": "workload_account", "consequential": true },
+    "convex_http_route:POST /chat/anonymous": {
+      "binding": "public_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-public-exemptions.test.ts",
+        "testName": "convex/chatAnonymous.ts:anonymousChat fails closed before admission or provider use regardless of caller-shaped headers"
+      }
+    },
+    "convex_http_route:POST /internal/provider-consequence/journal/abort": { "binding": "canonical_agent", "consequential": true },
+    "convex_http_route:POST /internal/provider-consequence/journal/attest": { "binding": "canonical_agent", "consequential": true },
+    "convex_http_route:POST /internal/provider-consequence/journal/begin": { "binding": "canonical_agent", "consequential": true },
+    "convex_http_route:POST /internal/provider-consequence/journal/complete": { "binding": "canonical_agent", "consequential": true },
+    "convex_http_route:POST /internal/provider-consequence/x402": { "binding": "canonical_agent", "consequential": true },
+    "convex_http_route:POST /internal/secret-lifecycle": { "binding": "workload_account", "consequential": true },
+    "callback:convex/providerConsequenceHttp.ts:abortProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "callback:convex/providerConsequenceHttp.ts:attestProviderConsequenceTicket": { "binding": "canonical_agent", "consequential": true },
+    "callback:convex/providerConsequenceHttp.ts:beginProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "callback:convex/providerConsequenceHttp.ts:completeProviderConsequenceJournal": { "binding": "canonical_agent", "consequential": true },
+    "callback:convex/providerConsequenceHttp.ts:providerConsequenceX402Rpc": { "binding": "canonical_agent", "consequential": true },
+    "callback:convex/secretLifecycleHttp.ts:secretLifecycleRpc": { "binding": "workload_account", "consequential": true },
+    "callback:src/routes/api.stripe.webhook.ts:Route": { "binding": "signed_callback", "consequential": true },
+    "continuation:convex/capabilityOperationInvocations.ts:completeWork": { "binding": "workload_account", "consequential": true },
+    "continuation:convex/capabilityProviderConnectionCleanup.ts:completeWork": { "binding": "workload_account", "consequential": true },
+    "job:convex/agentAccessOAuth.ts:cleanupExpiredOAuthGrants": {
+      "binding": "workload_account", "consequential": true
+    },
+    "job:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": { "binding": "workload_account", "consequential": true },
+    "job:convex/facilitatorDiscoveryAction.ts:run": { "binding": "workload_account", "consequential": true },
+    "job:convex/marketAggregateBackfill.ts:run": {
+      "binding": "workload_account", "consequential": true
+    },
+    "job:convex/marketExternalRefresh.ts:run": {
+      "binding": "workload_account", "consequential": true
+    },
+    "job:convex/marketExternalRegistryRefresh.ts:run": {
+      "binding": "workload_account", "consequential": true
+    },
+    "job:convex/marketPresence.ts:refresh": {
+      "binding": "workload_account", "consequential": true
+    },
+    "job:convex/moneyLedger.ts:runDailySupplierSettlement": { "binding": "workload_account", "consequential": true },
+    "job:convex/sourceWriteAdmission.ts:cleanupExpiredSourceWriteNonces": {
+      "binding": "workload_account", "consequential": true
+    },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocation": { "binding": "canonical_agent", "consequential": true },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileInvocationWorkloadAuthority": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/capabilityOperationInvocations.ts:reconcileOwnerInvocation": { "binding": "interactive_account", "consequential": true },
+    "reconciliation:convex/capabilityOperationInvocationWorker.ts:reconcileScheduled": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/facilitatorDiscovery.ts:reconcile": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/interactiveAuthority.ts:reconcileScheduledInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
+    "reconciliation:convex/interactiveCredentialLifecycle.ts:reconcileInteractiveCredentialExpiry": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-background-exemptions.test.ts",
+        "testName": "reconcileInteractiveCredentialExpiry fails closed on a missing chain and cannot create authority or resources"
+      }
+    },
+    "reconciliation:convex/moneyLedger.ts:reconcileCharge": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/moneyLedger.ts:reconcileExternalInvocationSpend": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/moneyLedger.ts:reconcileInvocationCharge": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/moneyLedger.ts:reconcilePayoutTransfer": { "binding": "interactive_account", "consequential": true },
+    "reconciliation:convex/moneyX402PaymentAttempts.ts:reconcileX402PaymentAttempt": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/workloadCron.ts:reconcile": { "binding": "workload_account", "consequential": true },
+    "reconciliation:convex/workloadCron.ts:reconcileDueFacilitatorInvocations": { "binding": "workload_account", "consequential": true },
+    "reconciliation:src/routes/api.v1.operations.$invocationRef.reconcile.ts:Route": { "binding": "canonical_agent", "consequential": true },
+    "run_action:convex/capabilityOperationInvocationWorker.ts:recover": { "binding": "workload_account", "consequential": true },
+    "run_action:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
+    "run_action:convex/chatExecute.ts:execute": { "binding": "interactive_account", "consequential": true },
+    "run_action:convex/interactiveAuthority.ts:resolveCurrentInteractiveAuthority": { "binding": "interactive_account", "consequential": true },
+    "run_action:convex/marketRegistryGraduation.ts:run": { "binding": "workload_account", "consequential": true },
+    "run_action:convex/workloadCron.ts:runAdmittedAction": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/capabilitySupplyReadiness.ts:probe": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/capabilitySupplyReadiness.ts:probeFromCron": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/chatGenerate.ts:generate": { "binding": "interactive_account", "consequential": true },
+    "scheduler:convex/devSeed.ts:seedOfferingSupply": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/interactiveCredentialLifecycle.ts:expireInteractiveCredential": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-background-exemptions.test.ts",
+        "testName": "expireInteractiveCredential stales only the exact credential generation and cannot grant or widen resource access"
+      }
+    },
+    "scheduler:convex/marketExternalRegistry.ts:deleteGenerationBatch": {
+      "binding": "narrow_system_non_consequential",
+      "consequential": false,
+      "exemption": {
+        "testFile": "tests/maturity/phase-2-background-exemptions.test.ts",
+        "testName": "deleteGenerationBatch removes only inactive public registry metadata and cannot touch the active generation"
+      }
+    },
+    "scheduler:convex/marketRegistryGraduation.ts:sweep": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/workloadCron.ts:cleanupExpiredAgentAccessOAuthGrants": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/workloadCron.ts:cleanupExpiredSourceWriteNonces": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/workloadCron.ts:continueMarketAggregateBackfill": { "binding": "workload_account", "consequential": true },
+    "scheduler:convex/workloadCron.ts:refreshCurrentMarketPresence": { "binding": "workload_account", "consequential": true },
+    "workpool:convex/capabilityOperationInvocationWorker.ts:run": { "binding": "workload_account", "consequential": true },
+    "workpool:convex/capabilityProviderConnectionCleanup.ts:run": { "binding": "workload_account", "consequential": true },
+    "cron:cleanup expired agent access oauth grants": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:cleanup expired source write nonces": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:continue market aggregate backfill": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:reconcile due facilitator invocations": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:refresh Agentic Economy API registry": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:refresh Agentic Market snapshots": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:refresh capability supply readiness": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:refresh current market presence": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:refresh facilitator discovery": {
+      "binding": "workload_account",
+      "consequential": true
+    },
+    "cron:run daily supplier settlement": {
+      "binding": "workload_account",
+      "consequential": true
+    }
+  }
+}

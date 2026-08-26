@@ -20,7 +20,11 @@ import { problem } from '@/lib/server/problem'
 import { methodNotAllowed } from '@/lib/server/method-guard'
 import { readBoundedRequestJson, readBoundedRequestText, type BoundedRequestTextResult } from '@/lib/server/bounded-request-body'
 import { ConvexSourceError } from '@/lib/server/convex-source'
-import { authenticateAgentAccess, resolveAgentAccessPrincipal } from '@/lib/server/agent-access-auth'
+import {
+  authenticateAgentAccess,
+  resolveAgentAccessPrincipal,
+  type AgentAccessPrincipalResolver,
+} from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { runWithRequestCorrelation, withRequestCorrelationHeader } from '@/lib/server/request-correlation'
 import { recordGatewayTelemetry, type GatewayTelemetryEvent } from '@/lib/server/gateway-telemetry'
@@ -28,6 +32,7 @@ import { isRecord } from '@/modules/common/is-record'
 import { listMcpActions, mcpToolName, type AnyAction } from '@/modules/actions'
 import {
   agentAuthorityModeAllows,
+  agentAuthorityScopeForMode,
   type AgentAccessAuthorityMode,
 } from '@/modules/agent-access/contract'
 import type { ActionAgentAccessPrincipal, ActionTimingSink } from '@/modules/common/action'
@@ -314,6 +319,7 @@ export function createAeMcpServer(
 type McpRequestOptions = Readonly<{
   actions?: readonly AnyAction[]
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: AgentAccessPrincipalResolver
   supplyManagementService?: SupplyManagementService
   timing?: ActionTimingSink
   operationInvokeService?: OperationInvokeService
@@ -340,12 +346,21 @@ export async function handleMcpRequest(request: Request, options: McpRequestOpti
       const protectedAction = protectedTarget.action
       const requiredMode = requiredModeForAction(protectedAction)
       const requiredScope = protectedTarget.generic ? null : protectedAction.credentialAdmission?.scope
+      const resolverRequiredScopes = protectedTarget.generic
+        ? []
+        : [protectedAction.credentialAdmission?.scope ?? agentAuthorityScopeForMode(requiredMode)]
+      const resolvePrincipal = options.resolvePrincipal
+        ?? (options.authenticate === undefined
+          ? resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId)
+          : undefined)
       const admitted = await authenticateAgentAccess({
         ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
-        ...(options.authenticate === undefined
-          ? { resolvePrincipal: resolveAgentAccessPrincipal(boundedRequest, bounded.bodyText, correlationId) }
-          : {}),
+        ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
+        consequenceResource: protectedTarget.generic
+          ? 'surface:mcp:tools-list'
+          : `surface:mcp:${protectedAction.id}`,
         ...(requiredScope === undefined ? {} : { requiredScope }),
+        requiredScopes: resolverRequiredScopes,
         requiredMode,
       })
       if (admitted.kind === 'refused') {

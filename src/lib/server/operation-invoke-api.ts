@@ -1,7 +1,12 @@
 import { bearerChallenge } from '@/lib/http/oauth-challenge'
 import { gatewayFailureToProblem } from '@/lib/errors'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { authenticateAgentAccess, resolveAgentAccessPrincipal, type AgentAccessPrincipal } from '@/lib/server/agent-access-auth'
+import {
+  authenticateAgentAccess,
+  resolveAgentAccessPrincipal,
+  type AgentAccessPrincipal,
+  type AgentAccessPrincipalResolver,
+} from '@/lib/server/agent-access-auth'
 import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { ConvexSourceError, callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { problem } from '@/lib/server/problem'
@@ -51,6 +56,7 @@ type OperationInvokeReconcileRequest = Parameters<OperationInvokeService['reconc
 
 export type OperationInvokeHandlerOptions = Readonly<{
   authenticate?: NonNullable<Parameters<typeof authenticateAgentAccess>[0]>['authenticate']
+  resolvePrincipal?: AgentAccessPrincipalResolver
   operationInvokeService?: OperationInvokeService
   timing?: ActionTimingSink
 }>
@@ -331,11 +337,12 @@ export async function authenticateOperationGateway(
   options: OperationInvokeHandlerOptions,
   body: string | Uint8Array,
 ): Promise<Readonly<{ kind: 'authenticated'; principal: GatewayPrincipalRef }> | Response> {
+  const resolvePrincipal = options.resolvePrincipal
+    ?? (options.authenticate === undefined ? resolveAgentAccessPrincipal(request, body, correlationId) : undefined)
   const admitted = await authenticateAgentAccess({
-    ...(options.authenticate === undefined
-      ? { resolvePrincipal: resolveAgentAccessPrincipal(request, body, correlationId) }
-      : {}),
+    ...(resolvePrincipal === undefined ? {} : { resolvePrincipal }),
     ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }),
+    consequenceResource: 'surface:http:operations-call',
     requiredScope: OPERATION_INVOKE_SCOPE,
   })
   if (admitted.kind === 'authenticated') return { kind: admitted.kind, principal: admitted.principal }

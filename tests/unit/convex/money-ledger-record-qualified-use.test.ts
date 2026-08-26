@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { qualifiedUseMaterialDigest } from '@/modules/money/public'
+import {
+  buildQualifiedUseReceipt,
+  qualifiedUseMaterialDigest,
+} from '@/modules/money/public'
+import {
+  recordQualifiedUsePayoutAllocation,
+  requireCanonicalPayoutAuthority,
+  resolveCanonicalInvocationAuthority,
+} from '../../../convex/moneyQualifiedUsePayout'
+import { DelegationService } from '@/modules/authority/delegation/public'
 
 import {
   MemoryDb,
@@ -9,6 +18,7 @@ import {
   freeTierQualifiedUseArgs,
   invocationRef,
   now,
+  principalId,
   qualifiedUseArgs,
   qualifiedUseHandler,
   reconcileHandler,
@@ -17,9 +27,12 @@ import {
   transactionRef,
 } from './money-ledger-test-harness'
 import {
+  canonicalQualifiedUseAccountRef,
+  canonicalQualifiedUseGrantRef,
   rebindSeededCharge,
   seedBudget,
   seedCanonicalFreeTierCharge,
+  seedCanonicalQualifiedUseAuthority,
   seedDailyAllocationComposition,
   seedPaidCharge,
   settleSeededChargeBudget,
@@ -52,6 +65,11 @@ describe('exact invocation money reconciliation', () => {
       periodEnd: '1970-01-02T00:00:00.000Z',
       state: 'held_threshold',
       minimumPayoutUnits: '0',
+      owningAccountRef: canonicalQualifiedUseAccountRef,
+      authorityPrincipalRef: principalId,
+      authorityGrantRef: canonicalQualifiedUseGrantRef,
+      authorityGrantGeneration: 1,
+      authorityResourceRefs: ['operation:money'],
     })
     expect(db.rows('moneyPayoutAllocations')[0]).toMatchObject({
       qualifiedUseRef: `qualified-use:v1:${invocationRef}:${attemptRef}:1`,
@@ -80,6 +98,24 @@ describe('exact invocation money reconciliation', () => {
         responseDigest: 'sha256:response-qualified',
         evidenceRefs: ['evidence:qualified'],
       }),
+      owningAccountRef: canonicalQualifiedUseAccountRef,
+      authorityPrincipalRef: principalId,
+      authorityGrantRef: canonicalQualifiedUseGrantRef,
+      authorityGrantGeneration: 1,
+      authorityResourceRef: 'operation:money',
+    })
+    expect(db.rows('qualifiedUseReceipts')[0]).toMatchObject({
+      owningAccountRef: canonicalQualifiedUseAccountRef,
+      authorityPrincipalRef: principalId,
+      authorityGrantRef: canonicalQualifiedUseGrantRef,
+      authorityGrantGeneration: 1,
+      authorityResourceRef: 'operation:money',
+    })
+    expect(db.rows('authorityDelegationSnapshots')).toHaveLength(0)
+    expect(db.rows('authorityDelegationSnapshotAncestors')).toHaveLength(0)
+    expect(db.rows('authorityDelegationGrants')[0]).toMatchObject({
+      budgetUsed: 1,
+      revision: 1,
     })
   })
 
@@ -176,6 +212,47 @@ describe('exact invocation money reconciliation', () => {
       providerNetUnits: '99',
     })
   })
+
+  it.each([17, 32])(
+    'preserves the exact valid Qualified Use outcome through %i canonical delegation grants',
+    async (grantCount) => {
+      const db = new MemoryDb()
+      seedBudget(db)
+      seedPaidCharge(db)
+      settleSeededChargeBudget(db, credentialId, credentialId, true)
+      extendQualifiedUseDelegationAncestry(db, grantCount)
+
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'recorded' })
+      await expect(
+        qualifiedUseHandler({ db }, qualifiedUseArgs()),
+      ).resolves.toMatchObject({ kind: 'replayed' })
+      expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+      expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+      expect(db.rows('moneyPayouts')).toHaveLength(1)
+      expect(db.rows('moneyPayouts')[0]).toMatchObject({
+        grossAccrualUnits: '100',
+        rakeUnits: '1',
+        providerNetUnits: '99',
+      })
+    },
+  )
+
+  it('holds Qualified Use through a 33-grant ancestry before any monetary effect', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    extendQualifiedUseDelegationAncestry(db, 33)
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
   it.each([
     { name: 'transfer_pending', payoutState: 'transfer_pending' },
     { name: 'outcome_unknown', payoutState: 'outcome_unknown' },
@@ -260,6 +337,665 @@ describe('exact invocation money reconciliation', () => {
     expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
     expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
     expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects foreign commercial principal rows even when the caller repeats that principal', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const foreignPrincipalRef = 'prn_99999999999999999999999999999999'
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    const usage = db.rows('moneyUsageEvents').find(
+      (row) => row._id === 'usage:money',
+    )
+    const charge = db.rows('moneyLedgerEntries').find(
+      (row) => row._id === 'entry:charge',
+    )
+    if (transaction === undefined || usage === undefined || charge === undefined)
+      throw new Error('commercial_principal_fixture_missing')
+    transaction.principalId = foreignPrincipalRef
+    usage.principalId = foreignPrincipalRef
+    charge.principalId = foreignPrincipalRef
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ principalId: foreignPrincipalRef }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects a foreign commercial principal at the allocation helper seam', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const foreignPrincipalRef = 'prn_99999999999999999999999999999999'
+    const transaction = db.rows('moneyTransactions').find(
+      (row) => row._id === 'transaction:charge',
+    )
+    const usage = db.rows('moneyUsageEvents').find(
+      (row) => row._id === 'usage:money',
+    )
+    const charge = db.rows('moneyLedgerEntries').find(
+      (row) => row._id === 'entry:charge',
+    )
+    if (transaction === undefined || usage === undefined || charge === undefined)
+      throw new Error('commercial_principal_fixture_missing')
+    transaction.principalId = foreignPrincipalRef
+    usage.principalId = foreignPrincipalRef
+    charge.principalId = foreignPrincipalRef
+
+    await expect(
+      recordQualifiedUsePayoutAllocation(
+        { db } as never,
+        buildQualifiedUseReceipt(
+          qualifiedUseArgs() as unknown as Parameters<
+            typeof buildQualifiedUseReceipt
+          >[0],
+        ),
+        foreignPrincipalRef,
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects a caller-shaped operation outside the invocation authority', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({ operationRef: 'operation:caller-shaped' }),
+      ),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    await expect(
+      recordQualifiedUsePayoutAllocation(
+        { db } as never,
+        buildQualifiedUseReceipt(
+          qualifiedUseArgs({
+            operationRef: 'operation:caller-shaped',
+          }) as unknown as Parameters<typeof buildQualifiedUseReceipt>[0],
+        ),
+        principalId,
+      ),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it.each([
+    {
+      name: 'revoked grant',
+      mutate: (db: MemoryDb) => {
+        const grant = db.rows('authorityDelegationGrants')[0]
+        if (grant === undefined) throw new Error('authority_fixture_missing')
+        grant.lifecycle = 'revoked'
+      },
+    },
+    {
+      name: 'stale generation',
+      mutate: (db: MemoryDb) => {
+        const grant = db.rows('authorityDelegationGrants')[0]
+        if (grant === undefined) throw new Error('authority_fixture_missing')
+        grant.generation = 2
+      },
+    },
+    {
+      name: 'expired grant',
+      mutate: (db: MemoryDb) => {
+        const grant = db.rows('authorityDelegationGrants')[0]
+        if (grant === undefined) throw new Error('authority_fixture_missing')
+        grant.expiresAt = 0
+      },
+    },
+    {
+      name: 'inactive Account',
+      mutate: (db: MemoryDb) => {
+        const account = db.rows('accounts')[0]
+        if (account === undefined) throw new Error('authority_fixture_missing')
+        account.lifecycle = 'suspended'
+      },
+    },
+    {
+      name: 'uncovered invocation operation',
+      mutate: (db: MemoryDb) => {
+        const invocation = db.rows('capabilityOperationInvocations')[0]
+        if (invocation === undefined) throw new Error('authority_fixture_missing')
+        invocation.operationRef = 'operation:not-covered'
+      },
+    },
+  ])('holds Qualified Use on $name authority', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    mutate(db)
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it.each([
+    {
+      name: 'revoked ancestor',
+      parent: {
+        generation: 2,
+        revision: 2,
+        lifecycle: 'revoked',
+        revokedAt: now + 1,
+      },
+      childParentGeneration: 2,
+    },
+    {
+      name: 'stale parent generation',
+      parent: { generation: 1, revision: 1, lifecycle: 'active' },
+      childParentGeneration: 2,
+    },
+    {
+      name: 'malformed widened ancestry',
+      parent: {
+        generation: 1,
+        revision: 1,
+        lifecycle: 'active',
+        scopes: ['market.operations.read'],
+      },
+      childParentGeneration: 1,
+    },
+  ])('holds Qualified Use on $name', async ({ parent, childParentGeneration }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const leaf = db.rows('authorityDelegationGrants')[0]
+    if (leaf === undefined) throw new Error('authority_fixture_missing')
+    const parentGrantRef = 'grt_55555555555555555555555555555555'
+    const parentRow = {
+      _id: `authority-grant:${parentGrantRef}`,
+      grantRef: parentGrantRef,
+      accountRef: canonicalQualifiedUseAccountRef,
+      actorPrincipalRef: principalId,
+      subjectPrincipalRef: principalId,
+      scopes: ['market.operations.invoke'],
+      resourceRefs: ['operation:money'],
+      budgetLimit: 2_000,
+      budgetUsed: 1,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      createdAt: 0,
+      createdBy: {
+        actorPrincipalRef: principalId,
+        activeAccountRef: canonicalQualifiedUseAccountRef,
+        correlationRef: `correlation:${parentGrantRef}`,
+        idempotencyRef: `create:${parentGrantRef}`,
+      },
+      ...parent,
+    }
+    if (parent.lifecycle === 'revoked') {
+      Object.assign(parentRow, {
+        revokedBy: {
+          actorPrincipalRef: principalId,
+          activeAccountRef: canonicalQualifiedUseAccountRef,
+          correlationRef: `revoke:${parentGrantRef}`,
+          idempotencyRef: `revoke:${parentGrantRef}`,
+        },
+      })
+    }
+    db.seed('authorityDelegationGrants', parentRow)
+    leaf.parentGrantRef = parentGrantRef
+    leaf.parentGeneration = childParentGeneration
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('holds Qualified Use on a cyclic grant ancestry', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const leaf = db.rows('authorityDelegationGrants')[0]
+    if (leaf === undefined) throw new Error('authority_fixture_missing')
+    leaf.parentGrantRef = leaf.grantRef
+    leaf.parentGeneration = leaf.generation
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(0)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it.each([
+    {
+      name: 'malformed grant generation',
+      mutate: (invocation: Record<string, unknown>) => {
+        invocation.grantGeneration = -1
+      },
+    },
+    {
+      name: 'non-integer grant generation',
+      mutate: (invocation: Record<string, unknown>) => {
+        invocation.grantGeneration = 1.5
+      },
+    },
+    {
+      name: 'malformed grant reference',
+      mutate: (invocation: Record<string, unknown>) => {
+        invocation.grantRef = 'grant:caller-shaped'
+      },
+    },
+  ])('holds Qualified Use on $name before any grant read', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedCanonicalQualifiedUseAuthority(db)
+    const invocation = db.rows('capabilityOperationInvocations')[0]
+    if (invocation === undefined) throw new Error('authority_fixture_missing')
+    mutate(invocation)
+
+    await expect(
+      resolveCanonicalInvocationAuthority({ db } as never, invocationRef),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+  })
+
+  it.each([
+    {
+      name: 'absent invocation',
+      seed: (_db: MemoryDb) => undefined,
+      invocation: invocationRef,
+    },
+    {
+      name: 'nonproduction invocation',
+      seed: (db: MemoryDb) => {
+        seedCanonicalQualifiedUseAuthority(db)
+        const invocation = db.rows('capabilityOperationInvocations')[0]
+        if (invocation === undefined) throw new Error('authority_fixture_missing')
+        invocation.environment = 'sandbox'
+      },
+      invocation: invocationRef,
+    },
+    {
+      name: 'blank invocation',
+      seed: (_db: MemoryDb) => undefined,
+      invocation: '   ',
+    },
+  ])('holds Qualified Use on $name', async ({ seed, invocation }) => {
+    const db = new MemoryDb()
+    seed(db)
+
+    await expect(
+      resolveCanonicalInvocationAuthority({ db } as never, invocation),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+  })
+
+  it('holds Qualified Use on a snapshot authority mismatch', async () => {
+    const db = new MemoryDb()
+    seedCanonicalQualifiedUseAuthority(db)
+    const admit = vi
+      .spyOn(DelegationService.prototype, 'admitConsequence')
+      .mockResolvedValue({
+        accountRef: 'acc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        actorPrincipalRef: principalId,
+        subjectPrincipalRef: principalId,
+        grantRef: canonicalQualifiedUseGrantRef,
+        generation: 1,
+      } as never)
+    try {
+      await expect(
+        resolveCanonicalInvocationAuthority({ db } as never, invocationRef),
+      ).rejects.toThrow('qualified_use_authority_invalid')
+    } finally {
+      admit.mockRestore()
+    }
+  })
+
+  it('rejects a payout whose existing immutable Account provenance conflicts', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const nextInvocationRef = 'operation-invocation:test-money:mixed-account'
+    const nextAttemptRef = `${nextInvocationRef}:attempt:1`
+    const nextTransactionRef = `operation-money:${nextInvocationRef}:${nextAttemptRef}:1`
+    rebindSeededCharge(db, nextInvocationRef, nextAttemptRef, nextTransactionRef, now + 1)
+    const otherAccountRef = 'acc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const otherGrantRef = 'grt_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    seedCanonicalQualifiedUseAuthority(db, nextInvocationRef, {
+      accountRef: otherAccountRef,
+      grantRef: otherGrantRef,
+    })
+    const nextInvocation = db.rows('capabilityOperationInvocations').find(
+      (row) => row.invocationRef === nextInvocationRef,
+    )
+    if (nextInvocation === undefined) throw new Error('authority_fixture_missing')
+    nextInvocation.grantRef = otherGrantRef
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs({
+        invocationRef: nextInvocationRef,
+        attemptRef: nextAttemptRef,
+        transactionRef: nextTransactionRef,
+        usageRef: `${nextInvocationRef}:usage`,
+        qualifiedAt: now + 1,
+        responseDigest: 'sha256:mixed-account',
+      })),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+  })
+
+  it('derives Account from the invocation grant despite caller-shaped legacy IDs', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const invocation = db.rows('capabilityOperationInvocations')[0]
+    if (invocation === undefined) throw new Error('authority_fixture_missing')
+    invocation.ownerId = 'acc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    invocation.credentialId = 'acc_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+    await expect(
+      qualifiedUseHandler({ db }, qualifiedUseArgs()),
+    ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('qualifiedUseReceipts')[0]?.owningAccountRef).toBe(
+      canonicalQualifiedUseAccountRef,
+    )
+  })
+
+  it('holds legacy or revoked payout provenance at the settlement seam', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const payout = db.rows('moneyPayouts')[0]
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (payout === undefined || allocation === undefined)
+      throw new Error('payout_fixture_missing')
+
+    await expect(
+      requireCanonicalPayoutAuthority({ db } as never, payout as never),
+    ).resolves.toEqual({
+      owningAccountRef: canonicalQualifiedUseAccountRef,
+      authorityPrincipalRef: principalId,
+      authorityGrantRef: canonicalQualifiedUseGrantRef,
+      authorityGrantGeneration: 1,
+      authorityResourceRefs: ['operation:money'],
+    })
+    delete allocation.owningAccountRef
+    await expect(
+      requireCanonicalPayoutAuthority({ db } as never, payout as never),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    allocation.owningAccountRef = canonicalQualifiedUseAccountRef
+    delete payout.authorityGrantRef
+    await expect(
+      requireCanonicalPayoutAuthority({ db } as never, payout as never),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+    payout.authorityGrantRef = canonicalQualifiedUseGrantRef
+    const grant = db.rows('authorityDelegationGrants')[0]
+    if (grant === undefined) throw new Error('authority_fixture_missing')
+    grant.lifecycle = 'revoked'
+    await expect(
+      requireCanonicalPayoutAuthority({ db } as never, payout as never),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+  })
+
+  it.each([
+    {
+      name: 'malformed pinned grant generation',
+      mutate: (payout: Record<string, unknown>, _allocation: Record<string, unknown>) => {
+        payout.authorityGrantGeneration = -1
+      },
+    },
+    {
+      name: 'missing payout resource list',
+      mutate: (payout: Record<string, unknown>, _allocation: Record<string, unknown>) => {
+        delete payout.authorityResourceRefs
+      },
+    },
+    {
+      name: 'deduplicated resource list',
+      mutate: (payout: Record<string, unknown>, _allocation: Record<string, unknown>) => {
+        payout.authorityResourceRefs = ['operation:money', 'operation:money']
+      },
+    },
+    {
+      name: 'malformed resource',
+      mutate: (_payout: Record<string, unknown>, allocation: Record<string, unknown>) => {
+        allocation.authorityResourceRef = ''
+      },
+    },
+  ])('holds payout settlement on $name', async ({ mutate }) => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const payout = db.rows('moneyPayouts')[0]
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (payout === undefined || allocation === undefined)
+      throw new Error('payout_fixture_missing')
+    mutate(payout, allocation)
+
+    await expect(
+      requireCanonicalPayoutAuthority({ db } as never, payout as never),
+    ).rejects.toThrow('qualified_use_authority_invalid')
+  })
+
+  it('holds payout settlement on a missing generation even under a permissive numeric port', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const payout = db.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('payout_fixture_missing')
+    delete payout.authorityGrantGeneration
+    const isSafeInteger = Number.isSafeInteger
+    const integerCheck = vi
+      .spyOn(Number, 'isSafeInteger')
+      .mockImplementation((value) => value === undefined || isSafeInteger(value))
+    try {
+      await expect(
+        requireCanonicalPayoutAuthority({ db } as never, payout as never),
+      ).rejects.toThrow('qualified_use_authority_invalid')
+    } finally {
+      integerCheck.mockRestore()
+    }
+  })
+
+  it('rejects invalid existing payout resource composition before pooling', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const payout = db.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('payout_fixture_missing')
+    delete payout.authorityResourceRefs
+    const nextInvocationRef = 'operation-invocation:test-money:invalid-composition'
+    const nextAttemptRef = `${nextInvocationRef}:attempt:1`
+    const nextTransactionRef = `operation-money:${nextInvocationRef}:${nextAttemptRef}:1`
+    rebindSeededCharge(
+      db,
+      nextInvocationRef,
+      nextAttemptRef,
+      nextTransactionRef,
+      now + 1,
+    )
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: nextInvocationRef,
+          attemptRef: nextAttemptRef,
+          transactionRef: nextTransactionRef,
+          usageRef: `${nextInvocationRef}:usage`,
+          qualifiedAt: now + 1,
+          responseDigest: 'sha256:invalid-payout-resource-composition',
+        }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+  })
+
+  it('rejects malformed resource provenance in an existing allocation before pooling', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    allocation.authorityResourceRef = ''
+    const nextInvocationRef = 'operation-invocation:test-money:malformed-resource'
+    const nextAttemptRef = `${nextInvocationRef}:attempt:1`
+    const nextTransactionRef = `operation-money:${nextInvocationRef}:${nextAttemptRef}:1`
+    rebindSeededCharge(
+      db,
+      nextInvocationRef,
+      nextAttemptRef,
+      nextTransactionRef,
+      now + 1,
+    )
+
+    await expect(
+      qualifiedUseHandler(
+        { db },
+        qualifiedUseArgs({
+          invocationRef: nextInvocationRef,
+          attemptRef: nextAttemptRef,
+          transactionRef: nextTransactionRef,
+          usageRef: `${nextInvocationRef}:usage`,
+          qualifiedAt: now + 1,
+          responseDigest: 'sha256:malformed-allocation-resource',
+        }),
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+  })
+
+  it('rejects persisted receipt drift at the allocation helper seam', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const args = qualifiedUseArgs()
+    await qualifiedUseHandler({ db }, args)
+    const persisted = db.rows('qualifiedUseReceipts')[0]
+    if (persisted === undefined) throw new Error('receipt_fixture_missing')
+    persisted.responseDigest = 'sha256:persisted-receipt-drift'
+    const receipt = buildQualifiedUseReceipt(
+      args as unknown as Parameters<typeof buildQualifiedUseReceipt>[0],
+    )
+
+    await expect(
+      recordQualifiedUsePayoutAllocation(
+        { db } as never,
+        receipt,
+        principalId,
+      ),
+    ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+  })
+
+  it('rejects a payout resource list invalidated before pointer advance', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    await qualifiedUseHandler({ db }, qualifiedUseArgs())
+    const payout = db.rows('moneyPayouts')[0]
+    if (payout === undefined) throw new Error('payout_fixture_missing')
+    const nextInvocationRef = 'operation-invocation:test-money:late-resource-drift'
+    const nextAttemptRef = `${nextInvocationRef}:attempt:1`
+    const nextTransactionRef = `operation-money:${nextInvocationRef}:${nextAttemptRef}:1`
+    rebindSeededCharge(
+      db,
+      nextInvocationRef,
+      nextAttemptRef,
+      nextTransactionRef,
+      now + 1,
+    )
+    const insertRow = db.insert.bind(db)
+    const insert = vi.spyOn(db, 'insert').mockImplementation(
+      async (table, value) => {
+        const id = await insertRow(table, value)
+        if (table === 'moneyPayoutAllocations')
+          delete payout.authorityResourceRefs
+        return id
+      },
+    )
+    try {
+      await expect(
+        qualifiedUseHandler(
+          { db },
+          qualifiedUseArgs({
+            invocationRef: nextInvocationRef,
+            attemptRef: nextAttemptRef,
+            transactionRef: nextTransactionRef,
+            usageRef: `${nextInvocationRef}:usage`,
+            qualifiedAt: now + 1,
+            responseDigest: 'sha256:late-payout-resource-drift',
+          }),
+        ),
+      ).rejects.toThrow('qualified_use_payout_allocation_invalid')
+    } finally {
+      insert.mockRestore()
+    }
+  })
+
+  it('rejects replay when allocation authority provenance is malformed', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const args = qualifiedUseArgs()
+    await qualifiedUseHandler({ db }, args)
+    const allocation = db.rows('moneyPayoutAllocations')[0]
+    if (allocation === undefined) throw new Error('allocation_fixture_missing')
+    allocation.authorityPrincipalRef =
+      'prn_99999999999999999999999999999999'
+
+    await expect(qualifiedUseHandler({ db }, args)).rejects.toThrow(
+      'qualified_use_payout_allocation_invalid',
+    )
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
+  })
+
+  it('rejects replay when persisted authority provenance is changed', async () => {
+    const db = new MemoryDb()
+    seedBudget(db)
+    seedPaidCharge(db)
+    settleSeededChargeBudget(db, credentialId, credentialId, true)
+    const args = qualifiedUseArgs()
+    await qualifiedUseHandler({ db }, args)
+    const receipt = db.rows('qualifiedUseReceipts')[0]
+    if (receipt === undefined) throw new Error('receipt_fixture_missing')
+    receipt.authorityGrantGeneration = 99
+
+    await expect(qualifiedUseHandler({ db }, args)).rejects.toThrow(
+      'qualified_use_payout_allocation_invalid',
+    )
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(1)
   })
 
   it('rejects a sandbox source behind a production Qualified Use receipt atomically', async () => {
@@ -476,6 +1212,7 @@ describe('exact invocation money reconciliation', () => {
 
   it('keeps provider-direct Qualified Use evidence without allocating payout', async () => {
     const db = new MemoryDb()
+    seedCanonicalQualifiedUseAuthority(db)
 
     await expect(
       qualifiedUseHandler(
@@ -483,6 +1220,25 @@ describe('exact invocation money reconciliation', () => {
         qualifiedUseArgs({ transactionRef: undefined }),
       ),
     ).resolves.toMatchObject({ kind: 'recorded' })
+    expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
+    expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
+    expect(db.rows('moneyPayouts')).toHaveLength(0)
+  })
+
+  it('rejects provider-direct replay when its pinned authority Principal drifts', async () => {
+    const db = new MemoryDb()
+    seedCanonicalQualifiedUseAuthority(db)
+    const args = qualifiedUseArgs({ transactionRef: undefined })
+    await expect(qualifiedUseHandler({ db }, args)).resolves.toMatchObject({
+      kind: 'recorded',
+    })
+    const receipt = db.rows('qualifiedUseReceipts')[0]
+    if (receipt === undefined) throw new Error('receipt_fixture_missing')
+    receipt.authorityPrincipalRef = 'prn_99999999999999999999999999999999'
+
+    await expect(qualifiedUseHandler({ db }, args)).rejects.toThrow(
+      'qualified_use_payout_allocation_invalid',
+    )
     expect(db.rows('qualifiedUseReceipts')).toHaveLength(1)
     expect(db.rows('moneyPayoutAllocations')).toHaveLength(0)
     expect(db.rows('moneyPayouts')).toHaveLength(0)
@@ -553,3 +1309,44 @@ describe('exact invocation money reconciliation', () => {
     expect(db.rows('moneyPayouts')).toHaveLength(0)
   })
 })
+
+function extendQualifiedUseDelegationAncestry(
+  db: MemoryDb,
+  grantCount: number,
+): void {
+  if (!Number.isSafeInteger(grantCount) || grantCount < 1) {
+    throw new Error('delegation_grant_count_invalid')
+  }
+  const leaf = db.rows('authorityDelegationGrants')[0]
+  if (leaf === undefined) throw new Error('authority_fixture_missing')
+  let child = leaf
+  for (let index = 1; index < grantCount; index += 1) {
+    const grantRef = `grt_${index.toString(16).padStart(32, '0')}`
+    const parent = {
+      _id: `authority-grant:${grantRef}`,
+      grantRef,
+      accountRef: canonicalQualifiedUseAccountRef,
+      actorPrincipalRef: principalId,
+      subjectPrincipalRef: principalId,
+      scopes: ['market_operations:invoke'],
+      resourceRefs: ['operation:money'],
+      budgetLimit: 1_000,
+      budgetUsed: 1,
+      expiresAt: 8_000_000_000_000_000 + index,
+      generation: 1,
+      revision: 1,
+      lifecycle: 'active',
+      createdAt: 0,
+      createdBy: {
+        actorPrincipalRef: principalId,
+        activeAccountRef: canonicalQualifiedUseAccountRef,
+        correlationRef: `correlation:${grantRef}`,
+        idempotencyRef: `create:${grantRef}`,
+      },
+    }
+    child.parentGrantRef = grantRef
+    child.parentGeneration = 1
+    db.seed('authorityDelegationGrants', parent)
+    child = parent
+  }
+}

@@ -1,11 +1,22 @@
-import type { GenericDatabaseReader, UserIdentity } from 'convex/server'
+import {
+  makeFunctionReference,
+  type GenericDatabaseReader,
+  type UserIdentity,
+} from 'convex/server'
 
-import { canonicalDigest } from '../src/modules/common/canonical-digest'
-import type { BusinessActor } from '../src/modules/business/public'
+import type {
+  BusinessActor,
+  InteractiveBusinessAuthorityContext,
+} from '../src/modules/business/public'
 import { requireAdminAuthority } from '../src/modules/security/public'
 import type { AdminAction, AdminAuthorityMutationResult, AdminAuthorityResult, AdminMembership } from '../src/modules/security/public'
 import type { DataModel, Doc } from './_generated/dataModel'
-import type { QueryCtx } from './_generated/server'
+import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server'
+import {
+  InteractiveAuthorityError,
+  resolveInteractiveAuthorityContext,
+  resolveMaterializedInteractiveAuthorityContext,
+} from './interactiveAuthority'
 type AdminIdentityLookup = Pick<UserIdentity, 'tokenIdentifier'>
 
 type AuthzCtx = {
@@ -13,28 +24,98 @@ type AuthzCtx = {
   auth: QueryCtx['auth']
 }
 
+type BusinessActorCtx =
+  | Readonly<{ auth: QueryCtx['auth']; db: GenericDatabaseReader<DataModel> }>
+  | Readonly<{
+      auth: MutationCtx['auth']
+      db: MutationCtx['db']
+      scheduler: MutationCtx['scheduler']
+    }>
+  | Readonly<{ auth: ActionCtx['auth']; runAction: ActionCtx['runAction'] }>
+
+const resolveCurrentInteractiveAuthorityRef = makeFunctionReference<
+  'action',
+  Record<string, never>,
+  InteractiveBusinessAuthorityContext | null
+>('interactiveAuthority:resolveCurrentInteractiveAuthority')
+
 export async function resolveBusinessActor(
-  ctx: Pick<AuthzCtx, 'auth'>,
+  ctx: BusinessActorCtx,
 ): Promise<BusinessActor> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
-    return {
-      kind: 'anonymous',
-      anonymousBucket: 'convex:anonymous',
-    }
+    return anonymousBusinessActor()
   }
 
-  return actorFromIdentity(identity)
+  let authority: InteractiveBusinessAuthorityContext | null
+  try {
+    if ('db' in ctx) {
+      if (!('scheduler' in ctx) || ctx.scheduler === undefined) {
+        authority = await resolveMaterializedInteractiveAuthorityContext(ctx.db, identity)
+      } else {
+        authority = await resolveInteractiveAuthorityContext({
+          db: ctx.db as MutationCtx['db'],
+          scheduler: ctx.scheduler,
+        }, identity)
+      }
+    } else {
+      authority = await ctx.runAction(resolveCurrentInteractiveAuthorityRef, {})
+    }
+  } catch (error) {
+    if (error instanceof InteractiveAuthorityError) return anonymousBusinessActor()
+    throw error
+  }
+  if (authority === null) return anonymousBusinessActor()
+  return Object.freeze({
+    kind: 'authenticated_owner',
+    clerkUserId: authority.legacyOwnerLocator,
+    canonicalPrincipalRef: authority.principalRef,
+    canonicalAccountRef: authority.accountRef,
+    legacyOwnerId: authority.legacyOwnerId,
+    authorityRevision: authority.revision,
+    authorityProvenance: authority.provenance,
+    ...(authority.displayName === undefined ? {} : { displayName: authority.displayName }),
+    ...(authority.emailHash === undefined ? {} : { emailHash: authority.emailHash }),
+  })
+}
+
+function anonymousBusinessActor(): Extract<BusinessActor, { kind: 'anonymous' }> {
+  return Object.freeze({
+    kind: 'anonymous',
+    anonymousBucket: 'convex:anonymous',
+  })
+}
+
+export async function readCanonicalCompatibilityOwner(
+  db: GenericDatabaseReader<DataModel>,
+  actor: Extract<BusinessActor, { kind: 'authenticated_owner' }>,
+): Promise<Doc<'owners'> | null> {
+  const ownerId = db.normalizeId('owners', actor.legacyOwnerId)
+  if (ownerId === null) return null
+  const owner = await db.get(ownerId)
+  return owner !== null &&
+    String(owner._id) === actor.legacyOwnerId &&
+    owner.canonicalPrincipalRef === actor.canonicalPrincipalRef &&
+    owner.canonicalAccountRef === actor.canonicalAccountRef
+    ? owner
+    : null
 }
 
 export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction): Promise<AdminAuthorityResult> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') {
+    return requireAdminAuthority(undefined, action)
+  }
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) {
     return requireAdminAuthority(undefined, action)
   }
 
   const membership = await readActiveAdminMembership(ctx.db, identity)
-  return requireAdminAuthority(membership, action)
+  return requireAdminAuthority(
+    membership?.clerkUserId === actor.clerkUserId ? membership : undefined,
+    action,
+  )
 }
 
 export async function readCurrentActiveAdminMembership(
@@ -43,8 +124,12 @@ export async function readCurrentActiveAdminMembership(
     auth: QueryCtx['auth']
   }>,
 ): Promise<AdminMembership | undefined> {
+  const actor = await resolveBusinessActor(ctx)
+  if (actor.kind !== 'authenticated_owner') return undefined
   const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(ctx.db, identity)
+  if (identity === null) return undefined
+  const membership = await readActiveAdminMembership(ctx.db, identity)
+  return membership?.clerkUserId === actor.clerkUserId ? membership : undefined
 }
 
 export async function readActiveAdminMembership(
@@ -77,28 +162,5 @@ function adminMembershipFromDoc(membership: Doc<'adminMemberships'>): AdminMembe
     ...(membership.evidenceRef === undefined ? {} : { evidenceRef: membership.evidenceRef }),
   }
 }
-
-export function actorFromIdentity(identity: UserIdentity): BusinessActor {
-  const displayName = optionalIdentityText(identity.name ?? identity.preferredUsername)
-  const emailHash = identity.email === undefined ? undefined : canonicalDigest({ email: identity.email.toLowerCase() })
-  return {
-    kind: 'authenticated_owner',
-    clerkUserId: identity.subject,
-    ...(displayName === undefined ? {} : { displayName }),
-    ...(emailHash === undefined ? {} : { emailHash }),
-    sessionRef: identity.tokenIdentifier,
-  }
-}
-
-function optionalIdentityText(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined
-  }
-
-  const normalized = value.replace(/\s+/g, ' ').trim().slice(0, 160)
-  return normalized.length === 0 ? undefined : normalized
-}
-
-
 
 export type { AdminAuthorityResult, AdminAuthorityMutationResult }

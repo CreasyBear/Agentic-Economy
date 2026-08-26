@@ -12,6 +12,7 @@ import {
 import type { AdminMembership } from '@/modules/security/public'
 import { resolveAdminAuthority } from '../../../convex/authz'
 import schema from '../../../convex/schema'
+import { ownerAdmin } from '../../helpers/convex-fixtures'
 
 const convexModules = Object.fromEntries(
   Object.entries(import.meta.glob('../../../convex/**/*.{ts,js}'))
@@ -249,27 +250,14 @@ describe('admin authority contract', () => {
     }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'register_capability_supply'))
     expect(missingAuthority).toEqual({ kind: 'denied', reason: 'missing_membership' })
 
-    await backend.run(async (ctx) => {
-      await ctx.db.insert('adminMemberships', {
-        clerkUserId: 'current-admin',
-        tokenIdentifier: 'clerk|current-admin',
-        role: 'owner_admin',
-        state: 'active',
-        grantedBy: 'bootstrap',
-        grantedAt: 1,
-      })
-    })
-
-    const currentAuthority = await backend.withIdentity({
-      subject: 'current-admin',
-      issuer: 'https://clerk.example.test',
-      tokenIdentifier: 'clerk|current-admin',
-    }).query((ctx) => resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'register_capability_supply'))
+    const currentAdmin = await ownerAdmin(backend, 'user_current-admin')
+    const currentAuthority = await currentAdmin.query((ctx) =>
+      resolveAdminAuthority({ db: ctx.db, auth: ctx.auth }, 'register_capability_supply'))
     expect(currentAuthority).toMatchObject({
       kind: 'allowed',
       membership: {
-        clerkUserId: 'current-admin',
-        tokenIdentifier: 'clerk|current-admin',
+        clerkUserId: 'user_current-admin',
+        tokenIdentifier: 'token_current-admin',
         role: 'owner_admin',
         state: 'active',
       },

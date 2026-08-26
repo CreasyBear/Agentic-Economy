@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 describe('MCP host adapter operation.invoke', () => {
   it('authenticates operation.invoke and delegates the same registered action', async () => {
+    const resolvedScopes: Array<readonly string[]> = []
+    const resolvedResources: string[] = []
     const executor = {
       invokeOperation: vi.fn().mockResolvedValue({
         kind: 'completed',
@@ -46,11 +48,28 @@ describe('MCP host adapter operation.invoke', () => {
         subject: 'user_test',
         scopes: ['market_operations:invoke'],
       }),
+      resolvePrincipal: async (projection, requiredScopes, consequenceResource) => {
+        resolvedScopes.push(requiredScopes)
+        resolvedResources.push(consequenceResource)
+        return {
+          ...projection,
+          principalId: 'prn_00000000000040008000000000000044',
+          ownerId: 'acc_00000000000040008000000000000044',
+        }
+      },
       operationInvokeService: executor,
     })
     expect(response.status).toBe(200)
     const body = await readMcpBody(response)
     expect((body.result?.structuredContent as { result?: unknown } | undefined)?.result).toMatchObject({ kind: 'completed', operationRef: currentOperationRef })
+    expect(resolvedScopes).toEqual([['market_operations:invoke']])
+    expect(resolvedResources).toEqual(['surface:mcp:operation.invoke'])
     expect(executor.invokeOperation).toHaveBeenCalledOnce()
+    expect(executor.invokeOperation).toHaveBeenCalledWith(expect.objectContaining({
+      principal: expect.objectContaining({
+        principalId: 'prn_00000000000040008000000000000044',
+        ownerId: 'acc_00000000000040008000000000000044',
+      }),
+    }))
   })
 })

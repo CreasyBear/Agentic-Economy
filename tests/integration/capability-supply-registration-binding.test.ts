@@ -26,7 +26,7 @@ describe('V2 capability supply registration — binding', () => {
     const admin = await ownerAdmin(backend, 'user_capability_supply_admin')
     const ref = await registerContract(admin)
     const { businessId, owner } = await publishedBusinessOwner(backend, 'supply-one')
-    await registerProviderConnection(admin, businessId, bindingRegistration(ref))
+    await registerProviderConnection(backend, businessId, bindingRegistration(ref))
     const offeringArgs = {
       registration: offeringRegistration(businessId, ref), ...operationContext('offering'),
     }
@@ -79,7 +79,7 @@ describe('V2 capability supply registration — binding', () => {
       registration: bindingRegistration(ref), ...operationContext('binding'),
     })
     if (binding.kind !== 'registered') throw new Error('binding registration failed')
-    await registerProviderConnection(admin, businessId, {
+    await registerProviderConnection(backend, businessId, {
       ...bindingRegistration(ref),
       bindingId: 'binding:supply-one:http:healthy',
       endpointUrl: 'https://healthy.example.test/capability',

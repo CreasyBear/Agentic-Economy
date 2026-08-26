@@ -18,6 +18,22 @@ import { recover } from '../../../convex/capabilityOperationInvocationWorker'
 type Handler = (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>
 type AuthIdentity = Readonly<{ subject: string; tokenIdentifier: string }>
 
+vi.mock('../../../convex/authz', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../convex/authz')>()),
+  resolveBusinessActor: vi.fn(async (ctx: { auth: { getUserIdentity: () => Promise<AuthIdentity | null> } }) => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'anonymous', anonymousBucket: 'convex:anonymous' }
+    return {
+      kind: 'authenticated_owner', clerkUserId: identity.tokenIdentifier,
+      canonicalPrincipalRef: identity.tokenIdentifier === 'clerk|user_123'
+        ? `prn_${'1'.repeat(32)}` : `prn_${'9'.repeat(32)}`,
+      canonicalAccountRef: identity.tokenIdentifier === 'clerk|user_123'
+        ? `acc_${'2'.repeat(32)}` : `acc_${'8'.repeat(32)}`,
+      legacyOwnerId: 'owners:1', authorityRevision: {}, authorityProvenance: {},
+    }
+  }),
+}))
+
 type RecoveryRow = Readonly<{
   invocationRef: string
   principalId: string
@@ -41,7 +57,7 @@ type RecoveryRow = Readonly<{
 
 const principal: AgentAccessPrincipal = {
   principalId: 'principal:one',
-  ownerId: 'clerk|user_123',
+  ownerId: `acc_${'2'.repeat(32)}`,
   credentialId: 'credential:one',
   applicationRef: 'application:one',
   environment: 'sandbox',
@@ -177,7 +193,10 @@ function recoveryContext(options: Readonly<{
       default: throw new Error(`unexpected_query:${functionPath(reference)}`)
     }
   })
-  const runMutation = vi.fn(async () => ({ kind: 'accepted' }))
+  const runMutation = vi.fn(async (reference: unknown, args: Record<string, unknown>) => {
+    if (functionPath(reference) === 'capabilityOperationInvocations:resolveInvocationAgentAuthority') return args.principal
+    return { kind: 'accepted' }
+  })
   return { runAction, runQuery, runMutation }
 }
 function recoveryArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -241,6 +260,20 @@ function workerRecoveryContext(
   })
   const runMutation = vi.fn(async (reference: unknown, args: unknown) => {
     const path = functionPath(reference)
+    if (path === 'capabilityOperationInvocations:reconcileInvocationWorkloadAuthority') {
+      return {
+        kind: 'authorized',
+        authority: {
+          principalId: currentRow.principalId,
+          accountRef: currentRow.ownerId,
+          credentialId: currentRow.credentialId,
+          grantRef: 'grant:current',
+          grantGeneration: currentRow.grantGeneration,
+          policyDigest: 'sha256:policy',
+          expiresAt: 9_999_999,
+        },
+      }
+    }
     if (path === 'capabilityOperationInvocations:cancelBeforeClaim') {
       currentRow = {
         ...currentRow,
@@ -293,6 +326,12 @@ function workerRecoveryContext(
     return { kind: 'recorded' }
   })
   return { runQuery, runMutation }
+}
+
+function effectMutationCalls(context: { runMutation: ReturnType<typeof vi.fn> }) {
+  return context.runMutation.mock.calls.filter(([reference]) => (
+    functionPath(reference) !== 'capabilityOperationInvocations:reconcileInvocationWorkloadAuthority'
+  ))
 }
 const ownerIdentity: AuthIdentity = { subject: 'user_123', tokenIdentifier: 'clerk|user_123' }
 function projectionContext(initialRow: RecoveryRow) {
@@ -356,9 +395,9 @@ describe('capability operation recovery Convex adapters', () => {
       mode: 'reconcile',
       evidence,
     })
-    expect(statusContext.runMutation).toHaveBeenCalledTimes(1)
-    expect(cancelContext.runMutation).toHaveBeenCalledTimes(1)
-    expect(reconcileContext.runMutation).toHaveBeenCalledTimes(1)
+    expect(statusContext.runMutation).toHaveBeenCalledTimes(2)
+    expect(cancelContext.runMutation).toHaveBeenCalledTimes(2)
+    expect(reconcileContext.runMutation).toHaveBeenCalledTimes(2)
     for (const context of [statusContext, cancelContext, reconcileContext]) {
       expect(context.runQuery).toHaveBeenCalledTimes(1)
       expect(functionPath(context.runQuery.mock.calls[0]?.[0])).toBe('capabilityOperationInvocations:readRecovery')
@@ -551,7 +590,7 @@ describe('capability operation recovery Convex adapters', () => {
       evidenceHash: 'sha256:evidence',
       attemptRef: 'attempt:outer',
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
     expect(context.runQuery.mock.calls.map(([reference]) => functionPath(reference))).toEqual([
       'capabilityOperationInvocations:readRecovery',
       'actionInvocationControl:readControl',
@@ -580,7 +619,7 @@ describe('capability operation recovery Convex adapters', () => {
       state: 'terminal',
       result,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
 
   it('cancels a pre-control pending row durably and replays the cancellation', async () => {
@@ -617,9 +656,9 @@ describe('capability operation recovery Convex adapters', () => {
         retryable: false,
       },
     })
-    expect(context.runMutation).toHaveBeenCalledTimes(1)
-    expect(functionPath(context.runMutation.mock.calls[0]?.[0])).toBe('capabilityOperationInvocations:cancelBeforeClaim')
-    expect(context.runMutation.mock.calls[0]?.[1]).toMatchObject({
+    expect(effectMutationCalls(context)).toHaveLength(1)
+    expect(functionPath(effectMutationCalls(context)[0]?.[0])).toBe('capabilityOperationInvocations:cancelBeforeClaim')
+    expect(effectMutationCalls(context)[0]?.[1]).toMatchObject({
       invocationRef,
       principalId: principal.principalId,
       credentialId: principal.credentialId,
@@ -680,7 +719,7 @@ describe('capability operation recovery Convex adapters', () => {
       state: 'in_progress',
       result,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
 
   it('keeps canonical retryable state authoritative without repairing on status read', async () => {
@@ -717,7 +756,7 @@ describe('capability operation recovery Convex adapters', () => {
       effectGeneration: 1,
       attemptRef: `operation-attempt:${invocationRef}:1`,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
 
   it('projects canonical terminal state without repairing an outer pending row', async () => {
@@ -746,7 +785,7 @@ describe('capability operation recovery Convex adapters', () => {
       effectGeneration: 1,
       attemptRef: `operation-attempt:${invocationRef}:1`,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
 
 
@@ -780,7 +819,7 @@ describe('capability operation recovery Convex adapters', () => {
       state: 'terminal',
       result,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
   it('replays the persisted canonical cancellation after an interrupted outer projection', async () => {
     const fixture = canonicalFixture({ state: 'cancelled', effect: 'not_released' })
@@ -852,6 +891,6 @@ describe('capability operation recovery Convex adapters', () => {
       code: 'invocation_not_found',
       retryable: false,
     })
-    expect(context.runMutation).not.toHaveBeenCalled()
+    expect(effectMutationCalls(context)).toHaveLength(0)
   })
 })

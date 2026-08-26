@@ -40,6 +40,7 @@ import {
 } from './capabilitySupplyCommands'
 import type { Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
+import { resolveBusinessActor } from './authz'
 import {
   authorityValue,
   cancellationValue,
@@ -323,8 +324,12 @@ export async function publishPreparedCapabilityHandler(
   const agentAdmission = args.agentPrincipal === undefined
     ? undefined
     : await verifySupplyAgentPrincipal(ctx, args.agentPrincipal, true)
+  const ownerActor = args.agentPrincipal === undefined
+    ? await resolveBusinessActor(ctx)
+    : undefined
   const businessAuthorized = args.agentPrincipal === undefined
-    ? await ownsPublishedBusiness(ctx, args.businessId)
+    ? ownerActor?.kind === 'authenticated_owner'
+      && await ownsPublishedBusiness(ctx, args.businessId)
     : agentAdmission?.kind === 'allowed'
       && await ownsPublishedBusinessForOwnerId(ctx, args.businessId, agentAdmission.ownerId)
   if (!validRegistrationContext(args) || !businessAuthorized) {
@@ -367,10 +372,7 @@ export async function publishPreparedCapabilityHandler(
       reason: 'catalog_offering_origin_changed' as const,
     }
   }
-  const identity = args.agentPrincipal === undefined
-    ? await ctx.auth.getUserIdentity()
-    : null
-  if (args.agentPrincipal === undefined && identity === null)
+  if (args.agentPrincipal === undefined && ownerActor?.kind !== 'authenticated_owner')
     return {
       kind: 'refused' as const,
       reason: 'authorization_denied' as const,
@@ -380,7 +382,14 @@ export async function publishPreparedCapabilityHandler(
       businessId: String(args.businessId),
       runtimeEnvironment: args.runtimeEnvironment,
       prepared: args.prepared,
-      actor: { kind: 'owner', ref: args.agentPrincipal?.ownerId ?? identity?.subject ?? '' },
+      actor: {
+        kind: 'owner',
+        ref: agentAdmission?.kind === 'allowed'
+          ? agentAdmission.principalId
+          : ownerActor?.kind === 'authenticated_owner'
+            ? ownerActor.canonicalPrincipalRef
+            : '',
+      },
       origin,
       operationKey: args.operationKey,
       correlationId: args.correlationId,

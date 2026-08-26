@@ -800,6 +800,7 @@ describe('T4 current Operation read model', () => {
     const target = await backend.query(internal.capabilitySupply.readCapabilityProbeTarget, {
       publicationRef: fixture.publicationRef,
       expectedRevision: fixture.publicationRevision,
+      now: Date.now(),
     })
     expect(target.kind).toBe('available')
     if (target.kind !== 'available') return
@@ -815,6 +816,7 @@ describe('T4 current Operation read model', () => {
       observedAt,
       validUntil: observedAt + 3_600_000,
       evidenceRefs: ['test:t4:probe-cycle'],
+      resourceAuthority: target.target.resourceAuthority,
     })
     expect(observed).toMatchObject({ kind: 'observed' })
     const row = await backend.run(async (ctx) => (

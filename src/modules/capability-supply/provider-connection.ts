@@ -25,6 +25,11 @@ export type {
 } from './internal/provider-connection/types'
 
 export {
+  canonicalProviderConnectionProjection,
+  canonicalProviderConnectionProjectionIsCurrent,
+  canonicalProviderConnectionProjectionMatches,
+  canonicalProviderLeaseProjection,
+  canonicalProviderLeaseProjectionIsCurrent,
   isProviderConnectionAuthorityCurrent,
   providerConnectionAuthorityDigest,
 } from './internal/provider-connection/shared'

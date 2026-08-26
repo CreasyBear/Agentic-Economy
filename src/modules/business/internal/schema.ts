@@ -11,11 +11,20 @@ import {
 export const businessTables = {
   owners: defineTable({
     clerkUserId: v.string(),
+    // Compatibility-only migration provenance. Clerk identifiers continue to
+    // locate legacy catalogue rows, but never establish Principal or Account
+    // authority. Rows without both canonical references fail closed.
+    canonicalPrincipalRef: v.optional(v.string()),
+    canonicalAccountRef: v.optional(v.string()),
     displayName: v.optional(v.string()),
     emailHash: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_clerkUserId', ['clerkUserId']),
+  })
+    .index('by_clerkUserId', ['clerkUserId'])
+    .index('by_canonicalPrincipalRef', ['canonicalPrincipalRef'])
+    .index('by_canonicalAccountRef', ['canonicalAccountRef'])
+    .index('by_canonicalPrincipalRef_and_canonicalAccountRef', ['canonicalPrincipalRef', 'canonicalAccountRef']),
 
   businesses: defineTable({
     ownerId: v.id('owners'),

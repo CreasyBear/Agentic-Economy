@@ -11,7 +11,7 @@ Last updated: 2026-08-26 Australia/Perth
 |---|---|---|---|
 | 0 | INTEGRATED | `50f74aa72` | Foundation predecessor retained |
 | 1 | SOURCE_ACCEPTED_EVIDENCE_OPEN | accepted source `ae284871d9d5bad40245182aefd6f2050d53b556`; evidence handoff `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Phase 2 launched |
-| 2 | IMPLEMENTING | task `01a039cb-a32a-7952-9c39-330b3c4ec860`; branch `codex/ae-maturity-phase-2`; current measured HEAD `3dd77ba0c8800124e1374a91bc83b06ca970effc`; base `d20d62d8255ee7a38ce7cb8f1c618b1e0393d4e0` | Finish the frozen authority-entry migration, internal handoff, then fresh acceptance |
+| 2 | INCOMPLETE_NOT_ACCEPTED_NOT_MATURE | stop-line source `f293325c87934e5fefc52c1dbc8cb3b799d00aa0`, now integrated into the mainline consolidation candidate; assessment `05528077dfbc020518c7c603acaf20658ee2e4dd` | Preserve the sound foundation work, keep all failed proof/design gates open, and rebaseline before further maturity execution |
 | 3 | REBASELINE_HOLD | architecture tasks `01a03cd1-732d-7a81-8d23-a90e5840af85` and `01a03d14-df23-72f3-88d5-4d246472b07b` stopped and archived; prior drafts are explicitly unaccepted with 0/12 reset gates met | Wait for Phase 2 acceptance, Phase 1–2 forensics and a new engineering-reviewed executable baseline |
 | 4 | REBASELINE_HOLD | prior Phase 3 dependency model is not authorized | Wait for the new baseline |
 | 5 | REBASELINE_HOLD | automatic parallel launch is suspended | Wait for the new baseline |
@@ -33,7 +33,7 @@ Last updated: 2026-08-26 Australia/Perth
   three clean worktrees removed after exact refs were proven reachable. Phase 1
   branches remain retained through Phase 2 acceptance.
 
-## Phase 2 dispatch
+## Phase 2 stop-line
 
 - Task: `AE Maturity Phase 2 — Execution Resume`
 - Task ID: `01a039cb-a32a-7952-9c39-330b3c4ec860`
@@ -42,7 +42,9 @@ Last updated: 2026-08-26 Australia/Perth
 - Launch packet commit: `7c84f8df3` (must be verified as two documentation
   files before cherry-pick).
 - Scope: P2-01 through P2-05 plus Phase 2 integration only.
-- Acceptance: not yet started; it must be a new task after exact internal handoff.
+- Acceptance: not achieved. The authoritative checkpoint assessment remains
+  `INCOMPLETE_NOT_ACCEPTED_NOT_MATURE`; mainline inclusion is source consolidation,
+  not Phase 2 acceptance or an AE maturity claim.
 
 ## Open external evidence carried forward
 

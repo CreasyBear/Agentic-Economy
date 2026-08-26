@@ -12,6 +12,36 @@ import { internal } from './_generated/api'
 import { env, internalAction } from './_generated/server'
 import type { ActionCtx } from './_generated/server'
 import { createChatAgent } from './chatTools'
+import { interactiveAuthorityContextValue } from './interactiveAuthority'
+import type { InteractiveBusinessAuthorityContext } from '../src/modules/business/public'
+import {
+  accountRef,
+  membershipRef,
+  ownershipRef,
+  principalRef,
+} from '../src/modules/principal-account/public'
+
+function interactiveAuthorityContextFromValue(
+  input: typeof interactiveAuthorityContextValue.type,
+): InteractiveBusinessAuthorityContext {
+  const accessRef = input.provenance.accessKind === 'ownership'
+    ? ownershipRef(input.provenance.accessRef)
+    : membershipRef(input.provenance.accessRef)
+  return Object.freeze({
+    principalRef: principalRef(input.principalRef),
+    accountRef: accountRef(input.accountRef),
+    legacyOwnerId: input.legacyOwnerId,
+    legacyOwnerLocator: input.legacyOwnerLocator,
+    ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+    ...(input.emailHash === undefined ? {} : { emailHash: input.emailHash }),
+    revision: Object.freeze({ ...input.revision }),
+    provenance: Object.freeze({
+      ...input.provenance,
+      accessRef,
+      currentOwnershipRef: ownershipRef(input.provenance.currentOwnershipRef),
+    }),
+  })
+}
 
 export async function streamDurableChatResponse(
   ctx: ActionCtx,
@@ -19,10 +49,11 @@ export async function streamDurableChatResponse(
     threadId: string
     ownerId: string
     promptMessageId: string
+    authority?: InteractiveBusinessAuthorityContext
   }>,
   languageModel: LanguageModelV4,
 ): Promise<void> {
-  const agent = createChatAgent(languageModel)
+  const agent = createChatAgent(languageModel, args.authority)
   await agent.streamText(
     ctx,
     { threadId: args.threadId, userId: args.ownerId },
@@ -40,8 +71,8 @@ export async function streamDurableChatResponse(
 export const generate = internalAction({
   args: {
     threadId: v.string(),
-    ownerId: v.string(),
     promptMessageId: v.string(),
+    authority: interactiveAuthorityContextValue,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -55,9 +86,19 @@ export const generate = internalAction({
         ...(env.AE_LLM_MODEL === undefined ? {} : { AE_LLM_MODEL: env.AE_LLM_MODEL }),
         ...(env.AE_SITE_URL === undefined ? {} : { SITE_URL: env.AE_SITE_URL }),
       })
+      const current = await ctx.runQuery(internal.chatMessages.authorizeScheduledGeneration, {
+        threadId: args.threadId,
+        promptMessageId: args.promptMessageId,
+        authority: args.authority,
+      })
+      if (current === null) throw new Error('chat_generation_authority_invalid')
       await streamDurableChatResponse(
         ctx,
-        args,
+        {
+          ...args,
+          ownerId: current.ownerId,
+          authority: interactiveAuthorityContextFromValue(args.authority),
+        },
         openRouterModel(config, config.model),
       )
       return null

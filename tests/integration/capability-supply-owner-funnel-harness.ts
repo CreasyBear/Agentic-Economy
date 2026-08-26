@@ -15,6 +15,7 @@ import {
 } from '../fixtures/capability-contract-v2'
 import {
   isAdapterConfig,
+  publishedBusinessOwner,
   type ConvexFixtureBackend,
 } from '../helpers/convex-fixtures'
 import { withSourceWrite } from '../helpers/source-write-admission'
@@ -396,36 +397,17 @@ export async function createPublishedBusinessOwner(
   backend: ConvexFixtureBackend,
   slug: string,
 ) {
-  const identity = {
-    subject: `user_${slug}`,
-    issuer: 'https://identity.example',
-    tokenIdentifier: `token_${slug}`,
-  }
-  const businessId = (await backend.run(async (ctx) => {
-    const ownerId = await ctx.db.insert('owners', {
-      clerkUserId: identity.subject,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    return ctx.db.insert('businesses', {
-      ownerId,
-      slug,
-      name: slug,
-      normalizedName: slug,
-      category: 'professional services',
+  const published = await publishedBusinessOwner(backend, slug)
+  await backend.run(async (ctx) => {
+    await ctx.db.patch(published.businessId, {
       businessContext: {
         kind: 'programmable_provider',
         website: 'https://provider.example',
         providerIdentifier: `provider:${slug}`,
       },
-      publicStatus: 'published',
-      trustTier: 'listed',
-      sourceHash: `source:${slug}`,
-      createdAt: 1,
-      updatedAt: 1,
     })
-  })) as Id<'businesses'>
-  return { businessId, owner: backend.withIdentity(identity) }
+  })
+  return published
 }
 export async function seedSupplyAgentPrincipal(
   backend: ConvexFixtureBackend,

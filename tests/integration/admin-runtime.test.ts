@@ -7,8 +7,10 @@ import {
   readAdminAuditEvents,
   readAdminIndexHealth,
 } from '../../convex/security'
+import { interactiveCredentialExpiryNonce } from '../../convex/interactiveCredentialLifecycle'
 import { withSourceWrite } from '../helpers/source-write-admission'
 import type { SourceWriteAdmission, SourceWriteAdmissionRequest } from '@/modules/security/source-write-admission'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -464,12 +466,129 @@ function seededAdminDb(): FakeDb {
 }
 
 function authCtx(db: Db, identity: UserIdentity | null): TestCtx {
+  const canonicalIdentity = identity === null
+    ? null
+    : { ...identity, exp: identity.exp ?? 8_000_000_000 }
+  if (canonicalIdentity !== null && db instanceof FakeDb) {
+    seedCanonicalIdentity(db, canonicalIdentity)
+  }
   return {
     db,
     auth: {
-      getUserIdentity: async () => identity,
+      getUserIdentity: async () => canonicalIdentity,
     },
   }
+}
+
+function seedCanonicalIdentity(db: FakeDb, identity: UserIdentity): void {
+  const tokenIdentifier = identity.tokenIdentifier
+  if (db.dump('externalIdentityBindings').some((row) => row.providerIdentifier === tokenIdentifier)) return
+  const suffix = canonicalDigest({ tokenIdentifier }).slice('sha256:'.length, 'sha256:'.length + 32)
+  const principalRef = `prn_${suffix}`
+  const accountRef = `acc_${suffix}`
+  const ownershipRef = `own_${suffix}`
+  const bindingRef = `eib_${suffix}`
+  const credentialRef = `crd_${suffix}`
+  const now = 1
+  const expiresAt = 8_000_000_000_000
+  db.seed('principals', {
+    _id: `principals:${suffix}`,
+    _creationTime: now,
+    principalRef,
+    kind: 'human',
+    lifecycle: 'active',
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  db.seed('accounts', {
+    _id: `accounts:${suffix}`,
+    _creationTime: now,
+    accountRef,
+    displayName: `${identity.subject} account`,
+    lifecycle: 'active',
+    recoveryPolicy: { kind: 'no_transfer', revision: 1 },
+    creationActorPrincipalRef: principalRef,
+    creationIdempotencyRef: `create:${accountRef}`,
+    initialOwnershipRef: ownershipRef,
+    currentOwnershipRef: ownershipRef,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+    lastAction: {
+      actorPrincipalRef: principalRef,
+      activeAccountRef: accountRef,
+      correlationRef: `create:${accountRef}`,
+      idempotencyRef: `create:${accountRef}`,
+    },
+  })
+  db.seed('accountOwnerships', {
+    _id: `accountOwnerships:${suffix}`,
+    _creationTime: now,
+    ownershipRef,
+    accountRef,
+    ownerPrincipalRef: principalRef,
+    lifecycle: 'active',
+    changeKind: 'creation',
+    revision: 1,
+    createdAt: now,
+    createdBy: {
+      actorPrincipalRef: principalRef,
+      activeAccountRef: accountRef,
+      correlationRef: `create:${ownershipRef}`,
+      idempotencyRef: `create:${ownershipRef}`,
+    },
+  })
+  db.seed('externalIdentityBindings', {
+    _id: `externalIdentityBindings:${suffix}`,
+    _creationTime: now,
+    bindingRef,
+    principalRef,
+    providerNamespace: 'clerk/user',
+    providerIdentifier: tokenIdentifier,
+    providerState: { kind: 'known', value: 'active' },
+    lifecycle: 'active',
+    credentialGeneration: 1,
+    bindIdempotencyRef: `bind:${bindingRef}`,
+    revision: 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const credential = {
+    _id: `credentials:${suffix}`,
+    _creationTime: now,
+    credentialRef,
+    bindingRef,
+    principalRef,
+    type: 'provider_token',
+    lifecycle: 'active',
+    generation: 1,
+    issueIdempotencyRef: `issue:${credentialRef}`,
+    revision: 1,
+    issuedAt: now,
+    expiresAt,
+    updatedAt: now,
+  }
+  db.seed('credentials', {
+    ...credential,
+    expiryMaterialization: {
+      state: 'scheduled',
+      credentialGeneration: 1,
+      credentialExpiresAt: expiresAt,
+      scheduleNonce: interactiveCredentialExpiryNonce(credential),
+      scheduleRef: `scheduled:${credentialRef}`,
+      materializedAt: now,
+    },
+  })
+  db.seed('owners', {
+    _id: `owners:${suffix}`,
+    _creationTime: now,
+    clerkUserId: identity.subject,
+    canonicalPrincipalRef: principalRef,
+    canonicalAccountRef: accountRef,
+    createdAt: now,
+    updatedAt: now,
+  })
 }
 
 function ownerAdmin(): UserIdentity {

@@ -43,7 +43,7 @@ export async function readAgentOwnerSupplyFunnelHandler(
       return { kind: 'error', code: 'unauthenticated' }
     const owner = await ctx.db
       .query('owners')
-      .withIndex('by_clerkUserId', (q) => q.eq('clerkUserId', admission.ownerId))
+      .withIndex('by_canonicalAccountRef', (q) => q.eq('canonicalAccountRef', admission.ownerId))
       .unique()
     if (owner === null) return { kind: 'not_found' }
     const business = await ctx.db.get(args.businessId)

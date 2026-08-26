@@ -15,21 +15,35 @@ import {
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import {
+  bindWorkloadCronActionContext,
+  parseWorkloadCronSnapshot,
+  workloadCronSnapshotValue,
+  type WorkloadCronSnapshot,
+} from "./workloadCron";
 
 const WRITE_BATCH_SIZE = 50;
 
 export const run = internalAction({
-  args: {},
+  args: { workload: workloadCronSnapshotValue },
   returns: v.object({
     kind: v.union(v.literal("refreshed"), v.literal("preserved")),
     generation: v.string(),
     entries: v.number(),
     reason: v.optional(v.string()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
+    const workload: WorkloadCronSnapshot = await ctx.runQuery(internal.workloadCron.reconcile, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: parseWorkloadCronSnapshot(args.workload),
+    });
+    const authorized = bindWorkloadCronActionContext(ctx, {
+      name: "refresh Agentic Economy API registry",
+      snapshot: workload,
+    });
     const startedAt = Date.now();
     const generation = `registry-${startedAt}-${crypto.randomUUID()}`;
-    await ctx.runMutation(internal.marketExternalRegistry.begin, {
+    await authorized.runMutation(internal.marketExternalRegistry.begin, {
       generation,
       startedAt,
     });
@@ -44,7 +58,7 @@ export const run = internalAction({
               ...launchCohort,
               ...sourceEntries.map(toLaunchCandidate),
             ]);
-            const written = await ctx.runMutation(
+            const written = await authorized.runMutation(
               internal.marketExternalRegistry.writeBatch,
               {
                 generation,
@@ -65,7 +79,7 @@ export const run = internalAction({
             ? []
             : [`treg:${treg.incompleteReason ?? "incomplete"}`]),
         ].join(",");
-        await ctx.runMutation(internal.marketExternalRegistry.fail, {
+        await authorized.runMutation(internal.marketExternalRegistry.fail, {
           generation,
           failedAt: Date.now(),
           reason,
@@ -73,7 +87,7 @@ export const run = internalAction({
         return { kind: "preserved" as const, generation, entries: 0, reason };
       }
       for (let offset = 0; offset < treg.entries.length; offset += WRITE_BATCH_SIZE) {
-        const written = await ctx.runMutation(
+        const written = await authorized.runMutation(
           internal.marketExternalRegistry.writeBatch,
           {
             generation,
@@ -84,7 +98,7 @@ export const run = internalAction({
         );
         insertedEntries += written.inserted;
       }
-      await ctx.runMutation(internal.marketExternalRegistry.finalize, {
+      await authorized.runMutation(internal.marketExternalRegistry.finalize, {
         generation,
         completedAt: Date.now(),
         expectedEntries: insertedEntries,
@@ -100,6 +114,8 @@ export const run = internalAction({
             documentId,
             sourceDigest,
           })),
+          cursor: null,
+          workload,
         });
       }
       return {
@@ -109,7 +125,7 @@ export const run = internalAction({
       };
     } catch (error) {
       const reason = publicFailureReason(error);
-      await ctx.runMutation(internal.marketExternalRegistry.fail, {
+      await authorized.runMutation(internal.marketExternalRegistry.fail, {
         generation,
         failedAt: Date.now(),
         reason,

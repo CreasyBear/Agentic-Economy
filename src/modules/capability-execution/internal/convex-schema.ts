@@ -168,6 +168,13 @@ export const invocationReconciliationValue = v.object({
   ),
 })
 
+const providerConsequenceJournalStateValue = v.union(
+  v.literal('pending'),
+  v.literal('started'),
+  v.literal('completed'),
+  v.literal('aborted'),
+)
+
 
 export const capabilityOperationInvocationTables = {
   capabilityOperationInvocations: defineTable({
@@ -212,5 +219,64 @@ export const capabilityOperationInvocationTables = {
     .index('by_credentialId_and_state_and_grantExpiresAt', ['credentialId', 'state', 'grantExpiresAt'])
     .index('by_principalId_and_invocationRef', ['principalId', 'invocationRef'])
     .index('by_ownerId_and_state_and_createdAt', ['ownerId', 'state', 'createdAt'])
-    .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt'])
+    .index('by_state_and_reconciliation_nextAttemptAt', ['state', 'reconciliation.nextAttemptAt']),
+  // Authority-provenance-only journal. It stores no provider or payment secret
+  // material; every field either pins the admitted consequence snapshot or
+  // prevents a duplicate/ambiguous external effect.
+  providerConsequenceJournal: defineTable({
+    ticketRef: v.string(),
+    effectRef: v.string(),
+    commandId: v.string(),
+    state: providerConsequenceJournalStateValue,
+    journalTokenDigest: v.string(),
+    requestDigest: v.string(),
+    invocationDigest: v.string(),
+    operationKeyDigest: v.string(),
+    ticketClaimsDigest: v.string(),
+    invocationRef: v.string(),
+    operationRef: v.string(),
+    attemptRef: v.string(),
+    effectGeneration: v.number(),
+    leaseRef: v.string(),
+    canonicalLeaseRef: v.string(),
+    canonicalConnectionRef: v.string(),
+    canonicalConnectionGeneration: v.number(),
+    providerRef: v.string(),
+    adapterId: v.string(),
+    authorityDigest: v.string(),
+    grantedScopes: v.array(v.string()),
+    grantedResources: v.array(v.string()),
+    readinessValidUntil: v.number(),
+    readinessDigest: v.optional(v.string()),
+    owningAccountRef: v.string(),
+    activeAccountRef: v.string(),
+    actorPrincipalRef: v.string(),
+    grantRef: v.string(),
+    grantGeneration: v.number(),
+    secretRef: v.string(),
+    secretGeneration: v.string(),
+    secretPointerRevision: v.number(),
+    paymentSecretRef: v.optional(v.string()),
+    paymentSecretGeneration: v.optional(v.string()),
+    paymentSecretPointerRevision: v.optional(v.number()),
+    paymentAccountRef: v.optional(v.string()),
+    signingSecretRef: v.string(),
+    signingSecretGeneration: v.string(),
+    signingSecretPointerRevision: v.number(),
+    signingAccountRef: v.string(),
+    issuedAt: v.number(),
+    expiresAt: v.number(),
+    claimRef: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    observationJson: v.optional(v.string()),
+    observationDigest: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    abortedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index('by_ticketRef', ['ticketRef'])
+    .index('by_effectRef', ['effectRef'])
+    .index('by_commandId', ['commandId'])
+    .index('by_claimRef', ['claimRef'])
+    .index('by_state_and_expiresAt', ['state', 'expiresAt']),
 } as const
