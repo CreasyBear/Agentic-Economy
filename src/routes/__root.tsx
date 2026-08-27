@@ -8,6 +8,7 @@ import { Toaster } from 'sonner'
 
 
 import { RouteProgressBar } from '@/components/ae/layout/AeRouteProgressBar'
+import { SITE_THEME_COLOR_HEX } from '@/components/ui/theme-meta'
 
 import { REQUEST_FAILED_TOAST_EVENT, type RequestFailedToastDetail } from '@/lib/http/toast-error-funnel'
 import { toast } from '@/lib/ui/toast'
@@ -40,7 +41,7 @@ export const Route = createRootRoute({
         name: 'description',
         content: HOME.metaDescription,
       },
-      { name: 'theme-color', content: '#f4f4f1' },
+      { name: 'theme-color', content: SITE_THEME_COLOR_HEX },
       { name: 'color-scheme', content: 'light' },
     ],
     links: [

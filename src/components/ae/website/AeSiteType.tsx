@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
+import { SiteMarker } from '@/components/ui/site-marker'
 
 import { AeMarkedDivider } from './AeSiteMarks'
 import { parseHeadingNotation } from './heading-notation'
@@ -60,12 +61,14 @@ type AeSiteBodyProps = {
   children: ReactNode
   muted?: boolean
   size?: 'md' | 'sm'
+  id?: string
   className?: string
 }
 
-export function AeSiteBody({ children, muted = false, size = 'md', className }: AeSiteBodyProps) {
+export function AeSiteBody({ children, muted = false, size = 'md', id, className }: AeSiteBodyProps) {
   return (
     <p
+      {...(id === undefined ? {} : { id })}
       data-ae-muted={muted ? '' : undefined}
       className={cn(
         'ae-site-body max-w-prose text-pretty',
@@ -82,7 +85,7 @@ export function AeSiteBody({ children, muted = false, size = 'md', className }: 
 export function AeSiteEyebrow({ children }: { children: string }) {
   return (
     <p className="ae-site-eyebrow inline-flex items-center gap-2 font-sans text-xs font-medium tracking-tight text-muted-foreground">
-      <span aria-hidden="true" data-ae-marker className="h-[7px] w-3.5 shrink-0 rounded-[1px] bg-info" />
+      <SiteMarker tone="info" visible dataMarker />
       {children}
     </p>
   )
