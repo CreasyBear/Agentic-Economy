@@ -322,8 +322,9 @@ describe('Stripe Checkout top-up lifecycle', () => {
       { event: verified, readback: paidEvidence, ...sourceArgs },
     )
     expect(applied).toMatchObject({ kind: 'accepted', status: 'applied' })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    // $10 top-up earns no ladder bonus (< $50 tier) plus one-time $1 owner trial grant
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1100')
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
 
     await expect(
       apply(
@@ -331,8 +332,8 @@ describe('Stripe Checkout top-up lifecycle', () => {
         { event: verified, readback: paidEvidence, ...sourceArgs },
       ),
     ).resolves.toMatchObject({ kind: 'accepted', status: 'replayed' })
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1100')
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     const frozenCommand = db.rows('moneyTopupCommands')[0]
     await expect(
       apply(
@@ -353,7 +354,7 @@ describe('Stripe Checkout top-up lifecycle', () => {
       appliedPayloadDigest: frozenCommand?.appliedPayloadDigest,
       evidenceDigest: frozenCommand?.evidenceDigest,
     })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     await expect(
       apply(
         { db, auth: identity },
@@ -370,7 +371,7 @@ describe('Stripe Checkout top-up lifecycle', () => {
       kind: 'refused',
       code: 'ledger_idempotency_conflict',
     })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
   })
 
   it('refuses account events without inserting an ignored Stripe row', async () => {

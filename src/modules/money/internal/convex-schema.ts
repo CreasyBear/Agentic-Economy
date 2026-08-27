@@ -29,7 +29,7 @@ export const moneyTables = {
   moneyLedgerEntries: defineTable({
     entryRef: identifier,
     accountRef: identifier,
-    entryType: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss')),
+    entryType: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss'), v.literal('promo_grant'), v.literal('topup_bonus')),
     direction: v.union(v.literal('credit'), v.literal('debit')),
     amountUnits: units,
     allocationCorrectionUnits: v.optional(units),
@@ -55,9 +55,11 @@ export const moneyTables = {
     .index('by_payoutRef_and_allocationRef', ['payoutRef', 'allocationRef']),
   moneyTransactions: defineTable({
     transactionRef: identifier,
-    kind: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss')),
+    kind: v.union(v.literal('topup'), v.literal('charge'), v.literal('refund'), v.literal('payout_accrual'), v.literal('rake'), v.literal('external_loss'), v.literal('promo_grant'), v.literal('topup_bonus')),
     idempotencyKey: identifier,
     inputDigest: identifier,
+    journalDigest: v.optional(identifier),
+    digestFormat: v.optional(identifier),
     principalId: identifier,
     accountId: v.optional(identifier),
     currency,

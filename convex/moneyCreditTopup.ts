@@ -29,6 +29,9 @@ import {
 } from './moneyLedgerValues'
 import { eventRowFields, eventRowMatches } from './moneyStripeEvents'
 import {
+  applyOwnerMoneyPromotionsOnCompletedTopup,
+} from './moneyCreditPromotions'
+import {
   verifyCustomerRequestServiceAssertion,
   type CustomerRequestServiceAssertion,
 } from '../src/modules/agent-access/service-auth-envelope'
@@ -888,17 +891,30 @@ export async function applyCreditTopupHandler(
     ],
     createdAt: event.observedAt,
   })
+  const postTopupVersion = account.version + 1
   await ctx.db.patch('moneyAccounts', account._id, {
     balanceUnits: nextBalance.units,
-    version: account.version + 1,
+    version: postTopupVersion,
     updatedAt: event.observedAt,
   })
   await ctx.db.insert('moneyTransactions', transaction)
+  const promotedBalanceAfter = await applyOwnerMoneyPromotionsOnCompletedTopup(
+    ctx,
+    {
+      account,
+      postTopupBalanceUnits: nextBalance.units,
+      postTopupVersion,
+      principalId: command.principalId,
+      topupAmount: accountAmount,
+      topupTransactionRef: transactionRef,
+      event,
+    },
+  )
   await ctx.db.patch('moneyTopupCommands', command._id, {
     ...boundPatch,
     state: 'succeeded',
     buyerBalanceBeforeUnits: account.balanceUnits,
-    buyerBalanceAfterUnits: nextBalance.units,
+    buyerBalanceAfterUnits: promotedBalanceAfter.balanceUnits,
     appliedStripeEventId: event.stripeEventId,
     appliedPayloadDigest: event.payloadDigest,
     appliedTransactionRef: transactionRef,

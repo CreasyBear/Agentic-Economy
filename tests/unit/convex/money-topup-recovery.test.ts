@@ -269,12 +269,13 @@ describe('Convex credit topup recovery', () => {
       apply(context, { event, readback, ...sourceArgs }),
     ).resolves.toMatchObject({ kind: 'accepted', status: 'applied' })
     expect(db.rows('moneyTopupCommands')[0]?.state).toBe('succeeded')
-    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1000')
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    // $10 top-up earns no ladder bonus (< $50 tier) plus one-time $1 owner trial grant
+    expect(db.rows('moneyAccounts')[0]?.balanceUnits).toBe('1100')
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     await expect(
       apply(context, { event, readback, ...sourceArgs }),
     ).resolves.toMatchObject({ kind: 'accepted', status: 'replayed' })
-    expect(db.rows('moneyLedgerEntries')).toHaveLength(1)
+    expect(db.rows('moneyLedgerEntries')).toHaveLength(2)
     await expect(
       apply(context, {
         event: { ...event, payloadDigest: 'sha256:changed' },
