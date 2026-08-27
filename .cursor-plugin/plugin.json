@@ -1,0 +1,19 @@
+{
+  "name": "agentic-economy",
+  "displayName": "Agentic Economy",
+  "version": "0.1.0",
+  "description": "Give your agent a live catalog of supplier-hosted Operations. Search by the task you want done, read each Operation's exact inputs, terms, price, availability and evidence, then invoke one under delegated authority with idempotent receipts and honest recovery. Keyless reads run anonymously for free; paid calls draw on one pre-funded wallet after the price and inputs are approved. No per-provider accounts and no stored provider credentials.",
+  "author": {
+    "name": "Agentic Economy"
+  },
+  "repository": "https://github.com/CreasyBear/Agentic-Economy",
+  "license": "UNLICENSED",
+  "keywords": [
+    "agents",
+    "mcp",
+    "operations",
+    "catalog",
+    "pay-per-use",
+    "idempotent"
+  ]
+}

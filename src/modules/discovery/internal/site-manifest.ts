@@ -1,4 +1,4 @@
-import { MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
+import { MCP_HTTP_ENDPOINT_PATH, MCP_LATEST_PROTOCOL_VERSION } from '@/lib/mcp-protocol'
 import { schemaDescriptorDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 import { trimTrailingSlashes } from '@/modules/common/trim-trailing-slashes'
@@ -216,7 +216,7 @@ const humanSurfaceLabels: Readonly<Record<string, string>> = {
   '/market': 'Operation catalogue',
   '/for-agents': 'Agent setup guide',
   '/for-providers': 'Guide for operation providers',
-  '/about': 'What Agentic Economy is',
+  '/about': 'About',
   '/privacy/remove-business': 'Listing correction or removal',
   [SiteDiscoveryManifestPath]: 'This document',
   [PublicAgentSkillPath]: 'Assistant setup instructions',
@@ -290,7 +290,7 @@ export function buildSiteDiscoveryManifest(
         },
       },
       mcp: {
-        endpoint: `${origin}/mcp`,
+        endpoint: `${origin}${MCP_HTTP_ENDPOINT_PATH}`,
         operationInvokeTool: operationInvokeTool.name,
         protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
         lifecycle: ['initialize', 'notifications/initialized', 'tools/list', 'tools/call', 'close'],

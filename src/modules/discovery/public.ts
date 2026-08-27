@@ -24,6 +24,10 @@ export type {
   SiteDiscoveryManifestContract,
 } from './internal/site-manifest'
 export {
+  ApiCatalogManifestPath,
+  buildApiCatalogDocument,
+} from './internal/api-catalog'
+export {
   PUBLIC_INVOCATION_REF_EXAMPLE,
   PUBLIC_IDEMPOTENCY_KEY_EXAMPLE,
   PUBLIC_OPERATION_REF_EXAMPLE,
@@ -73,6 +77,7 @@ export {
   buildRobotsTxt,
   buildSitemapXml,
   buildSitemapXmlFromSlugs,
+  DiscoveryPublicSurfacePaths,
 } from './internal/discovery-files'
 
 export { buildPublicAgentSkillMarkdown } from './internal/agent-skill'

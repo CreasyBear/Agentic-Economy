@@ -18,6 +18,18 @@ export function discoveryTextResponse(body: string, contentType: string, init: R
   })
 }
 
+/** RFC 9727 profile media type for `/.well-known/api-catalog`. */
+export const rfc9727LinksetContentType = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"' as const
+
+/**
+ * RFC 9727 api-catalog documents are JSON documents served under a distinct
+ * media type; they keep exactly the same discovery header discipline as the
+ * JSON manifests.
+ */
+export function discoveryLinksetJsonResponse(body: unknown): Response {
+  return discoveryTextResponse(serializeJson(body), rfc9727LinksetContentType)
+}
+
 function mergeHeaders(contentType: string, input: HeadersInit | undefined): Headers {
   const headers = new Headers(input)
   headers.set('Content-Type', contentType)

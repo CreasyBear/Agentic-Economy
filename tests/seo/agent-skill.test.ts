@@ -30,7 +30,40 @@ describe('public agent skill', () => {
       previous = current
     }
   })
+  it('opens with the activation funnel before the market loop', () => {
+    const funnelMarkers = [
+      '## 1. Pick your path',
+      '/llms.txt',
+      '/for-agents',
+      'npm install --global @agentic-economy/cli',
+      'tell your human what you needed',
+      '## 2. Price rule — before any paid call',
+      'state the total price and the required inputs',
+      '## 3. Search by job',
+    ]
+    let previous = -1
+    for (const marker of funnelMarkers) {
+      const current = body.indexOf(marker)
+      expect(current).toBeGreaterThan(previous)
+      previous = current
+    }
+    expect(body).toMatch(/names begin with `ae_`/u)
+    expect(body).toContain('anonymously and free')
+  })
 
+  it('recovers from insufficient credit through the served operator page', () => {
+    expect(body).toContain('## If credit runs short')
+    expect(body).toContain('`insufficient_credit`')
+    expect(body).toContain('`retryable: false`')
+    expect(body).toContain('https://ae.example/owner/credit')
+    expect(body).toContain('add credit at https://ae.example/owner/credit')
+  })
+
+  it('closes on the evidence expectation', () => {
+    expect(body).toContain('## What counts as proof')
+    expect(body).toContain('literal output plus an `evidenceHash`')
+    expect(body).toContain('job stays unproven')
+  })
   it('distinguishes invoke outcomes from status diagnostics', () => {
     expect(body).toContain(
       'Only `result.kind` is the operation outcome when present: `completed | pending | needs_authority | reconciliation_required | refused`.',
